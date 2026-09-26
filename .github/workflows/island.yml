@@ -1480,6 +1480,17 @@ jobs:
             --outfile=node_modules/.cache/deedaltar.mjs --log-level=error
           node node_modules/.cache/deedaltar.mjs
 
+      - name: Baubles, found, restored and set into the altar
+        run: |
+          # Asked for: a share of archaeology's finds are baubles, restored like
+          # relics and set into a settlement's altar for bonuses to its citizens
+          # on its land. Both sides hold the same tiers, skills and words, read
+          # each other's baubles, refuse a setting in the same words, and give
+          # the same time, skill and yield -- through the clock, on the island.
+          npx esbuild supabase/test/baubles.ts --bundle --platform=node --format=esm \
+            --outfile=node_modules/.cache/baubles.mjs --log-level=error
+          node node_modules/.cache/baubles.mjs
+
       - name: The exact benefit, and where its number comes from
         run: |
           # Text the player reads says what changes and by how much, and where

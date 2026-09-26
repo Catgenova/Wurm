@@ -924,7 +924,9 @@ export function recipeAction(r: Recipe): ActionDef {
        * ceiling is the parts; nothing is finer than what it is made of.
        */
       const ql = r.qlFromInputs ? Math.max(1, Math.min(100, fromInputs * inputKeep(g, r))) : g.productQl(r.skill, toolQl(g) + (oven ? oven.ql * 0.3 : 0));
-      const item = g.inventory.add(r.result, { count: r.count ?? 1, ql, extra: r.extra ?? mat });
+      // More, the go a bauble on the trade comes up in the altar of the settlement you work on.
+      const made = g.baubleYield(r.result, r.count ?? 1);
+      const item = g.inventory.add(r.result, { count: made, ql, extra: r.extra ?? mat });
       // Now and again a thing comes off the bench better than the hands that
       // made it had any right to produce. Nothing brings it on.
       const rare = rollRarity(g.rand);
@@ -935,7 +937,7 @@ export function recipeAction(r: Recipe): ActionDef {
         g.note(['', 'rare', 'supreme', 'fantastic'][rare]);
         g.logMsg(RARITY_WORD[rare], 'skill');
       }
-      g.madeIt(r.result, item.ql, r.count ?? 1, rare);
+      g.madeIt(r.result, item.ql, made, rare);
       for (const [id, n] of r.returns ?? []) g.inventory.add(id, { count: n, ql: 20 });
       // Working a thing out with your hands is what sharpens the head.
       g.gainSkill('mind_logic', tryGain(true, CRAFT_HEAD));

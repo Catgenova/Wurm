@@ -143,6 +143,8 @@ export const STROKE_BY_ID: Record<string, Stroke> = {
   raise_rock: 'stone', chip_corner: 'stone', strike_foundation: 'stone',
   place_smelter: 'stone', pick_up_smelter: 'stone', place_kiln: 'stone', pick_up_kiln: 'stone',
   place_anvil: 'stone', pick_up_anvil: 'stone',
+  // A bauble pressed into its socket in the altar's stone.
+  set_bauble: 'stone',
   // Timber. Building is a mallet on pegs whatever the walls end up being made
   // of, which is the one place the material of the thing and the noise of
   // making it genuinely part company.

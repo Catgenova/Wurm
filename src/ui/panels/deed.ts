@@ -7,6 +7,7 @@ import { crateName } from '../../game/crates';
 import { trapName } from '../../game/traps';
 import { bridgeName } from '../../game/bridges';
 import { postName } from '../../game/posts';
+import { BAUBLE_TIERS, baubleSummary, socketsOf } from '../../game/baubles';
 import type { UIWindow } from '../windows';
 
 /**
@@ -190,6 +191,25 @@ export class DeedPanel {
       bare.className = 'deed-note';
       bare.textContent = 'Bare ground so far. Everything you build inside the border is counted here.';
       this.body.append(bare);
+    }
+
+    // What the baubles in its sockets give, added up, and how full the sockets are.
+    const set = d.baubles ?? [];
+    if (set.length || altars.length) {
+      this.body.append(this.head('Baubles in the altar'));
+      for (const t of BAUBLE_TIERS) {
+        this.body.append(this.row(`${t.name} sockets`, `${socketsOf(d, t.id).filter(Boolean).length} of ${t.slots}`));
+      }
+      for (const line of baubleSummary(set)) {
+        const cap = line.capped ? 'at the cap' : '';
+        this.body.append(this.row(line.text, cap, line.capped ? 'More is set than counts: the rest is lost to the cap until one is replaced.' : undefined));
+      }
+      const who = document.createElement('div');
+      who.className = 'deed-note';
+      who.textContent = set.length
+        ? 'Given to its founder, mayors and builders on every action they do on its land. Guests get none of it.'
+        : 'No bauble is set yet. Restore one and set it at the altar.';
+      this.body.append(who);
     }
 
     // The named things worth walking to.

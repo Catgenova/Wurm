@@ -2,7 +2,8 @@ import { tryGain } from './learn';
 import { TileType } from '../world/tiles';
 import type { ActionDef } from './actions';
 import type { Game } from './game';
-import { itemName, type Item } from './items';
+import { itemName, RARITY_WORD, rollRarity, type Item } from './items';
+import { BAUBLE_SHARE, BAUBLE_TIER_BY_ID, rollBauble, rollTier, TARNISHED, type BaubleTier } from './baubles';
 
 /** What one go at putting a relic back together teaches. */
 export const RESTORE_GAIN = 0.4;
@@ -95,6 +96,33 @@ export const findChance = (skill: number, toolQl: number): number => Math.min(0.
 /** The relics a given archaeologist would recognise if they turned one up. */
 export const relicsWithin = (skill: number): RelicDef[] => RELICS.filter((r) => r.difficulty <= skill + 14);
 
+/**
+ * A tarnished bauble put right: at its tier's difficulty, and only as good as
+ * it came out of the ground, less what age took, as a relic is. What it does
+ * is rolled now, and its rarity with it, which multiplies what it does
+ * (`rollBauble`); all of it is then written on the bauble.
+ */
+function restoreBauble(g: Game, item: Item): void {
+  const tier = BAUBLE_TIER_BY_ID.get(item.extra as BaubleTier) ?? BAUBLE_TIER_BY_ID.get('minor');
+  if (!tier) return;
+  if (!g.skillCheck('restoration', tier.difficulty, 0, g.mindEase())) {
+    g.gainSkill('mind_logic', tryGain(false, RESTORE_GAIN));
+    g.damageItem(item, 5 + g.rand() * 9);
+    g.logMsg(`The tarnish will not lift from the ${tier.id} bauble and you mark it trying.`, 'event');
+    return;
+  }
+  const ql = Math.max(1, Math.min(100, item.ql * (1 - item.dmg / 200) * (0.72 + g.skills.get('restoration') / 260)));
+  const rare = rollRarity(g.rand);
+  if (!g.inventory.remove(item.uid, 1)) return;
+  const made = g.inventory.add(tier.item, { ql, extra: rollBauble(tier.id, rare, g.rand) });
+  if (rare) {
+    made.rare = rare;
+    g.logMsg(RARITY_WORD[rare], 'skill');
+  }
+  g.gainSkill('mind_logic', tryGain(true, RESTORE_GAIN));
+  g.logMsg(`The tarnish comes away and the bauble is whole: ${itemName(made).toLowerCase()}. (QL ${made.ql.toFixed(1)})`, 'event');
+}
+
 /** What studying at a lectern is worth over holding the book in one hand. */
 export const LECTERN_GAIN = 2;
 
@@ -122,6 +150,16 @@ export const ARCHAEOLOGY_ACTIONS: ActionDef[] = [
       if (g.rand() > findChance(skill, toolQl)) {
         g.missed();
         g.logMsg('You go through the soil and turn up nothing but roots and small stones.', 'event');
+        return;
+      }
+      // A share of whatever comes up is a bauble, whatever the archaeologist
+      // knows: whole, but black with age, and good for nothing until restored.
+      if (g.rand() < BAUBLE_SHARE) {
+        const tier = rollTier(g.rand);
+        const found = g.gather(TARNISHED, { ql: Math.max(1, g.productQl('archaeology', toolQl) * (0.55 + g.rand() * 0.35)), extra: tier });
+        found.dmg = 18 + g.rand() * 50;
+        g.events.emit('inventory');
+        g.logMsg(`Your trowel turns up a tarnished ${tier} bauble. Restore it to see what it does. (QL ${found.ql.toFixed(1)}, damage ${found.dmg.toFixed(0)})`, 'event');
         return;
       }
       const within = relicsWithin(skill);
@@ -166,11 +204,12 @@ export const ARCHAEOLOGY_ACTIONS: ActionDef[] = [
     applies: (t, g) => {
       if (t.kind !== 'item') return false;
       const item = g.inventory.get(t.uid);
-      return !!item && fragmentOf(item) !== null;
+      return !!item && (fragmentOf(item) !== null || item.id === TARNISHED);
     },
     check: (t, g) => {
       if (t.kind !== 'item') return null;
       const item = g.inventory.get(t.uid);
+      if (item?.id === TARNISHED) return item.dmg >= 85 ? 'It is too far gone to restore. Repair it first.' : null;
       const f = item && fragmentOf(item);
       if (!f) return 'That is not a fragment of anything.';
       const missing = partsMissing(g, f.relic);
@@ -182,6 +221,10 @@ export const ARCHAEOLOGY_ACTIONS: ActionDef[] = [
     perform: (t, g) => {
       if (t.kind !== 'item') return;
       const item = g.inventory.get(t.uid);
+      if (item?.id === TARNISHED) {
+        restoreBauble(g, item);
+        return;
+      }
       const f = item && fragmentOf(item);
       if (!f) return;
       const pieces = piecesHeld(g, f.relic);

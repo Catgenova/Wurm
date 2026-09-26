@@ -35,6 +35,7 @@ import { BAIT_BY_ID } from '../game/fishing';
 import { BRIDGES, bridgeDef, bridgeName, bridgeState, spanWants, type Bridge } from '../game/bridges';
 import { foundationState } from '../game/foundations';
 import { BLESS_CAP, CASTS, FAITH, favourCap } from '../game/faith';
+import { BAUBLE_SAID, BAUBLE_TIER_BY_ID, BAUBLE_TIERS, readBauble, socketsOf, socketText, TARNISHED } from '../game/baubles';
 import { abilitiesOf, CHOOSE_AT, MEDITATION, nextStep, PATHS, PATH_LIST, sittingWorth } from '../game/meditation';
 import { canImprove } from '../game/improve';
 import { BREWS } from '../game/brewing';
@@ -1477,6 +1478,60 @@ export class UI {
     return entries;
   }
 
+  /**
+   * The settlement's sockets at one of its altars: what is in each, and every
+   * bauble in the pack, to be set into the next empty socket of its tier or in
+   * place of one already there.
+   */
+  private baubleEntry(f: PlacedFurniture): MenuItem {
+    const g = this.game;
+    const deed = g.deedOfMineAt(f.x, f.y);
+    const setDef = ACTION_BY_ID.get('set_bauble');
+    if (!deed || !setDef) return { label: 'Baubles', hint: BAUBLE_SAID.notOurs, disabled: true };
+    const slots = BAUBLE_TIERS.reduce((n, t) => n + t.slots, 0);
+    const sockets: MenuItem[] = BAUBLE_TIERS.map((t) => {
+      const held = socketsOf(deed, t.id);
+      return {
+        label: `${t.name} sockets`,
+        note: `${held.filter(Boolean).length} of ${t.slots}`,
+        children: held.map((b, i) => ({ label: `${i + 1}. ${b ? socketText(b) : 'empty'}`, disabled: true })),
+      };
+    });
+    const loose = g.inventory.items.filter((it) => it.id === TARNISHED || readBauble(it));
+    const setting: MenuItem[] = loose.map((it) => {
+      const b = readBauble(it);
+      const next: Target = { kind: 'furniture', id: f.id, itemUid: it.uid };
+      const why = setDef.check?.(next, g) ?? null;
+      const tier = b ? BAUBLE_TIER_BY_ID.get(b.tier) : undefined;
+      const over: MenuItem[] = tier
+        ? socketsOf(deed, tier.id).flatMap((held, slot) => {
+            if (!held) return [];
+            const t: Target = { ...next, slot };
+            const no = setDef.check?.(t, g) ?? null;
+            return [{
+              label: `In place of ${tier.name.toLowerCase()} ${slot + 1}: ${socketText(held)}`,
+              hint: no ?? 'What is in it now is lost.',
+              disabled: !!no,
+              onSelect: () => g.requestAction(setDef, t),
+            }];
+          })
+        : [];
+      return {
+        label: `Set ${itemName(it).toLowerCase()}`,
+        hint: b ? undefined : why ?? undefined,
+        disabled: !b,
+        children: b
+          ? [{ label: 'Into the next empty socket', hint: why ?? undefined, disabled: !!why, onSelect: () => g.requestAction(setDef, next) }, ...over]
+          : undefined,
+      };
+    });
+    return {
+      label: 'Baubles',
+      note: `${deed.baubles?.length ?? 0} of ${slots} sockets set`,
+      children: [...sockets, ...setting],
+    };
+  }
+
   /** Opening, emptying and lifting a piece of furniture. */
   private furnitureEntries(f: PlacedFurniture): MenuItem[] {
     const g = this.game;
@@ -1523,6 +1578,7 @@ export class UI {
           }),
         });
       }
+      entries.push(this.baubleEntry(f));
     }
     if (furnitureHolds(f)) {
       const heft = furnitureHeft(f);

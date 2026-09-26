@@ -1,7 +1,7 @@
 import { generateWorld } from '../world/generate';
 import { EMOTES, EMOTE_BY_ID } from './emotes';
 import { defaultKey } from './keybinds';
-import { numberWord, share, spanWords } from './words';
+import { listed, numberWord, share, spanWords } from './words';
 import { brazierBurn, shoreNear } from './placeables';
 import type { Hoard } from './treasure';
 import { packTreeData, TILE_DEFS, TileType, TREE_DEFS, TREE_AGES, TREE_ROOM_ONE, TREE_ROOM_TWO, TREE_SEED_BOTH, TREE_SEED_NONE, TREE_SEED_REACH, TREE_SEEDS, lastDawn, treeAge, treeSpecies, LAWN_AFTER, mownDays, mownToday } from '../world/tiles';
@@ -61,6 +61,7 @@ import { strokeOf } from '../audio/sound';
 import { lockRefusal, type Lockable } from './locks';
 import { sailFactor, sailWord, windAt, windFrom, windWord, type Wind } from './wind';
 import { festerChance, PART_NAMES, woundClose, woundDrain, WOUND_KINDS, woundText, type Wound, type WoundKind } from './wounds';
+import { baubleLearn, baublePace, baublePlus, baublesFrom, baublesServe, baubleTwice, YIELD_TIMES, type DeedBauble, type IslandBauble } from './baubles';
 
 export type { ActiveAction } from './actor';
 
@@ -122,6 +123,11 @@ export interface Deed {
    * asked. On an island it comes down with the settlement.
    */
   role?: DeedRole;
+  /**
+   * What is set into its altar's sockets (`baubles.ts`): the settlement's,
+   * whichever altar on it they were set at. Absent or empty when none is.
+   */
+  baubles?: DeedBauble[];
 }
 
 /**
@@ -2273,7 +2279,8 @@ export class Game {
     // It reads off the worst of the four, so bread alone buys nothing.
     mult *= tableMul(this.player.nutrition);
     for (const b of this.player.boons) if (b.skill === id && b.until > this.time) mult += b.bonus;
-    return mult;
+    // And a bauble for the trade in the altar of the settlement you are working on.
+    return mult * baubleLearn(this.baubleHere(), id);
   }
 
   /**
@@ -3014,7 +3021,9 @@ export class Game {
       if (c) this.events.emit('strike', c.x, c.y);
     }
     this.soundOfWork(a.def, a.target);
+    this.baubleGo = { job: a.def, made: [] };
     const again = a.def.perform(a.target, this) === true;
+    this.sayBaubleGo();
     if (a.def.tool) this.wearTool(a.def.tool);
     const cost = this.staminaCost(a.def.stamina);
     this.player.stats.stamina = Math.max(0, this.player.stats.stamina - cost);
@@ -3700,7 +3709,49 @@ export class Game {
   duration(def: ActionDef): number {
     const skill = def.skill ? this.skills.get(def.skill) : 50;
     const toolQl = def.tool ? this.toolQl(def.tool) : 0;
-    return goSeconds(def.baseTime, skill, toolQl, this.controlSpeed());
+    // And less of it on a settlement whose altar has a bauble for the trade.
+    return goSeconds(def.baseTime, skill, toolQl, this.controlSpeed() * baublePace(this.baubleHere(), def.skill));
+  }
+
+  /**
+   * The baubles working for you where you stand: those of the settlement of
+   * yours under your feet, while you are one of its citizens rather than a
+   * guest; nothing anywhere else.
+   */
+  baubleHere(): readonly DeedBauble[] {
+    const deed = this.deedOfMineAt(this.player.tileX, this.player.tileY);
+    return baublesServe(deed) ? deed?.baubles ?? [] : [];
+  }
+
+  /**
+   * The go being done, while it is being done: its job, whether the baubles
+   * doubled it -- asked once, at its first yield, so a go comes out doubled
+   * or not as a whole -- and what they made of what it yielded, said once the
+   * go has said its own piece (`sayBaubleGo`).
+   */
+  private baubleGo: { job: ActionDef; twice?: boolean; made: string[] } | null = null;
+
+  /**
+   * A yield of the go in hand, and what the settlement's baubles make of it:
+   * what an ancient bauble on the job adds, and then `YIELD_TIMES` as many,
+   * the go a major bauble on its skill comes up. Outside a go, as it was.
+   */
+  baubleYield(id: string, count: number): number {
+    const go = this.baubleGo;
+    if (!go || count <= 0) return count;
+    const here = this.baubleHere();
+    let n = count + baublePlus(here, go.job.id);
+    go.twice ??= baubleTwice(here, go.job.skill, this.rand);
+    if (go.twice) n *= YIELD_TIMES;
+    if (n !== count) go.made.push(`${n} × ${itemDef(id).name.toLowerCase()}`);
+    return n;
+  }
+
+  /** After the go's own words, what the baubles made of its yield, in so many. */
+  private sayBaubleGo(): void {
+    const made = this.baubleGo?.made ?? [];
+    this.baubleGo = null;
+    if (made.length) this.logMsg(`The baubles in the altar make that ${listed(made)}.`, 'event');
   }
 
   /**
@@ -4979,7 +5030,9 @@ export class Game {
    */
   gather(id: string, opts: { ql?: number; count?: number; extra?: string } = {}): Item {
     const cart = this.workCart();
-    const count = opts.count ?? 1;
+    // And what the settlement's baubles make of it, when it is the yield of a go.
+    const count = this.baubleYield(id, opts.count ?? 1);
+    if (count !== (opts.count ?? 1)) opts = { ...opts, count };
     if (!cart) return this.inventory.add(id, opts);
     const def = itemDef(id);
     const item: Item = { uid: 0, id, ql: Math.max(1, Math.min(100, opts.ql ?? 20)), dmg: 0, count, extra: opts.extra };
@@ -5849,14 +5902,14 @@ export class Game {
      */
     // `null` from the island means you are nothing on it, which here is the
     // same as saying nothing: a deed you do not belong to is not in `myDeeds`.
-    if (ground.deeds !== undefined) this.neighbourDeeds = ground.deeds.map((d) => ({ ...d, role: d.role ?? undefined }));
+    if (ground.deeds !== undefined) this.neighbourDeeds = ground.deeds.map((d) => ({ ...d, role: d.role ?? undefined, baubles: baublesFrom(d.baubles) }));
     if (ground.folk !== undefined) this.folkAshore = ground.folk;
     // Your graves wherever they are, on the slow half, for the marks on your map.
     if (ground.graves !== undefined) this.markGraves(ground.graves);
     if (ground.deed !== undefined) {
       const d = ground.deed;
       const was = this.deed;
-      this.deed = d ? { name: d.name, x: d.x, y: d.y, radius: d.radius, level: d.level, mine: d.mine, role: d.role ?? undefined } : null;
+      this.deed = d ? { name: d.name, x: d.x, y: d.y, radius: d.radius, level: d.level, mine: d.mine, role: d.role ?? undefined, baubles: baublesFrom(d.baubles) } : null;
       // Only when it is actually different: this runs every few seconds, and a
       // settlement that has not moved is not news to anybody.
       if ((was?.name ?? null) !== (d?.name ?? null) || was?.x !== d?.x || was?.y !== d?.y
@@ -7084,7 +7137,7 @@ export interface IslandGround {
    * fast read carries none of the three, which is why `sawGround` applies it
    * only when it was sent, and why this was wrong to type as always present.
    */
-  deed?: { name: string; x: number; y: number; radius: number; level: number; mine: boolean; role?: DeedRole | null } | null;
+  deed?: { name: string; x: number; y: number; radius: number; level: number; mine: boolean; role?: DeedRole | null; baubles?: IslandBauble[] | null } | null;
   /**
    * Other people's settlements, and only those near enough to be standing in.
    *
@@ -7096,7 +7149,7 @@ export interface IslandGround {
    * settlement in it did — lit their homestead in your fog and ticked their
    * work off in your journal.
    */
-  deeds?: Array<{ name: string; x: number; y: number; radius: number; level: number; holder: string | null; mine?: boolean; role?: DeedRole | null }>;
+  deeds?: Array<{ name: string; x: number; y: number; radius: number; level: number; holder: string | null; mine?: boolean; role?: DeedRole | null; baubles?: IslandBauble[] | null }>;
   /**
    * Everybody else ashore, with whereabouts while the island is quiet.
    *

@@ -52,17 +52,24 @@ const out = psql(`
 begin;
 create temp table said (k text);
 do $$
-declare w uuid; u uuid; other uuid; t int; alt bigint; box bigint;
+declare w uuid; u uuid; other uuid; t int; v int; alt bigint; box bigint;
 begin
-  -- A world with two people in it: the one building, and a neighbour.
-  select p.world_id into w from player p group by p.world_id having count(*) >= 2 order by p.world_id limit 1;
+  /*
+   * The suite's own island, by name, and two people on it: the one building,
+   * and a neighbour. It was "the first island with two people on it" in the
+   * order of their ids, which are random: most runs that was this one, and
+   * one run it was an island of sixty-four, where the ground set out below
+   * ran off the edge and the step failed before it asked anything.
+   */
+  select id into w from world where name = 'Stonehaven';
   select p.uid into u from player p where p.world_id = w order by p.uid limit 1;
   select p.uid into other from player p where p.world_id = w and p.uid <> u order by p.uid limit 1;
   delete from deed where world_id = w;
-  -- Plain dry ground under everything asked about.
-  for t in 30..70 loop
-    perform land_set_height(w, t, 40, 4); perform land_set_tile(w, t, 40, tile_id('Grass'));
-    perform land_set_height(w, 43, t, 4); perform land_set_tile(w, 43, t, tile_id('Grass'));
+  -- Plain dry ground under everything asked about: the whole of it, sixteen a side.
+  for t in 0..15 loop
+    for v in 0..15 loop
+      perform land_set_height(w, t, v, 4); perform land_set_tile(w, t, v, tile_id('Grass'));
+    end loop;
   end loop;
   -- A trowel and everything an altar takes, on them.
   delete from item where world_id = w and holder = 'player' and holder_uid = u;
@@ -78,41 +85,42 @@ begin
   insert into said select 'FLAGGED|' || coalesce(string_agg(id, ',' order by id), '') from recipe where deed;
 
   -- Out in the country.
-  update player set x = 40.5, y = 40.5 where world_id = w and uid = u;
+  update player set x = 6.5, y = 8.5 where world_id = w and uid = u;
   insert into said select 'WILD|' || coalesce(craft_refusal(w, u, 'make_altar', null), 'null');
   insert into said select 'WILDACT|' || coalesce(act_refusal(w, u, 'make_altar', '{}'::jsonb), 'null');
   -- Something without the flag is refused for what it lacks, never for the ground.
   insert into said select 'STOOL|' || coalesce(craft_refusal(w, u, 'make_stool', null), 'null');
   -- Nor set down anywhere but a settlement of theirs; a chest goes down where it likes.
   insert into said select 'PUTWILD|' || coalesce(act_refusal(w, u, 'place_furniture',
-    jsonb_build_object('itemUid', alt, 'x', 41, 'y', 40, 'sx', 0, 'sy', 0)), 'null');
+    jsonb_build_object('itemUid', alt, 'x', 7, 'y', 8, 'sx', 0, 'sy', 0)), 'null');
   insert into said select 'CHESTWILD|' || coalesce(act_refusal(w, u, 'place_furniture',
-    jsonb_build_object('itemUid', box, 'x', 41, 'y', 40, 'sx', 0, 'sy', 0)), 'null');
+    jsonb_build_object('itemUid', box, 'x', 7, 'y', 8, 'sx', 0, 'sy', 0)), 'null');
 
   -- On a settlement they founded, from its token to its last tile.
-  insert into deed (world_id, name, x, y, radius, level, founded_by) values (w, 'Home', 40, 40, 3, 1, u);
+  insert into deed (world_id, name, x, y, radius, level, founded_by) values (w, 'Home', 6, 8, 3, 1, u);
   insert into said select 'OWN|' || coalesce(craft_refusal(w, u, 'make_altar', null), 'null');
   insert into said select 'OWNACT|' || coalesce(act_refusal(w, u, 'make_altar', '{}'::jsonb), 'null');
   insert into said select 'PUTOWN|' || coalesce(act_refusal(w, u, 'place_furniture',
-    jsonb_build_object('itemUid', alt, 'x', 41, 'y', 40, 'sx', 0, 'sy', 0)), 'null');
+    jsonb_build_object('itemUid', alt, 'x', 7, 'y', 8, 'sx', 0, 'sy', 0)), 'null');
+  update player set x = 9.5, y = 8.5 where world_id = w and uid = u;
   insert into said select 'PUTPAST|' || coalesce(act_refusal(w, u, 'place_furniture',
-    jsonb_build_object('itemUid', alt, 'x', 44, 'y', 40, 'sx', 0, 'sy', 0)), 'null');
-  update player set x = 43.9, y = 40.5 where world_id = w and uid = u;
+    jsonb_build_object('itemUid', alt, 'x', 10, 'y', 8, 'sx', 0, 'sy', 0)), 'null');
+  update player set x = 9.9, y = 8.5 where world_id = w and uid = u;
   insert into said select 'EDGE|' || coalesce(craft_refusal(w, u, 'make_altar', null), 'null');
-  update player set x = 44.1, y = 40.5 where world_id = w and uid = u;
+  update player set x = 10.1, y = 8.5 where world_id = w and uid = u;
   insert into said select 'PAST|' || coalesce(craft_refusal(w, u, 'make_altar', null), 'null');
 
   -- A neighbour's settlement is not theirs to raise one on...
-  insert into deed (world_id, name, x, y, radius, level, founded_by) values (w, 'Next door', 60, 40, 3, 1, other);
-  update player set x = 60.5, y = 40.5 where world_id = w and uid = u;
+  insert into deed (world_id, name, x, y, radius, level, founded_by) values (w, 'Next door', 13, 8, 1, 1, other);
+  update player set x = 13.5, y = 8.5 where world_id = w and uid = u;
   insert into said select 'STRANGER|' || coalesce(craft_refusal(w, u, 'make_altar', null), 'null');
   insert into said select 'PUTSTRANGER|' || coalesce(act_refusal(w, u, 'place_furniture',
-    jsonb_build_object('itemUid', alt, 'x', 61, 'y', 40, 'sx', 0, 'sy', 0)), 'null');
+    jsonb_build_object('itemUid', alt, 'x', 13, 'y', 9, 'sx', 0, 'sy', 0)), 'null');
   -- ...until they are made a citizen of it.
   insert into deed_member (world_id, founder, uid, role) values (w, other, u, 'builder');
   insert into said select 'CITIZEN|' || coalesce(craft_refusal(w, u, 'make_altar', null), 'null');
   insert into said select 'PUTCITIZEN|' || coalesce(act_refusal(w, u, 'place_furniture',
-    jsonb_build_object('itemUid', alt, 'x', 61, 'y', 40, 'sx', 0, 'sy', 0)), 'null');
+    jsonb_build_object('itemUid', alt, 'x', 13, 'y', 9, 'sx', 0, 'sy', 0)), 'null');
 end $$;
 select k from said;
 rollback;

@@ -7,7 +7,8 @@ import { RECIPE_BY_ID } from '../../game/recipes';
 import { BOARD_TOP } from '../../game/boards';
 import { IDLE_LOGOUT, WORKER_REST_EVERY, WORKER_REST_FIRST, WORKER_REST_MOST } from '../../game/keep';
 import { REPORTS_A_SESSION } from '../../net/errors';
-import { numberWord, share, spanWords } from '../../game/words';
+import { article, listed, numberWord, percent, share, spanWords, times } from '../../game/words';
+import { ANCIENT_EFFECTS, ANCIENT_PLUS, BAUBLE_HIGH, BAUBLE_LOW, BAUBLE_SHARE, BAUBLE_TIERS, baubleTimes, YIELD_TIMES } from '../../game/baubles';
 import { GRAVE_KEEPS, GRAVE_REACH } from '../../game/graves';
 import { UI_SIZE_MAX, UI_SIZE_MIN } from '../screen';
 import { defaultKey } from '../../game/keybinds';
@@ -328,6 +329,17 @@ export const NEWS: News[] = [
     day: '2026-09-26',
     lines: () => [
       'An altar can only be set down on a settlement of yours as well. Altars already standing elsewhere stay where they are.',
+    ],
+  },
+  {
+    n: 23,
+    day: '2026-09-26',
+    lines: () => [
+      `Baubles: ${percent(BAUBLE_SHARE)} of what archaeology turns up is now a tarnished bauble, ${listed(BAUBLE_TIERS.map((t) => `${percent(t.odds)} ${t.name.toLowerCase()}`))}. Restore it as you would a relic, and what it gives is rolled and written on it.`,
+      `Set it into an altar on a settlement of yours, from Baubles on the altar's menu. A settlement has ${listed(BAUBLE_TIERS.map((t) => `${numberWord(t.slots)} ${t.name.toLowerCase()}`))} sockets, and its founder, mayors and builders get what is in them on every action they do on its land.`,
+      `Minor: ${BAUBLE_LOW} to ${BAUBLE_HIGH}% less time per action, or ${BAUBLE_LOW} to ${BAUBLE_HIGH}% more skill gained, in one skill. Major: a ${BAUBLE_LOW} to ${BAUBLE_HIGH}% chance of ${times(YIELD_TIMES)} the yield of each action in one skill. Ancient: +${ANCIENT_PLUS} to every yield of one action, such as ${ANCIENT_EFFECTS[1].said}.`,
+      `Rarity multiplies what it rolled: ${listed(RARITIES.slice(1).map((r, i) => `${times(baubleTimes(i + 1))} for ${article(r.name)} ${r.name} one`))}.`,
+      'A bauble set into an altar stays there. Another can take its socket, and the one it replaces is destroyed.',
     ],
   },
 ];

@@ -97,6 +97,7 @@ import { FUELS, FUEL_SAID } from '../src/game/campfire';
 import { GRAVE_KEEPS, GRAVE_REACH } from '../src/game/graves';
 import { spanWords } from '../src/game/words';
 import { DARK_HIT, DARK_SHOT, DARK_SWING, HEAVY_SKILLS, NIGHT_EYES_FROM, WORK_BACK, WORK_HAND, WORK_WIND, WORK_WIND_SPENT } from '../src/game/learn';
+import { ANCIENT_EFFECTS, ANCIENT_PLUS, BAUBLE_HIGH, BAUBLE_KINDS, BAUBLE_LOW, BAUBLE_SHARE, BAUBLE_TIERS, MAJOR_SKILLS, MINOR_SKILLS, YIELD_TIMES } from '../src/game/baubles';
 
 const q = (v: unknown): string => {
   if (v === undefined || v === null) return 'null';
@@ -599,6 +600,24 @@ out.push(`create table if not exists recipe (
 );`);
 /* Worked only by somebody standing on a settlement of theirs: `Recipe.deed`, which `craft_refusal` reads. */
 out.push(`alter table recipe add column if not exists deed boolean not null default false;`);
+/*
+ * Baubles (`src/game/baubles.ts`): their three tiers, the skills a minor and a
+ * major one may speak for, how each kind is written and how far it adds up,
+ * and what an ancient one adds to. Read by the `bauble_*` functions, which
+ * roll them, read them off a bauble and add up a settlement's; the sockets
+ * themselves are players' data, in `deed_bauble`.
+ */
+out.push(`create table if not exists bauble_tier (
+  id text primary key, ord int not null, odds real not null, slots int not null,
+  difficulty real not null, item text not null
+);`);
+out.push(`create table if not exists bauble_skill (skill text primary key, minor boolean not null, major boolean not null);`);
+out.push(`create table if not exists bauble_ancient (id text primary key, ord int not null, action text not null, said text not null);`);
+out.push(`create table if not exists bauble_kind (id text primary key, ord int not null, lead text not null, tail text not null, cap real not null);`);
+out.push(`alter table bauble_kind enable row level security;`);
+out.push(`alter table bauble_tier enable row level security;`);
+out.push(`alter table bauble_skill enable row level security;`);
+out.push(`alter table bauble_ancient enable row level security;`);
 /*
  * What a thing set down on the ground takes up, and what it is good for.
  *
@@ -1545,5 +1564,19 @@ for (const r of RECIPES) {
   for (const [item, count] of r.salvage ?? []) {
     out.push(`insert into recipe_gives values (${q(r.id)}, ${q(item)}, ${q(count)}, 'salvage');`);
   }
+}
+/* The baubles, and their few loose numbers. */
+out.push(emptied(['bauble_tier', 'bauble_skill', 'bauble_ancient', 'bauble_kind']));
+BAUBLE_TIERS.forEach((t, ord) => out.push(`insert into bauble_tier values (${[q(t.id), q(ord), q(t.odds), q(t.slots), q(t.difficulty), q(t.item)].join(', ')});`));
+for (const skill of [...new Set([...MINOR_SKILLS, ...MAJOR_SKILLS])]) {
+  out.push(`insert into bauble_skill values (${q(skill)}, ${q(MINOR_SKILLS.includes(skill))}, ${q(MAJOR_SKILLS.includes(skill))});`);
+}
+ANCIENT_EFFECTS.forEach((e, ord) => out.push(`insert into bauble_ancient values (${[q(e.id), q(ord), q(e.action), q(e.said)].join(', ')});`));
+Object.entries(BAUBLE_KINDS).forEach(([id, k], ord) => out.push(`insert into bauble_kind values (${[q(id), q(ord), q(k.lead), q(k.tail), q(k.cap)].join(', ')});`));
+for (const [fn, v] of [
+  ['bauble_share', BAUBLE_SHARE], ['bauble_low', BAUBLE_LOW], ['bauble_high', BAUBLE_HIGH], ['ancient_plus', ANCIENT_PLUS],
+  ['bauble_yield_times', YIELD_TIMES],
+] as Array<[string, number]>) {
+  out.push(`create or replace function ${fn}() returns double precision language sql immutable as $fn$ select ${q(v)}::double precision $fn$;`);
 }
 console.log(out.join('\n'));

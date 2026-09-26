@@ -35,6 +35,7 @@ import { FOUNDATION_ACTIONS } from './foundations';
 import { NAMING_ACTIONS } from './naming';
 import { LANTERN_ACTIONS } from './lantern';
 import { FAITH_ACTIONS } from './faith';
+import { BAUBLE_ACTIONS } from './baubles';
 import { MEDITATION_ACTIONS } from './meditation';
 import { SPECIES, type Stance } from './creatures';
 import { BOTANIZE_TABLE, FORAGE_TABLE, listOf, rollsAt, rollTable } from './forage';
@@ -80,7 +81,15 @@ export type Target =
   | { kind: 'campfire'; id: number; itemUid?: number; count?: number }
   | { kind: 'smelter'; id: number; itemUid?: number; count?: number; mouldUid?: number }
   | { kind: 'kiln'; id: number; itemUid?: number; count?: number }
-  | { kind: 'furniture'; id: number; itemUid?: number; count?: number; brew?: string }
+  | {
+      kind: 'furniture';
+      id: number;
+      itemUid?: number;
+      count?: number;
+      brew?: string;
+      /** Which socket of its tier a bauble goes into, when one is asked for (`set_bauble`). */
+      slot?: number;
+    }
   | { kind: 'anvil'; id: number; itemUid?: number }
   | { kind: 'post'; id: number; creatureId?: number }
   | { kind: 'trap'; id: number }
@@ -2199,6 +2208,7 @@ export const ACTIONS: ActionDef[] = [
   ...BRIDGE_ACTIONS,
   ...FOUNDATION_ACTIONS,
   ...FAITH_ACTIONS,
+  ...BAUBLE_ACTIONS,
   ...MEDITATION_ACTIONS,
   ...ARCHAEOLOGY_ACTIONS,
   ...TREASURE_ACTIONS,

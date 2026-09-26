@@ -22,6 +22,7 @@ import { DEED_UPGRADES } from '../../game/deed';
 import { DYES } from '../../game/dyestuffs';
 import { CROP_BY_SEED, cropYield, RIPE, STAGE_NAMES } from '../../game/farming';
 import { CASTS, FAITH, FAVOUR_CEILING, favourCap, PRAYER_BASE, PRAYER_LIFT, PRAYER_PEAKS, PRAYER_REST, PRAYER_TAPER } from '../../game/faith';
+import { ANCIENT_EFFECTS, ANCIENT_PLUS, BAUBLE_HIGH, BAUBLE_KINDS, BAUBLE_LOW, BAUBLE_SHARE, BAUBLE_TIERS, baubleTimes, MAJOR_SKILLS, MINOR_SKILLS, YIELD_TIMES } from '../../game/baubles';
 import { HERB_HEAL, healAmount, SUITS_HEAL } from '../../game/firstaid';
 import { biteShare, FISH, LINE_REACH } from '../../game/fishing';
 import { PER_ROLL, rollsAt } from '../../game/forage';
@@ -1583,6 +1584,27 @@ export function helpText(): string {
     treasure and nothing more &mdash; a statuette, a bronze mirror, a bone comb, an old lamp &mdash;
     and some of it is an <b>old file</b>, an <b>old blade</b> or an <b>ancient helm</b>, which are the
     real prize: a file before you have a forge to cast one in.</p>
+    <h3>Baubles</h3>
+    <p>${capital(percent(BAUBLE_SHARE))} of what a trowel turns up is not a fragment but a <b>tarnished bauble</b>, whole in one
+    piece: ${listed(BAUBLE_TIERS.map((t) => `${percent(t.odds)} of them ${t.name.toLowerCase()}`))}. Tarnished, it gives nothing. <b>Restore</b> it on
+    its own, on restoration, at difficulty ${listed(BAUBLE_TIERS.map((t) => `${t.difficulty} for ${article(t.name.toLowerCase())} ${t.name.toLowerCase()} one`))}; a failure
+    damages it, as it does a relic's pieces. What it gives is rolled when it comes clean, with its rarity, and
+    written on it: a rare bauble gives ${times(baubleTimes(1))} what an ordinary one rolls, a supreme ${times(baubleTimes(2))} and a
+    fantastic ${times(baubleTimes(3))}.</p>
+    <table>
+      ${BAUBLE_TIERS.map((t) => `<tr><td><b>${t.name}</b></td><td>${NumberWord(t.slots)} sockets. ${
+        t.id === 'minor' ? `${BAUBLE_LOW} to ${BAUBLE_HIGH}% less time per action, or ${BAUBLE_LOW} to ${BAUBLE_HIGH}% more skill gained, in one of the ${numberWord(MINOR_SKILLS.length)} skills an action is done with.`
+        : t.id === 'major' ? `A ${BAUBLE_LOW} to ${BAUBLE_HIGH}% chance of ${times(YIELD_TIMES)} the yield of each action in one of ${numberWord(MAJOR_SKILLS.length)} skills: every skill the crafting window makes things with, and ${listed(MAJOR_SKILLS.filter((k) => !RECIPES.some((r) => r.skill === k)).map((k) => SKILL_BY_ID.get(k)?.name.toLowerCase() ?? k))}.`
+        : `One of: ${listed(ANCIENT_EFFECTS.map((e) => `+${ANCIENT_PLUS} ${e.said}`))}.`}</td></tr>`).join('\n      ')}
+    </table>
+    <p>Set one at an altar on a settlement of yours: <b>Baubles</b> on the altar's menu. The sockets are the
+    settlement's, not the stone's &mdash; every altar on it opens the same ${numberWord(BAUBLE_TIERS.reduce((n, t) => n + t.slots, 0))} &mdash; and its founder,
+    a mayor or a builder may set a bauble into an empty one. Only the founder or a mayor may set one in place
+    of another, and the one it replaces is destroyed; nothing set can be taken out again. What is set works
+    for the settlement's citizens &mdash; its founder, mayors and builders, not its guests &mdash; on every action
+    they do standing on its land. The same kind for the same skill adds up, to at most ${percent(BAUBLE_KINDS.time.cap / 100)} less time,
+    ${times(1 + BAUBLE_KINDS.learn.cap / 100)} the skill gain, and a ${percent(BAUBLE_KINDS.double.cap / 100)} chance of ${times(YIELD_TIMES)} the yield, which a go gets
+    all of or none of. The Settlement window adds up what yours give.</p>
     <h3>Wildermon</h3>
     <p>Wild creatures roam the island. The <b>Rabba</b> is a rabbit-like grazer that forages berries when
     hungry; the <b>Vola</b> is a mole-like digger that botanizes herbs and roots instead; the
@@ -1781,6 +1803,7 @@ export function helpText(): string {
     ${numberWord(PRAYER_TAPER)} hours or more from either &mdash; and less the further off you are. A good altar banks more
     than a rough one. Favour also trickles back on its own, slowly, up to whatever your faith carries
     &mdash; ${Math.round(favourCap(startOf(FAITH)))} at the start and ${FAVOUR_CEILING} at the very top.</p>
+    <p>It also holds the settlement's bauble sockets: see <b>Baubles</b>, under digging up the past.</p>
     <p>${NumberWord(CASTS.length)} things it buys, and none of them can be had any other way:</p>
     <table>
       ${CASTS.map((c) => `<tr><td><b>${c.name}</b></td><td>${c.cost} favour, prayer ${c.level}. ${c.note}</td></tr>`).join('\n      ')}
