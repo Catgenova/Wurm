@@ -2371,7 +2371,9 @@ function toneOf(P: Palette, m: Mat, k: number, gear: boolean): string {
   // Gear takes the same light as the body, harder, so its lit side and its shadow side are two planes whatever its colour: metal half as
   // much again between them, cloth and hide and wood well over a half, scale a third; and no metal goes darker than three-fifths lit.
   const cool = COOLS.has(m);
-  const kk = Math.min(m === 'metalLit' ? 1.02 : Infinity, Math.max(cool ? 0.6 : HIDE.has(m) ? HIDE_LEAST : 0, 0.92 + (k - 0.92) * (m === 'scale' || m === 'scaleDark' ? 1.3 : cool ? 1.5 : 1.55)));
+  // A lit edge or a blade's flat full in the light no further than a little over its own colour, which is pale already: past that it
+  // goes to paper white and the blade is a gap in the picture.
+  const kk = Math.min(m === 'metalLit' ? 1.02 : m === 'blade' ? 1.05 : Infinity, Math.max(cool ? 0.6 : HIDE.has(m) ? HIDE_LEAST : 0, 0.92 + (k - 0.92) * (m === 'scale' || m === 'scaleDark' ? 1.3 : cool ? 1.5 : 1.55)));
   // Lit no further than its brightest channel will go: past that, a colour clips toward lemon or cyan instead of getting lighter.
   if (!cool || kk >= 0.94) return shade(P[m], Math.min(kk, 250 / Math.max(1, P[m][0], P[m][1], P[m][2])));
   // Its shadow leans cool: blue-grey, or on copper the green it weathers to.
@@ -3161,7 +3163,7 @@ const MODELS: Record<string, (b: Build, fit: number) => GearModel> = {
   chain_hauberk: (b) => {
     const g = CHEST_FIT.chain_hauberk;
     // Hanging long and belling out well past the hips, which is what tells it from a coat at a distance.
-    const skirt = skirtRings(b, g - 0.02, -3.0, 5.2);
+    const skirt = skirtRings(b, g - 0.02, -3.0, 7.2);
     const halves: Array<[number, number]> = [[-80, 80], [100, 260]];
     return {
       layer: 3,
@@ -3204,10 +3206,10 @@ const MODELS: Record<string, (b: Build, fit: number) => GearModel> = {
       layer: 4,
       bits: [
         // Scale in courses over the whole body of it, and a collar of the dark scale.
-        { bone: 'chest', over: ['chest'], bias: 0.02, convex: true, mesh: join(scaled(b.fr, chestRings(b, g), 5, 0.12, 12), rings([[2.16, 1.36 * b.fr.sh * g, 0.78 * g, 0, -0.08], [2.3, 1.24 * b.fr.sh * g, 0.72 * g, 0, -0.08]], 8, 'scaleDark', { top: false, bottom: false })) },
-        { bone: 'spine', over: ['abdomen', 'skirt'], bias: 0.02, convex: true, mesh: scaled(b.fr, waistRings(b, g), 3, 0.1, 12) },
+        { bone: 'chest', over: ['chest'], bias: 0.02, convex: true, mesh: join(scaled(b.fr, chestRings(b, g), 4, 0.12, 10), rings([[2.16, 1.36 * b.fr.sh * g, 0.78 * g, 0, -0.08], [2.3, 1.24 * b.fr.sh * g, 0.72 * g, 0, -0.08]], 8, 'scaleDark', { top: false, bottom: false })) },
+        { bone: 'spine', over: ['abdomen', 'skirt'], bias: 0.02, convex: true, mesh: scaled(b.fr, waistRings(b, g), 2, 0.1, 10) },
         // And a skirt of it to the middle of the thigh, flaring.
-        { bone: 'pelvis', over: ['skirt', 'thigh', 'pelvis'], bias: 0.16, skirt: true, convex: true, mesh: scaled(b.fr, skirtRings(b, g - 0.02, -2.2, 1.8), 4, 0.1, 12) },
+        { bone: 'pelvis', over: ['skirt', 'thigh', 'pelvis'], bias: 0.16, skirt: true, convex: true, mesh: scaled(b.fr, skirtRings(b, g - 0.02, -2.2, 1.8), 3, 0.1, 10) },
         { bone: 'pelvis', over: ['belt', 'skirt', 'abdomen', 'pelvis'], bias: 0.02, convex: true, mesh: beltRing(b, g + 0.03, 'belt') },
         // Great scales capping the shoulders.
         { bone: 'arm', side: 'both', over: ['upper'], bias: 0.2, convex: true, mesh: scaled(b.fr, [[-0.95, 1.04, 1.02, 0.1], [0.2, 1.18, 1.14, 0.1], [0.78, 0.68, 0.66, 0.04]], 3, 0.1, 8) },
@@ -3282,9 +3284,9 @@ const MODELS: Record<string, (b: Build, fit: number) => GearModel> = {
   scale_sleeves: (b) => ({
     layer: 4,
     bits: [
-      { bone: 'arm', side: 'both', over: ['upper'], bias: 0.015, convex: true, mesh: scaled(b.fr, upperRings(b, 1.14, -2.95), 4, 0.09, 8, 0.14) },
+      { bone: 'arm', side: 'both', over: ['upper'], bias: 0.015, convex: true, mesh: scaled(b.fr, upperRings(b, 1.14, -2.95), 3, 0.09, 6, 0.14) },
       { bone: 'elbow', side: 'both', over: ['lower', 'upper'], bias: 0.017, convex: true, mesh: knuckle(0.76, 'scaleDark') },
-      { bone: 'elbow', side: 'both', over: ['lower'], bias: 0.02, convex: true, mesh: scaled(b.fr, forearmRings(1.12), 3, 0.08, 8, 0.14) },
+      { bone: 'elbow', side: 'both', over: ['lower'], bias: 0.02, convex: true, mesh: scaled(b.fr, forearmRings(1.12), 2, 0.08, 6, 0.14) },
       // A cuff of scale flaring over the back of the glove.
       { bone: 'elbow', side: 'both', over: ['lower', 'hand'], bias: 0.03, convex: true, mesh: rings([[-2.4, 0.76, 0.72], [-1.8, 0.62, 0.59]], 6, 'scaleDark', { top: false, bottom: false }) },
     ],
@@ -3341,9 +3343,9 @@ const MODELS: Record<string, (b: Build, fit: number) => GearModel> = {
   scale_leggings: (b) => ({
     layer: 4,
     bits: [
-      { bone: 'hip', side: 'both', over: ['thigh'], bias: 0.012, convex: true, mesh: scaled(b.fr, thighRings(b, 1.12), 4, 0.09, 8, 0.14) },
+      { bone: 'hip', side: 'both', over: ['thigh'], bias: 0.012, convex: true, mesh: scaled(b.fr, thighRings(b, 1.12), 3, 0.09, 6, 0.14) },
       { bone: 'knee', side: 'both', over: ['shin', 'thigh'], bias: 0.02, convex: true, mesh: knuckle(0.92, 'scaleDark') },
-      { bone: 'knee', side: 'both', over: ['shin', 'boot'], bias: 0.03, convex: true, mesh: scaled(b.fr, shinRings(1.12, -2.4), 3, 0.08, 8, 0.14) },
+      { bone: 'knee', side: 'both', over: ['shin', 'boot'], bias: 0.03, convex: true, mesh: scaled(b.fr, shinRings(1.12, -2.4), 2, 0.08, 6, 0.14) },
     ],
     hides: ['thigh', 'shin'],
   }),
@@ -4065,7 +4067,7 @@ const bowUp = (facing: number): V3 => {
  */
 const STAFF_BACK = [0, 1, 0, 0, 0, 1, 0, 0];
 const STAFF_BACK_BY = -8;
-const STAFF_OUT = [10, 22, 10, 10, 10, 16, 10, 10];
+const STAFF_OUT = [10, 22, 10, 10, 10, 22, 10, 10];
 /** And side on to the left, where the shaft in the far hand stands in front of the face, leaning forward at least this far, clear of it. */
 const STAFF_LEAST = [0, 0, 22, 0, 0, 0, 22, 0];
 const staffUp = (facing: number, lean: number): V3 => {
@@ -4124,7 +4126,8 @@ const SHIELD: Record<string, (dyed: boolean) => Mesh> = {
     const face: Mat = dyed ? 'cloth' : 'wood';
     // The rim bound in iron, the planks across it, and the boss over the grip.
     const disc = rings([[-0.12, R, R], [0.12, R, R]], n, (band) => (band === 1 ? face : 'woodDark'));
-    const rim = rings([[-0.16, R + 0.1, R + 0.1], [0.17, R + 0.1, R + 0.1]], n, 'metalDark', { top: false, bottom: false });
+    // The rim bound in iron standing proud of the boards either side, so edge on the shield is a straight band and not a strand.
+    const rim = rings([[-0.26, R + 0.12, R + 0.12], [0.27, R + 0.12, R + 0.12]], n, 'metalDark', { top: false, bottom: false });
     const seams = decals([-1.25, 0, 1.25].map((x) => {
       const half = Math.sqrt(Math.max(0, R * R - x * x)) * 0.97;
       return plate([x, 0, 0.125], [0.04, 0, 0], [0, half, 0], [0, 0, 1], dyed ? 'clothDark' : 'woodDark');
@@ -4141,7 +4144,9 @@ const SHIELD: Record<string, (dyed: boolean) => Mesh> = {
     const outline: Pt[] = [[-1.75, 2.3], [0, 2.3], [1.75, 2.3], [1.8, 0.6], [1.45, -0.9], [0.8, -2.1], [0, -2.9], [-0.8, -2.1], [-1.45, -0.9], [-1.8, 0.6]];
     const bend = (x: number): number => -Math.abs(x) * 0.22;
     const n = outline.length;
-    const v: V3[] = [...outline.map(([x, y]): V3 => [x, y, bend(x) + 0.1]), ...outline.map(([x, y]): V3 => [x, y, bend(x) - 0.1])];
+    // Thick enough edge on to be a band rather than a hairline.
+    const T = 0.16;
+    const v: V3[] = [...outline.map(([x, y]): V3 => [x, y, bend(x) + T]), ...outline.map(([x, y]): V3 => [x, y, bend(x) - T])];
     // The face as two halves, right and left of the middle, so the bend shows in the light; boarded behind in wood.
     const right = [1, 2, 3, 4, 5, 6], left = [6, 7, 8, 9, 0, 1];
     const f: Face[] = [
@@ -4156,7 +4161,7 @@ const SHIELD: Record<string, (dyed: boolean) => Mesh> = {
     // The field inside the rim, painted when dyed, and a boss on the middle.
     const inset = (i: number): V3 => {
       const [x, y] = outline[i];
-      return [x * 0.84, y * 0.84 - 0.05, bend(x * 0.84) + 0.105];
+      return [x * 0.84, y * 0.84 - 0.05, bend(x * 0.84) + T + 0.005];
     };
     const field: Mat = dyed ? 'cloth' : 'metal';
     const paint = decals([right, left].map((idx) => {
@@ -4164,8 +4169,8 @@ const SHIELD: Record<string, (dyed: boolean) => Mesh> = {
       return { q: newell(q)[2] < 0 ? q.reverse() : q, m: field };
     }));
     // A pale down the middle in brass, the one device on it, and a boss over the grip.
-    const pale = decals([plate([0, -0.25, bend(0) + 0.112], [0.3, 0, 0], [0, 2.35, 0], [0, 0, 1], 'fitting')]);
-    const boss = ball([0, 0.2, 0.18], [0.62, 0.62, 0.36], 8, 4, 'metalLit');
+    const pale = decals([plate([0, -0.25, bend(0) + T + 0.012], [0.3, 0, 0], [0, 2.35, 0], [0, 0, 1], 'fitting')]);
+    const boss = ball([0, 0.2, T + 0.08], [0.62, 0.62, 0.36], 8, 4, 'metalLit');
     return join(mesh(v, f), paint, pale, boss);
   },
 };
@@ -4644,7 +4649,7 @@ const dist = (a: V3, b: V3): number => Math.hypot(a[0] - b[0], a[1] - b[1], a[2]
  * rows. Under two of a pattern to a facet it is not drawn at all.
  */
 const PATTERN: Record<Pattern, { a: number; b: number; px: number }> = {
-  mail: { a: 0.2, b: 0.2, px: 2.2 },
+  mail: { a: 0.2, b: 0.2, px: 3.0 },
   scale: { a: 0.46, b: 0.4, px: 3.0 },
   quilt: { a: 0.42, b: 9, px: 3.6 },
   lames: { a: 9, b: 0.5, px: 3.6 },
@@ -5254,11 +5259,21 @@ function render(g: CanvasRenderingContext2D, parts: Part[], pal: Palette, view: 
     to.moveTo(l.s[a][0], l.s[a][1]);
     to.lineTo(l.s[b][0], l.s[b][1]);
   };
+  // The outline round the whole in the dark ink gear is drawn in, the body's own parts as well: in the body's lighter inks a bare
+  // sleeve beside a coat of mail has half the line round it the mail has, and goes soft at the edge of the figure.
+  const outlines = {} as Record<Mat, string>;
+  for (const m of Object.keys(pal) as Mat[]) outlines[m] = shade(gearInk(pal[m]), 1);
+  const rimLine = (l: Laid, a: number, b: number, fi: number): void => {
+    const m = l.part.mesh.f[fi].m;
+    const to = into(l.part.pal ? inkIn(l, m) : outlines[m]);
+    to.moveTo(l.s[a][0], l.s[a][1]);
+    to.lineTo(l.s[b][0], l.s[b][1]);
+  };
   g.lineJoin = 'round';
   g.lineCap = 'round';
   const edges = laid.map(edgesOf);
   // The outline: every part's own outline in its ink, fattened, so that only a rim shows round the outside once the facets go over it.
-  laid.forEach((l, li) => { for (const [a, b, fi] of edges[li]) line(l, a, b, fi); });
+  laid.forEach((l, li) => { for (const [a, b, fi] of edges[li]) rimLine(l, a, b, fi); });
   flush(ink * 2, false);
   const shines = laid.some((l) => l.part.rare) ? shinesOf(laid, now) : null;
   laid.forEach((l, li) => {

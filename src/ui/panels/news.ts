@@ -240,6 +240,17 @@ export const NEWS: News[] = [
       ];
     },
   },
+  {
+    n: 15,
+    day: '2026-09-26',
+    lines: () => {
+      const named = (id: string): string => itemDef(id).name.toLowerCase();
+      return [
+        `Dragon scale is laid in fewer, larger scales, mail's rows of rings are further apart, and a ${named('chain_hauberk')} flares wider below the hips.`,
+        `A ${either(Object.keys(SHIELDS).map(named))} is thicker at the rim, so seen edge on it is a band rather than a line. A blade in full light is pale steel rather than white, and bare arms are outlined as darkly as armour is.`,
+      ];
+    },
+  },
 ];
 
 /** The highest entry this browser has shown. */
