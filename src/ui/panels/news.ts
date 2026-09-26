@@ -190,9 +190,23 @@ export const NEWS: News[] = [
       const knives = WEAPONS.filter((w) => weaponCarry(w.id)?.front).map((w) => named(w.id));
       return [
         `Your hair shows below the rim of a ${either(['wool_cap', 'leather_cap', 'helm', 'scale_helm'].map(named))}, and long hair hangs down below a ${named('wool_cap')} or a ${named('leather_cap')} as it is cut. A ${named('chain_coif')} covers all of it.`,
-        `A ${either(knives)} is put away upright at the front of your belt, left of the buckle, rather than at your hip.`,
+        `A ${either(knives)} is put away upright at the front of your belt, right of the buckle, rather than at your hip.`,
         `The ${named('hatchet')} has a square bit with a hammer's poll behind it, the ${named('throwing_axe')} a head sweeping up above a haft bowed toward it, the ${named('javelin')} vanes at its tail and the ${named('carving_knife')} a guard for the fingers. A ${named('chain_hauberk')} hangs longer and flares out past the hips.`,
         `Dragon scale's scales end in a broad U rather than a point, each hanging over the course below. A ${either(shine)} piece of it shows its colour on the lit tips of its scales rather than in a line round its edge.`,
+      ];
+    },
+  },
+  {
+    n: 12,
+    day: '2026-09-26',
+    lines: () => {
+      const shine = RARITIES.slice(1).map((r) => r.name);
+      const named = (id: string): string => itemDef(id).name.toLowerCase();
+      return [
+        `Under a ${either(['wool_cap', 'leather_cap', 'helm', 'scale_helm'].map(named))} your hair is cut off at the rim: what shows is what hangs below it, and none of it through the crown. The ${named('helm')} and the ${named('scale_helm')} stand clear of the hair, with a guard over the back of the neck, and the ${named('leather_cap')} is sewn from four panels of a darker, redder hide than the coat.`,
+        `A ${either(shine)} piece shows its colour as a sheen over the side of it the light falls on, rather than as a line round its edges. Its glint crosses it nearly all the time instead of most of it, and a ${shine[2]} one's glint is paler and its stars bigger.`,
+        `A ${named('maul')} is slung head up; a ${named('spear')} or ${named('javelin')} is slung higher, so its butt is off the ground; a ${named('throwing_axe')} leans out from the belt, so its haft shows; and a sword in its scabbard hangs out from the leg, where it can be seen from the front.`,
+        "Dragon scale's lower edges are pale where the light is on them and a mid green where it is not, instead of a dark line under every course.",
       ];
     },
   },

@@ -2516,6 +2516,8 @@ const CHALK: RGB = [176, 172, 164];
 /** What copper's shadow leans toward: the grey-green it weathers to, which keeps it off the colour of skin in the shade. */
 const VERDIGRIS: RGB = [104, 132, 120];
 const WARM_LIGHT: RGB = [255, 250, 238];
+/** Hide tanned dark and red, for the step a leather cap takes away from the face. */
+const TANNED: RGB = [96, 52, 42];
 /** A colour made lighter or darker by `k` along its own hue: every channel scaled, none past white. */
 const lift = (c: RGB, k: number): RGB => {
   const top = Math.max(c[0], c[1], c[2]) * k;
@@ -2544,7 +2546,10 @@ function gearPalette(base: Palette, p: GearPiece, step = 0): Palette {
   // Cloth and hide a step lighter or darker by where on the body they are, so a suit of one dye is still a cap, a coat and breeches.
   const stepped = (c: RGB): RGB => (step ? mixRGB(c, step > 0 ? WARM_LIGHT : COOL_SHADOW, Math.abs(step)) : c);
   const cloth = stepped(dye ?? GEAR_BASE.cloth);
-  const leather = stepped(dye ? mixRGB(GEAR_BASE.leather, dye, 0.45) : GEAR_BASE.leather);
+  const hide = dye ? mixRGB(GEAR_BASE.leather, dye, 0.45) : GEAR_BASE.leather;
+  // Hide worn on the head the other way, darker and warmer than the coat: a step lighter, a leather cap is the colour of the face
+  // under it, and from behind the head it reads as a bald crown.
+  const leather = step > 0 ? mixRGB(hide, TANNED, 0.3) : stepped(hide);
   pal = {
     ...base,
     metal,
@@ -2613,6 +2618,12 @@ interface GearModel {
    * would only be drawn to be drawn over.
    */
   hides?: Covers[];
+  /**
+   * A hat's rim, at `f` over the brow and `b` at the nape as its rows are:
+   * the hair is cut off level with it, so what shows of it is what hangs
+   * below the brim, and none of it stands out through the crown.
+   */
+  hairTo?: { f: number; b: number };
 }
 
 /** Every side facet of a mesh worked with a pattern. */
@@ -2882,6 +2893,17 @@ function crestOf(fr: Frame, out: number, r: number, m: Mat, top = CROWN + 0.3, f
   return chain(pts, pts.map(() => r), 4, m);
 }
 
+/** A seam up a cap from `from` to `to`, `a` degrees round from the right (90 over the brow), `out` off the skull and `r` round. */
+function seamOf(fr: Frame, a: number, from: number, to: number, out: number, r: number, m: Mat): Mesh {
+  const c = Math.cos(a * DEG), s = Math.sin(a * DEG);
+  const pts = [0, 0.34, 0.67, 1].map((t): V3 => {
+    const z = from + (to - from) * t;
+    const [sx, sy, cy] = skull(fr, z);
+    return [c * (sx + out), cy + s * (sy + out), z];
+  });
+  return chain(pts, pts.map(() => r), 4, m);
+}
+
 /** Everything a hat is drawn over: the head and whatever of the hair and the face is left on it. */
 const HEAD_OVER: Covers[] = ['head', 'ears', 'nose', 'beard', 'fall', 'tails', 'cap', 'top'];
 
@@ -2927,35 +2949,45 @@ function splitSkirt(rs: number[][], fork: number, halves: Array<[number, number]
  */
 const MODELS: Record<string, (b: Build, fit: number) => GearModel> = {
   /* Head */
-  wool_cap: (b) => ({
-    layer: 1,
-    bits: [{
-      bone: 'head', over: HEAD_OVER, bias: 0.03,
-      mesh: grown(worn(hat(b.fr, [
-        // A rolled brim up on the brow and down at the nape, and the knitted crown slouching back over the top.
-        { f: 2.16, b: 1.6, out: 0.12, outB: 0.2 }, { f: 2.32, b: 1.74, out: 0.3, outB: 0.34 }, { f: 2.46, b: 1.9, out: 0.2, outB: 0.24 },
-        { f: 2.8, b: 2.46, out: 0.17, outB: 0.2, dy: -0.08 }, { f: CROWN + 0.04, r: [1.04, 1.1], dy: -0.4 }, { f: CROWN + 0.3, r: [0.6, 0.64], dy: -0.95 },
-      ], 8, (band) => (band < 2 ? 'clothDark' : 'cloth')), 'quilt', (f) => f.m === 'cloth')),
-    }],
-    hides: ['top', 'tails'],
-  }),
-  leather_cap: (b) => ({
-    layer: 2,
-    bits: [{
-      bone: 'head', over: HEAD_OVER, bias: 0.03,
-      mesh: grown(join(
-        // A round cap of hide to just over the brow, bound round its edge in the darker hide, with a button on the crown.
-        hat(b.fr, [
-          { f: 2.16, b: 1.62, out: 0.1, outB: 0.18 }, { f: 2.3, b: 1.76, out: 0.14, outB: 0.19 },
-          { f: 2.7, b: 2.34, out: 0.13 }, { f: 3.0, b: 2.86, out: 0.1 }, { f: CROWN + 0.12, r: [0.36, 0.38] },
-        ], 8, (band) => (band === 0 ? 'leatherDark' : 'leather')),
-        ball([0, skull(b.fr, CROWN - 0.1)[2], CROWN + 0.15], [0.2, 0.2, 0.12], 5, 3, 'leatherDark'),
-        // Flaps down over the ears, curved round the head behind the cheek.
-        ...[-14, 194].map((c) => arcs([skullRing(b.fr, 1.05, 0.2), skullRing(b.fr, 1.4, 0.21), skullRing(b.fr, 1.8, 0.2)], 3, c - 26, c + 26, (band) => (band === 0 ? 'leatherDark' : 'leather'))),
-      )),
-    }],
-    hides: ['top', 'tails'],
-  }),
+  wool_cap: (b) => {
+    const rim = { f: 2.16, b: 1.6 };
+    return {
+      layer: 1,
+      bits: [{
+        bone: 'head', over: HEAD_OVER, bias: 0.03,
+        mesh: grown(worn(hat(b.fr, [
+          // A rolled brim up on the brow and down at the nape, and the knitted crown slouching back over the top.
+          { ...rim, out: 0.12, outB: 0.2 }, { f: 2.32, b: 1.74, out: 0.3, outB: 0.34 }, { f: 2.46, b: 1.9, out: 0.2, outB: 0.24 },
+          { f: 2.8, b: 2.46, out: 0.17, outB: 0.2, dy: -0.08 }, { f: CROWN + 0.04, r: [1.04, 1.1], dy: -0.4 }, { f: CROWN + 0.3, r: [0.6, 0.64], dy: -0.95 },
+        ], 8, (band) => (band < 2 ? 'clothDark' : 'cloth')), 'quilt', (f) => f.m === 'cloth')),
+      }],
+      hides: ['top', 'tails'],
+      hairTo: rim,
+    };
+  },
+  leather_cap: (b) => {
+    const rim = { f: 2.16, b: 1.62 };
+    return {
+      layer: 2,
+      bits: [{
+        bone: 'head', over: HEAD_OVER, bias: 0.03,
+        mesh: grown(join(
+          // A round cap of hide to just over the brow, bound round its edge in the darker hide, with a button on the crown.
+          hat(b.fr, [
+            { ...rim, out: 0.16, outB: 0.24 }, { f: 2.3, b: 1.76, out: 0.24, outB: 0.28 },
+            { f: 2.7, b: 2.34, out: 0.24 }, { f: 3.0, b: 2.86, out: 0.2 }, { f: CROWN + 0.2, r: [0.46, 0.48] },
+          ], 8, (band) => (band === 0 ? 'leatherDark' : 'leather')),
+          ball([0, skull(b.fr, CROWN - 0.1)[2], CROWN + 0.25], [0.22, 0.22, 0.13], 5, 3, 'leatherDark'),
+          // Sewn from four panels, a raised seam from the brim to the button between each, so it is a cap and not a head of hair.
+          ...[45, 135, 225, 315].map((a) => seamOf(b.fr, a, 2.5, CROWN - 0.05, 0.25, 0.06, 'leatherDark')),
+          // Flaps down over the ears, curved round the head behind the cheek.
+          ...[-14, 194].map((c) => arcs([skullRing(b.fr, 1.05, 0.26), skullRing(b.fr, 1.4, 0.27), skullRing(b.fr, 1.8, 0.26)], 3, c - 26, c + 26, (band) => (band === 0 ? 'leatherDark' : 'leather'))),
+        )),
+      }],
+      hides: ['top', 'tails'],
+      hairTo: rim,
+    };
+  },
   chain_coif: (b) => ({
     layer: 3,
     bits: [
@@ -2979,41 +3011,54 @@ const MODELS: Record<string, (b: Build, fit: number) => GearModel> = {
     // A hood hides the hair: it covers the head to the shoulders, and the hair would stand out through its crown.
     hides: ['cap', 'top', 'fall', 'tails'],
   }),
-  helm: (b) => ({
-    layer: 5,
-    bits: [{
-      bone: 'head', over: HEAD_OVER, bias: 0.04,
-      mesh: grown(join(
-        // A round steel cap to a rolled rim just over the brow, deeper behind, and a comb from the brow over the crown.
-        hat(b.fr, [
-          { f: 1.98, b: 1.55, out: 0.32, outB: 0.38 }, { f: 2.1, b: 1.7, out: 0.3, outB: 0.34 }, { f: 2.5, b: 2.3, out: 0.27 },
-          { f: 2.85, out: 0.22 }, { f: CROWN + 0.26, r: [0.5, 0.52] },
-        ], 8, (band) => (band === 0 ? 'metalLit' : 'metal')),
-        // From the brow up to the top of the crown and no further: down the back, it is a stroke of light down the middle of the head from behind.
-        crestOf(b.fr, 0.3, 0.13, 'metalLit', CROWN + 0.36, 2.25, Infinity),
-        // The nasal down over the nose, and a cheek plate down each side of the face.
-        box([-0.13, 1.72, 0.92], [0.13, 1.98, 2.02], 'metal'),
-        box([1.34, -0.2, 0.62], [1.72, 1.2, 1.7], 'metal', 'metalLit'), box([-1.72, -0.2, 0.62], [-1.34, 1.2, 1.7], 'metal', 'metalLit'),
-      )),
-    }],
-    hides: ['top', 'fall', 'tails'],
-  }),
-  scale_helm: (b) => ({
-    layer: 4,
-    bits: [{
-      bone: 'head', over: HEAD_OVER, bias: 0.04,
-      mesh: grown(join(
-        // Courses of scale up the skull from a rim over the brow, and a row of scale-spines up the middle, tallest over the crown.
-        worn(hat(b.fr, [
-          { f: 1.98, b: 1.5, out: 0.32, outB: 0.36 }, { f: 2.2, b: 1.9, out: 0.28 }, { f: 2.24, b: 1.94, out: 0.34 }, { f: 2.56, b: 2.36, out: 0.28 },
-          { f: 2.6, b: 2.4, out: 0.32 }, { f: 2.92, out: 0.24 }, { f: CROWN + 0.24, r: [0.5, 0.52] },
-        ], 8, (band) => (band === 0 ? 'scaleDark' : band % 2 ? 'scaleDark' : 'scale')), 'scale', (f) => f.m === 'scale'),
-        ...[-1.15, -0.45, 0.25, 0.95].map((y, i) => slab([[y - 0.32, CROWN - 0.1 - Math.abs(y) * 0.3], [y + 0.26, CROWN - 0.1 - Math.abs(y) * 0.3], [y - 0.18, CROWN + 1.1 - Math.abs(i - 1.5) * 0.3]].map(([yy, z]): [number, number, number] => [yy, z, 0.08]), 'scaleDark')),
-        box([1.32, -0.7, 0.8], [1.66, 0.45, 1.66], 'scale'), box([-1.66, -0.7, 0.8], [-1.32, 0.45, 1.66], 'scale'),
-      )),
-    }],
-    hides: ['top', 'fall', 'tails'],
-  }),
+  helm: (b) => {
+    const rim = { f: 1.98, b: 1.55 };
+    return {
+      layer: 5,
+      bits: [{
+        bone: 'head', over: HEAD_OVER, bias: 0.04,
+        mesh: grown(join(
+          // A round steel cap to a rolled rim just over the brow, deeper behind, and a comb from the brow over the crown: standing
+          // clear of the hair all round, so the head is the helm's shape and not the haircut's.
+          hat(b.fr, [
+            { ...rim, out: 0.42, outB: 0.48 }, { f: 2.1, b: 1.7, out: 0.4, outB: 0.44 }, { f: 2.5, b: 2.3, out: 0.38 },
+            { f: 2.85, out: 0.32 }, { f: CROWN + 0.36, r: [0.6, 0.62] },
+          ], 8, (band) => (band === 0 ? 'metalLit' : 'metal')),
+          // From the brow up to the top of the crown and no further: down the back, it is a stroke of light down the middle of the head from behind.
+          crestOf(b.fr, 0.4, 0.13, 'metalLit', CROWN + 0.48, 2.25, Infinity),
+          // The nasal down over the nose, and a cheek plate down each side of the face.
+          box([-0.13, 1.82, 0.92], [0.13, 2.08, 2.02], 'metal'),
+          box([1.44, -0.2, 0.62], [1.82, 1.2, 1.7], 'metal', 'metalLit'), box([-1.82, -0.2, 0.62], [-1.44, 1.2, 1.7], 'metal', 'metalLit'),
+          // A lame flared out over the nape from the rim between the cheek plates, so from behind it is a helm's back and not a face.
+          arcs([skullRing(b.fr, 0.72, 0.74), skullRing(b.fr, 1.1, 0.56), skullRing(b.fr, rim.b + 0.08, 0.46)], 5, 208, 332, (band) => (band === 0 ? 'metalLit' : 'metal')),
+        )),
+      }],
+      hides: ['top', 'tails'],
+      hairTo: rim,
+    };
+  },
+  scale_helm: (b) => {
+    const rim = { f: 1.98, b: 1.5 };
+    return {
+      layer: 4,
+      bits: [{
+        bone: 'head', over: HEAD_OVER, bias: 0.04,
+        mesh: grown(join(
+          // Courses of scale up the skull from a rim over the brow, and a row of scale-spines up the middle, tallest over the crown.
+          worn(hat(b.fr, [
+            { ...rim, out: 0.42, outB: 0.46 }, { f: 2.2, b: 1.9, out: 0.38 }, { f: 2.24, b: 1.94, out: 0.44 }, { f: 2.56, b: 2.36, out: 0.38 },
+            { f: 2.6, b: 2.4, out: 0.42 }, { f: 2.92, out: 0.34 }, { f: CROWN + 0.34, r: [0.6, 0.62] },
+          ], 8, (band) => (band === 0 ? 'scaleDark' : band % 2 ? 'scaleDark' : 'scale')), 'scale', (f) => f.m === 'scale'),
+          ...[-1.15, -0.45, 0.25, 0.95].map((y, i) => slab([[y - 0.32, CROWN - 0.1 - Math.abs(y) * 0.3], [y + 0.26, CROWN - 0.1 - Math.abs(y) * 0.3], [y - 0.18, CROWN + 1.2 - Math.abs(i - 1.5) * 0.3]].map(([yy, z]): [number, number, number] => [yy, z, 0.08]), 'scaleDark')),
+          box([1.42, -0.7, 0.8], [1.76, 0.45, 1.66], 'scale'), box([-1.76, -0.7, 0.8], [-1.42, 0.45, 1.66], 'scale'),
+          // A curtain of scale hung from the rim round the back of the neck, so from behind it is the helm and not a face.
+          worn(arcs([skullRing(b.fr, 0.62, 0.66), skullRing(b.fr, 1.05, 0.52), skullRing(b.fr, rim.b + 0.06, 0.44)], 5, 205, 335, (band) => (band === 0 ? 'scale' : 'scaleDark')), 'scale', (f) => f.m === 'scale'),
+        )),
+      }],
+      hides: ['top', 'tails'],
+      hairTo: rim,
+    };
+  },
 
   /* Chest */
   cloth_tunic: (b) => {
@@ -3128,9 +3173,10 @@ const MODELS: Record<string, (b: Build, fit: number) => GearModel> = {
   cloth_sleeves: (b) => ({
     layer: 1,
     bits: [
-      // Padded out, thickest over the shoulder, and rolled at the shoulder seam and the cuff.
-      { bone: 'arm', side: 'both', over: ['upper'], bias: 0.01, convex: true, mesh: worn(rings([[-2.95, 0.68 * 1.26, 0.66 * 1.26], [-1.5, 0.76 * 1.34, 0.74 * 1.34], [0.08, 0.84 * b.arm * 1.42, 0.82 * 1.42], [0.5, 0.52 * 1.5, 0.54 * 1.5]], 6, 'cloth', { top: false, bottom: false }), 'quilt') },
-      { bone: 'arm', side: 'both', over: ['upper'], bias: 0.015, convex: true, mesh: rings([[0.12, 1.24 * b.arm, 1.2], [0.42, 1.04, 1.0]], 6, 'clothDark', { top: false, bottom: false }) },
+      // Padded out, thickest over the shoulder, and rolled at the shoulder seam and the cuff: the top of it rounded in under the roll
+      // rather than cut off square above the arm, where it stood up over the line of the shoulders in two boxes.
+      { bone: 'arm', side: 'both', over: ['upper'], bias: 0.01, convex: true, mesh: worn(rings([[-2.95, 0.68 * 1.26, 0.66 * 1.26], [-1.5, 0.76 * 1.34, 0.74 * 1.34], [-0.2, 0.84 * b.arm * 1.42, 0.82 * 1.42], [0.22, 0.66 * 1.42, 0.64 * 1.42], [0.4, 0.34, 0.34]], 6, 'cloth', { bottom: false }), 'quilt') },
+      { bone: 'arm', side: 'both', over: ['upper'], bias: 0.015, convex: true, mesh: rings([[-0.12, 1.22 * b.arm, 1.18], [0.14, 1.0, 0.96]], 6, 'clothDark', { top: false, bottom: false }) },
       { bone: 'elbow', side: 'both', over: ['lower', 'upper'], bias: 0.012, convex: true, mesh: knuckle(0.78, 'cloth') },
       { bone: 'elbow', side: 'both', over: ['lower'], bias: 0.015, convex: true, mesh: join(worn(forearmShell(1.2, 'cloth'), 'quilt'), rings([[-2.46, 0.72, 0.68], [-1.95, 0.74, 0.7]], 6, 'clothDark', { top: false, bottom: false })) },
     ],
@@ -3170,7 +3216,8 @@ const MODELS: Record<string, (b: Build, fit: number) => GearModel> = {
       // The couter over the point of the elbow, and the vambrace down the forearm.
       { bone: 'elbow', side: 'both', over: ['lower', 'upper'], bias: 0.022, convex: true, mesh: knuckle(0.8, 'metal') },
       { bone: 'elbow', side: 'both', over: ['lower'], bias: 0.024, convex: true, mesh: rings(forearmRings(1.1), 6, 'metal', { top: false, bottom: false }) },
-      { bone: 'elbow', side: 'both', over: ['lower', 'upper'], bias: 0.03, mesh: ball([0, -0.46, 0.05], [0.5, 0.36, 0.52], 6, 4, 'metalLit') },
+      // In the plate's own metal and a few broad facets, so it shades as one dome: lit metal cut fine is a scatter of white specks.
+      { bone: 'elbow', side: 'both', over: ['lower', 'upper'], bias: 0.03, convex: true, mesh: ball([0, -0.46, 0.05], [0.5, 0.36, 0.52], 5, 3, 'metal') },
       // The flared cuff of the gauntlet.
       { bone: 'wrist', side: 'both', over: ['hand'], bias: 0.05, convex: true, mesh: rings([[-0.2, 0.66, 0.62], [0.35, 0.54, 0.5]], 6, 'metalLit', { top: false, bottom: false }) },
     ],
@@ -3231,8 +3278,8 @@ const MODELS: Record<string, (b: Build, fit: number) => GearModel> = {
       { bone: 'hip', side: 'both', over: ['thigh'], bias: 0.015, convex: true, mesh: worn(shingled([...thighRings(b, 1.08), [0.25, 1.1 * b.fr.hi * 1.08, 1.12 * 1.08]], 3, 0.1, 'metal'), 'lames') },
       { bone: 'knee', side: 'both', over: ['shin', 'thigh'], bias: 0.02, convex: true, mesh: knuckle(0.92, 'metal') },
       { bone: 'knee', side: 'both', over: ['shin', 'boot'], bias: 0.03, convex: true, mesh: shinShell(1.1, -2.7, 'metal') },
-      // The poleyn: a lit dome over the front of the knee.
-      { bone: 'knee', side: 'both', over: ['shin', 'boot', 'thigh'], bias: 0.05, front: [0, 1, 0], mesh: ball([0, 0.54, 0.06], [0.66, 0.4, 0.64], 8, 4, 'metalLit') },
+      // The poleyn: a dome over the front of the knee, in a few broad facets of the plate's own metal for the reason the couter is.
+      { bone: 'knee', side: 'both', over: ['shin', 'boot', 'thigh'], bias: 0.05, front: [0, 1, 0], convex: true, mesh: ball([0, 0.54, 0.06], [0.66, 0.4, 0.64], 6, 3, 'metal') },
     ],
     hides: ['thigh', 'shin'],
   }),
@@ -3360,10 +3407,11 @@ const MODELS: Record<string, (b: Build, fit: number) => GearModel> = {
     layer: 7,
     bits: [{
       bone: 'wrist', side: 1, over: ['hand'], bias: 0.06,
-      // Drawn bigger than life, as the pendant is, to be seen at all: a thick gold band round the fist and a stone set on its back.
+      // A narrow gold band round the fingers and a stone set on its back, a little over life size to be seen at all: as wide as the
+      // hand, it is a knuckle-duster.
       mesh: handSized(join(
-        rings([[-1.12, 0.64, 0.44], [-0.66, 0.66, 0.46]], 6, 'fitting'),
-        ball([0.66, 0.02, -0.89], [0.34, 0.34, 0.34], 5, 3, 'gem'),
+        rings([[-1.0, 0.6, 0.41], [-0.8, 0.61, 0.42]], 6, 'fitting'),
+        ball([0.62, 0.02, -0.9], [0.24, 0.24, 0.24], 5, 3, 'gem'),
       )),
     }],
   }),
@@ -3469,9 +3517,10 @@ interface Weapon {
    * lay it along the line of sight, [what share of its tilt back it keeps,
    * how much further out it leans, how much further it is turned about
    * itself], so its head or its blade shows beside the head rather than
-   * behind it.
+   * behind it; and seen side on, how far back behind the neck it goes over
+   * the shoulder, so it rises behind the jaw rather than across it.
    */
-  stage?: Record<number, [number, number, number]>;
+  stage?: Record<number, [number, number, number] | [number, number, number, number]>;
   /** Carried upright: how far its top leans forward, in degrees. */
   lean?: number;
   /** Across the back: how far from upright, in degrees. */
@@ -3569,7 +3618,7 @@ const WEAPONS: Record<string, () => Weapon> = {
   long_sword: () => bladed({
     carry: 'shoulder', stow: 'back', from: -1.7, to: 10.6, fist: -0.2, reach: 3.1, tilt: 70, out: 28, spin: 90, slant: 42,
     // From behind: straight up off the shoulder and a little forward three-quarters away, and back at a slant square behind.
-    stage: { 0: [1, 9, 0], 3: [-0.3, 10, 0], 4: [0.35, 25, 0], 5: [-0.3, 18, 0] },
+    stage: { 0: [1, 9, 0], 2: [0.85, 0, 0, 0.8], 3: [-0.3, 10, 0], 4: [0.35, 25, 0], 5: [-0.3, 18, 0], 6: [0.85, 0, 0, 0.8] },
     grip: shaft([[-1.3, 0.17], [0.62, 0.16]], 'grip', 6),
     hilt: join(pommelOf(-1.48, 0.27), guardOf(0.7, 1.25), box([-0.16, -0.3, 0.6], [0.16, 0.3, 0.98], 'fitting')),
     blade: join(
@@ -3591,7 +3640,8 @@ const WEAPONS: Record<string, () => Weapon> = {
     ),
   }),
   throwing_axe: () => ({
-    carry: 'fist', stow: 'belt', headUp: true, from: -0.9, to: 3.7, belt: 1.5,
+    // Leaning out from the hip through the belt, so its haft shows below the head and it is an axe there, not a flap of blue.
+    carry: 'fist', stow: 'belt', headUp: true, from: -0.9, to: 3.7, belt: 1.5, splay: [0.34, 0.3],
     grip: rod(-0.8, 0.5, 0.14, 0.13, 'woodDark', 5),
     // A francisca: a short dark haft bound in leather and bowed toward the bit, and a narrow head that sweeps up in an S from the
     // haft to a long upper horn standing well above the end of it.
@@ -3605,7 +3655,7 @@ const WEAPONS: Record<string, () => Weapon> = {
     carry: 'shoulder', stow: 'back', headUp: true, from: -4.2, to: 6.8, fist: -3.3, reach: 2.8, tilt: 34, out: 64, spin: 150, slant: 38,
     // Three-quarters away, all but upright with the bit turned to the viewer, where lying back it would be edge on beside the cheek;
     // side on, lying further back, so the haft goes over the shoulder below the jaw rather than across the throat.
-    stage: { 2: [1.45, 6, 0], 3: [0.15, 0, 60], 5: [0.15, 0, 60], 6: [1.45, 6, 0] },
+    stage: { 2: [1, 0, 0, 0.8], 3: [0.15, 0, 60], 5: [0.15, 0, 60], 6: [1, 0, 0, 0.8] },
     grip: shaft([[-4.1, 0.19], [-0.7, 0.18], [0.6, 0.175]], 'grip', 5),
     head: join(
       shaft([[0.6, 0.175], [5.9, 0.16]], 'wood', 5),
@@ -3629,8 +3679,9 @@ const WEAPONS: Record<string, () => Weapon> = {
     ),
   }),
   maul: () => ({
-    carry: 'shoulder', stow: 'back', from: -4.3, to: 5.9, fist: -3.4, reach: 2.8, tilt: 40, out: 64, spin: 90, slant: 36,
-    stage: { 2: [1.4, 6, 0], 3: [0.15, 0, 60], 5: [0.15, 0, 60], 6: [1.4, 6, 0] },
+    // Slung head up, as a hammer is carried: head down on the back it is a spade, and at the hip a satchel.
+    carry: 'shoulder', stow: 'back', headUp: true, from: -4.3, to: 5.9, fist: -3.4, reach: 2.8, tilt: 40, out: 64, spin: 90, slant: 36,
+    stage: { 2: [1, 0, 0, 0.8], 3: [0.15, 0, 60], 5: [0.15, 0, 60], 6: [1, 0, 0, 0.8] },
     grip: shaft([[-4.2, 0.19], [-0.8, 0.18], [0.6, 0.175]], 'grip', 5),
     head: join(
       shaft([[0.6, 0.175], [4.9, 0.17]], 'wood', 5),
@@ -3656,8 +3707,9 @@ const WEAPONS: Record<string, () => Weapon> = {
     grip: rod(-0.5, 0.5, 0.13, 0.13, 'grip', 5),
     head: join(
       rod(-2.6, -0.5, 0.1, 0.11, 'wood', 5), rod(0.5, 9.2, 0.11, 0.1, 'wood', 5),
-      // Two pale vanes across each other at the butt, which is what says it is thrown.
-      ...[0, 90].map((a) => spun(slab([[-0.46, -2.6, 0.015], [0.46, -2.6, 0.015], [0.34, -0.7, 0.015], [-0.34, -0.7, 0.015]], 'fletch'), a)),
+      // Two pale vanes across each other at the butt, which is what says it is thrown: narrow, as a dart's are, or slung on the back
+      // the four fins of them from behind are a broom head.
+      ...[0, 90].map((a) => spun(slab([[-0.3, -2.6, 0.015], [0.3, -2.6, 0.015], [0.2, -1.2, 0.015], [-0.2, -1.2, 0.015]], 'fletch'), a)),
       rings([[9.1, 0.13, 0.13], [9.5, 0.1, 0.1]], 5, 'metal'),
       // A long thin head, for going in rather than cutting.
       rings([[9.5, 0.07, 0.11], [10.0, 0.06, 0.24], [10.8, 0.012, 0.012]], 6, 'blade', { top: false }),
@@ -3801,6 +3853,32 @@ function cutAcross(m: Mesh, z: number): [Mesh, Mesh] {
 }
 
 
+/**
+ * Hair cut off level with a hat's rim, which runs from `f` over the brow down
+ * to `b` at the nape: what is left of it under the brim. The rim is a plane
+ * tipped from front to back; the hair is sheared until it lies level, cut
+ * across, and sheared back, so the cut runs along the rim however far the
+ * hat is tipped. Kept for each haircut and rim, as it is the same every frame.
+ */
+const trims = new WeakMap<Mesh, Map<string, Mesh>>();
+function trimmed(m: Mesh, fr: Frame, rim: { f: number; b: number }): Mesh {
+  let byRim = trims.get(m);
+  if (!byRim) trims.set(m, (byRim = new Map()));
+  const key = `${rim.f},${rim.b}`;
+  let t = byRim.get(key);
+  if (!t) {
+    // The rim's middle over the brow and at the nape, as the head is grown, as the hair is.
+    const [, fy, fc] = skull(fr, rim.f), [, by, bc] = skull(fr, rim.b);
+    const F = bigger([0, fc + fy, rim.f]), B = bigger([0, bc - by, rim.b]);
+    const s = (F[2] - B[2]) / (F[1] - B[1]);
+    const level: Mesh = { ...m, v: m.v.map(([x, y, z]): V3 => [x, y, z - s * (y - F[1])]) };
+    const [below] = cutAcross(level, F[2]);
+    t = { ...below, v: below.v.map(([x, y, z]): V3 => [x, y, z + s * (y - F[1])]) };
+    byRim.set(key, t);
+  }
+  return t;
+}
+
 /** What of a shouldered weapon is in front of the shoulder, from its butt up, and what is behind it; its whole, and a blade in its scabbard. */
 const cuts = new WeakMap<Weapon, { fore: Mesh; aft: Mesh; whole: Mesh; sheathed?: Mesh }>();
 function cutsOf(w: Weapon): { fore: Mesh; aft: Mesh; whole: Mesh; sheathed?: Mesh } {
@@ -3823,8 +3901,9 @@ function cutsOf(w: Weapon): { fore: Mesh; aft: Mesh; whole: Mesh; sheathed?: Mes
  */
 function bowArm(r: Rig, fr: Frame, w: Weapon, up: number, facing: number): void {
   const T = fr.tall, dir = bowUp(facing);
-  // The fist's height over the hips that puts the lower tip over the ground, with a margin.
-  const fist = Math.max(-2.6, -w.from * dir[2] + 0.6 - HIP * T) + up;
+  // The fist's height over the hips that puts the lower tip over the ground, with a margin -- and more of one seen from behind and
+  // the left, where the bow leans toward whoever is looking and its lower tip comes down the screen onto the feet.
+  const fist = Math.max(-2.6, -w.from * dir[2] + 0.6 - HIP * T) + up + byFacing(BOW_LIFT, facing);
   const at: V3 = [-2.15 * fr.sh, 0.45, fist - GRIP];
   hold(r, fr, 0, at, [-0.4, -0.8, -0.4], dir);
 }
@@ -3838,12 +3917,12 @@ function bowArm(r: Rig, fr: Frame, w: Weapon, up: number, facing: number): void 
 function shoulder(r: Rig, fr: Frame, w: Weapon, k: number, facing: number): void {
   const T = fr.tall, s = k ? 1 : -1;
   const chest = joint(joint(ROOT, [0, 0, SPINE * T], ...r.spine), [0, 0, CHEST * T], ...r.chest);
-  const [keep, wider, turn] = w.stage?.[((Math.round(facing) % 8) + 8) % 8] ?? [1, 0, 0];
+  const [keep, wider, turn, back = 0] = w.stage?.[((Math.round(facing) % 8) + 8) % 8] ?? [1, 0, 0];
   const tilt = (w.tilt ?? 45) * keep * DEG, out = ((w.out ?? 12) + wider) * DEG;
   r.spin = turn;
   // Back from upright by the tilt, and leaning out from the head by `out`, so what is behind the shoulder clears the skull.
   const d = unit([s * Math.sin(out) * Math.cos(tilt), -Math.sin(tilt), Math.cos(out) * Math.cos(tilt)]);
-  const top: V3 = [s * 2.0 * fr.sh, -0.1, ARM_AT * T + 0.8];
+  const top: V3 = [s * 2.0 * fr.sh, -0.1 - back, ARM_AT * T + 0.8];
   const reach = w.reach ?? 2.7;
   const fist = place(chest, [top[0] - d[0] * reach, top[1] - d[1] * reach, top[2] - d[2] * reach]);
   const haft = mv(chest.m, d), pole = mv(chest.m, [s * 0.75, -0.25, -0.62]);
@@ -3884,6 +3963,8 @@ function byFacing(table: number[], facing: number): number {
  * screen, and it leans back instead.
  */
 const BOW_FWD = [11, 11, -40, -28, 11, 11, 20, -28];
+/** How much higher again a bow is held at each facing: see `bowArm`. */
+const BOW_LIFT = [0, 0, 0, 0, 0.3, 0.9, 1.2, 0.9];
 const BOW_OUT = 14;
 const bowUp = (facing: number): V3 => {
   const fwd = byFacing(BOW_FWD, facing) * DEG, out = BOW_OUT * DEG;
@@ -3897,9 +3978,9 @@ const bowUp = (facing: number): V3 => {
  */
 const STAFF_BACK = [0, 1, 0, 0, 0, 1, 0, 0];
 const STAFF_BACK_BY = -8;
-const STAFF_OUT = [10, 16, 10, 10, 10, 16, 10, 10];
+const STAFF_OUT = [10, 22, 10, 10, 10, 16, 10, 10];
 /** And side on to the left, where the shaft in the far hand stands in front of the face, leaning forward at least this far, clear of it. */
-const STAFF_LEAST = [0, 0, 0, 0, 0, 0, 22, 0];
+const STAFF_LEAST = [0, 0, 22, 0, 0, 0, 22, 0];
 const staffUp = (facing: number, lean: number): V3 => {
   const back = byFacing(STAFF_BACK, facing);
   const ahead = Math.max(lean, byFacing(STAFF_LEAST, facing));
@@ -4079,6 +4160,8 @@ function dress(parts: Part[], named: Map<string, Part[]>, kit: Kit, r: Rig, b: B
     if (!piece || !model) return;
     worn.push([si, piece, model]);
     for (const c of model.hides ?? []) for (const key of regionsOf(c, -1)) for (const p of named.get(key) ?? []) hidden.add(p);
+    // What hair a hat leaves showing: the cap of it and what falls from it, as far up as the rim and no further.
+    if (model.hairTo) for (const key of ['cap', 'fall']) for (const p of named.get(key) ?? []) p.mesh = trimmed(p.mesh, fr, model.hairTo);
   });
   const out = parts.filter((p) => !hidden.has(p));
   const put: Put[] = [];
@@ -4199,16 +4282,19 @@ function wield(out: Part[], named: Map<string, Part[]>, r: Rig, b: Bones, gear: 
       bit(arm.head, xf, 0.035);
       for (const h of named.get(`hand${hand}`) ?? []) h.after = grip;
     } else if (arm.stow === 'hip' && c.sheathed) {
-      // The scabbard's throat at the belt on the left, forward of the hip, and the blade down and back behind the leg; a knife's nearer
-      // upright and round at the front of the belt, its handle standing up over it where it shows from either side.
+      // The scabbard's throat at the belt on the left, forward of the hip, and the blade down and back behind the leg; a knife's
+      // upright at the front of the belt, its handle standing up over it where it shows from either side.
       const side = 1.64 * fr.wa * fit + 0.3;
       const knife = arm.to < KNIFE_TO;
-      // Seated, the scabbard swings back to lie out behind rather than hanging down through the seat.
-      const dir = unit(r.reins ? [-0.18, -0.95, -0.22] : knife ? [-0.12, 0.1, -1] : [-0.16, -0.62, -0.78]);
-      const at: V3 = knife ? [-side * 0.72, 1.28 * fit, 1.25] : [-side, 0.55, 1.15];
+      // A knife on the right of the buckle, clear of the left hand wherever work holds it; a blade on the left, drawn across.
+      const x = knife ? 1 : -1;
+      // Seated, the scabbard swings back and out rather than hanging down through the seat -- down more than back, or it juts out
+      // behind like a log. Standing, a sword's hangs out from the leg enough to be seen past it from the front.
+      const dir = unit(r.reins ? [0.34 * x, -0.72, -0.6] : knife ? [0.12, 0.1, -1] : [-0.3, -0.56, -0.78]);
+      const at: V3 = knife ? [side * 0.72, 1.28 * fit, 1.25] : [-side * 1.06, 0.55, 1.15];
       const k = arm.throat ?? 0.7;
-      const xf = aimed(b.pelvis, [at[0] - dir[0] * k, at[1] - dir[1] * k, at[2] - dir[2] * k], dir, [-1, 0, 0]);
-      bit(c.sheathed, xf, 0.03, { after: on('pelvis', 'skirt', 'belt', 'abdomen', 'thigh0'), front: within(xf, mv(b.pelvis.m, [-1, 0, 0])) });
+      const xf = aimed(b.pelvis, [at[0] - dir[0] * k, at[1] - dir[1] * k, at[2] - dir[2] * k], dir, [x, 0, 0]);
+      bit(c.sheathed, xf, 0.03, { after: on('pelvis', 'skirt', 'belt', 'abdomen', knife ? 'thigh1' : 'thigh0'), front: within(xf, mv(b.pelvis.m, [x, 0, 0])) });
     } else if (arm.stow === 'belt') {
       // Through the belt at the right hip, head up: a hatchet by its haft with its head on the belt, a club by its grip under the knob.
       const side = 1.64 * fr.wa * fit + 0.25;
@@ -4223,9 +4309,10 @@ function wield(out: Part[], named: Map<string, Part[]>, r: Rig, b: Bones, gear: 
       const sl = (arm.slant ?? 30) * DEG;
       const dir: V3 = arm.headUp ? [Math.sin(sl), 0, Math.cos(sl)] : [-Math.sin(sl), 0, -Math.cos(sl)];
       const mid = (arm.from + arm.to) / 2;
-      // Hung lower the longer it is, so whichever end is up stops at the ear rather than over the crown.
+      // Hung lower the longer it is, so whichever end is up stops at the ear rather than over the crown -- except a spear or a
+      // javelin, whose head goes up over the head as a slung spear's does, so that its butt stops at the calf and not on the ground.
       const top = 0.85 + Math.max(dir[2] * (arm.to - mid), dir[2] * (arm.from - mid));
-      const z = 0.85 - Math.max(0, top - 3.1);
+      const z = 0.85 - Math.max(0, top - (arm.carry === 'staff' ? 4.6 : 3.1));
       // Turned about itself as it would be on the shoulder from where it is seen, so an axe's bit shows its face over the shoulder, not its edge.
       const turn = arm.stage?.[((Math.round(facing) % 8) + 8) % 8]?.[2] ?? 0;
       const xf = joint(aimed(b.chest, [-dir[0] * mid, behind, z - dir[2] * mid], dir, [0, -1, 0]), [0, 0, 0], 0, 0, turn);
@@ -4549,14 +4636,14 @@ function worked(g: CanvasRenderingContext2D, l: Laid, faces: number[], P: Palett
  * that would wash the whole figure in one colour and bury the pieces that are
  * rare under it. So what is rare carries its light on itself, inside its own
  * outline, in the colour its rarity is written in -- as light only: the piece
- * keeps its own steel, wood or dye, and the colour is a line along its edges
- * on the side away from the light and the glint that crosses it, more of it
- * the rarer it is:
+ * keeps its own steel, wood or dye, and the colour is a sheen on the side of
+ * it the light falls on and the glint that crosses it, more of it the rarer
+ * it is:
  *
- *   rare        edged in blue, and a slow glint across it most of the time
- *   supreme     edged in violet, breathing, and a quicker glint
- *   fantastic   edged in gold, breathing, a glint more often still, and
- *               small stars that open on it here and there
+ *   rare        a blue sheen, and a slow glint crossing it nearly always
+ *   supreme     a violet sheen that breathes, and a quicker glint
+ *   fantastic   a gold sheen that breathes, a glint quicker still and
+ *               whiter, and stars that open on it here and there
  *
  * Everything of one rarity on a body shines as one: one tint, and one glint
  * that crosses all of it together, so a rare set reads as a set rather than
@@ -4568,10 +4655,12 @@ function worked(g: CanvasRenderingContext2D, l: Laid, faces: number[], P: Palett
  */
 const GLINT = [
   null,
-  { period: 3.2, sweep: 0.75, band: 0.13, core: 0.42, glow: 0, rim: 0.66, breathes: 0, stars: 0 },
-  { period: 2.6, sweep: 0.65, band: 0.11, core: 0.46, glow: 0.03, rim: 0.8, breathes: 0.6, stars: 0 },
-  { period: 2.2, sweep: 0.6, band: 0.09, core: 0.52, glow: 0.04, rim: 0.86, breathes: 0.45, stars: 2 },
+  { period: 3.2, sweep: 0.92, band: 0.22, core: 0.46, glow: 0, sheen: 0.22, breathes: 0, stars: 0, white: 0.35 },
+  { period: 2.6, sweep: 0.9, band: 0.2, core: 0.5, glow: 0.03, sheen: 0.26, breathes: 0.5, stars: 0, white: 0.35 },
+  { period: 2.2, sweep: 0.88, band: 0.18, core: 0.56, glow: 0.04, sheen: 0.3, breathes: 0.4, stars: 3, white: 0.6 },
 ] as const;
+/** Where on a piece its rarity's sheen starts, and where it is at its fullest, in the light a facet takes (`lightOn`). */
+const SHEEN_FROM = 0.93, SHEEN_FULL = 1.0;
 /** How saturated the colour of a rarity's light on a piece may be: the island's chalk, not a sign painter's. */
 const SHINE_SAT = 0.55;
 /** A colour with its saturation, as the eye reads it, held to at most `s`: pulled toward its own grey. */
@@ -4654,12 +4743,11 @@ function shinesOf(laid: Laid[], now: number): Map<number, Shine> {
 
 /**
  * The shine on one rare part, laid on as soon as the part is drawn so that
- * whatever is drawn in front of it afterwards covers it too: its rarity's
- * tint over its own light and shade, a breath of that colour's light on a
- * supreme or fantastic one, the glint as it crosses, a line of the colour
- * round its edges, and the stars that are open on it.
+ * whatever is drawn in front of it afterwards covers it too: a breath of its
+ * rarity's colour over a supreme or fantastic one, the colour as a sheen on
+ * its lit side, the glint as it crosses, and the stars that are open on it.
  */
-function shineOn(g: CanvasRenderingContext2D, l: Laid, li: number, edges: Array<[number, number, number, boolean]>, s: Shine, ink: number, now: number): void {
+function shineOn(g: CanvasRenderingContext2D, l: Laid, li: number, s: Shine, now: number): void {
   const look = GLINT[s.rare];
   if (!look) return;
   const f = l.part.mesh.f;
@@ -4684,39 +4772,33 @@ function shineOn(g: CanvasRenderingContext2D, l: Laid, li: number, edges: Array<
     g.fillStyle = rgba(tamed(s.c, SHINE_SAT), look.glow * breath);
     g.fill(face);
   }
-  // A line of the colour right round its outline -- the edges where it turns away, not every step and course across it -- which is what
-  // says what is rare from across the island: evenly all the way round, so it reads as the piece's edge and not as a stray stroke.
-  const scaly = f.some((face) => face.m === 'scale');
-  if (edges.length && !scaly) {
-    const rim = new Path2D();
-    for (const [a, b, fi] of edges) {
-      // Not along a blade, already the lightest thing on a body, which a line of light turns into a rod of it.
-      if (l.t[fi] > 0.55 || f[fi].m === 'blade') continue;
-      rim.moveTo(l.s[a][0], l.s[a][1]);
-      rim.lineTo(l.s[b][0], l.s[b][1]);
-    }
-    // Breathing, a supreme or fantastic one: its edge from under half as bright to full and back.
-    g.strokeStyle = rgba(tamed(mixRGB(s.deep, s.c, 0.5), SHINE_SAT), look.rim * (1 - look.breathes + look.breathes * breath));
-    g.lineWidth = ink * 0.9;
-    g.lineCap = 'round';
-    g.stroke(rim);
+  // The colour as a sheen on the side the light falls on, fullest where the light is -- not a line round the piece, which reads as the
+  // piece picked out rather than shining. Not on a blade, already the lightest thing on a body; and on dragon scale at two-thirds,
+  // where the lit side is a scale's tip in every course and all of them tinted is a stripe down each.
+  const half = new Path2D(), full = new Path2D();
+  let sheened = false;
+  for (let fi = 0; fi < f.length; fi++) {
+    if (!l.vis[fi] || f[fi].decal || f[fi].m === 'blade' || l.k[fi] < SHEEN_FROM) continue;
+    const idx = f[fi].i, to = l.k[fi] >= SHEEN_FULL ? full : half;
+    to.moveTo(l.s[idx[0]][0], l.s[idx[0]][1]);
+    for (let q = 1; q < idx.length; q++) to.lineTo(l.s[idx[q]][0], l.s[idx[q]][1]);
+    to.closePath();
+    sheened = true;
   }
-  // Scale takes its colour on the lit feet of one scale in five rather than round every course's outline, which reads as piping.
-  if (scaly) {
-    const flecks = new Path2D();
-    let any = false;
-    for (let fi = 0; fi < f.length; fi++) {
-      if (!l.vis[fi] || f[fi].m !== 'scale' || l.k[fi] < 0.9 || (fi * 7 + s.seed) % 5) continue;
-      const idx = f[fi].i;
-      flecks.moveTo(l.s[idx[0]][0], l.s[idx[0]][1]);
-      for (let q = 1; q < idx.length; q++) flecks.lineTo(l.s[idx[q]][0], l.s[idx[q]][1]);
-      flecks.closePath();
-      any = true;
+  if (sheened) {
+    const a = look.sheen * (1 - look.breathes + look.breathes * breath) * (f.some((face) => face.m === 'scale') ? 2 / 3 : 1);
+    const c = tamed(mixRGB(s.deep, s.c, 0.5), SHINE_SAT);
+    // The colour glazed into the lit side, which is what keeps it gold on pale steel, where light added on is only white; and a
+    // little light added over that, so it is a shine and not a stain.
+    g.globalCompositeOperation = 'multiply';
+    for (const [path, k] of [[half, 0.5], [full, 1]] as const) {
+      g.fillStyle = rgba(mixRGB(c, [255, 255, 255], 0.3), a * k * 1.3);
+      g.fill(path);
     }
-    if (any) {
-      g.globalCompositeOperation = 'lighter';
-      g.fillStyle = rgba(tamed(s.c, SHINE_SAT), 0.3 * (1 - look.breathes + look.breathes * breath));
-      g.fill(flecks);
+    g.globalCompositeOperation = 'lighter';
+    for (const [path, k] of [[half, 0.5], [full, 1]] as const) {
+      g.fillStyle = rgba(c, a * k * 0.5);
+      g.fill(path);
     }
   }
   // The glint: across all of it from upper left to lower right over most of the cycle, and gone the rest.
@@ -4727,10 +4809,11 @@ function shineOn(g: CanvasRenderingContext2D, l: Laid, li: number, edges: Array<
     const span = Math.max(w, h) + 1e-6;
     const grad = g.createLinearGradient(s.x0 - span * 0.25, s.y0 - span * 0.25, s.x1 + span * 0.25, s.y1 + span * 0.25);
     const at = 0.08 + u * 0.84, hw = look.band / 2;
-    const c = tamed(s.c, SHINE_SAT);
+    // Paler the rarer, so the fantastic one's glint is light over whatever it crosses -- over dark scale, gold at full strength is khaki.
+    const c = tamed(mixRGB(s.c, [255, 252, 244], look.white * 0.6), SHINE_SAT);
     grad.addColorStop(Math.max(0, at - hw), rgba(c, 0));
     grad.addColorStop(Math.max(0, at - hw * 0.3), rgba(c, look.core * 0.45));
-    grad.addColorStop(at, rgba(mixRGB([255, 252, 244], c, 0.35), look.core * 0.8));
+    grad.addColorStop(at, rgba(mixRGB([255, 252, 244], s.c, 1 - look.white), look.core * 0.85));
     grad.addColorStop(Math.min(1, at + hw * 0.3), rgba(c, look.core * 0.45));
     grad.addColorStop(Math.min(1, at + hw), rgba(c, 0));
     g.fillStyle = grad;
@@ -4739,16 +4822,17 @@ function shineOn(g: CanvasRenderingContext2D, l: Laid, li: number, edges: Array<
   g.globalCompositeOperation = 'source-over';
   for (const st of s.stars) {
     if (st.li !== li) continue;
-    const r = Math.max(1.3, Math.min(2.6, Math.max(w, h) * 0.05)) * (0.45 + st.life * 0.55);
+    // Big enough to be a star at the size the island is played at, and not a stray pixel.
+    const r = Math.max(2, Math.min(3, Math.max(w, h) * 0.07)) * (0.55 + st.life * 0.45);
     g.save();
     g.translate(st.at[0], st.at[1]);
     g.rotate(now * 0.9 + st.k);
     g.globalCompositeOperation = 'screen';
-    g.fillStyle = rgba(tamed(s.deep, SHINE_SAT + 0.1), 0.75 * st.life);
-    fourPoint(g, r, r * 0.2);
+    g.fillStyle = rgba(tamed(s.deep, SHINE_SAT + 0.1), 0.85 * st.life);
+    fourPoint(g, r, r * 0.22);
     g.fill();
-    g.fillStyle = rgba([255, 250, 236], 0.9 * st.life);
-    fourPoint(g, r * 0.5, r * 0.12);
+    g.fillStyle = rgba([255, 250, 236], 0.95 * st.life);
+    fourPoint(g, r * 0.62, r * 0.14);
     g.fill();
     g.restore();
   }
@@ -4918,17 +5002,18 @@ function render(g: CanvasRenderingContext2D, parts: Part[], pal: Palette, view: 
     }
     batch.clear();
   };
-  // The foot of a scale over the course below is drawn in a dark of the scale's own green, not the ink: the ink stays for its outline.
-  const lips = new Map<Palette, string>();
-  const lipIn = (l: Laid): string => {
+  // The foot of a scale over the course below is drawn in the scale's own green, not the ink, which stays for its outline: a pale
+  // lip where the scale faces the light, as a scale's edge catches it, and a mid teal where it is turned away.
+  const lips = new Map<Palette, [string, string]>();
+  const lipIn = (l: Laid, fi: number): string => {
     const P = palOf(l);
     let c = lips.get(P);
-    if (!c) { c = shade(mixRGB(P.scaleDark, COOL_SHADOW, 0.3), 0.62); lips.set(P, c); }
-    return c;
+    if (!c) { c = [css(mixRGB(P.scale, WARM_LIGHT, 0.34)), shade(mixRGB(P.scaleDark, COOL_SHADOW, 0.12), 0.86)]; lips.set(P, c); }
+    return l.k[fi] >= 0.96 ? c[0] : c[1];
   };
   const line = (l: Laid, a: number, b: number, fi: number, open = false): void => {
     const m = l.part.mesh.f[fi].m;
-    const to = into(open && (m === 'scale' || m === 'scaleDark') ? lipIn(l) : inkIn(l, m));
+    const to = into(open && (m === 'scale' || m === 'scaleDark') ? lipIn(l, fi) : inkIn(l, m));
     to.moveTo(l.s[a][0], l.s[a][1]);
     to.lineTo(l.s[b][0], l.s[b][1]);
   };
@@ -4952,11 +5037,11 @@ function render(g: CanvasRenderingContext2D, parts: Part[], pal: Palette, view: 
       flush(ink * 0.6, false);
     } else {
       // Far to near, a run of one shade at a time, and after each run the lines along its edges.
-      const mine = new Map<number, Array<[number, number]>>();
-      for (const [a, b, fi] of edges[li]) {
+      const mine = new Map<number, Array<[number, number, boolean]>>();
+      for (const [a, b, fi, open] of edges[li]) {
         const list = mine.get(fi);
-        if (list) list.push([a, b]);
-        else mine.set(fi, [[a, b]]);
+        if (list) list.push([a, b, open]);
+        else mine.set(fi, [[a, b, open]]);
       }
       shown.sort((a, b) => l.d[a] - l.d[b]);
       let q = 0;
@@ -4967,7 +5052,7 @@ function render(g: CanvasRenderingContext2D, parts: Part[], pal: Palette, view: 
         for (let r = q; r < end; r++) add(into(c), l, shown[r]);
         flush(0, true);
         worked(g, l, shown.slice(q, end), P, px, hs);
-        for (let r = q; r < end; r++) for (const [a, b] of mine.get(shown[r]) ?? []) line(l, a, b, shown[r]);
+        for (let r = q; r < end; r++) for (const [a, b, open] of mine.get(shown[r]) ?? []) line(l, a, b, shown[r], open);
         flush(ink * 0.6, false);
         q = end;
       }
@@ -4982,7 +5067,7 @@ function render(g: CanvasRenderingContext2D, parts: Part[], pal: Palette, view: 
     }
     // And if it is rare, its shine, before anything in front of it goes down.
     const sh = shines && l.part.rare ? shines.get(l.part.rare) : undefined;
-    if (sh) shineOn(g, l, li, edges[li], sh, ink, now);
+    if (sh) shineOn(g, l, li, sh, now);
   });
 }
 
