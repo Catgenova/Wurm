@@ -3478,6 +3478,8 @@ interface Weapon {
   slant?: number;
   /** Through the belt: how far along it the belt goes, from the middle of the grip. */
   belt?: number;
+  /** Through the belt: how far its head leans out from the hip and forward, as parts of its length. */
+  splay?: [number, number];
 }
 
 /** A round shaft along z, from `a` to `b`, `r0` across at `a` and `r1` at `b`. */
@@ -3614,8 +3616,9 @@ const WEAPONS: Record<string, () => Weapon> = {
     ),
   }),
   club: () => ({
-    // Through the belt head up, the knob standing over the hip: hung the other way it is a bag.
-    carry: 'fist', stow: 'belt', headUp: true, from: -0.9, to: 4.4, belt: 0.9,
+    // Through the belt head up, caught at the swell under its knob so the knob stands on the hip rather than up under the arm, where
+    // the arm hides all but a stick of it; hung the other way it is a bag.
+    carry: 'fist', stow: 'belt', headUp: true, from: -0.9, to: 4.4, belt: 2.0, splay: [0.42, 0.34],
     grip: rod(-0.85, 0.6, 0.19, 0.21, 'woodDark', 6),
     // Swelling from the grip to the knob of the root it was cut from, dark with handling, bound in two bands of iron and studded.
     head: join(
@@ -3661,39 +3664,60 @@ const WEAPONS: Record<string, () => Weapon> = {
     ),
   }),
   // Staves in the darker heart of the wood, so a bow seen edge on is still a line against the grass.
-  short_bow: () => bowOf(11, 0.8, 'woodDark'),
-  medium_bow: () => bowOf(14, 1.0, 'woodDark'),
-  long_bow: () => bowOf(16, 1.1, 'woodDark'),
-  composite_bow: () => bowOf(12, 0.95, 'leatherDark', true),
+  short_bow: () => bowOf(11, 1.35, 'woodDark', 'deep'),
+  medium_bow: () => bowOf(14, 1.0, 'woodDark', 'flat'),
+  long_bow: () => bowOf(16, 0.9, 'woodDark', 'long'),
+  composite_bow: () => bowOf(12, 0.95, 'leatherDark', 'recurve'),
 };
 
 /**
  * A bow `L` long, standing along z, bellied `c` forward of its string at the
- * grip, in `m`. A composite one is the horseman's shape: its tips turned
- * forward again past where the string meets them, in bone, with the string
- * bearing on the limb where the turn begins.
+ * grip, in `m`, with the limbs of its kind, which are what tell one bow from
+ * another at a glance: `deep`, a hunter's short bow bent into a round D in
+ * thick round limbs; `flat`, limbs wider than they are thick, broadest a
+ * third of the way out and narrowing to the handle and the tips; `long`,
+ * tall and slender, tipped in pale horn; and `recurve`, the horseman's
+ * shape, its tips turned forward again past where the string meets them, in
+ * bone, with the string bearing on the limb where the turn begins.
  */
-function bowOf(L: number, c: number, m: Mat, recurve = false): Weapon {
+function bowOf(L: number, c: number, m: Mat, limbs: 'deep' | 'flat' | 'long' | 'recurve'): Weapon {
   const h = L / 2;
   const EAR = 0.78;
+  const recurve = limbs === 'recurve';
   const at = (u: number): V3 => {
     // u from -1 at the lower tip to 1 at the upper: a bow bent into a flat arc, and a recurve's ears flicked forward.
     const a = Math.abs(u);
     const y = c * (1 - u * u) + (recurve && a > EAR ? Math.pow((a - EAR) / (1 - EAR), 1.3) * 1.05 * c : 0);
     return [0, y, u * h];
   };
-  const r = (x: number): number => 0.09 + 0.08 * (1 - Math.abs(x));
-  const limb = (u: number[], mat: Mat): Mesh => chain(u.map(at), u.map(r), 5, mat, false);
+  const [r0, r1] = limbs === 'deep' ? [0.11, 0.1] : limbs === 'long' ? [0.075, 0.07] : [0.09, 0.08];
+  const r = (x: number): number => r0 + r1 * (1 - Math.abs(x));
+  // A flat bow's limb spread across the bow (along x) and thinned from belly to back, most a third of the way out from the handle.
+  const flat = (me: Mesh): Mesh => ({
+    ...me,
+    v: me.v.map(([x, y, z]): V3 => {
+      const a = Math.min(1, Math.abs(z) / h);
+      const k = a < 0.12 ? 1 : a < 0.35 ? 1 + (1.5 * (a - 0.12)) / 0.23 : 2.5 - (1.4 * (a - 0.35)) / 0.65;
+      const mid = at(z / h)[1];
+      return [x * k, mid + (y - mid) * (a < 0.12 ? 1 : 0.7), z];
+    }),
+  });
+  const limb = (u: number[], mat: Mat): Mesh => {
+    const me = chain(u.map(at), u.map(r), 5, mat, false);
+    return limbs === 'flat' ? flat(me) : me;
+  };
   // Slung across the back flatter the longer it is, so a long bow's lower tip stays off the ground while its upper one stops at the ear.
   const bow = { carry: 'bow' as const, stow: 'back' as const, headUp: true, from: -h, to: h, slant: L > 13 ? 56 : 40 };
   if (!recurve) {
     const us = [-1, -0.82, -0.6, -0.34, -0.12, 0.12, 0.34, 0.6, 0.82, 1];
+    // A long bow's nocks in horn, pale at both ends of it; the others' cut in the stave.
+    const nock = (u: number): Mesh => (limbs === 'long' ? ball(at(u), [0.11, 0.11, 0.26], 5, 3, 'fletch') : ball(at(u), [0.1, 0.1, 0.14], 5, 3, 'woodDark'));
     return {
       ...bow,
       grip: chain([at(-0.12), at(0.12)], [0.19, 0.19], 6, 'grip'),
       head: join(
         limb(us.slice(0, 5), m), limb(us.slice(5), m),
-        ball(at(-1), [0.1, 0.1, 0.14], 5, 3, 'woodDark'), ball(at(1), [0.1, 0.1, 0.14], 5, 3, 'woodDark'),
+        nock(-1), nock(1),
         fine(chain([at(-0.985), at(0.985)], [0.05, 0.05], 4, 'string'), 0.1),
       ),
     };
@@ -4186,12 +4210,14 @@ function wield(out: Part[], named: Map<string, Part[]>, r: Rig, b: Bones, gear: 
       const xf = aimed(b.pelvis, [at[0] - dir[0] * k, at[1] - dir[1] * k, at[2] - dir[2] * k], dir, [-1, 0, 0]);
       bit(c.sheathed, xf, 0.03, { after: on('pelvis', 'skirt', 'belt', 'abdomen', 'thigh0'), front: within(xf, mv(b.pelvis.m, [-1, 0, 0])) });
     } else if (arm.stow === 'belt') {
-      // Through the belt at the right hip: a hatchet by its haft with its head on the belt, a club by the end of its grip with its head hanging.
+      // Through the belt at the right hip, head up: a hatchet by its haft with its head on the belt, a club by its grip under the knob.
       const side = 1.64 * fr.wa * fit + 0.25;
-      const dir = unit(arm.headUp ? [0.12, 0.2, 1] : [0.12, 0.22, -1]);
+      const [outward, ahead] = arm.splay ?? [0.12, 0.2];
+      const dir = unit(arm.headUp ? [outward, ahead, 1] : [outward, ahead + 0.02, -1]);
       const k = arm.belt ?? 0;
       const xf = aimed(b.pelvis, [side - dir[0] * k, 0.35 - dir[1] * k, 1.15 - dir[2] * k], dir, [1, 0, 0]);
-      bit(c.whole, xf, 0.03, { after: on('pelvis', 'skirt', 'belt', 'abdomen', 'thigh1'), front: within(xf, mv(b.pelvis.m, [1, 0, 0])) });
+      // Over the chest as well as the hips from its own side: a club's knob stands up beside the ribs, and under the coat it is a stick.
+      bit(c.whole, xf, 0.03, { after: on('pelvis', 'skirt', 'belt', 'abdomen', 'chest', 'thigh1'), front: within(xf, mv(b.pelvis.m, [1, 0, 0])) });
     } else {
       // Across the back by its middle, head up over the right shoulder or point down to the left hip.
       const sl = (arm.slant ?? 30) * DEG;
