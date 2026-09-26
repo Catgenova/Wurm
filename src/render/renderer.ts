@@ -2286,7 +2286,10 @@ export class Renderer {
           // What on it moves -- an altar's stars -- over it, and outside the
           // ring under the pointer: a ring round a bloom of light is a blot.
           drawFurnitureLive(ctx, ent.sx, ent.sy, zoom, piece.kind, view, this.game.darkness());
-          if (glowsAtNight(piece.kind)) this.glows.push({ sx: ent.sx, sy: ent.sy, kind: piece.kind, view });
+          // Not indoors: a roof or a wall stands in front of it there, and the night cut away at its stars would be cut out of that.
+          if (glowsAtNight(piece.kind) && !this.game.buildings.buildingAt(Math.floor(piece.x), Math.floor(piece.y))) {
+            this.glows.push({ sx: ent.sx, sy: ent.sy, kind: piece.kind, view });
+          }
         }
         // A sign is a board made to be read, so what is written on it stands
         // over it in the world rather than waiting in a tooltip.
