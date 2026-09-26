@@ -323,6 +323,13 @@ export const NEWS: News[] = [
       'An altar can only be built while you stand on a settlement of yours: one you founded or one you are a citizen of.',
     ],
   },
+  {
+    n: 22,
+    day: '2026-09-26',
+    lines: () => [
+      'An altar can only be set down on a settlement of yours as well. Altars already standing elsewhere stay where they are.',
+    ],
+  },
 ];
 
 /** The highest entry this browser has shown. */

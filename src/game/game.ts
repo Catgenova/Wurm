@@ -20,7 +20,7 @@ import { anvilAnchor, anvilCovers, ANVIL_SUBTILES, type PlacedAnvil } from './an
 import { fireAnchor, fireCentre, fireCovers, FIRE_SUBTILES, type PlacedCampfire } from './campfire';
 import { smelterAnchor, smelterCentre, smelterCovers, SMELTER_H, SMELTER_W, type PlacedSmelter, type SmeltJob } from './smelter';
 import { kilnAnchor, kilnCovers, KILN_SUBTILES, type PlacedKiln } from './kiln';
-import { ACROSS_OF, deckSpot, furnitureAnchor, furnitureCapacity, furnitureCentre, furnitureCovers, furnitureDef, furnitureHeft, furnitureHolds, furnitureKg, furnitureRefuses, furnitureRoom, furnitureUnits, hiveRoom, rackDeck, rackSpots, teamOf, vehicleOf, type LiquidKind, type PlacedFurniture, furnitureName, LIQUID_NAME, isBoat, furnitureFootprint, type BoatDef } from './furniture';
+import { ACROSS_OF, DEED_PLACE, deckSpot, furnitureAnchor, furnitureCapacity, furnitureCentre, furnitureCovers, furnitureDef, furnitureHeft, furnitureHolds, furnitureKg, furnitureRefuses, furnitureRoom, furnitureUnits, hiveRoom, rackDeck, rackSpots, teamOf, vehicleOf, type LiquidKind, type PlacedFurniture, furnitureName, LIQUID_NAME, isBoat, furnitureFootprint, type BoatDef } from './furniture';
 import { emptyCrate, occupiedRefusal, shutIn } from './creaturecrate';
 import { bury, crumble, graveAt, graveRefusal, graveSays, GRAVE_MARK } from './graves';
 import { cropDef, RIPE, type Crop } from './farming';
@@ -6160,6 +6160,8 @@ export class Game {
     if (!this.world.isPassable(x, y) || this.world.hasWater(x, y)) return 'Furniture needs dry, solid ground.';
     if (this.world.slope(x, y) > 16) return 'The floor is too uneven for it to stand.';
     if (this.isToken(x, y)) return 'Not on the token.';
+    // An altar goes down on a settlement of yours; one already standing may still be turned where it is.
+    if (def.deed && except === undefined && !this.onDeed(x, y)) return DEED_PLACE;
     for (let dy = 0; dy < fh; dy++) {
       for (let dx = 0; dx < fw; dx++) {
         if (this.occupiedSubtile(x, y, ax + dx, ay + dy, except)) return 'Something is already standing there.';

@@ -93,7 +93,12 @@ export interface FurnitureDef {
   bed?: number;
   /** A stone table to kneel at. Praying at one banks favour. */
   altar?: boolean;
-  /** Built only by somebody standing on a settlement of theirs, founded or joined (`Recipe.deed`). */
+  /**
+   * Built, and set down, only on a settlement of yours, founded or joined.
+   * The building is `Recipe.deed`; the setting down is asked of the tile it
+   * goes on (`Game.furniturePlaceReason`), and the island reads both off
+   * `recipe.deed` on the piece's own recipe.
+   */
   deed?: boolean;
   /** Rung on a settlement: every wildermon of the deed comes, and every citizen hears where it hangs. */
   bell?: boolean;
@@ -199,6 +204,9 @@ const piece = (
  * Every piece, from a three-legged stool to a wagon. Everything a carpenter
  * builds here is nailed rather than pegged, so every one of them takes nails.
  */
+/** Why a piece built only on a settlement of yours will not stand anywhere else; the island says the same (`fire_refusal`). */
+export const DEED_PLACE = 'You can only set this down on a settlement of yours.';
+
 export const FURNITURE: FurnitureDef[] = [
   piece('stool', 'Stool', 1, 1, [['plank', 4], ['shaft', 3], ['nail', 12]], 8, 6, 'You nail up a {bill.shaft:w}-legged stool.'),
   piece('chair', 'Chair', 1, 1, [['plank', 8], ['shaft', 4], ['nail', 20]], 12, 8, 'You nail up a chair with a proper back to it.'),
