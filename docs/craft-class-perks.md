@@ -1,0 +1,333 @@
+# Craft class perks
+
+The perks chosen for the fourteen craft classes, class by class, on 26 September 2026. They replace what a craft class gives today: its channels and its tree of nodes in `src/game/classes.ts`. None of them is built yet.
+
+## Points
+
+- A class is taken at 50 in one of its skills, and comes with 1 point.
+- Every 10 levels of the class's main skill after that give 1 more point: 6 at 100.
+- Each perk costs 1 point, so at 100 a player holds 6 of their class's 18.
+
+Each class was offered 50 perks and 18 were picked. A perk keeps the number it was offered under, which is the number it was picked by. Figures in brackets are the game's own when the perks were chosen, so each line can be checked against the rule it changes when it is built.
+
+## Terraformer
+
+Main skill digging; also paving.
+
+5. **Clean Earth** — dirt, sand, clay, peat and tar you dig, dredge, collect or flatten off come up at +10% QL (at most 100).
+6. **Rare Earth** — 1 in 100 goes of Dig, Dredge and Collect bring the material up rare, rolling on to supreme and fantastic at crafting's odds. (Gathered material is never rare now.)
+9. **Level Hand** — Flatten moves 2 height units a go instead of 1.
+10. **Quick Level** — Flatten takes 35% less time per go.
+12. **Steep Cut** — slope limit for Dig, Drop dirt and Flatten is 4× digging (now 3×, minimum 40).
+14. **Wader** — Dig, Flatten and Drop dirt work in water up to 20 deep (now 10).
+15. **Dredger** — Dredge reaches bottoms up to 60 deep (now 30) and takes 20% less time.
+17. **Bed Worker** — Collect takes 30% less time per go.
+20. **Treasure Nose** — digging turns up a treasure map in 1 of every 200 goes (now 1 in 1000).
+23. **Stump Puller** — Dig out the stump takes 50% less time and gives 1 log of the tree's kind.
+25. **Quick Paver** — Pack, Pave (cobblestone) and Pave (slabs) take 35% less time per go.
+26. **Bed True** — Pave (slabs) never fails (now a check at difficulty 10 against the slab's QL).
+27. **Frugal Cobbler** — 1 in 3 goes of Pave (cobblestone) use no stone brick.
+29. **Road Legs** — you walk 15% faster on packed dirt, cobblestone and slabs.
+32. **Soil Porter** — dirt, sand and clay weigh 10 kg a unit in your pack (now 20 kg, against a 120 kg carry limit).
+33. **Strong Back** — you carry 40 kg more before the load slows you (now 120 kg + 5 per body strength).
+34. **Long Reach** — Drop dirt and Flatten draw soil from carts and containers within 5 tiles (now 2.5), and what you dig goes straight into a cart within 5 tiles.
+44. **Dig Out the Tile** — lowers all four corners of a tile by 1 in one go, in 16 s base (four digs take 24 s), and gives 4 of the material.
+
+## Miner
+
+Main skill mining; also prospecting and archaeology.
+
+1. **Quick Pick** — Mine takes 25% less time per go (8 s base now).
+2. **Rich Seam** — Mine: 15% of goes bring up 2.
+3. **Sure Swing** — Mine fails half as often.
+6. **Rare Ore** — 1 in 100 goes of Mine bring the yield up rare, rolling on to supreme and fantastic at crafting's odds.
+7. **Ore Sense** — you can mine each ore at 10 below its mining level: gold at 40, seryll at 80 (now copper 1, iron 5, tin 10, then every 10 up to seryll 90).
+8. **Coal Hand** — Mine on a coal seam brings up 2 coal a go.
+9. **Chipper** — Chip corner lowers the corner 1 go in 2 (now 1 in 4).
+11. **Face Shaper** — when Chip corner succeeds, it lowers the corner by 2.
+13. **Rock Slide** — when the face drops on its own, 3 more of what you're mining come down with it.
+14. **Wet Work** — Mine and Chip corner work in water up to 20 deep (now 10).
+15. **Gem Eye** — mining turns up a gem in 1 of every 150 goes (now 1 in 400).
+17. **Treasure in the Rock** — mining turns up a treasure map in 1 of every 200 goes (now 1 in 1000).
+19. **Far Reader** — Prospect reads 3 tiles further (now 3, plus 1 per 10 prospecting).
+25. **Keen Trowel** — Investigate finds something 15 percentage points more often, up to 85%. (Now: 14%, plus 40% of your archaeology level and 10% of the trowel's QL, capped at 70%.)
+27. **Pieces that Fit** — while you hold pieces of a relic, half your relic finds are a piece of it you're missing.
+28. **Bauble Hunter** — 40% of finds are tarnished baubles (now 30%).
+35. **Ore Cart** — what you mine goes straight into a cart or container within 5 tiles.
+50. **Pan** — on sand beside water, 1 go in 8 gives copper, tin, silver or gold ore, at a QL set by your prospecting.
+
+## Mason
+
+Main skill masonry; also stonecutting.
+
+1. **Quick Chisel** — stonecutting takes 25% less time (bricks 6 s, slabs 9–10 s base).
+2. **Three from a Shard** — Chisel brick makes 3 bricks from a shard (now 2).
+4. **Sure Chisel** — stonecutting fails half as often.
+8. **Quick Mason** — stone walls and floors take 30% less time per go (5 s base now).
+9. **Two at a Time** — Build wall and Build floor lay 2 units a go when you have them (now 1; a stone-brick wall is 24 bricks and 12 mortar).
+12. **Tall Walls** — stone buildings you plan can rise 2 storeys past the material's limit (stone brick and marble 10, slate 8, sandstone and clay brick 7, cobblestone 6, adobe 5).
+16. **Salvage** — Remove wall gives back half the stone (now nothing).
+17. **Concrete Hand** — Raise the rock with concrete never fails (now difficulty 10, and the concrete is lost on a fail).
+18. **Double Lift** — Raise the rock lifts the corner by 2 for one concrete, where the slope limit allows.
+19. **Steep Stone** — the slope limit for raising rock is 4× masonry (now 3×, minimum 40).
+20. **Good Mix** — Mix concrete makes 2 from 1 mortar and 1 ash (now 1).
+22. **Wet Set** — Raise the rock works under water up to 10 deep (now only above water).
+24. **Nothing Wasted** — a failed smelter, kiln, oven, brazier, well, statue or altar keeps its materials (now they're lost).
+29. **Bridge Mason** — stone arch bridges take 30% less time and span 10 tiles (now 8).
+33. **Brick Porter** — bricks and slabs weigh half in your pack (a stone brick is 15 kg now).
+35. **Hod Carrier** — Build wall and Build floor also draw from carts and containers within 5 tiles (now only your pack and a crate on the site).
+47. **Repoint** — re-lay a finished wall in a different stone; you pay the new stone and get half the old stone back.
+48. **Rubble Fill** — raise a rock corner with 5 rock shards instead of a concrete.
+
+## Carpenter
+
+Main skill carpentry; also fine carpentry, bowyery and fletching.
+
+1. **Quick Saw** — Saw into planks, Saw into timbers and Carve shafts take 30% less time (5 s base).
+2. **Clean Sawing** — a log saws into 4 planks (now 3).
+3. **Heavy Timber** — a log saws into 3 timbers (now 2).
+6. **Thatcher** — Bundle into thatch makes 2 from 2 mixed grass (now 1).
+10. **Master Joiner** — furniture you make comes out rare twice as often.
+12. **Deep Drawers** — chests, cupboards, barrels, bins, shelves, wardrobes and larders you make hold 20% more.
+14. **Shipwright** — boats take 30% less time to build (rowing boat 34 s, sailing boat 70 s, caravel 180 s).
+15. **Keel Layer** — boats you build go 10% faster on the water.
+16. **Deep Hold** — boats you build carry 25% more.
+18. **Smooth Axle** — carts and wagons you build go 10% faster.
+19. **Sure Hull** — boats, carts and wagons fail half as often.
+25. **Fence Builder** — fences and gates take half the time and half the material.
+26. **Timber Salvage** — Remove wall gives back half the wood (now nothing).
+27. **Bridge Wright** — wooden and rope bridges take 30% less time and span 2 tiles more.
+31. **Bowyer's Draw** — bows you make hit 10% harder.
+32. **True Bow** — bows you make reach 10% further.
+37. **String Maker** — a bowstring takes 1 yarn (now 2) and never fails.
+45. **Saw Care** — saws, carving knives, mallets and files wear 50% less.
+
+## Smith
+
+Main skill blacksmithing; also smelting, weaponsmithing, armorsmithing, platesmithing and chainsmithing.
+
+7. **Sure Alloy** — alloy mixes fail half as often.
+8. **Glassblower** — Make glass makes 2.
+9. **Reclaimer** — Melt down gives back 75% of the lumps at 85% QL (now half, at 70%).
+12. **Hard Sand** — moulds you make wear half as fast, so they last twice as many pours (a QL 50 mould now lasts 7).
+13. **Clean Pour** — a mould's wear doesn't lower what you pour. (A casting is now the average of the lump, your smelting and the mould's QL, and the mould's QL drops by half its damage.)
+16. **Sure Hammer** — smithing at the anvil fails half as often.
+20. **Second Heat** — a failed smithing go keeps the casting (now it's lost).
+22. **Nail Maker** — 8 nails a lump (now 5).
+24. **Keen Edge** — weapons you smith deal 10% more damage.
+25. **Balanced** — weapons you smith have a 5% better chance to hit.
+26. **Mail Maker** — chain armour you smith stops 10% more damage.
+27. **Plate Maker** — plate armour you smith stops 10% more damage.
+30. **Toolsmith** — tool heads and blades you smith come out at +10% QL.
+32. **Metal Polisher** — Improve on metal raises QL 50% more per go.
+36. **Forge Reach** — smelter and anvil work draw lumps, fuel and castings from containers within 6 tiles (now 3).
+38. **Long Shift** — you can queue 2 more jobs.
+45. **Temper Bath** — quench a weapon or tool you finished for +5 QL, once per item.
+49. **Ingots** — pour 5 lumps into 1 ingot that weighs half and counts as 5 lumps.
+
+## Forester
+
+Main skill woodcutting; also forestry.
+
+1. **Clean Stroke** — each stroke of Cut down takes 25% less time (8 s base).
+2. **Heavy Swing** — trees come down in one stroke fewer, at least 1 (now young 2, mature 3, old 3, very old 4).
+3. **Sure Hatchet** — Cut down glances off half as often.
+5. **Choice Logs** — logs you fell come up at +10% QL.
+6. **Rare Heartwood** — 1 tree in 100 you fell gives rare logs, rolling on to supreme and fantastic at crafting's odds.
+7. **Clean Drop** — a tree you fell leaves no stump.
+10. **Sprout Picker** — Pick sprout never fails (now difficulty 15) and gives 2.
+11. **Nursery** — sprouts you plant come up as young trees, skipping the sapling stage.
+14. **Master Grafter** — Graft never fails (now difficulty 40) and takes 30% less time.
+16. **Fruitful** — Pick fruit gives 1 more fruit per pick.
+20. **Hedge Harvest** — Harvest bush gives 1 more per go.
+21. **Nest Finder** — 1 tree in 10 you fell gives 3 feathers, which fletching needs.
+22. **Honey Hunter** — 1 tree in 20 you fell gives 2 honey.
+24. **Kindling** — cutting down a bush gives 2 shafts.
+34. **Woodsman's Stride** — you walk through bushes, reeds, stumps and marsh at full pace (now half pace in bushes, 0.7 on stumps, 0.8 in reeds, 0.6 in marsh).
+40. **Coppice** — cuts a mature or older tree back to young for 2 logs; the tree stays standing.
+43. **Tap Resin** — taps a pine for 1 tar once a day.
+44. **Clear Brush** — clears a 3×3 patch of bushes and reeds as one job.
+
+## Farmer
+
+Main skill farming; also milling.
+
+4. **Seed Saver** — 1 sowing in 4 uses no seed.
+5. **Fast Growth** — crops you sow go through each stage 20% faster.
+6. **Crop Rotation** — a field sown with a different crop from its last one grows 25% faster.
+8. **Bumper Crop** — a crop tended at every stage gives 5 produce (now 4).
+11. **Rare Harvest** — 1 harvest in 100 comes up rare, rolling on to supreme and fantastic at crafting's odds.
+14. **Fodder** — every harvest also gives 2 mixed grass.
+15. **Herb Plot** — sage, basil, thyme, mint and rosemary give 2 more per harvest.
+16. **Grain Master** — wheat and corn give 2 more per harvest.
+17. **Fibre Farmer** — cotton and wemp give 2 more per harvest.
+22. **More Meal** — Make flour and Make cornmeal give 1 more per go.
+23. **Full Press** — pressing fruit gives 25% more juice, cider or oil.
+25. **Milkmaid** — milking takes 40% less time and gives 50% more milk.
+28. **Sack Porter** — produce, seeds and flour weigh half in your pack.
+30. **Barn Reach** — harvests go straight into a container within 5 tiles.
+34. **Worn-in Rake** — your rake counts as 20 QL higher when tilling (at most 100).
+39. **Sow a Patch** — sows a 3×3 patch as one job.
+40. **Tend a Patch** — tends a 3×3 patch as one job.
+41. **Harvest a Patch** — harvests a 3×3 patch as one job.
+
+## Cook
+
+Main skill cooking; also butchering and brewing.
+
+3. **Fine Fare** — dishes you cook come up at +10% QL.
+5. **Big Pot** — stew, pottage, porridge and preserves make 1 more serving.
+6. **Frugal Cook** — 1 dish in 5 gives one of its ingredients back.
+7. **Hearty** — dishes you cook feed each nutrient 25% more.
+8. **Long-lasting** — dishes you cook decay 50% slower.
+11. **Flavoursome** — the knack from a dish you cooked lasts 50% longer.
+14. **Balanced Diet** — a balanced diet is worth up to +30% on your learning (now +20%).
+15. **Filling** — your dishes fill hunger 25% more.
+18. **Full Carcass** — you take 15% more of a carcass (at most all of it).
+20. **Prime Cuts** — meat you butcher comes up at +10% QL.
+21. **Hide Keeper** — hides and bones you take come up at +10% QL.
+28. **Strong Brew** — the knack from a drink you brewed lasts 50% longer.
+31. **Pantry Reach** — cooking draws ingredients from containers within 6 tiles (now 3).
+32. **Cool Pack** — food in your pack decays 50% slower.
+46. **Broth** — a recipe that turns bones into broth, feeding a little of all four.
+47. **Distil** — turns 15 L of a brew into 5 L of spirit whose knack lasts 3 times as long.
+49. **Bait Maker** — butchering also gives 2 fishing bait.
+50. **Taste** — Examine on a dish shows what it feeds and how long its knack lasts.
+
+## Tailor
+
+Main skill tailoring; also leatherworking and ropemaking.
+
+2. **Full Fleece** — shearing gives 1 more wool (now 1–3, depending on the fleece).
+3. **Quick Spindle** — spinning takes 40% less time (6 s base).
+4. **Even Thread** — spinning turns 2 fibre into 3 yarn (now 2).
+7. **Tight Weave** — a cloth takes 2 yarn (now 3).
+9. **Sure Needle** — tailoring fails half as often (difficulty 8–20).
+11. **Master Tailor** — what you tailor comes out rare twice as often.
+16. **Sack Maker** — sacks you stitch hold 60 (now 40).
+18. **Sure Tan** — tanning fails half as often (difficulty 16).
+19. **Lye Saver** — 1 tanning in 2 leaves the lye in the bucket.
+21. **Sure Awl** — leatherworking fails half as often (difficulty 12–58).
+25. **Deep Pockets** — satchels you stitch hold 31 (now 25) and backpacks hold 75 (now 60).
+27. **Saddler** — mounts and teams in saddles, bridles and yokes you made move 10% faster.
+31. **Fisher's Friend** — nets and creels you make catch 20% more (a net now hauls 1–5 fish).
+34. **Nothing Wasted** — a failed tailoring, leatherworking or ropemaking job keeps its materials.
+35. **Light Pack** — cloth, leather, yarn and hides weigh half as much in your pack.
+37. **Workshop Reach** — tailoring, leatherworking and ropemaking draw from containers within 6 tiles (now 3).
+46. **Patch** — take 20 damage off a cloth or leather piece for 1 cloth or leather.
+49. **Tent** — pitch a tent and sleep anywhere, with half the rest a bed gives.
+
+## Herdsman
+
+Main skill animal husbandry; also taming.
+
+1. **Soft Hand** — every offering is 10 points likelier to take.
+2. **Patient Coax** — each refused offering makes the next 6 points likelier (now 3).
+9. **Young Trust** — young ones are 2.5 times as easy to tame (now 1.6 times).
+10. **Any Bait** — any food works as an offering to any kind (now each kind takes only its own few).
+11. **Brushwork** — a brushing adds 50% more care (now 18–74% of full care, depending on your skill and the brush).
+13. **Lasting Care** — care wears off over 6 hours (now 3).
+14. **Well Kept** — full care makes a wildermon work and learn 40% faster (now 25%).
+15. **Healing Hands** — a brushing heals 15% of its health (now 6%).
+16. **Light Eaters** — wildermon you keep get hungry 30% slower (now a follower empties in about 67 minutes, a settlement worker in about 42).
+18. **Long-lived** — wildermon you keep grow old at 25 hours (now 15).
+21. **Short Rest** — a pair can be put together again 25 minutes after a pairing (now 50).
+22. **Quick Gestation** — a mother you pair carries for 15 minutes (now 30).
+24. **Twins** — 1 pairing in 5 gives two young.
+25. **True Blood** — each of a young one's traits is 10 points likelier to come from its parents (now 50%, plus 0.35 point per husbandry level, plus up to 11 points for care, 96% at most).
+26. **Bred Up** — each trait is 10 points likelier to come out a tier better (now 0.22 point per husbandry level plus up to 8 points for care, 30% at most).
+28. **Choose the Sex** — you choose whether a pairing gives a male or a female (now even odds).
+37. **Light Crate** — a creature crate weighs 3 kg in your pack (now 10).
+50. **Stud Book** — Examine on a pair shows the odds before you pair them: the chance the pairing takes, and each trait's chance to come through.
+
+## Naturalist
+
+Main skill foraging; also botanizing, alchemy and first aid.
+
+2. **Keen Eye** — foraging and botanizing search the ground one more time (now 1, plus 1 for every 20 skill, 6 at most).
+3. **Sure Find** — no search comes up empty by chance (now 1 in 5 does, before the skill check).
+10. **Hay Cutter** — cutting grass gives 3 bundles (now 2).
+11. **Reed Cutter** — cutting reeds always gives 3 (now 2, with a chance of a 3rd equal to your foraging ÷ 140).
+12. **Rare Find** — 1 find in 100 comes up rare.
+13. **Quick Lye** — making lye takes 40% less time (12 s base).
+15. **Double Boil** — a dye boil makes 3 pots (now 2).
+16. **Thrifty Dyer** — a dye boil takes 25% less dyestuff (now 8–10).
+17. **Sure Boil** — alchemy fails half as often (difficulty 10–22).
+19. **Ink Maker** — grinding ink gives 4 (now 2).
+23. **Quick Dressing** — dressing a wound takes 40% less time (7 s base).
+24. **Sure Hands** — dressing a wound fails half as often (difficulty 10, or 30 on an infected one).
+29. **Quick Mend** — wounds you dress close 50% faster.
+30. **Cover Maker** — 2 herbs and 1 cotton make 5 covers (now 3).
+34. **Field Medic** — you can dress other players' wounds, at your skill (now only your own and your wildermon's).
+43. **Herb Tea** — a new recipe; 2 herbs and a bucket of water make 3 cups, and each cup restores 20% of your stamina.
+44. **Salve** — a new recipe; 2 herbs and 1 wax make a salve, and a dressed wound under it never gets infected.
+50. **Tincture** — a new recipe; 3 herbs make a tincture that gives +10% skill gain in foraging, botanizing, alchemy and first aid for 20 minutes.
+
+## Fisher
+
+Main skill fishing.
+
+1. **Quick Cast** — a cast takes 30% less time (9 s base).
+2. **Long Cast** — you cast up to 6 tiles (now 3.6).
+3. **Steady Hand** — a fish that bites stays on 15 points more often.
+4. **Bait Saver** — bait is used up only when you land a fish (now every cast uses one).
+5. **Strong Bait** — bait draws its fish twice as strongly (now 8 times for its first fish and 4 times for its second).
+6. **Any Bait** — any food works as bait (now only worms, corn, minnows, meat and perch).
+9. **Big Fish** — trout, pike and sturgeon bite twice as often.
+12. **Rare Catch** — 1 fish in 100 comes up rare.
+13. **Quick Net** — dragging the net takes 30% less time (16 s base).
+14. **Full Net** — a net hauls 2 more fish (now 1–5).
+15. **Wide Net** — a net reaches 4 tiles (now 2.6).
+17. **Net Care** — nets wear 50% less.
+19. **Deep Creel** — a creel holds 16 fish (now 8).
+25. **Cool Pack** — fish in your pack decay 50% slower.
+27. **Smoke Fish** — a new job; smoke fish over a fire so it keeps 5 times as long.
+33. **Rod Care** — rods wear 50% less.
+45. **Fishing Journal** — looking at water also shows each fish's chance to bite with the bait you carry.
+47. **Fish Pond** — a new build on your settlement that holds 10 fish and gains 1 an hour.
+
+## Mender
+
+Main skill repair; also restoration.
+
+1. **Big Mend** — each repair takes out 50% more damage.
+2. **Light Touch** — repairing costs half the QL.
+3. **Clean Repair** — 1 repair in 4 costs no QL.
+4. **Quick Hands** — each repair takes 40% less time (1 s base).
+9. **Tool Care** — all your tools wear 25% slower.
+10. **Armour Care** — armour and weapons you wear take 25% less damage.
+14. **Post Keeper** — work posts, traps and creels you set last 50% longer.
+17. **Quick Restore** — restoring takes 40% less time (20 s base).
+18. **Sure Restore** — restoration fails half as often.
+19. **Gentle Hands** — a failed restoration does no damage (now 5–14 to each piece).
+20. **Fine Restore** — what you restore comes up at +10% QL.
+21. **Age Undone** — damage on the pieces no longer lowers the QL of what you restore.
+24. **Lucky Polish** — baubles you restore come out rare twice as often (now 1 in 100).
+25. **Second Look** — a bauble you restore is rolled twice, and you keep the better roll.
+26. **Tier Up** — 1 restoration in 10 turns a minor bauble into a major one, or a major into an ancient one.
+27. **Handyman** — you can improve anything up to QL 30, whatever your skill in its trade (now 10).
+42. **Repair Kit** — a new item made from 2 cloth, 2 nails and a plank; it takes 50 damage off anything in one use, anywhere.
+50. **Sealant** — a new recipe; 1 tar and 1 wax seal an item so it never decays.
+
+## Artisan
+
+Main skill jewellery; also pottery and papyrusmaking.
+
+2. **Sure Setting** — setting a stone fails half as often.
+3. **Keep the Stone** — a failed setting never loses the stone (now it splits).
+4. **Bright Stone** — a jewel you set gives +15% skill gain on its trade (now +10%).
+7. **Cut True** — a jewel you set gives up to +5% more, depending on its QL (now QL makes no difference).
+9. **Fine Castings** — rings and pendants you cast come up at +10% QL.
+10. **Gem Eye** — your mining turns up gems twice as often.
+12. **More Stones** — six new gems that favour farming, masonry, cooking, tailoring, taming and pottery.
+13. **Focus Cutter** — a focus you set wears 25% slower when you cast from it.
+14. **Keen Focus** — spells cast from a focus you set are 10% stronger.
+26. **Deep Pot** — dishes cooked in a pot or bowl you made give 1 more serving.
+27. **Sealed Jar** — fruit preserved in a jar you made keeps twice as long.
+28. **Glaze** — a new job; a glazed pot, bowl or jar never decays.
+34. **Good Read** — books you bind teach 25% more.
+35. **Sturdy Binding** — books you bind take half the damage when studied (now 2–5 each time).
+36. **Trade Book** — a new book written on one of your skills; studying it teaches that skill instead of mind logic.
+46. **Amphora** — a new fired jar that holds 20 of one food or drink, which keeps twice as long inside it.
+48. **Circlet** — a new gold band worn on the head, set with 3 stones that each give half their bonus.
+49. **Potter's Wheel** — a new build; anyone shaping clay at it works 30% faster.
