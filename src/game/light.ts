@@ -64,15 +64,17 @@ export const FIRE_REACH = 5;
 export const OVEN_REACH = 4;
 export const FORGE_REACH = 6;
 /**
- * And an altar's stars: a small pool of violet round the stone, steady, and
+ * And an altar's stars: a small pool of lavender round the stone, steady, and
  * only for the look of it -- what a light reaches is drawn, never asked about
- * by any rule. The stars themselves shine through the wash on their own
- * (`furnitureHoles` in the renderer).
+ * by any rule. It is kept faint, about what a campfire casts, so the stars
+ * and not the stone they light are the brightest thing there; the stars
+ * themselves shine through the wash on their own (`furnitureHoles` in the
+ * renderer).
  */
-export const ALTAR_REACH = 1.2;
+export const ALTAR_REACH = 0.9;
 export const ALTAR_GLOW = 0.4;
-export const ALTAR_CAST = '225, 80, 255';
-export const ALTAR_CAST_ALPHA = 0.45;
+export const ALTAR_CAST = '184, 160, 240';
+export const ALTAR_CAST_ALPHA = 0.18;
 
 /**
  * What the night is worth over a point, given everything burning near it: 1
