@@ -1774,7 +1774,8 @@ export function helpText(): string {
     <p>There is no god on this island with a name and nobody here would claim to know one. There is a
     stone table, there are the hours the clock favours, and there is the plain fact that a thing knelt
     over then comes out better than a thing that was not.</p>
-    <p>An <b>altar</b> is masonry: ${bill('make_altar')}, laid with a trowel. Kneel at it and you bank
+    <p>An <b>altar</b> is masonry: ${bill('make_altar')}, laid with a trowel while you stand on a settlement of yours,
+    one you founded or one you are a citizen of. Kneel at it and you bank
     <b>favour</b>, on the <b>prayer</b> skill. You may say what you have to say once every ${spanWords(PRAYER_REST)}, and it is
     worth most at <b>${listed(PRAYER_PEAKS.map(hudHour))}</b> &mdash; ${times((PRAYER_BASE + PRAYER_LIFT) / PRAYER_BASE)} what it is worth
     ${numberWord(PRAYER_TAPER)} hours or more from either &mdash; and less the further off you are. A good altar banks more

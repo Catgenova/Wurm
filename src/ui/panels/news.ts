@@ -316,6 +316,13 @@ export const NEWS: News[] = [
       'An altar is a coursed stone pedestal with the gold sun in its face and a gold dish on top. Over the dish a figure of stars joined by lines turns, with a ring of light round it, and at night the stars shine through the dark.',
     ],
   },
+  {
+    n: 21,
+    day: '2026-09-26',
+    lines: () => [
+      'An altar can only be built while you stand on a settlement of yours: one you founded or one you are a citizen of.',
+    ],
+  },
 ];
 
 /** The highest entry this browser has shown. */

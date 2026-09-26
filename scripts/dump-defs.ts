@@ -597,6 +597,8 @@ out.push(`create table if not exists recipe (
   consume_on_fail boolean not null default false, ql_from_inputs boolean not null default false,
   material text, wood text, extra text, done text not null, fail text
 );`);
+/* Worked only by somebody standing on a settlement of theirs: `Recipe.deed`, which `craft_refusal` reads. */
+out.push(`alter table recipe add column if not exists deed boolean not null default false;`);
 /*
  * What a thing set down on the ground takes up, and what it is good for.
  *
@@ -1533,6 +1535,7 @@ for (const r of RECIPES) {
     [q(r.id), q(r.result), q(r.count ?? 1), q(r.tool), q(r.station), q(r.skill), q(r.label), q(r.verb),
      q(r.baseTime), q(r.stamina), q(r.difficulty === undefined ? null : r.difficulty),
      q(!!r.consumeOnFail), q(!!r.qlFromInputs), q(r.material), q(r.wood), q(r.extra), q(r.done), q(r.fail)].join(', ') + `);`);
+  if (r.deed) out.push(`update recipe set deed = true where id = ${q(r.id)};`);
   r.inputs.forEach((i, n) => {
     out.push(`insert into recipe_input values (${q(r.id)}, ${n}, ${q(i.item)}, ${q(i.count ?? 1)});`);
   });

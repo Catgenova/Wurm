@@ -301,6 +301,7 @@ create table if not exists recipe (
   consume_on_fail boolean not null default false, ql_from_inputs boolean not null default false,
   material text, wood text, extra text, done text not null, fail text
 );
+alter table recipe add column if not exists deed boolean not null default false;
 create table if not exists rock_def (
   id int primary key, name text not null, yields text not null,
   level real not null default 1, ore boolean not null default false
@@ -5159,6 +5160,7 @@ insert into recipe_input values ('make_brazier', 0, 'stone_brick', 24);
 insert into recipe_input values ('make_brazier', 1, 'mortar', 8);
 insert into recipe_input values ('make_brazier', 2, 'ribbon', 4);
 insert into recipe (id, result, count, tool, station, skill, label, verb, base_time, stamina, difficulty, consume_on_fail, ql_from_inputs, material, wood, extra, done, fail) values ('make_altar', 'altar', 1, 'trowel', null, 'masonry', 'Build altar', 'building a altar', 40, 0.05, 40, false, false, null, null, null, 'You lay the courses, bed the slab on top and set the gold into the face of it. Kneel here at dawn. Set it down on any spot of a tile.', 'The courses will not run true and you knock the altar down again.');
+update recipe set deed = true where id = 'make_altar';
 insert into recipe_input values ('make_altar', 0, 'stone_brick', 64);
 insert into recipe_input values ('make_altar', 1, 'mortar', 32);
 insert into recipe_input values ('make_altar', 2, 'stone_slab', 4);

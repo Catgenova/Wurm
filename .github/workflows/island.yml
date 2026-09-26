@@ -1469,6 +1469,17 @@ jobs:
             --outfile=node_modules/.cache/climb.mjs --log-level=error
           node node_modules/.cache/climb.mjs
 
+      - name: An altar goes up on your own ground
+        run: |
+          # Asked for: "Make the altar only craftable within deed perimeter".
+          # The same recipes carry the flag on both sides, and both refuse an
+          # altar in the same words off a settlement of yours: on one you
+          # founded it goes up, to its last tile and not a tile past it; on a
+          # neighbour's it does not, until you are a citizen of it.
+          npx esbuild supabase/test/deedaltar.ts --bundle --platform=node --format=esm \
+            --outfile=node_modules/.cache/deedaltar.mjs --log-level=error
+          node node_modules/.cache/deedaltar.mjs
+
       - name: The exact benefit, and where its number comes from
         run: |
           # Text the player reads says what changes and by how much, and where

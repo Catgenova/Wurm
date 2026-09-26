@@ -1,7 +1,7 @@
 import { ACTION_BY_ID } from '../../game/actions';
 import type { Game } from '../../game/game';
 import { itemDef } from '../../game/items';
-import { CRAFT_REACH, RECIPE_CATEGORIES, RECIPES, materialChoices, prospect, recipeStatus, stationName, type CraftStock, type Recipe, type RecipeStatus } from '../../game/recipes';
+import { CRAFT_REACH, DEED_ONLY, RECIPE_CATEGORIES, RECIPES, materialChoices, prospect, recipeStatus, stationName, type CraftStock, type Recipe, type RecipeStatus } from '../../game/recipes';
 import { SKILL_DEFS } from '../../game/skills';
 import type { UIWindow } from '../windows';
 import { Repaint } from '../repaint';
@@ -87,7 +87,7 @@ export class CraftPanel {
    */
   private matches(r: Recipe): boolean {
     if (!this.query) return true;
-    const parts = [itemDef(r.result).name, r.label, r.note ?? '', r.category, skillName(r.skill), r.tool ? lower(r.tool) : '', r.station ? stationName(r.station) : '', ...r.inputs.map((i) => lower(i.item))];
+    const parts = [itemDef(r.result).name, r.label, r.note ?? '', r.category, skillName(r.skill), r.tool ? lower(r.tool) : '', r.station ? stationName(r.station) : '', r.deed ? 'settlement deed' : '', ...r.inputs.map((i) => lower(i.item))];
     return parts.join(' ').toLowerCase().includes(this.query);
   }
 
@@ -215,6 +215,14 @@ export class CraftPanel {
       station.textContent = stationName(r.station);
       station.title = st.station ? 'You are standing at one' : 'Not within reach of one';
       parts.push(station);
+    }
+    // Where it may be built at all: an altar goes up on a settlement of yours or nowhere.
+    if (r.deed) {
+      const deed = document.createElement('span');
+      deed.className = st.deed ? 'have' : 'lack';
+      deed.textContent = 'on your settlement';
+      deed.title = st.deed ? 'You are standing on a settlement of yours' : DEED_ONLY;
+      parts.push(deed);
     }
     if (r.tool) {
       const tool = document.createElement('span');

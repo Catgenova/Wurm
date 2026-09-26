@@ -77,6 +77,12 @@ export interface Recipe {
   tool?: string;
   /** Something that must be standing nearby, such as a lit fire to cook on. */
   station?: Station;
+  /**
+   * Worked only standing on a settlement of yours -- one you founded or one
+   * you are a citizen of -- as an altar is. The island keeps the same flag,
+   * as `recipe.deed`, and refuses in the same words (`DEED_ONLY`).
+   */
+  deed?: boolean;
   skill: string;
   /** Menu label on the material, such as "Saw into planks". */
   label: string;
@@ -386,6 +392,7 @@ const FURNITURE_RECIPES: Recipe[] = FURNITURE.filter((f) => !f.grave).map((f) =>
   skill: f.skill ?? 'fine_carpentry',
   // A carpenter's piece is of the wood it is built from; a mason's is brick.
   material: f.material ?? (f.skill === 'masonry' ? undefined : ('wood' as const)),
+  ...(f.deed ? { deed: true } : {}),
   label: `Build ${f.name.toLowerCase()}`,
   verb: `building a ${f.name.toLowerCase()}`,
   baseTime: f.time,
@@ -523,6 +530,9 @@ const RECIPE_SAID = { recipe: Object.fromEntries(RECIPES.map((r) => [r.id, { cou
 describeWith(RECIPE_SAID);
 describeGoals(RECIPE_SAID);
 
+/** Why a recipe that is worked on a settlement is refused anywhere else; the island says the same (`craft_refusal`). */
+export const DEED_ONLY = 'You can only build this standing on a settlement of yours.';
+
 export const RECIPE_CATEGORIES: RecipeCategory[] = ['Woodwork', 'Furniture', 'Stonework', 'Clay & thatch', 'Cloth', 'Alchemy', 'Writing', 'Cooking', 'Smelting'];
 export const stationName = (s: Station): string => STATION_NAME[s];
 
@@ -531,6 +541,8 @@ export interface RecipeStatus {
   tool: boolean;
   /** Standing at the station it needs, or none needed. */
   station: boolean;
+  /** Standing on a settlement of yours, or it can be made anywhere. */
+  deed: boolean;
   /** Each input: how many a go takes, how many are at hand, and how many of those are on you rather than stored nearby. */
   inputs: Array<{ item: string; need: number; have: number; carried: number }>;
   /** Everything is at hand for at least one craft. */
@@ -631,6 +643,7 @@ export function prospect(r: Recipe, g: Game, stock: readonly CraftStock[] = g.cr
 export function recipeStatus(r: Recipe, g: Game, want?: string, stock: readonly CraftStock[] = g.craftStock()): RecipeStatus {
   const tool = !r.tool || g.inventory.has(r.tool);
   const station = !r.station || g.atStation(r.station);
+  const deed = !r.deed || g.onDeed(g.player.tileX, g.player.tileY);
   const material = chooseMaterial(g, r, undefined, want, stock);
   const inputs = r.inputs.map((i) => ({
     item: i.item,
@@ -638,8 +651,8 @@ export function recipeStatus(r: Recipe, g: Game, want?: string, stock: readonly 
     have: countFor(stock, r, i.item, material),
     carried: countFor(stock, r, i.item, material, true),
   }));
-  const max = tool && station ? Math.min(...inputs.map((i) => Math.floor(i.have / i.need))) : 0;
-  return { tool, station, inputs, ready: max >= 1, max, material };
+  const max = tool && station && deed ? Math.min(...inputs.map((i) => Math.floor(i.have / i.need))) : 0;
+  return { tool, station, deed, inputs, ready: max >= 1, max, material };
 }
 
 /**
@@ -721,6 +734,7 @@ export function chooseMaterial(g: Game, r: Recipe, preferUid?: number, want?: st
 export function recipeReason(r: Recipe, g: Game, preferUid?: number, stock: readonly CraftStock[] = g.craftStock(preferUid)): string | null {
   if (r.tool && !g.inventory.has(r.tool)) return `You need a ${lower(r.tool)}.`;
   if (r.station && !g.atStation(r.station)) return `You need to stand at a ${STATION_NAME[r.station]}.`;
+  if (r.deed && !g.onDeed(g.player.tileX, g.player.tileY)) return DEED_ONLY;
   const mat = chooseMaterial(g, r, preferUid, undefined, stock);
   if (r.wood) {
     const i = r.inputs[0];
