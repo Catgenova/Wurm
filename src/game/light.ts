@@ -22,6 +22,8 @@ export interface LightSource {
   steady?: boolean;
   /** The colour it throws, as 'r, g, b'; firelight when it does not say. */
   cast?: string;
+  /** How strong that colour is at its middle at full dark; a fire's is a sixth of its strength. */
+  castAlpha?: number;
 }
 
 /** Seconds of burning in one candle, at a lantern made perfectly. */
@@ -68,8 +70,9 @@ export const FORGE_REACH = 6;
  * (`furnitureHoles` in the renderer).
  */
 export const ALTAR_REACH = 1.2;
-export const ALTAR_GLOW = 0.55;
-export const ALTAR_CAST = '190, 160, 255';
+export const ALTAR_GLOW = 0.4;
+export const ALTAR_CAST = '200, 110, 255';
+export const ALTAR_CAST_ALPHA = 0.25;
 
 /**
  * What the night is worth over a point, given everything burning near it: 1

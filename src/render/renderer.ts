@@ -7444,7 +7444,7 @@ export class Renderer {
           if (sx < -r || sy < -r || sx > this.canvas.width + r || sy > this.canvas.height + r) continue;
           const cast = l.cast ?? '255, 186, 92';
           const warm = ctx.createRadialGradient(sx, sy, 0, sx, sy, r);
-          warm.addColorStop(0, `rgba(${cast}, ${(0.16 * dark * l.strength).toFixed(3)})`);
+          warm.addColorStop(0, `rgba(${cast}, ${((l.castAlpha ?? 0.16 * l.strength) * dark).toFixed(3)})`);
           warm.addColorStop(1, `rgba(${cast}, 0)`);
           ctx.fillStyle = warm;
           ctx.beginPath();

@@ -1383,9 +1383,17 @@ const STAR_INK = (i: number): [string, string] =>
 /** The warm ink every piece on the island is edged in, and the violet of the lines, deep and pale. */
 const SKY_EDGE = '74, 48, 40', LINE_DEEP = '90, 60, 158', LINE_PALE = '214, 186, 246';
 /** The top of the dish the stars stand over, and where the middle of the figure hangs, in units over the floor. */
-const DISH_Z = 12.25, SKY_Z = 20;
+const DISH_Z = 13.1, SKY_Z = 20.9;
 /** Seconds to a turn of the figure and to a bob, and how far it bobs in units; seconds to a turn of the ring the other way, and to a lap of the mote on it. */
 const SKY_TURN = 26, SKY_BOB = 5.5, BOB = 0.7, RING_TURN = 41, MOTE_LAP = 7;
+/**
+ * How much the turn lingers face-on: a figure of stars laid out across and up
+ * is a string of beads end on, so it turns slowly while it faces you and
+ * quickly past its edge -- still once in `SKY_TURN` -- a sixth as fast at its
+ * slowest. `SKY_FACE` is how far round from square the figure is widest,
+ * since its hands and feet do not sit on one plane.
+ */
+const SKY_EASE = 0.4, SKY_FACE = 0.26;
 /** The ring: how far out it runs, and how far it leans off level. */
 const RING_R = 9.5, RING_LEAN = 0.1;
 /** The highest a star reaches, bob and spikes and all: the top of the room the model keeps. */
@@ -1394,7 +1402,10 @@ const SKY_TOP = SKY_Z + 7.5;
 /** Where everything over an altar is at `t`, on a screen with the altar's floor at (sx, sy). */
 function skyAt(view: PieceView, zoom: number, sx: number, sy: number, t: number) {
   const sc = new Scene(null as unknown as CanvasRenderingContext2D, view, zoom);
-  const turn = (t / SKY_TURN) * TAU, c = Math.cos(turn), s = Math.sin(turn);
+  // Square to you is where a step across the figure goes straight across the screen.
+  const square = Math.atan2(-view.uy, view.vy) + SKY_FACE;
+  const round = (t / SKY_TURN) * TAU;
+  const turn = round - SKY_EASE * Math.sin(2 * (round - square)), c = Math.cos(turn), s = Math.sin(turn);
   const mid = SKY_Z + Math.sin((t / SKY_BOB) * TAU) * BOB;
   const at = (x: number, y: number, z: number): Pt => {
     const [px, py] = sc.P(x, y, z);
@@ -1416,14 +1427,19 @@ function skyAt(view: PieceView, zoom: number, sx: number, sy: number, t: number)
   return { sc, at, mid, figure, dust, near, unit };
 }
 
-/** How far a star's body reaches, in pixels, by how bright it is. */
-const starR = (mag: number, zoom: number): number => (1 + mag * 0.75) * zoom;
+/**
+ * How far a star's body reaches, in pixels, by how bright it is: in step with
+ * the zoom up close but a little behind it, so a star that is big enough to
+ * read at play zoom does not crowd the figure in a close-up.
+ */
+const starR = (mag: number, zoom: number): number => (1 + mag * 0.75) * zoom ** 0.85;
 
 /**
  * Draw the stars over an altar standing at (sx, sy), at `t` seconds, under a
  * night `night` dark (0 by day, 1 at midnight): after dark the lines lose some
- * of their ink, the pale in them and the light round the figure come up, and
- * the ink edge goes, since the wash is taken back off them.
+ * of their ink, the pale in them and the light round the figure come up, the
+ * ink edge goes and the loose stars come out, since the wash is taken back
+ * off them.
  */
 function drawSky(g: CanvasRenderingContext2D, sx: number, sy: number, zoom: number, view: PieceView, t: number, night = 0): void {
   const { sc, at, mid, figure, dust, near, unit } = skyAt(view, zoom, sx, sy, t);
@@ -1433,9 +1449,8 @@ function drawSky(g: CanvasRenderingContext2D, sx: number, sy: number, zoom: numb
 
   /*
    * First what it stands against and the light off it: the violet haze
-   * behind the figure, breathing, a bloom of light over it, the pool in the
-   * dish lit from above, and a beam between the two -- the stars stand on
-   * the altar rather than hanging somewhere near it.
+   * behind the figure, breathing, a bloom of light over it and the pool in
+   * the dish lit from above.
    */
   const breath = 0.8 + 0.2 * Math.sin(t * 1.3);
   const bloom = (x: number, y: number, r: number, ink: string, a: number): void => {
@@ -1456,51 +1471,68 @@ function drawSky(g: CanvasRenderingContext2D, sx: number, sy: number, zoom: numb
   g.globalCompositeOperation = 'lighter';
   bloom(cx, cy, unit * 11, LINE_PALE, (0.05 + 0.25 * night) * breath);
   bloom(dx, dy, unit * 5, LINE_PALE, (0.2 + 0.35 * night) * breath);
+  /*
+   * And a beam between the two, so the stars stand on the altar rather than
+   * hanging somewhere near it. It comes up out of the pool rather than
+   * starting at its surface, and it is laid three times, each narrower, so
+   * its sides are soft and nothing in it is an edge.
+   */
   const [, by] = at(0, 0, mid - 3.8);
+  const beamA = (0.3 + 0.2 * night) * breath;
   const beam = g.createLinearGradient(dx, dy, dx, by);
-  beam.addColorStop(0, `rgba(${LINE_PALE}, ${((0.3 + 0.2 * night) * breath).toFixed(3)})`);
+  beam.addColorStop(0, `rgba(${LINE_PALE}, 0)`);
+  beam.addColorStop(0.3, `rgba(${LINE_PALE}, ${(beamA / 3).toFixed(3)})`);
   beam.addColorStop(1, `rgba(${LINE_PALE}, 0)`);
   g.fillStyle = beam;
-  g.beginPath();
-  g.moveTo(dx - unit * 2.6, dy);
-  g.lineTo(dx - unit * 1.5, by);
-  g.lineTo(dx + unit * 1.5, by);
-  g.lineTo(dx + unit * 2.6, dy);
-  g.closePath();
-  g.fill();
+  for (const k of [1, 0.75, 0.5]) {
+    g.beginPath();
+    g.moveTo(dx - unit * 2.6 * k, dy);
+    g.lineTo(dx - unit * 1.5 * k, by);
+    g.lineTo(dx + unit * 1.5 * k, by);
+    g.lineTo(dx + unit * 2.6 * k, dy);
+    g.closePath();
+    g.fill();
+  }
 
   /*
-   * One star: an ink edge round gold points with arms seven tenths as wide as
-   * they are tall, a pale body and a white heart added on top. A loose star
-   * is the pale body alone, half the size and under half as bright.
+   * Everything else goes down in one order, far to near: the ring's lengths
+   * and its beads, the motes on it, the lines and the stars. So the ring's far
+   * side is behind the figure and its near side in front, a star behind a
+   * line is behind it, and nothing is on top only because it is a star. A
+   * line is laid as far back as the further of its two stars, so it runs into
+   * both of them rather than over either.
    */
-  const drawStar = ([x, y]: Pt, mag: number, bright: number, [deep, pale]: [string, string], tilt: number, loose = false): void => {
-    const r = starR(mag, zoom) * (loose ? 0.5 : 1);
+  const draws: Array<{ d: number; draw: () => void }> = [];
+
+  /*
+   * One star, the same colour however far off it is: an ink edge round gold
+   * points with arms seven tenths as wide as they are tall, a pale body over
+   * them and a white heart. Its twinkle is in the heart and the reach of its
+   * points; the far side of the figure is a little smaller and a darker gold,
+   * never a thinner one.
+   */
+  const drawStar = ([x, y]: Pt, r: number, flare: number, far: number, [deep, pale]: [string, string], tilt: number): void => {
+    const [dr, dg, db] = deep.split(',').map(Number);
+    const k = 1 - 0.35 * far * 0.28;
+    const spikes = `rgb(${Math.round(dr * k)}, ${Math.round(dg * k)}, ${Math.round(db * k)})`;
     g.save();
     g.translate(x, y);
     g.rotate(tilt);
     g.globalCompositeOperation = 'source-over';
-    if (loose) {
-      g.fillStyle = `rgba(${pale}, ${(0.45 * bright).toFixed(3)})`;
-      star(g, r * 1.8, r * 1.3);
-      g.fill();
-      g.restore();
-      return;
-    }
-    const R = r * 2;
+    const R = r * 2 * (0.9 + 0.22 * flare);
     star(g, R, R * 0.7);
     if (day > 0.02) {
-      g.strokeStyle = `rgba(${SKY_EDGE}, ${(0.5 * day * bright).toFixed(3)})`;
-      g.lineWidth = Math.max(1, 0.35 * zoom);
+      g.strokeStyle = `rgba(${SKY_EDGE}, ${(0.85 * day).toFixed(3)})`;
+      g.lineWidth = Math.max(1, 0.5 * zoom);
       g.stroke();
     }
-    g.fillStyle = `rgba(${deep}, ${(0.95 * bright).toFixed(3)})`;
+    g.fillStyle = spikes;
     g.fill();
-    g.fillStyle = `rgba(${pale}, ${bright.toFixed(3)})`;
+    g.fillStyle = `rgb(${pale})`;
     star(g, r * 1.3, r * 0.95);
     g.fill();
     g.globalCompositeOperation = 'lighter';
-    g.fillStyle = `rgba(255, 255, 255, ${(0.8 * bright).toFixed(3)})`;
+    g.fillStyle = `rgba(255, 255, 255, ${(0.35 + 0.55 * flare).toFixed(3)})`;
     g.beginPath();
     g.arc(0, 0, r * 0.45, 0, TAU);
     g.fill();
@@ -1509,10 +1541,10 @@ function drawSky(g: CanvasRenderingContext2D, sx: number, sy: number, zoom: numb
 
   /*
    * The ring: level but for a tenth of a radian, so it is an orbit from every
-   * side rather than a slash one moment and a ball the next; faint by day,
-   * behind the figure's own lines. Cut into short lengths, each as bright as
-   * it is near, so its far half goes behind the figure and its near half in
-   * front; and a mote running round it.
+   * side; faint by day, behind the figure's own lines. Eight beads ride it so
+   * its turn the other way can be seen, and two motes run round it, each a
+   * point of light with a fading wake -- as bright as they are near, smoothly,
+   * so nothing flicks from dim to bright where the ring passes behind.
    */
   const ringTurn = -(t / RING_TURN) * TAU, rc = Math.cos(ringTurn), rs = Math.sin(ringTurn);
   const onRing = (a: number): { p: Pt; d: number } => {
@@ -1521,13 +1553,13 @@ function drawSky(g: CanvasRenderingContext2D, sx: number, sy: number, zoom: numb
     return { p: at(wx, wy, mid + z), d: sc.depth(wx, wy, mid + z) };
   };
   const dMid = sc.depth(0, 0, mid);
+  const nearRing = (d: number): number => Math.max(0, Math.min(1, (d - dMid) / 3 + 0.5));
   const RING_N = 56;
   const ringPts = Array.from({ length: RING_N + 1 }, (_, j) => onRing((j / RING_N) * TAU));
-  const ringHalf = (front: boolean): void => {
-    const k = front ? 1 : 0.55;
-    for (let j = 0; j < RING_N; j++) {
-      const a = ringPts[j], b = ringPts[j + 1];
-      if ((a.d + b.d) / 2 > dMid !== front) continue;
+  for (let j = 0; j < RING_N; j++) {
+    const a = ringPts[j], b = ringPts[j + 1];
+    const k = 0.55 + 0.45 * nearRing((a.d + b.d) / 2);
+    draws.push({ d: Math.min(a.d, b.d), draw: () => {
       g.globalCompositeOperation = 'source-over';
       g.strokeStyle = `rgba(${LINE_DEEP}, ${(0.22 * k * (1 - 0.4 * night)).toFixed(3)})`;
       g.lineWidth = Math.max(1, 0.45 * zoom);
@@ -1536,45 +1568,79 @@ function drawSky(g: CanvasRenderingContext2D, sx: number, sy: number, zoom: numb
       g.strokeStyle = `rgba(${LINE_PALE}, ${((0.22 + 0.25 * night) * k).toFixed(3)})`;
       g.lineWidth = Math.max(0.5, 0.22 * zoom);
       g.beginPath(); g.moveTo(a.p[0], a.p[1]); g.lineTo(b.p[0], b.p[1]); g.stroke();
-    }
-    for (const lap of [0, 0.5]) {
-      const m = onRing(((t / MOTE_LAP + lap) % 1) * TAU);
-      if (m.d > dMid !== front) continue;
-      drawStar(m.p, 0.6, front ? 1 : 0.6, [LINE_DEEP, '246, 238, 255'], 0);
-    }
-  };
-  ringHalf(false);
+    } });
+  }
+  for (let j = 0; j < 8; j++) {
+    const b = onRing((j / 8) * TAU + 0.2);
+    const k = 0.35 + 0.25 * nearRing(b.d);
+    draws.push({ d: b.d, draw: () => {
+      g.globalCompositeOperation = 'source-over';
+      g.fillStyle = `rgba(${LINE_DEEP}, ${(k * day).toFixed(3)})`;
+      g.beginPath(); g.arc(b.p[0], b.p[1], Math.max(1, 0.6 * zoom) + 0.5, 0, TAU); g.fill();
+      g.globalCompositeOperation = 'lighter';
+      g.fillStyle = `rgba(${LINE_PALE}, ${(k + 0.3 * night).toFixed(3)})`;
+      g.beginPath(); g.arc(b.p[0], b.p[1], Math.max(1, 0.6 * zoom), 0, TAU); g.fill();
+    } });
+  }
+  for (const lap of [0, 0.5]) {
+    const a0 = ((t / MOTE_LAP + lap) % 1) * TAU;
+    const m = onRing(a0);
+    const k = 0.6 + 0.4 * nearRing(m.d);
+    draws.push({ d: m.d, draw: () => {
+      g.globalCompositeOperation = 'lighter';
+      for (let i = 5; i >= 1; i--) {
+        const w = onRing(a0 - (i / 5) * 0.5);
+        g.fillStyle = `rgba(${LINE_PALE}, ${(k * 0.5 * (1 - i / 6)).toFixed(3)})`;
+        g.beginPath(); g.arc(w.p[0], w.p[1], zoom * (1.1 - i * 0.12), 0, TAU); g.fill();
+      }
+      const glow = g.createRadialGradient(m.p[0], m.p[1], 0, m.p[0], m.p[1], 3 * zoom);
+      glow.addColorStop(0, `rgba(${LINE_PALE}, ${(0.7 * k).toFixed(3)})`);
+      glow.addColorStop(1, `rgba(${LINE_PALE}, 0)`);
+      g.fillStyle = glow;
+      g.beginPath(); g.arc(m.p[0], m.p[1], 3 * zoom, 0, TAU); g.fill();
+      g.fillStyle = `rgba(255, 255, 255, ${k.toFixed(3)})`;
+      g.beginPath(); g.arc(m.p[0], m.p[1], 1.2 * zoom, 0, TAU); g.fill();
+    } });
+  }
 
-  // The lines, the far ones first: deep violet, and a thin pale core down them.
-  const links = SKY_LINKS.map(([i, j]) => ({ a: figure[i], b: figure[j], n: (near(figure[i].d) + near(figure[j].d)) / 2 }));
-  links.sort((p, q) => p.n - q.n);
+  // The lines: deep violet, and a thin pale core down them.
   const wDeep = Math.max(1.8, 0.5 * zoom + 1.1);
-  for (const { a, b, n } of links) {
-    const k = 0.85 + 0.15 * n;
-    g.globalCompositeOperation = 'source-over';
-    g.strokeStyle = `rgba(${LINE_DEEP}, ${(k * (0.95 - 0.4 * night)).toFixed(3)})`;
-    g.lineWidth = wDeep;
-    g.beginPath(); g.moveTo(a.p[0], a.p[1]); g.lineTo(b.p[0], b.p[1]); g.stroke();
-    g.globalCompositeOperation = 'lighter';
-    g.strokeStyle = `rgba(${LINE_PALE}, ${((0.3 + 0.35 * night) * k).toFixed(3)})`;
-    g.lineWidth = wDeep * 0.45;
-    g.beginPath(); g.moveTo(a.p[0], a.p[1]); g.lineTo(b.p[0], b.p[1]); g.stroke();
+  for (const [i, j] of SKY_LINKS) {
+    const a = figure[i], b = figure[j];
+    const k = 0.85 + 0.15 * (near(a.d) + near(b.d)) / 2;
+    draws.push({ d: Math.min(a.d, b.d) - 1e-3, draw: () => {
+      g.globalCompositeOperation = 'source-over';
+      g.strokeStyle = `rgba(${LINE_DEEP}, ${(k * (0.95 - 0.4 * night)).toFixed(3)})`;
+      g.lineWidth = wDeep;
+      g.beginPath(); g.moveTo(a.p[0], a.p[1]); g.lineTo(b.p[0], b.p[1]); g.stroke();
+      g.globalCompositeOperation = 'lighter';
+      g.strokeStyle = `rgba(${LINE_PALE}, ${((0.3 + 0.35 * night) * k).toFixed(3)})`;
+      g.lineWidth = wDeep * 0.45;
+      g.beginPath(); g.moveTo(a.p[0], a.p[1]); g.lineTo(b.p[0], b.p[1]); g.stroke();
+    } });
   }
 
-  // And the stars, far to near, each twinkling on its own beat, the loose ones among them.
-  const stars = [
-    ...figure.map((q, i) => ({ ...q, mag: SKY_STARS[i][3], ink: STAR_INK(i), i, loose: false })),
-    ...dust.map((q, i) => ({ ...q, mag: SKY_DUST[i][3], ink: STAR_INK(-1), i: i + SKY_STARS.length, loose: true })),
-  ];
-  stars.sort((p, q) => p.d - q.d);
-  for (const q of stars) {
-    const beat = 1.7 + ((q.i * 0.37) % 1.4);
-    const twinkle = 0.725 + 0.275 * Math.sin((t / beat) * TAU + q.i * 2.1);
+  // The stars of the figure, each twinkling on its own beat.
+  figure.forEach((q, i) => {
+    const beat = 1.7 + ((i * 0.37) % 1.4);
+    const flare = 0.5 + 0.5 * Math.sin((t / beat) * TAU + i * 2.1);
     const n = near(q.d);
-    drawStar(q.p, q.mag * (0.86 + 0.24 * n) * (0.94 + 0.06 * twinkle), (0.7 + 0.3 * n) * twinkle, q.ink, ((q.i % 3) - 1) * 0.1, q.loose);
+    draws.push({ d: q.d, draw: () => drawStar(q.p, starR(SKY_STARS[i][3], zoom) * (0.86 + 0.24 * n), flare, 1 - n, STAR_INK(i), ((i % 3) - 1) * 0.1) });
+  });
+  // And the loose ones, which come out after dark.
+  if (night > 0.02) {
+    dust.forEach((q, i) => {
+      const r = starR(SKY_DUST[i][3], zoom) * 0.5;
+      draws.push({ d: q.d, draw: () => {
+        g.globalCompositeOperation = 'lighter';
+        g.fillStyle = `rgba(255, 236, 190, ${(0.45 * night).toFixed(3)})`;
+        g.save(); g.translate(q.p[0], q.p[1]); star(g, r * 1.8, r * 1.3); g.fill(); g.restore();
+      } });
+    });
   }
 
-  ringHalf(true);
+  draws.sort((p, q) => p.d - q.d);
+  for (const it of draws) it.draw();
   g.restore();
 }
 
@@ -1587,8 +1653,8 @@ function skyHoles(sx: number, sy: number, zoom: number, view: PieceView, t: numb
   const { at, mid, figure, unit } = skyAt(view, zoom, sx, sy, t);
   const [cx, cy] = at(0, 0, mid + 0.6);
   return [
-    { x: cx, y: cy, r: unit * 12, a: 0.3 },
-    ...figure.map((q, i) => ({ x: q.p[0], y: q.p[1], r: starR(SKY_STARS[i][3], zoom) * 4.5, a: 0.9 })),
+    { x: cx, y: cy, r: unit * 12, a: 0.15 },
+    ...figure.map((q, i) => ({ x: q.p[0], y: q.p[1], r: starR(SKY_STARS[i][3], zoom) * 2.5, a: 0.9 })),
   ];
 }
 
@@ -2596,9 +2662,17 @@ const MODELS: Record<string, Model> = {
      * it from the middle, in units, and inked light so the gold is not lost
      * under its own outline.
      */
+    /*
+     * Each on a dressed panel sunk into the coursing, a shade into shadow, so
+     * the gold has a smooth ground to itself; and each drawn at two thirds of
+     * its height, since a unit up the face is nearly twice as far on the
+     * screen as a unit across it and a round sun would stand as an egg.
+     */
     const inlay = (shapes: (c: number, t: number) => Array<Array<[number, number]>>) => (F: FaceAt, w: number, h: number): void => {
       coursed(F, w, h);
-      for (const shape of shapes(w / 2, h * 0.5)) sc.fillInk(shape.map(([u, v]) => F(u, v)), rgb(GOLD.body, 1.02), GOLD.ink, 0.5);
+      sc.fillInk([F(0.7, 0.8), F(w - 0.7, 0.8), F(w - 0.7, h - 0.8), F(0.7, h - 0.8)], rgb(STONE.body, 0.93), STONE.ink, 0.7);
+      const c = w / 2, t = h * 0.5;
+      for (const shape of shapes(0, 0)) sc.fillInk(shape.map(([u, v]) => F(c + u, t + v * 0.65)), rgb(GOLD.body, 1.02), GOLD.ink, 0.9);
     };
     const round = (c: number, t: number, r: number, n = 20): Array<[number, number]> =>
       Array.from({ length: n }, (_, i) => [c + Math.cos((i / n) * TAU) * r, t + Math.sin((i / n) * TAU) * r]);
@@ -2632,8 +2706,9 @@ const MODELS: Record<string, Model> = {
     // The capital, and the slab bedded on it.
     sc.box(-4.5, 4.5, -4.5, 4.5, 9.6, 10.3, SLAB);
     sc.box(-5.6, 5.6, -5.6, 5.6, 10.3, 11.2, SLAB, { front: grain(sc, SLAB, 1, true, 0.3) });
-    // The gold dish, its lip round a pool of night with the first of the stars already in it.
-    sc.lathe(0, 0, [[11.2, 2.6], [11.5, 3.3], [12, 4.1], [DISH_Z, 4.3]], GOLD, 24, {
+    // The gold dish on a short turned stem, a chalice, its lip round a pool of night with the first of the stars already in it.
+    sc.lathe(0, 0, [[11.2, 1.9], [11.45, 1.25], [11.8, 1.05], [12.05, 1.5]], GOLD, 20, { cap: null });
+    sc.lathe(0, 0, [[12.05, 2.6], [12.35, 3.3], [12.85, 4.1], [DISH_Z, 4.3]], GOLD, 24, {
       cap: paintOf(mix(GOLD.body, [255, 246, 214], 0.25), 0.5),
       lid: (F) => {
         const pool: Pt[] = [];
