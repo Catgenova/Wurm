@@ -231,6 +231,28 @@ const bkt = packAll([row({ id: 10, def: 'backpack', ql: 50 }),
                      row({ id: 12, def: 'bucket', holder: 'bag', inside: 10 })], still);
 say('a bucket in the bag fills too', why('fill_bucket', bkt, 12), null);
 
+/*
+ * And one of a pile of them. A bucket does not stack with other buckets, but
+ * three given at once are one item of three, and filling "a bucket" of them did
+ * nothing at all -- after the water for it had been drawn. The suite's bucket
+ * at the well was one of these, and passed only while some other water bucket
+ * happened to be in the pack. The one filled comes off the pile, where the pile
+ * lies.
+ */
+function fill(items: Item[], uid: number): Inventory {
+  const inventory = new Inventory(items);
+  const game = { inventory, nearWater: () => true, furnitureWithin: () => [], events: { emit: () => {} }, logMsg: () => {} };
+  (ACTION_BY_ID.get('fill_bucket') as ActionDef).perform?.({ kind: 'item', uid } as unknown as Target, game as never);
+  return inventory;
+}
+const piles = (items: Item[]): string[] => items.map((it) => `${it.id} x${it.count}`).sort();
+say('filling one of a pile of three', piles(fill([packed(row({ id: 12, def: 'bucket', count: 3 }), still)], 12).items),
+  ['bucket x2', 'water_bucket x1']);
+say('and one of a pile in the bag, which stays in the bag',
+  piles(fill(packAll([row({ id: 10, def: 'backpack', ql: 50 }),
+    row({ id: 12, def: 'bucket', count: 3, holder: 'bag', inside: 10 })], still), 12).items[0].inside ?? []),
+  ['bucket x2', 'water_bucket x1']);
+
 // And the loose case is untouched: it is the same lookup, asked first.
 say('a skin loose in your hands still fills',
   why('fill_skin', [packed(row({ id: 11, charges: 0 }), still)], 11), null);

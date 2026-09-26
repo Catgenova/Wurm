@@ -773,20 +773,32 @@ export function fillFromSource(g: Game, item: Item): LiquidKind | null {
  * One vessel becoming another, in place: an empty bucket becoming a bucket of
  * water and back again.
  *
- * It was a remove and an add, which is two things where there is one. A bucket
- * is not stackable, so there was never more than one of it to split — and what
- * the pair of them threw away was where it was. Fill a bucket in your backpack
- * that way and the new one lands in your hands, so the bag empties itself a
- * bucket at a time. The island swaps the row in place for the same reason;
- * this is the same swap, and the same rule about charges: as many goes in it
- * as the new thing holds.
+ * It was a remove and an add, which is two things where there is one. What the
+ * pair of them threw away was where it was: fill a bucket in your backpack that
+ * way and the new one lands in your hands, so the bag empties itself a bucket at
+ * a time. The island swaps the row in place for the same reason; this is the
+ * same swap, and the same rule about charges: as many goes in it as the new
+ * thing holds.
+ *
+ * A bucket does not stack with other buckets, but three given at once are one
+ * item of three, and one of those used to be refused -- after the water for it
+ * had been drawn. The one that changes comes off the pile, beside it in the pack
+ * or the same bag, as the island does it (`vessel_becomes`).
  */
 export function vesselBecomes(g: Game, item: Item, id: string): boolean {
-  if (item.count !== 1) return false;
-  item.id = id;
+  if (item.count < 1) return false;
+  let one = item;
+  if (item.count > 1) {
+    item.count -= 1;
+    one = { ...item, uid: g.inventory.nextUid++, count: 1 };
+    const bag = g.inventory.bagWith(item.uid);
+    if (bag?.inside) bag.inside.push(one);
+    else g.inventory.items.push(one);
+  }
+  one.id = id;
   const charges = itemDef(id).charges;
-  if (charges) item.charges = charges;
-  else delete item.charges;
+  if (charges) one.charges = charges;
+  else delete one.charges;
   g.inventory.onChange?.();
   g.events.emit('inventory');
   return true;

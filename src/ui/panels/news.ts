@@ -251,6 +251,16 @@ export const NEWS: News[] = [
       ];
     },
   },
+  {
+    n: 16,
+    day: '2026-09-26',
+    lines: () => {
+      const named = (id: string): string => itemDef(id).name.toLowerCase();
+      return [
+        `Filling, emptying or pouring out one ${named('bucket')} of several you got at once takes that one off the pile, in your pack or the same bag. It used to do nothing, and filling still drew the water out of the well or barrel.`,
+      ];
+    },
+  },
 ];
 
 /** The highest entry this browser has shown. */
