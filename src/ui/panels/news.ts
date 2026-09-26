@@ -284,6 +284,22 @@ export const NEWS: News[] = [
       ];
     },
   },
+  {
+    n: 18,
+    day: '2026-09-26',
+    lines: () => {
+      const shine = RARITIES.slice(1).map((r) => r.name);
+      const named = (id: string): string => itemDef(id).name.toLowerCase();
+      return [
+        `A ${either(shine)} piece is tinted its rarity's colour all over, on the side turned from the light as well as the lit side, and still shows what it is made of; the line round it is a dark of that colour.`,
+        `Dragon scale is laid in courses of overlapping scales, its edges cut in points at the shoulders, elbows, knees, hem and boot tops, and its gauntlets are of the dark scale.`,
+        `${itemDef('chain_sleeves').name} flare over the back of the hand and ${named('chain_leggings')} hang over the knee in ragged points; a ${named('chain_hauberk')}'s hem is a band of bright rings of its own metal.`,
+        `Leather is a browner red, and dyed leather keeps the colour of its dye. ${itemDef('leather_sleeves').name} have no knob at the elbow. The pieces of a cloth or leather suit step further apart in shade from cap to shoes, and quilting is in wider channels. Copper is warmer, with pale edges and a green shadow.`,
+        `Whatever is slung on your back hangs from a strap over the same shoulder, and while you work left-handed both are on the other shoulder. A ${named('long_bow')} is longer, and held further out in front at a run; a ${named('throwing_axe')} is held head up.`,
+        `A ${named('chain_coif')}'s face opening comes to a point under the chin; a ${named('scale_helm')}'s fins stand on its crown; long hair under a cap or helm falls as one curtain.`,
+      ];
+    },
+  },
 ];
 
 /** The highest entry this browser has shown. */
