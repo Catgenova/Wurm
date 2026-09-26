@@ -1,3 +1,4 @@
+import type { GearLook } from '../render/figure';
 import type { Look } from '../game/look';
 import type { Target } from '../game/actions';
 
@@ -92,6 +93,8 @@ export interface PeerState {
    * on this one cannot be anything but an entry in a table we wrote.
    */
   look?: Look;
+  /** What they have on, each piece to be drawn in its own material, dye and rarity; already checked against our own tables (`gearFrom`). */
+  gear?: GearLook;
 }
 
 /**

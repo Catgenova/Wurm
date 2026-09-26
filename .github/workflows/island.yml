@@ -1445,6 +1445,17 @@ jobs:
             --outfile=node_modules/.cache/keeper.mjs --log-level=error
           node node_modules/.cache/keeper.mjs
 
+      - name: What everybody on an island has on
+        run: |
+          # A body is drawn in its gear, and somebody else's pack is not yours to
+          # read: the island says what each body has on, a slot at a time, as
+          # the thing, how rare, what it is made of and its dye -- and not a
+          # thing put down but still written as worn, nor anything of its
+          # quality; to somebody on the island, and to nobody else.
+          npx esbuild supabase/test/worn.ts --bundle --platform=node --format=esm \
+            --outfile=node_modules/.cache/worn.mjs --log-level=error
+          node node_modules/.cache/worn.mjs
+
       - name: The exact benefit, and where its number comes from
         run: |
           # Text the player reads says what changes and by how much, and where

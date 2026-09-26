@@ -1,3 +1,4 @@
+import { wornWire } from './game/worn';
 import { FullscreenCanvas } from './engine/canvas';
 import { Input } from './engine/input';
 import { GameLoop } from './engine/loop';
@@ -409,7 +410,7 @@ const loop = new GameLoop(
 
     // Where we have walked to, told rarely and never twice for standing still.
     // The island believes it only as far as its own clock allows.
-    if (island) void island.move(player.x, player.y, player.level, performance.now() / 1000);
+    if (island) void island.move(player.x, player.y, player.level, performance.now() / 1000, wornWire((slot) => game.worn(slot)));
 
     /*
      * The view at the screen edge. Resting the cursor in the outer band slides

@@ -1,3 +1,4 @@
+import { gearFrom } from '../game/worn';
 import { Game } from '../game/game';
 import { EMOTE_BY_ID } from '../game/emotes';
 import { cleanLook } from '../game/look';
@@ -537,7 +538,7 @@ export async function startIsland(params: URLSearchParams, tell: Telling): Promi
       .map((p) => ({
         id: hashId(p.uid), uid: p.uid, name: p.name, x: p.x, y: p.y, dirX: 0, dirY: 1,
         level: p.level, moving: false, swimming: false, working: !!p.act,
-        act: p.act ?? undefined, look: cleanLook(p.look),
+        act: p.act ?? undefined, look: cleanLook(p.look), gear: gearFrom(p.gear),
       })));
   };
   for (const [text, kind, at] of log) game.write(text, kind as Parameters<Game['write']>[1], at);

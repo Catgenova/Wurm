@@ -1,3 +1,4 @@
+import { gearFrom, wornWire } from '../game/worn';
 import { Camera } from '../engine/camera';
 import { emoteAt } from '../game/emotes';
 import { ACTION_BY_ID } from '../game/actions';
@@ -2095,10 +2096,9 @@ export class Renderer {
             swimming: player.swimming,
             working: this.game.action?.state === 'performing',
             driving: (ent.lift ?? 0) > 0 && !ent.standing,
-            // Dyed cloth or leather on the chest and legs is worn where it shows.
-            tunic: dyeOf(this.game.worn('chest'))?.colour,
-            trousers: dyeOf(this.game.worn('legs'))?.colour,
             look: player.look,
+            // Everything on, each piece drawn in its own material, dye and rarity.
+            gear: gearFrom(wornWire((slot) => this.game.worn(slot))),
             // Both clocks here are `performance.now()`: the one the emote was
             // stamped on and the one the frames are drawn on.
             emote: player.emote,
@@ -2135,6 +2135,7 @@ export class Renderer {
             tunic: peer.tunic,
             trousers: peer.trousers,
             look: peer.look,
+            gear: peer.gear,
             emote: peer.emote,
             emoteT: emoteAt(peer.emote, peer.emoteAt, performance.now() / 1000) ?? undefined,
           }),

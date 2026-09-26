@@ -14,6 +14,9 @@ import { defaultKey } from '../../game/keybinds';
 import { guidePages } from '../../game/guide';
 import { MUTE_FOR, MUTE_SHUTS } from '../../game/keeper';
 import { awayFor } from '../../game/away';
+import { ARMOUR, SHIELDS, WEAPONS } from '../../game/gear';
+import { JEWEL_PIECES } from '../../game/gems';
+import { RARITIES } from '../../game/items';
 import type { UIWindow } from '../windows';
 
 /**
@@ -123,6 +126,18 @@ export const NEWS: News[] = [
       'An island has keepers: whoever founded it, and whoever keeps every island. A keeper sees everybody on the island, can move a body that is stuck to the token of the settlement it founded, or to where newcomers come ashore if it founded none, and can clear everything lying on a tile.',
       `A keeper can mute somebody ${either(MUTE_FOR.map((secs) => (secs === null ? 'until a keeper lifts it' : `for ${awayFor(secs)}`)))}. Until then the island refuses ${MUTE_SHUTS}, and says until when.`,
     ],
+  },
+  {
+    n: 7,
+    day: '2026-09-26',
+    lines: () => {
+      const shine = RARITIES.slice(1).map((r) => r.name);
+      return [
+        `What you wear and hold is drawn on you, on everybody else and on you as they see you: each of the ${ARMOUR.length} pieces of armour, ${WEAPONS.length} weapons, ${Object.keys(SHIELDS).length} shields, the toolbelt and the ${JEWEL_PIECES.length} jewels is a model of its own, in the metal, wood or stone it was made of and the colour it was dyed, and any of them can be worn with any other.`,
+        'A weapon is held in the hand, a bow in the other and a shield on the arm; two-handed weapons, and everything while you work, swim or hold the reins, go across your back.',
+        `${either(shine).replace(/^./, (c) => c.toUpperCase())} things shine where they are worn, each in its own colour: a glint crosses everything of one rarity together, a ${shine[1]} one's colour comes and goes, and a ${shine[2]} one sparkles.`,
+      ];
+    },
   },
 ];
 

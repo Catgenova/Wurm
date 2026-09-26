@@ -1,3 +1,4 @@
+import type { WornWire } from '../game/worn';
 import type { RealtimeChannel } from '@supabase/supabase-js';
 import type { ErrorReport } from './errors';
 import { CHUNK, World } from '../world/world';
@@ -212,6 +213,8 @@ export interface PlayerRow {
   level: number;
   /** Skin, hair, eyes and clothes, as ids out of `look_option`. */
   look?: unknown;
+  /** What they have on, as `rpc_worn` and the body message say it: see `gearFrom`. */
+  gear?: unknown;
   act: string | null;
   act_ends: string | null;
   [key: string]: unknown;
@@ -2096,15 +2099,22 @@ export class Island {
 
   async refreshPeople(): Promise<void> {
     if (!this.info) return;
-    const { data, error } = await supabase().from('player').select('*')
-      .eq('world_id', this.info.id).eq('away', false);
+    // And what each of them has on, which their rows cannot say: see `rpc_worn`.
+    const [{ data, error }, worn] = await Promise.all([
+      supabase().from('player').select('*').eq('world_id', this.info.id).eq('away', false),
+      supabase().rpc('rpc_worn', { p_world: this.info.id }),
+    ]);
     // A call that failed is not an island with nobody on it. See `refreshMobs`,
     // which learned this first: clearing on a dropped read empties the roster
     // and the next answer puts it straight back, so all it ever does is flicker
     // — and on a slow island it is not a flicker, it is everybody gone.
     if (error || !Array.isArray(data)) return;
+    // Nor is a read of the gear that failed everybody undressed: they keep what they were last seen in.
+    const wearing = !worn.error && worn.data && typeof worn.data === 'object' ? worn.data as Record<string, unknown> : null;
+    const was = new Map(this.people);
     this.people.clear();
     for (const p of rowsIn<PlayerRow>(data)) {
+      p.gear = wearing ? wearing[p.uid] : was.get(p.uid)?.gear;
       this.people.set(p.uid, p);
       if (p.uid === this.uid) this.me = p;
     }
@@ -2153,7 +2163,7 @@ export class Island {
    * back rather than refusing when the claim is too large. So this is not
    * where we are, it is what the island will let us have been.
    */
-  async move(x: number, y: number, level: number, now: number): Promise<void> {
+  async move(x: number, y: number, level: number, now: number, wearing?: WornWire): Promise<void> {
     if (!this.info) return;
     void this.reconcile(now);
     void this.refreshMobs(now);
@@ -2179,13 +2189,19 @@ export class Island {
      * what everybody else saw over your head was whatever the twenty-second
      * reconcile had last read off the row.
      */
-    const shown = `${said}|${this.doing ?? ''}`;
+    /*
+     * And on what is worn, so putting on a helm or taking up a sword standing
+     * still is seen by everybody straight away rather than at their next read
+     * of the island (`rpc_worn`), and a new arrival drawn in what they have on.
+     */
+    const gear = wearing ? JSON.stringify(wearing) : '';
+    const shown = `${said}|${this.doing ?? ''}|${gear}`;
     if (shown !== this.lastShown && now - this.lastBody >= BODY_EVERY && this.bodies) {
       this.lastBody = now;
       this.lastShown = shown;
       void this.bodies.send({
         type: 'broadcast', event: 'body',
-        payload: { uid: this.uid, name: this.me?.name ?? '', x, y, level, look: this.me?.look, act: this.doing },
+        payload: { uid: this.uid, name: this.me?.name ?? '', x, y, level, look: this.me?.look, act: this.doing, gear: wearing },
       });
     }
 
