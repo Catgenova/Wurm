@@ -206,6 +206,12 @@ const piece = (
  */
 /** Why a piece built only on a settlement of yours will not stand anywhere else; the island says the same (`fire_refusal`). */
 export const DEED_PLACE = 'You can only set this down on a settlement of yours.';
+/**
+ * Why a second altar will not go up or down on a settlement: it has its one.
+ * The island says the same, off the same `altar` flag, and it is the one it
+ * refuses both a building and a setting down of with.
+ */
+export const ONE_ALTAR = 'This settlement already has an altar, and a settlement may have only one.';
 
 export const FURNITURE: FurnitureDef[] = [
   piece('stool', 'Stool', 1, 1, [['plank', 4], ['shaft', 3], ['nail', 12]], 8, 6, 'You nail up a {bill.shaft:w}-legged stool.'),

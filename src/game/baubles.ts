@@ -28,10 +28,11 @@ import { times } from './words';
  *     of it is then written on the bauble (`extra`), so what you read is
  *     what it gives.
  *   * It is set into the altar of a settlement of yours (`set_bauble`), into
- *     one of that settlement's sockets for its tier. The sockets are the
- *     settlement's, not the stone's: every altar on it opens the same ones,
- *     and a second altar is not a second set. A socket is filled for good --
- *     another bauble can take its place, and the one in it is lost.
+ *     one of that settlement's sockets for its tier. A settlement has one
+ *     altar (`ONE_ALTAR`), and the sockets are the settlement's rather than
+ *     the stone's: an altar picked up and set down again finds its baubles
+ *     where they were. A socket is filled for good -- another bauble can
+ *     take its place, and the one in it is lost.
  *   * What the baubles in a settlement's sockets give, they give to its
  *     citizens -- not its guests -- while they stand on it (`baubleHere`).
  *     Each kind adds up across sockets for the same skill, to `BAUBLE_CAP`.

@@ -20,7 +20,7 @@ import { anvilAnchor, anvilCovers, ANVIL_SUBTILES, type PlacedAnvil } from './an
 import { fireAnchor, fireCentre, fireCovers, FIRE_SUBTILES, type PlacedCampfire } from './campfire';
 import { smelterAnchor, smelterCentre, smelterCovers, SMELTER_H, SMELTER_W, type PlacedSmelter, type SmeltJob } from './smelter';
 import { kilnAnchor, kilnCovers, KILN_SUBTILES, type PlacedKiln } from './kiln';
-import { ACROSS_OF, DEED_PLACE, deckSpot, furnitureAnchor, furnitureCapacity, furnitureCentre, furnitureCovers, furnitureDef, furnitureHeft, furnitureHolds, furnitureKg, furnitureRefuses, furnitureRoom, furnitureUnits, hiveRoom, rackDeck, rackSpots, teamOf, vehicleOf, type LiquidKind, type PlacedFurniture, furnitureName, LIQUID_NAME, isBoat, furnitureFootprint, type BoatDef } from './furniture';
+import { ACROSS_OF, DEED_PLACE, ONE_ALTAR, deckSpot, furnitureAnchor, furnitureCapacity, furnitureCentre, furnitureCovers, furnitureDef, furnitureHeft, furnitureHolds, furnitureKg, furnitureRefuses, furnitureRoom, furnitureUnits, hiveRoom, rackDeck, rackSpots, teamOf, vehicleOf, type LiquidKind, type PlacedFurniture, furnitureName, LIQUID_NAME, isBoat, furnitureFootprint, type BoatDef } from './furniture';
 import { emptyCrate, occupiedRefusal, shutIn } from './creaturecrate';
 import { bury, crumble, graveAt, graveRefusal, graveSays, GRAVE_MARK } from './graves';
 import { cropDef, RIPE, type Crop } from './farming';
@@ -1380,6 +1380,20 @@ export class Game {
 
   onDeed(x: number, y: number): boolean {
     return !!this.deedOfMineAt(x, y);
+  }
+
+  /**
+   * The altar standing on the settlement of yours that covers this tile, when
+   * one does -- other than `except`, a piece being turned where it stands. A
+   * settlement has one altar and no more (`ONE_ALTAR`).
+   */
+  altarOfDeedAt(x: number, y: number, except?: number): PlacedFurniture | undefined {
+    const d = this.deedOfMineAt(x, y);
+    if (!d) return undefined;
+    for (const f of this.furniture.values()) {
+      if (f.id !== except && furnitureDef(f.kind).altar && Math.abs(f.x - d.x) <= d.radius && Math.abs(f.y - d.y) <= d.radius) return f;
+    }
+    return undefined;
   }
 
   /**
@@ -6213,8 +6227,9 @@ export class Game {
     if (!this.world.isPassable(x, y) || this.world.hasWater(x, y)) return 'Furniture needs dry, solid ground.';
     if (this.world.slope(x, y) > 16) return 'The floor is too uneven for it to stand.';
     if (this.isToken(x, y)) return 'Not on the token.';
-    // An altar goes down on a settlement of yours; one already standing may still be turned where it is.
+    // An altar goes down on a settlement of yours, and on one that has none yet; one already standing may still be turned where it is.
     if (def.deed && except === undefined && !this.onDeed(x, y)) return DEED_PLACE;
+    if (def.altar && except === undefined && this.altarOfDeedAt(x, y)) return ONE_ALTAR;
     for (let dy = 0; dy < fh; dy++) {
       for (let dx = 0; dx < fw; dx++) {
         if (this.occupiedSubtile(x, y, ax + dx, ay + dy, except)) return 'Something is already standing there.';

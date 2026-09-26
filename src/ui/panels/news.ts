@@ -342,6 +342,14 @@ export const NEWS: News[] = [
       'A bauble set into an altar stays there. Another can take its socket, and the one it replaces is destroyed.',
     ],
   },
+  {
+    n: 24,
+    day: '2026-09-26',
+    lines: () => [
+      'A settlement has one altar. A second cannot be built or set down on a settlement that already has one standing; turning the one that stands still works.',
+      'A settlement that already had more than one keeps them, but it cannot get another. Its bauble sockets were always the settlement\'s, so an altar picked up and set down again keeps what is set in it.',
+    ],
+  },
 ];
 
 /** The highest entry this browser has shown. */

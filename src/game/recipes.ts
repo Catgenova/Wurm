@@ -5,7 +5,7 @@ import { describeWith, itemDef, rollRarity, RARITY_WORD, type Item } from './ite
 import { QL_PER_LOOP } from './belt';
 import { describeGoals } from './journal';
 import { fill, numberWord } from './words';
-import { FURNITURE } from './furniture';
+import { FURNITURE, ONE_ALTAR } from './furniture';
 import { castWhole, MOULDS } from './metal';
 import { FISH } from './fishing';
 import { DYES } from './dyes';
@@ -532,6 +532,10 @@ describeGoals(RECIPE_SAID);
 
 /** Why a recipe that is worked on a settlement is refused anywhere else; the island says the same (`craft_refusal`). */
 export const DEED_ONLY = 'You can only build this standing on a settlement of yours.';
+/** What makes an altar, which a settlement that already has one will not see built on it (`ONE_ALTAR`). */
+const ALTARS = new Set(FURNITURE.filter((f) => f.altar).map((f) => f.id));
+/** Whether this recipe would be the settlement's second altar, for somebody standing where the player stands. */
+const secondAltar = (r: Recipe, g: Game): boolean => ALTARS.has(r.result) && !!g.altarOfDeedAt(g.player.tileX, g.player.tileY);
 
 export const RECIPE_CATEGORIES: RecipeCategory[] = ['Woodwork', 'Furniture', 'Stonework', 'Clay & thatch', 'Cloth', 'Alchemy', 'Writing', 'Cooking', 'Smelting'];
 export const stationName = (s: Station): string => STATION_NAME[s];
@@ -543,6 +547,8 @@ export interface RecipeStatus {
   station: boolean;
   /** Standing on a settlement of yours, or it can be made anywhere. */
   deed: boolean;
+  /** It is an altar, and the settlement you stand on has one already (`ONE_ALTAR`). */
+  second: boolean;
   /** Each input: how many a go takes, how many are at hand, and how many of those are on you rather than stored nearby. */
   inputs: Array<{ item: string; need: number; have: number; carried: number }>;
   /** Everything is at hand for at least one craft. */
@@ -644,6 +650,7 @@ export function recipeStatus(r: Recipe, g: Game, want?: string, stock: readonly 
   const tool = !r.tool || g.inventory.has(r.tool);
   const station = !r.station || g.atStation(r.station);
   const deed = !r.deed || g.onDeed(g.player.tileX, g.player.tileY);
+  const second = secondAltar(r, g);
   const material = chooseMaterial(g, r, undefined, want, stock);
   const inputs = r.inputs.map((i) => ({
     item: i.item,
@@ -651,8 +658,8 @@ export function recipeStatus(r: Recipe, g: Game, want?: string, stock: readonly 
     have: countFor(stock, r, i.item, material),
     carried: countFor(stock, r, i.item, material, true),
   }));
-  const max = tool && station && deed ? Math.min(...inputs.map((i) => Math.floor(i.have / i.need))) : 0;
-  return { tool, station, deed, inputs, ready: max >= 1, max, material };
+  const max = tool && station && deed && !second ? Math.min(...inputs.map((i) => Math.floor(i.have / i.need))) : 0;
+  return { tool, station, deed, second, inputs, ready: max >= 1, max, material };
 }
 
 /**
@@ -735,6 +742,7 @@ export function recipeReason(r: Recipe, g: Game, preferUid?: number, stock: read
   if (r.tool && !g.inventory.has(r.tool)) return `You need a ${lower(r.tool)}.`;
   if (r.station && !g.atStation(r.station)) return `You need to stand at a ${STATION_NAME[r.station]}.`;
   if (r.deed && !g.onDeed(g.player.tileX, g.player.tileY)) return DEED_ONLY;
+  if (secondAltar(r, g)) return ONE_ALTAR;
   const mat = chooseMaterial(g, r, preferUid, undefined, stock);
   if (r.wood) {
     const i = r.inputs[0];

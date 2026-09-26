@@ -2,6 +2,7 @@ import { ACTION_BY_ID } from '../../game/actions';
 import type { Game } from '../../game/game';
 import { itemDef } from '../../game/items';
 import { CRAFT_REACH, DEED_ONLY, RECIPE_CATEGORIES, RECIPES, materialChoices, prospect, recipeStatus, stationName, type CraftStock, type Recipe, type RecipeStatus } from '../../game/recipes';
+import { ONE_ALTAR } from '../../game/furniture';
 import { SKILL_DEFS } from '../../game/skills';
 import type { UIWindow } from '../windows';
 import { Repaint } from '../repaint';
@@ -223,6 +224,14 @@ export class CraftPanel {
       deed.textContent = 'on your settlement';
       deed.title = st.deed ? 'You are standing on a settlement of yours' : DEED_ONLY;
       parts.push(deed);
+    }
+    // And one altar to a settlement: none built where one already stands.
+    if (st.second) {
+      const second = document.createElement('span');
+      second.className = 'lack';
+      second.textContent = 'one to a settlement';
+      second.title = ONE_ALTAR;
+      parts.push(second);
     }
     if (r.tool) {
       const tool = document.createElement('span');

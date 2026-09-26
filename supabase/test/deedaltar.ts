@@ -14,13 +14,17 @@
  *   * a recipe without the flag is not asked about the ground at all;
  *   * and an altar is set down only on a settlement of theirs, asked of the
  *     tile it goes on, in the same words on both sides (`DEED_PLACE`), while
- *     a chest goes down anywhere and an altar already standing may be turned.
+ *     a chest goes down anywhere and an altar already standing may be turned;
+ *   * and a settlement has one altar: with one standing on it, a second is
+ *     neither built there nor set down there, in the same words on both
+ *     sides (`ONE_ALTAR`), while another settlement of theirs is not asked
+ *     about it, a chest still goes down, and the one standing may be turned.
  *
  * Runs against the database the suite leaves behind, and puts it back.
  */
 import { execFileSync } from 'node:child_process';
 import { Game } from '../../src/game/game';
-import { DEED_PLACE } from '../../src/game/furniture';
+import { DEED_PLACE, ONE_ALTAR } from '../../src/game/furniture';
 import { DEED_ONLY, RECIPES, recipeReason, recipeStatus } from '../../src/game/recipes';
 import { TileType } from '../../src/world/tiles';
 
@@ -110,6 +114,17 @@ begin
   update player set x = 10.1, y = 8.5 where world_id = w and uid = u;
   insert into said select 'PAST|' || coalesce(craft_refusal(w, u, 'make_altar', null), 'null');
 
+  -- One altar to a settlement: with Home's standing, no second is built or set down on it.
+  insert into placed (world_id, kind, sub, x, y, sx, sy, cx, cy, ql, made_by)
+    values (w, 'furniture', 'altar', 4, 8, 0, 0, 4.5, 8.5, 50, u);
+  update player set x = 6.5, y = 8.5 where world_id = w and uid = u;
+  insert into said select 'SECONDMAKE|' || coalesce(craft_refusal(w, u, 'make_altar', null), 'null');
+  insert into said select 'SECONDACT|' || coalesce(act_refusal(w, u, 'make_altar', '{}'::jsonb), 'null');
+  insert into said select 'SECONDPUT|' || coalesce(act_refusal(w, u, 'place_furniture',
+    jsonb_build_object('itemUid', alt, 'x', 7, 'y', 8, 'sx', 0, 'sy', 0)), 'null');
+  insert into said select 'SECONDCHEST|' || coalesce(act_refusal(w, u, 'place_furniture',
+    jsonb_build_object('itemUid', box, 'x', 7, 'y', 8, 'sx', 0, 'sy', 0)), 'null');
+
   -- A neighbour's settlement is not theirs to raise one on...
   insert into deed (world_id, name, x, y, radius, level, founded_by) values (w, 'Next door', 13, 8, 1, 1, other);
   update player set x = 13.5, y = 8.5 where world_id = w and uid = u;
@@ -120,6 +135,11 @@ begin
   insert into deed_member (world_id, founder, uid, role) values (w, other, u, 'builder');
   insert into said select 'CITIZEN|' || coalesce(craft_refusal(w, u, 'make_altar', null), 'null');
   insert into said select 'PUTCITIZEN|' || coalesce(act_refusal(w, u, 'place_furniture',
+    jsonb_build_object('itemUid', alt, 'x', 13, 'y', 9, 'sx', 0, 'sy', 0)), 'null');
+  -- And that one has its own one altar to have.
+  insert into placed (world_id, kind, sub, x, y, sx, sy, cx, cy, ql, made_by)
+    values (w, 'furniture', 'altar', 12, 7, 0, 0, 12.5, 7.5, 50, other);
+  insert into said select 'NEXTDOORFULL|' || coalesce(act_refusal(w, u, 'place_furniture',
     jsonb_build_object('itemUid', alt, 'x', 13, 'y', 9, 'sx', 0, 'sy', 0)), 'null');
 end $$;
 select k from said;
@@ -148,6 +168,12 @@ check('on a settlement they founded an altar goes down', say('PUTOWN') === 'null
 check('and not a tile past its border', say('PUTPAST') === DEED_PLACE, say('PUTPAST'));
 check('nor on a neighbour\'s settlement', say('PUTSTRANGER') === DEED_PLACE, say('PUTSTRANGER'));
 check('until they are a citizen of it', say('PUTCITIZEN') === 'null', say('PUTCITIZEN'));
+check('with an altar standing on a settlement, the island will not see a second built there, in the browser\'s words', say('SECONDMAKE') === ONE_ALTAR, say('SECONDMAKE'));
+check('by the action either', say('SECONDACT') === ONE_ALTAR, say('SECONDACT'));
+check('nor set down there', say('SECONDPUT') === ONE_ALTAR, say('SECONDPUT'));
+check('while a chest still goes down beside it', say('SECONDCHEST') === 'null', say('SECONDCHEST'));
+check('another settlement of theirs is not asked about it', say('CITIZEN') === 'null' && say('PUTCITIZEN') === 'null');
+check('and has its own one altar to have', say('NEXTDOORFULL') === ONE_ALTAR, say('NEXTDOORFULL'));
 
 /* ---- the browser --------------------------------------------------------- */
 if (ALTAR) {
@@ -185,6 +211,17 @@ if (ALTAR) {
   check('and not a tile past its border', game.furniturePlaceReason('altar', 44, 40, 0, 0) === DEED_PLACE, String(game.furniturePlaceReason('altar', 44, 40, 0, 0)));
   check('where a chest goes down all the same', game.furniturePlaceReason('chest', 44, 40, 0, 0) === null, String(game.furniturePlaceReason('chest', 44, 40, 0, 0)));
   check('and an altar already standing there may still be turned', game.furniturePlaceReason('altar', 44, 40, 0, 0, 'e', 12345) === null, String(game.furniturePlaceReason('altar', 44, 40, 0, 0, 'e', 12345)));
+
+  // One altar to a settlement.
+  const standing = game.addFurniture('altar', 38, 40, 0, 0, 50);
+  check('with an altar standing on it, the browser will not set a second down', game.furniturePlaceReason('altar', 41, 40, 0, 0) === ONE_ALTAR, String(game.furniturePlaceReason('altar', 41, 40, 0, 0)));
+  check('nor build one there', recipeReason(ALTAR, game) === ONE_ALTAR, String(recipeReason(ALTAR, game)));
+  check('and the crafting window says so and counts none', recipeStatus(ALTAR, game).second && recipeStatus(ALTAR, game).max === 0);
+  check('the one standing may still be turned', game.furniturePlaceReason('altar', 38, 40, 0, 0, 'e', standing.id) === null, String(game.furniturePlaceReason('altar', 38, 40, 0, 0, 'e', standing.id)));
+  check('and a chest goes down beside it', game.furniturePlaceReason('chest', 41, 40, 0, 0) === null, String(game.furniturePlaceReason('chest', 41, 40, 0, 0)));
+  game.removeFurniture(standing.id);
+  check('taken up again, an altar may be set down once more', game.furniturePlaceReason('altar', 41, 40, 0, 0) === null && recipeReason(ALTAR, game) === null,
+    `${game.furniturePlaceReason('altar', 41, 40, 0, 0)} / ${recipeReason(ALTAR, game)}`);
 }
 
 for (const line of [...ok, ...bad]) console.log(line);

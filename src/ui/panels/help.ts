@@ -1597,9 +1597,9 @@ export function helpText(): string {
         : t.id === 'major' ? `A ${BAUBLE_LOW} to ${BAUBLE_HIGH}% chance of ${times(YIELD_TIMES)} the yield of each action in one of ${numberWord(MAJOR_SKILLS.length)} skills: every skill the crafting window makes things with, and ${listed(MAJOR_SKILLS.filter((k) => !RECIPES.some((r) => r.skill === k)).map((k) => SKILL_BY_ID.get(k)?.name.toLowerCase() ?? k))}.`
         : `One of: ${listed(ANCIENT_EFFECTS.map((e) => `+${ANCIENT_PLUS} ${e.said}`))}.`}</td></tr>`).join('\n      ')}
     </table>
-    <p>Set one at an altar on a settlement of yours: <b>Baubles</b> on the altar's menu. The sockets are the
-    settlement's, not the stone's &mdash; every altar on it opens the same ${numberWord(BAUBLE_TIERS.reduce((n, t) => n + t.slots, 0))} &mdash; and its founder,
-    a mayor or a builder may set a bauble into an empty one. Only the founder or a mayor may set one in place
+    <p>Set one at the altar of a settlement of yours: <b>Baubles</b> on the altar's menu. Its ${numberWord(BAUBLE_TIERS.reduce((n, t) => n + t.slots, 0))} sockets
+    are the settlement's rather than the stone's &mdash; pick the altar up and set it down again and they are
+    still filled &mdash; and its founder, a mayor or a builder may set a bauble into an empty one. Only the founder or a mayor may set one in place
     of another, and the one it replaces is destroyed; nothing set can be taken out again. What is set works
     for the settlement's citizens &mdash; its founder, mayors and builders, not its guests &mdash; on every action
     they do standing on its land. The same kind for the same skill adds up, to at most ${percent(BAUBLE_KINDS.time.cap / 100)} less time,
@@ -1797,7 +1797,8 @@ export function helpText(): string {
     stone table, there are the hours the clock favours, and there is the plain fact that a thing knelt
     over then comes out better than a thing that was not.</p>
     <p>An <b>altar</b> is masonry: ${bill('make_altar')}, laid with a trowel. It is built, and set down, only on a
-    settlement of yours: one you founded or one you are a citizen of. Kneel at it and you bank
+    settlement of yours: one you founded or one you are a citizen of. A settlement has one altar: a second
+    is neither built nor set down on one that has its altar standing. Kneel at it and you bank
     <b>favour</b>, on the <b>prayer</b> skill. You may say what you have to say once every ${spanWords(PRAYER_REST)}, and it is
     worth most at <b>${listed(PRAYER_PEAKS.map(hudHour))}</b> &mdash; ${times((PRAYER_BASE + PRAYER_LIFT) / PRAYER_BASE)} what it is worth
     ${numberWord(PRAYER_TAPER)} hours or more from either &mdash; and less the further off you are. A good altar banks more
