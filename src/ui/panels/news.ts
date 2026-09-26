@@ -167,6 +167,20 @@ export const NEWS: News[] = [
       ];
     },
   },
+  {
+    n: 10,
+    day: '2026-09-26',
+    lines: () => {
+      const shine = RARITIES.slice(1).map((r) => r.name);
+      const carried = (how: string): string[] => WEAPONS.filter((w) => weaponCarry(w.id)?.carry === how).map((w) => itemDef(w.id).name.toLowerCase());
+      return [
+        `A ${either(carried('fist'))} in your hand turns out to your side wherever it would otherwise point at whoever is looking or hide behind you, so it shows from every side. A ${either(['bow', ...carried('staff')])} leans back rather than forward where forward would cross your head, and a ${either(carried('shoulder'))} is carried more upright seen from behind.`,
+        `A ${either(shine)} piece keeps its own metal, wood or dye: its rarity's colour is in the line along its edges, the glint that crosses it and the stars, and nowhere else.`,
+        'Mail is drawn as rows of rings and dragon scale as overlapping scales at the size the island is played at. Cloth and leather show a lit side and a shaded side as the body does, and a cap, a coat and breeches of one dye are each a step lighter or darker.',
+        'The toolbelt carries a claw hammer behind your left hip and a pocket of chisel and awl handles at your right.',
+      ];
+    },
+  },
 ];
 
 /** The highest entry this browser has shown. */
