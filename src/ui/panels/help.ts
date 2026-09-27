@@ -51,7 +51,7 @@ import { candleBurn, FIRE_REACH, HELD_LIGHTS, lanternReach, OVEN_REACH, torchBur
 import { MARK_CAP } from '../../game/marks';
 import { MATERIAL_BY_ID, type MaterialDef } from '../../game/materials';
 import { CHOOSE_AT, PATH_LIST, SIT_REST, SIT_WORTH } from '../../game/meditation';
-import { COIN_METALS, METALS, MOULDS, NAILS_PER_LUMP, RARE_METALS } from '../../game/metal';
+import { COIN_METALS, INGOT_LUMPS, INGOT_WEIGHT, METALS, MOULDS, NAILS_PER_LUMP, RARE_METALS } from '../../game/metal';
 import { COIN_WORTH } from '../../game/money';
 import { ORDER_LIFE } from '../../game/orders';
 import { KEPT_BEST, NUTRIENT_HOURS, NUTRIENT_NAMES, NUTRIENTS, TABLE_BEST } from '../../game/nutrition';
@@ -828,6 +828,12 @@ export function helpText(): string {
     carries the quality of the mould and the metal it was poured from, and the anvil. Tool heads and
     blades are finished by fitting a shaft to them. A sword hits far harder than any working tool, and a
     helm turns aside most of what a cornered animal does to you when you attack it.</p>
+    <p>A Smith with <b>Ingots</b> pours ${numberWord(INGOT_LUMPS)} lumps of one metal into an <b>ingot</b> at the
+    smelter (<b>Pour ingots</b>). It weighs ${share(INGOT_WEIGHT)} what its lumps did and counts as all ${numberWord(INGOT_LUMPS)} of
+    them wherever the smelter, the anvil, a recipe or Improve takes lumps; what a job does not use of one
+    comes back as lumps. A weapon or tool finished by a Smith with <b>Temper Bath</b> can be <b>quenched</b>
+    once, by that Smith or another with the perk, from its menu, standing at water or beside a barrel or a
+    well of it, for the quality its maker's mark says; Examine shows it.</p>
     <h3>Hunting and butchering</h3>
     <p>Wild wildermon can be <b>attacked</b> from their menu; an edged tool in your pack hits far harder
     than bare hands, and timid creatures bolt when hurt, so expect a chase. Whatever kills one leaves a

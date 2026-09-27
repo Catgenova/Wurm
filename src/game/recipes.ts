@@ -1,12 +1,12 @@
 import { tryGain } from './learn';
 import type { ActionDef, Target } from './actions';
 import type { Game } from './game';
-import { describeWith, itemDef, makersMark, rollRarity, RARITY_ODDS, RARITY_WORD, type Item } from './items';
+import { describeWith, itemDef, makersMark, partsMark, rollRarity, RARITY_ODDS, RARITY_WORD, type Item } from './items';
 import { QL_PER_LOOP } from './belt';
 import { describeGoals } from './journal';
 import { fill, numberWord } from './words';
 import { FURNITURE, ONE_ALTAR } from './furniture';
-import { castWhole, MOULDS } from './metal';
+import { castWhole, INGOT_LUMPS, ingotOf, METAL_BY_LUMP, MOULD_BY_MAKES, MOULDS } from './metal';
 import { FISH } from './fishing';
 import { DYES } from './dyes';
 import { WOUND_KINDS } from './wounds';
@@ -654,7 +654,7 @@ export const needOf = (g: Game, r: Recipe, i: { count?: number }): number =>
  * crafting window asks this of every recipe in the book at once, and lists
  * the pack and the stores around you once for the lot rather than once a row.
  */
-export function recipeStatus(r: Recipe, g: Game, want?: string, stock: readonly CraftStock[] = g.craftStock()): RecipeStatus {
+export function recipeStatus(r: Recipe, g: Game, want?: string, stock: readonly CraftStock[] = g.craftStock(undefined, false, reachFor(g, r))): RecipeStatus {
   const tool = !r.tool || g.inventory.has(r.tool);
   const station = !r.station || g.atStation(r.station);
   const deed = !r.deed || g.onDeed(g.player.tileX, g.player.tileY);
@@ -685,16 +685,27 @@ function countFor(stock: readonly CraftStock[], r: Recipe, id: string, mat: stri
   // that never is — the nails in an oak chest — counts whatever it is. Which
   // of those an input is, is asked of everything at hand, carried or not.
   let strict = false;
+  // Lumps of a metal count its ingots too, each as its lumps (a Smith's
+  // Ingots); the island breaks into one for what the go takes.
+  const lumpOf = METAL_BY_LUMP.get(id);
+  const bar = lumpOf ? ingotOf(lumpOf) : undefined;
   for (const s of stock) {
     const it = s.item;
-    if (it.id !== id) continue;
+    const per = it.id === id ? 1 : it.id === bar ? INGOT_LUMPS : 0;
+    if (!per) continue;
     if (mat && isMaterialKind(it.extra, r.material as MaterialKind)) strict = true;
     if (onYou && !s.carried) continue;
-    all += it.count;
-    if (mat && it.extra === mat) matching += it.count;
+    all += it.count * per;
+    if (mat && it.extra === mat) matching += it.count * per;
   }
   return strict ? matching : all;
 }
+
+/**
+ * How far a recipe reaches into your stores: as far as any craft, and as far
+ * as a Smith's Forge Reach takes work at the smelter for a recipe made there.
+ */
+export const reachFor = (g: Game, r: Recipe): number => (r.station === 'smelter' ? g.forgeReach() : CRAFT_REACH);
 
 /** Whether this input has to be of the settled material rather than anything. */
 const strictInput = (stock: readonly CraftStock[], r: Recipe, id: string): boolean =>
@@ -706,7 +717,7 @@ const strictInput = (stock: readonly CraftStock[], r: Recipe, id: string): boole
  * the kind decides, the way `chooseMaterial` reads it; a recipe that names
  * its wood offers nothing to choose.
  */
-export function materialChoices(g: Game, r: Recipe, stock: readonly CraftStock[] = g.craftStock()): string[] {
+export function materialChoices(g: Game, r: Recipe, stock: readonly CraftStock[] = g.craftStock(undefined, false, reachFor(g, r))): string[] {
   if (!r.material || r.wood) return [];
   for (const i of r.inputs) {
     const stacks = stock.filter(({ item: it }) => it.id === i.item && isMaterialKind(it.extra, r.material as MaterialKind));
@@ -721,7 +732,7 @@ export function materialChoices(g: Game, r: Recipe, stock: readonly CraftStock[]
  * hand, and otherwise whichever there is most of. A recipe that names its
  * wood takes that and nothing else.
  */
-export function chooseMaterial(g: Game, r: Recipe, preferUid?: number, want?: string, stock: readonly CraftStock[] = g.craftStock(preferUid)): string | undefined {
+export function chooseMaterial(g: Game, r: Recipe, preferUid?: number, want?: string, stock: readonly CraftStock[] = g.craftStock(preferUid, false, reachFor(g, r))): string | undefined {
   if (!r.material) return undefined;
   if (r.wood) return r.wood;
   for (const i of r.inputs) {
@@ -746,7 +757,7 @@ export function chooseMaterial(g: Game, r: Recipe, preferUid?: number, want?: st
 }
 
 /** Why a recipe cannot be made right now, or null. */
-export function recipeReason(r: Recipe, g: Game, preferUid?: number, stock: readonly CraftStock[] = g.craftStock(preferUid)): string | null {
+export function recipeReason(r: Recipe, g: Game, preferUid?: number, stock: readonly CraftStock[] = g.craftStock(preferUid, false, reachFor(g, r))): string | null {
   if (r.tool && !g.inventory.has(r.tool)) return `You need a ${lower(r.tool)}.`;
   if (r.station && !g.atStation(r.station)) return `You need to stand at a ${STATION_NAME[r.station]}.`;
   if (r.deed && !g.onDeed(g.player.tileX, g.player.tileY)) return DEED_ONLY;
@@ -868,8 +879,8 @@ export function recipeAction(r: Recipe): ActionDef {
    * reached for anyway.
    */
   const carryOn = (t: Extract<Target, { kind: 'item' }>, g: Game, was: Item | undefined, mat: string | undefined): void => {
-    if (!was || g.craftItem(t.uid)) return;
-    const next = g.craftStock().find((s) => s.item.id === was.id && (!mat || s.item.extra === mat));
+    if (!was || g.craftItem(t.uid, reachFor(g, r))) return;
+    const next = g.craftStock(undefined, false, reachFor(g, r)).find((s) => s.item.id === was.id && (!mat || s.item.extra === mat));
     if (next) t.uid = next.item.uid;
   };
   return {
@@ -884,16 +895,16 @@ export function recipeAction(r: Recipe): ActionDef {
     repeat: true,
     // Aimed at a stack of one of its materials, wherever a craft may reach it:
     // the pack, a bag on your back, or a store within `CRAFT_REACH`.
-    applies: (t, g) => t.kind === 'item' && materials.includes(g.craftItem(t.uid)?.id ?? ''),
+    applies: (t, g) => t.kind === 'item' && materials.includes(g.craftItem(t.uid, reachFor(g, r))?.id ?? ''),
     check: (t, g) => recipeReason(r, g, t.kind === 'item' ? t.uid : undefined),
     // Counted with the stack it was started on, which may be one the settings would not have picked.
-    maxRepeat: (t, g) => recipeStatus(r, g, undefined, g.craftStock(t.kind === 'item' ? t.uid : undefined)).max,
+    maxRepeat: (t, g) => recipeStatus(r, g, undefined, g.craftStock(t.kind === 'item' ? t.uid : undefined, false, reachFor(g, r))).max,
     perform: (t, g) => {
       if (t.kind !== 'item') return;
       // Everything this go may spend, listed once: the pack, then the bags,
       // then the stores within reach, nearest first -- and the stack it was
       // started on, whatever the settings say about rare stock.
-      const stock = g.craftStock(t.uid);
+      const stock = g.craftStock(t.uid, false, reachFor(g, r));
       const was = stock.find((s) => s.item.uid === t.uid)?.item;
       // An oven holds its heat evenly: what would burn over a fire comes out right.
       const oven = r.station === 'campfire' ? g.hotOvenNear() : undefined;
@@ -919,6 +930,12 @@ export function recipeAction(r: Recipe): ActionDef {
         return more(t, g);
       }
       const fromInputs = r.qlFromInputs ? inputQl(stock, r, t.uid, mat) : 0;
+      // What the parts the anvil beat out carry of their makers' marks, read
+      // off the stacks a go spends first, before spending them: a Smith's Keen
+      // Edge in a sword blade goes into the sword whoever fits it.
+      const parts = itemDef(r.result).stackable ? [] : r.inputs.filter((i) => MOULD_BY_MAKES.has(i.item))
+        .map((i) => drawFor(stock, i.item, needOf(g, r, i), t.uid, mat, strict.get(i.item))?.[0]?.item)
+        .filter((it): it is Item => !!it);
       for (const i of r.inputs) if (!consumeAcross(stock, i.item, needOf(g, r, i), t.uid, mat, strict.get(i.item))) return;
       carryOn(t, g, was, mat);
       /*
@@ -945,9 +962,10 @@ export function recipeAction(r: Recipe): ActionDef {
       const made = g.baubleYield(r.result, g.madeAGo(r));
       const item = g.inventory.add(r.result, { count: made, ql, extra: r.extra ?? mat });
       // What the maker's perks put into it, which stays with it (a Carpenter's
-      // Deep Drawers). Only on a thing made one at a time, as the island has it.
-      const mark = itemDef(r.result).stackable ? undefined : makersMark((k, d) => g.perk(k, d), r.result);
-      if (mark) item.mark = mark;
+      // Deep Drawers, a Smith's Temper Bath), over what its parts carried. Only
+      // on a thing made one at a time, as the island has it.
+      const mark = itemDef(r.result).stackable ? undefined : { ...partsMark(parts), ...makersMark((k, d) => g.perk(k, d), r.result) };
+      if (mark && Object.keys(mark).length) item.mark = mark;
       // Now and again a thing comes off the bench better than the hands that
       // made it had any right to produce. Nothing brings it on but a perk on
       // the recipe (a Carpenter's Master Joiner).

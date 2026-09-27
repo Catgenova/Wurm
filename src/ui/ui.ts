@@ -24,7 +24,7 @@ import { baitHint, CREATURE_ACTION_BY_ID } from '../game/creatureActions';
 import { crateLine, crateOf, CREATURE_CRATE, CREATURE_CRATE_ACTION_BY_ID, occupiedRefusal } from '../game/creaturecrate';
 import { graveLine, graveName, graveSays, graveUnits, isGrave } from '../game/graves';
 import { isBaitFor, SPECIES, STANCE_HINTS, STANCE_NAMES, STANCES, GATHER_VERB, GATHER_DO } from '../game/creatures';
-import { itemDef, itemName, storedLine, type Item } from '../game/items';
+import { itemDef, itemName, markOf, storedLine, type Item } from '../game/items';
 import { nearestSide } from '../render/renderer';
 import { crateKindOfItem, crateName, crateCapacity, crateUnits, subtileOf } from '../game/crates';
 import { butcherPreview } from '../game/butcher';
@@ -41,7 +41,7 @@ import { abilitiesOf, CHOOSE_AT, MEDITATION, nextStep, PATHS, PATH_LIST, sitting
 import { canImprove } from '../game/improve';
 import { BREWS } from '../game/brewing';
 import { fireAnchor, fireState, FIRE_COST, isFuel, type PlacedCampfire } from '../game/campfire';
-import { COIN_METALS, DIE_WEAR, METAL_BY_LUMP, MOULD_BY_ID, MOULD_BY_MAKES, isCasting, isLump, isMould, isOreItem, mouldLumps, mouldUsesLeft } from '../game/metal';
+import { COIN_METALS, DIE_WEAR, INGOT_LUMPS, MOULD_BY_ID, MOULD_BY_MAKES, isCasting, isIngot, isLump, isMetalStock, isMould, isOreItem, lumpsIn, metalOfBar, mouldLumps, mouldUsesLeft } from '../game/metal';
 import { meltable } from '../game/melt';
 import { jobName, smelterAnchor, smelterState, type PlacedSmelter } from '../game/smelter';
 import { isGreenware, kilnAnchor, kilnState, type PlacedKiln } from '../game/kiln';
@@ -121,9 +121,17 @@ type Placing =
  */
 const storedIn = (s: CraftStock): string | undefined =>
   s.carried || !s.store ? undefined : `in the ${s.store.charAt(0).toLowerCase()}${s.store.slice(1)}`;
+/**
+ * A stack of metal off a smelter's or an anvil's menu: its metal and how much
+ * of it, and for ingots how many lumps they count as (a Smith's Ingots).
+ */
+const metalLabel = (it: Item): string =>
+  isIngot(it.id)
+    ? `${itemName(it)} (${it.count}, ${lumpsIn(it)} lumps)`
+    : `${metalOfBar(it.id)?.name ?? itemName(it)} (${it.count})`;
 /** What a station's menu says when nothing it takes is at hand: on you, and in your stores too unless Settings keeps them out. */
-const noneAtHand = (g: Game, what: string): string =>
-  g.settings.fromStores ? `You have ${what} on you or in your stores within ${CRAFT_REACH} tiles.` : `You have ${what} on you.`;
+const noneAtHand = (g: Game, what: string, reach = CRAFT_REACH): string =>
+  g.settings.fromStores ? `You have ${what} on you or in your stores within ${reach} tiles.` : `You have ${what} on you.`;
 
 export class UI {
   readonly windows: WindowManager;
@@ -1351,43 +1359,46 @@ export class UI {
      * your stores within reach, a wagon drawn up beside it included. The
      * moulds are tools, and are the ones you carry.
      */
+    // As far as a craft reaches, or as far as a Smith's Forge Reach.
+    const reach = g.forgeReach();
     const fuelDef = ACTION_BY_ID.get('fuel_smelter');
-    const fuel = g.stockChoices((it) => isFuel(it.id));
+    const fuel = g.stockChoices((it) => isFuel(it.id), reach);
     if (fuelDef && fuel.length) entries.push({ label: 'Fuel', children: fuel.map((k) => this.stackRow(fuelDef, st, k)) });
     const smeltDef = ACTION_BY_ID.get('smelt_ore');
-    const ores = g.stockChoices((it) => isOreItem(it.id));
+    const ores = g.stockChoices((it) => isOreItem(it.id), reach);
     if (smeltDef) {
       entries.push({
         label: 'Smelt ore',
         disabled: !ores.length,
-        hint: ores.length ? undefined : noneAtHand(g, 'no ore'),
+        hint: ores.length ? undefined : noneAtHand(g, 'no ore', reach),
         children: ores.length ? ores.map((k) => this.stackRow(smeltDef, st, k)) : undefined,
       });
     }
     // Scrap goes back into the fire: anything cast from metal, or hafted to a cast head.
     const meltDef = ACTION_BY_ID.get('melt_down');
-    const scrap = g.stockChoices((it) => meltable(it));
+    const scrap = g.stockChoices((it) => meltable(it), reach);
     if (meltDef) {
       entries.push({
         label: 'Melt down',
         disabled: !scrap.length,
-        hint: scrap.length ? undefined : noneAtHand(g, 'nothing made of metal'),
+        hint: scrap.length ? undefined : noneAtHand(g, 'nothing made of metal', reach),
         children: scrap.length ? scrap.map((k) => this.stackRow(meltDef, st, k)) : undefined,
       });
     }
     const castDef = ACTION_BY_ID.get('cast_anvil');
-    const lumps = g.stockChoices((it) => isLump(it.id));
+    // Lumps, and ingots, which count as their lumps (a Smith's Ingots).
+    const lumps = g.stockChoices((it) => isMetalStock(it.id), reach);
     if (castDef && g.inventory.has('anvil_mould')) {
       entries.push({
         label: 'Cast an anvil',
         disabled: !lumps.length,
-        hint: lumps.length ? undefined : noneAtHand(g, 'no metal'),
+        hint: lumps.length ? undefined : noneAtHand(g, 'no metal', reach),
         children: lumps.length
           ? lumps.map((k) => {
               const it = k.item;
               const t: Target = { ...st, itemUid: it.uid };
               const reason = castDef.check?.(t, g) ?? null;
-              return { label: `${itemName(it)} (${it.count})`, note: storedIn(k), hint: reason ?? undefined, disabled: !!reason, onSelect: () => g.requestAction(castDef, t) };
+              return { label: metalLabel(it), note: storedIn(k), hint: reason ?? undefined, disabled: !!reason, onSelect: () => g.requestAction(castDef, t) };
             })
           : undefined,
       });
@@ -1399,14 +1410,14 @@ export class UI {
       entries.push({
         label: 'Pour a mould',
         disabled: !moulds.length || !lumps.length,
-        hint: !moulds.length ? 'You carry no moulds.' : !lumps.length ? noneAtHand(g, 'no metal') : undefined,
+        hint: !moulds.length ? 'You carry no moulds.' : !lumps.length ? noneAtHand(g, 'no metal', reach) : undefined,
         children:
           moulds.length && lumps.length
             ? moulds.map((mould) => {
                 const def = MOULD_BY_ID.get(mould.id)!;
                 return {
                   label: itemName(mould),
-                  note: `${itemDef(def.makes).name.toLowerCase()} · ${def.lumps} lump${def.lumps > 1 ? 's' : ''} · ${mouldUsesLeft(mould.ql, mould.dmg)} fillings left`,
+                  note: `${itemDef(def.makes).name.toLowerCase()} · ${def.lumps} lump${def.lumps > 1 ? 's' : ''} · ${mouldUsesLeft(mould.ql, mould.dmg, markOf(mould, 'last'))} fillings left`,
                   children: lumps.map((k) => {
                     const lump = k.item;
                     const t: Target = { ...st, mouldUid: mould.uid, itemUid: lump.uid };
@@ -1414,9 +1425,9 @@ export class UI {
                     // What this metal costs, which is not the same for all of
                     // them: a lump of the rare six weighs a tenth of an iron
                     // one, so a filling takes ten times as many.
-                    const need = mouldLumps(def, METAL_BY_LUMP.get(lump.id)?.id ?? '');
+                    const need = mouldLumps(def, metalOfBar(lump.id)?.id ?? '');
                     return {
-                      label: `${METAL_BY_LUMP.get(lump.id)?.name ?? itemName(lump)} (${lump.count}) · ${need} needed`,
+                      label: `${metalLabel(lump)} · ${need} needed`,
                       note: storedIn(k),
                       hint: reason ?? undefined,
                       disabled: !!reason,
@@ -1426,6 +1437,18 @@ export class UI {
                 };
               })
             : undefined,
+      });
+    }
+    // Bars out of lumps, for a Smith's Ingots.
+    const ingotDef = ACTION_BY_ID.get('pour_ingot');
+    if (ingotDef && ingotDef.applies(st, g)) {
+      const loose = lumps.filter((k) => isLump(k.item.id));
+      entries.push({
+        label: ingotDef.label,
+        disabled: !loose.length,
+        hint: loose.length ? undefined : noneAtHand(g, 'no lumps', reach),
+        note: `${INGOT_LUMPS} lumps to an ingot`,
+        children: loose.length ? loose.map((k) => this.stackRow(ingotDef, st, k)) : undefined,
       });
     }
     for (const id of ['light_smelter', 'damp_smelter', 'smelter_take_all', 'take_ashes_smelter', 'pick_up_smelter']) {
@@ -1843,8 +1866,10 @@ export class UI {
     const smithDef = ACTION_BY_ID.get('smith');
     // Castings poured at the smelter, each named for the piece it is of, and
     // the metal for coins: from the pack, a bag, or a store within reach.
-    const castings = g.stockChoices(isCasting);
-    const lumps = g.stockChoices((it) => isLump(it.id));
+    const castings = g.stockChoices(isCasting, g.forgeReach());
+    const lumps = g.stockChoices((it) => isMetalStock(it.id), g.forgeReach());
+    // Pieces to a filling, and more of them for a Smith's Nail Maker.
+    const per = (def: { makes: string; per?: number }): number => g.perk(`count:${def.makes}`, def.per ?? 1);
     if (smithDef) {
       entries.push({
         label: 'Smith',
@@ -1859,7 +1884,7 @@ export class UI {
               const where = storedIn(s);
               return {
                 label: `${itemName(c)} (${c.count})`,
-                note: def ? `${def.per && def.per > 1 ? `${def.per} ` : 'a '}${itemDef(def.makes).name.toLowerCase()} · QL ${c.ql.toFixed(0)}${where ? ` · ${where}` : ''}` : where,
+                note: def ? `${per(def) > 1 ? `${per(def)} ` : 'a '}${itemDef(def.makes).name.toLowerCase()} · QL ${c.ql.toFixed(0)}${where ? ` · ${where}` : ''}` : where,
                 hint: reason ?? undefined,
                 disabled: !!reason,
                 onSelect: () => g.requestAction(smithDef, t),
@@ -1871,7 +1896,7 @@ export class UI {
     // Coins: a die in the pack, and a lump of silver or gold named off the menu.
     const strikeDef = ACTION_BY_ID.get('strike_coins');
     const die = g.inventory.find('coin_die');
-    const precious = lumps.filter((s) => COIN_METALS.includes(METAL_BY_LUMP.get(s.item.id)?.id ?? ''));
+    const precious = lumps.filter((s) => COIN_METALS.includes(metalOfBar(s.item.id)?.id ?? ''));
     if (strikeDef) {
       entries.push({
         label: 'Strike coins',
@@ -1884,7 +1909,7 @@ export class UI {
                 const lump = s.item;
                 const t: Target = { ...at, itemUid: lump.uid };
                 const reason = strikeDef.check?.(t, g) ?? null;
-                return { label: `${METAL_BY_LUMP.get(lump.id)?.name ?? itemName(lump)} (${lump.count})`, note: storedIn(s), hint: reason ?? undefined, disabled: !!reason, onSelect: () => g.requestAction(strikeDef, t) };
+                return { label: metalLabel(lump), note: storedIn(s), hint: reason ?? undefined, disabled: !!reason, onSelect: () => g.requestAction(strikeDef, t) };
               })
             : undefined,
       });

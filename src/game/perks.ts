@@ -54,14 +54,20 @@ import { BRIDGES } from './bridges';
 import { BUILD_ACTION_BY_ID, REPOINT_BACK } from './buildActions';
 import { FENCE_TYPES, MATERIAL_BY_ID, MATERIALS, MAX_LEVELS, storeySkill, TALL_STOREYS, wallBill } from './building';
 import { FURNITURE, furnitureDef } from './furniture';
-import { WEAPONS } from './gear';
+import { ARMOUR, ARMOUR_BY_ID, ARMOUR_CLASSES, HIT_CAP, SOAK_CAP, WEAPON_BY_ID, WEAPONS } from './gear';
 import { GEM_ODDS } from './gems';
-import { CARRY_BASE, CARRY_PER_STRENGTH, MAX_VEHICLE_SPEED } from './game';
-import { ITEM_DEFS, RARITY_ODDS } from './items';
+import { CARRY_BASE, CARRY_PER_STRENGTH, CHAR_START, MAX_VEHICLE_SPEED, QUEUE_PER_MIND, queueCapAt } from './game';
+import { improveStepAt } from './improve';
+import { ITEM_DEFS, RARITY_ODDS, type Item } from './items';
+import { MELT_KEEP, MELT_SHARE, meltLumps } from './melt';
+import {
+  castWhole, COIN_DIFFICULTY, FORGE_WORK, INGOT_LUMPS, INGOT_WEIGHT, METALS, MOULD_BY_ID, MOULD_BY_MAKES, MOULD_DENT, mouldLumps, MOULDS,
+  mouldUsesLeft,
+} from './metal';
 import { MAP_ODDS } from './treasure';
-import { RECIPES, type Recipe } from './recipes';
+import { CRAFT_REACH, RECIPES, type Recipe } from './recipes';
 import { ROAD_TILES, ROCK_VARIANTS, TILE_DEFS } from '../world/tiles';
-import { article, capital, listed, numberWord, percent, share } from './words';
+import { article, capital, listed, numberWord, percent, share, times } from './words';
 
 /** What the perks somebody holds come to, key by key. */
 export type Fx = Record<string, number>;
@@ -686,12 +692,180 @@ const CARPENTER: Seed[] = [
   },
 ];
 
+/*
+ * ---------------------------------------------------------------------------
+ * The Smith: the smelter, the anvil and the file.
+ * ---------------------------------------------------------------------------
+ */
+/** The alloys: every lump the smelter mixes rather than smelts out of ore. */
+const ALLOYS = RECIPES.filter((r) => METALS.some((m) => m.ore === null && m.lump === r.result));
+const GLASS = recipeOf('make_glass');
+/** What the anvil beats out of a casting: every mould's piece but the anvil's and the two cast whole. */
+const BEATEN = MOULDS.filter((m) => m.makes !== 'anvil' && !castWhole(m));
+/** Every tool a job asks for. */
+const TOOLS = new Set([...ACTION_BY_ID.values()].map((a) => a.tool).concat(RECIPES.map((r) => r.tool)).filter((t): t is string => !!t));
+/** The things made one at a time out of any of these parts. */
+const fittedFrom = (parts: readonly string[]): string[] =>
+  [...new Set(RECIPES.filter((r) => !ITEM_DEFS[r.result]?.stackable && r.inputs.some((i) => parts.includes(i.item))).map((r) => r.result))];
+/** The heads and blades the anvil beats out, which is what a weapon or a tool is fitted round -- not its nails or ribbons. */
+const HEADS = BEATEN.map((m) => m.makes).filter((id) => /_(head|blade)$/.test(id));
+/** The heads and blades a weapon is fitted from. */
+const WEAPON_PARTS = HEADS.filter((id) => fittedFrom([id]).some((w) => WEAPON_BY_ID.has(w)));
+/** And those a tool some job asks for is fitted from. */
+const TOOL_PARTS = HEADS.filter((id) => fittedFrom([id]).some((t) => TOOLS.has(t)));
+const WEAPONS_FITTED = fittedFrom(WEAPON_PARTS).filter((id) => WEAPON_BY_ID.has(id));
+/** Chain and plate the anvil beats out: every piece of the class that has a mould. */
+const armourOf = (cls: string): string[] => ARMOUR.filter((a) => a.cls === cls && MOULD_BY_MAKES.has(a.id)).map((a) => a.id);
+const CHAIN = armourOf('chain');
+const PLATE = armourOf('plate');
+/** What Temper Bath quenches: a weapon or a tool fitted from a head or blade the anvil beat out, or one it beats out whole. */
+const TEMPERED = [...new Set([
+  ...fittedFrom([...WEAPON_PARTS, ...TOOL_PARTS]).filter((id) => WEAPON_BY_ID.has(id) || TOOLS.has(id)),
+  ...BEATEN.map((m) => m.makes).filter((id) => !ITEM_DEFS[id]?.stackable && !ARMOUR_BY_ID.has(id)),
+])];
+/** Every mould but the anvil's, which one filling uses up whole. */
+const MOULDS_KEPT = MOULDS.filter((m) => m.makes !== 'anvil').map((m) => m.id);
+const NAIL = MOULD_BY_ID.get('nail_mould')!;
+const SWORD = WEAPON_BY_ID.get('sword')!;
+/** Examples the notes work their numbers through: examples, not rules. */
+const SAMPLE = { mould: 50, dent: 40, head: 50, swing: 0.7, skill: 50, piece: 40, ql: 50 };
+const HAUBERK = { uid: 0, id: 'chain_hauberk', ql: SAMPLE.ql, dmg: 0, count: 1, extra: 'Iron' } as Item;
+const label = (id: string): string => ACTION_BY_ID.get(id)?.label ?? id;
+
+const SMITH: Seed[] = [
+  {
+    num: 7, name: 'Sure Alloy',
+    fx: onEach('fail', ALLOYS.map((r) => r.id), 0.5),
+    note: (fx) => `${listed(ALLOYS.map((r) => r.label))} fail ${share(fx[`fail:${ALLOYS[0].id}`])} as often `
+      + `(now a check at difficulty ${range(ALLOYS.map((r) => r.difficulty ?? 0))}).`,
+  },
+  {
+    num: 8, name: 'Glassblower',
+    fx: { 'count:glass': 3 },
+    note: (fx) => `${GLASS.label} makes ${numberWord(fx['count:glass'])} glass from ${numberWord(GLASS.inputs[0].count ?? 1)} `
+      + `${itemName(GLASS.inputs[0].item)} (now ${numberWord(GLASS.count ?? 1)}).`,
+  },
+  {
+    num: 9, name: 'Reclaimer',
+    fx: { 'melt:share': 0.75, 'melt:keep': 0.85 },
+    note: (fx) => `Melt down gives back ${percent(fx['melt:share'])} of the lumps a thing holds, at ${percent(fx['melt:keep'])} of its `
+      + `QL less its damage (now ${percent(MELT_SHARE)}, at ${percent(MELT_KEEP)}): a ${itemName(HAUBERK.id)} `
+      + `${meltLumps(HAUBERK, 1, fx['melt:share'])} lumps (now ${meltLumps(HAUBERK, 1)}).`,
+  },
+  {
+    num: 12, name: 'Hard Sand',
+    fx: onEach('last', MOULDS_KEPT, 2),
+    note: (fx) => `Moulds you make last ${times(fx[`last:${MOULDS_KEPT[0]}`])} as many fillings: a QL ${SAMPLE.mould} mould `
+      + `${mouldUsesLeft(SAMPLE.mould, 0, fx[`last:${MOULDS_KEPT[0]}`])} fillings of copper (now ${mouldUsesLeft(SAMPLE.mould, 0)}). `
+      + 'Every mould but the anvil\'s, which the one filling uses up. It stays with the mould whoever has it after.',
+  },
+  {
+    num: 13, name: 'Clean Pour',
+    fx: { 'pour:wear': 0 },
+    note: (fx) => `A mould's damage ${fx['pour:wear'] ? `counts ${share(fx['pour:wear'])} of itself` : 'no longer counts'} against `
+      + `what you pour from it: a QL ${SAMPLE.mould} mould at ${SAMPLE.dent} damage pours as ${SAMPLE.mould - SAMPLE.dent * fx['pour:wear']} `
+      + `(now ${SAMPLE.mould - SAMPLE.dent * MOULD_DENT}), which the casting takes together with the lump's QL and your smelting's.`,
+  },
+  {
+    num: 16, name: 'Sure Hammer',
+    fx: { 'fail:smith': 0.5, 'fail:strike_coins': 0.5 },
+    note: (fx) => `${label('smith')} and ${label('strike_coins').toLowerCase()} at the anvil fail ${share(fx['fail:smith'])} as often `
+      + `(now a check at difficulty ${range(BEATEN.map((m) => m.difficulty))} for a piece and ${COIN_DIFFICULTY} for coins, `
+      + 'and more for a hard metal).',
+  },
+  {
+    num: 20, name: 'Second Heat',
+    fx: { 'spare:smith': 1 },
+    note: (fx) => `${fx['spare:smith'] >= 1 ? 'A go' : `${oneIn(fx['spare:smith'])} goes`} of ${label('smith')} that fails `
+      + 'leaves its casting where it was, to be beaten again (now the metal is lost).',
+  },
+  {
+    num: 22, name: 'Nail Maker',
+    fx: { 'count:nail': 8 },
+    note: (fx) => `A filling of the nail mould beats out ${numberWord(fx['count:nail'])} nails at the anvil `
+      + `(now ${numberWord(NAIL.per ?? 1)}): ${fx['count:nail']} nails to ${NAIL.lumps === 1 ? 'a lump' : `${NAIL.lumps} lumps`} `
+      + `of iron, and to ${mouldLumps(NAIL, 'gold')} of gold.`,
+  },
+  {
+    num: 24, name: 'Keen Edge',
+    fx: onEach('damage', WEAPON_PARTS, 1.1),
+    note: (fx) => `Weapons fitted from heads and blades you beat out hit ${by(fx[`damage:${WEAPON_PARTS[0]}`])} harder, whoever `
+      + `fits them: ${listed(WEAPONS_FITTED.map((id) => plural(itemName(id))))}. A sword ${tenth(SWORD.damage * fx[`damage:${WEAPON_PARTS[0]}`])} `
+      + `base damage (now ${SWORD.damage}). It goes from the part into the weapon, and stays with it whoever has it after.`,
+  },
+  {
+    num: 25, name: 'Balanced',
+    fx: onEach('aim', WEAPON_PARTS, 1.05),
+    note: (fx) => `Weapons fitted from heads and blades you beat out land ${by(fx[`aim:${WEAPON_PARTS[0]}`])} more often, whoever `
+      + `fits them, up to the ${percent(HIT_CAP)} no swing passes: a ${percent(SAMPLE.swing)} swing lands `
+      + `${percent(Math.min(HIT_CAP, SAMPLE.swing * fx[`aim:${WEAPON_PARTS[0]}`]))}. It goes from the part into the weapon, and `
+      + 'stays with it whoever has it after.',
+  },
+  {
+    num: 26, name: 'Mail Maker',
+    fx: onEach('soak', CHAIN, 1.1),
+    note: (fx) => `Chain you beat out turns aside ${by(fx[`soak:${CHAIN[0]}`])} more of a blow, up to the ${percent(SOAK_CAP)} no `
+      + `piece passes: ${listed(CHAIN.map((id) => itemName(id)))}. Chain that turns aside ${percent(ARMOUR_CLASSES.chain.soak)} `
+      + `turns ${percent(ARMOUR_CLASSES.chain.soak * fx[`soak:${CHAIN[0]}`])}. It stays with the piece whoever wears it after.`,
+  },
+  {
+    num: 27, name: 'Plate Maker',
+    fx: onEach('soak', PLATE, 1.1),
+    note: (fx) => `Plate you beat out turns aside ${by(fx[`soak:${PLATE[0]}`])} more of a blow, up to the ${percent(SOAK_CAP)} no `
+      + `piece passes: ${listed(PLATE.map((id) => itemName(id)))}. Plate that turns aside ${percent(ARMOUR_CLASSES.plate.soak)} `
+      + `turns ${percent(ARMOUR_CLASSES.plate.soak * fx[`soak:${PLATE[0]}`])}. It stays with the piece whoever wears it after.`,
+  },
+  {
+    num: 30, name: 'Toolsmith',
+    fx: onEach('ql', TOOL_PARTS, 1.1),
+    note: (fx) => `Tool heads and blades you beat out come out at ${more(fx[`ql:${TOOL_PARTS[0]}`])} QL: `
+      + `${listed(TOOL_PARTS.map((id) => plural(itemName(id))))}. One that would come out at ${SAMPLE.head} comes out at `
+      + `${tenth(SAMPLE.head * fx[`ql:${TOOL_PARTS[0]}`])}.`,
+  },
+  {
+    num: 32, name: 'Metal Polisher',
+    fx: { 'improve:metal': 1.5 },
+    note: (fx) => `Improve raises anything of metal ${by(fx['improve:metal'])} more a pass: at ${SAMPLE.skill} in the skill, a QL `
+      + `${SAMPLE.piece} piece gains ${tenth(improveStepAt(SAMPLE.skill, SAMPLE.piece) * fx['improve:metal'])} a pass `
+      + `(now ${tenth(improveStepAt(SAMPLE.skill, SAMPLE.piece))}).`,
+  },
+  {
+    num: 36, name: 'Forge Reach',
+    fx: { 'reach:forge': 6 },
+    note: (fx) => `Work at a smelter or an anvil takes what it uses from your stores within ${fx['reach:forge']} tiles `
+      + `(now ${CRAFT_REACH}): ${listed(FORGE_WORK.map((id) => label(id).toLowerCase()))}, and every recipe made at the smelter.`,
+  },
+  {
+    num: 38, name: 'Long Shift',
+    fx: { jobs: 2 },
+    note: (fx) => `You can keep ${numberWord(fx.jobs)} more jobs queued: ${queueCapAt(CHAR_START) + fx.jobs} at ${CHAR_START} mind `
+      + `logic (now ${queueCapAt(CHAR_START)}), and one more for every ${QUEUE_PER_MIND} above that, as before.`,
+  },
+  {
+    num: 45, name: 'Temper Bath',
+    fx: onEach('temper', TEMPERED, 5),
+    note: (fx) => `A weapon or tool you finish can be quenched once, for +${fx[`temper:${TEMPERED[0]}`]} QL, by you or any Smith `
+      + `with Temper Bath: Quench it standing at water, or beside a barrel or a well of it. That is `
+      + `${listed(TEMPERED.map((id) => plural(itemName(id))))}: what is `
+      + 'fitted from a head or blade the anvil beat out, and what the anvil beats out whole. It stays with the thing until it is '
+      + 'quenched.',
+  },
+  {
+    num: 49, name: 'Ingots',
+    fx: { ingot: 1 },
+    note: () => `Pour ${INGOT_LUMPS} lumps of a metal into an ingot at the smelter, at the lumps' QL. An ingot weighs `
+      + `${share(INGOT_WEIGHT)} what its lumps do and counts as ${INGOT_LUMPS} lumps wherever the smelter, the anvil, a recipe or `
+      + 'Improve takes lumps; what a job does not use of one comes back as lumps.',
+  },
+];
+
 /** Every trade's perks, in the order they were picked. */
 const SEEDS: Record<string, Seed[]> = {
   terraformer: TERRAFORMER,
   miner: MINER,
   mason: MASON,
   carpenter: CARPENTER,
+  smith: SMITH,
 };
 
 const slug = (name: string): string => name.toLowerCase().replace(/[’']/g, '').replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '');
@@ -706,6 +880,7 @@ export const TIERS: Record<string, number[][]> = {
   miner: [[7, 8, 9], [14, 13, 19], [1, 2, 25], [3, 27, 35], [28, 15, 11], [50, 17, 6]],
   mason: [[1, 8, 17], [4, 18, 19], [20, 22, 33], [2, 9, 29], [16, 35, 48], [47, 24, 12]],
   carpenter: [[1, 37, 45], [3, 6, 14], [15, 26, 31], [16, 19, 32], [2, 18, 25], [10, 12, 27]],
+  smith: [[8, 26, 27], [30, 32, 49], [12, 20, 22], [24, 25, 36], [7, 9, 13], [16, 38, 45]],
 };
 
 /** Every perk there is, tier by tier, and in each tier by the number it was picked under, as the island lists them. */

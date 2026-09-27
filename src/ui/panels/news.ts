@@ -1,7 +1,8 @@
 import { MATERIAL_BY_ID } from '../../game/building';
 import { furnitureDef, liquidCapacity, type PlacedFurniture } from '../../game/furniture';
-import { billWords } from '../../game/items';
-import { MOULD_BY_ID } from '../../game/metal';
+import { billWords, type Item } from '../../game/items';
+import { INGOT_LUMPS, INGOT_WEIGHT, MOULD_BY_ID } from '../../game/metal';
+import { meltLumps } from '../../game/melt';
 import { ORDER_LIFE } from '../../game/orders';
 import { RECIPE_BY_ID } from '../../game/recipes';
 import { BOARD_TOP } from '../../game/boards';
@@ -451,6 +452,20 @@ export const NEWS: News[] = [
       return [
         `On an island a barrel holds what its wood holds, as the barrel always said: ${barrel('Oak')} litres of oak and ${barrel('Pine')} of pine where every barrel held ${furnitureDef('barrel').liquid}. A barrel already fuller than its wood allows keeps what is in it and takes no more until it is drawn below the line.`,
         'And a few other pieces hold one more or one less than they did, mostly rare ones and ones of pine, willow or fig: what the island lets in is now exactly the number the window shows.',
+      ];
+    },
+  },
+  {
+    n: 36,
+    day: '2026-09-27',
+    lines: () => {
+      const main = (CLASSES.find((c) => c.id === 'smith')?.main ?? '').replace(/_/g, ' ');
+      const hauberk = { uid: 0, id: 'chain_hauberk', ql: 50, dmg: 0, count: 1, extra: 'Iron' } as Item;
+      return [
+        `The Smith has perks instead of a tree now: ${numberWord(PERK_TIER_AT.length)} tiers of ${numberWord(PERKS_PER_TIER)}, the first with the trade and the others at ${listed(PERK_TIER_AT.slice(1).map(String))} in ${main}. The nodes a Smith had bought went with the tree.`,
+        'Some of them go into what a Smith beats out and stay there: a blade that hits harder or lands more often goes into the weapon whoever fits it, chain and plate that turn aside more, a mould that lasts longer, and a weapon or tool that can be quenched once for more quality. Examine a thing to see what its maker put into it.',
+        `A Smith with Ingots pours ${INGOT_LUMPS} lumps into a bar that weighs ${share(INGOT_WEIGHT)} what they did and counts as all ${numberWord(INGOT_LUMPS)} at the smelter, the anvil, the bench and the file.`,
+        `And melting down takes a half up on an island as it always did playing alone: a chain hauberk gives back ${meltLumps(hauberk, 1)} lumps, not one fewer.`,
       ];
     },
   },

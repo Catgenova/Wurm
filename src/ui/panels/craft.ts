@@ -1,7 +1,7 @@
 import { ACTION_BY_ID } from '../../game/actions';
 import type { Game } from '../../game/game';
 import { itemDef } from '../../game/items';
-import { CRAFT_REACH, DEED_ONLY, RECIPE_CATEGORIES, RECIPES, materialChoices, prospect, recipeStatus, stationName, type CraftStock, type Recipe, type RecipeStatus } from '../../game/recipes';
+import { CRAFT_REACH, DEED_ONLY, RECIPE_CATEGORIES, RECIPES, materialChoices, prospect, reachFor, recipeStatus, stationName, type CraftStock, type Recipe, type RecipeStatus } from '../../game/recipes';
 import { ONE_ALTAR } from '../../game/furniture';
 import { SKILL_DEFS } from '../../game/skills';
 import type { UIWindow } from '../windows';
@@ -107,7 +107,11 @@ export class CraftPanel {
   render(now = performance.now()): void {
     // What is at hand, listed once for the whole book rather than once a row.
     const stock = this.game.craftStock();
-    const statuses = new Map<Recipe, RecipeStatus>(RECIPES.map((r) => [r, recipeStatus(r, this.game, this.wants.get(r.id), stock)]));
+    // And further off for the smelter's recipes, for a Smith's Forge Reach.
+    const reach = this.game.forgeReach();
+    const forge = reach > CRAFT_REACH ? this.game.craftStock(undefined, false, reach) : stock;
+    const stockOf = (r: Recipe): readonly CraftStock[] => (r.station === 'smelter' ? forge : stock);
+    const statuses = new Map<Recipe, RecipeStatus>(RECIPES.map((r) => [r, recipeStatus(r, this.game, this.wants.get(r.id), stockOf(r))]));
     // What the book would say. Standing at an anvil hammering, this is the
     // same from one second to the next, so nothing is touched.
     const { fromStores, spareRare } = this.game.settings;
@@ -137,7 +141,7 @@ export class CraftPanel {
       this.list.append(header);
       for (const r of rows) {
         const st = statuses.get(r)!;
-        this.list.append(this.row(r, st, stock));
+        this.list.append(this.row(r, st, stockOf(r)));
         shown++;
         if (st.ready) ready++;
       }
@@ -314,7 +318,7 @@ export class CraftPanel {
     // clicking Craft makes the thing the row described -- the first one a
     // craft would reach, which is the pack's when there is one, and otherwise
     // the one in the nearest store.
-    const stock = this.game.craftStock();
+    const stock = this.game.craftStock(undefined, false, reachFor(this.game, r));
     const want = recipeStatus(r, this.game, this.wants.get(r.id), stock).material;
     const first = r.inputs[0].item;
     const material = ((want ? stock.find((s) => s.item.id === first && s.item.extra === want) : undefined)

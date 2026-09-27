@@ -3,8 +3,9 @@ import type { ActionDef } from './actions';
 import { ARMOUR_BY_ID, isShield, WEAPON_BY_ID } from './gear';
 import { FURNITURE_BY_ID } from './furniture';
 import type { Game } from './game';
-import { itemDef, itemName, liftRarity, rarityOf, RARITIES, RARITY_LIFT, type Item } from './items';
-import { isMould } from './metal';
+import { itemDef, itemName, liftRarity, rarityOf, RARITIES, RARITY_LIFT, temperOf, type Item } from './items';
+import { ingotOf, isMould, METALS } from './metal';
+import { waterNear } from './placeables';
 import { materialOfItem, matOf } from './materials';
 import type { CraftStock } from './recipes';
 
@@ -35,7 +36,9 @@ export interface MaterialDef {
 }
 
 export const MATERIALS: Record<Material, MaterialDef> = {
-  metal: { id: 'metal', name: 'metal', tools: ['file', 'whetstone'], stock: ['copper_lump', 'iron_lump', 'steel_lump', 'tin_lump', 'zinc_lump', 'lead_lump', 'silver_lump', 'gold_lump', 'bronze_lump', 'brass_lump', 'pewter_lump', 'electrum_lump', 'adamantine_lump', 'glimmersteel_lump', 'mithril_lump', 'seryll_lump'], skill: 'blacksmithing' },
+  // Lumps, and ingots, which count as their lumps (a Smith's Ingots): the
+  // island breaks into one for the lump a pass takes.
+  metal: { id: 'metal', name: 'metal', tools: ['file', 'whetstone'], stock: ['copper_lump', 'iron_lump', 'steel_lump', 'tin_lump', 'zinc_lump', 'lead_lump', 'silver_lump', 'gold_lump', 'bronze_lump', 'brass_lump', 'pewter_lump', 'electrum_lump', 'adamantine_lump', 'glimmersteel_lump', 'mithril_lump', 'seryll_lump', ...METALS.map(ingotOf)], skill: 'blacksmithing' },
   wood: { id: 'wood', name: 'wood', tools: ['carving_knife', 'file'], stock: ['plank', 'shaft'], skill: 'carpentry' },
   cloth: { id: 'cloth', name: 'cloth', tools: ['needle'], stock: ['cloth'], skill: 'tailoring' },
   leather: { id: 'leather', name: 'leather', tools: ['awl', 'needle'], stock: ['leather'], skill: 'leatherworking' },
@@ -96,11 +99,17 @@ export const canImprove = (id: string): boolean => !isMould(id) && improvable(id
 export const improveCeiling = (g: Game, skill: string, item?: Item): number =>
   Math.max(IMPROVE_FLOOR, g.skills.get(skill)) + (item ? rarityOf(item).ceiling : 0);
 
-/** How much a successful pass adds: a great deal at first, very little near the end. */
+/** How much a successful pass adds at this skill to a thing of this quality: a great deal at first, very little near the end. */
+export const improveStepAt = (level: number, ql: number): number => Math.max(0.08, Math.max(0, 100 - ql) * 0.05 * (0.35 + level / 130));
+
+/**
+ * How much a successful pass adds in these hands, and more for a perk on what
+ * the thing is made of (a Smith's Metal Polisher), as `improve:` has it on the
+ * island.
+ */
 export function improveStep(g: Game, item: Item, skill: string): number {
-  const level = g.skills.get(skill);
-  const room = Math.max(0, 100 - item.ql);
-  return Math.max(0.08, room * 0.05 * (0.35 + level / 130));
+  const what = improvable(item.id);
+  return improveStepAt(g.skills.get(skill), item.ql) * (what ? g.perk(`improve:${what.material.id}`, 1) : 1);
 }
 
 /** The first of a material's tools that is missing, or null when all are in hand. */
@@ -232,6 +241,47 @@ export const IMPROVE_ACTIONS: ActionDef[] = [
       g.logMsg(`The ${itemName(item).toLowerCase()} is better than it was. (QL ${item.ql.toFixed(1)})`, 'event');
       // Keep at it while there is room and stock of the right stuff left.
       return item.ql < ceiling && !!stockFor(g, what.material, made);
+    },
+  },
+  {
+    /*
+     * A Smith's Temper Bath: a weapon or tool a Smith with it finishes carries
+     * one quench in its maker's mark (`temper`, the quality it adds). Quenched
+     * in water -- standing at it, or beside a barrel or well of it -- it takes
+     * that much quality, once, and the mark is spent.
+     */
+    id: 'quench_item',
+    label: 'Quench',
+    verb: 'quenching',
+    stamina: 0.03,
+    baseTime: 3,
+    applies: (t, g) => {
+      if (t.kind !== 'item') return false;
+      const item = g.inventory.get(t.uid);
+      return !!item && temperOf(item) > 0;
+    },
+    check: (t, g) => {
+      if (t.kind !== 'item') return null;
+      const item = g.inventory.get(t.uid);
+      if (!item) return 'It is gone.';
+      if (temperOf(item) <= 0) return 'There is no quench left in it.';
+      if (g.perk(`temper:${item.id}`, 0) <= 0) return 'That wants a Smith who has learned to temper.';
+      if (!waterNear(g)) return 'You need water to quench it in: stand at the water, or beside a barrel or a well of it.';
+      return null;
+    },
+    perform: (t, g) => {
+      if (t.kind !== 'item') return;
+      const item = g.inventory.get(t.uid);
+      const add = item ? temperOf(item) : 0;
+      if (!item || add <= 0) return;
+      item.ql = Math.min(100, item.ql + add);
+      // The one quench it had, spent.
+      const rest = { ...item.mark };
+      delete rest.temper;
+      if (Object.keys(rest).length) item.mark = rest;
+      else delete item.mark;
+      g.events.emit('inventory');
+      g.logMsg(`You quench the ${itemName(item).toLowerCase()} and it comes out harder. (QL ${item.ql.toFixed(1)})`, 'event');
     },
   },
 ];

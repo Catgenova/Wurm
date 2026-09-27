@@ -430,7 +430,7 @@ export const CREATURE_ACTIONS: ActionDef[] = [
       const item = wdef && !bow ? held : null;
       const before = c.health;
       // Its blood has a say in whether you connect at all.
-      const landed = g.rand() <= hitChance(g, usable) * bloodMul(c, 'evade');
+      const landed = g.rand() <= hitChance(g, usable, item) * bloodMul(c, 'evade');
       g.gainSkill('fighting', tryGain(landed, SWING_FIGHT));
       g.gainSkill(usable.kind, tryGain(landed, SWING_ARM));
       g.gainSkill('body_strength', tryGain(landed, SWING_BODY));
@@ -499,7 +499,7 @@ export const CREATURE_ACTIONS: ActionDef[] = [
       g.fought(DARK_SHOT);
       // The far end of a bow's range is a far harder shot than the near end.
       const reach = 1 - (d / bowRange(bow, held)) * 0.35;
-      const landed = g.rand() <= hitChance(g, bow) * reach * bloodMul(c, 'evade');
+      const landed = g.rand() <= hitChance(g, bow, held) * reach * bloodMul(c, 'evade');
       g.gainSkill('fighting', tryGain(landed, SHOT_FIGHT));
       g.gainSkill('archery', tryGain(landed, SHOT_ARCHERY));
       if (!landed) {

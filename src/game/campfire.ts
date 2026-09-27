@@ -117,9 +117,9 @@ export const isFuel = (id: string): boolean => FUEL_VALUES[id] !== undefined;
  * pack, a bag on your back, a store within `CRAFT_REACH` -- so a crate of
  * logs beside the furnace keeps it going as well as an armful does.
  */
-export function fuelAtHand(g: Game, uid?: number): CraftStock | undefined {
-  if (uid === undefined) return g.stockOf((it) => isFuel(it.id))[0];
-  const s = g.stockEntry(uid);
+export function fuelAtHand(g: Game, uid?: number, reach?: number): CraftStock | undefined {
+  if (uid === undefined) return g.stockOf((it) => isFuel(it.id), reach)[0];
+  const s = g.stockEntry(uid, reach);
   return s && isFuel(s.item.id) ? s : undefined;
 }
 /** World position of a fire's centre. */

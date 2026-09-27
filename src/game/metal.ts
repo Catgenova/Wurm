@@ -55,6 +55,27 @@ export const isLump = (id: string): boolean => METAL_BY_LUMP.has(id);
 export const isOreItem = (id: string): boolean => METAL_BY_ORE.has(id);
 
 /**
+ * Ingots: a Smith's Ingots pours `INGOT_LUMPS` lumps of one metal into a bar
+ * at the smelter (`pour_ingot`), at the lumps' quality. The bar weighs
+ * `INGOT_WEIGHT` of what its lumps did, and counts as that many lumps wherever
+ * the smelter, the anvil, a recipe or Improve takes lumps of its metal: what a
+ * job does not use of a bar it breaks into comes back as lumps. The island
+ * reads the same two numbers (`ingot_lumps`, and the item table's weights).
+ */
+export const INGOT_LUMPS = 5;
+export const INGOT_WEIGHT = 0.5;
+export const ingotOf = (m: MetalDef): string => `${m.id}_ingot`;
+export const METAL_BY_INGOT = new Map(METALS.map((m) => [ingotOf(m), m]));
+export const isIngot = (id: string): boolean => METAL_BY_INGOT.has(id);
+/** The metal a lump or an ingot is of. */
+export const metalOfBar = (id: string): MetalDef | undefined => METAL_BY_LUMP.get(id) ?? METAL_BY_INGOT.get(id);
+/** Lumps or ingots: metal a job may take lumps from. */
+export const isMetalStock = (id: string): boolean => METAL_BY_LUMP.has(id) || METAL_BY_INGOT.has(id);
+/** How many lumps a stack of lumps or ingots counts as. */
+export const lumpsIn = (it: { id: string; count: number }): number =>
+  METAL_BY_INGOT.has(it.id) ? it.count * INGOT_LUMPS : METAL_BY_LUMP.has(it.id) ? it.count : 0;
+
+/**
  * Coins: a lump of silver or gold struck into twenty under a die, at the
  * anvil. A compact store of metal that goes in a pocket, and comes back out
  * of the fire as a lump when it is melted down. The die wears with every
@@ -217,8 +238,27 @@ export const isCasting = (it: { id: string; piece?: string }): boolean => it.id 
  * longer, but none of them can be mended, so every one wears out in the end.
  */
 export const mouldWear = (ql: number): number => Math.max(3, 26 - ql * 0.22);
-/** Casts a mould of this quality has left in it. */
-export const mouldUsesLeft = (ql: number, dmg: number): number => Math.max(0, Math.ceil((100 - dmg) / mouldWear(ql)));
+/**
+ * Casts a mould of this quality has left in it, of a metal that takes no more
+ * out of it than copper does. `last` is its maker's mark (a Smith's Hard Sand):
+ * a mould marked to last twice as long takes half the wear a filling.
+ */
+export const mouldUsesLeft = (ql: number, dmg: number, last = 1): number => Math.max(0, Math.ceil((100 - dmg) / (mouldWear(ql) / last)));
+/**
+ * How much of a mould's damage shows in what is poured from it: the pour
+ * reckons the mould this much of its damage below its quality. A Smith's Clean
+ * Pour makes it none.
+ */
+export const MOULD_DENT = 0.5;
+
+/**
+ * Work at a smelter or an anvil: what a Smith's Forge Reach takes from stores
+ * further off (`Game.forgeReach`), with every recipe made at the smelter. The
+ * island asks the same list in `forge_work`.
+ */
+export const FORGE_WORK: readonly string[] = [
+  'smelt_ore', 'melt_down', 'cast_anvil', 'pour_mould', 'pour_ingot', 'fuel_smelter', 'smith', 'strike_coins',
+];
 
 /** Seconds to smelt one ore, slower for stubborn metal and fine ore, faster in a good smelter. */
 export function smeltSeconds(metalId: string, oreQl: number, smelterQl: number): number {

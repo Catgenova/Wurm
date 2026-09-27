@@ -49,8 +49,12 @@ export function meltRefusal(item: Item): string | null {
   return null;
 }
 
-/** Lumps that come back from this many of a thing: half its metal, and never none. */
-export const meltLumps = (item: Item, count: number): number => Math.max(1, Math.round((metalContent(item) ?? 0) * count * MELT_SHARE));
+/**
+ * Lumps that come back from this many of a thing: half its metal, and never
+ * none. `share` is how much of it comes back, more for a Smith's Reclaimer.
+ */
+export const meltLumps = (item: Item, count: number, share = MELT_SHARE): number =>
+  Math.max(1, Math.round((metalContent(item) ?? 0) * count * share));
 
-/** The quality of what comes back: seven tenths, less the damage the thing carried. */
-export const meltQl = (item: Item): number => Math.max(1, item.ql * MELT_KEEP * (1 - item.dmg / 100));
+/** The quality of what comes back: seven tenths, less the damage the thing carried; `keep` more for a Smith's Reclaimer. */
+export const meltQl = (item: Item, keep = MELT_KEEP): number => Math.max(1, item.ql * keep * (1 - item.dmg / 100));

@@ -210,8 +210,12 @@ export function pieceSoak(def: ArmourDef, item: Item, skill: number): number {
   const cls = ARMOUR_CLASSES[def.cls];
   const wear = Math.max(0.25, 1 - item.dmg / 130);
   const quality = 0.55 + item.ql / 220;
-  return Math.min(0.92, cls.soak * matOf(item.extra).soak * rarityOf(item).boost * quality * wear * (1 + skill / 400));
+  // And what its maker put into it (a Smith's Mail Maker or Plate Maker), under the same ceiling.
+  return Math.min(SOAK_CAP, cls.soak * matOf(item.extra).soak * rarityOf(item).boost * quality * wear * (1 + skill / 400) * markOf(item, 'soak'));
 }
+
+/** The most of a blow any one piece turns aside, however good it is. The island says the same in `piece_soak`. */
+export const SOAK_CAP = 0.92;
 
 /** What a full set of this stuff costs to carry: heavy metal is heavy. */
 export const pieceBurden = (def: ArmourDef, item: Item): number => (ARMOUR_CLASSES[def.cls].burden / 5) * matOf(item.extra).weight;
@@ -245,12 +249,19 @@ export const bowRange = (def: WeaponDef, item: Item | null): number => (def.rang
 export const BANE_BONUS = 1.5;
 export const banes = (item: Item | null): boolean => !!item && !!matOf(item.extra).bane;
 
-/** Chance a swing lands at all: the weapon's own skill, then fighting behind it. */
-export function hitChance(g: Game, def: WeaponDef): number {
+/**
+ * Chance a swing lands at all: the weapon's own skill, then fighting behind
+ * it, and what the weapon's maker put into it (a Smith's Balanced) -- inside
+ * the ceiling, since this is a chance and `HIT_CAP` is where it stops.
+ */
+export function hitChance(g: Game, def: WeaponDef, item?: Item | null): number {
   const skill = g.skills.get(def.kind);
   const fighting = g.skills.get('fighting');
-  return Math.min(0.96, 0.45 + skill / 220 + fighting / 300 + g.skills.get('body_control') / 500);
+  return Math.min(HIT_CAP, (0.45 + skill / 220 + fighting / 300 + g.skills.get('body_control') / 500) * (item ? markOf(item, 'aim') : 1));
 }
+
+/** The best chance any swing has of landing. The island says the same in `hit_chance`. */
+export const HIT_CAP = 0.96;
 
 type ItemTarget = Extract<Target, { kind: 'item' }>;
 const itemOf = (g: Game, t: Target): Item | undefined => (t.kind === 'item' ? g.inventory.get((t as ItemTarget).uid) : undefined);

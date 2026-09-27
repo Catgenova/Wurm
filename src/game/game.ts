@@ -1477,7 +1477,8 @@ export class Game {
    */
   queueCapacity(): number {
     if (this.remoteCap !== null) return this.remoteCap;
-    return queueCapAt(this.skills.get('mind_logic'));
+    // And more for a Smith's Long Shift, as `queue_capacity` has it on the island.
+    return queueCapAt(this.skills.get('mind_logic')) + this.perk('jobs', 0);
   }
 
   /** Body control quickens every action; the effect is small but it is always there. */
@@ -4574,7 +4575,7 @@ export class Game {
    * naming a stack is choosing it. The island narrows its `craft_stock` the
    * same two ways.
    */
-  craftStock(chosen?: number, every = false): CraftStock[] {
+  craftStock(chosen?: number, every = false, reach = CRAFT_REACH): CraftStock[] {
     const pack = this.inventory;
     const out: CraftStock[] = [];
     const spare = this.settings.spareRare && !every;
@@ -4598,7 +4599,7 @@ export class Game {
         });
       }
     }
-    for (const store of this.storesForCraft()) {
+    for (const store of this.storesForCraft(reach)) {
       for (const it of store.items) {
         if (it.locked || it.price !== undefined || !kept(it)) continue;
         out.push({
@@ -4625,10 +4626,19 @@ export class Game {
    * into one whoever built it and whosever ground it stands on. A padlock on
    * it still keeps a craft out, as it keeps out a hand.
    */
-  private storesForCraft(): Array<{ items: Item[]; name: string }> {
+  private storesForCraft(reach = CRAFT_REACH): Array<{ items: Item[]; name: string }> {
     // "A player setting to only use inventory."
     if (!this.settings.fromStores) return [];
-    return this.storesWithin(CRAFT_REACH);
+    return this.storesWithin(reach);
+  }
+
+  /**
+   * How far work at a smelter or an anvil reaches into your stores: as far as
+   * a craft does, and further for a Smith's Forge Reach. Which work that is,
+   * is `FORGE_WORK`; the island reads the same key for the same jobs.
+   */
+  forgeReach(): number {
+    return Math.max(CRAFT_REACH, this.perk('reach:forge', CRAFT_REACH));
   }
 
   /**
@@ -4672,21 +4682,21 @@ export class Game {
    * in the same order and by the same rules (see `craftStock`). The tools --
    * a mould, a coin die, a file -- are still the ones you carry.
    */
-  stockEntry(uid: number): CraftStock | undefined {
-    return this.craftStock(uid).find((s) => s.item.uid === uid);
+  stockEntry(uid: number, reach = CRAFT_REACH): CraftStock | undefined {
+    return this.craftStock(uid, false, reach).find((s) => s.item.uid === uid);
   }
 
   /** Every stack at hand that answers `pick`, in the order a craft spends them. */
-  stockOf(pick: (it: Item) => boolean): CraftStock[] {
-    return this.craftStock().filter((s) => pick(s.item));
+  stockOf(pick: (it: Item) => boolean, reach = CRAFT_REACH): CraftStock[] {
+    return this.craftStock(undefined, false, reach).filter((s) => pick(s.item));
   }
 
   /**
    * The same, for a station's menu to choose from: rare stock included
    * whatever the settings say, because a stack named off a menu is chosen.
    */
-  stockChoices(pick: (it: Item) => boolean): CraftStock[] {
-    return this.craftStock(undefined, true).filter((s) => pick(s.item));
+  stockChoices(pick: (it: Item) => boolean, reach = CRAFT_REACH): CraftStock[] {
+    return this.craftStock(undefined, true, reach).filter((s) => pick(s.item));
   }
 
   /** How many of a kind are at hand to be spent, carried and stored within reach. */
@@ -4718,7 +4728,7 @@ export class Game {
    * its own, since that is where nearly every aim is and the question is put
    * once for every recipe a menu offers.
    */
-  craftItem(uid: number): Item | undefined {
+  craftItem(uid: number, reach = CRAFT_REACH): Item | undefined {
     const pack = this.inventory;
     const it = pack.get(uid);
     if (it) return pack.loose(it) ? it : undefined;
@@ -4726,7 +4736,7 @@ export class Game {
       const inside = bag.inside?.find((x) => x.uid === uid);
       if (inside) return pack.loose(inside) ? inside : undefined;
     }
-    for (const store of this.storesForCraft()) {
+    for (const store of this.storesForCraft(reach)) {
       const stored = store.items.find((x) => x.uid === uid);
       if (stored) return !stored.locked && stored.price === undefined ? stored : undefined;
     }

@@ -1,10 +1,10 @@
 import { matOfItem, workingQl } from './materials';
-import { COINS_PER_LUMP, MOULDS, RARE_LUMP_FACTOR } from './metal';
+import { COINS_PER_LUMP, INGOT_LUMPS, INGOT_WEIGHT, ingotOf, METALS, MOULDS, RARE_LUMP_FACTOR } from './metal';
 import { dyeWord } from './dyestuffs';
 import { WALL_TYPES } from './building';
 import { candleBurn, lanternReach, torchBurn, torchReach } from './light';
 import { CLOSE_CLOTH, CLOSE_RIGHT } from './wounds';
-import { article, fill, listed, numberWord } from './words';
+import { article, fill, listed, numberWord, share, times } from './words';
 
 export type ItemCategory = 'tool' | 'material' | 'food' | 'plant' | 'misc';
 
@@ -499,6 +499,28 @@ for (const m of MOULDS) {
   if (piece?.description) piece.description = fill(piece.description, m);
 }
 
+/*
+ * An ingot of every metal there is a lump of: a Smith's Ingots pours
+ * `INGOT_LUMPS` lumps into one at the smelter (`pour_ingot`). It weighs
+ * `INGOT_WEIGHT` of what those lumps did, and counts as that many of them
+ * wherever the smelter, the anvil, a recipe or Improve takes lumps of its
+ * metal. Named off the metal table, as the moulds are, so a metal added
+ * there has its ingot here and on the island without a second entry.
+ */
+for (const m of METALS) {
+  const lump = ITEM_DEFS[m.lump];
+  if (!lump) continue;
+  ITEM_DEFS[ingotOf(m)] ??= {
+    name: `${m.name} ingot`,
+    category: 'material',
+    weight: lump.weight * INGOT_LUMPS * INGOT_WEIGHT,
+    stackable: true,
+    decay: lump.decay,
+    description: `Counts as ${numberWord(INGOT_LUMPS)} ${lump.name.toLowerCase()}s at the smelter, the anvil, the bench and the file, `
+      + `and weighs ${share(INGOT_WEIGHT)} what they do: {grams} grams. What a job does not use of one comes back as lumps.`,
+  };
+}
+
 /**
  * Put numbers into every item's text from the module that holds them.
  *
@@ -619,18 +641,46 @@ export interface Item {
  * that holds more, and it goes on holding more after it is sold.
  *
  * Each family is a multiplier on one number of the thing's own: `hold` on
- * what it holds, `speed` on how fast it goes, `damage` on what it hits for
- * and `range` on how far it reaches. A perk puts one in with the key
- * `<family>:<what is made>` (`hold:chest`), read off the maker's fold as the
- * thing comes off the bench. The island keeps the same map in the `mark`
- * column of an item and of a piece set down, and carries it between the two.
+ * what it holds, `speed` on how fast it goes, `damage` on what it hits for,
+ * `range` on how far it reaches, `soak` on how much of a blow a piece of
+ * armour turns aside, `aim` on how often a weapon lands and `last` on how
+ * many fillings a mould lasts (the wear a filling does is divided by it).
+ * `temper` is the one that is not: it is the quality a quench adds, once,
+ * and a thing without it has none to add (`temperOf`).
+ *
+ * A perk puts one in with the key `<family>:<what is made>` (`hold:chest`),
+ * read off the maker's fold as the thing comes off the bench or the anvil. A
+ * thing fitted together from marked parts keeps what the parts carried -- a
+ * Smith's Keen Edge in a sword blade goes into the sword, whoever fits it --
+ * except a temper, which is for what was finished. The island keeps the same
+ * map in the `mark` column of an item and of a piece set down, and carries it
+ * between the two.
  */
-export type MarkFamily = 'hold' | 'speed' | 'damage' | 'range';
-export const MARK_FAMILIES: readonly MarkFamily[] = ['hold', 'speed', 'damage', 'range'];
+export type MarkFamily = 'hold' | 'speed' | 'damage' | 'range' | 'soak' | 'aim' | 'last' | 'temper';
+export const MARK_FAMILIES: readonly MarkFamily[] = ['hold', 'speed', 'damage', 'range', 'soak', 'aim', 'last', 'temper'];
 export type Mark = Partial<Record<MarkFamily, number>>;
 
 /** A thing's mark on one family, which is one where it has none. */
 export const markOf = (thing: { mark?: Mark | null }, family: MarkFamily): number => thing.mark?.[family] ?? 1;
+/** The quality a quench would add to a thing, which is none unless its maker's mark says otherwise (a Smith's Temper Bath). */
+export const temperOf = (thing: { mark?: Mark | null }): number => thing.mark?.temper ?? 0;
+
+/**
+ * What a thing fitted together from these parts carries of theirs: every
+ * family any of them was marked with, the larger where two say the same, and
+ * never a temper, which belongs to whoever finishes the thing.
+ */
+export function partsMark(parts: ReadonlyArray<{ mark?: Mark | null }>): Mark {
+  const out: Mark = {};
+  for (const p of parts) {
+    for (const f of MARK_FAMILIES) {
+      const v = p.mark?.[f];
+      if (f === 'temper' || v === undefined) continue;
+      out[f] = Math.max(out[f] ?? v, v);
+    }
+  }
+  return out;
+}
 
 /** The mark a maker's perks put on a thing of this id as it is made, or nothing. */
 export function makersMark(perk: (key: string, otherwise: number) => number, id: string): Mark | undefined {
@@ -651,6 +701,10 @@ export function markSays(mark: Mark | undefined | null): string {
     speed: (m) => `goes ${pct(m)} faster`,
     damage: (m) => `hits ${pct(m)} harder`,
     range: (m) => `reaches ${pct(m)} further`,
+    soak: (m) => `turns aside ${pct(m)} more of a blow`,
+    aim: (m) => `lands ${pct(m)} more often`,
+    last: (m) => `lasts ${times(m)} as many fillings`,
+    temper: (m) => `can be quenched once, for +${m} QL`,
   };
   const parts = MARK_FAMILIES.filter((f) => mark[f] !== undefined).map((f) => said[f](mark[f] as number));
   if (!parts.length) return '';
@@ -993,13 +1047,15 @@ export class Inventory {
     this.well.next = v;
   }
 
-  add(id: string, opts: { ql?: number; count?: number; extra?: string; issued?: boolean; piece?: string } = {}): Item {
+  add(id: string, opts: { ql?: number; count?: number; extra?: string; issued?: boolean; piece?: string; mark?: Mark } = {}): Item {
     const def = itemDef(id);
     const count = opts.count ?? 1;
     const ql = Math.max(1, Math.min(100, opts.ql ?? 20));
     const item: Item = { uid: this.nextUid++, id, ql, dmg: 0, count, extra: opts.extra };
     if (opts.issued) item.issued = true;
     if (opts.piece) item.piece = opts.piece;
+    // Marked before it is folded in, so it goes on the pile with the same mark or starts one of its own.
+    if (opts.mark && Object.keys(opts.mark).length) item.mark = opts.mark;
     if (def.charges) item.charges = def.charges;
     return this.addItem(item);
   }

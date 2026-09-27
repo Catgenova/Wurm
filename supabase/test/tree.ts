@@ -80,7 +80,7 @@ insert into said select 'WIRED|' || string_agg(ch.id || ':' || (
 -- 2. Somebody to hand a tree to.
 do $$
 declare w record; v jsonb; v_a double precision; v_b double precision;
-        v_c double precision; v_d double precision; v_it bigint;
+        v_c double precision; v_d double precision; v_it bigint; v_hands text;
 begin
   /*
    * A named body rather than whichever row the heap hands over first, and a
@@ -179,33 +179,38 @@ begin
     || '|' || coalesce(rpc_take_node(w.world_id, 'fisher_3_3')->>'why', 'IT WENT THROUGH'));
 
   -- 3. Putting the trade down puts the tree down, which is the only undo.
-  insert into skill (world_id, uid, id, value) values (w.world_id, w.uid, 'smelting', 60)
+  insert into skill (world_id, uid, id, value) values (w.world_id, w.uid, 'tailoring', 60)
     on conflict (world_id, uid, id) do update set value = 60;
   perform give_coins(w.world_id, w.uid, class_change_cost()::bigint * 3);
-  perform rpc_take_class(w.world_id, 'smith');
+  perform rpc_take_class(w.world_id, 'tailor');
   insert into said select 'CLEARED|' || count(*) || '|'
     || coalesce((select class_mul->>'hands' from player
                   where world_id = w.world_id and uid = w.uid), 'gone')
     from player_node where world_id = w.world_id and uid = w.uid;
 
-  -- 4. Fineness at the bench, with the roll taken out so the ratio is the node.
-  update recipe set difficulty = null where id = 'make_bronze';
+  -- 4. Fineness at the bench, with the rolls taken out so the ratio is the node:
+  -- the check's, and the hands' own (product_ql), held still for the two
+  -- gos and put back after. On a trade still on its tree: the Tailor's cap,
+  -- off two cloth, whose quality is the hands' rather than the cloth's.
+  v_hands := pg_get_functiondef('product_ql(double precision, double precision)'::regprocedure);
+  create or replace function product_ql(p_skill double precision, p_tool_ql double precision default 0)
+    returns double precision language sql as 'select 40::double precision';
+  update recipe set difficulty = null where id = 'make_wool_cap';
   delete from item where world_id = w.world_id and holder = 'player' and holder_uid = w.uid
-    and def in ('bronze_lump', 'copper_lump', 'tin_lump');
-  perform give(w.world_id, w.uid, 'copper_lump', 3, 50);
-  perform give(w.world_id, w.uid, 'tin_lump', 1, 50);
-  perform perform_craft(w.world_id, w.uid, 'make_bronze', '{}'::jsonb);
+    and def in ('wool_cap', 'cloth');
+  perform give(w.world_id, w.uid, 'cloth', 2, 50);
+  perform perform_craft(w.world_id, w.uid, 'make_wool_cap', '{}'::jsonb);
   select ql into v_a from item where world_id = w.world_id and holder = 'player'
-    and holder_uid = w.uid and def = 'bronze_lump';
-  perform rpc_take_node(w.world_id, 'smith_2_1');
-  update skill set value = 60 where world_id = w.world_id and uid = w.uid and id = 'smelting';
+    and holder_uid = w.uid and def = 'wool_cap';
+  perform rpc_take_node(w.world_id, 'tailor_2_1');
+  update skill set value = 60 where world_id = w.world_id and uid = w.uid and id = 'tailoring';
   delete from item where world_id = w.world_id and holder = 'player' and holder_uid = w.uid
-    and def in ('bronze_lump', 'copper_lump', 'tin_lump');
-  perform give(w.world_id, w.uid, 'copper_lump', 3, 50);
-  perform give(w.world_id, w.uid, 'tin_lump', 1, 50);
-  perform perform_craft(w.world_id, w.uid, 'make_bronze', '{}'::jsonb);
+    and def in ('wool_cap', 'cloth');
+  perform give(w.world_id, w.uid, 'cloth', 2, 50);
+  perform perform_craft(w.world_id, w.uid, 'make_wool_cap', '{}'::jsonb);
   select ql into v_b from item where world_id = w.world_id and holder = 'player'
-    and holder_uid = w.uid and def = 'bronze_lump';
+    and holder_uid = w.uid and def = 'wool_cap';
+  execute v_hands;
   insert into said values ('BENCH|' || coalesce(v_a::text, 'none') || '|' || coalesce(v_b::text, 'none'));
 
   -- 5. And at a mend, where the same number runs the other way.

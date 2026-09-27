@@ -162,6 +162,8 @@ export const STROKE_BY_ID: Record<string, Stroke> = {
   fish: 'water', fill_bucket: 'water', fill_skin: 'water',
   empty_vessel: 'water', pour_into_barrel: 'water', empty_creel: 'water',
   damp_smelter: 'water', damp_kiln: 'water', put_out_oven: 'water', put_out_campfire: 'water',
+  // Hot metal going into it (a Smith's Temper Bath).
+  quench_item: 'water',
   // A fire being got going, or kept going.
   light_oven: 'fire', light_campfire: 'fire', light_smelter: 'fire', light_kiln: 'fire',
   fuel_oven: 'fire', fuel_campfire: 'fire', fuel_smelter: 'fire', fuel_kiln: 'fire',

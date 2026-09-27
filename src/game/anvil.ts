@@ -2,10 +2,10 @@ import { tryGain } from './learn';
 import type { ActionDef, Target } from './actions';
 import { SUBTILES } from './crates';
 import type { Game } from './game';
-import { itemDef, rarityOf, rollRarity, RARITY_WORD } from './items';
+import { itemDef, makersMark, rarityOf, rollRarity, RARITY_WORD } from './items';
 import { matOf, matOfItem, workingQl } from './materials';
 import { metalOfItem } from './melt';
-import { COIN_DIFFICULTY, COIN_METALS, COINS_PER_LUMP, DIE_WEAR, isCasting, METAL_BY_ID, METAL_BY_LUMP, MOULD_BY_MAKES, type MouldDef } from './metal';
+import { COIN_DIFFICULTY, COIN_METALS, COINS_PER_LUMP, DIE_WEAR, isCasting, isMetalStock, METAL_BY_ID, METAL_BY_LUMP, metalOfBar, MOULD_BY_MAKES, type MouldDef } from './metal';
 import type { CraftStock } from './recipes';
 
 /**
@@ -62,20 +62,25 @@ const plural = (name: string, n: number): string => (n > 1 && !name.endsWith('s'
 /**
  * The casting to beat out: the one the player chose, or the first there is
  * when none was. From the same stock a craft spends -- the pack, a bag on
- * your back, a store within `CRAFT_REACH` -- so castings left in a crate
- * beside the anvil are as good as castings carried.
+ * your back, a store within `CRAFT_REACH`, or further for a Smith's Forge
+ * Reach -- so castings left in a crate beside the anvil are as good as
+ * castings carried.
  */
 function castingFor(g: Game, uid?: number): CraftStock | undefined {
-  if (uid === undefined) return g.stockOf(isCasting)[0];
-  const s = g.stockEntry(uid);
+  if (uid === undefined) return g.stockOf(isCasting, g.forgeReach())[0];
+  const s = g.stockEntry(uid, g.forgeReach());
   return s && isCasting(s.item) ? s : undefined;
 }
 
-/** The metal to strike: whichever lump the player chose, from the same stock. */
+/**
+ * The metal to strike: whichever lump the player chose, from the same stock,
+ * or an ingot, which counts as its lumps (a Smith's Ingots) and is broken into
+ * on the island for the one it takes.
+ */
 function lumpFor(g: Game, uid?: number): CraftStock | undefined {
-  if (uid === undefined) return g.stockOf((it) => METAL_BY_LUMP.has(it.id))[0];
-  const s = g.stockEntry(uid);
-  return s && METAL_BY_LUMP.has(s.item.id) ? s : undefined;
+  if (uid === undefined) return g.stockOf((it) => isMetalStock(it.id), g.forgeReach())[0];
+  const s = g.stockEntry(uid, g.forgeReach());
+  return s && isMetalStock(s.item.id) ? s : undefined;
 }
 
 /** What the anvil is worth to beat on: its quality, and how hard its own metal is. */
@@ -89,6 +94,16 @@ export const anvilQl = (a: PlacedAnvil): number => workingQl(a.ql, METAL_BY_ID.g
 export function smithQl(g: Game, def: MouldDef, mouldQl: number, lumpQl: number, anvil: PlacedAnvil): number {
   const skill = g.skills.get(def.skill);
   return Math.max(1, Math.min(100, (g.productQl(def.skill) + mouldQl + lumpQl + anvilQl(anvil)) / 4 + skill / 25));
+}
+
+/**
+ * A roll at the anvil, with a Smith's Sure Hammer: a failure stands only one
+ * time in `fail:` of the job, as `perk_pass` has it on the island. No perk,
+ * no second roll, so the dice fall as they always did for everybody else.
+ */
+function sureHand(g: Game, job: string, ok: boolean): boolean {
+  const fail = g.perk(`fail:${job}`, 1);
+  return ok || (fail < 1 && g.rand() >= fail);
 }
 
 export const ANVIL_ACTIONS: ActionDef[] = [
@@ -150,7 +165,7 @@ export const ANVIL_ACTIONS: ActionDef[] = [
       if (!g.inventory.has('coin_die')) return 'You need a coin die.';
       const lump = lumpFor(g, t.kind === 'anvil' ? t.itemUid : undefined)?.item;
       if (!lump) return 'You have no metal to strike.';
-      if (!COIN_METALS.includes(METAL_BY_LUMP.get(lump.id)?.id ?? '')) return 'Coins are struck from silver or gold.';
+      if (!COIN_METALS.includes(metalOfBar(lump.id)?.id ?? '')) return 'Coins are struck from silver or gold.';
       return null;
     },
     perform: (t, g) => {
@@ -169,7 +184,7 @@ export const ANVIL_ACTIONS: ActionDef[] = [
       if (broke) g.inventory.remove(die.uid, 1);
       g.events.emit('inventory');
       const hard = COIN_DIFFICULTY + matOfItem(lump).difficulty;
-      if (!g.skillCheck('blacksmithing', hard, anvilQl(a), g.mindEase())) {
+      if (!sureHand(g, 'strike_coins', g.skillCheck('blacksmithing', hard, anvilQl(a), g.mindEase()))) {
         g.gainSkill('blacksmithing', tryGain(false, SMITH_GAIN));
         g.logMsg(`The blanks come out smeared and you throw the metal back.${broke ? ' The die is worn through.' : ''}`, 'event');
         return;
@@ -223,20 +238,30 @@ export const ANVIL_ACTIONS: ActionDef[] = [
       if (!stack || !casting || !def) return;
       const metal = metalOfItem(casting);
       const metalWord = (metal?.name ?? casting.extra ?? 'metal').toLowerCase();
-      if (!stack.spend(1)) return;
-      g.events.emit('inventory');
       // The deeper the seam it came out of, the harder it is to beat into shape.
+      // The roll comes before the casting is spent, so that a Smith's Second
+      // Heat has a casting to keep; the island rolls in the same order.
       const hard = def.difficulty + matOf(casting.extra).difficulty;
-      if (!g.skillCheck(def.skill, hard, anvilQl(a), g.mindEase())) {
+      if (!sureHand(g, 'smith', g.skillCheck(def.skill, hard, anvilQl(a), g.mindEase()))) {
+        const kept = g.perk('spare:smith', 0) > 0 && g.rand() < g.perk('spare:smith', 0);
+        if (!kept && !stack.spend(1)) return;
+        g.events.emit('inventory');
         g.gainSkill(def.skill, tryGain(false, SMITH_GAIN));
-        g.logMsg(`The ${itemDef(def.makes).name.toLowerCase()} comes out misshapen and you throw the metal back.`, 'event');
+        g.logMsg(`The ${itemDef(def.makes).name.toLowerCase()} comes out misshapen and ${kept ? 'goes back into the fire: the casting is kept' : 'you throw the metal back'}.`, 'event');
         return;
       }
-      // The casting carries the mould and the metal it was poured from, so it stands for both.
-      const ql = smithQl(g, def, casting.ql, casting.ql, a);
+      if (!stack.spend(1)) return;
+      g.events.emit('inventory');
+      // The casting carries the mould and the metal it was poured from, so it
+      // stands for both. More for a Smith's Toolsmith on a tool's head or blade.
+      const ql = Math.min(100, smithQl(g, def, casting.ql, casting.ql, a) * g.perk(`ql:${def.makes}`, 1));
       g.gainSkill(def.skill, tryGain(true, SMITH_GAIN));
-      const per = def.per ?? 1;
-      const made = g.inventory.add(def.makes, { ql, extra: casting.extra, count: per });
+      // More to a filling for a Smith's Nail Maker, as `count:` has it on the island.
+      const per = g.perk(`count:${def.makes}`, def.per ?? 1);
+      // And what the smith's perks put into it (a Smith's Keen Edge, Mail
+      // Maker, Temper Bath), which goes with it into whatever it is fitted to.
+      const mark = makersMark((k, d) => g.perk(k, d), def.makes);
+      const made = g.inventory.add(def.makes, { ql, extra: casting.extra, count: per, mark });
       const rare = rollRarity(g.rand);
       if (rare) {
         made.rare = rare;

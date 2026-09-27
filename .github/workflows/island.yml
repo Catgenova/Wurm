@@ -1569,6 +1569,19 @@ jobs:
             --outfile=node_modules/.cache/carpenter.mjs --log-level=error
           node node_modules/.cache/carpenter.mjs
 
+      - name: The Smith's perks, each where its rule is
+        run: |
+          # Each of the Smith's eighteen measured on the island with the dice
+          # taken out where they can be: the smelter's glass, mix, melt, mould
+          # and pour; the anvil's hammer, second heat, nails and tool heads; the
+          # marks it beats into a blade, a hauberk and a breastplate and what
+          # each does, carried into a sword whoever fits it; ingots poured and
+          # counted as their lumps; the stores a forge reaches, a pass of
+          # Improve, the queue and a quench; and the browser reading the same.
+          npx esbuild supabase/test/smith.ts --bundle --platform=node --format=esm \
+            --outfile=node_modules/.cache/smith.mjs --log-level=error
+          node node_modules/.cache/smith.mjs
+
       - name: The exact benefit, and where its number comes from
         run: |
           # Text the player reads says what changes and by how much, and where

@@ -1,5 +1,5 @@
 import { GEMS, tradeName, type GemDef } from './gems';
-import { METAL_BY_LUMP, METALS } from './metal';
+import { METAL_BY_INGOT, METAL_BY_LUMP, METALS } from './metal';
 import { TREE_DEFS } from '../world/tiles';
 import { fill } from './words';
 
@@ -135,7 +135,8 @@ export const matOf = (extra: string | undefined): MaterialDef => materialOf(extr
 export function materialOfItem(item: { id: string; extra?: string }): MaterialDef | null {
   const named = materialOf(item.extra);
   if (named) return named;
-  const lump = METAL_BY_LUMP.get(item.id);
+  // A lump says its metal in its name, and so does an ingot (a Smith's Ingots).
+  const lump = METAL_BY_LUMP.get(item.id) ?? METAL_BY_INGOT.get(item.id);
   return lump ? MATERIAL_BY_ID.get(lump.id) ?? null : null;
 }
 
