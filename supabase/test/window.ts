@@ -161,6 +161,50 @@ for (let y = 0; y < SIZE; y++) {
 check('a box lays inside itself and nowhere else', inside === 40 * 40 && spilled === 0,
   `${inside} of ${40 * 40} tiles inside it are the island's, and ${spilled} tiles outside it were written`);
 
+/* ---- Laid into a world that is worked out as it goes -------------------- */
+
+/*
+ * Reported from a plateau raised to 100: none of its tiles could be clicked
+ * on, the cursor lit the slopes behind them or nothing at all, a refresh did
+ * not help, and flattening a corner nearby did. A joining browser works the
+ * island out from its seed a square at a time and lays the island's rows over
+ * that. The rows went into the arrays without the height range hearing of
+ * them, and the cursor searches only as far forward as the range says
+ * anything stands. And a square the rows reached before the generator did was
+ * worked out afterwards, over the top of them.
+ *
+ * Here the seed's ground is nought everywhere, so a square laid over by it
+ * afterwards cannot pass for the island's.
+ */
+const streamed = blankWorld(SIZE, SEED);
+streamed.streamFrom((_x0, _y0, ww, hh) => ({
+  heights: new Int16Array((ww + 1) * (hh + 1)),
+  dirt: new Uint8Array((ww + 1) * (hh + 1)),
+  tiles: new Uint8Array(ww * hh),
+  data: new Uint8Array(ww * hh),
+  rock: new Uint8Array(ww * hh),
+}));
+// The square round the body is worked out before the land comes; the rest is not.
+streamed.ensureBox(0, 0, 10, 10);
+layRows(streamed, win.rows);
+let lowest = Infinity;
+let highest = -Infinity;
+for (const v of replayed.heights) {
+  lowest = Math.min(lowest, v);
+  highest = Math.max(highest, v);
+}
+check('the height range hears of the land laid into it',
+  streamed.minHeight <= lowest && streamed.maxHeight >= highest,
+  `the island runs ${lowest} to ${highest}, the range ${streamed.minHeight} to ${streamed.maxHeight}`);
+let keptLand = 0;
+for (let y = 64; y < SIZE; y++) {
+  for (let x = 64; x < SIZE; x++) {
+    if (streamed.getHeight(x, y) === replayed.getHeight(x, y) && streamed.getTile(x, y) === replayed.getTile(x, y)) keptLand += 1;
+  }
+}
+check('a square first asked for after the land came keeps the island\'s land', keptLand === (SIZE - 64) * (SIZE - 64),
+  `${keptLand} of ${(SIZE - 64) * (SIZE - 64)} tiles`);
+
 /* ---- The seam: the cursor comes before the land ------------------------- */
 
 /*

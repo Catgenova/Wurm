@@ -218,6 +218,60 @@ export class World {
   }
 
   /**
+   * Every square touching a box of tiles the island's own land is about to be
+   * laid over, made ready for it.
+   *
+   * The land read at a join covers far more than the squares worked out round
+   * the body, and it went into the arrays whether or not the squares under it
+   * had been worked out. The first time one of those squares was asked for,
+   * the generator worked it out and laid its own ground over the island's:
+   * a plateau somebody raised came back as the hillside the seed made, and
+   * nothing read that square again, because the land for it had been read.
+   *
+   * So a square the box covers whole is marked worked out and left for the
+   * island's rows, which are all of it, corners, soil and tiles; and one the
+   * box covers only in part is worked out first, so that the island's rows go
+   * over the generator's and not the other way about.
+   */
+  claimBox(x0: number, y0: number, x1: number, y1: number): void {
+    const r = this.ready;
+    if (r === null) return;
+    const cx0 = Math.max(0, (x0 / CHUNK) | 0);
+    const cy0 = Math.max(0, (y0 / CHUNK) | 0);
+    const cx1 = Math.min(this.across - 1, (x1 / CHUNK) | 0);
+    const cy1 = Math.min(this.down - 1, (y1 / CHUNK) | 0);
+    for (let cy = cy0; cy <= cy1; cy++) {
+      for (let cx = cx0; cx <= cx1; cx++) {
+        if (r[cy * this.across + cx] !== 0) continue;
+        const whole = cx * CHUNK >= x0 && cy * CHUNK >= y0
+          && Math.min(this.w, (cx + 1) * CHUNK) - 1 <= x1 && Math.min(this.h, (cy + 1) * CHUNK) - 1 <= y1;
+        if (whole) {
+          r[cy * this.across + cx] = 1;
+          this.grown += 1;
+        } else {
+          this.grow(cx, cy);
+        }
+      }
+    }
+  }
+
+  /**
+   * Ground laid in from outside that the height range has to hear of.
+   *
+   * `grow` and `setHeight` keep the range as they write; the island's rows go
+   * straight into the arrays and did not, so the range stayed at whatever the
+   * generator had made. The cursor finds the tile under it by searching back
+   * from the nearest row of tiles that could stand that high, and the drawing
+   * skips rows the same way: a plateau raised above anything the seed made
+   * was drawn and could not be clicked on, and flattening a corner nearby put
+   * it right until the next time the page was opened.
+   */
+  widenRange(lo: number, hi: number): void {
+    if (lo < this.minHeight) this.minHeight = lo;
+    if (hi > this.maxHeight) this.maxHeight = hi;
+  }
+
+  /**
    * Whether a corner on this square's edge belongs to a square already made.
    *
    * The corner planes are one wider than the tile planes, so every square

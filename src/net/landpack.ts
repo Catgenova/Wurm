@@ -211,7 +211,13 @@ export function layRows(world: World, rows: LandRow[]): number {
   if (!LITTLE_ENDIAN) throw new Error('This machine stores numbers the other way round; the island format is little-endian.');
   const { w, cw } = world;
   const heightBytes = new Uint8Array(world.heights.buffer, world.heights.byteOffset, world.heights.byteLength);
-  let laid = 0;
+  /*
+   * Every row read and checked before any of it is laid: a row the wrong
+   * width stops the lot, rather than leaving half a box on the ground and the
+   * squares under it marked as holding the island's land.
+   */
+  type Read = { y: number; x0: number; h: Uint8Array; d: Uint8Array; t?: Uint8Array; dt?: Uint8Array; r?: Uint8Array };
+  const read: Read[] = [];
   for (const row of rows) {
     const y = row.y;
     if (!Number.isInteger(y) || y < 0 || y > world.h) continue;
@@ -225,8 +231,7 @@ export function layRows(world: World, rows: LandRow[]): number {
     if (h.length !== corners * 2 || corners < 1 || x0 + corners > cw) {
       throw new Error(`row ${y} is the wrong width`);
     }
-    heightBytes.set(h, (y * cw + x0) * 2);
-    world.dirt.set(d, y * cw + x0);
+    const got: Read = { y, x0, h, d };
     if (y < world.h && row.tiles && row.data && row.rock) {
       const t = fromBase64(row.tiles);
       const dt = fromBase64(row.data);
@@ -235,13 +240,59 @@ export function layRows(world: World, rows: LandRow[]): number {
         throw new Error(`row ${y} is the wrong width`);
       }
       for (let i = 0; i < t.length; i++) if (t[i] === GRAVEL) t[i] = TileType.Cobblestone;
-      world.tiles.set(t, y * w + x0);
-      world.data.set(dt, y * w + x0);
-      world.rock.set(r, y * w + x0);
+      got.t = t;
+      got.dt = dt;
+      got.r = r;
     }
-    laid += 1;
+    read.push(got);
   }
-  return laid;
+  if (!read.length) return 0;
+  /*
+   * The squares under it, made ready for it (`World.claimBox`): a box the
+   * rows cover whole — every row of tiles across the same columns, and every
+   * row of corners round them — is the island's to fill. Anything else is
+   * laid over squares worked out first, which costs the generator's time and
+   * is never wrong.
+   */
+  const tileRows = read.filter((g) => g.t);
+  const bx0 = Math.min(...tileRows.map((g) => g.x0));
+  const bx1 = Math.max(...tileRows.map((g) => g.x0 + (g.t?.length ?? 0) - 1));
+  const by0 = Math.min(...tileRows.map((g) => g.y));
+  const by1 = Math.max(...tileRows.map((g) => g.y));
+  const tilesAt = new Map(tileRows.map((g) => [g.y, g]));
+  const cornersAt = new Map(read.map((g) => [g.y, g]));
+  let whole = tileRows.length === by1 - by0 + 1;
+  for (let y = by0; whole && y <= by1 + 1; y++) {
+    const c = cornersAt.get(y);
+    const t = tilesAt.get(y);
+    if (!c || c.x0 > bx0 || c.x0 + c.d.length - 1 < bx1 + 1) whole = false;
+    else if (y <= by1 && (!t || t.x0 !== bx0 || t.x0 + (t.t?.length ?? 0) - 1 !== bx1)) whole = false;
+  }
+  if (whole) {
+    world.claimBox(bx0, by0, bx1, by1);
+  } else {
+    const ys = read.map((g) => g.y);
+    world.ensureBox(Math.min(...read.map((g) => g.x0)), Math.min(...ys),
+      Math.max(...read.map((g) => g.x0 + g.d.length - 1)), Math.max(...ys));
+  }
+  let lo = Infinity;
+  let hi = -Infinity;
+  for (const g of read) {
+    heightBytes.set(g.h, (g.y * cw + g.x0) * 2);
+    world.dirt.set(g.d, g.y * cw + g.x0);
+    for (let i = g.y * cw + g.x0, end = i + g.d.length; i < end; i++) {
+      const v = world.heights[i];
+      if (v < lo) lo = v;
+      if (v > hi) hi = v;
+    }
+    if (g.t && g.dt && g.r) {
+      world.tiles.set(g.t, g.y * w + g.x0);
+      world.data.set(g.dt, g.y * w + g.x0);
+      world.rock.set(g.r, g.y * w + g.x0);
+    }
+  }
+  world.widenRange(lo, hi);
+  return read.length;
 }
 
 /** An empty island of the right shape, for rows to be laid into. */
