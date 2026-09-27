@@ -1312,7 +1312,7 @@ export class UI {
       const material = stock.find((s) => s.item.id === r.inputs[0].item)?.item;
       const reason = def ? recipeReason(r, g, undefined, stock) : 'Not possible.';
       return {
-        label: `${itemDef(r.result).name}${(r.count ?? 1) > 1 ? ` × ${r.count}` : ''}`,
+        label: `${itemDef(r.result).name}${g.madeAGo(r) > 1 ? ` × ${g.madeAGo(r)}` : ''}`,
         note: recipeNeeds(r),
         hint: reason ?? undefined,
         disabled: !!reason || !def || !material,

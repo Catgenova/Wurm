@@ -1,7 +1,7 @@
 import type { ActionDef, Target } from './actions';
 import type { Game } from './game';
 import { JEWEL_PIECES } from './gems';
-import { describeFrom, itemDef, rarityOf, type Item } from './items';
+import { describeFrom, itemDef, markOf, rarityOf, type Item } from './items';
 import { matOf } from './materials';
 import { HARD_HANDS } from './meditation';
 
@@ -230,8 +230,13 @@ export function weaponDamage(g: Game, def: WeaponDef, item: Item | null): number
   const edge = item ? matOf(item.extra).edge * rarityOf(item).boost : 1;
   // The plain path hits harder, and a fury harder again.
   const might = (g.walks('power', 3) ? HARD_HANDS : 1) * g.furyMult();
-  return def.damage * edge * (0.55 + ql / 180) * wear * body * (1 + (skill + fighting) / 260) * might;
+  // And what its maker put into it: a Carpenter's Bowyer's Draw.
+  const made = item ? markOf(item, 'damage') : 1;
+  return def.damage * edge * (0.55 + ql / 180) * wear * body * (1 + (skill + fighting) / 260) * might * made;
 }
+
+/** How far a bow in these hands throws, in tiles: its own range, and further for its maker's mark (a Carpenter's True Bow). */
+export const bowRange = (def: WeaponDef, item: Item | null): number => (def.range ?? 6) * (item ? markOf(item, 'range') : 1);
 
 /**
  * Silver's old virtue: it bites the unnatural. Anything that carries its own

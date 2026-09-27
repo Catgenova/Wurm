@@ -3,7 +3,7 @@ import { SIDE_NAMES, type Side } from './building';
 import { STORE_REACH, SUBTILES } from './crates';
 import { CROP_BY_SEED } from './farming';
 import type { Game } from './game';
-import { describeFrom, describeWith, isWorked, ITEM_DEFS, itemDef, itemName, rarityOf, roomFor, storedLine, type Item } from './items';
+import { describeFrom, describeWith, isWorked, ITEM_DEFS, itemDef, itemName, markOf, rarityOf, roomFor, storedLine, type Item, type Mark } from './items';
 import { fill, numberWord } from './words';
 import { matOf } from './materials';
 
@@ -402,6 +402,8 @@ export interface PlacedFurniture {
   rare?: number;
   /** Who made it, which rare work and better carries. */
   maker?: string;
+  /** What its maker's perks put into it (`Mark`): more room, more pace. */
+  mark?: Mark;
   /** What you have called it, when you have called it anything. */
   name?: string;
   /** What is stored in it, for the pieces that store anything. */
@@ -531,10 +533,12 @@ export const furnitureName = (f: PlacedFurniture): string => {
 export const furnitureUnits = (f: PlacedFurniture): number => f.items.reduce((n, it) => n + it.count, 0);
 /** How much more a counting piece will take. `furnitureRoom` is the general one. */
 export const furnitureSpare = (f: PlacedFurniture): number => Math.max(0, furnitureCapacity(f) - furnitureUnits(f));
-/** What it holds: its build, and how strong a wood it was built out of. */
-export const furnitureCapacity = (f: PlacedFurniture): number => roomFor((furnitureDef(f.kind).capacity ?? furnitureDef(f.kind).hive ?? 0) * matOf(f.material).hold, f);
+/** What it holds: its build, how strong a wood it was built out of, and its maker's mark. */
+export const furnitureCapacity = (f: PlacedFurniture): number =>
+  roomFor((furnitureDef(f.kind).capacity ?? furnitureDef(f.kind).hive ?? 0) * matOf(f.material).hold * markOf(f, 'hold'), f);
 /** Kilograms it holds, for a piece measured that way. Nought for the rest. */
-export const furnitureHeft = (f: PlacedFurniture): number => roomFor((furnitureDef(f.kind).heft ?? 0) * matOf(f.material).hold, f);
+export const furnitureHeft = (f: PlacedFurniture): number =>
+  roomFor((furnitureDef(f.kind).heft ?? 0) * matOf(f.material).hold * markOf(f, 'hold'), f);
 /** Kilograms standing in it, which is the only thing a heft bin counts. */
 export const furnitureKg = (f: PlacedFurniture): number =>
   f.items.reduce((kg, it) => kg + itemDef(it.id).weight * it.count, 0);
@@ -651,7 +655,7 @@ export const teamOf = (f: PlacedFurniture): number[] => f.team ?? [];
 export const liquidCapacity = (f: PlacedFurniture): number => {
   const def = furnitureDef(f.kind);
   // A well is a lined shaft in the ground; only the coopered things vary.
-  return def.liquid ? Math.round(def.liquid * matOf(f.material).hold) : def.well ?? 0;
+  return def.liquid ? Math.round(def.liquid * matOf(f.material).hold * markOf(f, 'hold')) : def.well ?? 0;
 };
 export const holdsLiquid = (f: PlacedFurniture): boolean => liquidCapacity(f) > 0;
 export const litresIn = (f: PlacedFurniture): number => f.litres ?? 0;
@@ -790,6 +794,7 @@ export const FURNITURE_ACTIONS: ActionDef[] = [
       // Everything the thing was keeps standing when the thing is standing.
       if (item.rare) f.rare = item.rare;
       if (item.maker) f.maker = item.maker;
+      if (item.mark) f.mark = item.mark;
       // And whoever is shut in it, who stands where it stands and is seen in it.
       const inside = item.creature !== undefined ? g.creatures.get(item.creature) : undefined;
       if (inside?.mode === 'stored') {
@@ -879,6 +884,7 @@ export const FURNITURE_ACTIONS: ActionDef[] = [
       if (f.dye) back.dye = f.dye;
       if (f.rare) back.rare = f.rare;
       if (f.maker) back.maker = f.maker;
+      if (f.mark) back.mark = f.mark;
       // Whoever is shut in it comes too, and is where you are from now on.
       const inside = f.creature !== undefined ? g.creatures.get(f.creature) : undefined;
       if (inside?.mode === 'stored') {

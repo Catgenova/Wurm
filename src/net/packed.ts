@@ -60,6 +60,7 @@ export function packed(it: ItemRow, island: Aged): Item {
     maker: it.maker ?? undefined,
     piece: it.piece ?? undefined,
     creature: it.creature ?? undefined,
+    mark: it.mark ?? undefined,
   };
 }
 

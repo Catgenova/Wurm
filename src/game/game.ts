@@ -31,7 +31,7 @@ import { Actor, type ActiveAction, type GuestSave } from './actor';
 import { HOST_ID, type PeerId } from '../net/protocol';
 import { Roster } from './roster';
 import { GameEmitter, type LogEntry, type LogKind } from './events';
-import { bagTake, DEED_DECAY, describeWith, foldInto, groundDecayRate, Inventory, ITEM_DEFS, itemName, type Item, rarityOf, rarityStep, itemDef, sameStack, spendOut } from './items';
+import { bagTake, DEED_DECAY, describeWith, foldInto, groundDecayRate, Inventory, ITEM_DEFS, itemName, type Item, markOf, type Mark, rarityOf, rarityStep, itemDef, sameStack, spendOut } from './items';
 import { BASE_SPEED, CARRY_CRAWL, CLIMB_LEARN, CLIMB_LEARN_FROM, CLIMB_LEARN_STEEP, CLIMB_PER_LEVEL, groundStep, MAX_STAND, MAX_STEP, Player, readPlayer, standsOn, writePlayer, SWIM_DEPTH, SWIM_SPEED } from './player';
 import { randomLook, type Look } from './look';
 import { ACTION_FLOOR, ACTION_PACE, world } from './pace';
@@ -302,7 +302,7 @@ export const DAMAGE_MAX = 100;
  */
 export const wearPerUse = (ql: number): number => 0.06 + 3 / (10 + ql);
 /** No team takes a vehicle faster than this, whatever is in the traces. */
-const MAX_VEHICLE_SPEED = 4;
+export const MAX_VEHICLE_SPEED = 4;
 /** How far ahead of the shafts a hitched team walks. */
 const TRACE_LENGTH = 1.6;
 /** How fast a mount works its dinner off under a rider. One in the traces does not. */
@@ -1196,7 +1196,8 @@ export class Game {
     const heft = furnitureHeft(f);
     const cap = furnitureCapacity(f);
     const load = heft ? Math.min(1, furnitureKg(f) / heft) : cap ? Math.min(1, furnitureUnits(f) / cap) : 0;
-    return hullSpeed(def, f.ql, body, weather, load);
+    // And her builder's hand in her, for a hull a Carpenter laid the keel of.
+    return hullSpeed(def, f.ql, body, weather, load) * markOf(f, 'speed');
   }
 
   /**
@@ -3720,8 +3721,15 @@ export class Game {
   duration(def: ActionDef): number {
     const skill = def.skill ? this.skills.get(def.skill) : 50;
     const toolQl = def.tool ? this.toolQl(def.tool) : 0;
-    // And less of it on a settlement whose altar has a bauble for the trade.
-    return goSeconds(def.baseTime, skill, toolQl, this.controlSpeed() * baublePace(this.baubleHere(), def.skill));
+    // And less of it on a settlement whose altar has a bauble for the trade,
+    // and for a perk on the job's own time (a Carpenter's Quick Saw).
+    return goSeconds(def.baseTime, skill, toolQl,
+      this.controlSpeed() * baublePace(this.baubleHere(), def.skill) * this.perk(`time:${def.id}`, 1));
+  }
+
+  /** How many of a thing a go of this recipe makes for you: its own count, or a perk's (a Carpenter's Clean Sawing). */
+  madeAGo(r: { result: string; count?: number }): number {
+    return this.perk(`count:${r.result}`, r.count ?? 1);
   }
 
   /**
@@ -3795,7 +3803,8 @@ export class Game {
   wearTool(id: string, multiplier = 1): void {
     const tool = this.inventory.tool(id);
     if (!tool) return;
-    this.damageItem(tool, wearPerUse(tool.ql) * multiplier);
+    // Less for a perk on the tool (a Carpenter's Saw Care), as `wear_tool` has it.
+    this.damageItem(tool, wearPerUse(tool.ql) * multiplier * this.perk(`wear:${id}`, 1));
   }
 
   /**
@@ -5128,7 +5137,9 @@ export class Game {
     for (const c of team) pull += (this.creatures.species(c).pull ?? PULL_DEFAULT) * ageDef(c, this.time).pull * bloodMul(c, 'haul');
     // A body of light wood rolls a shade easier than one of oak, which is the
     // price oak charges for holding more and lasting longer.
-    return Math.min(MAX_VEHICLE_SPEED, mean * pull * worst * footing(this.teamClimb(f)) * rollEase(f.material));
+    // The builder's mark goes on after the cap, as the island has it, so a
+    // Carpenter's Smooth Axle is its whole share at the top of the range too.
+    return Math.min(MAX_VEHICLE_SPEED, mean * pull * worst * footing(this.teamClimb(f)) * rollEase(f.material)) * markOf(f, 'speed');
   }
 
   /** How full a vehicle is, 0..1. An empty one rolls over anything. */
@@ -5803,6 +5814,8 @@ export class Game {
           // was set down. A chest of oak is a chest of oak standing up.
           material: r.material ?? undefined,
           rare: rarityStep(r.rare),
+          // And its maker's mark, which is how much more it holds or how much faster it goes.
+          mark: r.mark ?? undefined,
           fuel: r.fuel ?? undefined, lit: r.lit ?? undefined, ash: r.ash ?? undefined,
           litres: r.litres ?? undefined, liquid: (r.liquid ?? undefined) as PlacedFurniture['liquid'],
           ferment: r.ferment ?? undefined,
@@ -7066,6 +7079,8 @@ export interface IslandPlaced {
   puller?: string | null;
   /** The wildermon shut in it, for a creature crate; absent from older islands. */
   creature?: number | null;
+  /** What its maker's perks put into it (`Mark`); null for most, and absent from older islands. */
+  mark?: Mark | null;
   /**
    * What is in it, for a piece of furniture near enough to reach into.
    *

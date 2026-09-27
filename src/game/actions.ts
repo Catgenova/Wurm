@@ -45,7 +45,7 @@ import { DEED_RADIUS, rankAtLeast, type Game } from './game';
 import { materialOfItem } from './materials';
 import { boonOf } from './boons';
 import { SKILL_DEFS } from './skills';
-import { itemDef, itemName, itemWeight, rarityOf, bagAdd, bagRefuses, bagSpare, isBag, storedLine } from './items';
+import { itemDef, itemName, itemWeight, markSays, rarityOf, bagAdd, bagRefuses, bagSpare, isBag, storedLine } from './items';
 import { numberWord } from './words';
 import { knackable, RECIPE_ACTIONS } from './recipes';
 
@@ -1829,8 +1829,8 @@ export const ACTIONS: ActionDef[] = [
       const stuff = made ? ` ${made.name}: ${made.note}` : '';
       const r = rarityOf(item);
       const rare = r.name ? ` It is ${r.name}: better at what it is for by a ${r.boost > 1.3 ? 'half' : r.boost > 1.15 ? 'quarter' : 'tenth'}, slower to wear and to rot, and can be bettered ${r.ceiling} past your own skill.` : '';
-      // Rare work is signed.
-      const by = item.maker ? ` Made by ${item.maker}.` : '';
+      // Rare work is signed, and what a maker's perks put into it is said.
+      const by = `${item.maker ? ` Made by ${item.maker}.` : ''}${markSays(item.mark)}`;
       // A knack comes off something somebody made, so the examine line says so
       // for the same things the eating does.
       const skill = knackable(item.id) ? boonOf(g.seed, item.id) : null;

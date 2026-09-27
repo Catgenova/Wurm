@@ -52,14 +52,16 @@ import { FIND_BASE, FIND_CAP, FIND_PER_SKILL, FIND_PER_TOOL } from './archaeolog
 import { BAUBLE_SHARE } from './baubles';
 import { BRIDGES } from './bridges';
 import { BUILD_ACTION_BY_ID, REPOINT_BACK } from './buildActions';
-import { MATERIAL_BY_ID, MATERIALS, MAX_LEVELS, storeySkill, TALL_STOREYS } from './building';
+import { FENCE_TYPES, MATERIAL_BY_ID, MATERIALS, MAX_LEVELS, storeySkill, TALL_STOREYS, wallBill } from './building';
+import { FURNITURE, furnitureDef } from './furniture';
+import { WEAPONS } from './gear';
 import { GEM_ODDS } from './gems';
-import { CARRY_BASE, CARRY_PER_STRENGTH } from './game';
-import { ITEM_DEFS } from './items';
+import { CARRY_BASE, CARRY_PER_STRENGTH, MAX_VEHICLE_SPEED } from './game';
+import { ITEM_DEFS, RARITY_ODDS } from './items';
 import { MAP_ODDS } from './treasure';
 import { RECIPES, type Recipe } from './recipes';
 import { ROAD_TILES, ROCK_VARIANTS, TILE_DEFS } from '../world/tiles';
-import { listed, numberWord, percent, share } from './words';
+import { article, capital, listed, numberWord, percent, share } from './words';
 
 /** What the perks somebody holds come to, key by key. */
 export type Fx = Record<string, number>;
@@ -69,7 +71,7 @@ export type Fx = Record<string, number>;
  * part before the colon. Anything not named here is the larger of the two.
  */
 export const FX_RULE: Record<string, 'mul' | 'add'> = {
-  time: 'mul', ql: 'mul', weight: 'mul', walk: 'mul', fail: 'mul', wear: 'mul',
+  time: 'mul', ql: 'mul', weight: 'mul', walk: 'mul', fail: 'mul', wear: 'mul', need: 'mul', bill: 'mul',
   carry: 'add', jobs: 'add',
 };
 
@@ -387,7 +389,8 @@ const stonesOf = (ids: readonly string[]): string[] => ids.map((id) => itemName(
 /** A bill in words: "24 stone bricks and 12 mortar". */
 const billOf = (bill: ReadonlyArray<readonly [string, number]>): string =>
   listed(bill.map(([id, n]) => `${n} ${n === 1 ? itemName(id) : plural(itemName(id))}`));
-const plural = (name: string): string => (/(s|mortar|ash)$/.test(name) ? name : `${name}s`);
+const plural = (name: string): string =>
+  (/(s|mortar|ash)$/.test(name) ? name : /(kni|shel)fe?$/.test(name) ? name.replace(/fe?$/, 'ves') : `${name}s`);
 /** What each stone stands now, tallest first: "stone brick, marble, ornate silver and ornate gold 10, slate 8". */
 const standsNow = (): string => {
   const by = new Map<number, string[]>();
@@ -511,11 +514,184 @@ const MASON: Seed[] = [
   },
 ];
 
+/*
+ * ---------------------------------------------------------------------------
+ * The Carpenter: the saw, the bench, the hull and the bow.
+ * ---------------------------------------------------------------------------
+ */
+const recipeOf = (id: string): Recipe => {
+  const r = RECIPES.find((x) => x.id === id);
+  if (!r) throw new Error(`no recipe ${id}`);
+  return r;
+};
+/** What a log is sawn or carved into, a go at a time. */
+const SAWN = ['make_planks', 'make_timbers', 'make_shafts'].map(recipeOf);
+const PLANKS = recipeOf('make_planks');
+const TIMBERS = recipeOf('make_timbers');
+const THATCH = recipeOf('make_thatch');
+const BOWSTRING = recipeOf('make_bow_string');
+/** A piece of furniture's recipe, by the piece. */
+const pieceRecipe = (id: string): Recipe => recipeOf(`make_${id}`);
+/** Every piece of furniture made of wood at the bench: its recipe is carpentry or fine carpentry. */
+const JOINERY = FURNITURE.filter((f) => RECIPES.some((r) => r.result === f.id && (r.skill === 'carpentry' || r.skill === 'fine_carpentry')))
+  .map((f) => pieceRecipe(f.id));
+/** The storage Deep Drawers deepen: the chests, cupboards, barrels, bins, shelves, wardrobes and larders. */
+const DRAWERS = ['chest', 'coffer', 'cupboard', 'wardrobe', 'shelves', 'bookshelf', 'larder',
+  'small_barrel', 'barrel', 'large_barrel', 'bulk_bin', 'craft_bin', 'seed_bin', 'sprout_bin'].map(furnitureDef);
+const BOATS = FURNITURE.filter((f) => f.boat);
+/** What goes on wheels behind a team. A hand cart has no pace of its own: it goes at yours. */
+const VEHICLES = FURNITURE.filter((f) => f.vehicle);
+/** Boats, carts and wagons: what Sure Hull steadies the hands on. */
+const HULLS = FURNITURE.filter((f) => f.boat || f.vehicle || f.cart).map((f) => pieceRecipe(f.id));
+/** The bows a bowyer makes: every weapon that throws an arrow and is tillered at the bench. */
+const BOWS = WEAPONS.filter((w) => w.ammo && RECIPES.some((r) => r.result === w.id && r.skill === 'bowyery'));
+/** The tools Saw Care keeps. */
+const SAW_TOOLS = ['saw', 'carving_knife', 'mallet', 'file'];
+/** A fence, a gate or a half wall: the wall types that stand on a border of their own. */
+const FENCES = FENCE_TYPES.map((t) => t.name.toLowerCase());
+const PLANK_WALL = MATERIAL_BY_ID.get('plank')!;
+const piece = (id: string): string => furnitureDef(id).name.toLowerCase();
+const pieces = (ids: readonly string[]): string => listed(ids.map((id) => plural(piece(id))));
+const bill = (b: Record<string, number>): string => listed(Object.entries(b).map(([id, n]) => `${n} ${n === 1 ? itemName(id) : plural(itemName(id))}`));
+/** "6.6", to a tenth. */
+const tenth = (x: number): string => `${Number(x.toFixed(1))}`;
+/** "10%", from a multiplier of 1.1: how much more, without the sign. */
+const by = (m: number): string => percent(m - 1);
+/** The same multiplier on the same family for every one of a list of things. */
+const onEach = (family: string, ids: readonly string[], v: number): Fx => each(ids.map((id) => `${family}:${id}`), v);
+
+const CARPENTER: Seed[] = [
+  {
+    num: 1, name: 'Quick Saw',
+    fx: onEach('time', SAWN.map((r) => r.id), 0.7),
+    note: (fx) => `${listed(SAWN.map((r) => r.label))} take ${less(fx[`time:${SAWN[0].id}`])} less time a go `
+      + `(${range(SAWN.map((r) => r.baseTime))} s base).`,
+  },
+  {
+    num: 2, name: 'Clean Sawing',
+    fx: { 'count:plank': 4 },
+    note: (fx) => `${PLANKS.label} makes ${numberWord(fx['count:plank'])} planks from a log (now ${numberWord(PLANKS.count ?? 1)}).`,
+  },
+  {
+    num: 3, name: 'Heavy Timber',
+    fx: { 'count:timber': 3 },
+    note: (fx) => `${TIMBERS.label} makes ${numberWord(fx['count:timber'])} timbers from a log (now ${numberWord(TIMBERS.count ?? 1)}).`,
+  },
+  {
+    num: 6, name: 'Thatcher',
+    fx: { 'count:thatch': 2 },
+    note: (fx) => `${THATCH.label} makes ${numberWord(fx['count:thatch'])} thatch from ${numberWord(THATCH.inputs[0].count ?? 1)} `
+      + `${itemName(THATCH.inputs[0].item)} (now ${numberWord(THATCH.count ?? 1)}).`,
+  },
+  {
+    num: 10, name: 'Master Joiner',
+    fx: onEach('rare', JOINERY.map((r) => r.id), RARITY_ODDS[0] * 2),
+    note: (fx) => `Furniture you make with carpentry or fine carpentry, all ${JOINERY.length} pieces of it with the boats, carts and `
+      + `wagons, comes out rare ${oneIn(fx[`rare:${JOINERY[0].id}`])} (now ${oneIn(RARITY_ODDS[0])}); supreme and fantastic `
+      + 'follow at their usual odds.',
+  },
+  {
+    num: 12, name: 'Deep Drawers',
+    fx: onEach('hold', DRAWERS.map((f) => f.id), 1.2),
+    note: (fx) => `${capital(pieces(DRAWERS.map((f) => f.id)))} you make hold ${by(fx[`hold:${DRAWERS[0].id}`])} more, `
+      + `before the wood and the rarity: a chest ${Math.round((furnitureDef('chest').capacity ?? 0) * fx['hold:chest'])} `
+      + `(now ${furnitureDef('chest').capacity}) and a barrel ${Math.round((furnitureDef('barrel').liquid ?? 0) * fx['hold:barrel'])} litres `
+      + `(now ${furnitureDef('barrel').liquid}). It stays with the piece whoever has it after.`,
+  },
+  {
+    num: 14, name: 'Shipwright',
+    fx: onEach('time', BOATS.map((f) => `make_${f.id}`), 0.7),
+    note: (fx) => `Building ${either(BOATS.map((f) => `${article(piece(f.id))} ${piece(f.id)}`))} takes `
+      + `${less(fx[`time:make_${BOATS[0].id}`])} less time (${listed(BOATS.map((f) => `${pieceRecipe(f.id).baseTime} s`))} base).`,
+  },
+  {
+    num: 15, name: 'Keel Layer',
+    fx: onEach('speed', BOATS.map((f) => f.id), 1.1),
+    note: (fx) => `Boats you build go ${by(fx[`speed:${BOATS[0].id}`])} faster on the water, whoever is working them: `
+      + `${listed(BOATS.map((f) => `a ${piece(f.id)} ${tenth((f.boat?.speed ?? 0) * fx[`speed:${f.id}`])}`))} tiles a second `
+      + `at a fair effort (now ${listed(BOATS.map((f) => `${f.boat?.speed}`))}). It stays with the boat whoever has it after.`,
+  },
+  {
+    num: 16, name: 'Deep Hold',
+    fx: onEach('hold', BOATS.map((f) => f.id), 1.25),
+    note: (fx) => `Boats you build carry ${by(fx[`hold:${BOATS[0].id}`])} more, before the wood and the rarity: `
+      + `${listed(BOATS.map((f) => `a ${piece(f.id)} ${Math.round((f.capacity ?? 0) * fx[`hold:${f.id}`])}`))} `
+      + `(now ${listed(BOATS.map((f) => `${f.capacity}`))}). It stays with the boat whoever has it after.`,
+  },
+  {
+    num: 18, name: 'Smooth Axle',
+    fx: onEach('speed', VEHICLES.map((f) => f.id), 1.1),
+    note: (fx) => `${capital(pieces(VEHICLES.map((f) => f.id)))} you build go ${by(fx[`speed:${VEHICLES[0].id}`])} faster behind their team, `
+      + `up to ${tenth(MAX_VEHICLE_SPEED * fx[`speed:${VEHICLES[0].id}`])} tiles a second (now at most ${MAX_VEHICLE_SPEED}). `
+      + 'It stays with the vehicle whoever has it after.',
+  },
+  {
+    num: 19, name: 'Sure Hull',
+    fx: onEach('fail', HULLS.map((r) => r.id), 0.5),
+    note: (fx) => `Building a boat, a cart or a wagon fails ${share(fx[`fail:${HULLS[0].id}`])} as often `
+      + `(now a check at difficulty ${range(HULLS.map((r) => r.difficulty ?? 0))}).`,
+  },
+  {
+    num: 25, name: 'Fence Builder',
+    fx: { 'time:fence': 0.5, 'bill:fence': 0.5 },
+    note: (fx) => `${capital(listed(FENCES.map(plural)))} take ${share(fx['time:fence'])} the time a go `
+      + `(${secs(base('build_wall'))} base) and ${share(fx['bill:fence'])} the material, rounded up: a plank fence `
+      + `${bill(wallBill('plank', 'fence', fx['bill:fence']).needed)} (now ${bill(wallBill('plank', 'fence').needed)}). `
+      + 'Hinges and brackets are as they were.',
+  },
+  {
+    num: 26, name: 'Timber Salvage',
+    fx: { 'salvage:build_wood': 0.5 },
+    note: (fx) => `Remove wall gives back ${share(fx['salvage:build_wood'])} the logs or planks laid in a wall of `
+      + `${either(TIMBER)}, rounded down: ${Math.floor(PLANK_WALL.bill[0][1] * fx['salvage:build_wood'])} of a plank wall's `
+      + `${PLANK_WALL.bill[0][1]} planks (now none).`,
+  },
+  {
+    num: 27, name: 'Bridge Wright',
+    fx: {
+      'time:bridge_wood': 0.7, 'time:bridge_rope': 0.7,
+      'span:bridge_wood': BRIDGES.wood.span + 2, 'span:bridge_rope': BRIDGES.rope.span + 2,
+    },
+    note: (fx) => `Work on a ${BRIDGES.wood.name.toLowerCase()} or a ${BRIDGES.rope.name.toLowerCase()} takes `
+      + `${less(fx['time:bridge_wood'])} less time a go (${secs(base('build_bridge'))} base), and they span `
+      + `${fx['span:bridge_wood'] - BRIDGES.wood.span} tiles more: ${fx['span:bridge_wood']} and ${fx['span:bridge_rope']} `
+      + `(now ${BRIDGES.wood.span} and ${BRIDGES.rope.span}).`,
+  },
+  {
+    num: 31, name: "Bowyer's Draw",
+    fx: onEach('damage', BOWS.map((w) => w.id), 1.1),
+    note: (fx) => `Bows you make hit ${by(fx[`damage:${BOWS[0].id}`])} harder: `
+      + `${listed(BOWS.map((w) => `${article(itemName(w.id))} ${itemName(w.id)} ${tenth(w.damage * fx[`damage:${w.id}`])}`))} base damage `
+      + `(now ${listed(BOWS.map((w) => `${w.damage}`))}). It stays with the bow whoever has it after.`,
+  },
+  {
+    num: 32, name: 'True Bow',
+    fx: onEach('range', BOWS.map((w) => w.id), 1.1),
+    note: (fx) => `Bows you make reach ${by(fx[`range:${BOWS[0].id}`])} further: `
+      + `${listed(BOWS.map((w) => `${article(itemName(w.id))} ${itemName(w.id)} ${tenth((w.range ?? 0) * fx[`range:${w.id}`])}`))} tiles `
+      + `(now ${listed(BOWS.map((w) => `${w.range}`))}). It stays with the bow whoever has it after.`,
+  },
+  {
+    num: 37, name: 'String Maker',
+    fx: { [`need:${BOWSTRING.id}`]: 0.5, [`fail:${BOWSTRING.id}`]: 0 },
+    note: (fx) => `${BOWSTRING.label} takes ${Math.max(1, Math.ceil((BOWSTRING.inputs[0].count ?? 1) * fx[`need:${BOWSTRING.id}`]))} `
+      + `${itemName(BOWSTRING.inputs[0].item)} (now ${BOWSTRING.inputs[0].count ?? 1}) and never fails `
+      + `(now a check at difficulty ${BOWSTRING.difficulty}).`,
+  },
+  {
+    num: 45, name: 'Saw Care',
+    fx: onEach('wear', SAW_TOOLS, 0.5),
+    note: (fx) => `${capital(listed(SAW_TOOLS.map((id) => plural(itemName(id)))))} take ${share(fx[`wear:${SAW_TOOLS[0]}`])} the damage `
+      + 'a use, at any quality and of any wood or metal: a go of work at the bench wears the tool it is done with.',
+  },
+];
+
 /** Every trade's perks, in the order they were picked. */
 const SEEDS: Record<string, Seed[]> = {
   terraformer: TERRAFORMER,
   miner: MINER,
   mason: MASON,
+  carpenter: CARPENTER,
 };
 
 const slug = (name: string): string => name.toLowerCase().replace(/[’']/g, '').replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '');
@@ -529,6 +705,7 @@ export const TIERS: Record<string, number[][]> = {
   terraformer: [[10, 17, 25], [9, 14, 23], [15, 12, 26], [32, 29, 27], [33, 34, 44], [5, 6, 20]],
   miner: [[7, 8, 9], [14, 13, 19], [1, 2, 25], [3, 27, 35], [28, 15, 11], [50, 17, 6]],
   mason: [[1, 8, 17], [4, 18, 19], [20, 22, 33], [2, 9, 29], [16, 35, 48], [47, 24, 12]],
+  carpenter: [[1, 37, 45], [3, 6, 14], [15, 26, 31], [16, 19, 32], [2, 18, 25], [10, 12, 27]],
 };
 
 /** Every perk there is, tier by tier, and in each tier by the number it was picked under, as the island lists them. */

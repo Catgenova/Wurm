@@ -17,6 +17,7 @@ import {
   type Bill,
   type Building,
   type Wall,
+  type WallType,
   type FloorKind,
   type MaterialDef,
   workLevel,
@@ -133,6 +134,15 @@ function toHand(g: Game, id: string, mat: MaterialDef | undefined, at: { x: numb
  * back -- the bricks, shards or adobe, not the mortar, which is spent once it
  * has set. The paint goes with the old face.
  */
+/**
+ * The share of its material a wall of this type is planned for: all of it,
+ * or less for a fence type and a Carpenter's Fence Builder (`bill:fence`).
+ * A fence type is one that stands on its own border (`FENCE_TYPES`), wherever
+ * it is planned; the island asks the same of `wall_type_def.standalone`.
+ */
+export const fenceScale = (g: Game, type: WallType): number =>
+  WALL_TYPE_BY_ID.get(type)?.standalone ? g.perk('bill:fence', 1) : 1;
+
 export const REPOINT_BACK = 0.5;
 export const REPOINT_TIME = 30;
 /** What a wall of `mat` is laid in, without its fittings: the bill a Repoint pays. */
@@ -296,7 +306,8 @@ export const BUILD_ACTIONS: ActionDef[] = [
       if (!isTile(t) || !t.side || !t.wallType || !t.material) return;
       const b = buildingOf(g, t);
       if (!b) return;
-      const wall = g.buildings.setWall(b, topLevel(b), t.x, t.y, t.side, t.wallType, t.material);
+      // A fence type stood in a building is still a fence, to a Carpenter's Fence Builder.
+      const wall = g.buildings.setWall(b, topLevel(b), t.x, t.y, t.side, t.wallType, t.material, fenceScale(g, t.wallType));
       const type = WALL_TYPE_BY_ID.get(t.wallType)?.name.toLowerCase() ?? t.wallType;
       g.logMsg(`You plan a ${type} ${material(t.material)?.name.toLowerCase()} wall on the ${SIDE_NAMES[t.side]} side. It needs ${needsText(wall)}.`, 'event');
       g.events.emit('world', t.x, t.y);
@@ -330,7 +341,8 @@ export const BUILD_ACTIONS: ActionDef[] = [
     },
     perform: (t, g) => {
       if (!isTile(t) || !t.side || !t.wallType || !t.material) return;
-      const wall = g.buildings.setFence(t.x, t.y, t.side, t.wallType, t.material);
+      // For less of the material, for a Carpenter's Fence Builder, as `perform_building` has it.
+      const wall = g.buildings.setFence(t.x, t.y, t.side, t.wallType, t.material, fenceScale(g, t.wallType));
       const type = WALL_TYPE_BY_ID.get(t.wallType)?.name.toLowerCase() ?? 'fence';
       g.logMsg(`You mark out a ${material(t.material)?.name.toLowerCase()} ${type} on the ${SIDE_NAMES[t.side]} border. It needs ${needsText(wall)}.`, 'event');
       g.events.emit('world', t.x, t.y);

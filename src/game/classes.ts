@@ -56,7 +56,7 @@ export const CLASS_CHANGE_COST = 500;
  * nobody is ever offered a card with nothing behind it; the rest keep their
  * trees until then.
  */
-export const PERK_CLASSES: ReadonlySet<string> = new Set(['terraformer', 'miner', 'mason']);
+export const PERK_CLASSES: ReadonlySet<string> = new Set(['terraformer', 'miner', 'mason', 'carpenter']);
 
 /**
  * The six tiers, as the skill each one opens at.

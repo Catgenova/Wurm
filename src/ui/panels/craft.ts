@@ -161,7 +161,7 @@ export class CraftPanel {
     row.className = 'craft-row' + (st.ready ? '' : ' locked');
     const name = document.createElement('div');
     name.className = 'craft-name';
-    const count = r.count ?? 1;
+    const count = this.game.madeAGo(r);
     name.textContent = count > 1 ? `${itemDef(r.result).name} × ${count}` : itemDef(r.result).name;
     const meta = document.createElement('small');
     meta.textContent = `${skillName(r.skill)} · ${this.game.duration(ACTION_BY_ID.get(r.id)!).toFixed(0)} s`;

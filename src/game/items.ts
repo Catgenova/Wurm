@@ -609,7 +609,58 @@ export interface Item {
    * keeps the same column.
    */
   creature?: number;
+  /** What its maker's perks put into it as it was made (`Mark`), which stays with it. */
+  mark?: Mark;
 }
+
+/**
+ * What a maker's perks put into a thing as it is made, and which stays with
+ * the thing whoever holds it after: a Carpenter's Deep Drawers make a chest
+ * that holds more, and it goes on holding more after it is sold.
+ *
+ * Each family is a multiplier on one number of the thing's own: `hold` on
+ * what it holds, `speed` on how fast it goes, `damage` on what it hits for
+ * and `range` on how far it reaches. A perk puts one in with the key
+ * `<family>:<what is made>` (`hold:chest`), read off the maker's fold as the
+ * thing comes off the bench. The island keeps the same map in the `mark`
+ * column of an item and of a piece set down, and carries it between the two.
+ */
+export type MarkFamily = 'hold' | 'speed' | 'damage' | 'range';
+export const MARK_FAMILIES: readonly MarkFamily[] = ['hold', 'speed', 'damage', 'range'];
+export type Mark = Partial<Record<MarkFamily, number>>;
+
+/** A thing's mark on one family, which is one where it has none. */
+export const markOf = (thing: { mark?: Mark | null }, family: MarkFamily): number => thing.mark?.[family] ?? 1;
+
+/** The mark a maker's perks put on a thing of this id as it is made, or nothing. */
+export function makersMark(perk: (key: string, otherwise: number) => number, id: string): Mark | undefined {
+  const out: Mark = {};
+  for (const f of MARK_FAMILIES) {
+    const v = perk(`${f}:${id}`, Number.NaN);
+    if (!Number.isNaN(v)) out[f] = v;
+  }
+  return Object.keys(out).length ? out : undefined;
+}
+
+/** What a mark does, said: "It holds 20% more and goes 10% faster." Nothing for no mark. */
+export function markSays(mark: Mark | undefined | null): string {
+  if (!mark) return '';
+  const pct = (m: number): string => `${Math.round((m - 1) * 100)}%`;
+  const said: Record<MarkFamily, (m: number) => string> = {
+    hold: (m) => `holds ${pct(m)} more`,
+    speed: (m) => `goes ${pct(m)} faster`,
+    damage: (m) => `hits ${pct(m)} harder`,
+    range: (m) => `reaches ${pct(m)} further`,
+  };
+  const parts = MARK_FAMILIES.filter((f) => mark[f] !== undefined).map((f) => said[f](mark[f] as number));
+  if (!parts.length) return '';
+  const joined = parts.length < 2 ? parts[0] : `${parts.slice(0, -1).join(', ')} and ${parts[parts.length - 1]}`;
+  return ` Its maker's hand is in it: it ${joined}.`;
+}
+
+/** Whether two things carry the same mark, or both none. */
+export const sameMark = (a: { mark?: Mark }, b: { mark?: Mark }): boolean =>
+  MARK_FAMILIES.every((f) => a.mark?.[f] === b.mark?.[f]);
 
 /**
  * Rarity. Now and again a thing comes off the bench better than the hands
@@ -735,11 +786,15 @@ export function liftRarity(item: { rare?: number }, rand: () => number): number 
   return rand() < rarityChance(step) ? step : null;
 }
 
-/** Roll for rarity on a newly made thing: nothing helps and nothing hurts. */
-export function rollRarity(rand: () => number): number {
+/**
+ * Roll for rarity on a newly made thing. `first` is the chance of the first
+ * step, which a perk may better (a Carpenter's Master Joiner); the steps after
+ * it are rolled at their own odds whatever it is, as `perk_rare` has them.
+ */
+export function rollRarity(rand: () => number, first = RARITY_ODDS[0]): number {
   let step = 0;
   for (const odds of RARITY_ODDS) {
-    if (rand() >= odds) break;
+    if (rand() >= (step === 0 ? first : odds)) break;
     step++;
   }
   return step;
@@ -842,7 +897,7 @@ export function sameStack(a: Item, b: Item): boolean {
   return a.id === b.id && !a.locked && !b.locked && !a.lit && !b.lit
     && a.extra === b.extra && a.rare === b.rare && a.dye === b.dye
     && a.bless === b.bless && a.maker === b.maker && a.piece === b.piece
-    && !!a.issued === !!b.issued && a.charges === b.charges;
+    && !!a.issued === !!b.issued && a.charges === b.charges && sameMark(a, b);
 }
 
 /** Fold one thing into another, both quality and damage by the unit. */

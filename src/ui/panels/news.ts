@@ -430,6 +430,18 @@ export const NEWS: News[] = [
       'Taking up a trade and taking a perk now ask a second time, saying what goes, what it costs and which perks close.',
     ],
   },
+  {
+    n: 34,
+    day: '2026-09-27',
+    lines: () => {
+      const main = (CLASSES.find((c) => c.id === 'carpenter')?.main ?? '').replace(/_/g, ' ');
+      return [
+        `The Carpenter has perks instead of a tree now: ${numberWord(PERK_TIER_AT.length)} tiers of ${numberWord(PERKS_PER_TIER)}, the first with the trade and the others at ${listed(PERK_TIER_AT.slice(1).map(String))} in ${main}. The nodes a Carpenter had bought went with the tree.`,
+        'Some of them go into what a Carpenter makes and stay there: a chest that holds more, a boat or a wagon that goes faster, a bow that hits harder or reaches further, whoever owns it after. Examine a thing to see what its maker put into it.',
+        'On an island the bench now wears its tool with every go, as it always did playing by yourself: saws, carving knives, mallets, files and the rest.',
+      ];
+    },
+  },
 ];
 
 /** The highest entry this browser has shown. */

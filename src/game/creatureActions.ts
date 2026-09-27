@@ -8,7 +8,7 @@ import type { Game } from './game';
 import { furnitureCentre, furnitureName, vehicleOf } from './furniture';
 import { deedJobLine, emptyCrate, letOut, shutIn } from './creaturecrate';
 import { itemDef, itemName } from './items';
-import { BANE_BONUS, banes, hitChance, isBow, WEAPON_BY_ID, weaponDamage, type WeaponDef } from './gear';
+import { BANE_BONUS, banes, bowRange, hitChance, isBow, WEAPON_BY_ID, weaponDamage, type WeaponDef } from './gear';
 import { matOfItem } from './materials';
 
 /**
@@ -482,7 +482,7 @@ export const CREATURE_ACTIONS: ActionDef[] = [
       if (!held || !bow?.ammo) return 'You have no bow in your hands.';
       if (!g.inventory.has(bow.ammo)) return 'You are out of arrows.';
       const d = Math.hypot(c.x - g.player.x, c.y - g.player.y);
-      if (d > (bow.range ?? 6)) return `Too far for a ${itemName(held).toLowerCase()}.`;
+      if (d > bowRange(bow, held)) return `Too far for a ${itemName(held).toLowerCase()}.`;
       if (d < 1.2) return 'It is too close to draw on.';
       return null;
     },
@@ -498,7 +498,7 @@ export const CREATURE_ACTIONS: ActionDef[] = [
       // Picking a target out of the dark at range is the hardest looking there is.
       g.fought(DARK_SHOT);
       // The far end of a bow's range is a far harder shot than the near end.
-      const reach = 1 - (d / (bow.range ?? 6)) * 0.35;
+      const reach = 1 - (d / bowRange(bow, held)) * 0.35;
       const landed = g.rand() <= hitChance(g, bow) * reach * bloodMul(c, 'evade');
       g.gainSkill('fighting', tryGain(landed, SHOT_FIGHT));
       g.gainSkill('archery', tryGain(landed, SHOT_ARCHERY));
@@ -514,7 +514,7 @@ export const CREATURE_ACTIONS: ActionDef[] = [
         g.logMsg(`Your arrow goes home. The ${def.name.toLowerCase()} is down to ${Math.max(0, Math.ceil(c.health))} of ${maxHealth(c, def)}.`, 'fight');
       }
       if (c.health <= 0) return false;
-      return g.inventory.has(bow.ammo) && Math.hypot(c.x - g.player.x, c.y - g.player.y) <= (bow.range ?? 6);
+      return g.inventory.has(bow.ammo) && Math.hypot(c.x - g.player.x, c.y - g.player.y) <= bowRange(bow, held);
     },
   },
   {

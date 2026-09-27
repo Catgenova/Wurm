@@ -1,7 +1,7 @@
 import { tryGain } from './learn';
 import type { ActionDef, Target } from './actions';
 import type { Game } from './game';
-import { describeWith, itemDef, rollRarity, RARITY_WORD, type Item } from './items';
+import { describeWith, itemDef, makersMark, rollRarity, RARITY_ODDS, RARITY_WORD, type Item } from './items';
 import { QL_PER_LOOP } from './belt';
 import { describeGoals } from './journal';
 import { fill, numberWord } from './words';
@@ -640,6 +640,14 @@ export function prospect(r: Recipe, g: Game, stock: readonly CraftStock[] = g.cr
 }
 
 /**
+ * How many of an input a go takes from you: the recipe's own count, or fewer
+ * for a perk on the recipe (a Carpenter's String Maker), and never under one,
+ * as `recipe_need` has it on the island.
+ */
+export const needOf = (g: Game, r: Recipe, i: { count?: number }): number =>
+  Math.max(1, Math.ceil((i.count ?? 1) * g.perk(`need:${r.id}`, 1)));
+
+/**
  * What a recipe needs against what is at hand.
  *
  * `stock` is what is at hand, `g.craftStock()` unless it is handed in: the
@@ -654,7 +662,7 @@ export function recipeStatus(r: Recipe, g: Game, want?: string, stock: readonly 
   const material = chooseMaterial(g, r, undefined, want, stock);
   const inputs = r.inputs.map((i) => ({
     item: i.item,
-    need: i.count ?? 1,
+    need: needOf(g, r, i),
     have: countFor(stock, r, i.item, material),
     carried: countFor(stock, r, i.item, material, true),
   }));
@@ -722,7 +730,7 @@ export function chooseMaterial(g: Game, r: Recipe, preferUid?: number, want?: st
     const clicked = stacks.find((it) => it.uid === preferUid);
     if (clicked) return clicked.extra;
     if (want && stacks.some((it) => it.extra === want)) return want;
-    const need = i.count ?? 1;
+    const need = needOf(g, r, i);
     const held = new Map<string, number>();
     for (const st of stacks) held.set(st.extra as string, (held.get(st.extra as string) ?? 0) + st.count);
     let best: string | undefined;
@@ -746,14 +754,14 @@ export function recipeReason(r: Recipe, g: Game, preferUid?: number, stock: read
   const mat = chooseMaterial(g, r, preferUid, undefined, stock);
   if (r.wood) {
     const i = r.inputs[0];
-    const need = i.count ?? 1;
+    const need = needOf(g, r, i);
     if (countFor(stock, r, i.item, r.wood) < need) return `A ${lower(r.result)} is tillered from ${r.wood.toLowerCase()} and nothing else: ${need} ${plural(i.item, need)} of it.`;
   }
   for (const i of r.inputs) {
-    const need = i.count ?? 1;
+    const need = needOf(g, r, i);
     if (countFor(stock, r, i.item, mat) < need) {
       const of = mat && strictInput(stock, r, i.item) ? ` of ${mat.toLowerCase()}` : '';
-      return `${itemDef(r.result).name} takes ${need} ${plural(i.item, need)}${of}${r.inputs.length > 1 ? ` (${r.inputs.map((x) => `${x.count ?? 1} ${plural(x.item, x.count ?? 1)}`).join(', ')})` : ''}.`;
+      return `${itemDef(r.result).name} takes ${need} ${plural(i.item, need)}${of}${r.inputs.length > 1 ? ` (${r.inputs.map((x) => `${needOf(g, r, x)} ${plural(x.item, needOf(g, r, x))}`).join(', ')})` : ''}.`;
     }
   }
   return null;
@@ -899,7 +907,7 @@ export function recipeAction(r: Recipe): ActionDef {
       const hard = (r.difficulty ?? 0) + matOf(mat).difficulty;
       if (r.difficulty !== undefined && !g.skillCheck(r.skill, hard, toolQl(g), ease)) {
         if (r.consumeOnFail) {
-          for (const i of r.inputs) consumeAcross(stock, i.item, i.count ?? 1, t.uid, mat, strict.get(i.item));
+          for (const i of r.inputs) consumeAcross(stock, i.item, needOf(g, r, i), t.uid, mat, strict.get(i.item));
           // The batch is wasted, not the vessel: you tip the ruin out and keep
           // the bucket.
           for (const [id, n] of r.salvage ?? r.returns ?? []) g.inventory.add(id, { count: n, ql: 20 });
@@ -911,7 +919,7 @@ export function recipeAction(r: Recipe): ActionDef {
         return more(t, g);
       }
       const fromInputs = r.qlFromInputs ? inputQl(stock, r, t.uid, mat) : 0;
-      for (const i of r.inputs) if (!consumeAcross(stock, i.item, i.count ?? 1, t.uid, mat, strict.get(i.item))) return;
+      for (const i of r.inputs) if (!consumeAcross(stock, i.item, needOf(g, r, i), t.uid, mat, strict.get(i.item))) return;
       carryOn(t, g, was, mat);
       /*
        * Two rules, and which one a recipe takes is whether the thing is made
@@ -932,12 +940,18 @@ export function recipeAction(r: Recipe): ActionDef {
        * ceiling is the parts; nothing is finer than what it is made of.
        */
       const ql = r.qlFromInputs ? Math.max(1, Math.min(100, fromInputs * inputKeep(g, r))) : g.productQl(r.skill, toolQl(g) + (oven ? oven.ql * 0.3 : 0));
-      // More, the go a bauble on the trade comes up in the altar of the settlement you work on.
-      const made = g.baubleYield(r.result, r.count ?? 1);
+      // More, the go a bauble on the trade comes up in the altar of the settlement
+      // you work on, and more again for a perk (a Carpenter's Clean Sawing).
+      const made = g.baubleYield(r.result, g.madeAGo(r));
       const item = g.inventory.add(r.result, { count: made, ql, extra: r.extra ?? mat });
+      // What the maker's perks put into it, which stays with it (a Carpenter's
+      // Deep Drawers). Only on a thing made one at a time, as the island has it.
+      const mark = itemDef(r.result).stackable ? undefined : makersMark((k, d) => g.perk(k, d), r.result);
+      if (mark) item.mark = mark;
       // Now and again a thing comes off the bench better than the hands that
-      // made it had any right to produce. Nothing brings it on.
-      const rare = rollRarity(g.rand);
+      // made it had any right to produce. Nothing brings it on but a perk on
+      // the recipe (a Carpenter's Master Joiner).
+      const rare = rollRarity(g.rand, g.perk(`rare:${r.id}`, RARITY_ODDS[0]));
       if (rare) {
         item.rare = rare;
         // Rare work carries its maker's mark.

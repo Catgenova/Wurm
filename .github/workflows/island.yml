@@ -1558,6 +1558,17 @@ jobs:
             --outfile=node_modules/.cache/mason.mjs --log-level=error
           node node_modules/.cache/mason.mjs
 
+      - name: The Carpenter's perks, each where its rule is
+        run: |
+          # Each of the Carpenter's eighteen measured on the island with the
+          # dice taken out where they can be: the saw and the bench, the maker's
+          # mark on a chest, a boat, a cart and a bow and what each does with
+          # it, the bench wearing its tool and Saw Care halving it, fences,
+          # salvage and bridges; and the browser reading the same numbers.
+          npx esbuild supabase/test/carpenter.ts --bundle --platform=node --format=esm \
+            --outfile=node_modules/.cache/carpenter.mjs --log-level=error
+          node node_modules/.cache/carpenter.mjs
+
       - name: The exact benefit, and where its number comes from
         run: |
           # Text the player reads says what changes and by how much, and where

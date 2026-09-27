@@ -412,9 +412,14 @@ export function scaledBill(material: string, factor: number): Bill {
   return { needed, total: { ...needed } };
 }
 
-export const wallBill = (material: string, type: WallType): Bill => {
+/**
+ * What a wall of this type and material takes to build. `scale` is a perk's
+ * share of the material (a Carpenter's Fence Builder), rounded up like the
+ * type's own; the fittings are what they are whatever the wall is of.
+ */
+export const wallBill = (material: string, type: WallType, scale = 1): Bill => {
   const def = WALL_TYPE_BY_ID.get(type);
-  const bill = scaledBill(material, def?.factor ?? 1);
+  const bill = scaledBill(material, (def?.factor ?? 1) * scale);
   // The fittings go on top of the material's bill, whatever the wall is of.
   for (const [item, n] of def?.fittings ?? []) {
     bill.needed[item] = (bill.needed[item] ?? 0) + n;
@@ -521,8 +526,8 @@ export class Buildings {
     return near ?? far;
   }
 
-  setWall(b: Building, level: number, x: number, y: number, side: Side, type: WallType, material: string): Wall {
-    return this.planWall(b.id, level, x, y, side, type, material);
+  setWall(b: Building, level: number, x: number, y: number, side: Side, type: WallType, material: string, scale = 1): Wall {
+    return this.planWall(b.id, level, x, y, side, type, material, scale);
   }
 
   /**
@@ -530,13 +535,13 @@ export class Buildings {
    * does — the border is the thing walls live on — and belongs to no building,
    * which is what building 0 means.
    */
-  setFence(x: number, y: number, side: Side, type: WallType, material: string): Wall {
-    return this.planWall(0, 0, x, y, side, type, material);
+  setFence(x: number, y: number, side: Side, type: WallType, material: string, scale = 1): Wall {
+    return this.planWall(0, 0, x, y, side, type, material, scale);
   }
 
-  private planWall(building: number, level: number, x: number, y: number, side: Side, type: WallType, material: string): Wall {
+  private planWall(building: number, level: number, x: number, y: number, side: Side, type: WallType, material: string, scale = 1): Wall {
     const border = borderOf(x, y, side);
-    const wall: Wall = { building, level, x: border.x, y: border.y, dir: border.dir, type, material, ...wallBill(material, type) };
+    const wall: Wall = { building, level, x: border.x, y: border.y, dir: border.dir, type, material, ...wallBill(material, type, scale) };
     this.walls.set(wallKey(level, border), wall);
     return wall;
   }

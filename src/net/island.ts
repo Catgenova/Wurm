@@ -8,6 +8,7 @@ import { PROJECT, supabase, signIn } from './supabase';
 import type { IslandCreature } from '../game/creatures';
 import { cleanLook, type Look } from '../game/look';
 import type { IslandCrate, IslandGround } from '../game/game';
+import type { Mark } from '../game/items';
 import { AWAY_SLOWER, BODY_EVERY, CHANGE_PAGE, FOG_EVERY, FOUND_MAX, GROUND_EVERY, GROUND_IDLE, GROUND_RANGE, GUIDE_BATCH, GUIDE_EVERY, HEARTBEAT, LAND_ASK, LAND_NEAR, MOBS_EVERY, MOBS_RANGE, RECONCILE_EVERY, REGION, SNAP_GAP } from '../game/keep';
 import type { GuideBook } from '../game/guide';
 import { packFog, unpackFog } from './fogpack';
@@ -254,6 +255,8 @@ export interface ItemRow {
   piece: string | null;
   /** The wildermon shut in it, for a creature crate; null for everything else. */
   creature?: number | null;
+  /** What its maker's perks put into it: a Carpenter's chest that holds more. Null for most things. */
+  mark?: Mark | null;
   /** Alight, for the things that burn, and when it was set going. */
   lit: boolean;
   lit_at: string | null;

@@ -70,6 +70,7 @@ const PAIRS: Array<[string, Partial<Item>, boolean]> = [
   ['a different piece', { piece: 'hatchet_head' }, false],
   ['one of them was issued, not made', { issued: true }, false],
   ['a different number of charges', { charges: 3 }, false],
+  ['what its maker\'s perks put into it', { mark: { hold: 1.2 } }, false],
 ];
 const rows = PAIRS.map(([, diff], i) => ({ i, diff }));
 
@@ -77,6 +78,7 @@ const lit = (v: unknown): string =>
   v === undefined || v === null ? 'null'
     : typeof v === 'string' ? `'${v.replace(/'/g, "''")}'`
     : typeof v === 'boolean' ? (v ? 'true' : 'false')
+    : typeof v === 'object' ? `'${JSON.stringify(v)}'::jsonb`
     : String(v);
 const asRow = (it: Partial<Item> & { id?: string }): string =>
   `(null, null, 'player', null, null, null, ${lit(it.inside ?? null)}, ${lit(it.id ?? base.id)},`
@@ -84,7 +86,7 @@ const asRow = (it: Partial<Item> & { id?: string }): string =>
   + ` ${lit(it.extra ?? null)}, ${lit(it.rare ?? null)}, ${lit(it.dye ?? null)}, ${lit(it.bless ?? null)},`
   + ` ${lit(it.charges ?? null)}, ${lit(it.locked ?? false)}, ${lit(it.issued ?? false)}, now(), null,`
   + ` ${lit(it.lit ?? false)}, null, null, null, ${lit(it.maker ?? null)}, ${lit(it.piece ?? null)},`
-  + ` null, null, null, null, null)::item`;
+  + ` null, null, null, null, null, ${lit(it.mark ?? null)})::item`;
 
 const out = psql(`
 begin;
