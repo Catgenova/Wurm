@@ -268,6 +268,8 @@ create table if not exists rarity_def (
 alter table rarity_def add column if not exists odds real not null default 0;
 alter table rarity_def add column if not exists word text not null default '';
 alter table rarity_def add column if not exists lift text not null default '';
+alter table rarity_def add column if not exists size real not null default 1;
+alter table rarity_def add column if not exists blood real not null default 1;
 create table if not exists dye_def (
   id text primary key, name text not null, word text not null
 );
@@ -2046,9 +2048,9 @@ insert into buryable values (10);
 insert into buryable values (11);
 insert into buryable values (19);
 insert into buryable values (20);
-insert into rarity_def values ('rare', 1, 1.1, 0.8, 5, 0.01, 'Something in the grain runs true and it comes out better than it had any right to be.', 'Something gives under the file, and what was an ordinary thing is not one any more.');
-insert into rarity_def values ('supreme', 2, 1.25, 0.6, 12, 0.1, 'Your hands know what to do before you do, and what they leave is not far off perfect.', 'You go over it once more and it comes back at you: a better thing than the one you started on.');
-insert into rarity_def values ('fantastic', 3, 1.5, 0.35, 25, 0.1, 'For a moment the whole of it is obvious, and what you set down is the finest thing you will ever make.', 'The last stroke lands and the whole of it settles. You will not make its like again.');
+insert into rarity_def values ('rare', 1, 1.1, 0.8, 5, 0.01, 'Something in the grain runs true and it comes out better than it had any right to be.', 'Something gives under the file, and what was an ordinary thing is not one any more.', 1.5, 1.2);
+insert into rarity_def values ('supreme', 2, 1.25, 0.6, 12, 0.1, 'Your hands know what to do before you do, and what they leave is not far off perfect.', 'You go over it once more and it comes back at you: a better thing than the one you started on.', 2, 1.4);
+insert into rarity_def values ('fantastic', 3, 1.5, 0.35, 25, 0.1, 'For a moment the whole of it is obvious, and what you set down is the finest thing you will ever make.', 'The last stroke lands and the whole of it settles. You will not make its like again.', 3, 1.6);
 insert into dye_def values ('woad', 'Woad', 'blue');
 insert into dye_def values ('madder', 'Madder', 'red');
 insert into dye_def values ('scarlet', 'Scarlet', 'scarlet');

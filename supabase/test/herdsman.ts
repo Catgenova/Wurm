@@ -78,9 +78,13 @@ const refused = (a: string, id = 'v_c'): string =>
 const row = (id: string): string => `(select c from creature c where c.world_id = w and c.id = ${id})`;
 const dice = (...xs: number[]): string => `perform pg_temp.dice('${xs.join(',')}')`;
 const nodice = 'perform pg_temp.nodice()';
-/** A creature held still where it was put, fed, and out of anybody's way. */
+/**
+ * A creature held still where it was put, fed, and out of anybody's way; and
+ * ordinary, since one wildermon in a hundred comes into the world rare and
+ * what is measured here is the plain rule.
+ */
 const still = (id: string, set = ''): string =>
-  `update creature set hunger = 1, from_x = to_x, from_y = to_y, leg_at = now(), leg_ends = now()${set.includes('settled_at') ? '' : ', settled_at = now()'}${set}
+  `update creature set hunger = 1, rare = null, from_x = to_x, from_y = to_y, leg_at = now(), leg_ends = now()${set.includes('settled_at') ? '' : ', settled_at = now()'}${set}
      where world_id = w and id = ${id}`;
 const SKILL = 40;
 const BRUSH_QL = 50;

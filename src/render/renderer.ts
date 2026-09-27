@@ -59,6 +59,7 @@ import { FURNITURE_BY_ID, rackDeck, rackSpots } from '../game/furniture';
 import { cropDef } from '../game/farming';
 import { crateCentre, crateKindOfItem, subtileOf, SUBTILES } from '../game/crates';
 import { maxHealth, SPECIES, type Creature } from '../game/creatures';
+import { rarityOf } from '../game/items';
 import { CREST_ALPHA, FOAM_WIDTH, foamAlpha, LONG_WAVE, SHORT_WAVE, SWELL_SPEED, swellAt, swellShow, TROUGH_ALPHA, WATER_LIT, WATER_PALETTE, waterLevel } from './water';
 import { Wakes } from './wake';
 import { Dust } from './dust';
@@ -2203,6 +2204,8 @@ export class Renderer {
          */
         const turned = this.facingOnScreen(cr.dirX, cr.dirY, this.beastFacing.get(cr.id));
         this.beastFacing.set(cr.id, turned);
+        // Its age, and how rare it came into the world: a fantastic one stands three times the height of its kind.
+        const big = ageDef(cr, this.game.time).scale * rarityOf(cr).size;
         const hit = this.flashOf(cr.attackedAt);
         this.paint(ctx, zoom, hit > 0 ? 'flash' : hovering ? 'hover' : 'none', hit * 0.92, ent.sx, ent.sy, (g, px, py) =>
           drawCreature(g, px, py, zoom, {
@@ -2214,15 +2217,18 @@ export class Renderer {
             colors: def.variants[cr.variant] ?? def.variants[0],
             health: cr.health / maxHealth(cr, def),
             fleece: cr.fleece,
-            scale: ageDef(cr, this.game.time).scale,
+            scale: big,
             label: cr.mode === 'wild' ? undefined : cr.name,
             id: cr.id,
             graze: cr.state === 'forage',
+            rare: cr.rare,
           }),
         );
-        // As tall as it is drawn, for a kind that is a model: a big one is clicked by its head as well as its feet.
-        const tall = Math.max(22, (wildermonTop(def.id) ?? 0) * ageDef(cr, this.game.time).scale);
-        this.creatureHits.push({ x: ent.x, y: ent.y, left: ent.sx - 10 * zoom, top: ent.sy - tall * zoom, w: 20 * zoom, h: (tall + 2) * zoom, creature: cr.id });
+        // As tall and as wide as it is drawn: a big one, or a rare one, is clicked by its head as well as its feet.
+        const size = rarityOf(cr).size;
+        const tall = Math.max(22 * size, (wildermonTop(def.id) ?? 0) * big);
+        const wide = 10 * size;
+        this.creatureHits.push({ x: ent.x, y: ent.y, left: ent.sx - wide * zoom, top: ent.sy - tall * zoom, w: 2 * wide * zoom, h: (tall + 2) * zoom, creature: cr.id });
         continue;
       }
       // The layers of a hull in front of somebody on her deck; see `takeAboard`.
@@ -2263,6 +2269,7 @@ export class Renderer {
               fleece: inside.fleece,
               scale: ageDef(inside, this.game.time).scale * CRATE_SCALE,
               id: inside.id,
+              rare: inside.rare,
             });
             drawFurniture(g, px, py, zoom, piece.kind, false, tint, 1, view, piece.material);
           });

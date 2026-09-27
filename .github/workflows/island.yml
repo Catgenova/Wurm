@@ -278,6 +278,17 @@ jobs:
           npx esbuild supabase/test/yours.ts --bundle --platform=node --format=esm \
             --outfile=node_modules/.cache/yours.mjs --log-level=error
           node node_modules/.cache/yours.mjs
+      - name: A wildermon can come into the world rare
+        run: |
+          # Asked for: a wildermon rolls rarity at a made thing's odds, and a
+          # rare one is 1.5x the size with 1.2x the stats and better odds of
+          # good traits; supreme 2x and 1.4x; fantastic 3x and 1.6x; and the
+          # whole beast shimmers like rare gear. Both sides roll it, keep it,
+          # multiply every channel of its blood by it the same way, and the
+          # browser draws it that much bigger and says what it is worth.
+          npx esbuild supabase/test/rarebeast.ts --bundle --platform=node --format=esm \
+            --outfile=node_modules/.cache/rarebeast.mjs --log-level=error
+          node node_modules/.cache/rarebeast.mjs
       - name: A rack takes eight crates and says which spots are full
         run: |
           # Reported as no way to add crates to a crate shelf. The rules knew

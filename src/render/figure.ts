@@ -5474,6 +5474,99 @@ function fourPoint(g: CanvasRenderingContext2D, r: number, waist: number): void 
   g.closePath();
 }
 
+/** Two canvases the shine on a picture is worked on, kept between frames: the picture glazed, and the light laid over it. */
+let shineWork: [HTMLCanvasElement, HTMLCanvasElement] | null = null;
+
+/**
+ * A picture of something rare laid on the screen shining as a rare thing worn
+ * does (`shineOn`): glazed toward its rarity's hue, the glint crossing it the
+ * long way, and a supreme or fantastic one's breath and a fantastic one's
+ * stars -- the same light, the same colours and the same timing, laid through
+ * the picture's own ink rather than through a part's facets. For what is drawn
+ * as a picture and not as parts: a wildermon still drawn by hand.
+ *
+ * The picture is the top left `W` by `H` of `pic`, drawn at `x`, `y`, `w` by
+ * `h` on the screen, as `drawImage` would; `seed` sets it apart from anything
+ * else of its rarity, so two rare ones side by side do not glint in step.
+ */
+export function shineOver(ctx: CanvasRenderingContext2D, pic: HTMLCanvasElement, W: number, H: number, x: number, y: number, w: number, h: number, rare: number, seed: number, now: number): void {
+  const look = GLINT[rare];
+  const how = RARE_GLAZE[rare];
+  if (!look || !how || W < 1 || H < 1) {
+    ctx.drawImage(pic, 0, 0, W, H, x, y, w, h);
+    return;
+  }
+  if (!shineWork) shineWork = [document.createElement('canvas'), document.createElement('canvas')];
+  const [glazedC, lightC] = shineWork;
+  for (const c of shineWork) if (c.width < W || c.height < H) { c.width = Math.max(c.width, W); c.height = Math.max(c.height, H); }
+  const gz = glazedC.getContext('2d') as CanvasRenderingContext2D;
+  const lt = lightC.getContext('2d') as CanvasRenderingContext2D;
+  const c = rarityRgb(rare), deep = deepened(c), tone = tamed(mixRGB(deep, c, 0.5), SHINE_SAT), hue = saturated(c);
+  // Glazed toward its rarity's hue as far as a rare piece is in shadow, keeping how light or dark each part of it is: a picture
+  // has no facets to tell its light from its shade by, and a blend takes all of the glaze's colour where a part's glaze takes a
+  // share of it, so the glaze a part keeps for its darkest facets is what a picture takes all over.
+  gz.setTransform(1, 0, 0, 1, 0, 0);
+  gz.globalCompositeOperation = 'source-over';
+  gz.clearRect(0, 0, W, H);
+  gz.drawImage(pic, 0, 0, W, H, 0, 0, W, H);
+  gz.globalCompositeOperation = 'color';
+  gz.fillStyle = rgba(fromHsv(hsvOf(hue)[0], GLAZE_SAT[rare], 1), how[0]);
+  gz.fillRect(0, 0, W, H);
+  gz.globalCompositeOperation = 'destination-in';
+  gz.drawImage(pic, 0, 0, W, H, 0, 0, W, H);
+  // Its light: the breath, and the glint crossing it the long way, down the screen and to the right, and gone for the rest of the cycle.
+  lt.setTransform(1, 0, 0, 1, 0, 0);
+  lt.globalCompositeOperation = 'source-over';
+  lt.clearRect(0, 0, W, H);
+  const breath = 0.5 + 0.5 * Math.sin((now * TAU) / BREATH + seed);
+  if (look.glow) {
+    lt.fillStyle = rgba(tamed(c, SHINE_SAT), look.glow * breath);
+    lt.fillRect(0, 0, W, H);
+  }
+  const t = ((((now + seed * 0.13) / look.period) % 1) + 1) % 1;
+  if (t < look.sweep) {
+    const u = t / look.sweep, at = 0.08 + u * 0.84, hw = look.band / 2;
+    const grad = lt.createLinearGradient(-W * 0.25, -H * 0.1, W * 1.25, H * 0.35);
+    const lit = tamed(mixRGB(tone, [255, 252, 244], look.white * 0.6), SHINE_SAT);
+    const mid = mixRGB([255, 252, 244], tone, 1 - look.white);
+    grad.addColorStop(Math.max(0, at - hw), rgba(lit, 0));
+    grad.addColorStop(Math.max(0, at - hw * 0.3), rgba(lit, look.core * 0.45));
+    grad.addColorStop(at, rgba(mid, look.core * 0.85));
+    grad.addColorStop(Math.min(1, at + hw * 0.3), rgba(lit, look.core * 0.45));
+    grad.addColorStop(Math.min(1, at + hw), rgba(lit, 0));
+    lt.fillStyle = grad;
+    lt.fillRect(0, 0, W, H);
+  }
+  lt.globalCompositeOperation = 'destination-in';
+  lt.drawImage(pic, 0, 0, W, H, 0, 0, W, H);
+  gz.globalCompositeOperation = 'lighter';
+  gz.drawImage(lightC, 0, 0, W, H, 0, 0, W, H);
+  gz.globalCompositeOperation = 'source-over';
+  ctx.drawImage(glazedC, 0, 0, W, H, x, y, w, h);
+  // A fantastic one's stars, each opening on a spot of it and closing again, somewhere new each time round: spots near the middle
+  // of the picture, where a body is, rather than out at its edges where there may be nothing.
+  for (let k = 0; k < look.stars; k++) {
+    const cyc = (now + seed * 0.13) / look.period + k / look.stars;
+    const v = ((cyc % 1) + 1) % 1;
+    if (v > 0.4) continue;
+    const n = Math.floor(cyc) * 7919 + k * 104729 + Math.round(seed * 31);
+    const fx = 0.25 + 0.5 * (((n * 0.6180339887) % 1 + 1) % 1), fy = 0.3 + 0.45 * (((n * 0.7548776662) % 1 + 1) % 1);
+    const life = Math.sin((v / 0.4) * Math.PI);
+    const r = Math.max(2, Math.min(4, Math.max(w, h) * 0.06)) * (0.55 + life * 0.45);
+    ctx.save();
+    ctx.translate(x + fx * w, y + fy * h);
+    ctx.rotate(now * 0.9 + k);
+    ctx.globalCompositeOperation = 'screen';
+    ctx.fillStyle = rgba(tamed(deep, SHINE_SAT + 0.1), 0.85 * life);
+    fourPoint(ctx, r, r * 0.22);
+    ctx.fill();
+    ctx.fillStyle = rgba([255, 250, 236], 0.95 * life);
+    fourPoint(ctx, r * 0.62, r * 0.14);
+    ctx.fill();
+    ctx.restore();
+  }
+}
+
 /**
  * Put the parts on the screen. Each is sorted into place by how near its
  * middle is along the ground -- which is what puts the near arm in front of
@@ -5650,7 +5743,8 @@ export function render(g: CanvasRenderingContext2D, parts: Part[], pal: Palette,
   const inks: Partial<Record<Mat, string>> = {};
   // A piece of gear is in colours of its own, and inked in a dark shade of each of them.
   // A rare piece in its colours glazed toward its rarity's hue, and inked in a dark of them: its rim is its rarity's colour.
-  const palOf = (l: Laid): Palette => (l.part.rare && l.part.pal ? rarePalette(l.part.pal, l.part.rare) : l.part.pal ?? pal);
+  // A rare piece is glazed over its own colours, or over the body's for a part that has none of its own: a rare wildermon's.
+  const palOf = (l: Laid): Palette => (l.part.rare ? rarePalette(l.part.pal ?? pal, l.part.rare) : l.part.pal ?? pal);
   const partInks = new Map<Palette, Partial<Record<Mat, string>>>();
   const airyInks: Partial<Record<Mat, string>> = {};
   const inkIn = (l: Laid, m: Mat): string => {

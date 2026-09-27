@@ -9,6 +9,7 @@ import {
   growsAt,
   maxHealth,
   pedigreeLine,
+  rarityLine,
   SEX_NAMES,
   SPECIES,
   STANCE_NAMES,
@@ -57,6 +58,7 @@ export function creatureLines(g: Game, c: Creature): string[] {
 
   if (c.mode === 'wild') {
     lines.push(`Wild ${def.name} · ${age}${growing > 0 ? `, grown in ${clockLeft(growing)}` : ''}`);
+    if (c.rare) lines.push(rarityLine(c));
     lines.push(`Eats ${baitHint(c)}`);
     const taming = g.skills.get('taming');
     if (taming < def.tameLevel) lines.push(`Taming ${def.tameLevel} to try · you have ${taming.toFixed(1)}`);
@@ -69,6 +71,7 @@ export function creatureLines(g: Game, c: Creature): string[] {
 
   // One of your own: name, what it is, and how far along it is.
   lines.push(`${c.name} · ${SEX_NAMES[c.sex]} ${def.name} · ${age}${growing > 0 ? `, grown in ${clockLeft(growing)}` : ''} · Lv ${creatureLevel(c)}`);
+  if (c.rare) lines.push(rarityLine(c));
   const max = maxHealth(c, def);
   lines.push(`Health ${Math.ceil(c.health)}/${max} ${bar(c.health / max)}`);
   lines.push(`Fed ${pct(c.hunger)}% ${bar(c.hunger)} · care ${pct(c.care)}%, ${careWord(c.care)}`);

@@ -257,22 +257,34 @@ const holds = (taken: string[], id: string): boolean => taken.some((t) => family
  * common one, and the three worth having lifted steeply.
  */
 export const HUSBANDRY_LIFT: Record<TraitTier, number> = { common: -0.35, rare: 1.5, supreme: 3, fantastic: 5 };
-/** The table a keeper of this much husbandry rolls against. Skill of nought is `WILD_ODDS` itself. */
-export function husbandryOdds(husbandry = 0): Record<TraitTier, number> {
-  const lift = Math.max(0, Math.min(100, husbandry)) / 100;
+/**
+ * The table a keeper of this much husbandry rolls against. Skill of nought is
+ * `WILD_ODDS` itself. A wildermon that came into the world rare rolls its own
+ * blood on the table lifted as far again for each step of its rarity -- a
+ * rare one as if a hundred husbandry stood behind it, a fantastic one three
+ * hundred -- and a row lifted below nothing is not rolled at all: a fantastic
+ * one has no common blood in it.
+ */
+export function husbandryOdds(husbandry = 0, rare = 0): Record<TraitTier, number> {
+  const lift = Math.max(0, Math.min(100, husbandry)) / 100 + Math.max(0, rare);
   const odds = {} as Record<TraitTier, number>;
-  for (const t of TIERS) odds[t] = WILD_ODDS[t] * (1 + lift * HUSBANDRY_LIFT[t]);
+  for (const t of TIERS) odds[t] = WILD_ODDS[t] * Math.max(0, 1 + lift * HUSBANDRY_LIFT[t]);
   return odds;
 }
+
+/** How much of what is rolled on a table comes out better than common: 14% of the wild table. */
+export const betterThanCommon = (odds: Record<TraitTier, number>): number =>
+  1 - odds.common / TIERS.reduce((n, t) => n + odds[t], 0);
 
 /**
  * One fresh trait out of the wild, avoiding what is already there. Husbandry
  * tilts the table: a keeper who knows what they are looking at finds better
- * blood in the wild as well as breeding it. A share of what comes up is
- * fighting blood, and that is two rolls: the name, and then its own grade.
+ * blood in the wild as well as breeding it; and so does a rare wildermon's own
+ * rarity (`husbandryOdds`). A share of what comes up is fighting blood, and
+ * that is two rolls: the name, and then its own grade.
  */
-export function rollTrait(rand: () => number, taken: string[] = [], husbandry = 0): string | null {
-  const odds = husbandryOdds(husbandry);
+export function rollTrait(rand: () => number, taken: string[] = [], husbandry = 0, rare = 0): string | null {
+  const odds = husbandryOdds(husbandry, rare);
   for (let i = 0; i < 12; i++) {
     const id = rand() < FIGHT_SHARE
       ? gradeId(pick(FIGHTING, rand).id, rollTier(odds, rand))
@@ -283,11 +295,11 @@ export function rollTrait(rand: () => number, taken: string[] = [], husbandry = 
   return rest.length ? pick(rest, rand).id : null;
 }
 
-/** Three traits for something born in the wild. */
-export function rollTraits(rand: () => number, husbandry = 0): string[] {
+/** Three traits for something born in the wild, as rare as it came (a step, nought to three). */
+export function rollTraits(rand: () => number, husbandry = 0, rare = 0): string[] {
   const out: string[] = [];
   for (let i = 0; i < TRAIT_SLOTS; i++) {
-    const id = rollTrait(rand, out, husbandry);
+    const id = rollTrait(rand, out, husbandry, rare);
     if (id) out.push(id);
   }
   return out;

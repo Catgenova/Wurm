@@ -2112,6 +2112,7 @@ kbd {
 .trait-chip.trait-unread { color: #6d7a72; border-style: dashed; font-style: italic; }
 /* A bred one's dam and sire, over the traits, and on each trait where it came from. */
 .pal-pedigree { margin: 4px 0 0; color: var(--ui-dim); font-size: 11px; }
+.pal-rarity { margin: 2px 0 4px; font-size: 11px; font-weight: 600; }
 .trait-from { font-size: 10px; color: #b8b09a; font-style: italic; }
 
 /* What a trait is worth, printed beside its name rather than hidden in a hover. */

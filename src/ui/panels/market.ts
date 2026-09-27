@@ -1,6 +1,6 @@
 import { LETTER_MAX, type Deal, type Good, type Island, type Occupant, type Order, type Parcel, type Stall } from '../../net/island';
 import type { Game } from '../../game/game';
-import { billWords, ITEM_DEFS, itemName, type Item } from '../../game/items';
+import { billWords, ITEM_DEFS, itemName, RARITIES, type Item } from '../../game/items';
 import { furnitureDef } from '../../game/furniture';
 import { SPECIES } from '../../game/creatures';
 import { priceWords, purse } from '../../game/money';
@@ -483,7 +483,7 @@ export class MarketPanel {
       });
       const name = document.createElement('span');
       const occupant = it.creature === undefined ? undefined : this.game.creatures.get(it.creature);
-      const named = occupant ? `${itemName(it)} — ${occupant.name}, ${speciesName(occupant.species)}` : itemName(it);
+      const named = occupant ? `${itemName(it)} — ${occupant.name}, ${occupant.rare ? `${RARITIES[occupant.rare].name} ` : ''}${speciesName(occupant.species)}` : itemName(it);
       name.textContent = it.count > 1 ? `${named} (${it.count})` : named;
       label.append(box, name);
       list.append(label);
@@ -567,7 +567,7 @@ const PICK_SHOWN = 40;
 /** A thing in a deal or in the post, named the way the pack names it, and a crate with who is in it. */
 const nameOf = (t: { def: string; extra: string | null; ql: number; count: number; creature?: Occupant | null }): string => {
   const named = itemName({ uid: 0, id: t.def, extra: t.extra ?? undefined, ql: t.ql, count: t.count, dmg: 0 } as Item);
-  return t.creature ? `${named} — ${t.creature.name}, ${speciesName(t.creature.species)}` : named;
+  return t.creature ? `${named} — ${t.creature.name}, ${t.creature.rare ? `${t.creature.rare} ` : ''}${speciesName(t.creature.species)}` : named;
 };
 /** A species as a sentence names it. */
 const speciesName = (id: string): string => (SPECIES[id]?.name ?? id).toLowerCase();

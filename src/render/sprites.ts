@@ -1,7 +1,7 @@
 import { mulberry32 } from '../world/noise';
 import type { Look } from '../game/look';
 import { emotePose } from '../game/emotes';
-import { drawBust, drawFigure, type FigurePose } from './figure';
+import { drawBust, drawFigure, shineOver, type FigurePose } from './figure';
 import { BUSH_DEFS, TREE_AGES, TREE_DEFS } from '../world/tiles';
 import { drawWildermon, drawWildermonPortrait, modelled, wildermonTop } from './wildermon';
 
@@ -1987,6 +1987,12 @@ export interface CreaturePose {
   id?: number;
   /** Head down at the ground, at whatever it forages. */
   graze?: boolean;
+  /**
+   * How rare it came into the world, a step (`RARITIES`): it shines as a rare
+   * thing worn does. How much bigger that makes it is the caller's to put in
+   * `scale`, so a rare one in a crate is drawn the crate's size.
+   */
+  rare?: number;
 }
 
 /**
@@ -2171,6 +2177,14 @@ export function bodyFrame(ctx: CanvasRenderingContext2D, sx: number, sy: number,
 }
 
 /**
+ * Set while a rare body is drawn again for its shine (`drawRareBody`), so it
+ * comes without the shadow under it: the plain drawing beneath has laid that
+ * already, and a shadow glazed and lit along with the body is a coloured pane
+ * on the grass.
+ */
+let bareBody = false;
+
+/**
  * Run a drawing flat on the ground, out of the lean the body is drawn with.
  *
  * A body pointed into the picture has its far end higher up the screen, and
@@ -2180,6 +2194,7 @@ export function bodyFrame(ctx: CanvasRenderingContext2D, sx: number, sy: number,
  * on a long diagonal smear.
  */
 export function onGround(ctx: CanvasRenderingContext2D, pose: CreaturePose, draw: () => void): void {
+  if (bareBody) return;
   const { lean } = beastTurn(pose.facing);
   /*
    * And back down, if it is running.
@@ -2430,15 +2445,54 @@ export function drawCreature(ctx: CanvasRenderingContext2D, sx: number, sy: numb
   // A kind that is a model now is drawn as one; the rest as they always were.
   if (modelled(pose.species)) {
     drawWildermon(ctx, sx, sy, zoom, pose.species as string, pose.colors, {
-      id: pose.id, facing: pose.facing, phase: pose.phase, moving: pose.moving, gait: pose.gait, fleece: pose.fleece, graze: pose.graze,
+      id: pose.id, facing: pose.facing, phase: pose.phase, moving: pose.moving, gait: pose.gait, fleece: pose.fleece, graze: pose.graze, rare: pose.rare,
     });
     drawCreatureOverlay(ctx, sx, sy, zoom, pose, wildermonTop(pose.species as string));
     return;
   }
   const kept = standingSprite(pose);
-  if (kept) ctx.drawImage(kept.canvas, sx - kept.ax * zoom, sy - kept.ay * zoom, kept.w * zoom, kept.h * zoom);
+  if (pose.rare) drawRareBody(ctx, sx, sy, zoom, pose, kept);
+  else if (kept) ctx.drawImage(kept.canvas, sx - kept.ax * zoom, sy - kept.ay * zoom, kept.w * zoom, kept.h * zoom);
   else drawBody(ctx, sx, sy, zoom, pose);
   drawCreatureOverlay(ctx, sx, sy, zoom, pose);
+}
+
+/** The canvas a rare body drawn by hand is laid on before its shine, kept between frames. */
+let rareCanvas: HTMLCanvasElement | null = null;
+
+/**
+ * A rare one still drawn by hand, shining as a rare thing worn does
+ * (`shineOver` in `./figure`). Drawn plain first, shadow and all, and then its
+ * body again without the shadow on a canvas of its own, the size its standing
+ * picture takes and a quarter again all round for a stride, and that laid over
+ * it glazed and lit.
+ */
+function drawRareBody(ctx: CanvasRenderingContext2D, sx: number, sy: number, zoom: number, pose: CreaturePose, kept: Sprite | null): void {
+  if (kept) ctx.drawImage(kept.canvas, sx - kept.ax * zoom, sy - kept.ay * zoom, kept.w * zoom, kept.h * zoom);
+  else drawBody(ctx, sx, sy, zoom, pose);
+  const box = kept ?? standingSprite({ ...pose, moving: false, gait: 0 });
+  if (!box) return;
+  const t = ctx.getTransform();
+  const dev = Math.hypot(t.a, t.b) || 1;
+  const mx = box.w * 0.25, my = box.h * 0.25;
+  const w = (box.w + 2 * mx) * zoom, h = (box.h + 2 * my) * zoom;
+  const W = Math.max(1, Math.ceil(w * dev)), H = Math.max(1, Math.ceil(h * dev));
+  rareCanvas ??= document.createElement('canvas');
+  if (rareCanvas.width < W || rareCanvas.height < H) {
+    rareCanvas.width = Math.max(rareCanvas.width, W);
+    rareCanvas.height = Math.max(rareCanvas.height, H);
+  }
+  const g = rareCanvas.getContext('2d') as CanvasRenderingContext2D;
+  g.setTransform(1, 0, 0, 1, 0, 0);
+  g.clearRect(0, 0, W, H);
+  g.setTransform(dev, 0, 0, dev, 0, 0);
+  bareBody = true;
+  try {
+    drawBody(g, (mx + box.ax) * zoom, (my + box.ay) * zoom, zoom, pose);
+  } finally {
+    bareBody = false;
+  }
+  shineOver(ctx, rareCanvas, W, H, sx - (mx + box.ax) * zoom, sy - (my + box.ay) * zoom, w, h, pose.rare ?? 0, (pose.id ?? 0) % 97, performance.now() / 1000);
 }
 
 /** One body, drawn out of paths, with its feet at (sx, sy). */
@@ -4287,10 +4341,13 @@ function drawVespBody(ctx: CanvasRenderingContext2D, sx: number, sy: number, zoo
   ctx.translate(sx, sy);
   ctx.scale(zoom, zoom);
   const [band, dark] = pose.colors;
-  ctx.fillStyle = 'rgba(0,0,0,0.16)';
-  ctx.beginPath();
-  ctx.ellipse(0, 1, 8, 3.2, 0, 0, TAU);
-  ctx.fill();
+  // Its shadow, which a cloud casts flat without the lean of a body (`onGround`), and not again under its shine.
+  if (!bareBody) {
+    ctx.fillStyle = 'rgba(0,0,0,0.16)';
+    ctx.beginPath();
+    ctx.ellipse(0, 1, 8, 3.2, 0, 0, TAU);
+    ctx.fill();
+  }
   const churn = pose.moving ? 1.6 : 0.7;
   for (let i = 0; i < 14; i++) {
     // Each of them keeps its own orbit, so the swarm boils rather than spins.

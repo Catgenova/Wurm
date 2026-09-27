@@ -67,8 +67,8 @@ import { SMELTER_H, SMELTER_W } from '../../game/smelter';
 import { KNACK_BONUS, KNACK_CAP, KNACK_HOME, KNACK_ODDS, TITLE_STEPS, titlesFor } from '../../game/titles';
 import { CHECK_EVERY, CREEL_BAIT_LOSS, creelOdds, HUNTER_TRAPPED, TIMID_TRAPPED, TRAPS } from '../../game/traps';
 import {
-  FIGHT_SHARE, FIGHTING, GRADE_STEP, inheritChance, TIERS, TRAIT_SLOTS, TRAIT_SOURCES, TRAITS, upgradeChance,
-  type TraitTier,
+  betterThanCommon, CHANNELS as BLOOD, FIGHT_SHARE, FIGHTING, GRADE_STEP, husbandryOdds, inheritChance, pct as cardPct, TIERS, TRAIT_SLOTS,
+  TRAIT_SOURCES, TRAITS, upgradeChance, type TraitTier,
 } from '../../game/traits';
 import { AWARENESS, awarenessReach, BASE_SIGHT, LIGHT_GIVES_BACK, NIGHT_LOSS, TREE_OPACITY } from '../../game/vision';
 import { NO_GO, pointAt, windWord, windWorth } from '../../game/wind';
@@ -1981,6 +1981,15 @@ export function helpText(): string {
     (rare), fanged (supreme) or fanged (fantastic), each worth steeply more than the last &mdash; ${listed(TIERS.map((t) => times(GRADE_STEP[t])).slice(1))} what
     the common grade is &mdash; and a line is bred up a grade at a time under the same husbandry.
     ${capital(percent(FIGHT_SHARE))} of what the wild throws up is fighting blood, and no animal carries more than one grade of a name.</p>
+    <p>Now and again a wildermon comes into the world <b>rare</b>, at the odds a made thing has: ${listed(RARE_STEPS.map((s) => `one in ${numberWord(Math.round(1 / rarityChance(s)))} ${RARITIES[s].name}`))}.
+    A monster never does, and a young one is rolled for as it is born, whatever its parents were. A rare one is <b>${times(RARITIES[1].size)} the size</b>
+    of its kind, ${listed(RARE_STEPS.slice(1).map((s) => `${article(RARITIES[s].name)} ${RARITIES[s].name} one ${times(RARITIES[s].size)}`))}, and the whole beast
+    <b>shimmers</b> in its rarity's colour the way rare gear does. Its ${listed(BLOOD.filter((ch) => ch.up).map((ch) => ch.label))}
+    go up by ${listed(RARE_STEPS.map((s) => `<b>${cardPct(RARITIES[s].blood).slice(1)}</b> ${RARITIES[s].name}`))}, and its
+    ${listed(BLOOD.filter((ch) => !ch.up).map((ch) => ch.label))} go down by ${listed(RARE_STEPS.map((s) => `<b>${cardPct(1 / RARITIES[s].blood).slice(1)}</b> ${RARITIES[s].name}`))},
+    on top of what its traits do. One out of the wild also rolls its traits on better odds: ${listed(RARE_STEPS.map((s) => `${percent(Math.round(100 * betterThanCommon(husbandryOdds(0, s))) / 100)} of ${article(RARITIES[s].name)} ${RARITIES[s].name} one's`))}
+    come out better than common, where ${percent(Math.round(100 * betterThanCommon(husbandryOdds(0, 0))) / 100)} of an ordinary one's do.
+    Its card, the Wildermon window and <b>Look it over</b> say how rare it is.</p>
     <p>What is walking about in the wild is almost all common. Better blood is <b>bred</b>, and that is
     what <b>animal husbandry</b> is for. Make a <b>brush</b> (${bill('make_brush')}, with a carving
     knife) and <b>brush a wildermon down</b>: it puts <b>care</b> into the animal, and a cared-for beast

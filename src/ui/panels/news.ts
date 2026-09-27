@@ -11,7 +11,7 @@ import { RECIPE_BY_ID, RECIPES, TRADE_BOOK_AT } from '../../game/recipes';
 import { BOARD_TOP } from '../../game/boards';
 import { IDLE_LOGOUT, WORKER_REST_EVERY, WORKER_REST_FIRST, WORKER_REST_MOST } from '../../game/keep';
 import { REPORTS_A_SESSION } from '../../net/errors';
-import { article, listed, NumberWord, numberWord, percent, share, spanWords, times } from '../../game/words';
+import { article, capital, listed, NumberWord, numberWord, percent, share, spanWords, times } from '../../game/words';
 import { ANCIENT_EFFECTS, ANCIENT_PLUS, BAUBLE_HIGH, BAUBLE_LOW, BAUBLE_SHARE, BAUBLE_TIERS, baubleTimes, REGRET_SHARE, YIELD_TIMES } from '../../game/baubles';
 import { CLASS_CHANGE_COST, CLASSES, PERK_TIER_AT, PERKS_PER_TIER } from '../../game/classes';
 import { perksOf } from '../../game/perks';
@@ -27,12 +27,13 @@ import { MUTE_FOR, MUTE_SHUTS } from '../../game/keeper';
 import { awayFor } from '../../game/away';
 import { ARMOUR, SHIELDS, WEAPONS } from '../../game/gear';
 import { JEWEL_PIECES } from '../../game/gems';
-import { itemDef, RARITIES } from '../../game/items';
+import { itemDef, RARITIES, rarityChance } from '../../game/items';
 import { weaponCarry } from '../../render/figure';
 import { TRY_LEARN } from '../../game/learn';
 import { CLIMB_LEARN_FROM, MAX_STEP } from '../../game/player';
 import { ALL_GOALS } from '../../game/journal';
 import { SPECIES } from '../../game/creatures';
+import { betterThanCommon, CHANNELS, husbandryOdds, pct as cardPct } from '../../game/traits';
 import type { UIWindow } from '../windows';
 
 /**
@@ -634,6 +635,33 @@ export const NEWS: News[] = [
       return [
         `${NumberWord(kinds.length)} wildermon are drawn as models, each animated standing, walking, running and foraging: ${listed(kinds.map((k) => SPECIES[k]?.name ?? k))}. The rest are drawn as they were until theirs are done.`,
         'One drawn as a model is clicked anywhere on it, its head as well as its feet, and its name and health sit over the top of it.',
+      ];
+    },
+  },
+  {
+    n: 49,
+    day: '2026-09-27',
+    lines: () => {
+      const steps = RARITIES.map((_, s) => s).slice(1);
+      const name = (s: number): string => RARITIES[s].name;
+      // A step's figure against each of the three, the first saying what it is for.
+      const each = (fig: (s: number) => string): string =>
+        listed(steps.map((s, i) => `${fig(s)} for ${i === 0 ? `${article(name(s))} ${name(s)} one` : `${article(name(s))} ${name(s)}`}`));
+      // How far a multiplier moves a figure, as a card rounds it (`cardPct`), without its sign.
+      const by = (m: number): string => cardPct(m).slice(1);
+      // How much of what a wild roll gives it comes out better than common.
+      const better = (s: number): string => {
+        const n = Math.round(100 * betterThanCommon(husbandryOdds(0, s)));
+        return n === 100 ? 'all' : `${n}%`;
+      };
+      const up = CHANNELS.filter((ch) => ch.up).map((ch) => ch.label);
+      const down = CHANNELS.filter((ch) => !ch.up).map((ch) => ch.label);
+      return [
+        `A wildermon can come into the world rare, at the odds a made thing has: ${listed(steps.map((s) => `one in ${numberWord(Math.round(1 / rarityChance(s)))} ${name(s)}`))}. A monster never does, and a young one is rolled for as it is born, whatever its parents were.`,
+        `${capital(article(name(1)))} ${name(1)} one is ${times(RARITIES[1].size)} the size of its kind, ${listed(steps.slice(1).map((s) => `${article(name(s))} ${name(s)} one ${times(RARITIES[s].size)}`))}.`,
+        `Its ${listed(up)} go up by ${each((s) => by(RARITIES[s].blood))}, and its ${listed(down)} go down by ${each((s) => by(1 / RARITIES[s].blood))}.`,
+        `One out of the wild rolls its traits on better odds: ${listed(steps.map((s) => `${better(s)} of ${article(name(s))} ${name(s)} one's`))} come out better than common, where ${better(0)} of an ordinary one's do.`,
+        'The whole beast shimmers in its rarity\'s colour the way rare gear does, and its card, the Wildermon window and Look it over say how rare it is and what that does.',
       ];
     },
   },

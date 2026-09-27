@@ -588,6 +588,14 @@ out.push(`alter table rarity_def add column if not exists odds real not null def
  */
 out.push(`alter table rarity_def add column if not exists word text not null default '';`);
 out.push(`alter table rarity_def add column if not exists lift text not null default '';`);
+/*
+ * And what the step makes of a wildermon that came into the world that rare:
+ * how much bigger it is, and how much better every figure its blood decides.
+ * The browser draws the first and both sides reckon with the second, so the
+ * island reads it off the same row the browser does.
+ */
+out.push(`alter table rarity_def add column if not exists size real not null default 1;`);
+out.push(`alter table rarity_def add column if not exists blood real not null default 1;`);
 out.push(`create table if not exists dye_def (
   id text primary key, name text not null, word text not null
 );`);
@@ -1065,7 +1073,7 @@ for (const t of [...BURYABLE].sort((a, b) => a - b)) out.push(`insert into burya
  */
 RARITIES.forEach((r, ord) => {
   if (!r.name) return;
-  out.push(`insert into rarity_def values (${q(r.name)}, ${q(ord)}, ${q(r.boost)}, ${q(r.keep)}, ${q(r.ceiling)}, ${q(RARITY_ODDS[ord - 1])}, ${q(RARITY_WORD[ord])}, ${q(RARITY_LIFT[ord])});`);
+  out.push(`insert into rarity_def values (${q(r.name)}, ${q(ord)}, ${q(r.boost)}, ${q(r.keep)}, ${q(r.ceiling)}, ${q(RARITY_ODDS[ord - 1])}, ${q(RARITY_WORD[ord])}, ${q(RARITY_LIFT[ord])}, ${q(r.size)}, ${q(r.blood)});`);
 });
 for (const d of DYES) out.push(`insert into dye_def values (${q(d.id)}, ${q(d.name)}, ${q(d.word)});`);
 for (const m of Object.values(IMPROVE_MATERIALS)) {

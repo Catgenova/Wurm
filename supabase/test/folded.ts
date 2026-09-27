@@ -109,10 +109,11 @@ begin
   insert into said values ('AURA|' || v_n || ' of ' || (v_beasts * v_chan));
   insert into said values ('PAIRS|' || (v_beasts * v_chan) || ' over ' || v_chan || ' channels');
 
-  -- One worked out straight from the tables, owing nothing to either body.
+  -- One worked out straight from the tables, owing nothing to either body: its blood, and a rare one's rarity.
   select count(*) filter (where max_health(c) is distinct from round(s.health
       * coalesce((select exp(sum(ln(e.mul))) from trait_effect e
-                   where e.channel = 'hardy' and e.trait = any(coalesce(c.traits, '{}'))), 1)))
+                   where e.channel = 'hardy' and e.trait = any(coalesce(c.traits, '{}'))), 1)
+      * coalesce((select r.blood from rarity_def r where r.id = c.rare), 1)))
     into v_n from creature c join species_def s on s.id = c.species where c.mode <> 'deed';
   insert into said values ('SUMS|' || v_n);
 
@@ -124,6 +125,7 @@ begin
     v_fn := least(v_fn, extract(epoch from (clock_timestamp() - t0)) * 1000);
     t0 := clock_timestamp();
     perform sum(round(species_health(c.species) * trait_mul(c.traits, 'hardy') * deed_aura(c, 'hardy')
+                    * case when c.rare is null then 1 else rarity_blood(c.rare, 'hardy') end
                     * class_mul(c.world_id, c.keeper, 'hide', 'soul_strength')))
       from creature c;
     v_body := least(v_body, extract(epoch from (clock_timestamp() - t0)) * 1000);

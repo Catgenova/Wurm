@@ -392,6 +392,8 @@ export interface Deal {
 export interface Occupant {
   name: string;
   species: string;
+  /** How rare it came into the world ('rare', 'supreme', 'fantastic'); absent for an ordinary one. */
+  rare?: string | null;
 }
 
 /** A thing on a stall: what it is, and its price, or null while it is not for sale. */

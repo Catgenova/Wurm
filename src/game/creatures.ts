@@ -9,15 +9,15 @@ import { MINE_COLLAPSE, MINE_DEPTH } from './actions';
 import { bedrockAt, oreAt } from '../world/ore';
 import { DIGGABLE, findChance, relicsWithin } from './archaeology';
 import { fishable, fishHere, waterDepth } from './fishing';
-import { describeWith, itemDef, markOf, type Item, type Mark } from './items';
-import { fill } from './words';
+import { describeWith, itemDef, markOf, rarityOf, rarityStep, rollRarity, type Item, type Mark } from './items';
+import { fill, listed, times } from './words';
 import { groundStep, standsOn } from './player';
 import { skillGain } from './skills';
 import { keyX, keyY, tileKey } from './tileindex';
 import { fireCentre, FIRE_CAPACITY, FUEL_VALUES, isFuel } from './campfire';
 import { BUCKET_LITRES, furnitureCentre } from './furniture';
 import type { WoundKind } from './wounds';
-import { auraMul, breedTraits, rollTraits, traitList, traitMul, traitTier, TRAIT_SLOTS, type TraitChannel, type TraitSource } from './traits';
+import { auraMul, breedTraits, channelOf, CHANNELS, pct, rollTraits, traitList, traitMul, traitTier, TRAIT_SLOTS, type TraitChannel, type TraitSource } from './traits';
 import { ACTION_FLOOR, ACTION_PACE, WORKER_WEIGHT } from './pace';
 import { world } from './pace';
 import { emptyCrate, shutIn, standingCrate } from './creaturecrate';
@@ -1624,7 +1624,7 @@ export function taskSkill(c: Creature, species: SpeciesDef): number {
 /** How far from the token this worker may range right now. */
 export function workRangeOf(c: Creature, species: SpeciesDef): number {
   const earned = species.workRange + rangeSteps(taskSkill(c, species)) * (species.rangePerStep ?? RANGE_PER_STEP);
-  return Math.round(earned * traitMul(c.traits, 'range'));
+  return Math.round(earned * bloodMul(c, 'range'));
 }
 
 /**
@@ -1739,8 +1739,44 @@ export const careMul = (c: Creature): number => 1 + Math.max(0, Math.min(1, c.ca
 export const careWord = (care: number): string =>
   care >= 0.75 ? 'well looked after' : care >= 0.4 ? 'kept' : care >= 0.12 ? 'wanting a brush' : 'neglected';
 
-/** Its own blood on one channel, with nothing communal in it. */
-export const bloodMul = (c: Creature, channel: TraitChannel): number => traitMul(c.traits, channel);
+/**
+ * What its rarity makes of one channel: `RARITIES[rare].blood` times as good,
+ * which is multiplied in where more is better and divided in where less is.
+ */
+export const rarityMul = (c: Pick<Creature, 'rare'>, channel: TraitChannel): number => {
+  const k = rarityOf(c).blood;
+  return channelOf(channel)?.up === false ? 1 / k : k;
+};
+
+/**
+ * What a step of rarity does to a wildermon's blood, channel by channel, the
+ * way a card prints a trait: "+20% speed, work, ... and healing, −17% upkeep,
+ * damage taken and chance to be hit". Every channel its traits move, up where
+ * more is better and down where less is, by the step's own figure.
+ */
+export function rarityEffects(c: Pick<Creature, 'rare'>): string {
+  const k = rarityOf(c).blood;
+  const up = CHANNELS.filter((ch) => ch.up).map((ch) => ch.label);
+  const down = CHANNELS.filter((ch) => !ch.up).map((ch) => ch.label);
+  return `${pct(k)} ${listed(up)}, ${pct(1 / k)} ${listed(down)}`;
+}
+
+/** What its rarity makes of it, for a card: nothing for an ordinary one. */
+export function rarityLine(c: Pick<Creature, 'rare'>): string {
+  if (!c.rare) return '';
+  const r = rarityOf(c);
+  return `${r.name[0].toUpperCase()}${r.name.slice(1)} · ${times(r.size)} the size of its kind · ${rarityEffects(c)}`;
+}
+
+/** And as a sentence, for what is said when you look it over. */
+export function raritySays(c: Pick<Creature, 'rare'>): string {
+  if (!c.rare) return '';
+  const r = rarityOf(c);
+  return ` It came into the world ${r.name}: ${times(r.size)} the size of its kind, ${rarityEffects(c)}.`;
+}
+
+/** Its own blood on one channel, as rare as it is, with nothing communal in it. */
+export const bloodMul = (c: Creature, channel: TraitChannel): number => traitMul(c.traits, channel) * rarityMul(c, channel);
 
 /** What it can take, once its blood is counted. */
 export const maxHealth = (c: Creature, species: SpeciesDef): number =>
@@ -1805,6 +1841,8 @@ export interface IslandCreature {
   traits?: string[];
   hunting?: boolean;
   mine?: boolean;
+  /** How rare it is, as the island words it ('rare', 'supreme', 'fantastic'); absent for an ordinary one. */
+  rare?: string | null;
   /** Shod, by the island's clock. */
   shod?: boolean;
   /** What the tack on it carries of its makers' marks, when anything (a Tailor's Saddler). */
@@ -1873,6 +1911,15 @@ export interface Creature {
   sex: Sex;
   /** The three traits it was born with. Blood, and the whole of what breeding is for. */
   traits: string[];
+  /**
+   * How rare it came into the world, a step as a made thing's is: nought for
+   * an ordinary one, and rare, supreme or fantastic at a made thing's odds
+   * (`RARITY_ODDS`). A rare one is bigger (`RARITIES[rare].size`), better at
+   * every figure its blood decides (`rarityMul`) and was born with better
+   * blood (`rollTraits`). It is its own and not its parents': nothing breeds
+   * true for it.
+   */
+  rare: number;
   /** How well it has been looked after lately, 0..1. Brushing puts it up; time takes it down. */
   care: number;
   /** Game time it was last put to a mate, so nothing is bred twice in an afternoon. */
@@ -2013,6 +2060,8 @@ export interface CreatureJSON {
   born?: number;
   sex?: Sex;
   traits?: string[];
+  /** How rare it came into the world; absent in a save from before there were rare ones, which were all ordinary. */
+  rare?: number;
   care?: number;
   bredAt?: number;
   due?: number;
@@ -2309,23 +2358,30 @@ export class Creatures {
 
   private static make(id: number, species: string, x: number, y: number, mode: CreatureMode, rand: () => number): Creature {
     const def = SPECIES[species] ?? SPECIES.rabba;
+    const variant = Math.floor(rand() * def.variants.length);
+    const hunger = 0.6 + rand() * 0.4;
+    const fleece = 0.6 + rand() * 0.4;
+    const sex: Sex = rand() < 0.5 ? 'male' : 'female';
+    // As rare as a made thing may come out, and born with blood to match; a monster is not a wildermon and is never rare.
+    const rare = def.monster ? 0 : rollRarity(rand);
     const c: Creature = {
       id,
       species: def.id,
       name: def.name,
-      variant: Math.floor(rand() * def.variants.length),
+      variant,
       x,
       y,
       mode,
       stance: def.defaultStance ?? 'defensive',
       health: def.health,
-      hunger: 0.6 + rand() * 0.4,
+      hunger,
       carrying: null,
       xp: 0,
-      fleece: 0.6 + rand() * 0.4,
+      fleece,
       skills: startSkills(def),
-      sex: rand() < 0.5 ? 'male' : 'female',
-      traits: rollTraits(rand),
+      sex,
+      traits: rollTraits(rand, 0, rare),
+      rare,
       care: 0,
       bredAt: -1e9,
       due: 0,
@@ -2427,6 +2483,8 @@ export class Creatures {
       c.hunger = r.hunger ?? c.hunger;
       c.sex = (r.sex as Sex) ?? c.sex;
       c.traits = r.traits ?? c.traits;
+      // How rare it is, which the island rolled when it came into the world; nothing said is an ordinary one.
+      c.rare = rarityStep(r.rare) ?? 0;
       // The island sends a pedigree with anything bred and with nothing else.
       c.pedigree = r.pedigree ?? null;
       c.enemy = r.hunting ? 0 : null;
@@ -4823,6 +4881,7 @@ export class Creatures {
         born: c.born,
         sex: c.sex,
         traits: c.traits,
+        rare: c.rare,
         care: c.care,
         bredAt: c.bredAt,
         due: c.due,
@@ -4843,7 +4902,7 @@ export class Creatures {
     for (const [r, n] of data.banked ?? []) cs.banked.set(r, n);
     for (const j of data.list ?? []) {
       const c = Creatures.make(j.id, j.species, j.x, j.y, j.mode, Math.random);
-      Object.assign(c, { name: j.name, variant: j.variant, stance: j.stance, health: j.health, hunger: j.hunger, carrying: j.carrying ?? null, pouch: j.pouch ?? null, xp: j.xp ?? 0, fleece: j.fleece ?? 1, tacked: !!j.tacked, tack: j.tack, shodAt: j.shodAt ?? -1e9, pannier: j.pannier ?? [], post: j.post ?? null, trapped: j.trapped ?? null, born: j.born ?? 0, sex: j.sex ?? (j.id % 2 ? 'male' : 'female'), traits: j.traits ?? rollTraits(Math.random), care: j.care ?? 0, bredAt: j.bredAt ?? -1e9, due: j.due ?? 0, unborn: j.unborn ?? null, pedigree: j.pedigree ?? null, homeX: j.homeX ?? j.x, homeY: j.homeY ?? j.y, trade: j.trade && (SPECIES[j.species]?.trades ?? []).includes(j.trade) ? j.trade : null, skills: { ...startSkills(SPECIES[j.species] ?? SPECIES.rabba), ...(j.skills ?? {}) } });
+      Object.assign(c, { name: j.name, variant: j.variant, stance: j.stance, health: j.health, hunger: j.hunger, carrying: j.carrying ?? null, pouch: j.pouch ?? null, xp: j.xp ?? 0, fleece: j.fleece ?? 1, tacked: !!j.tacked, tack: j.tack, shodAt: j.shodAt ?? -1e9, pannier: j.pannier ?? [], post: j.post ?? null, trapped: j.trapped ?? null, born: j.born ?? 0, sex: j.sex ?? (j.id % 2 ? 'male' : 'female'), traits: j.traits ?? rollTraits(Math.random), rare: j.rare ?? 0, care: j.care ?? 0, bredAt: j.bredAt ?? -1e9, due: j.due ?? 0, unborn: j.unborn ?? null, pedigree: j.pedigree ?? null, homeX: j.homeX ?? j.x, homeY: j.homeY ?? j.y, trade: j.trade && (SPECIES[j.species]?.trades ?? []).includes(j.trade) ? j.trade : null, skills: { ...startSkills(SPECIES[j.species] ?? SPECIES.rabba), ...(j.skills ?? {}) } });
       cs.list.set(c.id, c);
       if (c.id >= cs.nextId) cs.nextId = c.id + 1;
     }

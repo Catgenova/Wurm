@@ -1,11 +1,11 @@
 import { clockLeft } from '../../game/boons';
 import { DAY_SECONDS } from '../../game/game';
-import { isShod, SHOE_DAYS, ageOf, attackOf, bloodMul, CARE_BONUS, careMul, careWord, growsAt, creatureLevel, GATHER_VERB, maxHealth, pedigreeLine, RANGE_PER_STEP, SEX_MARK, SEX_NAMES, SKILL_STEP, SPECIES, STANCE_NAMES, taskSkill, workRangeOf, type Creature } from '../../game/creatures';
-import { CHANNELS, isGain, pct, TIER_COLOUR, TRAIT_SOURCES, traitOf, type TraitChannel } from '../../game/traits';
+import { isShod, SHOE_DAYS, ageOf, attackOf, bloodMul, CARE_BONUS, careMul, careWord, growsAt, creatureLevel, GATHER_VERB, maxHealth, pedigreeLine, RANGE_PER_STEP, rarityLine, rarityMul, SEX_MARK, SEX_NAMES, SKILL_STEP, SPECIES, STANCE_NAMES, taskSkill, workRangeOf, type Creature } from '../../game/creatures';
+import { CHANNELS, isGain, pct, TIER_COLOUR, TRAIT_SOURCES, traitMul, traitOf, type TraitChannel } from '../../game/traits';
 import { TIER_LEVEL } from '../../game/husbandry';
 
 import type { Game } from '../../game/game';
-import { itemDef } from '../../game/items';
+import { itemDef, rarityOf } from '../../game/items';
 import type { MenuItem } from '../contextmenu';
 import type { UIWindow } from '../windows';
 
@@ -332,7 +332,10 @@ export class WildermonPanel {
     const flags = document.createElement('span');
     flags.className = 'pal-flags';
     head.append(name, flags, level, menu);
-    card.append(head);
+    // How rare it came into the world, in its rarity's colour, and what that makes of it.
+    const rarity = document.createElement('div');
+    rarity.className = 'pal-rarity';
+    card.append(head, rarity);
 
     const bar = (label: string, cls: string): { row: HTMLDivElement; fill: HTMLDivElement; value: HTMLSpanElement } => {
       const row = document.createElement('div');
@@ -373,6 +376,11 @@ export class WildermonPanel {
       const def = SPECIES[c.species] ?? SPECIES.rabba;
       set(name, `${SEX_MARK[c.sex]} ${c.name}${c.name !== def.name ? ` · ${def.name}` : ''}`,
         `${SEX_NAMES[c.sex]} ${def.name.toLowerCase()}`);
+      const rare = rarityLine(c);
+      if (rarity.textContent !== rare) rarity.textContent = rare;
+      rarity.hidden = !rare;
+      const hue = c.rare ? rarityOf(c).colour : '';
+      if (rarity.style.color !== hue) rarity.style.color = hue;
       // Age reads before anything else: a yearling cannot be worked at all.
       const age = ageOf(c, this.game.time);
       const growing = growsAt(c, this.game.time);
@@ -547,7 +555,8 @@ export class WildermonPanel {
       tag.className = `worth-tag ${isGain(ch.id, v) ? 'trait-up' : 'trait-down'}`;
       tag.textContent = `${pct(v)} ${ch.label}`;
       // Where it came from, so a figure that moved has somewhere to have moved from.
-      const parts = [`${ch.note}.`, `Blood ${bloodMul(c, ch.id).toFixed(2)}×`];
+      const parts = [`${ch.note}.`, `Blood ${traitMul(c.traits, ch.id).toFixed(2)}×`];
+      if (c.rare) parts.push(`${rarityOf(c).name} ${rarityMul(c, ch.id).toFixed(2)}×`);
       const herd = beasts.aura(c, ch.id);
       if (Math.abs(herd - 1) >= 0.005) parts.push(`herd ${herd.toFixed(2)}×`);
       if ((ch.id === 'work' || ch.id === 'learn') && c.care > 0) parts.push(`brushing ${careMul(c).toFixed(2)}×`);

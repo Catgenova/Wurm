@@ -828,13 +828,22 @@ export interface RarityDef {
   ceiling: number;
   /** Colour it is written in. */
   colour: string;
+  /** How much bigger a wildermon that came into the world this rare is than an ordinary one of its kind. */
+  size: number;
+  /**
+   * What it does for a wildermon's every figure: each channel of its blood
+   * (`TraitChannel`) is this much better -- multiplied by it where more is
+   * better, divided by it where less is (its upkeep, what a blow costs it,
+   * how often one lands on it).
+   */
+  blood: number;
 }
 
 export const RARITIES: RarityDef[] = [
-  { name: '', boost: 1, keep: 1, ceiling: 0, colour: '' },
-  { name: 'rare', boost: 1.1, keep: 0.8, ceiling: 5, colour: '#8fc8f0' },
-  { name: 'supreme', boost: 1.25, keep: 0.6, ceiling: 12, colour: '#c79bf0' },
-  { name: 'fantastic', boost: 1.5, keep: 0.35, ceiling: 25, colour: '#f0c060' },
+  { name: '', boost: 1, keep: 1, ceiling: 0, colour: '', size: 1, blood: 1 },
+  { name: 'rare', boost: 1.1, keep: 0.8, ceiling: 5, colour: '#8fc8f0', size: 1.5, blood: 1.2 },
+  { name: 'supreme', boost: 1.25, keep: 0.6, ceiling: 12, colour: '#c79bf0', size: 2, blood: 1.4 },
+  { name: 'fantastic', boost: 1.5, keep: 0.35, ceiling: 25, colour: '#f0c060', size: 3, blood: 1.6 },
 ];
 
 /**

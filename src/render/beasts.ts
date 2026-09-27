@@ -929,7 +929,10 @@ const breathOf = (v: readonly V3[], c: V3, k: number): V3[] =>
   v.map((p) => [c[0] + (p[0] - c[0]) * (1 + k), p[1], c[2] + (p[2] - c[2]) * (1 + k)]);
 
 /** The pieces of a kit on posed bones, as the parts `render` draws. */
-export function partsOf(kit: readonly Piece[], b: Bones, a: Anim, breath: number): Part[] {
+/** A rare body's shine (`shineOn` in `./figure`): how rare it is, what sets its glint apart from another's, and the time. */
+export interface BeastShine { rare: number; seed: number; now: number }
+
+export function partsOf(kit: readonly Piece[], b: Bones, a: Anim, breath: number, shine?: BeastShine): Part[] {
   const byKey = new Map<string, Part>();
   const out: Part[] = [];
   for (const pc of kit) {
@@ -938,6 +941,11 @@ export function partsOf(kit: readonly Piece[], b: Bones, a: Anim, breath: number
     if (!xf) continue;
     const mesh = a.blink && pc.shut ? pc.shut : pc.mesh;
     const part: Part = { mesh, xf, bias: pc.bias ?? 0, convex: pc.convex, front: pc.front, hide: pc.hide, hideIn: pc.hideIn ? b[pc.hideIn] : undefined, toon: true, lines: pc.lines, airy: pc.airy, rim: pc.rim, sheen: pc.sheen, thin: pc.thin, chain: pc.chain };
+    // A rare body shines the whole of it, as a rare thing worn does: every piece of it one rarity, so one glint crosses it all.
+    if (shine?.rare) {
+      part.rare = shine.rare;
+      part.seed = shine.seed;
+    }
     // What reshapes a piece goes on one after another: a fleece grown back still breathes.
     if (pc.bent) part.v = pc.bent(mesh.v, a);
     if (pc.breathes) part.v = breathOf(part.v ?? mesh.v, pc.breathes.c, pc.breathes.k * (breath - 0.5));
@@ -989,12 +997,12 @@ function glows(g: CanvasRenderingContext2D, view: View, list: ReadonlyArray<{ p:
 }
 
 /** One body, posed, with its feet at the origin of `g` in the figure's own units; `bare`, without its shadow or its light, for a silhouette. */
-export function drawKind(g: CanvasRenderingContext2D, kind: Kind, kit: readonly Piece[], pal: Palette, facing: number, a: Anim, ink: number, px: number, bare = false): void {
+export function drawKind(g: CanvasRenderingContext2D, kind: Kind, kit: readonly Piece[], pal: Palette, facing: number, a: Anim, ink: number, px: number, bare = false, shine?: BeastShine): void {
   const b = kind.bones(a);
   const view = viewOf(facing);
   if (!bare) contact(g, view, b, kind.shadow);
   kind.extra?.(g, view, b, a, true);
-  render(g, partsOf(kit, b, a, a.breath), pal, view, ink, px, 0);
+  render(g, partsOf(kit, b, a, a.breath, shine), pal, view, ink, px, shine?.now ?? 0);
   kind.extra?.(g, view, b, a, false);
   if (kind.glow && !bare) glows(g, view, kind.glow(b, a));
 }
@@ -1032,6 +1040,8 @@ export interface BeastPose {
   fleece?: number;
   /** Head down at the ground: foraging, standing. */
   graze?: boolean;
+  /** How rare it is, a step (`RARITIES`): a rare one shines, and is drawn afresh every frame for its light to move. */
+  rare?: number;
 }
 
 /** How long a turn of an eighth takes, and how fast a body gets going or settles, per second. */
@@ -1255,13 +1265,14 @@ export function drawBeast(ctx: CanvasRenderingContext2D, sx: number, sy: number,
     const ey = viewOf(s.facing).ey;
     return [off * ey[0] * zoom, off * ey[1] * zoom];
   };
-  // Turning, getting going or settling: drawn for itself, as it is this frame.
-  if (s.changing || !Number.isInteger(s.facing)) {
+  // Turning, getting going or settling, or rare, its light crossing it: drawn for itself, as it is this frame.
+  if (s.changing || !Number.isInteger(s.facing) || p.rare) {
     const [ax, ay] = ahead(a.u);
     ctx.save();
     ctx.translate(sx + ax, sy + ay);
     ctx.scale(zoom, zoom);
-    drawKind(ctx, kind, kit, pal, s.facing, a, inkAt(zoom, kind.size), 1 / zoom);
+    const shine = p.rare ? { rare: p.rare, seed: typeof p.id === 'number' ? p.id % 97 : 0, now } : undefined;
+    drawKind(ctx, kind, kit, pal, s.facing, a, inkAt(zoom, kind.size), 1 / zoom, false, shine);
     ctx.restore();
     return;
   }

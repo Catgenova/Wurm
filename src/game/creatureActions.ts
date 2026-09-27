@@ -1,6 +1,6 @@
 import { DARK_SHOT, DARK_SWING, tryGain } from './learn';
 import type { ActionDef, Target } from './actions';
-import { isShod, SHOES_PER_MOUNT, TACK, AGES, ageDef, ageOf, attackOf, BLOW_SHARE, bloodMul, careWord, coaxBonus, COAX_STEP, creatureLevel, forgetCoaxing, isBaitFor, maxHealth, SEX_NAMES, SPECIES, STANCE_NAMES, workRangeOf, type Creature, type Stance, type GatherKind } from './creatures';
+import { isShod, SHOES_PER_MOUNT, TACK, AGES, ageDef, ageOf, attackOf, BLOW_SHARE, bloodMul, careWord, coaxBonus, COAX_STEP, creatureLevel, forgetCoaxing, isBaitFor, maxHealth, raritySays, SEX_NAMES, SPECIES, STANCE_NAMES, workRangeOf, type Creature, type Stance, type GatherKind } from './creatures';
 import { studBook } from './husbandry';
 import { numberWord } from './words';
 import { GENTLE_HAND } from './meditation';
@@ -8,7 +8,7 @@ import { bestTier, traitList } from './traits';
 import type { Game } from './game';
 import { furnitureCentre, furnitureName, vehicleOf } from './furniture';
 import { deedJobLine, emptyCrate, letOut, shutIn } from './creaturecrate';
-import { itemDef, itemName, type Mark } from './items';
+import { itemDef, itemName, rarityOf, type Mark } from './items';
 import { BANE_BONUS, banes, bowRange, hitChance, isBow, WEAPON_BY_ID, weaponDamage, type WeaponDef } from './gear';
 import { matOfItem } from './materials';
 
@@ -159,13 +159,13 @@ export const CREATURE_ACTIONS: ActionDef[] = [
         }
         const warm = coaxBonus(c, g.time, coaxStep(g));
         const used = warm > 0 ? ` It has taken ${c.coaxed === 1 ? 'an offering' : `${c.coaxed} offerings`} from your hand and is ${(warm * 100).toFixed(0)}% readier for the next.` : '';
-        g.logMsg(`A wild ${def.name.toLowerCase()}: ${def.description} It eats ${dietText(c)}.${used} You would have to tame it to learn more.`, 'event');
+        g.logMsg(`A ${c.rare ? `${rarityOf(c).name} ` : ''}wild ${def.name.toLowerCase()}: ${def.description} It eats ${dietText(c)}.${used}${raritySays(c)} You would have to tame it to learn more.`, 'event');
         return;
       }
       const mood = c.hunger < 0.3 ? 'It looks hungry.' : c.hunger < 0.6 ? 'It could eat.' : 'It looks well fed.';
       const skills = Object.entries(c.skills).map(([id, v]) => `${id} ${v.toFixed(1)}`).join(', ');
       const range = c.mode === 'deed' && def.gathers ? ` It works up to ${workRangeOf(c, def)} tiles from the token.` : '';
-      g.logMsg(`${c.name} (${SEX_NAMES[c.sex]} ${def.name.toLowerCase()}, ${g.creatures.describe(c)}): ${def.description} Level ${creatureLevel(c)}, ${skills}. Health ${Math.ceil(c.health)}/${maxHealth(c, def)}. It is ${careWord(c.care)} and carries ${traitList(c.traits)}.${range} ${mood} It eats ${dietText(c)}.${studBook(g, c)}`, 'event');
+      g.logMsg(`${c.name} (${c.rare ? `${rarityOf(c).name} ` : ''}${SEX_NAMES[c.sex]} ${def.name.toLowerCase()}, ${g.creatures.describe(c)}): ${def.description} Level ${creatureLevel(c)}, ${skills}. Health ${Math.ceil(c.health)}/${maxHealth(c, def)}. It is ${careWord(c.care)} and carries ${traitList(c.traits)}.${raritySays(c)}${range} ${mood} It eats ${dietText(c)}.${studBook(g, c)}`, 'event');
     },
   },
   {
