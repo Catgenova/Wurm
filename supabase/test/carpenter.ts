@@ -27,9 +27,10 @@ import { ACTION_BY_ID } from '../../src/game/actions';
 import { fenceScale } from '../../src/game/buildActions';
 import { MATERIAL_BY_ID, wallBill } from '../../src/game/building';
 import { BRIDGES } from '../../src/game/bridges';
-import { furnitureCapacity, furnitureDef, type PlacedFurniture } from '../../src/game/furniture';
+import { furnitureCapacity, furnitureDef, furnitureHeft, liquidCapacity, type PlacedFurniture } from '../../src/game/furniture';
+import { crateCapacity, type PlacedCrate } from '../../src/game/crates';
 import { bowRange, WEAPON_BY_ID, weaponDamage } from '../../src/game/gear';
-import { makersMark, sameMark, type Item } from '../../src/game/items';
+import { makersMark, roomFor, sameMark, type Item } from '../../src/game/items';
 import { perksOf, type PerkDef } from '../../src/game/perks';
 import { needOf, RECIPE_BY_ID, recipeReason } from '../../src/game/recipes';
 
@@ -359,6 +360,34 @@ begin
     || '#' || coalesce(bridge_reason(w, u, 'wood', 1, 13, 13, 13), 'ALLOWED')
     || '#' || coalesce(bridge_reason(w, u, 'wood', 1, 13, 15, 13), 'ALLOWED'));
   delete from bridge where world_id = w and id in (v_wood, v_rope);
+
+  /*
+   * ---- What every piece holds: each one that holds anything, in the woods
+   * either side of plain, at every rarity, marked and not; and both crates. ----
+   */
+  insert into placed (world_id, kind, sub, x, y, sx, sy, cx, cy, ql, made_by, material, rare, mark)
+  select w, 'furniture', f.id, 14, 1, 0, 0, 14.5, 1.5, 40, u, wd, rr, mk
+    from (select fd.id from furniture_def fd where coalesce(fd.capacity, fd.heft, fd.hive, fd.liquid) is not null) f,
+         unnest(array['Pine', 'Willow', 'Fig', 'Birch', 'Oak', 'Olive']) wd,
+         unnest(array[null, 'rare', 'supreme', 'fantastic']) rr,
+         unnest(array[null, '{"hold": 1.2}']::jsonb[]) mk;
+  insert into said select 'HOLDS', string_agg(pl.sub || '|' || pl.material || '|' || coalesce(pl.rare, '-')
+      || '|' || coalesce(pl.mark->>'hold', '-') || '|' || furniture_capacity(pl) || '|' || furniture_heft(pl)
+      || '|' || liquid_capacity(pl), ',' order by pl.id)
+    from placed pl where pl.world_id = w and pl.x = 14 and pl.y = 1 and pl.kind = 'furniture';
+  delete from placed where world_id = w and x = 14 and y = 1 and kind = 'furniture';
+  insert into crate (world_id, id, kind, x, y, material, rare)
+  select w, 900000 + row_number() over (), ck, 14, 2, wd, rr
+    from unnest(array['log', 'plank']) ck,
+         unnest(array['Pine', 'Willow', 'Fig', 'Birch', 'Oak', 'Olive']) wd,
+         unnest(array[null, 'rare', 'supreme', 'fantastic']) rr;
+  insert into said select 'CRATES', string_agg(c.kind || '|' || c.material || '|' || coalesce(c.rare, '-')
+      || '|' || crate_capacity(c), ',' order by c.id)
+    from crate c where c.world_id = w and c.id > 900000;
+  delete from crate where world_id = w and id > 900000;
+  -- And the rule under all of them, which bags, smelters and kilns ask of whole numbers.
+  insert into said select 'ROOM', string_agg(room_for(b, r.id)::text, ',' order by b, r.ord)
+    from generate_series(0, 400) b, (select null::text as id, 0 as ord union all select id, ord from rarity_def) r;
 end $$;
 
 select k || E'\\t' || coalesce(v, 'null') from said;
@@ -465,6 +494,38 @@ check(`${P('Bridge Wright').name}: a go on a wooden and a rope bridge takes ${bw
 check(`and a wooden bridge spans ${bw['span:bridge_wood']} tiles with it, ${BRIDGES.wood.span} without`,
   spanA === `A wooden bridge spans ${BRIDGES.wood.span} tiles; that is 11.` && !spanB.includes('spans')
     && spanC === `A wooden bridge spans ${bw['span:bridge_wood']} tiles; that is 13.`, say('BRIDGE'));
+
+const STEP = ['-', 'rare', 'supreme', 'fantastic'];
+const holds = say('HOLDS').split(',').map((b) => b.split('|'));
+const pieceOf = (kind: string, material: string, rare: string, hold: string): PlacedFurniture => ({
+  id: 1, x: 0, y: 0, sx: 0, sy: 0, kind, ql: 40, items: [], material,
+  rare: STEP.indexOf(rare) || undefined, mark: hold === '-' ? undefined : { hold: Number(hold) },
+});
+const said3 = (f: PlacedFurniture): string => `${furnitureCapacity(f)}|${furnitureHeft(f)}|${liquidCapacity(f)}`;
+const holdsWrong = holds.filter(([kind, wood, rare, hold, cap, heft, litres]) => said3(pieceOf(kind, wood, rare, hold)) !== `${cap}|${heft}|${litres}`);
+check(`every piece holds on the island what the browser says it holds: ${holds.length} of them, in six woods, at every rarity, marked and not`,
+  holds.length > 0 && holdsWrong.length === 0,
+  holdsWrong.slice(0, 4).map(([kind, wood, rare, hold, cap, heft, litres]) =>
+    `${wood} ${rare} ${kind}${hold === '-' ? '' : ' marked'}: island ${cap}|${heft}|${litres}, browser ${said3(pieceOf(kind, wood, rare, hold))}`).join('; ')
+    || `${holds.length}`);
+const barrelHolds = (wood: string): number => Number(holds.find(([kind, w, rare, hold]) => kind === 'barrel' && w === wood && rare === '-' && hold === '-')?.[6]);
+check(`and a barrel holds what its wood holds: oak more than a plain one's ${furnitureDef('barrel').liquid} litres, pine less`,
+  barrelHolds('Oak') > (furnitureDef('barrel').liquid ?? 0) && barrelHolds('Pine') < (furnitureDef('barrel').liquid ?? 0),
+  `oak ${barrelHolds('Oak')}, pine ${barrelHolds('Pine')}`);
+const crates = say('CRATES').split(',').map((b) => b.split('|'));
+const crateOf = (kind: string, material: string, rare: string): PlacedCrate =>
+  ({ id: 1, x: 0, y: 0, sx: 0, sy: 0, kind: kind as PlacedCrate['kind'], material, rare: STEP.indexOf(rare) || undefined, items: [] } as unknown as PlacedCrate);
+const cratesWrong = crates.filter(([kind, wood, rare, cap]) => crateCapacity(crateOf(kind, wood, rare)) !== Number(cap));
+check(`and every crate: ${crates.length} of them, in six woods, at every rarity`, crates.length === 48 && cratesWrong.length === 0,
+  cratesWrong.slice(0, 4).map(([kind, wood, rare, cap]) => `${wood} ${rare} ${kind} crate: island ${cap}, browser ${crateCapacity(crateOf(kind, wood, rare))}`).join('; ')
+    || `${crates.length}`);
+
+const rooms = say('ROOM').split(',').map(Number);
+const roomsWanted = Array.from({ length: 401 }, (_, b) => [0, 1, 2, 3].map((step) => roomFor(b, { rare: step || undefined }))).flat();
+const roomsWrong = roomsWanted.map((want, i) => [i, want, rooms[i]]).filter(([, want, got]) => want !== got);
+check(`and what a bag, a smelter or a kiln holds: the island's room for every size to 400 at every rarity is the browser's`,
+  rooms.length === roomsWanted.length && roomsWrong.length === 0,
+  roomsWrong.slice(0, 4).map(([i, want, got]) => `${Math.floor(i / 4)} at step ${i % 4}: island ${got}, browser ${want}`).join('; ') || `${rooms.length}`);
 
 /* ---- the browser's half ------------------------------------------------------------ */
 

@@ -1,5 +1,5 @@
 import { MATERIAL_BY_ID } from '../../game/building';
-import { furnitureDef } from '../../game/furniture';
+import { furnitureDef, liquidCapacity, type PlacedFurniture } from '../../game/furniture';
 import { billWords } from '../../game/items';
 import { MOULD_BY_ID } from '../../game/metal';
 import { ORDER_LIFE } from '../../game/orders';
@@ -439,6 +439,18 @@ export const NEWS: News[] = [
         `The Carpenter has perks instead of a tree now: ${numberWord(PERK_TIER_AT.length)} tiers of ${numberWord(PERKS_PER_TIER)}, the first with the trade and the others at ${listed(PERK_TIER_AT.slice(1).map(String))} in ${main}. The nodes a Carpenter had bought went with the tree.`,
         'Some of them go into what a Carpenter makes and stay there: a chest that holds more, a boat or a wagon that goes faster, a bow that hits harder or reaches further, whoever owns it after. Examine a thing to see what its maker put into it.',
         'On an island the bench now wears its tool with every go, as it always did playing by yourself: saws, carving knives, mallets, files and the rest.',
+      ];
+    },
+  },
+  {
+    n: 35,
+    day: '2026-09-27',
+    lines: () => {
+      const barrel = (material: string): number =>
+        liquidCapacity({ id: 0, x: 0, y: 0, sx: 0, sy: 0, kind: 'barrel', ql: 20, items: [], material } as PlacedFurniture);
+      return [
+        `On an island a barrel holds what its wood holds, as the barrel always said: ${barrel('Oak')} litres of oak and ${barrel('Pine')} of pine where every barrel held ${furnitureDef('barrel').liquid}. A barrel already fuller than its wood allows keeps what is in it and takes no more until it is drawn below the line.`,
+        'And a few other pieces hold one more or one less than they did, mostly rare ones and ones of pine, willow or fig: what the island lets in is now exactly the number the window shows.',
       ];
     },
   },
