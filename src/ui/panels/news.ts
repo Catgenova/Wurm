@@ -13,6 +13,8 @@ import { ANCIENT_EFFECTS, ANCIENT_PLUS, BAUBLE_HIGH, BAUBLE_LOW, BAUBLE_SHARE, B
 import { CLASS_CHANGE_COST, CLASSES, PERK_TIER_AT, PERKS_PER_TIER } from '../../game/classes';
 import { perksOf } from '../../game/perks';
 import { HUSBANDRY_ACTIONS } from '../../game/husbandry';
+import { TINCTURE_BONUS, TINCTURE_SECONDS } from '../../game/boons';
+import { TINCTURE_NAMES } from '../../game/remedies';
 import { FED_SAID, MOTE_CHANCE } from '../../game/sacrifice';
 import { GRAVE_KEEPS, GRAVE_REACH } from '../../game/graves';
 import { UI_SIZE_MAX, UI_SIZE_MIN } from '../screen';
@@ -537,6 +539,21 @@ export const NEWS: News[] = [
         `The Herdsman has perks instead of a tree now: ${numberWord(PERK_TIER_AT.length)} tiers of ${numberWord(PERKS_PER_TIER)}, the first with the trade and the others at ${listed(PERK_TIER_AT.slice(1).map(String))} in ${main}. The nodes a Herdsman had bought went with the tree.`,
         `${listed(HUSBANDRY_ACTIONS.map((a) => a.label))} are on a wildermon's menu now. The rules had them and no menu offered them.`,
         `${listed(kept)} work on every wildermon their Herdsman keeps, on an island and off it. One that changes hands takes its new keeper's.`,
+      ];
+    },
+  },
+  {
+    n: 42,
+    day: '2026-09-27',
+    lines: () => {
+      const main = (CLASSES.find((c) => c.id === 'naturalist')?.main ?? '').replace(/_/g, ' ');
+      return [
+        `The Naturalist has perks instead of a tree now: ${numberWord(PERK_TIER_AT.length)} tiers of ${numberWord(PERKS_PER_TIER)}, the first with the trade and the others at ${listed(PERK_TIER_AT.slice(1).map(String))} in ${main}. The nodes a Naturalist had bought went with the tree.`,
+        `Three new things for a Naturalist who has learned them, and for anybody to use: herb tea, a cup of which puts back ${percent(itemDef('herb_tea').stamina ?? 0)} of your stamina; `
+          + `a salve, which keeps a dressed wound from going bad; and a tincture, which makes ${TINCTURE_NAMES} each go in ${percent(TINCTURE_BONUS)} faster for ${spanWords(TINCTURE_SECONDS)}.`,
+        'A Naturalist with Field Medic can dress somebody else\'s wounds, from that person\'s menu.',
+        'On an island a hive now fills with honey and beeswax for the Vesp kept on its settlement, as it always did offline. Nothing on an island gave beeswax before.',
+        'Offline, a rare thing made at a bench no longer makes the whole pile it goes onto rare.',
       ];
     },
   },

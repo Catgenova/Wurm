@@ -42,6 +42,8 @@ export interface ItemDef {
   food?: number;
   /** Restores this much thirst (0..1) per drink. */
   drink?: number;
+  /** Puts back this much stamina (0..1) when it is drunk: a Naturalist's herb tea. */
+  stamina?: number;
   /**
    * What is actually in it, by nutrient. Raw food feeds one of them a little;
    * a cooked dish feeds several, and feeds them properly. Anything nourishing
@@ -392,6 +394,9 @@ export const ITEM_DEFS: Record<string, ItemDef> = {
   creel: { name: 'Creel', category: 'misc', weight: 3, decay: 4, description: 'A woven basket trap with a throat it is easy to swim into and hard to swim out of. Set it in water, bait it, and leave it.' },
   snare: { name: 'Snare', category: 'misc', weight: 1.2, decay: 5, description: 'A noose of rope on a bent shaft. Set it out in the country, bait it, and come back to whatever came to the bait.' },
   deadfall: { name: 'Deadfall', category: 'misc', weight: 12, decay: 4, description: 'A weighted board on a trigger. It holds very nearly anything that walks, and it is a great deal of work to build.' },
+  herb_tea: { name: 'Herb tea', category: 'misc', weight: 0.3, stackable: true, decay: 30, stamina: 0.2, description: 'Herbs steeped in water, a cup of it. Drunk, it puts back {stamina:pct} of your stamina.' },
+  salve: { name: 'Salve', category: 'misc', weight: 0.1, stackable: true, decay: 6, description: 'Herbs worked into beeswax. Rubbed in over a dressing, it keeps the wound under it from going bad until it closes.' },
+  tincture: { name: 'Tincture', category: 'misc', weight: 0.1, stackable: true, decay: 3, description: 'Herbs steeped down to a few bitter drops. Taken, {skills} each go in {bonus:pct} faster for {span:span}.' },
   cover: { name: 'Healing cover', category: 'tool', weight: 0.2, stackable: true, decay: 12, description: 'Herbs worked into cotton. Laid on the wound it suits, it stops the bleeding, keeps the dirt out and closes it {cover.overCloth} times as fast as cloth.' },
   dye: { name: 'Dye', category: 'material', weight: 0.8, stackable: true, decay: 5, description: 'A pot of colour, struck with lye so it bites and holds. One pot does one thing.' },
   banner: { name: 'Banner', category: 'misc', weight: 4, decay: 5, description: 'Cloth on a staff. Plant it on the deed and fly your colour over it.' },
@@ -1083,11 +1088,14 @@ export class Inventory {
     this.well.next = v;
   }
 
-  add(id: string, opts: { ql?: number; count?: number; extra?: string; issued?: boolean; piece?: string; mark?: Mark } = {}): Item {
+  add(id: string, opts: { ql?: number; count?: number; extra?: string; issued?: boolean; piece?: string; mark?: Mark; rare?: number; maker?: string } = {}): Item {
     const def = itemDef(id);
     const count = opts.count ?? 1;
     const ql = Math.max(1, Math.min(100, opts.ql ?? 20));
     const item: Item = { uid: this.nextUid++, id, ql, dmg: 0, count, extra: opts.extra };
+    // Rare before it is folded in, so it goes on a pile of its own rather than making a whole pile rare.
+    if (opts.rare) item.rare = opts.rare;
+    if (opts.maker) item.maker = opts.maker;
     if (opts.issued) item.issued = true;
     if (opts.piece) item.piece = opts.piece;
     // Marked before it is folded in, so it goes on the pile with the same mark or starts one of its own.

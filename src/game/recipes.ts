@@ -9,7 +9,7 @@ import { FURNITURE, ONE_ALTAR, VESSELS } from './furniture';
 import { castWhole, INGOT_LUMPS, ingotOf, METAL_BY_LUMP, MOULD_BY_MAKES, MOULDS } from './metal';
 import { FISH } from './fishing';
 import { DYES } from './dyes';
-import { WOUND_KINDS } from './wounds';
+import { HERBS, WOUND_KINDS } from './wounds';
 import { TRAPS } from './traps';
 import { BREWS } from './brewing';
 import { isMaterialKind, matOf, type MaterialKind } from './materials';
@@ -156,6 +156,9 @@ export const RECIPE_PERK_SAYS: Record<string, string> = {
   broth: 'That wants a Cook who has learned to make broth.',
   distil: 'That wants a Cook who has learned to distil.',
   tent: 'That wants a Tailor who has learned to make a tent.',
+  herb_tea: 'That wants a Naturalist who has learned to make herb tea.',
+  salve: 'That wants a Naturalist who has learned to make a salve.',
+  tincture: 'That wants a Naturalist who has learned to make a tincture.',
 };
 
 export const RECIPES: Recipe[] = [
@@ -531,6 +534,38 @@ const COVER_RECIPES: Recipe[] = Object.values(WOUND_KINDS).map((k) => ({
 }));
 
 RECIPES.push(...COVER_RECIPES);
+
+/**
+ * A Naturalist's three remedies, each made of any one of the healing herbs:
+ * a tea that puts stamina back, a salve that keeps a dressed wound from going
+ * bad, and a tincture that makes their own four trades go in faster. Only a
+ * Naturalist who has learned one may make it; anybody may use it.
+ */
+const REMEDY_RECIPES: Recipe[] = HERBS.flatMap((herb): Recipe[] => [
+  {
+    id: `brew_tea_${herb}`, category: 'Alchemy', result: 'herb_tea', count: 3,
+    inputs: [{ item: herb, count: 2 }, { item: 'water_bucket' }], skill: 'alchemy', returns: [['bucket', 1]],
+    label: `Steep ${herb} into tea`, verb: 'steeping tea', baseTime: 8, stamina: 0.02, difficulty: 10,
+    done: `You steep the ${herb} until the water goes gold. {count:W} cups.`,
+    fail: `The ${herb} stews to a bitter brown that nobody would drink.`, consumeOnFail: true, perk: 'herb_tea',
+  },
+  {
+    id: `make_salve_${herb}`, category: 'Alchemy', result: 'salve',
+    inputs: [{ item: herb, count: 2 }, { item: 'wax' }], skill: 'first_aid',
+    label: `Work ${herb} into a salve`, verb: 'working a salve', baseTime: 9, stamina: 0.02, difficulty: 14,
+    done: `You bruise the ${herb} into the warm wax and let it set. A salve.`,
+    fail: 'The wax sets before the herb is through it, in lumps.', consumeOnFail: true, perk: 'salve',
+  },
+  {
+    id: `make_tincture_${herb}`, category: 'Alchemy', result: 'tincture',
+    inputs: [{ item: herb, count: 3 }], skill: 'alchemy',
+    label: `Steep ${herb} into a tincture`, verb: 'steeping a tincture', baseTime: 12, stamina: 0.03, difficulty: 16,
+    done: `You steep the ${herb} down to a few dark drops. A tincture.`,
+    fail: `The ${herb} steeps to nothing and the drops are only water.`, consumeOnFail: true, perk: 'tincture',
+  },
+]);
+
+RECIPES.push(...REMEDY_RECIPES);
 
 /**
  * The traps that are *built*, out of the same book the game reads them from.
@@ -1050,16 +1085,17 @@ export function recipeAction(r: Recipe): ActionDef {
       const stackable = !!itemDef(r.result).stackable;
       const mark = stackable ? makersMark((k, d) => g.perk(k, d), r.result) : overParts(partsMark(parts), makersMark((k, d) => g.perk(k, d), r.result));
       const marked = mark && Object.keys(mark).length ? mark : undefined;
-      const item = g.inventory.add(r.result, { count, ql, extra: r.extra ?? mat, ...(stackable && marked ? { mark: marked } : {}) });
-      if (!stackable && marked) item.mark = marked;
       // Now and again a thing comes off the bench better than the hands that
-      // made it had any right to produce. Nothing brings it on but a perk on
-      // the recipe (a Carpenter's Master Joiner).
+      // made it had any right to produce, the odds bettered by a perk on the
+      // recipe (a Carpenter's Master Joiner). Rolled before it goes into the
+      // pack, and rare work carries its maker's name, so that it starts a pile
+      // of its own: set after, it made the whole pile it went onto rare.
       const rare = rollRarity(g.rand, g.perk(`rare:${r.id}`, RARITY_ODDS[0]));
+      const item = g.inventory.add(r.result, {
+        count, ql, extra: r.extra ?? mat, ...(stackable && marked ? { mark: marked } : {}), ...(rare ? { rare, maker: g.player.name } : {}),
+      });
+      if (!stackable && marked) item.mark = marked;
       if (rare) {
-        item.rare = rare;
-        // Rare work carries its maker's mark.
-        item.maker = g.player.name;
         g.note(['', 'rare', 'supreme', 'fantastic'][rare]);
         g.logMsg(RARITY_WORD[rare], 'skill');
       }

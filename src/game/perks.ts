@@ -45,8 +45,9 @@
  */
 import { CLASSES, PERK_CLASSES, PERK_TIER_AT, PERKS_PER_TIER } from './classes';
 import {
-  ACTION_BY_ID, CHIP_CHANCE, CLEARED_TO, DIG_TILE_TIME, DREDGE_DEPTH, FLATTEN_STEP, MINE_COLLAPSE, MINE_DEPTH, PAN_ORES, PLANTED_AGE,
-  plantedAge, PROSPECT_REACH, PROSPECT_STEP, RESIN_TREE, SLOPE_FLOOR, SLOPE_PER_SKILL, SPOIL_REACH, TILE_CORNERS,
+  ACTION_BY_ID, CHIP_CHANCE, CLEARED_TO, DIG_TILE_TIME, DREDGE_DEPTH, FLATTEN_STEP, GRASS_PER_CUT, MINE_COLLAPSE, MINE_DEPTH, PAN_ORES,
+  PLANTED_AGE, plantedAge, PROSPECT_REACH, PROSPECT_STEP, REED_CUT, REED_EXTRA_AT, RESIN_TREE, SLOPE_FLOOR, SLOPE_PER_SKILL, SPOIL_REACH,
+  TILE_CORNERS,
 } from './actions';
 import { FIND_BASE, FIND_CAP, FIND_PER_SKILL, FIND_PER_TOOL } from './archaeology';
 import { BAUBLE_SHARE } from './baubles';
@@ -72,7 +73,11 @@ import { walkKey } from './player';
 import { article, capital, listed, numberWord, percent, share, spanWords, times } from './words';
 import { helpingOf, NUTRIENTS, TABLE_BEST } from './nutrition';
 import { BREWS } from './brewing';
-import { boonTime } from './boons';
+import { boonTime, TINCTURE_BONUS, TINCTURE_SECONDS } from './boons';
+import { EMPTY_CHANCE, PER_ROLL } from './forage';
+import { DRESS_CHECK } from './firstaid';
+import { TINCTURE_NAMES } from './remedies';
+import { FESTER_CLOTH, FESTER_WRONG } from './wounds';
 import { BAIT_BY_ID } from './fishing';
 import { BUTCHER_BAIT } from './butcher';
 import { SHEAR_FROM, SHEAR_WOOL, TAME_MOST } from './creatureActions';
@@ -89,8 +94,8 @@ export type Fx = Record<string, number>;
  */
 export const FX_RULE: Record<string, 'mul' | 'add'> = {
   time: 'mul', ql: 'mul', weight: 'mul', walk: 'mul', fail: 'mul', wear: 'mul', need: 'mul', bill: 'mul',
-  grow: 'mul', rotate: 'mul', feed: 'mul', fill: 'mul', knack: 'mul', rot: 'mul', cool: 'mul', catch: 'mul',
-  carry: 'add', jobs: 'add', plus: 'add', bumper: 'add', fodder: 'add', tool: 'add',
+  grow: 'mul', rotate: 'mul', feed: 'mul', fill: 'mul', knack: 'mul', rot: 'mul', cool: 'mul', catch: 'mul', empty: 'mul', mend: 'mul',
+  carry: 'add', jobs: 'add', plus: 'add', bumper: 'add', fodder: 'add', tool: 'add', passes: 'add',
 };
 
 export const fxFamily = (key: string): string => key.split(':')[0];
@@ -1492,6 +1497,124 @@ const HERDSMAN: Seed[] = [
   },
 ];
 
+/*
+ * ---------------------------------------------------------------------------
+ * The Naturalist: foraging and botanizing, alchemy and first aid.
+ * ---------------------------------------------------------------------------
+ */
+const DYE_BOILS = RECIPES.filter((r) => r.result === 'dye');
+const ALCHEMY = RECIPES.filter((r) => r.skill === 'alchemy' && r.difficulty !== undefined);
+const COVER = recipeOf('make_cover_thyme');
+const TEA = recipeOf('brew_tea_thyme');
+const SALVE = recipeOf('make_salve_thyme');
+const TINCTURE = recipeOf('make_tincture_thyme');
+/** "two of one herb", from a recipe whose first input is the herb. */
+const ofOneHerb = (r: Recipe): string => `${numberWord(r.inputs[0].count ?? 1)} of one herb`;
+
+const NATURALIST: Seed[] = [
+  {
+    num: 2, name: 'Keen Eye',
+    fx: { 'passes:forage': 1, 'passes:botanize': 1 },
+    note: (fx) => `Foraging and botanizing go over the ground ${numberWord(fx['passes:forage'])} more `
+      + `${fx['passes:forage'] === 1 ? 'time' : 'times'} a go (now once, and once more for every ${PER_ROLL} points of the skill).`,
+  },
+  {
+    num: 3, name: 'Sure Find',
+    fx: { 'empty:forage': 0, 'empty:botanize': 0 },
+    note: () => `No look over the ground comes up empty by chance, foraging or botanizing (now ${oneIn(EMPTY_CHANCE)} does, `
+      + 'before the skill is asked).',
+  },
+  {
+    num: 10, name: 'Hay Cutter',
+    fx: { 'count:mixed_grass': 3 },
+    note: (fx) => `Cutting grass gives ${numberWord(fx['count:mixed_grass'])} bundles (now ${numberWord(GRASS_PER_CUT)}).`,
+  },
+  {
+    num: 11, name: 'Reed Cutter',
+    fx: { 'count:reed': 3 },
+    note: (fx) => `Cutting reeds always gives ${numberWord(fx['count:reed'])} (now ${numberWord(REED_CUT)}, and one more on a chance of `
+      + `your foraging in ${REED_EXTRA_AT}).`,
+  },
+  {
+    num: 12, name: 'Rare Find',
+    fx: { 'rare:forage': RARITY_ODDS[0], 'rare:botanize': RARITY_ODDS[0] },
+    note: (fx) => `${oneIn(fx['rare:forage'])} finds foraging or botanizing come up rare (now none do); supreme and fantastic `
+      + 'follow at their usual odds.',
+  },
+  {
+    num: 13, name: 'Quick Lye',
+    fx: { 'time:make_lye': 0.6 },
+    note: (fx) => `${capital(recipeOf('make_lye').verb)} takes ${less(fx['time:make_lye'])} less time (${secs(base('make_lye'))} base).`,
+  },
+  {
+    num: 15, name: 'Double Boil',
+    fx: { 'count:dye': 3 },
+    note: (fx) => `A dye boil makes ${numberWord(fx['count:dye'])} pots (now ${numberWord(DYE_BOILS[0].count ?? 1)}).`,
+  },
+  {
+    num: 16, name: 'Thrifty Dyer',
+    fx: onEach('need', DYE_BOILS.map((r) => r.id), 0.75),
+    note: (fx) => `A dye boil takes ${range(DYE_BOILS.map((r) => needFor(r, fx[`need:${r.id}`])))} of its dyestuff `
+      + `(now ${range(DYE_BOILS.map((r) => needFor(r, 1)))}), and the one bucket of lye.`,
+  },
+  {
+    num: 17, name: 'Sure Boil',
+    fx: onEach('fail', ALCHEMY.map((r) => r.id), 0.5),
+    note: (fx) => `Alchemy fails ${share(fx[`fail:${ALCHEMY[0].id}`])} as often (now a check at difficulty `
+      + `${range(ALCHEMY.map((r) => r.difficulty ?? 0))}).`,
+  },
+  {
+    num: 19, name: 'Ink Maker',
+    fx: { 'count:ink': 4 },
+    note: (fx) => `${capital(recipeOf('make_ink').verb)} makes ${numberWord(fx['count:ink'])} (now ${numberWord(recipeOf('make_ink').count ?? 1)}).`,
+  },
+  {
+    num: 23, name: 'Quick Dressing',
+    fx: { 'time:bind_wound': 0.6 },
+    note: (fx) => `Dressing a wound takes ${less(fx['time:bind_wound'])} less time (${secs(base('bind_wound'))} base).`,
+  },
+  {
+    num: 24, name: 'Sure Hands',
+    fx: { 'fail:bind_wound': 0.5 },
+    note: (fx) => `A dressing slips ${share(fx['fail:bind_wound'])} as often (now a check at difficulty ${DRESS_CHECK}).`,
+  },
+  {
+    num: 29, name: 'Quick Mend',
+    fx: { 'mend:bind_wound': 1.5 },
+    note: (fx) => `A wound you dress closes ${percent(fx['mend:bind_wound'] - 1)} faster until it closes or is cleaned out, whoever's it is.`,
+  },
+  {
+    num: 30, name: 'Cover Maker',
+    fx: { 'count:cover': 5 },
+    note: (fx) => `${capital(ofOneHerb(COVER))} and ${numberWord(COVER.inputs[1].count ?? 1)} cotton make ${numberWord(fx['count:cover'])} `
+      + `healing covers (now ${numberWord(COVER.count ?? 1)}).`,
+  },
+  {
+    num: 34, name: 'Field Medic',
+    fx: { dress_others: 1 },
+    note: () => 'You can dress the wounds of somebody standing beside you, at your first aid and with your dressings (now only your own).',
+  },
+  {
+    num: 43, name: 'Herb Tea',
+    fx: { herb_tea: 1 },
+    note: () => `A new recipe: ${ofOneHerb(TEA)} and a bucket of water make ${numberWord(TEA.count ?? 1)} cups of herb tea, and a cup `
+      + `puts back ${percent(ITEM_DEFS.herb_tea.stamina ?? 0)} of your stamina.`,
+  },
+  {
+    num: 44, name: 'Salve',
+    fx: { salve: 1 },
+    note: () => `A new recipe: ${ofOneHerb(SALVE)} and ${numberWord(SALVE.inputs[1].count ?? 1)} beeswax make a salve. Rubbed in over a `
+      + `dressing, the wound under it never goes bad (now cloth over it leaves ${percent(FESTER_CLOTH)} of the chance and the wrong `
+      + `herb ${percent(FESTER_WRONG)}).`,
+  },
+  {
+    num: 50, name: 'Tincture',
+    fx: { tincture: 1 },
+    note: () => `A new recipe: ${ofOneHerb(TINCTURE)} make a tincture. Taken, ${TINCTURE_NAMES} each go in ${percent(TINCTURE_BONUS)} faster `
+      + `for ${spanWords(TINCTURE_SECONDS)}, beside anything a dish is doing for them.`,
+  },
+];
+
 /** Every trade's perks, in the order they were picked. */
 const SEEDS: Record<string, Seed[]> = {
   terraformer: TERRAFORMER,
@@ -1504,6 +1627,7 @@ const SEEDS: Record<string, Seed[]> = {
   cook: COOK,
   tailor: TAILOR,
   herdsman: HERDSMAN,
+  naturalist: NATURALIST,
 };
 
 const slug = (name: string): string => name.toLowerCase().replace(/[’']/g, '').replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '');
@@ -1524,6 +1648,7 @@ export const TIERS: Record<string, number[][]> = {
   cook: [[11, 18, 28], [31, 49, 50], [3, 7, 8], [5, 6, 15], [20, 21, 32], [14, 46, 47]],
   tailor: [[2, 3, 18], [27, 31, 37], [9, 19, 21], [16, 25, 34], [4, 7, 35], [11, 46, 49]],
   herdsman: [[1, 11, 21], [15, 37, 50], [2, 13, 22], [9, 16, 25], [14, 24, 28], [10, 18, 26]],
+  naturalist: [[2, 13, 23], [10, 11, 19], [3, 17, 24], [16, 29, 30], [12, 15, 34], [43, 44, 50]],
 };
 
 /** Every perk there is, tier by tier, and in each tier by the number it was picked under, as the island lists them. */

@@ -1,6 +1,6 @@
 # Craft class perks
 
-The perks chosen for the fourteen craft classes, class by class, on 26 September 2026, and the tiers they are offered in, settled on 27 September. They replace what a craft class gave before: its channels and its tree of nodes in `src/game/classes.ts`. The Terraformer, the Miner, the Mason, the Carpenter, the Smith, the Forester, the Farmer, the Cook, the Tailor and the Herdsman are built, in `src/game/perks.ts` and on the island; the other four are not yet.
+The perks chosen for the fourteen craft classes, class by class, on 26 September 2026, and the tiers they are offered in, settled on 27 September. They replace what a craft class gave before: its channels and its tree of nodes in `src/game/classes.ts`. The Terraformer, the Miner, the Mason, the Carpenter, the Smith, the Forester, the Farmer, the Cook, the Tailor, the Herdsman and the Naturalist are built, in `src/game/perks.ts` and on the island; the other three are not yet.
 
 ## Tiers
 
@@ -286,24 +286,24 @@ Brush it down, Put it to a mate and Look it over were rules on both sides that n
 
 Main skill foraging; also botanizing, alchemy and first aid.
 
-2. **Keen Eye** — foraging and botanizing search the ground one more time (now 1, plus 1 for every 20 skill, 6 at most).
-3. **Sure Find** — no search comes up empty by chance (now 1 in 5 does, before the skill check).
+2. **Keen Eye** — foraging and botanizing search the ground one more time (now 1, plus 1 for every 20 skill, 6 at most). Built as one more pass a go (`passes:`); there is no cap in the rule, six is what 100 gives.
+3. **Sure Find** — no search comes up empty by chance (now 1 in 5 does, before the skill check). Built as that chance multiplied by the perk's none (`empty:`), foraging and botanizing.
 10. **Hay Cutter** — cutting grass gives 3 bundles (now 2).
 11. **Reed Cutter** — cutting reeds always gives 3 (now 2, with a chance of a 3rd equal to your foraging ÷ 140).
-12. **Rare Find** — 1 find in 100 comes up rare.
+12. **Rare Find** — 1 find in 100 comes up rare. Built as the first rarity step at 1 in 100 on each find, the steps after it at their usual odds. Offline nothing gathered came up rare before; it can now, for this perk.
 13. **Quick Lye** — making lye takes 40% less time (12 s base).
 15. **Double Boil** — a dye boil makes 3 pots (now 2).
-16. **Thrifty Dyer** — a dye boil takes 25% less dyestuff (now 8–10).
-17. **Sure Boil** — alchemy fails half as often (difficulty 10–22).
+16. **Thrifty Dyer** — a dye boil takes 25% less dyestuff (now 8–10). Built as three quarters of it rounded up, as every `need:` perk is: 6 of 8 and 8 of 10, a quarter off the one and a fifth off the other. The bucket of lye is the same.
+17. **Sure Boil** — alchemy fails half as often (difficulty 10–22). Built on every alchemy recipe with a check: candles, lye, ink, the ten dyes, and the Naturalist's own herb tea and tincture. Healing covers are first aid.
 19. **Ink Maker** — grinding ink gives 4 (now 2).
 23. **Quick Dressing** — dressing a wound takes 40% less time (7 s base).
-24. **Sure Hands** — dressing a wound fails half as often (difficulty 10, or 30 on an infected one).
-29. **Quick Mend** — wounds you dress close 50% faster.
+24. **Sure Hands** — dressing a wound fails half as often (difficulty 10, or 30 on an infected one). Built at difficulty 10: a wound gone bad is refused a dressing until it is cleaned out, on both sides, so the 30 never comes up.
+29. **Quick Mend** — wounds you dress close 50% faster. Built as the dresser's pace stamped on the wound at a clean dressing, whoever's wound it is; the next dressing puts its own on, and scouring it out takes it off.
 30. **Cover Maker** — 2 herbs and 1 cotton make 5 covers (now 3).
-34. **Field Medic** — you can dress other players' wounds, at your skill (now only your own and your wildermon's).
-43. **Herb Tea** — a new recipe; 2 herbs and a bucket of water make 3 cups, and each cup restores 20% of your stamina.
-44. **Salve** — a new recipe; 2 herbs and 1 wax make a salve, and a dressed wound under it never gets infected.
-50. **Tincture** — a new recipe; 3 herbs make a tincture that gives +10% skill gain in foraging, botanizing, alchemy and first aid for 20 minutes.
+34. **Field Medic** — you can dress other players' wounds, at your skill (now only your own and your wildermon's). Built as a new thing an action can be done to, a person: "Dress <name>'s wounds" on their menu, standing beside them. It goes on their worst wound, at your first aid and out of your pack, and they are told who dressed it.
+43. **Herb Tea** — a new recipe; 2 herbs and a bucket of water make 3 cups, and each cup restores 20% of your stamina. Built as five recipes, one for each healing herb, the bucket back, and Drink it on a cup. Nothing restored stamina before but rest.
+44. **Salve** — a new recipe; 2 herbs and 1 wax make a salve, and a dressed wound under it never gets infected. Built as five recipes and Rub in the salve: it goes on the worst dressed wound that could still go bad (under cloth or the wrong herb), and scouring the wound out takes it off. Nothing on an island gave wax, so hives fill there now, as they always did offline: a kept Vesp on a settlement fills a hive standing on it with honey and wax, three to one, on the clock's tidying round.
+50. **Tincture** — a new recipe; 3 herbs make a tincture that gives +10% skill gain in foraging, botanizing, alchemy and first aid for 20 minutes. Built as five recipes and Take it: four boons of its own kind, for as long as a dish's knack at its plainest (twenty minutes of the world's time, fifty of play). They stand beside a dish's rather than in its place; a dish puts back the clock on a dish's, a tincture on a tincture's.
 
 **Tiers** (swept): 50 — Keen Eye, Quick Lye, Quick Dressing · 60 — Hay Cutter, Reed Cutter, Ink Maker ·
 70 — Sure Find, Sure Boil, Sure Hands · 80 — Thrifty Dyer, Quick Mend, Cover Maker ·

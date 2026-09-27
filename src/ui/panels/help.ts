@@ -6,7 +6,8 @@ import { ANVIL_SUBTILES } from '../../game/anvil';
 import { ARCHAEOLOGY_ACTION_BY_ID, LECTERN_GAIN, RELICS } from '../../game/archaeology';
 import { BELT_MAX, QL_PER_LOOP } from '../../game/belt';
 import { HUNGER_RATE } from '../../game/body';
-import { BOON_BONUS, BOON_FOODS, boonTime, REST_CAP, REST_MULT, REST_PER_SECOND } from '../../game/boons';
+import { BOON_BONUS, BOON_FOODS, boonTime, REST_CAP, REST_MULT, REST_PER_SECOND, TINCTURE_BONUS, TINCTURE_SECONDS } from '../../game/boons';
+import { TINCTURE_NAMES } from '../../game/remedies';
 import { BREW_BY_ID, BREWS } from '../../game/brewing';
 import { BRIDGES, CLEARANCE, END_SLOP } from '../../game/bridges';
 import { HOARD_LUMPS, HOARD_MORE } from '../../game/butcher';
@@ -1433,6 +1434,16 @@ export function helpText(): string {
     <p>A wound that has <b>gone bad</b> is a different problem: it drains rather than closes and no
     dressing will hold on it. Scour it out with a bucket of <b>lye</b> first &mdash; a hard piece of
     first aid, and it leaves the wound open and bleeding again, so dress it straight after.</p>
+    <p>A <b>Naturalist</b> who has learned them makes a tea, a salve and a tincture, each of any one of the ${numberWord(KINDS.length)} healing herbs,
+    and anybody who has one may use it. <b>Herb tea</b> (${numberWord(recipe(`brew_tea_${KINDS[0].herb}`).inputs[0].count ?? 1)} of the herb
+    and a bucket of water, ${numberWord(made(`brew_tea_${KINDS[0].herb}`))} cups) puts back ${percent(itemDef('herb_tea').stamina ?? 0)} of
+    your stamina a cup. A <b>salve</b> (${numberWord(recipe(`make_salve_${KINDS[0].herb}`).inputs[0].count ?? 1)} of the herb and beeswax)
+    is rubbed into the worst dressed wound on you that could still go bad, and while it is on, it never does; it goes on over a
+    dressing, not in place of one, and scouring the wound out takes it off. A <b>tincture</b>
+    (${numberWord(recipe(`make_tincture_${KINDS[0].herb}`).inputs[0].count ?? 1)} of the herb) makes ${TINCTURE_NAMES} each go in
+    ${percent(TINCTURE_BONUS)} faster for ${spanWords(TINCTURE_SECONDS)}, beside anything a dish's knack is doing for the same trade.</p>
+    <p>A Naturalist with <b>Field Medic</b> dresses somebody else: stand beside them, right-click them and choose
+    <b>Dress</b> <i>their name</i><b>'s wounds</b>. It goes on their worst wound, at your first aid and out of your pack.</p>
     <p>The same hands do as much for a hurt <b>wildermon</b>. Stand beside a tame one that has been in
     a fight and choose <b>Treat its wounds</b>: it takes a bandage and puts back the same share of its
     whole health, which is far more forgiving than waiting for it to mend itself. A wild creature will

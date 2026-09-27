@@ -676,6 +676,18 @@ export const litresIn = (f: PlacedFurniture): number => f.litres ?? 0;
 export const isWell = (f: PlacedFurniture): boolean => (furnitureDef(f.kind).well ?? 0) > 0;
 /** A hive fills itself, and takes nothing from anyone's hands. */
 export const hiveRoom = (f: PlacedFurniture): number => furnitureCapacity(f) - furnitureUnits(f);
+
+/**
+ * How a hive fills: comb a second for each swarm keeping it, more for a
+ * better-made hive; no more swarms than three to a hive's worth; and one comb
+ * in four is wax, the rest honey. The island's `hive_sweep` reads the same.
+ */
+export const HIVE_BASE = 0.004;
+export const HIVE_PER_QL = 0.012;
+export const HIVE_SWARMS = 3;
+export const HIVE_WAX = 0.25;
+/** Comb a hive draws in a second for each swarm keeping it. */
+export const hiveRate = (ql: number): number => HIVE_BASE + (ql / 100) * HIVE_PER_QL;
 export const isHive = (f: { kind: string }): boolean => (furnitureDef(f.kind).hive ?? 0) > 0;
 
 /**

@@ -22,6 +22,12 @@ export interface Boon {
   until: number;
   /** What gave it, for the hud. */
   from: string;
+  /**
+   * A tincture's, which stands beside a dish's rather than in its place: a
+   * dish puts back the clock on a dish's and a tincture on a tincture's, and
+   * both count while they last. Absent on a dish's.
+   */
+  kind?: 'tincture';
 }
 
 /** The most rest that will stay banked: an hour of it, and no more. */
@@ -34,6 +40,11 @@ export const REST_PER_SECOND = 0.5;
 /** What a dish's knack is worth, and how long the best of them carries it. */
 export const BOON_BONUS = 0.5;
 export const BOON_SECONDS = world(20 * 60);
+
+/** What a Naturalist's tincture lifts, by how much, and for how long: their own four trades, for as long as a dish's knack at its plainest. */
+export const TINCTURE_SKILLS = ['foraging', 'botanizing', 'alchemy', 'first_aid'];
+export const TINCTURE_BONUS = 0.1;
+export const TINCTURE_SECONDS = world(20 * 60);
 
 /** The trades a dish can favour: the ones you work at, not the ones you are. */
 export const BOON_SKILLS: string[] = SKILL_DEFS.filter((d) => d.group !== 'Characteristics').map((d) => d.id);

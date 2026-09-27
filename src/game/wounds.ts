@@ -56,6 +56,10 @@ export interface Wound {
   dressing: string | null;
   /** Game time it was taken, for the log and for how long it has had to fester. */
   at: number;
+  /** How much faster it closes for the hands that dressed it (a Naturalist's Quick Mend); absent is the rule's pace. */
+  mend?: number;
+  /** A salve rubbed in over the dressing: it will not go bad while it is on. */
+  salved?: boolean;
 }
 
 export const PART_NAMES: Record<string, string> = {
@@ -102,12 +106,12 @@ export const CLOSE_PER_SKILL = 0.00002;
 export const FESTER_CLOTH = 0.12;
 export const FESTER_WRONG = 0.05;
 
-/** How fast a wound closes, given what is on it. */
+/** How fast a wound closes, given what is on it, and faster for the hands that dressed it (a Naturalist's Quick Mend). */
 export function woundClose(w: Wound, chirurgy: number): number {
   if (w.infected) return 0;
   const k = WOUND_KINDS[w.kind];
   const dressed = w.dressing === null ? CLOSE_BARE : w.dressing === '' ? CLOSE_CLOTH : w.dressing === k.herb ? CLOSE_RIGHT : CLOSE_WRONG;
-  return w.severity * dressed * (CLOSE_PACE + chirurgy * CLOSE_PER_SKILL);
+  return w.severity * dressed * (CLOSE_PACE + chirurgy * CLOSE_PER_SKILL) * (w.mend ?? 1);
 }
 
 /**
@@ -116,11 +120,16 @@ export function woundClose(w: Wound, chirurgy: number): number {
  * usually holds; the wrong herb is better again; the right herb never turns.
  */
 export function festerChance(w: Wound): number {
-  if (w.infected || w.dressing === WOUND_KINDS[w.kind].herb) return 0;
+  // And never under a salve (a Naturalist's).
+  if (w.infected || w.dressing === WOUND_KINDS[w.kind].herb || w.salved) return 0;
   const k = WOUND_KINDS[w.kind];
   const guard = w.dressing === null ? 1 : w.dressing === '' ? FESTER_CLOTH : FESTER_WRONG;
   return k.fester * guard * (0.3 + w.severity * 2) / 60;
 }
+
+/** A dressed wound that could still go bad: what a salve is for. Covered by the herb that suits it, it never will. */
+export const salvable = (w: Wound): boolean =>
+  !w.infected && !w.salved && w.dressing !== null && w.dressing !== WOUND_KINDS[w.kind].herb;
 
 /** The worst wound on you, which is the one worth seeing to. */
 export function worstWound(wounds: Wound[]): Wound | null {

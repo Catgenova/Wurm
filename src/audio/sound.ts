@@ -121,7 +121,7 @@ export const HUSHED: ReadonlySet<string> = new Set([
   // swing twice.
   'attack_creature', 'shoot_creature',
   // Eating, drinking and sleeping. A body doing something to itself.
-  'eat', 'drink', 'drink_skin', 'drink_from_vessel', 'sleep', 'study_book',
+  'eat', 'drink', 'drink_skin', 'drink_from_vessel', 'sleep', 'study_book', 'drink_tea', 'take_tincture',
   // Faith and the paths, which are the two things on this island done by
   // sitting still; and what is given up at the altar, and what it gives back.
   'pray', 'cast', 'meditate', 'sacrifice', 'absorb_mote',
@@ -170,7 +170,7 @@ export const STROKE_BY_ID: Record<string, Stroke> = {
   // And handling: things going into a pack and straps going onto an animal.
   pick_up: 'cloth', pick_up_all: 'cloth', feed: 'cloth',
   tack_creature: 'cloth', untack_creature: 'cloth', hitch_creature: 'cloth',
-  groom: 'cloth', make_brush: 'cloth', patch_item: 'cloth',
+  groom: 'cloth', make_brush: 'cloth', patch_item: 'cloth', apply_salve: 'cloth',
   crate_take_all: 'cloth', smelter_take_all: 'cloth', kiln_take_all: 'cloth', furniture_take_all: 'cloth',
 };
 

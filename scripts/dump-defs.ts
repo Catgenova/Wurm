@@ -17,7 +17,7 @@ import { MATERIALS } from '../src/game/materials';
 import { ACTIONS } from '../src/game/actions';
 import { RECIPES } from '../src/game/recipes';
 import { FURNITURE } from '../src/game/furniture';
-import { FORAGE_TABLE, BOTANIZE_TABLE } from '../src/game/forage';
+import { FORAGE_TABLE, BOTANIZE_TABLE, EMPTY_CHANCE, FIND_CHECK, PER_ROLL } from '../src/game/forage';
 import { CROP_LIST } from '../src/game/farming';
 import { FISH, BAITS } from '../src/game/fishing';
 import { WALL_TYPES, MATERIALS as BUILD_MATERIALS, ROOF_SHAPES, STOREY_SKILL, INDOORS_DECAY, INDOORS_REST, WALL_HEIGHT, LADDER_PLANKS, MAX_LEVELS, TOP_LEVELS } from '../src/game/building';
@@ -37,7 +37,7 @@ import { BREW_GAIN } from '../src/game/brewing';
 import { IMPROVE_GAIN } from '../src/game/improve';
 import { RESTORE_GAIN } from '../src/game/archaeology';
 import { FREE_GAIN } from '../src/game/traps';
-import { BANDAGE_GAIN, CLEAN_GAIN } from '../src/game/firstaid';
+import { BANDAGE_GAIN, CLEAN_GAIN, DRESS_CHECK } from '../src/game/firstaid';
 import { SHOT_ARCHERY, SHOT_FIGHT, SWING_ARM, SWING_BODY, SWING_FIGHT, TAME_GAIN, TAME_NERVE } from '../src/game/creatureActions';
 import { NET_GAIN, ROD_GAIN } from '../src/game/fishing';
 import { BREED_GAIN } from '../src/game/husbandry';
@@ -49,7 +49,9 @@ import { METALS, MOULDS, ORE_PER_LUMP, RARE_LUMP_FACTOR, RARE_METALS } from '../
 import { POTTERY } from '../src/game/kiln';
 import { MATERIALS as IMPROVE_MATERIALS, improvable, canImprove } from '../src/game/improve';
 import { NUTRIENTS } from '../src/game/nutrition';
-import { BOON_SKILLS, BOON_SECONDS, BOON_BONUS } from '../src/game/boons';
+import { BOON_SKILLS, BOON_SECONDS, BOON_BONUS, TINCTURE_BONUS, TINCTURE_SECONDS, TINCTURE_SKILLS } from '../src/game/boons';
+import { HIVE_BASE, HIVE_PER_QL, HIVE_SWARMS, HIVE_WAX } from '../src/game/furniture';
+import { GRASS_PER_CUT, REED_CUT, REED_EXTRA_AT } from '../src/game/actions';
 import { CROWD_HIDES, DEEDS_JOINED, PLANTABLE } from '../src/game/game';
 import { RARITIES, RARITY_LIFT, RARITY_ODDS, RARITY_WORD } from '../src/game/items';
 import { DYES } from '../src/game/dyestuffs';
@@ -312,6 +314,8 @@ out.push(`alter table item_def add column if not exists larder boolean not null 
 /* How many times as long the knack it gives lasts, past the ceiling its food
  * and drink have: a Cook's spirit. */
 out.push(`alter table item_def add column if not exists knack real;`);
+/* What a cup of it puts back of your stamina: a Naturalist's herb tea. */
+out.push(`alter table item_def add column if not exists stamina real;`);
 /* Ground with anything living in it, and the damp ground that is full of them. */
 out.push(`alter table tile_def add column if not exists wormy boolean not null default false;`);
 out.push(`alter table tile_def add column if not exists rich_worms boolean not null default false;`);
@@ -386,6 +390,8 @@ out.push(`alter table species_def add column if not exists pitch real;`);
 /* And the trades a species may be set to, for one with more than one. */
 out.push(`alter table species_def add column if not exists trades text[];`);
 out.push(`alter table species_def add column if not exists swims boolean not null default false;`);
+/* Kept on a settlement, it fills a hive standing there with honey and wax: a Vesp. */
+out.push(`alter table species_def add column if not exists hives boolean not null default false;`);
 out.push(`alter table species_def add column if not exists pannier real;`);
 /* A cart is pulled by hand; a vehicle is driven from a seat with a team in
  * front of it; a boat is neither and wants water under it. */
@@ -1022,6 +1028,7 @@ for (const d of Object.values(SPECIES) as unknown as S[]) {
   }
   if (d.draught) out.push(`update species_def set draught = true where id = ${q(d.id)};`);
   if (d.swims) out.push(`update species_def set swims = true where id = ${q(d.id)};`);
+  if (d.hives) out.push(`update species_def set hives = true where id = ${q(d.id)};`);
   for (const item of d.diet as string[]) out.push(`insert into species_diet values (${q(d.id)}, ${q(item)});`);
   const trades = (d as unknown as { trades?: string[] }).trades;
   if (trades) out.push(`update species_def set trades = array[${trades.map(q).join(', ')}]::text[] where id = ${q(d.id)};`);
@@ -1055,6 +1062,7 @@ for (const [id, d] of Object.entries(ITEM_DEFS)) {
   if (d.food !== undefined) out.push(`update item_def set food = ${q(d.food)} where id = ${q(id)};`);
   if (d.drink !== undefined) out.push(`update item_def set drink = ${q(d.drink)} where id = ${q(id)};`);
   if (d.knack !== undefined) out.push(`update item_def set knack = ${q(d.knack)} where id = ${q(id)};`);
+  if (d.stamina !== undefined) out.push(`update item_def set stamina = ${q(d.stamina)} where id = ${q(id)};`);
   if (d.description !== undefined) out.push(`update item_def set description = ${q(d.description)} where id = ${q(id)};`);
   if (d.holds !== undefined) out.push(`update item_def set holds = ${q(d.holds)} where id = ${q(id)};`);
   for (const n of NUTRIENTS) {
@@ -1065,6 +1073,10 @@ for (const [id, d] of Object.entries(ITEM_DEFS)) {
 BOON_SKILLS.forEach((id, ord) => out.push(`insert into boon_skill values (${q(ord)}, ${q(id)});`));
 out.push(`create or replace function boon_seconds() returns double precision language sql immutable as $fn$ select ${q(BOON_SECONDS)}::double precision $fn$;`);
 out.push(`create or replace function boon_bonus() returns double precision language sql immutable as $fn$ select ${q(BOON_BONUS)}::double precision $fn$;`);
+/* A Naturalist's tincture: the trades it lifts, by how much, and for how long. */
+out.push(`create or replace function tincture_skills() returns text[] language sql immutable as $fn$ select array[${TINCTURE_SKILLS.map(q).join(', ')}]::text[] $fn$;`);
+out.push(`create or replace function tincture_bonus() returns double precision language sql immutable as $fn$ select ${q(TINCTURE_BONUS)}::double precision $fn$;`);
+out.push(`create or replace function tincture_seconds() returns double precision language sql immutable as $fn$ select ${q(TINCTURE_SECONDS)}::double precision $fn$;`);
 for (const t of TITLES) out.push(`insert into title_def values (${q(t.id)}, ${q(t.skill)}, ${q(t.at)}, ${q(t.name)});`);
 for (const [skill, family] of FAMILY_OF) out.push(`insert into knack_kin values (${q(skill)}, ${q(family)});`);
 for (const [cat, per] of Object.entries(CATEGORY_DECAY)) out.push(`insert into category_decay values (${q(cat)}, ${q(per)});`);
@@ -1252,6 +1264,14 @@ for (const [fn, v] of [
   ['deeds_joined', DEEDS_JOINED], ['crowd_hides', CROWD_HIDES],
   /* And what a brush is worth, which the card had been claiming and no rule read. */
   ['care_bonus', CARE_BONUS], ['care_hours', CARE_HOURS],
+  /* A look over the ground: how often it is empty by chance, how hard it is, and how many points of skill a pass is. */
+  ['forage_empty', EMPTY_CHANCE], ['find_check', FIND_CHECK], ['per_roll', PER_ROLL],
+  /* What a cut of grass or reeds gives, and the foraging at which a third reed is certain. */
+  ['grass_per_cut', GRASS_PER_CUT], ['reed_cut', REED_CUT], ['reed_extra_at', REED_EXTRA_AT],
+  /* How hard a dressing is to put on well. */
+  ['dress_check', DRESS_CHECK],
+  /* How a hive fills: comb a second at the roughest and for its quality, swarms to a hive, and the share that is wax. */
+  ['hive_base', HIVE_BASE], ['hive_per_ql', HIVE_PER_QL], ['hive_swarms', HIVE_SWARMS], ['hive_wax', HIVE_WAX],
   /* What a lump costs in ore, and what a lump of the rare six is worth against one. */
   ['ore_per_lump', ORE_PER_LUMP], ['rare_lump_factor', RARE_LUMP_FACTOR],
   ['tick_seconds', TICK_SECONDS], ['idle_logout', IDLE_LOGOUT], ['event_keep', EVENT_KEEP],

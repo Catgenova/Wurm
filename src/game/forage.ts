@@ -35,6 +35,10 @@ export const BOTANIZE_TABLE: Array<[string, number]> = [
 
 /** Points of skill between one look over the ground and the next. */
 export const PER_ROLL = 20;
+/** The share of looks that turn up nothing whatever the hand, before the skill is asked (a Naturalist's Sure Find takes it away). */
+export const EMPTY_CHANCE = 0.2;
+/** How hard a look is: the skill check each one asks after the empty ground. */
+export const FIND_CHECK = 5;
 
 /**
  * How many times a tile is searched in one go. Skill does not only make a find

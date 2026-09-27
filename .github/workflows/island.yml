@@ -1648,6 +1648,19 @@ jobs:
             --outfile=node_modules/.cache/herdsman.mjs --log-level=error
           node node_modules/.cache/herdsman.mjs
 
+      - name: The Naturalist's perks, each where its rule is
+        run: |
+          # Each of the Naturalist's eighteen measured on the island, the dice
+          # put either side of a perk's number where it is a chance: a look over
+          # the ground, its passes, its empty ground and its rare finds; a cut
+          # of grass and of reeds; the pot's time, pots, dyestuff, failures, ink
+          # and covers; a dressing's time, its slips, its quick hands, and one
+          # put on somebody else; the three remedies made and used; a hive
+          # filling; and the browser's words and numbers beside the island's.
+          npx esbuild supabase/test/naturalist.ts --bundle --platform=node --format=esm \
+            --outfile=node_modules/.cache/naturalist.mjs --log-level=error
+          node node_modules/.cache/naturalist.mjs
+
       - name: The exact benefit, and where its number comes from
         run: |
           # Text the player reads says what changes and by how much, and where

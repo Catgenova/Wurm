@@ -22,6 +22,7 @@ import { maybeGem } from './gems';
 import { TREASURE_ACTIONS, maybeMap } from './treasure';
 import { LOCK_ACTIONS } from './locks';
 import { FIRST_AID_ACTIONS } from './firstaid';
+import { REMEDY_ACTIONS } from './remedies';
 import { fillFromSource, PLACEABLE_ACTIONS, sourceFor, vesselBecomes, waterNear } from './placeables';
 import { DEED_ACTIONS } from './deed';
 import { CRATE_ACTIONS } from './crates';
@@ -39,14 +40,14 @@ import { BAUBLE_ACTIONS } from './baubles';
 import { SACRIFICE_ACTIONS } from './sacrifice';
 import { MEDITATION_ACTIONS } from './meditation';
 import { SPECIES, type Stance } from './creatures';
-import { BOTANIZE_TABLE, FORAGE_TABLE, listOf, rollsAt, rollTable } from './forage';
+import { BOTANIZE_TABLE, EMPTY_CHANCE, FIND_CHECK, FORAGE_TABLE, listOf, rollsAt, rollTable } from './forage';
 import type { FloorKind, RoofShape, Side, WallType } from './building';
 import { DEED_RADIUS, rankAtLeast, type Game } from './game';
 import { materialOfItem } from './materials';
 import { boonOf, boonTime, clockLeft } from './boons';
 import { helpingOf, NUTRIENTS } from './nutrition';
 import { SKILL_DEFS } from './skills';
-import { itemDef, itemName, itemWeight, markOf, markSays, rarityOf, bagAdd, bagRefuses, bagSpare, isBag, storedLine, type Item } from './items';
+import { itemDef, itemName, itemWeight, markOf, markSays, rarityOf, bagAdd, bagRefuses, bagSpare, isBag, storedLine, RARITIES, RARITY_WORD, rollRarity, type Item } from './items';
 import { listed, numberWord } from './words';
 import { knackable, RECIPE_ACTIONS } from './recipes';
 
@@ -80,6 +81,8 @@ export type Target =
       spell?: string;
     }
   | { kind: 'crate'; id: number }
+  /** Somebody else on the island, by who they are (a Naturalist's Field Medic dressing their wounds). */
+  | { kind: 'person'; uid: string; name?: string }
   | { kind: 'campfire'; id: number; itemUid?: number; count?: number }
   | { kind: 'smelter'; id: number; itemUid?: number; count?: number; mouldUid?: number }
   | { kind: 'kiln'; id: number; itemUid?: number; count?: number }
@@ -442,6 +445,36 @@ export const MINE_COLLAPSE = 1 / 30;
 
 /** Bundles of mixed grass a cut gives. */
 export const GRASS_PER_CUT = 2;
+/** Reeds a cut gives, and the foraging at which a third is certain (a third one in this many points of it). */
+export const REED_CUT = 2;
+export const REED_EXTRA_AT = 140;
+
+/** How many times a go of foraging or botanizing looks: by the skill, and once more for a Naturalist's Keen Eye. */
+const searches = (g: Game, job: 'forage' | 'botanize', skill: string): number =>
+  rollsAt(g.skills.get(skill)) + Math.floor(g.perk(`passes:${job}`, 0));
+
+/**
+ * The looks themselves, and what each turned up: none by chance on a share
+ * of them (none at all for a Naturalist's Sure Find), then the skill, then the
+ * table; and now and then a rare one for their Rare Find.
+ */
+function lookOver(g: Game, job: 'forage' | 'botanize', skill: string, table: Array<[string, number]>, rolls: number): string[] {
+  const found: string[] = [];
+  for (let i = 0; i < rolls; i++) {
+    if (g.rand() < EMPTY_CHANCE * g.perk(`empty:${job}`, 1) || !g.skillCheck(skill, FIND_CHECK)) continue;
+    const id = rollTable(table, g.rand());
+    // Only rolled for a Rare Find, so a look draws what it always drew without one.
+    const odds = g.perk(`rare:${job}`, 0);
+    const rare = odds > 0 ? rollRarity(() => g.rand(), odds) : 0;
+    const item = g.gather(id, { ql: g.productQl(skill), rare });
+    found.push(`${rare ? `${RARITIES[rare].name} ` : ''}${itemDef(id).name.toLowerCase()} (QL ${item.ql.toFixed(1)})`);
+    if (rare) {
+      g.note(RARITIES[rare].name);
+      g.logMsg(RARITY_WORD[rare], 'skill');
+    }
+  }
+  return found;
+}
 
 /** Quality nothing is repaired below: a thing mended often enough is finished in the end. */
 export const REPAIR_FLOOR = 1;
@@ -1819,21 +1852,16 @@ export const ACTIONS: ActionDef[] = [
     applies: (t, g) => t.kind === 'tile' && !!TILE_DEFS[tile(t, g)].forage,
     check: (t, g) => (t.kind === 'tile' && g.isForaged(t.x, t.y, 'forage') ? 'This spot has been picked clean for now.' : null),
     labelFor: (_t, g) => {
-      const rolls = rollsAt(g.skills.get('foraging'));
+      const rolls = searches(g, 'forage', 'foraging');
       return rolls > 1 ? `Forage (${rolls} passes)` : 'Forage';
     },
     perform: (t, g) => {
       if (t.kind !== 'tile') return;
       g.markForaged(t.x, t.y, 'forage');
-      // A practised eye goes over the same ground more than once.
-      const rolls = rollsAt(g.skills.get('foraging'));
-      const found: string[] = [];
-      for (let i = 0; i < rolls; i++) {
-        if (g.rand() < 0.2 || !g.skillCheck('foraging', 5)) continue;
-        const id = rollTable(FORAGE_TABLE, g.rand());
-        const item = g.gather(id, { ql: g.productQl('foraging') });
-        found.push(`${itemDef(id).name.toLowerCase()} (QL ${item.ql.toFixed(1)})`);
-      }
+      // A practised eye goes over the same ground more than once, and a
+      // Naturalist's Keen Eye once more again.
+      const rolls = searches(g, 'forage', 'foraging');
+      const found = lookOver(g, 'forage', 'foraging', FORAGE_TABLE, rolls);
       if (!found.length) {
         g.missed();
         g.logMsg(rolls > 1 ? `You go over the ground ${rolls} times and find nothing edible.` : 'You find nothing edible.', 'event');
@@ -1852,20 +1880,14 @@ export const ACTIONS: ActionDef[] = [
     applies: (t, g) => t.kind === 'tile' && !!TILE_DEFS[tile(t, g)].botanize,
     check: (t, g) => (t.kind === 'tile' && g.isForaged(t.x, t.y, 'botanize') ? 'This spot has been picked clean for now.' : null),
     labelFor: (_t, g) => {
-      const rolls = rollsAt(g.skills.get('botanizing'));
+      const rolls = searches(g, 'botanize', 'botanizing');
       return rolls > 1 ? `Botanize (${rolls} passes)` : 'Botanize';
     },
     perform: (t, g) => {
       if (t.kind !== 'tile') return;
       g.markForaged(t.x, t.y, 'botanize');
-      const rolls = rollsAt(g.skills.get('botanizing'));
-      const found: string[] = [];
-      for (let i = 0; i < rolls; i++) {
-        if (g.rand() < 0.2 || !g.skillCheck('botanizing', 5)) continue;
-        const id = rollTable(BOTANIZE_TABLE, g.rand());
-        const item = g.gather(id, { ql: g.productQl('botanizing') });
-        found.push(`${itemDef(id).name.toLowerCase()} (QL ${item.ql.toFixed(1)})`);
-      }
+      const rolls = searches(g, 'botanize', 'botanizing');
+      const found = lookOver(g, 'botanize', 'botanizing', BOTANIZE_TABLE, rolls);
       if (!found.length) {
         g.missed();
         g.logMsg(rolls > 1 ? `You go over the ground ${rolls} times and find nothing of interest.` : 'You find nothing of interest.', 'event');
@@ -2585,17 +2607,19 @@ export const ACTIONS: ActionDef[] = [
     perform: (t, g) => {
       if (t.kind !== 'tile') return;
       g.markForaged(t.x, t.y, 'grass');
-      g.gather('mixed_grass', { count: GRASS_PER_CUT, ql: g.productQl('foraging') });
+      // More to a cut for a Naturalist's Hay Cutter.
+      const cut = g.perk('count:mixed_grass', GRASS_PER_CUT);
+      g.gather('mixed_grass', { count: cut, ql: g.productQl('foraging') });
       // Grass kept cut on a deed becomes lawn: the tile counts the days.
       const w = g.world;
       if (w.getTile(t.x, t.y) === TileType.Grass && g.onDeed(t.x, t.y)) {
         const days = mownDays(w.getData(t.x, t.y));
         w.setTile(t.x, t.y, TileType.Grass, days | MOWN_TODAY);
         const left = LAWN_AFTER - days - 1;
-        g.logMsg(`You cut ${numberWord(GRASS_PER_CUT)} bundles of mixed grass.${left > 0 ? ` Kept cut, this will be lawn in ${left} more day${left === 1 ? '' : 's'}.` : ' Kept cut, this will be lawn tomorrow.'}`, 'event');
+        g.logMsg(`You cut ${numberWord(cut)} bundles of mixed grass.${left > 0 ? ` Kept cut, this will be lawn in ${left} more day${left === 1 ? '' : 's'}.` : ' Kept cut, this will be lawn tomorrow.'}`, 'event');
         return;
       }
-      g.logMsg(`You cut ${numberWord(GRASS_PER_CUT)} bundles of mixed grass.`, 'event');
+      g.logMsg(`You cut ${numberWord(cut)} bundles of mixed grass.`, 'event');
     },
   },
   {
@@ -2614,7 +2638,8 @@ export const ACTIONS: ActionDef[] = [
     perform: (t, g) => {
       if (t.kind !== 'tile') return;
       g.markForaged(t.x, t.y, 'reed');
-      const count = 2 + (g.rand() < g.skills.get('foraging') / 140 ? 1 : 0);
+      // Never fewer than a Naturalist's Reed Cutter says, whatever the roll.
+      const count = Math.max(g.perk('count:reed', 0), REED_CUT + (g.rand() < g.skills.get('foraging') / REED_EXTRA_AT ? 1 : 0));
       g.gather('reed', { count, ql: g.productQl('foraging', g.toolQl('carving_knife')) });
       g.logMsg(`You cut ${count} reeds out of the bed.`, 'event');
     },
@@ -2636,6 +2661,7 @@ export const ACTIONS: ActionDef[] = [
   ...ARCHAEOLOGY_ACTIONS,
   ...TREASURE_ACTIONS,
   ...FIRST_AID_ACTIONS,
+  ...REMEDY_ACTIONS,
   ...PLACEABLE_ACTIONS,
   ...CRATE_ACTIONS,
   ...LOCK_ACTIONS,

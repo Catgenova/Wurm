@@ -21,7 +21,7 @@ import { anvilAnchor, anvilCovers, ANVIL_SUBTILES, type PlacedAnvil } from './an
 import { fireAnchor, fireCentre, fireCovers, FIRE_SUBTILES, type PlacedCampfire } from './campfire';
 import { smelterAnchor, smelterCentre, smelterCovers, SMELTER_H, SMELTER_W, type PlacedSmelter, type SmeltJob } from './smelter';
 import { kilnAnchor, kilnCovers, KILN_SUBTILES, type PlacedKiln } from './kiln';
-import { ACROSS_OF, DEED_PLACE, ONE_ALTAR, deckSpot, furnitureAnchor, furnitureCapacity, furnitureCentre, furnitureCovers, furnitureDef, furnitureHeft, furnitureHolds, furnitureKg, furnitureRefuses, furnitureRoom, furnitureUnits, hiveRoom, rackDeck, rackSpots, teamOf, vehicleOf, type LiquidKind, type PlacedFurniture, furnitureName, LIQUID_NAME, isBoat, furnitureFootprint, type BoatDef } from './furniture';
+import { ACROSS_OF, DEED_PLACE, ONE_ALTAR, deckSpot, furnitureAnchor, furnitureCapacity, furnitureCentre, furnitureCovers, furnitureDef, furnitureHeft, furnitureHolds, furnitureKg, furnitureRefuses, furnitureRoom, furnitureUnits, hiveRate, hiveRoom, HIVE_SWARMS, HIVE_WAX, rackDeck, rackSpots, teamOf, vehicleOf, type LiquidKind, type PlacedFurniture, furnitureName, LIQUID_NAME, isBoat, furnitureFootprint, type BoatDef } from './furniture';
 import { emptyCrate, occupiedRefusal, shutIn } from './creaturecrate';
 import { bury, crumble, graveAt, graveRefusal, graveSays, GRAVE_MARK } from './graves';
 import { cropStageSeconds, RIPE, type Crop } from './farming';
@@ -36,7 +36,7 @@ import { BASE_SPEED, CARRY_CRAWL, CLIMB_LEARN, CLIMB_LEARN_FROM, CLIMB_LEARN_STE
 import { randomLook, type Look } from './look';
 import { ACTION_FLOOR, ACTION_PACE, world } from './pace';
 import { ARMOUR_BY_ID, ARMOUR_CLASSES, HIT_LOCATIONS, pieceBurden, pieceSoak, SHIELDS, WEAPON_BY_ID, type Slot, SLOTS } from './gear';
-import { boonOf, boonTime, BOON_BONUS, clockLeft, REST_CAP, REST_MULT, REST_PER_SECOND, type Boon } from './boons';
+import { boonOf, boonTime, BOON_BONUS, clockLeft, REST_CAP, REST_MULT, REST_PER_SECOND, TINCTURE_BONUS, TINCTURE_SECONDS, TINCTURE_SKILLS, type Boon } from './boons';
 import { cleanSaid } from './chat';
 import { ALL_GOALS } from './journal';
 import { FieldGuide, GUIDE_LOOK, seenLine, type GuideBook, type GuideMark } from './guide';
@@ -2402,13 +2402,30 @@ export class Game {
     // And lasts longer for its maker's hand in it (a Cook's Flavoursome, Strong Brew).
     const seconds = boonTime(itemId, ql, knack);
     const def = SKILL_DEFS.find((d) => d.id === skill);
-    const already = this.player.boons.find((b) => b.skill === skill && b.until > this.time);
+    // A dish's own, never a tincture's: the two stand side by side.
+    const already = this.player.boons.find((b) => b.skill === skill && !b.kind && b.until > this.time);
     if (already) already.until = Math.max(already.until, this.time + seconds);
     else this.player.boons.push({ skill, bonus: BOON_BONUS, until: this.time + seconds, from: itemName({ id: itemId, uid: 0, ql, dmg: 0, count: 1 }) });
     // Keep the list from growing without end as things run out.
     this.player.boons = this.player.boons.filter((b) => b.until > this.time);
     this.events.emit('inventory');
     return def ? `${def.name} comes easier for the next ${clockLeft(seconds)}.` : null;
+  }
+
+  /**
+   * A Naturalist's tincture taken: each of its trades goes in faster for a
+   * while, beside whatever a dish is doing for it. A second one puts the clock
+   * back on the first rather than stacking on it.
+   */
+  takeTincture(): void {
+    const until = this.time + TINCTURE_SECONDS;
+    for (const skill of TINCTURE_SKILLS) {
+      const already = this.player.boons.find((b) => b.skill === skill && b.kind === 'tincture' && b.until > this.time);
+      if (already) already.until = Math.max(already.until, until);
+      else this.player.boons.push({ skill, bonus: TINCTURE_BONUS, until, from: itemDef('tincture').name.toLowerCase(), kind: 'tincture' });
+    }
+    this.player.boons = this.player.boons.filter((b) => b.until > this.time);
+    this.events.emit('inventory');
   }
 
   /**
@@ -3604,6 +3621,11 @@ export class Game {
     if (target.kind === 'crate') {
       const c = this.crates.get(target.id);
       return c ? { x: c.x, y: c.y } : null;
+    }
+    // Somebody else: where the island last said they were standing.
+    if (target.kind === 'person') {
+      const who = this.roster.list().find((p) => p.uid === target.uid);
+      return who ? { x: Math.floor(who.x), y: Math.floor(who.y) } : null;
     }
     if (target.kind === 'campfire') {
       const f = this.campfires.get(target.id);
@@ -4882,7 +4904,7 @@ export class Game {
 
   /** Comb a hive draws in a second for each swarm keeping it. */
   hiveRate(f: PlacedFurniture): number {
-    return 0.004 + (f.ql / 100) * 0.012;
+    return hiveRate(f.ql);
   }
 
   /**
@@ -4895,7 +4917,7 @@ export class Game {
     for (const c of this.creatures.list.values()) {
       if (c.mode !== 'deed' && c.mode !== 'active') continue;
       if (!this.creatures.species(c).hives || !this.onDeed(c.x, c.y)) continue;
-      if (++n >= 3) break;
+      if (++n >= HIVE_SWARMS) break;
     }
     return n;
   }
@@ -4906,7 +4928,7 @@ export class Game {
     let made = 0;
     while (comb >= 1 && hiveRoom(f) > 0) {
       comb -= 1;
-      const id = this.rand() < 0.25 ? 'wax' : 'honey';
+      const id = this.rand() < HIVE_WAX ? 'wax' : 'honey';
       const ql = Math.min(100, Math.max(1, f.ql * (0.7 + this.rand() * 0.6)));
       this.furnitureAdd(f, { uid: this.inventory.nextUid++, id, ql, dmg: 0, count: 1 });
       made++;
@@ -5104,7 +5126,7 @@ export class Game {
    * has room for and will take, and the rest into the pack. The stack it
    * went into comes back, the cart's when any of it went there.
    */
-  gather(id: string, opts: { ql?: number; count?: number; extra?: string } = {}): Item {
+  gather(id: string, opts: { ql?: number; count?: number; extra?: string; rare?: number } = {}): Item {
     const cart = this.workCart();
     // And what the settlement's baubles make of it, when it is the yield of a go.
     const count = this.baubleYield(id, opts.count ?? 1);
@@ -5112,6 +5134,7 @@ export class Game {
     if (!cart) return this.inventory.add(id, opts);
     const def = itemDef(id);
     const item: Item = { uid: 0, id, ql: Math.max(1, Math.min(100, opts.ql ?? 20)), dmg: 0, count, extra: opts.extra };
+    if (opts.rare) item.rare = opts.rare;
     if (def.charges) item.charges = def.charges;
     const fit = furnitureRefuses(cart, item) ? 0 : Math.min(count, furnitureRoom(cart, item));
     if (fit < count) this.saidCartFull(cart);

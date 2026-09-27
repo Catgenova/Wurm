@@ -2217,6 +2217,19 @@ export class UI {
       note: after ? 'You are walking after them' : 'Walk after them until you go somewhere else',
       onSelect: () => this.game.follow(uid, name),
     });
+    // Their wounds, at your first aid and out of your pack: a Naturalist's Field Medic.
+    const dress = ACTION_BY_ID.get('bind_wound');
+    const patient: Target = { kind: 'person', uid, name };
+    if (dress?.applies(patient, this.game)) {
+      const why = dress.check?.(patient, this.game) ?? null;
+      entries.push({
+        label: dress.labelFor?.(patient, this.game) ?? dress.label,
+        note: 'At your first aid, with your dressings',
+        hint: why ?? undefined,
+        disabled: !!why,
+        onSelect: () => this.game.requestAction(dress, patient),
+      });
+    }
     const deed = this.game.deed;
     if (deed) {
       entries.push({
