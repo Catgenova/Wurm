@@ -411,6 +411,17 @@ export const NEWS: News[] = [
       'The Miner’s perks are set out in their final tiers too. A perk you had taken that moved is cleared, and yours to choose again in the Trades window; only Pan stayed where it was.',
     ],
   },
+  {
+    n: 32,
+    day: '2026-09-27',
+    lines: () => {
+      const main = (CLASSES.find((c) => c.id === 'mason')?.main ?? '').replace(/_/g, ' ');
+      return [
+        `The Mason has perks instead of a tree now: ${numberWord(PERK_TIER_AT.length)} tiers of ${numberWord(PERKS_PER_TIER)}, the first with the trade and the others at ${listed(PERK_TIER_AT.slice(1).map(String))} in ${main}. Among them two new jobs, Repoint, which lays a finished stone wall again in another stone, and Raise the rock with rubble.`,
+        'The nodes a Mason had bought went with the tree.',
+      ];
+    },
+  },
 ];
 
 /** The highest entry this browser has shown. */

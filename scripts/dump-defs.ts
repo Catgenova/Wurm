@@ -20,7 +20,8 @@ import { FURNITURE } from '../src/game/furniture';
 import { FORAGE_TABLE, BOTANIZE_TABLE } from '../src/game/forage';
 import { CROP_LIST } from '../src/game/farming';
 import { FISH, BAITS } from '../src/game/fishing';
-import { WALL_TYPES, MATERIALS as BUILD_MATERIALS, ROOF_SHAPES, STOREY_SKILL, INDOORS_DECAY, INDOORS_REST, WALL_HEIGHT, LADDER_PLANKS } from '../src/game/building';
+import { WALL_TYPES, MATERIALS as BUILD_MATERIALS, ROOF_SHAPES, STOREY_SKILL, INDOORS_DECAY, INDOORS_REST, WALL_HEIGHT, LADDER_PLANKS, MAX_LEVELS, TOP_LEVELS } from '../src/game/building';
+import { REPOINT_BACK } from '../src/game/buildActions';
 import { CONCRETE_PER_STEP } from '../src/game/foundations';
 import { COAX_LAPSE, COAX_STEP, HERD_REACH, HUNT_HOME, HUNT_LEASH, HUNT_REST, OLD_AT, YOUNG_FOR, SITE_LOOKS, WILD_RANGE, WILD_REACH, WILD_REST, WILD_REST_SPREAD, SHOE_DAYS, SHOE_PACE, SHOE_STEP, SHOES_PER_MOUNT,
          COMPANION_SIGHT, COMPANION_LEASH, COMPANION_REACH, COMPANION_BLOW, COMPANION_PACE, BLOW_MEMORY, FIGHT_BACK_GOES } from '../src/game/creatures';
@@ -1227,6 +1228,8 @@ for (const [fn, v] of [
   ['flatten_step', FLATTEN_STEP], ['spoil_reach', SPOIL_REACH],
   ['slope_per_skill', SLOPE_PER_SKILL], ['slope_floor', SLOPE_FLOOR],
   ['corners_per_tile', TILE_CORNERS], ['dig_tile_time', DIG_TILE_TIME],
+  /* The storeys a building may have, and the most a Mason's Tall Walls lets one reach; and what a Repoint gives back of the old stone. */
+  ['max_levels', MAX_LEVELS], ['top_levels', TOP_LEVELS], ['repoint_back', REPOINT_BACK],
   /* How likely a turn of the trowel is to find anything: a base, per skill, per trowel, and the cap. */
   ['find_base', FIND_BASE], ['find_per_skill', FIND_PER_SKILL], ['find_per_tool', FIND_PER_TOOL], ['find_cap', FIND_CAP],
   /* What the fire gives back of a thing melted down, and the heat it takes. */

@@ -140,7 +140,8 @@ export const heftWord = (n: number): string => HEFT_WORDS[n] ?? 'timber';
  * planned over it: ten a storey, so the second wants ten and the tenth ninety.
  */
 export const STOREY_SKILL = 10;
-export const storeySkill = (levels: number): number => levels * STOREY_SKILL;
+/** Past the tenth storey, which only a Mason's Tall Walls reaches, a hundred is as much as there is. */
+export const storeySkill = (levels: number): number => Math.min(100, levels * STOREY_SKILL);
 
 export const MATERIALS: MaterialDef[] = [
   { id: 'log', name: 'Log', kind: 'wood', tool: 'mallet', skill: 'carpentry', color: [139, 106, 62], trim: [92, 66, 38], floor: [150, 118, 74], courses: 3, bill: [['log', 16]], storeys: 3, heft: 1 },
@@ -181,6 +182,15 @@ export const FLOOR_DEEP = 2.2;
 /** And how deep an eave is: the board along the rafter ends, under the courses lapped over them. */
 export const EAVE_DEEP = 2.6;
 export const MAX_LEVELS = 10;
+/**
+ * How many storeys past what its stone will stand a building of stone may
+ * rise when it was planned by a Mason with Tall Walls, and so the tallest any
+ * building on the island can be. Everything that walks, climbs or looks up a
+ * building reaches as high as this; everything that plans one stops at
+ * `MAX_LEVELS` without the perk.
+ */
+export const TALL_STOREYS = 2;
+export const TOP_LEVELS = MAX_LEVELS + TALL_STOREYS;
 /**
  * What a roof over your head is worth to everything left under it.
  *
@@ -395,7 +405,7 @@ export function progressOf(b: Bill): number {
   return total ? 1 - left / total : 1;
 }
 
-function scaledBill(material: string, factor: number): Bill {
+export function scaledBill(material: string, factor: number): Bill {
   const def = MATERIAL_BY_ID.get(material);
   const needed: Record<string, number> = {};
   if (def) for (const [id, n] of def.bill) needed[id] = Math.max(1, Math.ceil(n * factor));
@@ -691,10 +701,14 @@ export class Buildings {
    * How tall this building may go: the shortest of what it is made of, and
    * never past what the world allows. A wing of planks caps the stone tower
    * it is joined to, which is the point — a building is one thing.
+   *
+   * `tall` is what its planner's Tall Walls adds, if they are a Mason who
+   * took it: that many storeys more on every stone in it, and on the world's
+   * limit, and nothing on timber.
    */
-  storeyCap(b: Building): number {
-    let cap = MAX_LEVELS;
-    for (const m of this.materialsIn(b)) cap = Math.min(cap, m.storeys);
+  storeyCap(b: Building, tall = 0): number {
+    let cap = MAX_LEVELS + tall;
+    for (const m of this.materialsIn(b)) cap = Math.min(cap, m.storeys + (m.kind === 'stone' ? tall : 0));
     return cap;
   }
 

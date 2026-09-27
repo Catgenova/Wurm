@@ -15,7 +15,7 @@ import type { ItemRow } from '../net/island';
 import { packed, type Aged } from '../net/packed';
 import { DROWN_RATE, DROWN_WARN, EXHAUSTED, HEAL_FED, HEAL_RATE, HUNGER_RATE, SWIM_LEARN, SWIM_WIND, THIRST_RATE, WIND_PER_LEVEL, WIND_REST, WIND_STARVING, WIND_WALK } from './body';
 import { markName, MARK_CAP, MARK_COLOURS, type Marker } from './marks';
-import { Buildings, connectsDown, floorKind, INDOORS_DECAY, isDone, MAX_LEVELS, roofShapeDef, WALL_HEIGHT, walkableKind, type BuildingsJSON, type Building, type Wall, type Side } from './building';
+import { Buildings, connectsDown, floorKind, INDOORS_DECAY, isDone, roofShapeDef, TOP_LEVELS, WALL_HEIGHT, walkableKind, type BuildingsJSON, type Building, type Wall, type Side } from './building';
 import { crateCentre, crateName, crateCapacity, crateUnits, STORE_REACH, subtileOf, type CrateKind, type PlacedCrate } from './crates';
 import { anvilAnchor, anvilCovers, ANVIL_SUBTILES, type PlacedAnvil } from './anvil';
 import { fireAnchor, fireCentre, fireCovers, FIRE_SUBTILES, type PlacedCampfire } from './campfire';
@@ -1303,7 +1303,7 @@ export class Game {
     if (this.afloat()) return { rule: this.sailRule, levels: 1 };
     if (this.driving()) return { rule: this.driveRule, levels: 1 };
     if (this.mounted()) return { rule: this.rideRule, levels: 1 };
-    return { rule: this.stepRule, levels: MAX_LEVELS };
+    return { rule: this.stepRule, levels: TOP_LEVELS };
   }
 
   /** Height of the player's feet, storeys included. */
@@ -3985,7 +3985,9 @@ export class Game {
     if (ax !== bx && ay !== by) return 'A bridge runs straight. Pick an end level with this one, north, south, east or west.';
     const span = spanTiles(ax, ay, bx, by);
     if (!span.length) return 'There is nothing between those two. Bridge a gap.';
-    if (span.length > def.span) return `A ${def.name.toLowerCase()} spans ${def.span} tiles; that is ${span.length}.`;
+    // A Mason's Bridge Mason carries a stone arch further (`span:bridge_stone`).
+    const reach = this.perk(`span:bridge_${kind}`, def.span);
+    if (span.length > reach) return `A ${def.name.toLowerCase()} spans ${reach} tiles; that is ${span.length}.`;
     /*
      * And what each end lands on.
      *
@@ -4617,17 +4619,26 @@ export class Game {
   private storesForCraft(): Array<{ items: Item[]; name: string }> {
     // "A player setting to only use inventory."
     if (!this.settings.fromStores) return [];
+    return this.storesWithin(CRAFT_REACH);
+  }
+
+  /**
+   * The crates and pieces within `reach` tiles that a craft may take from,
+   * nearest first: the same rule as `storesForCraft`, at any reach. A Mason's
+   * Hod Carrier builds out of these.
+   */
+  storesWithin(reach: number): Array<{ items: Item[]; name: string }> {
     const tx = this.player.tileX;
     const ty = this.player.tileY;
-    const within = (x: number, y: number): boolean => Math.max(Math.abs(x - tx), Math.abs(y - ty)) <= CRAFT_REACH;
+    const within = (x: number, y: number): boolean => Math.max(Math.abs(x - tx), Math.abs(y - ty)) <= reach;
     const found: Array<{ items: Item[]; name: string; d: number; order: number }> = [];
     const far = (cx: number, cy: number): number => Math.hypot(cx - this.player.x, cy - this.player.y);
-    this.placed.crates.around(tx + 0.5, ty + 0.5, CRAFT_REACH, (c) => {
+    this.placed.crates.around(tx + 0.5, ty + 0.5, reach, (c) => {
       if (!c.items.length || !within(c.x, c.y) || c.mine === false || this.lockRefusal(c)) return;
       const [cx, cy] = crateCentre(c);
       found.push({ items: c.items, name: crateName(c), d: far(cx, cy), order: c.id });
     });
-    this.placed.furniture.around(tx + 0.5, ty + 0.5, CRAFT_REACH, (f) => {
+    this.placed.furniture.around(tx + 0.5, ty + 0.5, reach, (f) => {
       if (!f.items.length || !within(f.x, f.y)) return;
       const def = furnitureDef(f.kind);
       if (!furnitureHolds(f) || def.trash || def.stall) return;

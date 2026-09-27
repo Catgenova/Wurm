@@ -35,6 +35,9 @@ import { ACTION_BY_ID, DIG_TILE_TIME, digDepth, FLATTEN_STEP, MINE_DEPTH, SLOPE_
 import { CLASSES, PERK_CLASSES, PERK_TIER_AT, PERKS_PER_TIER } from '../../src/game/classes';
 import { foldFx, foldPerks, FX_RULE, type Fx, PERKS, perkRefusal, perksOf, type PerkDef } from '../../src/game/perks';
 import { ITEM_DEFS } from '../../src/game/items';
+import { BRIDGES } from '../../src/game/bridges';
+import { buildWork } from '../../src/game/buildActions';
+import { MATERIALS as BUILD_MATERIALS } from '../../src/game/building';
 import { ROAD_TILES, TILE_DEFS } from '../../src/world/tiles';
 
 const psql = (sql: string): string =>
@@ -477,14 +480,22 @@ check('nobody keeps a node of the Terraformer\'s old tree', say('OLDNODES') === 
  * quality, a rarity, a map, a failure or a thing kept; a thing for a weight;
  * a skill for a slope. A typo there is a perk that reads nothing.
  */
-const JOBS = new Set(['time', 'ql', 'rare', 'map', 'fail', 'keep', 'more', 'gem', 'find', 'cap', 'into']);
+const JOBS = new Set(['time', 'ql', 'rare', 'map', 'fail', 'keep', 'more', 'gem', 'find', 'cap', 'into', 'spare']);
+/*
+ * And a kind of work, where the rule asks what is being worked rather than
+ * which job: a wall or floor of stone or of timber, a bridge of each kind.
+ */
+const WORKS = new Set([...BUILD_MATERIALS.map((m) => buildWork(m)), ...Object.keys(BRIDGES).map((k) => `bridge_${k}`)]);
+const WORK_FAMILIES = new Set(['lay', 'storeys', 'salvage', 'span']);
 const OTHERS = new Set([
   'depth:dig', 'depth:dredge', 'flatten:step', 'stump:log', 'walk:road', 'reach:soil', 'carry', 'dig_tile',
   'ore:below', 'chip:chance', 'chip:step', 'slide:more', 'depth:mine', 'further:prospect', 'fit:relic', 'share:bauble', 'pan',
+  'depth:raise_rock', 'lift:raise_rock', 'repoint', 'rubble',
 ]);
 const unnamed = PERKS.flatMap((p) => Object.keys(p.fx).filter((key) => {
   const [fam, rest] = key.split(':');
-  if (JOBS.has(fam)) return !ACTION_BY_ID.has(rest);
+  if (JOBS.has(fam)) return !ACTION_BY_ID.has(rest) && !WORKS.has(rest);
+  if (WORK_FAMILIES.has(fam) || (fam === 'reach' && rest?.startsWith('build_'))) return !WORKS.has(rest);
   if (fam === 'weight' || fam === 'count') return !ITEM_DEFS[rest];
   if (fam === 'slope') return !['digging', 'masonry'].includes(rest);
   return !OTHERS.has(key);

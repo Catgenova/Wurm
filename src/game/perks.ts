@@ -50,10 +50,14 @@ import {
 } from './actions';
 import { FIND_BASE, FIND_CAP, FIND_PER_SKILL, FIND_PER_TOOL } from './archaeology';
 import { BAUBLE_SHARE } from './baubles';
+import { BRIDGES } from './bridges';
+import { BUILD_ACTION_BY_ID, REPOINT_BACK } from './buildActions';
+import { MATERIAL_BY_ID, MATERIALS, MAX_LEVELS, storeySkill, TALL_STOREYS } from './building';
 import { GEM_ODDS } from './gems';
 import { CARRY_BASE, CARRY_PER_STRENGTH } from './game';
 import { ITEM_DEFS } from './items';
 import { MAP_ODDS } from './treasure';
+import { RECIPES, type Recipe } from './recipes';
 import { ROAD_TILES, ROCK_VARIANTS, TILE_DEFS } from '../world/tiles';
 import { listed, numberWord, percent, share } from './words';
 
@@ -351,10 +355,167 @@ const MINER: Seed[] = [
   },
 ];
 
+/*
+ * ---------------------------------------------------------------------------
+ * The Mason: the chisel, the trowel, and the rock under both.
+ * ---------------------------------------------------------------------------
+ */
+/** Everything cut with a chisel: the bricks, the slabs, the whetstone and the quern. */
+const STONECUTTING = RECIPES.filter((r) => r.skill === 'stonecutting');
+/** The bricks a shard or a block is chiselled into, a few at a go. */
+const CHISELLED = STONECUTTING.filter((r) => r.result.endsWith('_brick'));
+/** What comes off the chisel as bricks and slabs, which Brick Porter lightens. */
+const CUT_STONE = [...new Set(STONECUTTING.map((r) => r.result).filter((id) => /_(brick|slab)$/.test(id)))];
+/** The masonry a failed go pulls down with its materials in it. */
+const LOST_ON_FAIL = RECIPES.filter((r) => r.skill === 'masonry' && r.consumeOnFail);
+/** What a building is made of that is not stone: the timber a Mason's perks leave as they find it. */
+const TIMBER = MATERIALS.filter((m) => m.kind !== 'stone').map((m) => m.name.toLowerCase());
+const STONE_WORK = `stone, anything but ${either(TIMBER)}`;
+/** "6–16", or "8" where they are all one. */
+const range = (xs: readonly number[]): string => {
+  const lo = Math.min(...xs);
+  const hi = Math.max(...xs);
+  return lo === hi ? `${lo}` : `${lo}–${hi}`;
+};
+/** The same number on every one of a list of keys. */
+const each = (keys: readonly string[], v: number): Fx => Object.fromEntries(keys.map((k) => [k, v]));
+/** "bricks, whetstones, querns and slabs": what a run of recipes makes, by the last word of each. */
+const kinds = (rs: readonly Recipe[]): string =>
+  listed([...new Set(rs.map((r) => `${itemName(r.result).split(' ').pop()}s`))]);
+/** "stone, slate, marble or sandstone": the stone of each brick, without the brick. */
+const stonesOf = (ids: readonly string[]): string[] => ids.map((id) => itemName(id).replace(/ (brick|slab)$/, ''));
+/** A bill in words: "24 stone bricks and 12 mortar". */
+const billOf = (bill: ReadonlyArray<readonly [string, number]>): string =>
+  listed(bill.map(([id, n]) => `${n} ${n === 1 ? itemName(id) : plural(itemName(id))}`));
+const plural = (name: string): string => (/(s|mortar|ash)$/.test(name) ? name : `${name}s`);
+/** What each stone stands now, tallest first: "stone brick, marble, ornate silver and ornate gold 10, slate 8". */
+const standsNow = (): string => {
+  const by = new Map<number, string[]>();
+  for (const m of MATERIALS.filter((x) => x.kind === 'stone')) by.set(m.storeys, [...(by.get(m.storeys) ?? []), m.name.toLowerCase()]);
+  return [...by].sort((a, b) => b[0] - a[0]).map(([n, names]) => `${listed(names)} ${n}`).join(', ');
+};
+const STONE_BRICK_WALL = MATERIAL_BY_ID.get('stone_brick')!;
+const CONCRETE = RECIPES.find((r) => r.result === 'concrete')!;
+
+const MASON: Seed[] = [
+  {
+    num: 1, name: 'Quick Chisel',
+    fx: each(STONECUTTING.map((r) => `time:${r.id}`), 0.75),
+    note: (fx) => `Stonecutting takes ${less(fx[`time:${STONECUTTING[0].id}`])} less time a go: ${kinds(STONECUTTING)} `
+      + `(now ${range(STONECUTTING.map((r) => r.baseTime))} s base).`,
+  },
+  {
+    num: 2, name: 'Three from a Shard',
+    fx: each(CHISELLED.map((r) => `count:${r.result}`), 3),
+    note: (fx) => `Chiselling a brick of ${either(stonesOf(CHISELLED.map((r) => r.result)))} makes `
+      + `${numberWord(fx[`count:${CHISELLED[0].result}`])} at a go (now ${numberWord(CHISELLED[0].count ?? 1)}).`,
+  },
+  {
+    num: 4, name: 'Sure Chisel',
+    fx: each(STONECUTTING.map((r) => `fail:${r.id}`), 0.5),
+    note: (fx) => `Stonecutting fails ${share(fx[`fail:${STONECUTTING[0].id}`])} as often `
+      + `(now a check at difficulty ${range(STONECUTTING.map((r) => r.difficulty ?? 0))}).`,
+  },
+  {
+    num: 8, name: 'Quick Mason',
+    fx: { 'time:build_stone': 0.7 },
+    note: (fx) => `Build wall and Build floor take ${less(fx['time:build_stone'])} less time a go on ${STONE_WORK} `
+      + `(${secs(base('build_wall'))} base).`,
+  },
+  {
+    num: 9, name: 'Two at a Time',
+    fx: { 'lay:build_stone': 2 },
+    note: (fx) => `Build wall and Build floor lay ${numberWord(fx['lay:build_stone'])} units a go on ${STONE_WORK}, when you have them `
+      + `(now one; a stone-brick wall is ${billOf(STONE_BRICK_WALL.bill)}).`,
+  },
+  {
+    num: 12, name: 'Tall Walls',
+    fx: { 'storeys:build_stone': TALL_STOREYS },
+    note: (fx) => `Every stone in a building you planned stands ${numberWord(fx['storeys:build_stone'])} storeys taller, `
+      + `up to ${MAX_LEVELS + fx['storeys:build_stone']} (now ${standsNow()}, and ${MAX_LEVELS} at most). `
+      + `Timber stands no taller, and a building stops at the shortest thing in it. `
+      + `Every storey past the ${numberWord(MAX_LEVELS)}th takes masonry ${storeySkill(MAX_LEVELS)} in the storey below.`,
+  },
+  {
+    num: 16, name: 'Salvage',
+    fx: { 'salvage:build_stone': 0.5 },
+    note: (fx) => `Remove wall gives back ${share(fx['salvage:build_stone'])} the stone laid in a wall of ${STONE_WORK}, `
+      + `rounded down: ${Math.floor(STONE_BRICK_WALL.bill[0][1] * fx['salvage:build_stone'])} of a stone-brick wall's `
+      + `${STONE_BRICK_WALL.bill[0][1]} stone bricks (now none).`,
+  },
+  {
+    num: 17, name: 'Concrete Hand',
+    fx: { 'fail:raise_rock': 0 },
+    note: () => `Raise the rock with concrete never fails (now a check at difficulty ${diff('raise_rock')}, `
+      + 'and the concrete is lost when it does).',
+  },
+  {
+    num: 18, name: 'Double Lift',
+    fx: { 'lift:raise_rock': 2 },
+    note: (fx) => `Raise the rock with concrete lifts the corner ${numberWord(fx['lift:raise_rock'])} steps for one concrete `
+      + '(now one), where the slope you may leave and your level allow it; where they do not, one.',
+  },
+  {
+    num: 19, name: 'Steep Stone',
+    fx: { 'slope:masonry': 4 },
+    note: (fx) => `The steepest slope raising rock may leave is ${numberWord(fx['slope:masonry'])} times your masonry `
+      + `(now ${numberWord(SLOPE_PER_SKILL)} times, and never under ${SLOPE_FLOOR}).`,
+  },
+  {
+    num: 20, name: 'Good Mix',
+    fx: { 'count:concrete': 2 },
+    note: (fx) => `Mix concrete makes ${numberWord(fx['count:concrete'])} concrete out of the same `
+      + `${listed(CONCRETE.inputs.map((i) => itemName(i.item)))} (now ${numberWord(CONCRETE.count ?? 1)}).`,
+  },
+  {
+    num: 22, name: 'Wet Set',
+    fx: { 'depth:raise_rock': 10 },
+    note: (fx) => `Raising rock works on rock under water up to ${fx['depth:raise_rock']} deep (now only above the water).`,
+  },
+  {
+    num: 24, name: 'Nothing Wasted',
+    fx: each(LOST_ON_FAIL.map((r) => `spare:${r.id}`), 1),
+    note: () => `A failed ${either(LOST_ON_FAIL.map((r) => itemName(r.result)))} keeps its materials (now they are lost).`,
+  },
+  {
+    num: 29, name: 'Bridge Mason',
+    fx: { 'time:bridge_stone': 0.7, 'span:bridge_stone': 10 },
+    note: (fx) => `Work on a ${BRIDGES.stone.name.toLowerCase()} takes ${less(fx['time:bridge_stone'])} less time a go `
+      + `(${secs(base('build_bridge'))} base), and one spans ${fx['span:bridge_stone']} tiles (now ${BRIDGES.stone.span}).`,
+  },
+  {
+    num: 33, name: 'Brick Porter',
+    fx: each(CUT_STONE.map((id) => `weight:${id}`), 0.5),
+    note: (fx) => `Bricks and slabs of ${either([...new Set(stonesOf(CUT_STONE))])} weigh ${share(fx[`weight:${CUT_STONE[0]}`])} `
+      + `as much in your pack: a brick ${kg('stone_brick') * fx['weight:stone_brick']} kg and a slab `
+      + `${kg('stone_slab') * fx['weight:stone_slab']} kg (now ${kg('stone_brick')} and ${kg('stone_slab')}).`,
+  },
+  {
+    num: 35, name: 'Hod Carrier',
+    fx: { 'reach:build_stone': 5 },
+    note: (fx) => `Build wall and Build floor on ${STONE_WORK}, also take from crates, carts and containers within `
+      + `${fx['reach:build_stone']} tiles that a craft may take from (now only your pack and a crate on the tile).`,
+  },
+  {
+    num: 47, name: 'Repoint',
+    fx: { repoint: 1 },
+    note: () => `A new job, Repoint, on a finished wall of ${STONE_WORK}: it is laid again in another stone in one go of `
+      + `${secs(BUILD_ACTION_BY_ID.get('repoint_wall')?.baseTime ?? 0)} base. You pay the new stone's whole bill and get `
+      + `${share(REPOINT_BACK)} the old stone back, rounded down.`,
+  },
+  {
+    num: 48, name: 'Rubble Fill',
+    fx: { rubble: 5 },
+    note: (fx) => `A new job, Raise the rock with rubble: a corner of bare rock rises a step for ${numberWord(fx.rubble)} rock shards `
+      + `instead of a concrete, under the same rules as concrete and the same check at difficulty ${diff('raise_rock')}.`,
+  },
+];
+
 /** Every trade's perks, in the order they were picked. */
 const SEEDS: Record<string, Seed[]> = {
   terraformer: TERRAFORMER,
   miner: MINER,
+  mason: MASON,
 };
 
 const slug = (name: string): string => name.toLowerCase().replace(/[’']/g, '').replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '');
@@ -367,6 +528,7 @@ const slug = (name: string): string => name.toLowerCase().replace(/[’']/g, '')
 export const TIERS: Record<string, number[][]> = {
   terraformer: [[10, 17, 25], [9, 14, 23], [15, 12, 26], [32, 29, 27], [33, 34, 44], [5, 6, 20]],
   miner: [[7, 8, 9], [14, 13, 19], [1, 2, 25], [3, 27, 35], [28, 15, 11], [50, 17, 6]],
+  mason: [[1, 8, 17], [4, 18, 19], [20, 22, 33], [2, 9, 29], [16, 35, 48], [47, 24, 12]],
 };
 
 /** Every perk there is, tier by tier, and in each tier by the number it was picked under, as the island lists them. */

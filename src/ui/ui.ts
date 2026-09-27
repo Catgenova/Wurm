@@ -3,7 +3,7 @@ import { EMOTES } from '../game/emotes';
 import type { Pick, Renderer } from '../render/renderer';
 import { TileType, TREE_DEFS, treeAge, treeSpecies, SLAB_BY_ITEM } from '../world/tiles';
 import { ACTION_BY_ID, type ActionDef, type Target, fruitSprout, SPOIL_TILE } from '../game/actions';
-import { BUILD_ACTION_BY_ID, materialName } from '../game/buildActions';
+import { BUILD_ACTION_BY_ID, layingBill, materialName } from '../game/buildActions';
 import {
   describeNeeds,
   FENCE_TYPES,
@@ -2201,22 +2201,42 @@ export class UI {
       if (!def) throw new Error(`unknown building action ${id}`);
       return def;
     };
-    const base: Target = { kind: 'tile', x, y, cx: pick.cx, cy: pick.cy };
+    const base: Extract<Target, { kind: 'tile' }> = { kind: 'tile', x, y, cx: pick.cx, cy: pick.cy };
     const item = (def: ActionDef, target: Target, label = def.label): MenuItem => {
       const reason = def.check?.(target, g) ?? null;
       return { label, hint: reason ?? undefined, disabled: !!reason, onSelect: () => g.requestAction(def, target) };
+    };
+    // A Mason's Repoint: a finished wall of stone laid again in another stone, one entry to each.
+    const repoint = (standing: { material: string; type: Parameters<typeof layingBill>[1] }, target: Extract<Target, { kind: 'tile' }>, label: string): MenuItem[] => {
+      const def = act('repoint_wall');
+      if (!def.applies(target, g)) return [];
+      return [{
+        label,
+        children: MATERIALS.filter((m) => m.kind === 'stone' && m.id !== standing.material).map((m) => {
+          const to: Extract<Target, { kind: 'tile' }> = { ...target, material: m.id };
+          const why = def.check?.(to, g) ?? null;
+          return {
+            label: m.name,
+            note: describeNeeds(layingBill(m.id, standing.type), materialName),
+            hint: why ?? undefined,
+            disabled: !!why,
+            onSelect: () => g.requestAction(def, to),
+          };
+        }),
+      }];
     };
     const b = bld.buildingAt(x, y);
     if (!b) {
       // No building here: a fence or a half wall still goes on any border,
       // and the border is decided by which edge of the tile was clicked.
       const side = nearestSide(x, y, pick.wx, pick.wy);
-      const withSide: Target = { ...base, side };
+      const withSide: Extract<Target, { kind: 'tile' }> = { ...base, side };
       const standing = bld.wall(0, x, y, side);
       if (standing) {
         const what = WALL_TYPE_BY_ID.get(standing.type)?.name ?? 'Fence';
         if (!isDone(standing)) entries.push(item(act('build_wall'), withSide, `Build ${what.toLowerCase()} (${SIDE_NAMES[side]}) · needs ${describeNeeds(standing, materialName)}`));
         entries.push(item(act('remove_wall'), withSide, `Remove ${what.toLowerCase()} (${SIDE_NAMES[side]})`));
+        entries.push(...repoint(standing, withSide, `Repoint ${what.toLowerCase()} (${SIDE_NAMES[side]})`));
       } else {
         const fence = act('plan_fence');
         const probe = fence.check?.({ ...withSide, wallType: 'fence', material: 'log' }, g) ?? null;
@@ -2244,7 +2264,7 @@ export class UI {
     const level = workLevel(b);
     const side = nearestSide(x, y, pick.wx, pick.wy);
     const sideName = SIDE_NAMES[side];
-    const withSide: Target = { ...base, side };
+    const withSide: Extract<Target, { kind: 'tile' }> = { ...base, side };
     if (b.levels > 1) {
       entries.push({
         label: `Work on storey ${level + 1}`,
@@ -2260,6 +2280,7 @@ export class UI {
     if (wall) {
       if (!isDone(wall)) entries.push(item(act('build_wall'), withSide, `Build wall (${sideName}) · needs ${describeNeeds(wall, materialName)}`));
       entries.push(item(act('remove_wall'), withSide, `Remove wall (${sideName})`));
+      entries.push(...repoint(wall, withSide, `Repoint wall (${sideName})`));
     } else {
       const plan = act('plan_wall');
       const probe = plan.check?.({ ...withSide, wallType: 'solid', material: 'log' }, g) ?? null;

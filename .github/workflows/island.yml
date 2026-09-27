@@ -1548,6 +1548,16 @@ jobs:
             --outfile=node_modules/.cache/miner.mjs --log-level=error
           node node_modules/.cache/miner.mjs
 
+      - name: The Mason's perks, each where its rule is
+        run: |
+          # Each of the Mason's eighteen measured on the island with the dice
+          # taken out where they can be: the chisel, the trowel, Repoint and
+          # Tall Walls, the rock and Rubble Fill, the stone arch; and the
+          # browser reading the same numbers where it asks or offers them.
+          npx esbuild supabase/test/mason.ts --bundle --platform=node --format=esm \
+            --outfile=node_modules/.cache/mason.mjs --log-level=error
+          node node_modules/.cache/mason.mjs
+
       - name: The exact benefit, and where its number comes from
         run: |
           # Text the player reads says what changes and by how much, and where

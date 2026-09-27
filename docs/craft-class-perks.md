@@ -1,6 +1,6 @@
 # Craft class perks
 
-The perks chosen for the fourteen craft classes, class by class, on 26 September 2026, and the tiers they are offered in, settled on 27 September. They replace what a craft class gave before: its channels and its tree of nodes in `src/game/classes.ts`. The Terraformer and the Miner are built, in `src/game/perks.ts` and on the island; the other twelve are not yet.
+The perks chosen for the fourteen craft classes, class by class, on 26 September 2026, and the tiers they are offered in, settled on 27 September. They replace what a craft class gave before: its channels and its tree of nodes in `src/game/classes.ts`. The Terraformer, the Miner and the Mason are built, in `src/game/perks.ts` and on the island; the other eleven are not yet.
 
 ## Tiers
 

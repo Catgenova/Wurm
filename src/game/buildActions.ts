@@ -2,6 +2,7 @@ import type { ActionDef, Target } from './actions';
 import {
   borderOf,
   describeNeeds,
+  scaledBill,
   FLOOR_KIND_NAMES,
   floorKind,
   isDone,
@@ -15,6 +16,7 @@ import {
   WALL_TYPE_BY_ID,
   type Bill,
   type Building,
+  type Wall,
   type FloorKind,
   type MaterialDef,
   workLevel,
@@ -22,7 +24,7 @@ import {
 import type { PlacedCrate } from './crates';
 import { pickDye } from './dyes';
 import type { Game } from './game';
-import { itemDef } from './items';
+import { itemDef, spendOut, type Item } from './items';
 
 type TileTarget = Extract<Target, { kind: 'tile' }>;
 const isTile = (t: Target): t is TileTarget => t.kind === 'tile';
@@ -55,38 +57,118 @@ const needsText = (bill: Bill): string => describeNeeds(bill, materialName);
 const siteCrates = (g: Game, x: number, y: number): PlacedCrate[] =>
   [...g.crates.values()].filter((c) => c.x === x && c.y === y);
 
-/** The next item on a bill that is to hand: in the pack, or in a crate on the tile. */
-function nextAvailable(g: Game, bill: Bill, at?: { x: number; y: number }): string | null {
+/**
+ * What a perk names building work by: `build_stone` for anything laid with
+ * the trowel, `build_wood` for timber (`time:build_stone`, `reach:build_stone`).
+ */
+export const buildWork = (mat: MaterialDef | undefined): string => `build_${mat?.kind ?? 'wood'}`;
+
+/**
+ * The stores a Mason's Hod Carrier builds out of, besides the pack and a
+ * crate on the tile: those within the perk's reach that a craft may take
+ * from, nearest first. None for anybody without it, and none for timber.
+ */
+const hodStores = (g: Game, mat: MaterialDef | undefined): Array<{ items: Item[] }> => {
+  const reach = g.perk(`reach:${buildWork(mat)}`, 0);
+  return reach > 0 ? g.storesWithin(reach) : [];
+};
+const takeable = (it: Item, id: string): boolean => it.id === id && it.count > 0 && !it.locked && it.price === undefined;
+
+/** The next item on a bill that is to hand: in the pack, in a crate on the tile, or in a Hod Carrier's reach. */
+function nextAvailable(g: Game, bill: Bill & { material: string }, at?: { x: number; y: number }): string | null {
+  const stores = hodStores(g, material(bill.material));
   for (const [id, n] of Object.entries(bill.needed)) {
     if (n <= 0) continue;
     if (g.inventory.has(id)) return id;
     if (at && siteCrates(g, at.x, at.y).some((c) => c.items.some((it) => it.id === id && it.count > 0))) return id;
+    if (stores.some((st) => st.items.some((it) => takeable(it, id)))) return id;
   }
   return null;
 }
 
-function consumeUnit(g: Game, bill: Bill, at?: { x: number; y: number }): string | null {
-  const id = nextAvailable(g, bill, at);
-  if (!id) return null;
-  if (g.inventory.has(id)) {
-    if (!g.inventory.consume(id)) return null;
-  } else {
-    // Out of the crate on the site, a unit at a time, and the row goes when
-    // the last of it does.
-    let took = false;
-    for (const c of siteCrates(g, at?.x ?? 0, at?.y ?? 0)) {
-      const i = c.items.findIndex((it) => it.id === id && it.count > 0);
-      if (i < 0) continue;
-      const it = c.items[i];
-      it.count -= 1;
-      if (it.count <= 0) c.items.splice(i, 1);
-      took = true;
-      break;
-    }
-    if (!took) return null;
+/** One unit of `id` out of the pack, then a crate on the tile, then a Hod Carrier's stores. */
+function takeUnit(g: Game, id: string, mat: MaterialDef | undefined, at?: { x: number; y: number }): boolean {
+  if (g.inventory.has(id)) return g.inventory.consume(id);
+  // Out of the crate on the site, a unit at a time, and the row goes when
+  // the last of it does.
+  for (const c of siteCrates(g, at?.x ?? 0, at?.y ?? 0)) {
+    const i = c.items.findIndex((it) => it.id === id && it.count > 0);
+    if (i < 0) continue;
+    const it = c.items[i];
+    it.count -= 1;
+    if (it.count <= 0) c.items.splice(i, 1);
+    return true;
   }
+  for (const st of hodStores(g, mat)) {
+    const it = st.items.find((x) => takeable(x, id));
+    if (it && spendOut(st.items, it.uid, 1)) {
+      g.events.emit('crate');
+      return true;
+    }
+  }
+  return false;
+}
+
+function consumeUnit(g: Game, bill: Bill & { material: string }, at?: { x: number; y: number }): string | null {
+  const id = nextAvailable(g, bill, at);
+  if (!id || !takeUnit(g, id, material(bill.material), at)) return null;
   bill.needed[id] -= 1;
   return id;
+}
+
+/** How much of `id` is to hand for a bill: the pack, a crate on the tile, and a Hod Carrier's reach. */
+function toHand(g: Game, id: string, mat: MaterialDef | undefined, at: { x: number; y: number }): number {
+  let n = g.inventory.count(id);
+  for (const c of siteCrates(g, at.x, at.y)) for (const it of c.items) if (it.id === id) n += it.count;
+  for (const st of hodStores(g, mat)) for (const it of st.items) if (takeable(it, id)) n += it.count;
+  return n;
+}
+
+/**
+ * A Mason's Repoint.
+ *
+ * A finished stone wall laid again in another stone, in one go: the new
+ * stone's whole bill is paid out of whatever a wall may be built out of, the
+ * fittings stay where they are, and `REPOINT_BACK` of the old stone comes
+ * back -- the bricks, shards or adobe, not the mortar, which is spent once it
+ * has set. The paint goes with the old face.
+ */
+export const REPOINT_BACK = 0.5;
+export const REPOINT_TIME = 30;
+/** What a wall of `mat` is laid in, without its fittings: the bill a Repoint pays. */
+export const layingBill = (mat: string, type: Wall['type']): Bill => scaledBill(mat, WALL_TYPE_BY_ID.get(type)?.factor ?? 1);
+
+function repointReason(g: Game, t: TileTarget): string | null {
+  if (g.perk('repoint', 0) <= 0) return 'That wants a Mason who has learned to repoint.';
+  if (!t.side) return 'Choose a side.';
+  const wall = wallAt(g, t);
+  if (!wall) return 'There is no wall there.';
+  const was = material(wall.material);
+  if (was?.kind !== 'stone') return 'Only a wall of stone is repointed.';
+  if (!isDone(wall)) return 'Finish it before you repoint it.';
+  const mat = material(t.material);
+  if (!mat || mat.kind !== 'stone') return 'Choose the stone to lay it in.';
+  if (mat.id === was.id) return `It is ${mat.name.toLowerCase()} already.`;
+  const tool = needTool(g, mat.tool);
+  if (tool) return tool;
+  const b = buildingOf(g, t);
+  if (b && wall.building === b.id) {
+    // What is under it has to carry the new stone, as it would a new wall,
+    // and the new stone has to carry what stands on it.
+    const bears = g.buildings.bearing(b, wall.level);
+    if (mat.heft > bears) return `${mat.name} is too heavy to raise over what is under it. This storey carries ${heftWord(bears)}, no more.`;
+    let over = 0;
+    for (const w of g.buildings.walls.values()) {
+      if (w.building === b.id && w.level > wall.level) over = Math.max(over, material(w.material)?.heft ?? 0);
+    }
+    if (mat.heft < over) return `${mat.name} will not carry the ${heftWord(over)} standing on it.`;
+    const stands = mat.storeys + g.perk(`storeys:${buildWork(mat)}`, 0);
+    if (b.levels > stands) return `${mat.name} will not stand ${b.levels} storeys. ${stands} is as high as it goes.`;
+  }
+  const bill = layingBill(mat.id, wall.type);
+  const short = Object.entries(bill.needed).filter(([id, n]) => toHand(g, id, mat, t) < n);
+  if (short.length) return `You need ${needsText(bill)}.`;
+  return null;
 }
 
 const buildingOf = (g: Game, t: TileTarget): Building | undefined => g.buildings.buildingAt(t.x, t.y);
@@ -366,6 +448,43 @@ export const BUILD_ACTIONS: ActionDef[] = [
     },
   },
   {
+    id: 'repoint_wall',
+    label: 'Repoint the wall',
+    verb: 'repointing',
+    hidden: true,
+    skill: 'masonry',
+    tool: 'trowel',
+    stamina: 0.06,
+    baseTime: REPOINT_TIME,
+    applies: (t, g) => isTile(t) && g.perk('repoint', 0) > 0 && material(wallAt(g, t)?.material)?.kind === 'stone',
+    labelFor: (t) => (isTile(t) && t.material ? `Repoint in ${material(t.material)?.name.toLowerCase()}` : 'Repoint the wall'),
+    check: (t, g) => (isTile(t) ? repointReason(g, t) : null),
+    perform: (t, g) => {
+      if (!isTile(t) || !t.side || repointReason(g, t)) return;
+      const wall = wallAt(g, t);
+      const was = material(wall?.material);
+      const mat = material(t.material);
+      if (!wall || !was || !mat) return;
+      const bill = layingBill(mat.id, wall.type);
+      for (const [id, n] of Object.entries(bill.needed)) for (let i = 0; i < n; i++) if (!takeUnit(g, id, mat, t)) return;
+      // Half the old stone back, rounded down: what was laid of the first thing on its bill.
+      const stone = was.bill[0][0];
+      const back = Math.floor((wall.total[stone] ?? 0) * REPOINT_BACK);
+      if (back > 0) g.inventory.add(stone, { count: back, ql: 20 });
+      // The fittings stay where they are; the stone around them is new.
+      const fitted = WALL_TYPE_BY_ID.get(wall.type)?.fittings ?? [];
+      wall.material = mat.id;
+      wall.total = { ...bill.total };
+      for (const [id, n] of fitted) wall.total[id] = (wall.total[id] ?? 0) + n;
+      wall.needed = Object.fromEntries(Object.keys(wall.total).map((id) => [id, 0]));
+      delete wall.dye;
+      g.gainSkill('masonry', 1);
+      g.logMsg(`You take the ${was.name.toLowerCase()} out of the wall on the ${SIDE_NAMES[t.side]} side and lay it again in ${mat.name.toLowerCase()}`
+        + `${back > 0 ? `, and save ${back} ${materialName(stone, back)}` : ''}.`, 'event');
+      g.events.emit('world', t.x, t.y);
+    },
+  },
+  {
     id: 'paint_floor',
     label: 'Paint the floor',
     verb: 'painting',
@@ -441,7 +560,9 @@ export const BUILD_ACTIONS: ActionDef[] = [
       if (tool) return tool;
       const b = buildingOf(g, t);
       if (!b) return 'No building here.';
-      if (b.levels >= MAX_LEVELS) return `Buildings cannot be taller than ${MAX_LEVELS} storeys.`;
+      // A Mason's Tall Walls: stone stands higher in a building of theirs.
+      const tall = g.perk('storeys:build_stone', 0);
+      if (b.levels >= MAX_LEVELS + tall) return `Buildings cannot be taller than ${MAX_LEVELS + tall} storeys.`;
       /*
        * And no taller than what it is made of will stand.
        *
@@ -449,9 +570,10 @@ export const BUILD_ACTIONS: ActionDef[] = [
        * are standing on: a plank wing joined to a stone tower caps the tower,
        * because a building is one thing and comes down as one thing.
        */
-      const cap = g.buildings.storeyCap(b);
+      const cap = g.buildings.storeyCap(b, tall);
       if (b.levels >= cap) {
-        const worst = g.buildings.materialsIn(b).reduce((a, m) => (a && a.storeys <= m.storeys ? a : m), undefined as MaterialDef | undefined);
+        const stands = (m: MaterialDef): number => m.storeys + (m.kind === 'stone' ? tall : 0);
+        const worst = g.buildings.materialsIn(b).reduce((a, m) => (a && stands(a) <= stands(m) ? a : m), undefined as MaterialDef | undefined);
         return `${worst?.name ?? 'What this is built of'} will not stand ${cap + 1} storeys. ${cap} is as high as it goes.`;
       }
       // And the hands to raise it: ten a storey in the trade of the one below.

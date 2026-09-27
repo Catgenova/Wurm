@@ -512,6 +512,27 @@ function maxDigSlope(g: Game): number {
   return Math.max(SLOPE_FLOOR, Math.floor(g.skills.get('digging') * g.perk('slope:digging', SLOPE_PER_SKILL)));
 }
 
+/**
+ * Why a corner of rock may not be raised a step, with concrete or a Mason's
+ * rubble, or null. It goes on bare rock and never on a seam; above the water,
+ * or under as much of it as a Mason's Wet Set reaches (`depth:raise_rock`).
+ */
+export function rockRaiseRefusal(g: Game, cx: number, cy: number, what: 'Concrete' | 'Rubble'): string | null {
+  const w = g.world;
+  // Concrete goes on bare rock, above the water: the only way to build
+  // *up* on rock without dirt, which slides off it.
+  if (w.getDirt(cx, cy) > 0) return `There is soil on that corner. ${what} goes on bare rock.`;
+  const deep = g.perk('depth:raise_rock', 0);
+  if (w.getHeight(cx, cy) < -deep) {
+    return deep > 0 ? `${what} will not set under more than ${deep} of water.` : `${what} will not set under water.`;
+  }
+  if (seamUnder(w, cx, cy)) return `That corner is on a seam. ${what} goes on plain rock.`;
+  const under = cornerUnderBuilding(g, cx, cy);
+  if (under) return under;
+  if (!g.inventory.has('trowel')) return `You need a trowel to lay ${what.toLowerCase()}.`;
+  return levelStop(g, cx, cy, 1) ?? slopeRefusal(g, 'masonry', cx, cy, 1);
+}
+
 /** The same rule for a mason raising rock as for a digger moving soil. */
 function maxMasonSlope(g: Game): number {
   return Math.max(SLOPE_FLOOR, Math.floor(g.skills.get('masonry') * g.perk('slope:masonry', SLOPE_PER_SKILL)));
@@ -1020,6 +1041,42 @@ export const ACTIONS: ActionDef[] = [
       g.events.emit('action');
     },
   },
+  /*
+   * A Mason's Rubble Fill: the same step up on bare rock, bought with rock
+   * shards rather than a concrete, under the same rules and the same check.
+   */
+  {
+    id: 'rubble_fill',
+    label: 'Raise the rock with rubble',
+    verb: 'packing rubble',
+    skill: 'masonry',
+    tool: 'trowel',
+    corner: true,
+    stamina: 0.05,
+    baseTime: 5,
+    difficulty: 10,
+    applies: (t, g) => t.kind === 'tile' && g.perk('rubble', 0) > 0 && g.inventory.count('rock_shards') >= g.perk('rubble', 0),
+    check: (t, g) => {
+      if (t.kind !== 'tile') return null;
+      const n = g.perk('rubble', 0);
+      if (n <= 0) return 'That wants a Mason who has learned to fill with rubble.';
+      if (g.inventory.count('rock_shards') < n) return `You need ${numberWord(n)} rock shards.`;
+      return rockRaiseRefusal(g, t.cx, t.cy, 'Rubble');
+    },
+    perform: (t, g) => {
+      if (t.kind !== 'tile') return;
+      if (!g.inventory.consume('rock_shards', g.perk('rubble', 0))) return;
+      if (!g.skillCheck('masonry', 10, g.toolQl('trowel'))) {
+        g.missed();
+        g.logMsg('The rubble slides off the rock before it binds, and is lost.', 'event');
+        return;
+      }
+      const w = g.world;
+      w.setHeight(t.cx, t.cy, w.getHeight(t.cx, t.cy) + 1);
+      g.exposeRock(t.cx, t.cy);
+      g.logMsg(`You pack rubble into the ${cornerName(t)} corner and the rock stands a step higher.`, 'event');
+    },
+  },
   {
     id: 'raise_rock',
     label: 'Raise the rock with concrete',
@@ -1034,16 +1091,7 @@ export const ACTIONS: ActionDef[] = [
     check: (t, g) => {
       if (t.kind !== 'tile') return null;
       if (!g.inventory.has('concrete')) return 'You have no concrete.';
-      const w = g.world;
-      // Concrete goes on bare rock, above the water: the only way to build
-      // *up* on rock without dirt, which slides off it.
-      if (w.getDirt(t.cx, t.cy) > 0) return 'There is soil on that corner. Concrete goes on bare rock.';
-      if (w.getHeight(t.cx, t.cy) < 0) return 'Concrete will not set under water.';
-      if (seamUnder(w, t.cx, t.cy)) return 'That corner is on a seam. Concrete goes on plain rock.';
-      const under = cornerUnderBuilding(g, t.cx, t.cy);
-      if (under) return under;
-      if (!g.inventory.has('trowel')) return 'You need a trowel to lay concrete.';
-      return levelStop(g, t.cx, t.cy, 1) ?? slopeRefusal(g, 'masonry', t.cx, t.cy, 1);
+      return rockRaiseRefusal(g, t.cx, t.cy, 'Concrete');
     },
     perform: (t, g) => {
       if (t.kind !== 'tile') return;

@@ -6,7 +6,7 @@ import { WOUND_KINDS, woundText } from '../game/wounds';
 import { sailWord, windFrom, windWord } from '../game/wind';
 import { FAITH, favourCap } from '../game/faith';
 import { FURNITURE_BY_ID } from '../game/furniture';
-import { MAX_LEVELS } from '../game/building';
+import { TOP_LEVELS } from '../game/building';
 import { groundRoll, TILE_DEFS } from '../world/tiles';
 import type { Game } from '../game/game';
 import { itemName } from '../game/items';
@@ -516,7 +516,7 @@ export class Hud {
   stepStorey(step: number): void {
     const s = this.game.settings;
     const from = s.viewLevel ?? this.game.player.level;
-    s.viewLevel = Math.max(0, Math.min(MAX_LEVELS - 1, from + step));
+    s.viewLevel = Math.max(0, Math.min(TOP_LEVELS - 1, from + step));
   }
 
   toggleCutaway(): void {
@@ -555,7 +555,7 @@ export class Hud {
     const level = s.viewLevel;
     this.storeyLabel.textContent = level === null ? 'Auto' : ordinal(level + 1);
     this.storeyLabel.classList.toggle('pinned', level !== null);
-    this.storeyUp.disabled = level !== null && level >= MAX_LEVELS - 1;
+    this.storeyUp.disabled = level !== null && level >= TOP_LEVELS - 1;
     this.storeyDown.disabled = level === 0;
     this.cutBtn.classList.toggle('active', s.cutaway);
   }
