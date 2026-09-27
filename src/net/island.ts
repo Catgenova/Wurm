@@ -9,7 +9,7 @@ import type { IslandCreature } from '../game/creatures';
 import { cleanLook, type Look } from '../game/look';
 import type { IslandCrate, IslandGround } from '../game/game';
 import type { Mark } from '../game/items';
-import { AWAY_SLOWER, BODY_EVERY, CHANGE_PAGE, FOG_EVERY, FOUND_MAX, GROUND_EVERY, GROUND_IDLE, GROUND_RANGE, GUIDE_BATCH, GUIDE_EVERY, HEARTBEAT, LAND_ASK, LAND_NEAR, MOBS_EVERY, MOBS_RANGE, RECONCILE_EVERY, REGION, SNAP_GAP } from '../game/keep';
+import { AWAY_SLOWER, BODY_EVERY, BODY_FRESH, CHANGE_PAGE, FOG_EVERY, FOUND_MAX, GROUND_EVERY, GROUND_IDLE, GROUND_RANGE, GUIDE_BATCH, GUIDE_EVERY, HEARTBEAT, LAND_ASK, LAND_NEAR, MOBS_EVERY, MOBS_RANGE, RECONCILE_EVERY, REGION, SNAP_GAP } from '../game/keep';
 import type { GuideBook } from '../game/guide';
 import { packFog, unpackFog } from './fogpack';
 import type { Away } from '../game/away';
@@ -744,6 +744,8 @@ export class Island {
   away: Away | null = null;
   uid = '';
   readonly people = new Map<string, PlayerRow>();
+  /** When each of them was last heard over Broadcast, on the page's clock, in seconds (\`BODY_FRESH\`). */
+  private heardAt = new Map<string, number>();
   private channel: RealtimeChannel | null = null;
   /**
    * What the channel said when we asked to listen.
@@ -1807,6 +1809,7 @@ export class Island {
         if (!this.bodies) return;
         const b = (m as { payload?: PlayerRow }).payload;
         if (!b?.uid || b.uid === this.uid) return;
+        this.heardAt.set(b.uid, performance.now() / 1000);
         this.people.set(b.uid, { ...(this.people.get(b.uid) ?? b), ...b });
         this.hooks.people([...this.people.values()]);
       });
@@ -2137,8 +2140,17 @@ export class Island {
     const wearing = !worn.error && worn.data && typeof worn.data === 'object' ? worn.data as Record<string, unknown> : null;
     const was = new Map(this.people);
     this.people.clear();
+    const now = performance.now() / 1000;
     for (const p of rowsIn<PlayerRow>(data)) {
       p.gear = wearing ? wearing[p.uid] : was.get(p.uid)?.gear;
+      // Somebody heard from over the channel lately is where the channel said,
+      // not where their row was last written (\`BODY_FRESH\`).
+      const said = was.get(p.uid);
+      if (said && now - (this.heardAt.get(p.uid) ?? -Infinity) < BODY_FRESH) {
+        p.x = said.x;
+        p.y = said.y;
+        p.level = said.level;
+      }
       this.people.set(p.uid, p);
       if (p.uid === this.uid) this.me = p;
     }

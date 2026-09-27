@@ -289,6 +289,17 @@ jobs:
           npx esbuild supabase/test/rarebeast.ts --bundle --platform=node --format=esm \
             --outfile=node_modules/.cache/rarebeast.mjs --log-level=error
           node node_modules/.cache/rarebeast.mjs
+      - name: Nobody on the move is pulled back for going as fast as they can
+        run: |
+          # Reported as players rubberbanding when they move quickly. The
+          # island held a ship to her build's pace while the browser sails her
+          # with the wind, her quality and the hands at her helm, so a good
+          # ship in a good wind was pulled back every second; and other people
+          # were drawn jumping, cut short mid-walk by everybody else's words
+          # and pulled back to rows a second old.
+          npx esbuild supabase/test/pace.ts --bundle --platform=node --format=esm \
+            --outfile=node_modules/.cache/pace.mjs --log-level=error
+          node node_modules/.cache/pace.mjs
       - name: A rack takes eight crates and says which spots are full
         run: |
           # Reported as no way to add crates to a crate shelf. The rules knew

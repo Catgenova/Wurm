@@ -113,6 +113,13 @@ export function sailFactor(heading: number, w: Wind): number {
 export const windWorth = (force: number): number => 0.35 + force * 1.1;
 
 /**
+ * The most the weather is ever worth to a sail: a gale, on the broadest reach.
+ * The island has no weather of its own, so it holds a ship to this when it
+ * checks how far she can have gone (\`weather_most\`, \`hull_speed\`).
+ */
+export const WEATHER_MOST = windWorth(1) * pointAt((CLOSE + RUN) / 2);
+
+/**
  * Which side the wind is on and how full the sail is: negative to port,
  * positive to starboard, and near nothing when she is pointed into it.
  */

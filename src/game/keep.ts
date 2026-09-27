@@ -169,6 +169,22 @@ export const SENT_INLINE = 100;
 export const BODY_EVERY = 0.2;
 
 /**
+ * How long somebody heard over Broadcast is drawn where Broadcast said, rather
+ * than where their row in \`player\` says, when the rows are read again.
+ *
+ * Reported as other people rubberbanding when they move quickly. The row is
+ * written by \`rpc_move\`, at most once a \`MOVE_EVERY\`, and read back by the
+ * twenty-second reconcile and every time the channels are taken again, which
+ * is every block walked into. A body on the wire is a fifth of a second old;
+ * its row is up to a second old before the read even leaves, and at a
+ * mount's or a ship's pace that is five tiles or more behind. Laying the row
+ * over what the channel said pulled everybody on the move back to where they
+ * had been, and their next word put them forward again. Past this long
+ * without a word, the row is the better news: they have stopped, or gone.
+ */
+export const BODY_FRESH = 3;
+
+/**
  * How often the browser reconciles with the tables.
  *
  * Realtime is the fast path and this is the truth: the same rows, read the

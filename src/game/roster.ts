@@ -139,6 +139,19 @@ export class Roster {
       this.peers.set(state.id, { ...state, at: now, fromX: state.x, fromY: state.y, span: 0, walkPhase: 0, facing: 1 });
       return;
     }
+    /*
+     * Told again where somebody already is: there is nothing new to walk.
+     *
+     * Every word about anybody is laid as a word about everybody (\`sawAll\`),
+     * so five times a second for each person on the move, everybody else was
+     * told where they already were -- and starting the walk again from its
+     * own end cut short the one they were halfway along. Somebody moving
+     * quickly went in jumps whenever anybody else moved at all.
+     */
+    if (state.x === had.x && state.y === had.y && state.level === had.level) {
+      Object.assign(had, { ...state, at: had.at, fromX: had.fromX, fromY: had.fromY, span: had.span, walkPhase: had.walkPhase, facing: had.facing });
+      return;
+    }
     const jumped = Math.hypot(state.x - had.x, state.y - had.y) > TELEPORT;
     had.fromX = jumped ? state.x : had.x;
     had.fromY = jumped ? state.y : had.y;
