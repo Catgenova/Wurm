@@ -134,6 +134,9 @@ begin
   end loop; end loop;
   delete from item where world_id = w and holder = 'player' and holder_uid = u;
   delete from item where world_id = w and holder = 'ground' and gx between 0 and 15 and gy between 0 and 15;
+  -- A settlement's crates here fill with whatever its workers forage, and a craft reaches into them.
+  delete from item where world_id = w and holder = 'crate'
+     and crate in (select c.id from crate c where c.world_id = w and c.x between 0 and 15 and c.y between 0 and 15);
   delete from player_node where world_id = w and uid = u;
   delete from placed where world_id = w and x ${SPACE} and y ${SPACE};
   delete from creature where world_id = w and from_x between 4 and 16 and from_y between 4 and 16;
