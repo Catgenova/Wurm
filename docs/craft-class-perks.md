@@ -33,6 +33,10 @@ Main skill digging; also paving.
 34. **Long Reach** — Drop dirt and Flatten draw soil from carts and containers within 5 tiles (now 2.5), and what you dig goes straight into a cart within 5 tiles.
 44. **Dig Out the Tile** — lowers all four corners of a tile by 1 in one go, in 16 s base (four digs take 24 s), and gives 4 of the material.
 
+**Tiers** (swept): 50 — Quick Level, Bed Worker, Quick Paver · 60 — Level Hand, Wader, Stump Puller ·
+70 — Steep Cut, Dredger, Bed True · 80 — Frugal Cobbler, Road Legs, Soil Porter ·
+90 — Strong Back, Long Reach, Dig Out the Tile · 100 — Clean Earth, Rare Earth, Treasure Nose.
+
 ## Miner
 
 Main skill mining; also prospecting and archaeology.

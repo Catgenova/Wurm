@@ -16,9 +16,11 @@
  *
  * ## Which perk is in which tier
  *
- * For now, the order they were picked in, three to a tier. The tiers get a
- * sweep of their own once every trade's perks are built, and moving a perk
- * between tiers is moving it in the list below.
+ * `TIERS`, trade by trade: the three offered at each of the six tiers, by the
+ * number each perk was picked under, as the tiers were swept one trade at a
+ * time. Moving a perk between tiers is moving its number in that list; the
+ * island clears whoever held a perk that moved, so that nobody keeps two
+ * from one tier.
  *
  * ## What a perk does, as data
  *
@@ -358,15 +360,29 @@ const SEEDS: Record<string, Seed[]> = {
 const slug = (name: string): string => name.toLowerCase().replace(/[’']/g, '').replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '');
 
 /** Every perk there is, three to a tier in the order they were picked. */
+/**
+ * The perks each tier offers, lowest tier first, by the number each was picked
+ * under. Every trade with perks has its six rows of three here.
+ */
+export const TIERS: Record<string, number[][]> = {
+  terraformer: [[10, 17, 25], [9, 14, 23], [15, 12, 26], [32, 29, 27], [33, 34, 44], [5, 6, 20]],
+  miner: [[1, 2, 3], [6, 7, 8], [9, 11, 13], [14, 15, 17], [19, 25, 27], [28, 35, 50]],
+};
+
+/** Every perk there is, tier by tier, and in each tier by the number it was picked under, as the island lists them. */
 export const PERKS: PerkDef[] = Object.entries(SEEDS).flatMap(([cls, seeds]) =>
-  [...seeds].sort((a, b) => a.num - b.num).map((s, i) => ({
-    id: `${cls}_${slug(s.name)}`,
-    class: cls,
-    num: s.num,
-    name: s.name,
-    tier: Math.floor(i / PERKS_PER_TIER) + 1,
-    fx: s.fx,
-    note: s.note(s.fx),
+  (TIERS[cls] ?? []).flatMap((nums, t) => [...nums].sort((a, b) => a - b).map((num) => {
+    const s = seeds.find((x) => x.num === num);
+    if (!s) throw new Error(`${cls}'s tier ${t + 1} offers ${num}, and there is no such perk`);
+    return {
+      id: `${cls}_${slug(s.name)}`,
+      class: cls,
+      num: s.num,
+      name: s.name,
+      tier: t + 1,
+      fx: s.fx,
+      note: s.note(s.fx),
+    };
   })));
 
 export const PERK_BY_ID = new Map(PERKS.map((p) => [p.id, p]));
@@ -407,6 +423,14 @@ export function perkRefusal(p: PerkDef, mine: string | null, taken: readonly str
 for (const cls of PERK_CLASSES) {
   const n = perksOf(cls).length;
   if (n !== PERK_TIER_AT.length * PERKS_PER_TIER) throw new Error(`${cls} has ${n} perks`);
+  // Every perk offered at exactly one tier, and every tier offering its three.
+  const rows = TIERS[cls] ?? [];
+  if (rows.length !== PERK_TIER_AT.length || rows.some((r) => r.length !== PERKS_PER_TIER)) {
+    throw new Error(`${cls} does not have ${PERK_TIER_AT.length} tiers of ${PERKS_PER_TIER}`);
+  }
+  if (new Set(rows.flat()).size !== n || (SEEDS[cls] ?? []).some((s) => !rows.flat().includes(s.num))) {
+    throw new Error(`${cls} offers a perk at two tiers, or one at none`);
+  }
 }
 for (const cls of Object.keys(SEEDS)) {
   if (!PERK_CLASSES.has(cls)) throw new Error(`${cls} has perks but still has its tree`);
