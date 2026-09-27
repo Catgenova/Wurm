@@ -25,7 +25,7 @@ import { ACROSS_OF, DEED_PLACE, ONE_ALTAR, deckSpot, furnitureAnchor, furnitureC
 import { emptyCrate, occupiedRefusal, shutIn } from './creaturecrate';
 import { bury, crumble, graveAt, graveRefusal, graveSays, GRAVE_MARK } from './graves';
 import { cropStageSeconds, RIPE, type Crop } from './farming';
-import { ageDef, bloodMul, CALL_WINDOW, Creatures, FIGHT_BACK_GOES, HAUL_SKILL, isBaitFor, isShod, PLAYER_ATTACKER, PULL_DEFAULT, SHOE_PACE, SHOE_STEP, SPECIES, type Creature, type CreatureJSON, type Stance } from './creatures';
+import { ageDef, bloodMul, CALL_WINDOW, Creatures, FIGHT_BACK_GOES, HAUL_SKILL, isBaitFor, isShod, PLAYER_ATTACKER, PULL_DEFAULT, SHOE_PACE, SHOE_STEP, SPECIES, tackSpeed, type Creature, type CreatureJSON, type Stance } from './creatures';
 import { CRAFT_REACH, knackable, type CraftStock, type Station } from './recipes';
 import { Actor, type ActiveAction, type GuestSave } from './actor';
 import { HOST_ID, type PeerId } from '../net/protocol';
@@ -3849,6 +3849,18 @@ export class Game {
   }
 
   /** Wurm-flavoured success roll: better skill and tools help, difficulty hurts. */
+  /**
+   * A skill check at a job that a perk may make surer (`fail:` and the job, a
+   * Mason's Sure Chisel, a Miner's Sure Pick, a Tailor's Sure Needle): a
+   * failure stands only that share of the time, as `perk_pass` has it on the
+   * island. No perk, no second roll, so the dice fall as they always did.
+   */
+  sureCheck(job: string, skill: string, difficulty = 10, toolQl = 0, ease = 0): boolean {
+    const ok = this.skillCheck(skill, difficulty, toolQl, ease);
+    const fail = this.perk(`fail:${job}`, 1);
+    return ok || (fail < 1 && this.rand() >= fail);
+  }
+
   skillCheck(skill: string, difficulty = 10, toolQl = 0, ease = 0): boolean {
     const s = this.skills.get(skill);
     // A clear head makes a hard piece of work easier, but never simple.
@@ -4259,7 +4271,8 @@ export class Game {
     const depth = waterDepth(this, t.x, t.y);
     const pool = fishHere(depth, this.skills.get('fishing'));
     if (!pool.length) return;
-    if (this.rand() >= creelOdds(t.ql)) return;
+    // Better odds for its maker's hand in it (a Tailor's Fisher's Friend).
+    if (this.rand() >= creelOdds(t.ql) * markOf(t, 'catch')) return;
     const bait = t.bait ? BAIT_BY_ID.get(t.bait.id) : undefined;
     const got = pickFish(this, pool, bait);
     if (!got) return;
@@ -5209,7 +5222,8 @@ export class Game {
     const def = this.creatures.species(c);
     // Shod, it goes quicker on laid stone.
     const shod = isShod(this.time, c) && !!TILE_DEFS[this.world.getTile(this.player.tileX, this.player.tileY)].paved ? SHOE_PACE : 1;
-    return Math.min(MAX_MOUNT_SPEED, def.speed * ageDef(c, this.time).speed * this.creatures.speedMul(c) * footing(c.skills[HAUL_SKILL] ?? 0) * (0.6 + 0.4 * c.hunger) * shod);
+    // And quicker again in tack its maker's hand is in (a Tailor's Saddler), past the cap, as a vehicle's mark is.
+    return Math.min(MAX_MOUNT_SPEED, def.speed * ageDef(c, this.time).speed * this.creatures.speedMul(c) * footing(c.skills[HAUL_SKILL] ?? 0) * (0.6 + 0.4 * c.hunger) * shod) * tackSpeed(c);
   }
 
   /**

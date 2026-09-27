@@ -9,7 +9,7 @@ import { MINE_COLLAPSE, MINE_DEPTH } from './actions';
 import { bedrockAt, oreAt } from '../world/ore';
 import { DIGGABLE, findChance, relicsWithin } from './archaeology';
 import { fishable, fishHere, waterDepth } from './fishing';
-import { describeWith, itemDef, type Item } from './items';
+import { describeWith, itemDef, markOf, type Item, type Mark } from './items';
 import { fill } from './words';
 import { groundStep, standsOn } from './player';
 import { skillGain } from './skills';
@@ -1787,6 +1787,8 @@ export interface IslandCreature {
   mine?: boolean;
   /** Shod, by the island's clock. */
   shod?: boolean;
+  /** What the tack on it carries of its makers' marks, when anything (a Tailor's Saddler). */
+  tack?: Record<string, Mark> | null;
   /** The vehicle it is in the traces of; absent from older islands. */
   hitchedTo?: number | null;
   /** The trade a worker was set to, which is its species' own unless it was told otherwise. */
@@ -1930,6 +1932,11 @@ export interface Creature {
   hitchedTo: number | null;
   /** Saddled and bridled, for the sorts that can be ridden. */
   tacked: boolean;
+  /**
+   * What the tack on it carries of its makers' marks, by the piece: a
+   * Tailor's Saddler's pace. Absent for plain tack, and gone with the tack.
+   */
+  tack?: Record<string, Mark>;
   /** When it was last shod; shoes hold `SHOE_DAYS`. Long ago when it never was. */
   shodAt: number;
   /** What is riding on its back, for the sorts that carry panniers. */
@@ -1969,6 +1976,7 @@ export interface CreatureJSON {
   fleece?: number;
   skills?: Record<string, number>;
   tacked?: boolean;
+  tack?: Record<string, Mark>;
   shodAt?: number;
   pannier?: Item[];
   post?: number | null;
@@ -2025,6 +2033,17 @@ export const SHOE_PACE = 1.15;
 export const SHOE_STEP = 8;
 describeWith({ shoes: { perMount: SHOES_PER_MOUNT, days: SHOE_DAYS, quicker: SHOE_PACE - 1, step: SHOE_STEP } });
 /** Whether the shoes are still on: a week from the fitting, in the clock that fitted them. */
+
+/** What a mount wears to be ridden: a saddle and a bridle. */
+export const TACK = ['saddle', 'bridle'];
+/**
+ * How much faster its tack lets a mount go: the larger of the two pieces'
+ * makers' marks (a Tailor's Saddler), after the cap, as the island's
+ * `tack_speed` has it. One for plain tack.
+ */
+export const tackSpeed = (c: { tack?: Record<string, Mark> }): number =>
+  Math.max(1, ...TACK.map((id) => markOf({ mark: c.tack?.[id] }, 'speed')));
+
 export const isShod = (now: number, c: { shodAt: number }): boolean => now - c.shodAt < SHOE_DAYS * DAY_SECONDS;
 /** How close it comes before standing still, well inside arm's reach. */
 const CALL_DISTANCE = 0.9;
@@ -2388,6 +2407,10 @@ export class Creatures {
       if (r.job !== undefined) c.trade = r.job && r.job !== SPECIES[c.species]?.gathers && (SPECIES[c.species]?.trades ?? []).includes(r.job as GatherKind) ? (r.job as GatherKind) : null;
       // Shod or not is the island's word; the browser keeps its own clock of it.
       if (r.shod !== undefined) c.shodAt = r.shod ? (isShod(time, c) ? c.shodAt : time) : -1e9;
+      if (r.tack !== undefined) {
+        if (r.tack) c.tack = r.tack;
+        else delete c.tack;
+      }
       /*
        * And which traces it is in, which the island never said: every hitched
        * animal on an island read as free, so its menu offered to hitch it again
@@ -4732,6 +4755,7 @@ export class Creatures {
         fleece: c.fleece,
         skills: c.skills,
         tacked: c.tacked,
+        tack: c.tack,
         pannier: c.pannier,
         post: c.post,
         trapped: c.trapped,
@@ -4758,7 +4782,7 @@ export class Creatures {
     for (const [r, n] of data.banked ?? []) cs.banked.set(r, n);
     for (const j of data.list ?? []) {
       const c = Creatures.make(j.id, j.species, j.x, j.y, j.mode, Math.random);
-      Object.assign(c, { name: j.name, variant: j.variant, stance: j.stance, health: j.health, hunger: j.hunger, carrying: j.carrying ?? null, pouch: j.pouch ?? null, xp: j.xp ?? 0, fleece: j.fleece ?? 1, tacked: !!j.tacked, shodAt: j.shodAt ?? -1e9, pannier: j.pannier ?? [], post: j.post ?? null, trapped: j.trapped ?? null, born: j.born ?? 0, sex: j.sex ?? (j.id % 2 ? 'male' : 'female'), traits: j.traits ?? rollTraits(Math.random), care: j.care ?? 0, bredAt: j.bredAt ?? -1e9, due: j.due ?? 0, unborn: j.unborn ?? null, pedigree: j.pedigree ?? null, homeX: j.homeX ?? j.x, homeY: j.homeY ?? j.y, trade: j.trade && (SPECIES[j.species]?.trades ?? []).includes(j.trade) ? j.trade : null, skills: { ...startSkills(SPECIES[j.species] ?? SPECIES.rabba), ...(j.skills ?? {}) } });
+      Object.assign(c, { name: j.name, variant: j.variant, stance: j.stance, health: j.health, hunger: j.hunger, carrying: j.carrying ?? null, pouch: j.pouch ?? null, xp: j.xp ?? 0, fleece: j.fleece ?? 1, tacked: !!j.tacked, tack: j.tack, shodAt: j.shodAt ?? -1e9, pannier: j.pannier ?? [], post: j.post ?? null, trapped: j.trapped ?? null, born: j.born ?? 0, sex: j.sex ?? (j.id % 2 ? 'male' : 'female'), traits: j.traits ?? rollTraits(Math.random), care: j.care ?? 0, bredAt: j.bredAt ?? -1e9, due: j.due ?? 0, unborn: j.unborn ?? null, pedigree: j.pedigree ?? null, homeX: j.homeX ?? j.x, homeY: j.homeY ?? j.y, trade: j.trade && (SPECIES[j.species]?.trades ?? []).includes(j.trade) ? j.trade : null, skills: { ...startSkills(SPECIES[j.species] ?? SPECIES.rabba), ...(j.skills ?? {}) } });
       cs.list.set(c.id, c);
       if (c.id >= cs.nextId) cs.nextId = c.id + 1;
     }

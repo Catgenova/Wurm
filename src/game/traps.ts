@@ -5,7 +5,7 @@ import type { Game } from './game';
 import { isBaitFor, SPECIES, type Creature } from './creatures';
 import { emptyCrate, shutIn } from './creaturecrate';
 import { tameRoomRefusal } from './creatureActions';
-import { itemDef, itemName, type Item } from './items';
+import { itemDef, itemName, type Item, type Mark } from './items';
 import { BAIT_BY_ID, isBait } from './fishing';
 import { matOf } from './materials';
 import { world } from './pace';
@@ -120,7 +120,9 @@ export interface PlacedTrap {
   /** What has swum into it, for a creel. */
   fish?: Item[];
   /** The wood it was made of. */
-  material?: string;
+material?: string;
+  /** What its maker's perks put into it (`Mark`): more fish (a Tailor's Fisher's Friend). */
+  mark?: Mark;
 }
 
 const clampQl = (ql: number): number => Math.max(1, Math.min(100, ql));
@@ -218,6 +220,8 @@ export const TRAP_ACTIONS: ActionDef[] = [
       const item = t.itemUid !== undefined ? g.inventory.get(t.itemUid) : undefined;
       if (!item || !(item.id in TRAPS) || !g.inventory.remove(item.uid, 1)) return;
       const trap = g.addTrap(item.id as TrapKind, t.x, t.y, t.sx, t.sy, item.ql, item.extra);
+      // Its maker's hand goes into the water with it (a Tailor's Fisher's Friend).
+      if (item.mark && Object.keys(item.mark).length) trap.mark = item.mark;
       const mins = Math.round(trapLife(trap.kind, trap.ql) / 60);
       g.logMsg(
         trapDef(trap).water
@@ -417,7 +421,7 @@ export const TRAP_ACTIONS: ActionDef[] = [
       if (!trap) return;
       if (trap.bait) g.inventory.addItem(trap.bait);
       for (const f of trap.fish ?? []) g.inventory.addItem(f);
-      const back = g.inventory.add(trap.kind, { ql: trap.ql, extra: trap.material });
+      const back = g.inventory.add(trap.kind, { ql: trap.ql, extra: trap.material, ...(trap.mark ? { mark: trap.mark } : {}) });
       back.dmg = trap.dmg;
       g.removeTrap(trap.id);
       g.logMsg(`You take the ${trapName(trap).toLowerCase()} up${trap.bait ? ' and pocket the bait' : ''}.`, 'event');

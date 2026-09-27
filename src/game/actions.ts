@@ -14,7 +14,7 @@ import { KILN_ACTIONS } from './kiln';
 import { FURNITURE_ACTIONS, furnitureCentre } from './furniture';
 import { crateCentre } from './crates';
 import { GEAR_ACTIONS } from './gear';
-import { IMPROVE_ACTIONS } from './improve';
+import { IMPROVE_ACTIONS, improvable } from './improve';
 import { FARM_ACTIONS } from './farming';
 import { BUTCHER_ACTIONS } from './butcher';
 import { ARCHAEOLOGY_ACTIONS } from './archaeology';
@@ -651,6 +651,14 @@ function slopeAfter(g: Game, cx: number, cy: number, delta: number): number {
 }
 
 
+/** What somebody without a Tailor's Patch is told. The island says the same. */
+export const PATCH_PERK = 'That wants a Tailor who has learned to patch.';
+/** What a piece is patched with: cloth for cloth, leather for leather, and nothing else takes a patch. The island's `patch_with`. */
+export const patchWith = (id: string): 'cloth' | 'leather' | null => {
+  const m = improvable(id)?.material.id;
+  return m === 'cloth' || m === 'leather' ? m : null;
+};
+
 /** A share of a bar or a nutrient as a whole percentage, as the island says it. */
 const wholePct = (x: number): string => `${Math.round(x * 100)}%`;
 
@@ -1160,7 +1168,7 @@ export const ACTIONS: ActionDef[] = [
       if (t.kind !== 'tile') return;
       // Spent either way: concrete that slumps off is concrete gone.
       if (!g.inventory.consume('concrete')) return;
-      if (!g.skillCheck('masonry', 10, g.toolQl('trowel'))) {
+      if (!g.sureCheck('raise_rock', 'masonry', 10, g.toolQl('trowel'))) {
         g.missed();
         g.logMsg('The concrete slumps off the rock before it sets, and is lost.', 'event');
         return;
@@ -1195,7 +1203,7 @@ export const ACTIONS: ActionDef[] = [
       if (t.kind !== 'tile') return;
       const w = g.world;
       const pickQl = g.toolQl('pickaxe');
-      if (!g.skillCheck('mining', 12, pickQl)) {
+      if (!g.sureCheck('mine', 'mining', 12, pickQl)) {
         g.missed();
         g.logMsg('The rock is hard and you fail to loosen anything.', 'event');
         return;
@@ -1368,7 +1376,7 @@ export const ACTIONS: ActionDef[] = [
       if (t.kind !== 'tile') return;
       const w = g.world;
       const type = w.getTile(t.x, t.y);
-      if (!g.skillCheck('woodcutting', 10, g.toolQl('hatchet'))) {
+      if (!g.sureCheck('cut_down', 'woodcutting', 10, g.toolQl('hatchet'))) {
         g.missed();
         g.logMsg('Your hatchet glances off and you fail to make headway.', 'event');
         return;
@@ -1461,13 +1469,15 @@ export const ACTIONS: ActionDef[] = [
     perform: (t, g) => {
       if (t.kind !== 'tile') return;
       const def = TREE_DEFS[treeSpecies(g.world.getData(t.x, t.y))];
-      if (!g.skillCheck('forestry', 15)) {
+      if (!g.sureCheck('pick_sprout', 'forestry', 15)) {
         g.missed();
         g.logMsg('You find no sprout worth picking.', 'event');
         return;
       }
-      g.gather('sprout', { ql: g.productQl('forestry'), extra: def.name });
-      g.logMsg(`You pick a ${def.name.toLowerCase()} sprout.`, 'event');
+      // And picks more than one for a Forester's Sprout Picker (`count:sprout`), as the island does.
+      const n = Math.max(1, Math.floor(g.perk('count:sprout', 1)));
+      g.gather('sprout', { count: n, ql: g.productQl('forestry'), extra: def.name });
+      g.logMsg(n === 1 ? `You pick a ${def.name.toLowerCase()} sprout.` : `You pick ${numberWord(n)} ${def.name.toLowerCase()} sprouts.`, 'event');
     },
   },
   {
@@ -1673,7 +1683,7 @@ export const ACTIONS: ActionDef[] = [
       if (species < 0) return;
       // The sprout is spent either way: a graft that does not take is a sprout gone.
       g.inventory.remove(sprout.uid, 1);
-      if (!g.skillCheck('forestry', 40, g.toolQl('carving_knife'))) {
+      if (!g.sureCheck('graft', 'forestry', 40, g.toolQl('carving_knife'))) {
         g.missed();
         g.logMsg(`The ${TREE_DEFS[species].name.toLowerCase()} graft does not take, and the sprout is spent.`, 'event');
         return;
@@ -1956,7 +1966,7 @@ export const ACTIONS: ActionDef[] = [
       const slab = t.itemUid !== undefined ? g.inventory.get(t.itemUid) : g.inventory.items.find((it) => SLAB_BY_ITEM.has(it.id));
       const kind = slab && SLAB_BY_ITEM.get(slab.id);
       if (!slab || kind === undefined) return;
-      if (!g.skillCheck('paving', 10, slab.ql)) {
+      if (!g.sureCheck('pave_slabs', 'paving', 10, slab.ql)) {
         g.missed();
         g.logMsg('The slab rocks on its bed however you set it. You leave it for now.', 'event');
         return;
@@ -2155,6 +2165,47 @@ export const ACTIONS: ActionDef[] = [
       }
       // Keep at it while there is damage left and wind to do it with.
       return true;
+    },
+  },
+  {
+    /*
+     * A Tailor's Patch: a cloth or a leather piece mended with a piece of its
+     * own stuff, the perk's own number of damage off at a go and nothing off
+     * its quality, where a repair takes a little off every time.
+     */
+    id: 'patch_item',
+    label: 'Patch',
+    verb: 'patching',
+    stamina: 0.02,
+    baseTime: 4,
+    applies: (t, g) => {
+      if (t.kind !== 'item') return false;
+      const item = g.inventory.get(t.uid);
+      return !!item && item.dmg > 0 && patchWith(item.id) !== null;
+    },
+    check: (t, g) => {
+      if (t.kind !== 'item') return null;
+      if (g.perk('patch_item', 0) <= 0) return PATCH_PERK;
+      const item = g.inventory.get(t.uid);
+      if (!item) return 'It is gone.';
+      const stuff = patchWith(item.id);
+      if (!stuff) return 'Only cloth or leather takes a patch.';
+      if (item.dmg <= 0) return 'There is nothing wrong with it.';
+      if (!g.inventory.has(stuff)) return `You need ${stuff} to patch it with.`;
+      return null;
+    },
+    perform: (t, g) => {
+      if (t.kind !== 'item') return;
+      const item = g.inventory.get(t.uid);
+      const stuff = item ? patchWith(item.id) : null;
+      const piece = stuff ? g.inventory.find(stuff) : undefined;
+      if (!item || !stuff || !piece || !g.inventory.remove(piece.uid, 1)) return;
+      const off = Math.min(item.dmg, g.perk('patch_item', 0));
+      item.dmg = Math.max(0, item.dmg - off);
+      g.events.emit('inventory');
+      g.gainSkill(improvable(item.id)?.skill ?? 'tailoring', 0.25);
+      // The piece by its plain name, as the island says it.
+      g.logMsg(`You patch the ${itemDef(item.id).name.toLowerCase()} with ${stuff}. (damage ${item.dmg.toFixed(2)})`, 'event');
     },
   },
   {

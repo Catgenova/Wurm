@@ -96,6 +96,14 @@ export const percent = (x: number): string => {
  * "thirty times", 1.25 "a quarter again". Past two it counts the times; below
  * it, it says what is added on top.
  */
+/**
+ * A line that says a count, saying another: "into two lengths of yarn" as
+ * "into three lengths of yarn" when a perk makes three a go, as `count_said`
+ * has it on the island. The first time the word is said, and only that.
+ */
+export const countSaid = (text: string, was: number, now: number): string =>
+  (was === now ? text : text.replace(new RegExp(`\\b${numberWord(was)}\\b`), numberWord(now)));
+
 export function times(m: number): string {
   if (Math.abs(m - 2) < 1e-9) return 'twice';
   const whole = Math.round(m);

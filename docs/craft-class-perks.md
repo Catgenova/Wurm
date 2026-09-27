@@ -1,6 +1,6 @@
 # Craft class perks
 
-The perks chosen for the fourteen craft classes, class by class, on 26 September 2026, and the tiers they are offered in, settled on 27 September. They replace what a craft class gave before: its channels and its tree of nodes in `src/game/classes.ts`. The Terraformer, the Miner, the Mason, the Carpenter, the Smith, the Forester, the Farmer and the Cook are built, in `src/game/perks.ts` and on the island; the other six are not yet.
+The perks chosen for the fourteen craft classes, class by class, on 26 September 2026, and the tiers they are offered in, settled on 27 September. They replace what a craft class gave before: its channels and its tree of nodes in `src/game/classes.ts`. The Terraformer, the Miner, the Mason, the Carpenter, the Smith, the Forester, the Farmer, the Cook and the Tailor are built, in `src/game/perks.ts` and on the island; the other five are not yet.
 
 ## Tiers
 
@@ -236,18 +236,18 @@ Main skill tailoring; also leatherworking and ropemaking.
 7. **Tight Weave** — a cloth takes 2 yarn (now 3).
 9. **Sure Needle** — tailoring fails half as often (difficulty 8–20).
 11. **Master Tailor** — what you tailor comes out rare twice as often.
-16. **Sack Maker** — sacks you stitch hold 60 (now 40).
-18. **Sure Tan** — tanning fails half as often (difficulty 16).
-19. **Lye Saver** — 1 tanning in 2 leaves the lye in the bucket.
+16. **Sack Maker** — sacks you stitch hold 60 (now 40). Built, like Deep Pockets, as a maker's mark on the bag, so it holds whoever carries it.
+18. **Sure Tan** — tanning fails half as often (difficulty 16). Sure Awl covers tanning too, so with both it fails a quarter as often.
+19. **Lye Saver** — 1 tanning in 2 leaves the lye in the bucket. Built as the bucket of lye left full and no empty bucket back.
 21. **Sure Awl** — leatherworking fails half as often (difficulty 12–58).
 25. **Deep Pockets** — satchels you stitch hold 31 (now 25) and backpacks hold 75 (now 60).
-27. **Saddler** — mounts and teams in saddles, bridles and yokes you made move 10% faster.
-31. **Fisher's Friend** — nets and creels you make catch 20% more (a net now hauls 1–5 fish).
-34. **Nothing Wasted** — a failed tailoring, leatherworking or ropemaking job keeps its materials.
-35. **Light Pack** — cloth, leather, yarn and hides weigh half as much in your pack.
+27. **Saddler** — mounts and teams in saddles, bridles and yokes you made move 10% faster. Built as a maker's mark on each piece. A saddle's and a bridle's go onto the mount with them and come back with them when it is stripped, and the mount goes faster by the larger of the two, after the cap on a mount's pace, so a mount at the cap goes past it. A yoke's goes into the cart or wagon built on it, multiplied with the builder's own.
+31. **Fisher's Friend** — nets and creels you make catch 20% more (a net now hauls 1–5 fish). Built as a maker's mark, a new family (`catch`). A net's haul is multiplied by it and the part over a whole fish is a chance at one more, so it is 20% more on the average. A creel's odds at each look are multiplied by it, and a creel keeps its mark in the water and when it is taken up.
+34. **Nothing Wasted** — a failed tailoring, leatherworking or ropemaking job keeps its materials. Built on the thirty recipes of the three that lose their materials when they fail.
+35. **Light Pack** — cloth, leather, yarn and hides weigh half as much in your pack. Loose in the pack; in a bag they weigh what they do.
 37. **Workshop Reach** — tailoring, leatherworking and ropemaking draw from containers within 6 tiles (now 3).
-46. **Patch** — take 20 damage off a cloth or leather piece for 1 cloth or leather.
-49. **Tent** — pitch a tent and sleep anywhere, with half the rest a bed gives.
+46. **Patch** — take 20 damage off a cloth or leather piece for 1 cloth or leather. Built as a job on cloth and leather armour: one of the piece's own stuff, cloth for cloth and leather for leather, and none of its QL.
+49. **Tent** — pitch a tent and sleep anywhere, with half the rest a bed gives. Built as a piece of furniture (8 cloth, 2 rope and 3 shafts, with a needle) that is set down like any other; a night in it banks half the rest of a night in a bed of the same QL.
 
 **Tiers** (swept): 50 — Full Fleece, Quick Spindle, Sure Tan · 60 — Saddler, Fisher's Friend, Workshop Reach ·
 70 — Sure Needle, Lye Saver, Sure Awl · 80 — Sack Maker, Deep Pockets, Nothing Wasted ·

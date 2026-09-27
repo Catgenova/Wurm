@@ -11,6 +11,7 @@ import { REPORTS_A_SESSION } from '../../net/errors';
 import { article, listed, numberWord, percent, share, spanWords, times } from '../../game/words';
 import { ANCIENT_EFFECTS, ANCIENT_PLUS, BAUBLE_HIGH, BAUBLE_LOW, BAUBLE_SHARE, BAUBLE_TIERS, baubleTimes, REGRET_SHARE, YIELD_TIMES } from '../../game/baubles';
 import { CLASS_CHANGE_COST, CLASSES, PERK_TIER_AT, PERKS_PER_TIER } from '../../game/classes';
+import { perksOf } from '../../game/perks';
 import { FED_SAID, MOTE_CHANCE } from '../../game/sacrifice';
 import { GRAVE_KEEPS, GRAVE_REACH } from '../../game/graves';
 import { UI_SIZE_MAX, UI_SIZE_MIN } from '../screen';
@@ -504,6 +505,24 @@ export const NEWS: News[] = [
         'What a Cook puts into a dish stays with it whoever eats it, and examining a thing on an island now says what its maker put into it, as it always did offline.',
         'Two new things to make, broth and spirit, and a new bait, offal, for a Cook who has learned them.',
         'And part of a pile set down on an island keeps what the pile had: its maker\'s marks, its rarity, its colour and its blessing.',
+      ];
+    },
+  },
+  {
+    n: 40,
+    day: '2026-09-27',
+    lines: () => {
+      const main = (CLASSES.find((c) => c.id === 'tailor')?.main ?? '').replace(/_/g, ' ');
+      const tent = furnitureDef('tent');
+      const mends = perksOf('tailor').find((p) => p.fx.patch_item)?.fx.patch_item ?? 0;
+      const sprouts = perksOf('forester').find((p) => p.fx['count:sprout']);
+      return [
+        `The Tailor has perks instead of a tree now: ${numberWord(PERK_TIER_AT.length)} tiers of ${numberWord(PERKS_PER_TIER)}, the first with the trade and the others at ${listed(PERK_TIER_AT.slice(1).map(String))} in ${main}. The nodes a Tailor had bought went with the tree.`,
+        `Two new things for a Tailor who has learned them: a tent (${billWords(tent.bill, false)}), a night in which rests you ${percent((tent.bed ?? 0) / (furnitureDef('bed').bed ?? 1))} as well as a night in a bed, `
+          + `and Patch, which takes ${mends} damage off a cloth or leather piece for one cloth or one leather.`,
+        'Offline, every perk that makes a job fail less often now works as it does on an island, where before only the anvil\'s did; and so does Nothing Wasted, which keeps what a failed craft used.',
+        ...(sprouts ? [`Offline, ${sprouts.name} gives its ${numberWord(sprouts.fx['count:sprout'])} sprouts, as it does on an island.`] : []),
+        'Offline, a go that makes more than its recipe says now says how many it made, as it did on an island.',
       ];
     },
   },

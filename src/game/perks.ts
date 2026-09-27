@@ -56,17 +56,17 @@ import { FENCE_TYPES, MATERIAL_BY_ID, MATERIALS, MAX_LEVELS, storeySkill, TALL_S
 import { BUCKET_LITRES, FURNITURE, furnitureDef } from './furniture';
 import { ARMOUR, ARMOUR_BY_ID, ARMOUR_CLASSES, HIT_CAP, SOAK_CAP, WEAPON_BY_ID, WEAPONS } from './gear';
 import { GEM_ODDS } from './gems';
-import { CARRY_BASE, CARRY_PER_STRENGTH, CHAR_START, MAX_VEHICLE_SPEED, QL_TOP, QUEUE_PER_MIND, queueCapAt, TOOL_QL_SPAN } from './game';
+import { CARRY_BASE, CARRY_PER_STRENGTH, CHAR_START, MAX_MOUNT_SPEED, MAX_VEHICLE_SPEED, QL_TOP, QUEUE_PER_MIND, queueCapAt, TOOL_QL_SPAN } from './game';
 import { CROP_LIST, cropYield, RIPE, type CropDef } from './farming';
 import { improveStepAt } from './improve';
-import { ITEM_DEFS, RARITY_ODDS, type Item } from './items';
+import { billWords, ITEM_DEFS, RARITY_ODDS, type Item } from './items';
 import { MELT_KEEP, MELT_SHARE, meltLumps } from './melt';
 import {
   castWhole, COIN_DIFFICULTY, FORGE_WORK, INGOT_LUMPS, INGOT_WEIGHT, METALS, MOULD_BY_ID, MOULD_BY_MAKES, MOULD_DENT, mouldLumps, MOULDS,
   mouldUsesLeft,
 } from './metal';
 import { MAP_ODDS } from './treasure';
-import { CRAFT_REACH, DISTIL_BUCKETS, RECIPES, type Recipe } from './recipes';
+import { CRAFT_REACH, DISTIL_BUCKETS, RECIPES, TAILOR_SKILLS, type Recipe } from './recipes';
 import { BUSH_DEFS, ROAD_TILES, ROCK_VARIANTS, TILE_DEFS, TileType, TREE_AGES, TREE_DAWN_UTC, TREE_DEFS } from '../world/tiles';
 import { walkKey } from './player';
 import { article, capital, listed, numberWord, percent, share, spanWords, times } from './words';
@@ -75,6 +75,7 @@ import { BREWS } from './brewing';
 import { boonTime } from './boons';
 import { BAIT_BY_ID } from './fishing';
 import { BUTCHER_BAIT } from './butcher';
+import { SHEAR_FROM, SHEAR_WOOL } from './creatureActions';
 
 /** What the perks somebody holds come to, key by key. */
 export type Fx = Record<string, number>;
@@ -85,7 +86,7 @@ export type Fx = Record<string, number>;
  */
 export const FX_RULE: Record<string, 'mul' | 'add'> = {
   time: 'mul', ql: 'mul', weight: 'mul', walk: 'mul', fail: 'mul', wear: 'mul', need: 'mul', bill: 'mul',
-  grow: 'mul', rotate: 'mul', feed: 'mul', fill: 'mul', knack: 'mul', rot: 'mul', cool: 'mul',
+  grow: 'mul', rotate: 'mul', feed: 'mul', fill: 'mul', knack: 'mul', rot: 'mul', cool: 'mul', catch: 'mul',
   carry: 'add', jobs: 'add', plus: 'add', bumper: 'add', fodder: 'add', tool: 'add',
 };
 
@@ -1254,6 +1255,129 @@ const COOK: Seed[] = [
   },
 ];
 
+/** A Tailor's spinning, weaving and trades. */
+const SPINS = ['spin_wool', 'spin_cotton', 'spin_wemp'].map((id) => recipeOf(id));
+const WEAVE = recipeOf('weave_cloth');
+const TAILORED = RECIPES.filter((r) => r.skill === 'tailoring' && r.difficulty !== undefined);
+const LEATHERED = RECIPES.filter((r) => r.skill === 'leatherworking' && r.difficulty !== undefined);
+const TAILOR_RARE = RECIPES.filter((r) => r.skill === 'tailoring');
+const TAILOR_LOST = RECIPES.filter((r) => TAILOR_SKILLS.has(r.skill) && r.consumeOnFail);
+/** What a Tailor's Light Pack lightens, and the tack a Saddler's hand is in. */
+const LIGHT = ['cloth', 'leather', 'yarn', 'hide'];
+const TACKED = ['saddle', 'bridle', 'yoke'];
+const needFor = (r: Recipe, m: number): number => Math.max(1, Math.ceil((r.inputs[0].count ?? 1) * m));
+const holds = (id: string, m = 1): number => Math.round((ITEM_DEFS[id]?.holds ?? 0) * m);
+const kgSaid = (x: number): string => `${Number(x.toFixed(3))} kg`;
+
+const TAILOR: Seed[] = [
+  {
+    num: 2, name: 'Full Fleece',
+    fx: { 'plus:wool': 1 },
+    note: (fx) => `Shearing gives ${numberWord(fx['plus:wool'])} more wool a go (now ${numberWord(Math.max(1, Math.round(SHEAR_FROM * SHEAR_WOOL)))} `
+      + `to ${numberWord(SHEAR_WOOL)}, by how grown the fleece is).`,
+  },
+  {
+    num: 3, name: 'Quick Spindle',
+    fx: onEach('time', SPINS.map((r) => r.id), 0.6),
+    note: (fx) => `Spinning takes ${less(fx[`time:${SPINS[0].id}`])} less time (${secs(SPINS[0].baseTime)} base), wool, cotton and wemp alike.`,
+  },
+  {
+    num: 4, name: 'Even Thread',
+    fx: { 'count:yarn': 3 },
+    note: (fx) => `Spinning makes ${numberWord(fx['count:yarn'])} yarn a go (now ${numberWord(SPINS[0].count ?? 1)}) from the same `
+      + `${numberWord(SPINS[0].inputs[0].count ?? 1)} fibre.`,
+  },
+  {
+    num: 7, name: 'Tight Weave',
+    fx: { [`need:${WEAVE.id}`]: 2 / 3 },
+    note: (fx) => `${capital(WEAVE.label)} takes ${numberWord(needFor(WEAVE, fx[`need:${WEAVE.id}`]))} yarn (now ${numberWord(needFor(WEAVE, 1))}).`,
+  },
+  {
+    num: 9, name: 'Sure Needle',
+    fx: onEach('fail', TAILORED.map((r) => r.id), 0.5),
+    note: (fx) => `Tailoring fails ${share(fx[`fail:${TAILORED[0].id}`])} as often (now a check at difficulty `
+      + `${range(TAILORED.map((r) => r.difficulty ?? 0))}).`,
+  },
+  {
+    num: 11, name: 'Master Tailor',
+    fx: onEach('rare', TAILOR_RARE.map((r) => r.id), RARITY_ODDS[0] * 2),
+    note: (fx) => `What you tailor, all ${TAILOR_RARE.length} things, comes out rare ${oneIn(fx[`rare:${TAILOR_RARE[0].id}`])} `
+      + `(now ${oneIn(RARITY_ODDS[0])}); supreme and fantastic follow at their usual odds.`,
+  },
+  {
+    num: 16, name: 'Sack Maker',
+    fx: { 'hold:sack': 1.5 },
+    note: (fx) => `Sacks you stitch hold ${holds('sack', fx['hold:sack'])} (now ${holds('sack')}), whoever has them after.`,
+  },
+  {
+    num: 18, name: 'Sure Tan',
+    fx: { 'fail:tan_hide': 0.5 },
+    note: (fx) => `${capital(label('tan_hide'))} fails ${share(fx['fail:tan_hide'])} as often (now a check at difficulty ${diff('tan_hide')}).`,
+  },
+  {
+    num: 19, name: 'Lye Saver',
+    fx: { 'lye:tan_hide': 0.5 },
+    note: (fx) => `${oneIn(fx['lye:tan_hide'])} tannings leave the lye in the bucket for another (now the bucket comes back empty).`,
+  },
+  {
+    num: 21, name: 'Sure Awl',
+    fx: onEach('fail', LEATHERED.map((r) => r.id), 0.5),
+    note: (fx) => `Leatherworking fails ${share(fx[`fail:${LEATHERED[0].id}`])} as often (now a check at difficulty `
+      + `${range(LEATHERED.map((r) => r.difficulty ?? 0))}).`,
+  },
+  {
+    num: 25, name: 'Deep Pockets',
+    fx: { 'hold:satchel': 1.25, 'hold:backpack': 1.25 },
+    note: (fx) => `Satchels you stitch hold ${holds('satchel', fx['hold:satchel'])} (now ${holds('satchel')}) and backpacks `
+      + `${holds('backpack', fx['hold:backpack'])} (now ${holds('backpack')}), whoever has them after.`,
+  },
+  {
+    num: 27, name: 'Saddler',
+    fx: onEach('speed', TACKED, 1.1),
+    note: (fx) => `A mount in a saddle or a bridle you stitched goes ${by(fx['speed:saddle'])} faster, up to `
+      + `${tenth(MAX_MOUNT_SPEED * fx['speed:saddle'])} tiles a second (now at most ${MAX_MOUNT_SPEED}); and a cart or a wagon built with `
+      + `yokes you stitched goes ${by(fx['speed:yoke'])} faster behind its team, over what its builder's hand puts into it. `
+      + 'Whoever rides or drives them.',
+  },
+  {
+    num: 31, name: "Fisher's Friend",
+    fx: { 'catch:fishing_net': 1.2, 'catch:creel': 1.2 },
+    note: (fx) => `Nets and creels you make catch ${by(fx['catch:fishing_net'])} more, whoever fishes with them: a net's haul, `
+      + 'and a creel\'s chance of a fish each time it is looked at.',
+  },
+  {
+    num: 34, name: 'Nothing Wasted',
+    fx: each(TAILOR_LOST.map((r) => `spare:${r.id}`), 1),
+    note: () => `A failed tailoring, leatherworking or ropemaking job keeps its materials (now they are lost), on every one of `
+      + `the ${TAILOR_LOST.length} that lose them.`,
+  },
+  {
+    num: 35, name: 'Light Pack',
+    fx: each(LIGHT.map((id) => `weight:${id}`), 0.5),
+    note: (fx) => `${capital(listed(LIGHT.map((id) => (id === 'hide' ? plural(itemName(id)) : itemName(id)))))} weigh `
+      + `${less(fx['weight:cloth'])} less in your pack: ${listed(LIGHT.map((id) => `${itemName(id)} ${kgSaid(kg(id) * fx[`weight:${id}`])} a unit `
+      + `(now ${kgSaid(kg(id))})`))}.`,
+  },
+  {
+    num: 37, name: 'Workshop Reach',
+    fx: { 'reach:tailor': 6 },
+    note: (fx) => `Tailoring, leatherworking and ropemaking take what goes into them from containers within ${fx['reach:tailor']} tiles `
+      + `(now ${CRAFT_REACH}).`,
+  },
+  {
+    num: 46, name: 'Patch',
+    fx: { patch_item: 20 },
+    note: (fx) => `${label('patch_item')} (a job, ${secs(base('patch_item'))}): ${fx.patch_item} damage off a cloth or leather piece for `
+      + 'one cloth or one leather, and nothing off its QL.',
+  },
+  {
+    num: 49, name: 'Tent',
+    fx: { tent: 1 },
+    note: () => `A new piece to build, a ${piece('tent')} (${billWords(furnitureDef('tent').bill, false)}, with a needle), that you can set `
+      + `down anywhere and sleep in: ${percent((furnitureDef('tent').bed ?? 0) / (furnitureDef('bed').bed ?? 1))} of the rest a bed gives.`,
+  },
+];
+
 /** Every trade's perks, in the order they were picked. */
 const SEEDS: Record<string, Seed[]> = {
   terraformer: TERRAFORMER,
@@ -1264,6 +1388,7 @@ const SEEDS: Record<string, Seed[]> = {
   forester: FORESTER,
   farmer: FARMER,
   cook: COOK,
+  tailor: TAILOR,
 };
 
 const slug = (name: string): string => name.toLowerCase().replace(/[’']/g, '').replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '');
@@ -1282,6 +1407,7 @@ export const TIERS: Record<string, number[][]> = {
   forester: [[34, 43, 44], [21, 22, 40], [1, 2, 3], [7, 16, 24], [10, 11, 20], [5, 6, 14]],
   farmer: [[14, 25, 28], [4, 5, 8], [22, 23, 30], [6, 34, 39], [11, 40, 41], [15, 16, 17]],
   cook: [[11, 18, 28], [31, 49, 50], [3, 7, 8], [5, 6, 15], [20, 21, 32], [14, 46, 47]],
+  tailor: [[2, 3, 18], [27, 31, 37], [9, 19, 21], [16, 25, 34], [4, 7, 35], [11, 46, 49]],
 };
 
 /** Every perk there is, tier by tier, and in each tier by the number it was picked under, as the island lists them. */

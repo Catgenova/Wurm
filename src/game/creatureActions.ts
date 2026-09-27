@@ -1,13 +1,13 @@
 import { DARK_SHOT, DARK_SWING, tryGain } from './learn';
 import type { ActionDef, Target } from './actions';
-import { isShod, SHOES_PER_MOUNT, ageDef, attackOf, BLOW_SHARE, bloodMul, careWord, coaxBonus, creatureLevel, forgetCoaxing, isBaitFor, maxHealth, SEX_NAMES, SPECIES, STANCE_NAMES, workRangeOf, type Creature, type Stance, type GatherKind } from './creatures';
+import { isShod, SHOES_PER_MOUNT, TACK, ageDef, attackOf, BLOW_SHARE, bloodMul, careWord, coaxBonus, creatureLevel, forgetCoaxing, isBaitFor, maxHealth, SEX_NAMES, SPECIES, STANCE_NAMES, workRangeOf, type Creature, type Stance, type GatherKind } from './creatures';
 import { numberWord } from './words';
 import { GENTLE_HAND } from './meditation';
 import { bestTier, traitList } from './traits';
 import type { Game } from './game';
 import { furnitureCentre, furnitureName, vehicleOf } from './furniture';
 import { deedJobLine, emptyCrate, letOut, shutIn } from './creaturecrate';
-import { itemDef, itemName } from './items';
+import { itemDef, itemName, type Mark } from './items';
 import { BANE_BONUS, banes, bowRange, hitChance, isBow, WEAPON_BY_ID, weaponDamage, type WeaponDef } from './gear';
 import { matOfItem } from './materials';
 
@@ -107,7 +107,11 @@ export function companionSwap(g: Game, taking: Creature): { current: Creature; t
 }
 
 /** What has to be fitted before anything can be ridden. */
-export const TACK = ['saddle', 'bridle'];
+export { TACK } from './creatures';
+/** How grown a fleece has to be to shear, and what a full one gives: wool, or a bird's feathers. The island has the same. */
+export const SHEAR_FROM = 0.35;
+export const SHEAR_WOOL = 3;
+export const SHEAR_FEATHERS = 6;
 
 /** Bare hands: what you fight with when there is nothing in them. */
 const FIST: WeaponDef = { id: 'fist', kind: 'knives', damage: 3, swing: 1.8 };
@@ -246,19 +250,20 @@ export const CREATURE_ACTIONS: ActionDef[] = [
       if (!SPECIES[c.species]?.fleece) return 'There is nothing on it worth shearing.';
       if (c.mode === 'wild') return 'Tame it first; it will not stand still for you otherwise.';
       if (!g.inventory.has('carving_knife')) return 'You need a knife to shear with.';
-      if (c.fleece < 0.35) return `${c.name} has hardly any ${SPECIES[c.species].shearYield === 'feather' ? 'feathers' : 'fleece'} back yet.`;
+      if (c.fleece < SHEAR_FROM) return `${c.name} has hardly any ${SPECIES[c.species].shearYield === 'feather' ? 'feathers' : 'fleece'} back yet.`;
       return null;
     },
     perform: (t, g) => {
       const c = creatureOf(g, t);
-      if (!c || c.fleece < 0.35) return;
+      if (!c || c.fleece < SHEAR_FROM) return;
       if (!nearPlayer(g, c)) {
         g.logMsg(`${c.name} moved off before you could start.`, 'event');
         return;
       }
       // A full fleece is three, a half-grown one is one, and quality follows the fleece.
       const yields = SPECIES[c.species].shearYield ?? 'wool';
-      const n = Math.max(1, Math.round(c.fleece * (yields === 'wool' ? 3 : 6)));
+      // And more of it for a perk on what comes off (a Tailor's Full Fleece), as the island has it.
+      const n = Math.max(1, Math.round(c.fleece * (yields === 'wool' ? SHEAR_WOOL : SHEAR_FEATHERS))) + Math.floor(g.perk(`plus:${yields}`, 0));
       const ql = Math.max(1, Math.min(100, 15 + c.fleece * 45 + g.skills.get('tailoring') * 0.4));
       const wool = g.gather(yields, { count: n, ql });
       c.fleece = 0;
@@ -604,11 +609,18 @@ export const CREATURE_ACTIONS: ActionDef[] = [
     perform: (t, g) => {
       const c = creatureOf(g, t);
       if (!c) return;
+      // What each piece carries of its maker's hand goes onto the mount with it (a Tailor's Saddler).
+      const marks: Record<string, Mark> = {};
       for (const id of TACK) {
         const it = g.inventory.find(id);
-        if (!it || !g.inventory.remove(it.uid, 1)) return;
+        if (!it) return;
+        const mark = it.mark;
+        if (!g.inventory.remove(it.uid, 1)) return;
+        if (mark && Object.keys(mark).length) marks[id] = mark;
       }
       c.tacked = true;
+      if (Object.keys(marks).length) c.tack = marks;
+      else delete c.tack;
       g.logMsg(`You saddle ${c.name} and slip the bit into its mouth. It stands for it.`, 'event');
     },
   },
@@ -659,7 +671,8 @@ export const CREATURE_ACTIONS: ActionDef[] = [
       const c = creatureOf(g, t);
       if (!c) return;
       c.tacked = false;
-      for (const id of TACK) g.inventory.add(id, { ql: 40 });
+      for (const id of TACK) g.inventory.add(id, { ql: 40, ...(c.tack?.[id] ? { mark: c.tack[id] } : {}) });
+      delete c.tack;
       g.logMsg(`You strip the saddle and bridle off ${c.name}.`, 'event');
     },
   },

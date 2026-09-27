@@ -2253,6 +2253,26 @@ const MODELS: Record<string, Model> = {
     sc.rod([L - 2.4, -W + 0.9, z + 1.55], [L - 2.4, W - 0.9, z + 1.55], 1, WOOL);
     sc.box(-L + 1, -L + 3.4, -W + 1, W - 1, z + 0.55, z + 1.6, LINEN);
   },
+  /*
+   * A tent: a pole at each end and a ridge pole across them, the cloth thrown
+   * over it and pegged out to either side, the back end closed, and the front
+   * left open with its two flaps tied back to the poles.
+   */
+  tent: ({ sc, wood }) => {
+    const L = 8.4, W = 5.2, H = 8.4;
+    const CLOTH = paintOf(hex('#d6c9a8')), ROPE = paintOf(hex('#8e7d5e'));
+    const seams = (F: (u: number, v: number) => Pt): void => {
+      for (const u of [0.34, 0.67]) sc.line(F(u, 0.03), F(u, 0.97), rgb(CLOTH.ink, 1, 0.5), sc.ink * 0.6);
+    };
+    for (const x of [-L + 0.3, L - 0.3]) sc.box(x - 0.35, x + 0.35, -0.35, 0.35, 0, H + 0.6, wood);
+    sc.rod([-L, 0, H], [L, 0, H], 0.45, wood);
+    for (const y of [-W, W]) sc.panel([[-L, 0, H + 0.3], [L, 0, H + 0.3], [L, y, 0.2], [-L, y, 0.2]], CLOTH, seams);
+    sc.panel([[-L, -W, 0.2], [-L, 0, H + 0.3], [-L, W, 0.2]], CLOTH);
+    // The flaps at the front, drawn back to the pole on either side.
+    for (const y of [-W, W]) sc.panel([[L, y, 0.2], [L, y * 0.45, H * 0.55], [L + 0.4, y * 0.3, 0.2]], CLOTH);
+    // The guy ropes at the corners, pegged out beyond the cloth.
+    for (const x of [-L, L]) for (const y of [-W, W]) sc.rod([x, y * 0.55, H * 0.45], [x + Math.sign(x) * 1.2, y * 1.12, 0], 0.12, ROPE);
+  },
 
   /*
    * The two pieces that serve other people. The stall is a counter under a

@@ -1,7 +1,7 @@
 import { tryGain } from './learn';
 import type { ActionDef } from './actions';
 import type { Game } from './game';
-import { itemDef } from './items';
+import { itemDef, markOf } from './items';
 
 /** What one cast and one sweep of the net teach, fish or no fish. */
 export const ROD_GAIN = 0.4;
@@ -214,7 +214,11 @@ export const FISHING_ACTIONS: ActionDef[] = [
         g.logMsg('The net comes up with nothing in it but weed.', 'event');
         return true;
       }
-      const haul = 1 + Math.floor(g.rand() * (1 + (NET_HAUL - 1) * (0.3 + Math.min(100, netQl) / 160)));
+      const hauled = 1 + Math.floor(g.rand() * (1 + (NET_HAUL - 1) * (0.3 + Math.min(100, netQl) / 160)));
+      // And more of it for its maker's hand in the net (a Tailor's Fisher's Friend): the share over a
+      // whole fish is a chance at one more, so the catch is that much more on the average.
+      const more = hauled * markOf(g.inventory.tool('fishing_net') ?? {}, 'catch');
+      const haul = more === hauled ? hauled : Math.floor(more) + (g.rand() < more - Math.floor(more) ? 1 : 0);
       const got = new Map<string, number>();
       for (let i = 0; i < haul; i++) {
         const f = pickFish(g, pool);

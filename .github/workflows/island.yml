@@ -1620,6 +1620,20 @@ jobs:
             --outfile=node_modules/.cache/cook.mjs --log-level=error
           node node_modules/.cache/cook.mjs
 
+      - name: The Tailor's perks, each where its rule is
+        run: |
+          # Each of the Tailor's eighteen measured on the island, the dice put
+          # either side of a perk's number where it is a chance: the shears'
+          # wool; the spindle's time and third length and the loom's two yarn;
+          # a failed check held up, spared or lost; a rare cap; the lye left in
+          # the bucket; the marks on bags, tack, yokes, nets and creels and
+          # what each then does; the lighter pack; the workshop's reach; a
+          # patch with its refusals; the tent, built and slept in; and the
+          # browser's words and numbers beside the island's.
+          npx esbuild supabase/test/tailor.ts --bundle --platform=node --format=esm \
+            --outfile=node_modules/.cache/tailor.mjs --log-level=error
+          node node_modules/.cache/tailor.mjs
+
       - name: The exact benefit, and where its number comes from
         run: |
           # Text the player reads says what changes and by how much, and where

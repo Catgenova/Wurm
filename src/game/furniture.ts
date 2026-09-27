@@ -91,6 +91,8 @@ export interface FurnitureDef {
   hearth?: boolean;
   /** Can be slept in; the number is how much of a rest it is. */
   bed?: number;
+  /** A perk that has to be held to build it at all, by its key (a Tailor's Tent). */
+  perk?: string;
   /** A stone table to kneel at. Praying at one banks favour. */
   altar?: boolean;
   /**
@@ -222,6 +224,8 @@ export const FURNITURE: FurnitureDef[] = [
   piece('desk', 'Writing desk', 2, 2, [['plank', 32], ['timber', 8], ['nail', 40]], 22, 14, 'You nail up a writing desk, drawers and all.', 20),
   piece('bed', 'Bed', 3, 2, [['plank', 24], ['timber', 16], ['cloth', 8], ['nail', 40]], 18, 15, 'You nail up a bed and stuff the mattress.', undefined, { bed: 1 }),
   piece('cot', 'Cot', 2, 2, [['plank', 16], ['timber', 8], ['cloth', 4], ['nail', 24]], 12, 10, 'You nail up a narrow cot.', undefined, { bed: 0.7 }),
+  // A Tailor's tent: cloth over a ridge pole, light enough to carry and set down wherever the night finds you.
+  piece('tent', 'Tent', 2, 2, [['cloth', 8], ['rope', 2], ['shaft', 3]], 16, 14, 'You stitch the cloth into a fly, cut the poles and tie in the guy ropes.', undefined, { bed: 0.5, skill: 'tailoring', tool: 'needle', perk: 'tent' }),
   piece('chest', 'Chest', 2, 2, [['plank', 32], ['timber', 8], ['nail', 36]], 16, 12, 'You nail up a banded chest.', 60),
   piece('coffer', 'Coffer', 1, 1, [['plank', 16], ['nail', 20]], 14, 8, 'You nail up a small coffer.', 25),
   piece('cupboard', 'Cupboard', 2, 1, [['plank', 40], ['timber', 8], ['nail', 44]], 20, 14, 'You nail up a cupboard and hang its doors.', 80),
@@ -522,6 +526,8 @@ for (const f of FURNITURE) {
   describeFrom(f.id, said);
 }
 describeWith({ bucketLitres: BUCKET_LITRES });
+// A tent's night measured against a bed's, off the two pieces.
+describeFrom('tent', { ofBed: (furnitureDef('tent').bed ?? 0) / (furnitureDef('bed').bed ?? 1) });
 
 /**
  * What to call a piece standing on the ground.

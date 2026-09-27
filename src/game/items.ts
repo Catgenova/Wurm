@@ -410,6 +410,7 @@ export const ITEM_DEFS: Record<string, ItemDef> = {
   desk: { name: 'Writing desk', category: 'misc', weight: 24, decay: 4, description: 'A desk with drawers under the top. Holds {capacity} things.' },
   bed: { name: 'Bed', category: 'misc', weight: 30, decay: 5, description: 'A bed with a stuffed mattress on it.' },
   cot: { name: 'Cot', category: 'misc', weight: 16, decay: 5, description: 'A narrow bed for a narrow room.' },
+  tent: { name: 'Tent', category: 'misc', weight: 6, decay: 5, description: 'Sleep in it at night: {ofBed:pct} of the rest a bed of the same QL gives.' },
   chest: { name: 'Chest', category: 'misc', weight: 26, decay: 4, description: 'A banded chest. Holds {capacity} things.' },
   coffer: { name: 'Coffer', category: 'misc', weight: 10, decay: 4, description: 'A small strongbox. Holds {capacity} things.' },
   cupboard: { name: 'Cupboard', category: 'misc', weight: 30, decay: 4, description: 'A cupboard with doors on it. Holds {capacity} things.' },
@@ -671,8 +672,8 @@ export interface Item {
  * map in the `mark` column of an item and of a piece set down, and carries it
  * between the two.
  */
-export type MarkFamily = 'hold' | 'speed' | 'damage' | 'range' | 'soak' | 'aim' | 'last' | 'temper' | 'feed' | 'fill' | 'knack' | 'rot';
-export const MARK_FAMILIES: readonly MarkFamily[] = ['hold', 'speed', 'damage', 'range', 'soak', 'aim', 'last', 'temper', 'feed', 'fill', 'knack', 'rot'];
+export type MarkFamily = 'hold' | 'speed' | 'damage' | 'range' | 'soak' | 'aim' | 'last' | 'temper' | 'feed' | 'fill' | 'knack' | 'rot' | 'catch';
+export const MARK_FAMILIES: readonly MarkFamily[] = ['hold', 'speed', 'damage', 'range', 'soak', 'aim', 'last', 'temper', 'feed', 'fill', 'knack', 'rot', 'catch'];
 export type Mark = Partial<Record<MarkFamily, number>>;
 
 /** A thing's mark on one family, which is one where it has none. */
@@ -694,6 +695,18 @@ export function partsMark(parts: ReadonlyArray<{ mark?: Mark | null }>): Mark {
       out[f] = Math.max(out[f] ?? v, v);
     }
   }
+  return out;
+}
+
+/**
+ * A maker's own mark over what the parts carried: the maker's where both say
+ * the same, but a pace multiplied, since a yoke's and a builder's are two
+ * reasons to go faster (a Tailor's Saddler in the yoke, a Carpenter's in the
+ * cart). The island's `perform_craft` does the same.
+ */
+export function overParts(parts: Mark, made: Mark | undefined): Mark {
+  const out: Mark = { ...parts, ...(made ?? {}) };
+  if (parts.speed !== undefined && made?.speed !== undefined) out.speed = parts.speed * made.speed;
   return out;
 }
 
@@ -724,6 +737,7 @@ export function markSays(mark: Mark | undefined | null): string {
     fill: (m) => `fills ${pct(m)} more of the food bar`,
     knack: (m) => `gives a knack that lasts ${pct(m)} longer`,
     rot: (m) => `rots ${Math.round((1 - m) * 100)}% slower`,
+    catch: (m) => `catches ${pct(m)} more`,
   };
   const parts = MARK_FAMILIES.filter((f) => mark[f] !== undefined).map((f) => said[f](mark[f] as number));
   if (!parts.length) return '';
@@ -917,7 +931,8 @@ export const itemWeight = (item: { id: string; extra?: string; count: number; in
 // ---- Bags: the things that hold other things. ----
 
 /** How many a bag takes, or nothing at all for the things that are not bags. */
-export const bagRoom = (item: Item): number => roomFor(itemDef(item.id).holds ?? 0, item);
+/** What a bag holds: its make, its maker's mark (a Tailor's Sack Maker and Deep Pockets), and its rarity. The island's `bag_room`. */
+export const bagRoom = (item: Item): number => roomFor((itemDef(item.id).holds ?? 0) * markOf(item, 'hold'), item);
 export const isBag = (item: Item): boolean => bagRoom(item) > 0;
 export const bagUnits = (item: Item): number => (item.inside ?? []).reduce((n, it) => n + it.count, 0);
 /** How much more a bag will take. */

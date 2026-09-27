@@ -1,10 +1,10 @@
 import { tryGain } from './learn';
 import type { ActionDef, Target } from './actions';
 import type { Game } from './game';
-import { describeWith, itemDef, makersMark, partsMark, rollRarity, RARITY_ODDS, RARITY_WORD, type Item } from './items';
+import { describeWith, itemDef, makersMark, overParts, partsMark, rollRarity, RARITY_ODDS, RARITY_WORD, type Item } from './items';
 import { QL_PER_LOOP } from './belt';
 import { describeGoals } from './journal';
-import { fill, numberWord } from './words';
+import { countSaid, fill, numberWord } from './words';
 import { FURNITURE, ONE_ALTAR, VESSELS } from './furniture';
 import { castWhole, INGOT_LUMPS, ingotOf, METAL_BY_LUMP, MOULD_BY_MAKES, MOULDS } from './metal';
 import { FISH } from './fishing';
@@ -141,10 +141,21 @@ export interface Recipe {
   perk?: string;
 }
 
+/**
+ * Parts not beaten out at an anvil that still carry their maker's mark into
+ * what they are built into: a yoke's pace into the cart or wagon it goes on
+ * (a Tailor's Saddler). The island's `perform_craft` reads the same list.
+ */
+export const MARKED_PARTS: ReadonlySet<string> = new Set(['yoke']);
+
+/** What a Tailor's Lye Saver says when the vessel's liquid is left in it. The island says the same. */
+export const VESSEL_KEPT = 'There is enough left in the bucket for another.';
+
 /** What somebody without the perk a recipe wants is told, by the perk's key. The island says the same. */
 export const RECIPE_PERK_SAYS: Record<string, string> = {
   broth: 'That wants a Cook who has learned to make broth.',
   distil: 'That wants a Cook who has learned to distil.',
+  tent: 'That wants a Tailor who has learned to make a tent.',
 };
 
 export const RECIPES: Recipe[] = [
@@ -264,7 +275,7 @@ export const RECIPES: Recipe[] = [
   { id: 'make_arrows', category: 'Woodwork', result: 'arrow', count: 3, inputs: [{ item: 'shaft' }, { item: 'arrow_head', count: 3 }, { item: 'feather', count: 3 }], tool: 'carving_knife', skill: 'fletching', material: 'metal', label: 'Fletch arrows', verb: 'fletching', baseTime: 8, stamina: 0.03, difficulty: 12, done: 'You split the shaft, set the heads and fletch {count:w} arrows.', fail: 'The fletching will not sit straight and the arrows are spoiled.', consumeOnFail: true },
   // Alchemy: ashes leached in water, and what lye is for.
   { id: 'make_lye', category: 'Alchemy', result: 'lye_bucket', inputs: [{ item: 'water_bucket' }, { item: 'ash', count: 2 }], skill: 'alchemy', label: 'Leach into lye', verb: 'making lye', baseTime: 12, stamina: 0.03, difficulty: 14, done: 'You stir the ashes into the water and leave it to leach. It comes off sharp and slippery: lye.', fail: 'The ashes settle out again and you are left with dirty water.', consumeOnFail: true, salvage: [['bucket', 1]] },
-  { id: 'tan_hide', category: 'Alchemy', result: 'leather', inputs: [{ item: 'hide' }, { item: 'lye_bucket' }], tool: 'carving_knife', skill: 'leatherworking', returns: [['bucket', 1]], label: 'Tan in lye', verb: 'tanning a hide', baseTime: 14, stamina: 0.05, difficulty: 16, done: 'The lye takes the hair off the hide and you work it soft. It is leather now, and the bucket is empty.', fail: 'The hide is left too long in the lye and comes out brittle and useless.', consumeOnFail: true },
+  { id: 'tan_hide', category: 'Alchemy', result: 'leather', inputs: [{ item: 'hide' }, { item: 'lye_bucket' }], tool: 'carving_knife', skill: 'leatherworking', returns: [['bucket', 1]], label: 'Tan in lye', verb: 'tanning a hide', baseTime: 14, stamina: 0.05, difficulty: 16, done: 'The lye takes the hair off the hide and you work it soft. It is leather now.', fail: 'The hide is left too long in the lye and comes out brittle and useless.', consumeOnFail: true },
   // Writing: reed beds into paper, and what is written on it.
   { id: 'make_papyrus', category: 'Writing', result: 'papyrus', count: 3, inputs: [{ item: 'reed', count: 4 }, { item: 'water_bucket' }], skill: 'papyrusmaking', returns: [['bucket', 1]], label: 'Press into papyrus', verb: 'pressing papyrus', baseTime: 13, stamina: 0.04, difficulty: 16, done: 'You split the reeds, lay them crosswise and press them until they take to each other. {count:W} sheets.', fail: 'The sheet dries in ridges and tears as you lift it.', consumeOnFail: true },
   { id: 'make_ink', category: 'Writing', result: 'ink', count: 2, inputs: [{ item: 'gland' }, { item: 'ash', count: 2 }, { item: 'water_bucket' }], skill: 'alchemy', returns: [['bucket', 1]], label: 'Grind into ink', verb: 'grinding ink', baseTime: 11, stamina: 0.03, difficulty: 20, done: 'You grind soot and gland into the water until it flows black and stays black.', fail: 'It separates into grey water and grit. No ink today.', consumeOnFail: true },
@@ -430,16 +441,19 @@ const FURNITURE_RECIPES: Recipe[] = FURNITURE.filter((f) => !f.grave).map((f) =>
   inputs: f.bill.map(([item, count]) => ({ item, count })),
   tool: f.tool ?? 'mallet',
   skill: f.skill ?? 'fine_carpentry',
-  // A carpenter's piece is of the wood it is built from; a mason's is brick.
-  material: f.material ?? (f.skill === 'masonry' ? undefined : ('wood' as const)),
+  // A carpenter's piece is of the wood it is built from; a mason's is brick, and a tailor's cloth.
+  material: f.material ?? (f.skill === 'masonry' || f.skill === 'tailoring' ? undefined : ('wood' as const)),
   ...(f.deed ? { deed: true } : {}),
+  ...(f.perk ? { perk: f.perk } : {}),
   label: `Build ${f.name.toLowerCase()}`,
   verb: `building a ${f.name.toLowerCase()}`,
   baseTime: f.time,
   stamina: 0.05,
   difficulty: f.difficulty,
   done: `${f.done} Set it down on any spot of a tile.`,
-  fail: f.skill === 'masonry' ? `The courses will not run true and you knock the ${f.name.toLowerCase()} down again.` : `The joints will not pull up square and you pull the ${f.name.toLowerCase()} apart again.`,
+  fail: f.skill === 'masonry' ? `The courses will not run true and you knock the ${f.name.toLowerCase()} down again.`
+    : f.skill === 'tailoring' ? `The seams will not lie flat and you unpick the ${f.name.toLowerCase()} again.`
+      : `The joints will not pull up square and you pull the ${f.name.toLowerCase()} apart again.`,
 }));
 
 RECIPES.push(...FURNITURE_RECIPES);
@@ -743,11 +757,18 @@ function countFor(stock: readonly CraftStock[], r: Recipe, id: string, mat: stri
 
 /**
  * How far a recipe reaches into your stores: as far as any craft, as far as a
- * Smith's Forge Reach takes work at the smelter for a recipe made there, and
- * as far as a Cook's Pantry Reach takes cooking.
+ * Smith's Forge Reach takes work at the smelter for a recipe made there, as
+ * far as a Cook's Pantry Reach takes cooking, and as far as a Tailor's
+ * Workshop Reach takes tailoring, leatherworking and ropemaking.
  */
 export const reachFor = (g: Game, r: Recipe): number =>
-  (r.station === 'smelter' ? g.forgeReach() : r.skill === 'cooking' ? Math.max(CRAFT_REACH, Math.floor(g.perk('reach:cook', CRAFT_REACH))) : CRAFT_REACH);
+  (r.station === 'smelter' ? g.forgeReach()
+    : r.skill === 'cooking' ? Math.max(CRAFT_REACH, Math.floor(g.perk('reach:cook', CRAFT_REACH)))
+      : TAILOR_SKILLS.has(r.skill) ? Math.max(CRAFT_REACH, Math.floor(g.perk('reach:tailor', CRAFT_REACH)))
+        : CRAFT_REACH);
+
+/** The trades a Tailor's Workshop Reach takes further: the island's `tailor_work`. */
+export const TAILOR_SKILLS: ReadonlySet<string> = new Set(['tailoring', 'leatherworking', 'ropemaking']);
 
 /** Whether this input has to be of the settled material rather than anything. */
 const strictInput = (stock: readonly CraftStock[], r: Recipe, id: string): boolean =>
@@ -959,8 +980,13 @@ export function recipeAction(r: Recipe): ActionDef {
       // the answer.
       const strict = new Map(r.inputs.map((i) => [i.item, strictInput(stock, r, i.item)]));
       const hard = (r.difficulty ?? 0) + matOf(mat).difficulty;
-      if (r.difficulty !== undefined && !g.skillCheck(r.skill, hard, toolQl(g), ease)) {
-        if (r.consumeOnFail) {
+      // Surer for a perk on the recipe (a Mason's Sure Chisel, a Tailor's Sure Needle).
+      if (r.difficulty !== undefined && !g.sureCheck(r.id, r.skill, hard, toolQl(g), ease)) {
+        // And nothing lost of what went into it, now and then, for a perk on
+        // the recipe (a Mason's or a Tailor's Nothing Wasted), as the island has it.
+        const keep = r.consumeOnFail ? g.perk(`spare:${r.id}`, 0) : 0;
+        const spared = keep > 0 && g.rand() < keep;
+        if (r.consumeOnFail && !spared) {
           for (const i of r.inputs) consumeAcross(stock, i.item, needOf(g, r, i), t.uid, mat, strict.get(i.item));
           // The batch is wasted, not the vessel: you tip the ruin out and keep
           // the bucket.
@@ -970,20 +996,28 @@ export function recipeAction(r: Recipe): ActionDef {
         g.missed();
         g.gainSkill('mind_logic', tryGain(false, CRAFT_HEAD));
         g.logMsg(r.fail ?? `You fail to make ${lower(r.result)}.`, 'event');
+        if (spared) g.logMsg('Nothing that went into it is lost.', 'event');
         return more(t, g);
       }
       const fromInputs = r.qlFromInputs ? inputQl(stock, r, t.uid, mat) : 0;
       // What the parts the anvil beat out carry of their makers' marks, read
       // off the stacks a go spends first, before spending them: a Smith's Keen
       // Edge in a sword blade goes into the sword whoever fits it.
-      const parts = itemDef(r.result).stackable ? [] : r.inputs.filter((i) => MOULD_BY_MAKES.has(i.item))
+      const parts = itemDef(r.result).stackable ? [] : r.inputs.filter((i) => MOULD_BY_MAKES.has(i.item) || MARKED_PARTS.has(i.item))
         .map((i) => drawFor(stock, i.item, needOf(g, r, i), t.uid, mat, strict.get(i.item))?.[0]?.item)
         .filter((it): it is Item => !!it);
       // A Cook's Frugal Cook: one of the first ingredient that is not a
       // vessel, at the quality of the stack it came off, now and then.
       const spare = r.inputs.find((i) => !VESSELS[i.item] && i.item !== 'bucket');
       const spareQl = spare ? drawFor(stock, spare.item, needOf(g, r, spare), t.uid, mat, strict.get(spare.item))?.[0]?.item.ql : undefined;
-      for (const i of r.inputs) if (!consumeAcross(stock, i.item, needOf(g, r, i), t.uid, mat, strict.get(i.item))) return;
+      // A Tailor's Lye Saver: now and then the vessel's liquid is not used up,
+      // and the full vessel stays as it was rather than coming back empty.
+      const keepVessel = g.perk(`lye:${r.id}`, 0);
+      const vesselKept = keepVessel > 0 && g.rand() < keepVessel;
+      for (const i of r.inputs) {
+        if (vesselKept && VESSELS[i.item]) continue;
+        if (!consumeAcross(stock, i.item, needOf(g, r, i), t.uid, mat, strict.get(i.item))) return;
+      }
       carryOn(t, g, was, mat);
       /*
        * Two rules, and which one a recipe takes is whether the thing is made
@@ -1014,7 +1048,7 @@ export function recipeAction(r: Recipe): ActionDef {
       // parts carried. A pile of the same thing marked the same way is one
       // pile, and it goes in with the mark so that it stacks by it.
       const stackable = !!itemDef(r.result).stackable;
-      const mark = stackable ? makersMark((k, d) => g.perk(k, d), r.result) : { ...partsMark(parts), ...makersMark((k, d) => g.perk(k, d), r.result) };
+      const mark = stackable ? makersMark((k, d) => g.perk(k, d), r.result) : overParts(partsMark(parts), makersMark((k, d) => g.perk(k, d), r.result));
       const marked = mark && Object.keys(mark).length ? mark : undefined;
       const item = g.inventory.add(r.result, { count, ql, extra: r.extra ?? mat, ...(stackable && marked ? { mark: marked } : {}) });
       if (!stackable && marked) item.mark = marked;
@@ -1030,14 +1064,19 @@ export function recipeAction(r: Recipe): ActionDef {
         g.logMsg(RARITY_WORD[rare], 'skill');
       }
       g.madeIt(r.result, item.ql, count, rare);
-      for (const [id, n] of r.returns ?? []) g.inventory.add(id, { count: n, ql: 20 });
+      for (const [id, n] of r.returns ?? []) {
+        if (vesselKept && r.inputs.some((i) => VESSELS[i.item]?.empty === id)) continue;
+        g.inventory.add(id, { count: n, ql: 20 });
+      }
+      if (vesselKept) g.logMsg(VESSEL_KEPT, 'event');
       if (spare && g.rand() < g.perk(`keep:${r.id}`, 0)) {
         g.inventory.add(spare.item, { count: 1, ql: spareQl ?? item.ql });
         g.logMsg(`You save ${article(spare.item)}${lower(spare.item)} from the pot.`, 'event');
       }
       // Working a thing out with your hands is what sharpens the head.
       g.gainSkill('mind_logic', tryGain(true, CRAFT_HEAD));
-      g.logMsg(`${r.done} (${mat ? `${mat.toLowerCase()}, ` : ''}QL ${item.ql.toFixed(1)})`, 'event');
+      // Saying the count made, where a perk makes more than the recipe's own (a Tailor's Even Thread).
+      g.logMsg(`${countSaid(r.done, r.count ?? 1, g.madeAGo(r))} (${mat ? `${mat.toLowerCase()}, ` : ''}QL ${item.ql.toFixed(1)})`, 'event');
       return more(t, g);
     },
   };

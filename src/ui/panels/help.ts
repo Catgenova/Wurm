@@ -253,6 +253,7 @@ const forester = (name: string): Record<string, number> => perksOf('forester').f
 const BRUSH_SIDE = 2 * (forester('Clear Brush').clear_brush ?? 0) + 1;
 const farmer = (name: string): Record<string, number> => perksOf('farmer').find((p) => p.name === name)?.fx ?? {};
 const cook = (name: string): Record<string, number> => perksOf('cook').find((p) => p.name === name)?.fx ?? {};
+const tailor = (name: string): Record<string, number> => perksOf('tailor').find((p) => p.name === name)?.fx ?? {};
 const PATCH_SIDE = 2 * (farmer('Sow a Patch').sow_patch ?? 0) + 1;
 /** How many channels the rites push, from the narrowest to the widest. */
 const riteWidths = [...new Set(RITES.map((r) => Object.keys(r.muls).length))].sort((a, b) => a - b);
@@ -752,7 +753,9 @@ export function helpText(): string {
     inward. <b>Sink it in water</b> off a bank, bait it, and walk away: it fishes on its own while you
     are elsewhere, holds ${numberWord(TRAPS.creel.hold ?? 0)}, and gives about <b>${numberWord(Math.round(1 / CREEL_BAIT_LOSS))} fish to a baiting</b> before the bait is
     worked out of it. Empty it from the bank. Kept baited and emptied, the best one that can be woven is
-    worth around ${numberWord(Math.round(HOUR / CHECK_EVERY * creelOdds(TOP_QL)))} fish an hour for no work at all.</p>
+    worth around ${numberWord(Math.round(HOUR / CHECK_EVERY * creelOdds(TOP_QL)))} fish an hour for no work at all.
+    A net a Tailor with Fisher's Friend knotted hauls ${percent((tailor("Fisher's Friend")['catch:fishing_net'] ?? 1) - 1)} more fish on the
+    average, and a creel of theirs is ${percent((tailor("Fisher's Friend")['catch:creel'] ?? 1) - 1)} likelier to take one at each look.</p>
     <p>The <b>Wadd</b>, being the one thing on the island that swims, now fishes: set one to a deed or a
     work post and it works the banks in its range and carries the catch home.</p>
     <h3>Fruit trees</h3>
@@ -1354,6 +1357,8 @@ export function helpText(): string {
     kilns finish and everything left outside ages by however long you were under. On an island the
     night is everybody's and one sleeper cannot skip it, so you wake rested with the clock where it was.
     You wake up hungry and thirsty, too.</p>
+    <p>A Tailor can learn to make a <b>tent</b>: ${bill('make_tent')}, with a needle. Set it down anywhere and sleep in it
+    as in a bed: a night in it rests you ${percent((furnitureDef('tent').bed ?? 0) / (furnitureDef('bed').bed ?? 1))} as well as the same night in a bed of its quality.</p>
     <h3>Finding things, and moving them in bulk</h3>
     <p>A settlement of any age has crates, bins, chests and carts all over it, and opening all of them
     to find the planks is no way to live. The <b>Stores</b> window (<kbd>U</kbd>) lists every container
@@ -1401,6 +1406,8 @@ export function helpText(): string {
     Nothing is repaired once it is down to quality ${REPAIR_FLOOR}, so a thing mended often enough is finished in the
     end &mdash; but that is a long way off, and a good tool kept mended will outlast most of what you
     build with it.</p>
+    <p>A Tailor can learn to <b>Patch</b> cloth and leather armour instead: one cloth or one leather, of the piece's own
+    stuff, takes ${tailor('Patch').patch_item ?? 0} damage off it at a go and none of its quality.</p>
     <h3>Wounds, herbs and covers</h3>
     <p>A blow is not only a number off the bar. What gets through your armour leaves a <b>wound</b>, of
     a kind, in whichever place it landed, and that wound has its own life: it <b>bleeds</b> until it is
@@ -1705,7 +1712,9 @@ export function helpText(): string {
     or under a rider: stitch a <b>saddle</b> and a <b>bridle</b>, fit both from its menu, and
     <b>mount</b> it. A green one carries you at ${times(ORSE_GREEN / BASE_SPEED)} your own pace and over the same ground;
     one whose climbing is worked right up is ${times(ORSE_WORKED / ORSE_GREEN)} as fast as a green one and goes up slopes you would
-    have to walk round. The
+    have to walk round. Tack a Tailor with Saddler stitched lets a mount go ${percent((tailor('Saddler')['speed:saddle'] ?? 1) - 1)} faster,
+    past the ${MAX_MOUNT_SPEED} tiles a second a mount is otherwise held to, and yokes of theirs do the same for the cart or
+    wagon built on them. The
     <b>Rowl</b> hunts on sight in the wild &mdash; taming ${SPECIES.rowl.tameLevel}, and even then it is unruly &mdash; and
     tamed on a deed it hunts <b>for</b> you: it works a circuit of the token, runs down anything wild
     inside it, and carries the carcasses back to storage for butchering. Its <b>fighting</b> skill is
