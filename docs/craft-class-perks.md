@@ -1,6 +1,6 @@
 # Craft class perks
 
-The perks chosen for the fourteen craft classes, class by class, on 26 September 2026, and the tiers they are offered in, settled on 27 September. They replace what a craft class gave before: its channels and its tree of nodes in `src/game/classes.ts`. The Terraformer, the Miner, the Mason, the Carpenter, the Smith, the Forester and the Farmer are built, in `src/game/perks.ts` and on the island; the other seven are not yet.
+The perks chosen for the fourteen craft classes, class by class, on 26 September 2026, and the tiers they are offered in, settled on 27 September. They replace what a craft class gave before: its channels and its tree of nodes in `src/game/classes.ts`. The Terraformer, the Miner, the Mason, the Carpenter, the Smith, the Forester, the Farmer and the Cook are built, in `src/game/perks.ts` and on the island; the other six are not yet.
 
 ## Tiers
 
@@ -205,22 +205,22 @@ Main skill cooking; also butchering and brewing.
 
 3. **Fine Fare** — dishes you cook come up at +10% QL.
 5. **Big Pot** — stew, pottage, porridge and preserves make 1 more serving.
-6. **Frugal Cook** — 1 dish in 5 gives one of its ingredients back.
-7. **Hearty** — dishes you cook feed each nutrient 25% more.
-8. **Long-lasting** — dishes you cook decay 50% slower.
+6. **Frugal Cook** — 1 dish in 5 gives one of its ingredients back. Built as one of the first ingredient that is not a bucket, at the quality of the stack it came off.
+7. **Hearty** — dishes you cook feed each nutrient 25% more. Built, like Long-lasting, Flavoursome and Filling, as a maker's mark on the dish, so it holds whoever eats it; a dish made by the handful stacks by its mark.
+8. **Long-lasting** — dishes you cook decay 50% slower. Built as rotting 50% slower on the ground, which is the only place anything rots.
 11. **Flavoursome** — the knack from a dish you cooked lasts 50% longer.
 14. **Balanced Diet** — a balanced diet is worth up to +30% on your learning (now +20%).
 15. **Filling** — your dishes fill hunger 25% more.
 18. **Full Carcass** — you take 15% more of a carcass (at most all of it).
 20. **Prime Cuts** — meat you butcher comes up at +10% QL.
 21. **Hide Keeper** — hides and bones you take come up at +10% QL.
-28. **Strong Brew** — the knack from a drink you brewed lasts 50% longer.
+28. **Strong Brew** — the knack from a drink you brewed lasts 50% longer. Built as a mark on the barrel when the brew is set going, drawn off into every bucket filled from it; brew poured together is only as strong as the weakest of it, and an emptied barrel forgets it.
 31. **Pantry Reach** — cooking draws ingredients from containers within 6 tiles (now 3).
-32. **Cool Pack** — food in your pack decays 50% slower.
+32. **Cool Pack** — food in your pack decays 50% slower. Nothing rots in a pack, so it was built as food you drop rotting 50% slower where it lies, until it is picked up again.
 46. **Broth** — a recipe that turns bones into broth, feeding a little of all four.
-47. **Distil** — turns 15 L of a brew into 5 L of spirit whose knack lasts 3 times as long.
-49. **Bait Maker** — butchering also gives 2 fishing bait.
-50. **Taste** — Examine on a dish shows what it feeds and how long its knack lasts.
+47. **Distil** — turns 15 L of a brew into 5 L of spirit whose knack lasts 3 times as long. Built as 3 buckets of a brew into 1 of spirit, 2 buckets back, over a campfire with a clay pot. The spirit's knack is 3 times that of a drink as strong as it, mead or wine; ale and cider are weaker drinks with shorter knacks, so against them it is longer still.
+49. **Bait Maker** — butchering also gives 2 fishing bait. Built as 2 offal, a new bait that trout and pike bite on.
+50. **Taste** — Examine on a dish shows what it feeds and how long its knack lasts. Built for anything eaten or drunk: how much of the food bar a helping fills (or of the thirst bar a drink quenches), what it feeds of each of the four and how long its knack lasts, at its quality and with its maker's marks.
 
 **Tiers** (swept): 50 — Flavoursome, Full Carcass, Strong Brew · 60 — Pantry Reach, Bait Maker, Taste ·
 70 — Fine Fare, Hearty, Long-lasting · 80 — Big Pot, Frugal Cook, Filling ·

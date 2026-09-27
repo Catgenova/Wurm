@@ -500,6 +500,8 @@ const OTHERS = new Set([
   'melt:share', 'melt:keep', 'pour:wear', 'reach:forge', 'jobs', 'ingot',
   'stump:clear', 'nest:chance', 'nest:feathers', 'honey:chance', 'honey:count', 'bush:shaft', 'coppice', 'tap_resin', 'clear_brush',
   'sow_patch', 'tend_patch', 'harvest_patch',
+  'table:best', 'share:butcher', 'reach:cook', 'bait:butcher', 'cool:food', 'broth', 'distil', 'taste',
+  'brewed:ale', 'brewed:cider', 'brewed:mead', 'brewed:wine',
   ...STRIDE_KEYS,
 ]);
 const unnamed = PERKS.flatMap((p) => Object.keys(p.fx).filter((key) => {

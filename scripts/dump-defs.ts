@@ -309,6 +309,9 @@ out.push(`alter table item_def add column if not exists raw boolean not null def
 /* Kept in a larder though it is not food: flour, dough, cornmeal. Where a
  * thing lives and what a thing is are two questions, and this is the first. */
 out.push(`alter table item_def add column if not exists larder boolean not null default false;`);
+/* How many times as long the knack it gives lasts, past the ceiling its food
+ * and drink have: a Cook's spirit. */
+out.push(`alter table item_def add column if not exists knack real;`);
 /* Ground with anything living in it, and the damp ground that is full of them. */
 out.push(`alter table tile_def add column if not exists wormy boolean not null default false;`);
 out.push(`alter table tile_def add column if not exists rich_worms boolean not null default false;`);
@@ -1051,6 +1054,7 @@ for (const id of Object.keys(ITEM_DEFS)) {
 for (const [id, d] of Object.entries(ITEM_DEFS)) {
   if (d.food !== undefined) out.push(`update item_def set food = ${q(d.food)} where id = ${q(id)};`);
   if (d.drink !== undefined) out.push(`update item_def set drink = ${q(d.drink)} where id = ${q(id)};`);
+  if (d.knack !== undefined) out.push(`update item_def set knack = ${q(d.knack)} where id = ${q(id)};`);
   if (d.description !== undefined) out.push(`update item_def set description = ${q(d.description)} where id = ${q(id)};`);
   if (d.holds !== undefined) out.push(`update item_def set holds = ${q(d.holds)} where id = ${q(id)};`);
   for (const n of NUTRIENTS) {

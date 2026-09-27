@@ -59,6 +59,7 @@ export const BAITS: BaitDef[] = [
   { id: 'minnow', favours: ['pike', 'trout'], note: 'A live minnow. Nothing small enough to be eaten swims like that.' },
   { id: 'meat', favours: ['pike', 'trout'], note: 'Raw meat. A pike will come up out of the weed for it.' },
   { id: 'perch', favours: ['sturgeon', 'pike'], note: 'A whole perch on a hook, which is a lot of fish to give away for one that may not come.' },
+  { id: 'offal', favours: ['trout', 'pike'], note: 'Offal cut from a carcass. Trout and pike come to it.' },
 ];
 export const BAIT_BY_ID = new Map(BAITS.map((b) => [b.id, b]));
 export const isBait = (id: string): boolean => BAIT_BY_ID.has(id);

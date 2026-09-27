@@ -180,7 +180,7 @@ export const MINOR_SKILLS: string[] = [
  */
 export const MAJOR_SKILLS: string[] = [
   'digging', 'mining', 'woodcutting', 'forestry', 'foraging', 'botanizing', 'fishing', 'farming', 'butchering',
-  'alchemy', 'animal_husbandry', 'armorsmithing', 'blacksmithing', 'bowyery', 'carpentry', 'chainsmithing', 'cooking',
+  'alchemy', 'animal_husbandry', 'armorsmithing', 'blacksmithing', 'bowyery', 'brewing', 'carpentry', 'chainsmithing', 'cooking',
   'fine_carpentry', 'first_aid', 'fletching', 'jewellery', 'leatherworking', 'masonry', 'milling', 'papyrusmaking',
   'platesmithing', 'pottery', 'ropemaking', 'smelting', 'stonecutting', 'tailoring', 'weaponsmithing',
 ];

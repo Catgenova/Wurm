@@ -5,7 +5,7 @@ import { describeWith, itemDef, makersMark, partsMark, rollRarity, RARITY_ODDS, 
 import { QL_PER_LOOP } from './belt';
 import { describeGoals } from './journal';
 import { fill, numberWord } from './words';
-import { FURNITURE, ONE_ALTAR } from './furniture';
+import { FURNITURE, ONE_ALTAR, VESSELS } from './furniture';
 import { castWhole, INGOT_LUMPS, ingotOf, METAL_BY_LUMP, MOULD_BY_MAKES, MOULDS } from './metal';
 import { FISH } from './fishing';
 import { DYES } from './dyes';
@@ -132,7 +132,20 @@ export interface Recipe {
   salvage?: Array<[string, number]>;
   done: string;
   fail?: string;
+  /**
+   * A perk that has to be held to make it at all, by its key (a Cook's Broth
+   * and Distil). Everybody sees it in the crafting window; only a trade that
+   * has learned it may make it, and `RECIPE_PERK_SAYS` is what the others are
+   * told.
+   */
+  perk?: string;
 }
+
+/** What somebody without the perk a recipe wants is told, by the perk's key. The island says the same. */
+export const RECIPE_PERK_SAYS: Record<string, string> = {
+  broth: 'That wants a Cook who has learned to make broth.',
+  distil: 'That wants a Cook who has learned to distil.',
+};
 
 export const RECIPES: Recipe[] = [
   // Woodwork
@@ -276,6 +289,7 @@ export const RECIPES: Recipe[] = [
   { id: 'make_apple_pie', category: 'Cooking', result: 'apple_pie', count: 2, inputs: [{ item: 'dough' }, { item: 'apple', count: 4 }], tool: 'clay_bowl', station: 'campfire', skill: 'cooking', label: 'Bake an apple pie', verb: 'baking a pie', baseTime: 18, stamina: 0.03, difficulty: 20, done: 'You stew the apples down, lay the pastry over and bake {count:w} pies.', fail: 'The bottom goes to pieces and the whole thing runs out into the fire.', consumeOnFail: true },
   { id: 'make_cherry_preserves', category: 'Cooking', result: 'preserves', count: 2, inputs: [{ item: 'cherry', count: 12 }], tool: 'clay_bowl', station: 'campfire', skill: 'cooking', label: 'Preserve cherries', verb: 'preserving cherries', baseTime: 14, stamina: 0.03, difficulty: 14, done: 'You boil the cherries down with their own sugar and jar {count:w} lots.', fail: 'It catches on the bottom and the whole batch tastes of burning.', consumeOnFail: true },
   { id: 'press_olives', category: 'Cooking', result: 'olive_oil', count: 2, inputs: [{ item: 'olive', count: 10 }], tool: 'quern', skill: 'milling', label: 'Press into oil', verb: 'pressing olives', baseTime: 16, stamina: 0.05, difficulty: 18, done: 'You crush the olives under the stone and draw off {count:w} measures of oil.', fail: 'You crush them to a paste that will not part with its oil.', consumeOnFail: true },
+  { id: 'make_broth', category: 'Cooking', result: 'broth', count: 2, inputs: [{ item: 'bone', count: 2 }, { item: 'water_bucket' }], tool: 'clay_pot', station: 'campfire', skill: 'cooking', returns: [['bucket', 1]], label: 'Boil a broth', verb: 'boiling a broth', baseTime: 12, stamina: 0.03, difficulty: 10, done: 'You boil the bones down into {count:w} bowls of broth.', fail: 'The pot boils dry and the bones scorch.', consumeOnFail: true, perk: 'broth' },
   { id: 'make_stew', category: 'Cooking', result: 'stew', inputs: [{ item: 'cooked_meat' }, { item: 'potato' }, { item: 'onion' }], tool: 'clay_bowl', station: 'campfire', skill: 'cooking', label: 'Simmer a stew', verb: 'simmering a stew', baseTime: 16, stamina: 0.03, difficulty: 10, done: 'You simmer meat and vegetables into a thick stew.', fail: 'The pot catches and the stew is spoiled.', consumeOnFail: true },
   // A stone goes into a plain casting with a file. The piece takes the stone's name, the way a chest takes its wood, and the rarer the stone the harder the seating.
   { id: 'set_focus', category: 'Jewellery', result: 'focus', inputs: [{ item: 'gem' }, { item: 'silver_lump' }], tool: 'file', skill: 'jewellery', material: 'gem', label: 'Set a focus', verb: 'setting a focus', baseTime: 14, stamina: 0.04, difficulty: 20, done: 'You draw the silver up into claws and close them over the stone.', fail: 'The claw goes over too far, the stone splits, and there is silver and grit in your palm.', consumeOnFail: true },
@@ -380,7 +394,33 @@ const PRESS_RECIPES: Recipe[] = [
   })),
 ];
 
-RECIPES.push(...MOULD_RECIPES, ...SMELTER_RECIPES, ...PRESS_RECIPES);
+/**
+ * A Cook's Distil: three buckets of one brew boiled off over a fire into one
+ * of spirit, whose knack outlasts the brew's (`knack` on the spirit), and two
+ * of the buckets back empty.
+ */
+export const DISTIL_BUCKETS = 3;
+const DISTIL_RECIPES: Recipe[] = BREWS.map((b): Recipe => ({
+  id: `distil_${b.id}`,
+  category: 'Cooking',
+  result: 'spirit_bucket',
+  inputs: [{ item: `${b.id}_bucket`, count: DISTIL_BUCKETS }],
+  tool: 'clay_pot',
+  station: 'campfire',
+  skill: 'brewing',
+  returns: [['bucket', DISTIL_BUCKETS - 1]],
+  label: `Distil ${b.name.toLowerCase()}`,
+  verb: 'distilling',
+  baseTime: 20,
+  stamina: 0.04,
+  difficulty: 20,
+  done: `You boil the ${b.name.toLowerCase()} off and run what comes over into a bucket of spirit.`,
+  fail: `The pot boils over and the ${b.name.toLowerCase()} is lost.`,
+  consumeOnFail: true,
+  salvage: [['bucket', DISTIL_BUCKETS]],
+  perk: 'distil',
+}));
+RECIPES.push(...MOULD_RECIPES, ...SMELTER_RECIPES, ...PRESS_RECIPES, ...DISTIL_RECIPES);
 
 /** The twenty pieces of furniture, each nailed together by a fine carpenter; a grave is dug by dying, not built. */
 const FURNITURE_RECIPES: Recipe[] = FURNITURE.filter((f) => !f.grave).map((f) => ({
@@ -702,10 +742,12 @@ function countFor(stock: readonly CraftStock[], r: Recipe, id: string, mat: stri
 }
 
 /**
- * How far a recipe reaches into your stores: as far as any craft, and as far
- * as a Smith's Forge Reach takes work at the smelter for a recipe made there.
+ * How far a recipe reaches into your stores: as far as any craft, as far as a
+ * Smith's Forge Reach takes work at the smelter for a recipe made there, and
+ * as far as a Cook's Pantry Reach takes cooking.
  */
-export const reachFor = (g: Game, r: Recipe): number => (r.station === 'smelter' ? g.forgeReach() : CRAFT_REACH);
+export const reachFor = (g: Game, r: Recipe): number =>
+  (r.station === 'smelter' ? g.forgeReach() : r.skill === 'cooking' ? Math.max(CRAFT_REACH, Math.floor(g.perk('reach:cook', CRAFT_REACH))) : CRAFT_REACH);
 
 /** Whether this input has to be of the settled material rather than anything. */
 const strictInput = (stock: readonly CraftStock[], r: Recipe, id: string): boolean =>
@@ -758,6 +800,7 @@ export function chooseMaterial(g: Game, r: Recipe, preferUid?: number, want?: st
 
 /** Why a recipe cannot be made right now, or null. */
 export function recipeReason(r: Recipe, g: Game, preferUid?: number, stock: readonly CraftStock[] = g.craftStock(preferUid, false, reachFor(g, r))): string | null {
+  if (r.perk && g.perk(r.perk, 0) <= 0) return RECIPE_PERK_SAYS[r.perk] ?? 'That wants a perk you have not taken.';
   if (r.tool && !g.inventory.has(r.tool)) return `You need a ${lower(r.tool)}.`;
   if (r.station && !g.atStation(r.station)) return `You need to stand at a ${STATION_NAME[r.station]}.`;
   if (r.deed && !g.onDeed(g.player.tileX, g.player.tileY)) return DEED_ONLY;
@@ -936,6 +979,10 @@ export function recipeAction(r: Recipe): ActionDef {
       const parts = itemDef(r.result).stackable ? [] : r.inputs.filter((i) => MOULD_BY_MAKES.has(i.item))
         .map((i) => drawFor(stock, i.item, needOf(g, r, i), t.uid, mat, strict.get(i.item))?.[0]?.item)
         .filter((it): it is Item => !!it);
+      // A Cook's Frugal Cook: one of the first ingredient that is not a
+      // vessel, at the quality of the stack it came off, now and then.
+      const spare = r.inputs.find((i) => !VESSELS[i.item] && i.item !== 'bucket');
+      const spareQl = spare ? drawFor(stock, spare.item, needOf(g, r, spare), t.uid, mat, strict.get(spare.item))?.[0]?.item.ql : undefined;
       for (const i of r.inputs) if (!consumeAcross(stock, i.item, needOf(g, r, i), t.uid, mat, strict.get(i.item))) return;
       carryOn(t, g, was, mat);
       /*
@@ -956,16 +1003,21 @@ export function recipeAction(r: Recipe): ActionDef {
        * of that survives -- 78% of it at no skill and 99.7% at a hundred. The
        * ceiling is the parts; nothing is finer than what it is made of.
        */
-      const ql = r.qlFromInputs ? Math.max(1, Math.min(100, fromInputs * inputKeep(g, r))) : g.productQl(r.skill, toolQl(g) + (oven ? oven.ql * 0.3 : 0));
+      const made = r.qlFromInputs ? Math.max(1, Math.min(100, fromInputs * inputKeep(g, r))) : g.productQl(r.skill, toolQl(g) + (oven ? oven.ql * 0.3 : 0));
+      // And better for a perk on the recipe (a Cook's Fine Fare).
+      const ql = Math.min(100, made * g.perk(`ql:${r.id}`, 1));
       // More, the go a bauble on the trade comes up in the altar of the settlement
       // you work on, and more again for a perk (a Carpenter's Clean Sawing).
-      const made = g.baubleYield(r.result, g.madeAGo(r));
-      const item = g.inventory.add(r.result, { count: made, ql, extra: r.extra ?? mat });
+      const count = g.baubleYield(r.result, g.madeAGo(r));
       // What the maker's perks put into it, which stays with it (a Carpenter's
-      // Deep Drawers, a Smith's Temper Bath), over what its parts carried. Only
-      // on a thing made one at a time, as the island has it.
-      const mark = itemDef(r.result).stackable ? undefined : { ...partsMark(parts), ...makersMark((k, d) => g.perk(k, d), r.result) };
-      if (mark && Object.keys(mark).length) item.mark = mark;
+      // Deep Drawers, a Smith's Temper Bath, a Cook's Hearty), over what its
+      // parts carried. A pile of the same thing marked the same way is one
+      // pile, and it goes in with the mark so that it stacks by it.
+      const stackable = !!itemDef(r.result).stackable;
+      const mark = stackable ? makersMark((k, d) => g.perk(k, d), r.result) : { ...partsMark(parts), ...makersMark((k, d) => g.perk(k, d), r.result) };
+      const marked = mark && Object.keys(mark).length ? mark : undefined;
+      const item = g.inventory.add(r.result, { count, ql, extra: r.extra ?? mat, ...(stackable && marked ? { mark: marked } : {}) });
+      if (!stackable && marked) item.mark = marked;
       // Now and again a thing comes off the bench better than the hands that
       // made it had any right to produce. Nothing brings it on but a perk on
       // the recipe (a Carpenter's Master Joiner).
@@ -977,8 +1029,12 @@ export function recipeAction(r: Recipe): ActionDef {
         g.note(['', 'rare', 'supreme', 'fantastic'][rare]);
         g.logMsg(RARITY_WORD[rare], 'skill');
       }
-      g.madeIt(r.result, item.ql, made, rare);
+      g.madeIt(r.result, item.ql, count, rare);
       for (const [id, n] of r.returns ?? []) g.inventory.add(id, { count: n, ql: 20 });
+      if (spare && g.rand() < g.perk(`keep:${r.id}`, 0)) {
+        g.inventory.add(spare.item, { count: 1, ql: spareQl ?? item.ql });
+        g.logMsg(`You save ${article(spare.item)}${lower(spare.item)} from the pot.`, 'event');
+      }
       // Working a thing out with your hands is what sharpens the head.
       g.gainSkill('mind_logic', tryGain(true, CRAFT_HEAD));
       g.logMsg(`${r.done} (${mat ? `${mat.toLowerCase()}, ` : ''}QL ${item.ql.toFixed(1)})`, 'event');

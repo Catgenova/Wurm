@@ -1,6 +1,7 @@
 import { keyName, type Keybinds } from '../game/keybinds';
 import { clockLeft } from '../game/boons';
 import { balance, fedWord, NUTRIENTS, NUTRIENT_NAMES, NUTRIENT_NOTES, tableMul } from '../game/nutrition';
+import { share } from '../game/words';
 import { SKILL_DEFS } from '../game/skills';
 import { WOUND_KINDS, woundText } from '../game/wounds';
 import { sailWord, windFrom, windWord } from '../game/wind';
@@ -702,8 +703,10 @@ export class Hud {
       const fill = this.foodBars.get(k);
       if (fill) fill.style.width = `${Math.round(Math.max(0, Math.min(1, n[k])) * 100)}%`;
     }
-    const worth = Math.round((tableMul(n) - 1) * 100);
-    this.foodEl.title = `${fedWord(n)} — everything you do goes in ${worth}% faster. It reads off whichever of the four is shortest (${Math.round(balance(n) * 100)}%), so a full board is worth a fifth and bread alone is worth nothing.`;
+    // What a full table is worth to you: a fifth, or more for a Cook's Balanced Diet.
+    const best = this.game.tableBest();
+    const worth = Math.round((tableMul(n, best) - 1) * 100);
+    this.foodEl.title = `${fedWord(n)} — everything you do goes in ${worth}% faster. It reads off whichever of the four is shortest (${Math.round(balance(n) * 100)}%), so a full board is worth ${share(best)} and bread alone is worth nothing.`;
     this.foodEl.classList.toggle('hud-food-full', balance(n) >= 0.999);
 
     const companion = this.game.creatures.active();

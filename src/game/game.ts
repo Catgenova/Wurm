@@ -2,7 +2,7 @@ import { generateWorld } from '../world/generate';
 import { EMOTES, EMOTE_BY_ID } from './emotes';
 import { rankAtLeast, type DeedRole } from './ranks';
 import { defaultKey } from './keybinds';
-import { listed, numberWord, share, spanWords } from './words';
+import { listed, numberWord, percent, share, spanWords } from './words';
 import { brazierBurn, shoreNear } from './placeables';
 import type { Hoard } from './treasure';
 import { packTreeData, TILE_DEFS, TileType, TREE_DEFS, TREE_AGES, TREE_ROOM_ONE, TREE_ROOM_TWO, TREE_SEED_BOTH, TREE_SEED_NONE, TREE_SEED_REACH, TREE_SEEDS, lastDawn, treeAge, treeSpecies, LAWN_AFTER, mownDays, mownToday } from '../world/tiles';
@@ -57,7 +57,7 @@ import { blessBonus, favourCap, FAITH, FAVOUR_TRICKLE } from './faith';
 import { ATTENTIVE, FURY_MULT, FURY_SECS, GREEN_THUMB, hasStep, IRONHIDE, MEDITATION, MEND_FLESH, SENSE_REACH, STRONG_BACK, type PathId } from './meditation';
 import { ledgerTotals, record, type Ledger } from './ledger';
 import { ALTAR_CAST, ALTAR_CAST_ALPHA, ALTAR_GLOW, ALTAR_REACH, FIRE_REACH, heldReach, HELD_LIGHTS, lanternReach, OVEN_REACH, type LightSource } from './light';
-import { helpingOf, NUTRIENTS, NUTRIENT_DECAY, NUTRIENT_NAMES, tableMul, upkeepMul, type Nutrient } from './nutrition';
+import { helpingOf, NUTRIENTS, NUTRIENT_DECAY, NUTRIENT_NAMES, TABLE_BEST, tableMul, upkeepMul, type Nutrient } from './nutrition';
 import { strokeOf } from '../audio/sound';
 import { lockRefusal, type Lockable } from './locks';
 import { sailFactor, sailWord, windAt, windFrom, windWord, type Wind } from './wind';
@@ -2286,6 +2286,11 @@ export class Game {
     return MAX_STAND + this.skills.get('climbing') * CLIMB_PER_LEVEL;
   }
 
+  /** What a full table is worth to you on what you learn: `TABLE_BEST`, or a Cook's Balanced Diet. */
+  tableBest(): number {
+    return Math.max(TABLE_BEST, this.perk('table:best', TABLE_BEST));
+  }
+
   /** Raise a skill and announce it. Returns the gain. */
   /**
    * How much faster a trade goes into you than it otherwise would: doubled
@@ -2302,7 +2307,7 @@ export class Game {
     if (this.walks('knowledge', 1)) mult += ATTENTIVE;
     // A table with all four things on it is worth a fifth more on everything.
     // It reads off the worst of the four, so bread alone buys nothing.
-    mult *= tableMul(this.player.nutrition);
+    mult *= tableMul(this.player.nutrition, this.tableBest());
     for (const b of this.player.boons) if (b.skill === id && b.until > this.time) mult += b.bonus;
     // And a bauble for the trade in the altar of the settlement you are working on.
     return mult * baubleLearn(this.baubleHere(), id);
@@ -2387,12 +2392,13 @@ export class Game {
    * while. A second helping of the same thing puts the clock back rather
    * than stacking on itself.
    */
-  grantBoon(itemId: string, ql: number): string | null {
+  grantBoon(itemId: string, ql: number, knack = 1): string | null {
     // A knack comes off something somebody made. A berry off a bush is food.
     if (!knackable(itemId)) return null;
     const skill = boonOf(this.seed, itemId);
     if (!skill) return null;
-    const seconds = boonTime(itemId, ql);
+    // And lasts longer for its maker's hand in it (a Cook's Flavoursome, Strong Brew).
+    const seconds = boonTime(itemId, ql, knack);
     const def = SKILL_DEFS.find((d) => d.id === skill);
     const already = this.player.boons.find((b) => b.skill === skill && b.until > this.time);
     if (already) already.until = Math.max(already.until, this.time + seconds);
@@ -2409,11 +2415,12 @@ export class Game {
    * Returns a word about it when something has been filled right up, since
    * that is the moment worth knowing about.
    */
-  nourish(itemId: string, ql: number): string | null {
+  nourish(itemId: string, ql: number, feed = 1): string | null {
     const feeds = itemDef(itemId).feeds;
     if (!feeds) return null;
     const n = this.player.nutrition;
-    const share = helpingOf(ql);
+    // And more of it for its maker's hand in it (a Cook's Hearty).
+    const share = helpingOf(ql) * feed;
     const filled: string[] = [];
     for (const k of NUTRIENTS) {
       const gain = (feeds[k] ?? 0) * share;
@@ -2424,7 +2431,7 @@ export class Game {
     }
     if (!filled.length) return null;
     const all = NUTRIENTS.every((k) => n[k] >= 1);
-    if (all) return 'You could not eat another thing. Everything you do goes in a fifth faster while it lasts.';
+    if (all) return `You could not eat another thing. Everything you do goes in ${percent(this.tableBest())} faster while it lasts.`;
     return `That is as much ${filled.join(' and ')} as you can hold.`;
   }
 
@@ -6653,7 +6660,9 @@ export class Game {
     const key = tileKey(x, y);
     const pile = this.ground.get(key) ?? [];
     const def = ITEM_DEFS[item.id];
-    const stack = def?.stackable ? pile.find((it) => it.id === item.id && it.extra === item.extra && it.piece === item.piece) : undefined;
+    // Onto a pile of the same thing, by the one rule for what shares a stack
+    // (a maker's mark and a rarity are part of it), and rotting at the same pace.
+    const stack = def?.stackable ? pile.find((it) => sameStack(it, item) && (it.cool ?? 1) === (item.cool ?? 1)) : undefined;
     if (stack) {
       stack.ql = (stack.ql * stack.count + item.ql * item.count) / (stack.count + item.count);
       stack.count += item.count;
@@ -6701,6 +6710,9 @@ export class Game {
       const idx = pile.findIndex((it) => it.uid === uid);
       taken = idx >= 0 ? pile.splice(idx, 1) : [];
     }
+    // Nothing rots off the ground, so what kept a thing from rotting on it
+    // (a Cook's Cool Pack) goes when it is taken up.
+    for (const it of taken) delete it.cool;
     if (!pile.length) this.ground.delete(key);
     this.events.emit('world', x, y);
     return taken;

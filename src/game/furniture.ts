@@ -444,6 +444,12 @@ export interface PlacedFurniture {
   comb?: number;
   /** Seconds a brew still has to work before it can be drawn off. */
   ferment?: number;
+  /**
+   * How much longer the knack of what is in it lasts, for its brewer's hand
+   * in it (a Cook's Strong Brew): stamped when the brew is set going, drawn
+   * off into every bucket filled from it, and gone when it is empty.
+   */
+  knack?: number;
   /** The wood it was built of, for the pieces a carpenter builds. */
   material?: string;
   /** The colour it was dyed, for a banner and for a sail. */
@@ -475,8 +481,8 @@ export interface PlacedFurniture {
 }
 
 /** The two liquids worth keeping a barrel for. */
-export type LiquidKind = 'water' | 'lye' | 'milk' | 'ale' | 'cider' | 'mead' | 'wine' | 'juice';
-export const LIQUID_NAME: Record<LiquidKind, string> = { water: 'water', lye: 'lye', milk: 'milk', ale: 'ale', cider: 'cider', mead: 'mead', wine: 'wine', juice: 'juice' };
+export type LiquidKind = 'water' | 'lye' | 'milk' | 'ale' | 'cider' | 'mead' | 'wine' | 'juice' | 'spirit';
+export const LIQUID_NAME: Record<LiquidKind, string> = { water: 'water', lye: 'lye', milk: 'milk', ale: 'ale', cider: 'cider', mead: 'mead', wine: 'wine', juice: 'juice', spirit: 'spirit' };
 /** A bucket holds five litres, whichever way it is going. */
 export const BUCKET_LITRES = 5;
 /** Which liquid a full vessel is carrying, and which empty vessel it leaves. */
@@ -489,9 +495,10 @@ export const VESSELS: Record<string, { liquid: LiquidKind; empty: string }> = {
   mead_bucket: { liquid: 'mead', empty: 'bucket' },
   wine_bucket: { liquid: 'wine', empty: 'bucket' },
   juice_bucket: { liquid: 'juice', empty: 'bucket' },
+  spirit_bucket: { liquid: 'spirit', empty: 'bucket' },
 };
 /** Which full vessel a litre of each liquid fills an empty bucket into. */
-export const BUCKET_OF: Record<LiquidKind, string> = { water: 'water_bucket', lye: 'lye_bucket', milk: 'milk_bucket', ale: 'ale_bucket', cider: 'cider_bucket', mead: 'mead_bucket', wine: 'wine_bucket', juice: 'juice_bucket' };
+export const BUCKET_OF: Record<LiquidKind, string> = { water: 'water_bucket', lye: 'lye_bucket', milk: 'milk_bucket', ale: 'ale_bucket', cider: 'cider_bucket', mead: 'mead_bucket', wine: 'wine_bucket', juice: 'juice_bucket', spirit: 'spirit_bucket' };
 
 /*
  * What a piece says about itself, off the piece: what it holds and how much,

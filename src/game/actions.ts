@@ -43,10 +43,11 @@ import { BOTANIZE_TABLE, FORAGE_TABLE, listOf, rollsAt, rollTable } from './fora
 import type { FloorKind, RoofShape, Side, WallType } from './building';
 import { DEED_RADIUS, rankAtLeast, type Game } from './game';
 import { materialOfItem } from './materials';
-import { boonOf } from './boons';
+import { boonOf, boonTime, clockLeft } from './boons';
+import { helpingOf, NUTRIENTS } from './nutrition';
 import { SKILL_DEFS } from './skills';
-import { itemDef, itemName, itemWeight, markSays, rarityOf, bagAdd, bagRefuses, bagSpare, isBag, storedLine } from './items';
-import { numberWord } from './words';
+import { itemDef, itemName, itemWeight, markOf, markSays, rarityOf, bagAdd, bagRefuses, bagSpare, isBag, storedLine, type Item } from './items';
+import { listed, numberWord } from './words';
 import { knackable, RECIPE_ACTIONS } from './recipes';
 
 /**
@@ -649,6 +650,31 @@ function slopeAfter(g: Game, cx: number, cy: number, delta: number): number {
   return s;
 }
 
+
+/** A share of a bar or a nutrient as a whole percentage, as the island says it. */
+const wholePct = (x: number): string => `${Math.round(x * 100)}%`;
+
+/**
+ * What a helping of a thing does, to a Cook's tongue (a Cook's Taste): how
+ * much of the food bar it fills, or of the thirst bar a drink of it quenches,
+ * what it feeds of each of the four, and how long its knack lasts -- all of it
+ * at its quality and with its maker's hand in it. Nothing for what is not
+ * food or drink. The island says the same (`taste_says`).
+ */
+export function tasteSays(g: Game, item: Item): string {
+  const def = itemDef(item.id);
+  if (!(def.food ?? 0) && !(def.drink ?? 0)) return '';
+  const said: string[] = [];
+  said.push((def.food ?? 0) > 0
+    ? `fills ${wholePct((def.food ?? 0) * (0.7 + item.ql / 200) * markOf(item, 'fill'))} of the food bar`
+    : `quenches ${wholePct(def.drink ?? 0)} of the thirst bar`);
+  const feeds = NUTRIENTS.filter((k) => (def.feeds?.[k] ?? 0) > 0)
+    .map((k) => `${k} ${wholePct((def.feeds?.[k] ?? 0) * helpingOf(item.ql) * markOf(item, 'feed'))}`);
+  if (feeds.length) said.push(`feeds ${listed(feeds)}`);
+  const skill = knackable(item.id) ? boonOf(g.seed, item.id) : null;
+  if (skill) said.push(`gives a knack that lasts ${clockLeft(boonTime(item.id, item.ql, markOf(item, 'knack')))}`);
+  return ` To your taste, a helping ${listed(said)}.`;
+}
 
 export const ACTIONS: ActionDef[] = [
   {
@@ -1993,7 +2019,9 @@ export const ACTIONS: ActionDef[] = [
       // What it is worth at the work now, which is rarely the number stamped on it.
       const worth = g.toolWorth(item);
       const at = itemDef(item.id).category === 'tool' && Math.abs(worth - item.ql) >= 0.05 ? ` It works as a ${worth.toFixed(1)} today.` : '';
-      g.logMsg(`${itemName(item)}: QL ${item.ql.toFixed(2)}, damage ${item.dmg.toFixed(2)}, weight ${itemWeight(item).toFixed(2)} kg.${at}${desc}${rare}${by}${favours}${stuff}`, 'event');
+      // And to a Cook's tongue, what a helping of it does (a Cook's Taste).
+      const taste = g.perk('taste', 0) > 0 ? tasteSays(g, item) : '';
+      g.logMsg(`${itemName(item)}: QL ${item.ql.toFixed(2)}, damage ${item.dmg.toFixed(2)}, weight ${itemWeight(item).toFixed(2)} kg.${at}${desc}${rare}${by}${favours}${stuff}${taste}`, 'event');
     },
   },
   {
@@ -2013,11 +2041,13 @@ export const ACTIONS: ActionDef[] = [
       if (!item) return;
       const def = itemDef(item.id);
       g.inventory.remove(item.uid, 1);
-      g.player.stats.hunger = Math.min(1, g.player.stats.hunger + (def.food ?? 0) * (0.7 + item.ql / 200));
+      // Fuller, the more and the longer for its maker's hand in it (a Cook's
+      // Filling, Hearty and Flavoursome), whoever is eating it.
+      g.player.stats.hunger = Math.min(1, g.player.stats.hunger + (def.food ?? 0) * (0.7 + item.ql / 200) * markOf(item, 'fill'));
       // A dish favours a trade, and having eaten it you are better at that
       // trade for a while.
-      const favour = g.grantBoon(item.id, item.ql);
-      const full = g.nourish(item.id, item.ql);
+      const favour = g.grantBoon(item.id, item.ql, markOf(item, 'knack'));
+      const full = g.nourish(item.id, item.ql, markOf(item, 'feed'));
       g.logMsg(`You eat the ${def.name.toLowerCase()}.${favour ? ` ${favour}` : ''}${full ? ` ${full}` : ''}`, 'event');
     },
   },
@@ -2150,9 +2180,10 @@ export const ACTIONS: ActionDef[] = [
       item.charges = (item.charges ?? 1) - 1;
       g.player.stats.thirst = Math.min(1, g.player.stats.thirst + (itemDef(item.id).drink ?? 0));
       g.inventory.onChange?.();
-      // Milk and anything brewed favour a trade the way a cooked dish does.
-      const favour = g.grantBoon(item.id, item.ql);
-      const full = g.nourish(item.id, item.ql);
+      // Milk and anything brewed favour a trade the way a cooked dish does,
+      // and for longer for its brewer's hand in it (a Cook's Strong Brew).
+      const favour = g.grantBoon(item.id, item.ql, markOf(item, 'knack'));
+      const full = g.nourish(item.id, item.ql, markOf(item, 'feed'));
       g.logMsg(`You take a drink from the ${itemDef(item.id).name.toLowerCase()}.${favour ? ` ${favour}` : ''}${full ? ` ${full}` : ''}`, 'event');
     },
   },
@@ -2314,6 +2345,10 @@ export const ACTIONS: ActionDef[] = [
       if (t.kind !== 'item') return;
       const item = g.inventory.take(t.uid, t.count ?? 1);
       if (!item) return;
+      // Food set down by a Cook with Cool Pack rots slower where it lies.
+      const cool = itemDef(item.id).category === 'food' ? g.perk('cool:food', 1) : 1;
+      if (cool !== 1) item.cool = cool;
+      else delete item.cool;
       g.dropOnGround(g.player.tileX, g.player.tileY, item);
       const what = item.count > 1 ? `${item.count} × ${itemName(item).toLowerCase()}` : `the ${itemName(item).toLowerCase()}`;
       g.logMsg(`You drop ${what} on the ground.`, 'event');

@@ -105,12 +105,16 @@ export class CraftPanel {
   }
 
   render(now = performance.now()): void {
-    // What is at hand, listed once for the whole book rather than once a row.
-    const stock = this.game.craftStock();
-    // And further off for the smelter's recipes, for a Smith's Forge Reach.
-    const reach = this.game.forgeReach();
-    const forge = reach > CRAFT_REACH ? this.game.craftStock(undefined, false, reach) : stock;
-    const stockOf = (r: Recipe): readonly CraftStock[] => (r.station === 'smelter' ? forge : stock);
+    // What is at hand, listed once for each reach the book asks for rather
+    // than once a row: three tiles, or further for a Smith's Forge Reach at
+    // the smelter and a Cook's Pantry Reach at the fire (`reachFor`).
+    const byReach = new Map<number, readonly CraftStock[]>();
+    const stockOf = (r: Recipe): readonly CraftStock[] => {
+      const reach = reachFor(this.game, r);
+      let found = byReach.get(reach);
+      if (!found) byReach.set(reach, (found = reach > CRAFT_REACH ? this.game.craftStock(undefined, false, reach) : this.game.craftStock()));
+      return found;
+    };
     const statuses = new Map<Recipe, RecipeStatus>(RECIPES.map((r) => [r, recipeStatus(r, this.game, this.wants.get(r.id), stockOf(r))]));
     // What the book would say. Standing at an anvil hammering, this is the
     // same from one second to the next, so nothing is touched.
@@ -252,7 +256,7 @@ export class CraftPanel {
       // a surprise: what is on you goes first, then the nearest store.
       const stored = i.have - i.carried;
       span.title = stored > 0
-        ? `Have ${i.have}: ${i.carried} carried, ${stored} in your stores within ${CRAFT_REACH} tiles. What you carry is used first.`
+        ? `Have ${i.have}: ${i.carried} carried, ${stored} in your stores within ${reachFor(this.game, r)} tiles. What you carry is used first.`
         : `Have ${i.have}, carried`;
       const have = document.createElement('em');
       have.textContent = ` (${i.have})`;
@@ -283,7 +287,7 @@ export class CraftPanel {
       const made = document.createElement('span');
       made.className = 'have';
       made.textContent = `of ${st.material.toLowerCase()}`;
-      made.title = r.wood ? `A ${lower(r.result)} is made of ${r.wood.toLowerCase()} and nothing else` : `Carry another kind, or keep one in a store within ${CRAFT_REACH} tiles, and you can choose between them here`;
+      made.title = r.wood ? `A ${lower(r.result)} is made of ${r.wood.toLowerCase()} and nothing else` : `Carry another kind, or keep one in a store within ${reachFor(this.game, r)} tiles, and you can choose between them here`;
       parts.push(made);
     }
     parts.forEach((p, k) => {

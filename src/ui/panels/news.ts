@@ -494,6 +494,19 @@ export const NEWS: News[] = [
       ];
     },
   },
+  {
+    n: 39,
+    day: '2026-09-27',
+    lines: () => {
+      const main = (CLASSES.find((c) => c.id === 'cook')?.main ?? '').replace(/_/g, ' ');
+      return [
+        `The Cook has perks instead of a tree now: ${numberWord(PERK_TIER_AT.length)} tiers of ${numberWord(PERKS_PER_TIER)}, the first with the trade and the others at ${listed(PERK_TIER_AT.slice(1).map(String))} in ${main}. The nodes a Cook had bought went with the tree.`,
+        'What a Cook puts into a dish stays with it whoever eats it, and examining a thing on an island now says what its maker put into it, as it always did offline.',
+        'Two new things to make, broth and spirit, and a new bait, offal, for a Cook who has learned them.',
+        'And part of a pile set down on an island keeps what the pile had: its maker\'s marks, its rarity, its colour and its blessing.',
+      ];
+    },
+  },
 ];
 
 /** The highest entry this browser has shown. */

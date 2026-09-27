@@ -1606,6 +1606,20 @@ jobs:
             --outfile=node_modules/.cache/farmer.mjs --log-level=error
           node node_modules/.cache/farmer.mjs
 
+      - name: The Cook's perks, each where its rule is
+        run: |
+          # Each of the Cook's eighteen measured on the island with the dice
+          # taken out where they can be: the pot's quality, one more and
+          # ingredient back; the four marks on a dish, what they fill, feed,
+          # give and rot, and the pile they make; the fuller table; food set
+          # down cool; the knife's share, cuts and bait; a strong brew stamped,
+          # drawn off, drunk, poured together and emptied; the pantry's reach;
+          # broth and spirit with their refusals; a taste; and the browser's
+          # words and numbers beside the island's.
+          npx esbuild supabase/test/cook.ts --bundle --platform=node --format=esm \
+            --outfile=node_modules/.cache/cook.mjs --log-level=error
+          node node_modules/.cache/cook.mjs
+
       - name: The exact benefit, and where its number comes from
         run: |
           # Text the player reads says what changes and by how much, and where

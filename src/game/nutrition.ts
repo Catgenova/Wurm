@@ -54,8 +54,11 @@ export const balance = (n: Record<Nutrient, number>): number =>
 /** What hunger and thirst fall by, against their ordinary pace. */
 export const upkeepMul = (n: Record<Nutrient, number>): number => 1 - KEPT_BEST * fedness(n);
 
-/** What everything you do teaches you, against its ordinary rate. */
-export const tableMul = (n: Record<Nutrient, number>): number => 1 + TABLE_BEST * balance(n);
+/**
+ * What everything you do teaches you, against its ordinary rate. `best` is
+ * what a full table is worth to you: `TABLE_BEST`, or a Cook's Balanced Diet.
+ */
+export const tableMul = (n: Record<Nutrient, number>, best = TABLE_BEST): number => 1 + best * balance(n);
 
 /** How well a body is doing, in a word. */
 export const fedWord = (n: Record<Nutrient, number>): string => {

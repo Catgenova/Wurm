@@ -50,6 +50,12 @@ export interface ItemDef {
   feeds?: Partial<Record<Nutrient, number>>;
   /** Container capacity in drinks; the item carries `charges` of them. */
   charges?: number;
+  /**
+   * How many times as long the knack it gives lasts as its food and drink
+   * alone would make it, past the ceiling they have: a Cook's spirit, distilled
+   * down from a brew.
+   */
+  knack?: number;
   /** Damage taken per real hour while lying on the ground; defaults by category. */
   decay?: number;
   description?: string;
@@ -286,6 +292,8 @@ export const ITEM_DEFS: Record<string, ItemDef> = {
   hide: { name: 'Hide', category: 'material', weight: 2, stackable: true, raw: true, decay: 40, description: 'A raw skin off a carcass. Useless until it has been through lye.' },
   leather: { name: 'Leather', category: 'material', weight: 1.5, stackable: true, decay: 12, description: 'Hide tanned in lye and worked soft. What every leather thing is cut from.' },
   bone: { name: 'Bone', category: 'material', weight: 1, stackable: true, raw: true, decay: 8 },
+  offal: { name: 'Offal', category: 'material', weight: 0.2, stackable: true, raw: true, decay: 90, description: 'Cut from a carcass for the hook. A fishing bait.' },
+  broth: { name: 'Broth', category: 'food', weight: 0.4, stackable: true, food: 0.25, decay: 60, description: 'Bones boiled down in water: a little of every kind of food in one bowl.', feeds: { flesh: 0.08, starch: 0.08, greens: 0.08, fat: 0.08 } },
   gland: { name: 'Gland', category: 'material', weight: 0.2, stackable: true, raw: true, decay: 90, description: 'A small scent gland. Rare, and prized by alchemists.' },
   shaft: { name: 'Shaft', category: 'material', weight: 1, stackable: true, decay: 20, description: 'A straight length of wood, carved from a log. Handles for tools and rails for fences.' },
   ribbon: { name: 'Metal ribbon', category: 'material', weight: 0.4, stackable: true, decay: 1, description: 'Flat bands of metal, one lump beaten out to a ribbon. Everything that has to hold together under a load is banded with them.' },
@@ -424,6 +432,7 @@ export const ITEM_DEFS: Record<string, ItemDef> = {
   juice_bucket: { name: 'Bucket of juice', category: 'food', weight: 6, decay: 6, drink: 0.5, charges: 5, description: 'Fruit pressed under a quern, sweet and cloudy, with nothing dangerous in it. Drink it while it is fresh.', feeds: { greens: 0.1 } },
   mead_bucket: { name: 'Bucket of mead', category: 'food', weight: 6, decay: 1.5, drink: 0.5, charges: 5, description: 'Honey and time. The best thing to come out of a hive after the honey itself.', feeds: { starch: 0.12, greens: 0.04 } },
   wine_bucket: { name: 'Bucket of wine', category: 'food', weight: 6, decay: 1, drink: 0.5, charges: 5, description: 'Cherries, water and {brew.wine.time:span} of patience.', feeds: { greens: 0.1 } },
+  spirit_bucket: { name: 'Bucket of spirit', category: 'food', weight: 6, decay: 0.5, drink: 0.5, charges: 5, knack: 3, description: 'A brew boiled off and caught again. A drink of it gives a knack that lasts {knack:times} as long as a drink of {spirit.asStrong} at the same QL.', feeds: { starch: 0.06 } },
   fishing_rod: { name: 'Fishing rod', category: 'tool', weight: 1.4, decay: 3, description: '{recipe.make_fishing_rod.shaft:W} shafts spliced, a waxed line and a strip of metal bent into a hook. Stand at water and fish.' },
   minnow: { name: 'Minnow', category: 'food', weight: 0.1, stackable: true, food: 0.06, decay: 9, description: 'A finger of silver. Bait, if you are honest about it.', feeds: { flesh: 0.04 } },
   perch: { name: 'Perch', category: 'food', weight: 0.5, stackable: true, food: 0.2, decay: 8, description: 'Striped and spiny and everywhere there is water with a foot of depth.', feeds: { flesh: 0.09 } },
@@ -589,6 +598,12 @@ export interface Item {
    * and no more: it can be mended, but there is nothing in it to better.
    */
   issued?: boolean;
+  /**
+   * How fast it rots lying on the ground, against its own rate: food a Cook
+   * with Cool Pack set down. Set when it is dropped and gone when it is
+   * picked up; nothing rots in a pack.
+   */
+  cool?: number;
   /** 1 rare, 2 supreme, 3 fantastic; absent for the ordinary run of things. */
   rare?: number;
   /** Who made it, for rare work and better: a maker's mark. The island keeps the same. */
@@ -656,8 +671,8 @@ export interface Item {
  * map in the `mark` column of an item and of a piece set down, and carries it
  * between the two.
  */
-export type MarkFamily = 'hold' | 'speed' | 'damage' | 'range' | 'soak' | 'aim' | 'last' | 'temper';
-export const MARK_FAMILIES: readonly MarkFamily[] = ['hold', 'speed', 'damage', 'range', 'soak', 'aim', 'last', 'temper'];
+export type MarkFamily = 'hold' | 'speed' | 'damage' | 'range' | 'soak' | 'aim' | 'last' | 'temper' | 'feed' | 'fill' | 'knack' | 'rot';
+export const MARK_FAMILIES: readonly MarkFamily[] = ['hold', 'speed', 'damage', 'range', 'soak', 'aim', 'last', 'temper', 'feed', 'fill', 'knack', 'rot'];
 export type Mark = Partial<Record<MarkFamily, number>>;
 
 /** A thing's mark on one family, which is one where it has none. */
@@ -705,6 +720,10 @@ export function markSays(mark: Mark | undefined | null): string {
     aim: (m) => `lands ${pct(m)} more often`,
     last: (m) => `lasts ${times(m)} as many fillings`,
     temper: (m) => `can be quenched once, for +${m} QL`,
+    feed: (m) => `feeds each thing it feeds ${pct(m)} more`,
+    fill: (m) => `fills ${pct(m)} more of the food bar`,
+    knack: (m) => `gives a knack that lasts ${pct(m)} longer`,
+    rot: (m) => `rots ${Math.round((1 - m) * 100)}% slower`,
   };
   const parts = MARK_FAMILIES.filter((f) => mark[f] !== undefined).map((f) => said[f](mark[f] as number));
   if (!parts.length) return '';
@@ -879,12 +898,14 @@ export const billWords = (bill: ReadonlyArray<readonly [string, number]>, figure
 /**
  * Damage per real hour for an item lying on the ground; better quality holds
  * up longer, and what it is made of decides the rest. A cedar chest left in
- * the rain is still a chest a long time after the pine one has gone.
+ * the rain is still a chest a long time after the pine one has gone. And a
+ * dish rots slower for its maker's hand in it (a Cook's Long-lasting, `rot`),
+ * and food a Cook with Cool Pack set down slower again (`cool`).
  */
 export function groundDecayRate(item: Item): number {
   const def = itemDef(item.id);
   const base = def.decay ?? CATEGORY_DECAY[def.category];
-  return base * Math.max(0.3, 1.4 - item.ql / 120) * matOfItem(item).decay * rarityOf(item).keep;
+  return base * Math.max(0.3, 1.4 - item.ql / 120) * matOfItem(item).decay * rarityOf(item).keep * markOf(item, 'rot') * (item.cool ?? 1);
 }
 
 /** What one of a thing weighs, which is its make and what it is made of. */

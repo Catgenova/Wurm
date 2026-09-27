@@ -25,7 +25,7 @@ import {
   type PlacedFurniture,
 } from './furniture';
 import type { Game } from './game';
-import { itemDef, type Item } from './items';
+import { itemDef, markOf, type Item } from './items';
 import { world } from './pace';
 
 /**
@@ -146,7 +146,10 @@ export function nextVessel(g: Game, uid: number): Item | undefined {
 function drawFrom(g: Game, f: PlacedFurniture, litres: number): boolean {
   if (litresIn(f) < litres) return false;
   f.litres = litresIn(f) - litres;
-  if (f.litres <= 0 && !isWell(f)) f.liquid = undefined;
+  if (f.litres <= 0 && !isWell(f)) {
+    f.liquid = undefined;
+    delete f.knack;
+  }
   g.events.emit('crate');
   g.events.emit('world', f.x, f.y);
   return true;
@@ -514,11 +517,17 @@ export const PLACEABLE_ACTIONS: ActionDef[] = [
     },
     perform: (t, g) => {
       const f = pieceOf(g, t);
-      if (!f || !drawFrom(g, f, 1)) return;
+      if (!f) return;
+      // What is in it, asked before the drink: the last litre drawn empties it,
+      // and the last of a brew is as much a brew as the first.
+      const liquid = f.liquid;
+      const knack = f.knack ?? 1;
+      if (!drawFrom(g, f, 1)) return;
       g.player.stats.thirst = Math.min(1, g.player.stats.thirst + 0.5);
       // A brew straight out of the barrel favours a trade like any other.
-      const brew = isBrew(f.liquid) ? BUCKET_OF[f.liquid as LiquidKind] : null;
-      const favour = brew ? g.grantBoon(brew, f.ql) : null;
+      const brew = isBrew(liquid) ? BUCKET_OF[liquid as LiquidKind] : null;
+      // And for longer for its brewer's hand in it (a Cook's Strong Brew).
+      const favour = brew ? g.grantBoon(brew, f.ql, knack) : null;
       const full = brew ? g.nourish(brew, f.ql) : null;
       g.logMsg(`You drink your fill from the ${furnitureName(f).toLowerCase()}.${favour ? ` ${favour}` : ''}${full ? ` ${full}` : ''}`, 'event');
     },
@@ -545,6 +554,7 @@ export const PLACEABLE_ACTIONS: ActionDef[] = [
       const what = f.liquid ? LIQUID_NAME[f.liquid] : 'it';
       f.litres = 0;
       f.liquid = undefined;
+      delete f.knack;
       g.events.emit('crate');
       g.events.emit('world', f.x, f.y);
       g.logMsg(`You tip the ${what} out of the ${furnitureName(f).toLowerCase()}.`, 'event');
@@ -586,9 +596,14 @@ export const PLACEABLE_ACTIONS: ActionDef[] = [
       if (!barrel) return;
       const room = liquidCapacity(barrel) - litresIn(barrel);
       const poured = Math.min(BUCKET_LITRES, room);
+      // What is poured in is only as good as the worst of what it goes into
+      // (a Cook's Strong Brew): nothing plain is made better by the barrel.
+      const knack = litresIn(barrel) > 0 ? Math.min(barrel.knack ?? 1, markOf(item, 'knack')) : markOf(item, 'knack');
       if (poured <= 0 || !vesselBecomes(g, item, vessel.empty)) return;
       barrel.litres = litresIn(barrel) + poured;
       barrel.liquid = vessel.liquid;
+      if (knack !== 1) barrel.knack = knack;
+      else delete barrel.knack;
       g.events.emit('crate');
       g.events.emit('world', barrel.x, barrel.y);
       g.logMsg(
@@ -764,8 +779,10 @@ export function sourceFor(g: Game): { from: PlacedFurniture | null; liquid: Liqu
 export function fillFromSource(g: Game, item: Item): LiquidKind | null {
   const source = sourceFor(g);
   if (!source) return null;
+  // What the barrel's brewer put into it goes into the bucket (a Cook's Strong Brew).
+  const knack = source.from?.knack;
   if (source.from && !drawFrom(g, source.from, BUCKET_LITRES)) return null;
-  if (!vesselBecomes(g, item, BUCKET_OF[source.liquid])) return null;
+  if (!vesselBecomes(g, item, BUCKET_OF[source.liquid], knack)) return null;
   return source.liquid;
 }
 
@@ -785,7 +802,7 @@ export function fillFromSource(g: Game, item: Item): LiquidKind | null {
  * had been drawn. The one that changes comes off the pile, beside it in the pack
  * or the same bag, as the island does it (`vessel_becomes`).
  */
-export function vesselBecomes(g: Game, item: Item, id: string): boolean {
+export function vesselBecomes(g: Game, item: Item, id: string, knack?: number): boolean {
   if (item.count < 1) return false;
   let one = item;
   if (item.count > 1) {
@@ -799,6 +816,10 @@ export function vesselBecomes(g: Game, item: Item, id: string): boolean {
   const charges = itemDef(id).charges;
   if (charges) one.charges = charges;
   else delete one.charges;
+  // The knack of what it holds goes with what it holds, and out with it.
+  const { knack: _was, ...rest } = one.mark ?? {};
+  one.mark = knack !== undefined && knack !== 1 ? { ...rest, knack } : Object.keys(rest).length ? rest : undefined;
+  if (!one.mark) delete one.mark;
   g.inventory.onChange?.();
   g.events.emit('inventory');
   return true;

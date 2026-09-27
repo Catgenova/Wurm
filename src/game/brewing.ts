@@ -41,7 +41,16 @@ export const BREWS: BrewDef[] = [
 export const BREW_BY_ID = new Map(BREWS.map((b) => [b.id, b]));
 // How long a brew works, for a drink's text to say: `{brew.wine.time:span}`.
 describeWith({ brew: Object.fromEntries(BREWS.map((b) => [b.id, b])) });
-export const isBrew = (liquid: LiquidKind | undefined): boolean => !!liquid && BREW_BY_ID.has(liquid);
+/*
+ * What a spirit's knack is measured against, for its text to say: the brews
+ * that are as strong a drink as it is, whose knack its own multiplies. A
+ * weaker brew's is shorter still, so "as long as a brew's" would be wrong for
+ * those.
+ */
+const asStrong = BREWS.filter((b) => itemDef(`${b.id}_bucket`).drink === itemDef('spirit_bucket').drink).map((b) => b.name.toLowerCase());
+describeWith({ spirit: { asStrong: asStrong.length < 2 ? (asStrong[0] ?? '') : `${asStrong.slice(0, -1).join(', ')} or ${asStrong[asStrong.length - 1]}` } });
+/** A brew, or the spirit a Cook distils out of one: what favours a trade drunk out of a barrel. */
+export const isBrew = (liquid: LiquidKind | undefined): boolean => !!liquid && (BREW_BY_ID.has(liquid) || liquid === 'spirit');
 /** Still working, and not to be drawn off until it has stopped. */
 export const isWorking = (f: PlacedFurniture): boolean => (f.ferment ?? 0) > 0;
 
@@ -98,6 +107,7 @@ export const BREWING_ACTIONS: ActionDef[] = [
       if (!g.skillCheck('brewing', brew.difficulty, 0, g.mindEase())) {
         f.litres = Math.max(0, litresIn(f) - brew.litres);
         if (f.litres <= 0) f.liquid = undefined;
+        delete f.knack;
         g.gainSkill('brewing', tryGain(false, BREW_GAIN));
         g.logMsg(`It will not take. You tip the whole soured lot out of the ${furnitureName(f).toLowerCase()}.`, 'event');
         g.events.emit('crate');
@@ -106,6 +116,10 @@ export const BREWING_ACTIONS: ActionDef[] = [
       f.litres = brew.litres;
       f.liquid = brew.id;
       f.ferment = brew.time;
+      // Its brewer's hand in it, which goes into every bucket drawn off it (a Cook's Strong Brew).
+      const knack = g.perk(`brewed:${brew.id}`, 1);
+      if (knack !== 1) f.knack = knack;
+      else delete f.knack;
       f.ql = Math.max(1, Math.min(100, (stockQl + g.skills.get('brewing')) / 2));
       g.gainSkill('brewing', tryGain(true, BREW_GAIN));
       g.note('brew');

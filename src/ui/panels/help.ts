@@ -30,7 +30,7 @@ import { CASTS, FAITH, FAVOUR_CEILING, favourCap, PRAYER_BASE, PRAYER_LIFT, PRAY
 import { ANCIENT_EFFECTS, ANCIENT_PLUS, BAUBLE_HIGH, BAUBLE_KINDS, BAUBLE_LOW, BAUBLE_SHARE, BAUBLE_TIERS, baubleTimes, MAJOR_SKILLS, MINOR_SKILLS, REGRET_SHARE, YIELD_TIMES } from '../../game/baubles';
 import { MOTE_CHANCE } from '../../game/sacrifice';
 import { HERB_HEAL, healAmount, SUITS_HEAL } from '../../game/firstaid';
-import { biteShare, FISH, LINE_REACH } from '../../game/fishing';
+import { BAIT_BY_ID, biteShare, FISH, LINE_REACH } from '../../game/fishing';
 import { PER_ROLL, rollsAt } from '../../game/forage';
 import { BUCKET_LITRES, FURNITURE, furnitureDef, teamSaid } from '../../game/furniture';
 import { GRAVE_KEEPS, GRAVE_REACH } from '../../game/graves';
@@ -252,6 +252,7 @@ const FIRST_PERK = PERK_TRADES.length ? perksOf(PERK_TRADES[0].id)[0] : undefine
 const forester = (name: string): Record<string, number> => perksOf('forester').find((p) => p.name === name)?.fx ?? {};
 const BRUSH_SIDE = 2 * (forester('Clear Brush').clear_brush ?? 0) + 1;
 const farmer = (name: string): Record<string, number> => perksOf('farmer').find((p) => p.name === name)?.fx ?? {};
+const cook = (name: string): Record<string, number> => perksOf('cook').find((p) => p.name === name)?.fx ?? {};
 const PATCH_SIDE = 2 * (farmer('Sow a Patch').sow_patch ?? 0) + 1;
 /** How many channels the rites push, from the narrowest to the widest. */
 const riteWidths = [...new Set(RITES.map((r) => Object.keys(r.muls).length))].sort((a, b) => a - b);
@@ -718,6 +719,12 @@ export function helpText(): string {
     and a brew carries it far longer than food &mdash; at quality ${BOON_QL}, a baked potato's lasts
     ${spanWords(boonTime('baked_potato', BOON_QL))} and a bucket of wine's ${spanWords(boonTime('wine_bucket', BOON_QL))}. A barrel of the right thing
     before a long afternoon at the anvil is the single best use of an orchard.</p>
+    <p>A Cook can learn to <b>distil</b>: ${bill('distil_wine')} boiled off over a campfire into a <b>bucket of spirit</b>,
+    and ${numberWord(recipe('distil_wine').returns?.[0]?.[1] ?? 0)} of the buckets back. At quality ${BOON_QL} a drink of spirit gives a knack of
+    ${spanWords(boonTime('spirit_bucket', BOON_QL))}. A Cook with Strong Brew marks every barrel they set going: a drink from it, or from a
+    bucket drawn off it, gives a knack ${percent((cook('Strong Brew')['brewed:wine'] ?? 1) - 1)} longer, whoever drinks it. Brew poured together is only as
+    strong as the weakest of it, and a barrel emptied forgets it. A Cook can learn to boil <b>broth</b> too: ${bill('make_broth')}
+    over a campfire make ${numberWord(made('make_broth'))} bowls, each feeding a little of all ${numberWord(NUTRIENTS.length)}.</p>
     <h3>Fishing</h3>
     <p>Splice a <b>fishing rod</b> from ${bill('make_fishing_rod')}, the ribbon bent into a hook, stand at
     water and fish. The line reaches ${numberWord(LINE_REACH)} tiles, and it goes into whatever water within a cast is
@@ -733,7 +740,8 @@ export function helpText(): string {
     rung of which is something you caught on the rung below: <b>worms</b> (turned out of damp dirt with
     a shovel &mdash; a marsh is full of them) bring up <b>perch</b>; a live <b>minnow</b> or raw
     <b>meat</b> brings up a <b>pike</b>; a whole <b>perch</b> on the hook is what brings a
-    <b>sturgeon</b> up. Corn does at a pinch. Anything worth using is taken out of your pack and put on
+    <b>sturgeon</b> up. Corn does at a pinch, and a Cook with Bait Maker cuts <b>offal</b> from every carcass, which
+    ${listed((BAIT_BY_ID.get('offal')?.favours ?? []).map((f) => `${itemDef(f).name.toLowerCase()}`))} come to. Anything worth using is taken out of your pack and put on
     the hook by itself, and the menu says which. In water deep enough for everything, with the hand for
     all of it, a sturgeon is ${percent(biteShare('sturgeon'))} of what takes a bare hook and ${percent(biteShare('sturgeon', 'perch'))} of what
     takes a perch.</p>

@@ -53,7 +53,7 @@ import { BAUBLE_SHARE } from './baubles';
 import { BRIDGES } from './bridges';
 import { BUILD_ACTION_BY_ID, REPOINT_BACK } from './buildActions';
 import { FENCE_TYPES, MATERIAL_BY_ID, MATERIALS, MAX_LEVELS, storeySkill, TALL_STOREYS, wallBill } from './building';
-import { FURNITURE, furnitureDef } from './furniture';
+import { BUCKET_LITRES, FURNITURE, furnitureDef } from './furniture';
 import { ARMOUR, ARMOUR_BY_ID, ARMOUR_CLASSES, HIT_CAP, SOAK_CAP, WEAPON_BY_ID, WEAPONS } from './gear';
 import { GEM_ODDS } from './gems';
 import { CARRY_BASE, CARRY_PER_STRENGTH, CHAR_START, MAX_VEHICLE_SPEED, QL_TOP, QUEUE_PER_MIND, queueCapAt, TOOL_QL_SPAN } from './game';
@@ -66,10 +66,15 @@ import {
   mouldUsesLeft,
 } from './metal';
 import { MAP_ODDS } from './treasure';
-import { CRAFT_REACH, RECIPES, type Recipe } from './recipes';
+import { CRAFT_REACH, DISTIL_BUCKETS, RECIPES, type Recipe } from './recipes';
 import { BUSH_DEFS, ROAD_TILES, ROCK_VARIANTS, TILE_DEFS, TileType, TREE_AGES, TREE_DAWN_UTC, TREE_DEFS } from '../world/tiles';
 import { walkKey } from './player';
-import { article, capital, listed, numberWord, percent, share, times } from './words';
+import { article, capital, listed, numberWord, percent, share, spanWords, times } from './words';
+import { helpingOf, NUTRIENTS, TABLE_BEST } from './nutrition';
+import { BREWS } from './brewing';
+import { boonTime } from './boons';
+import { BAIT_BY_ID } from './fishing';
+import { BUTCHER_BAIT } from './butcher';
 
 /** What the perks somebody holds come to, key by key. */
 export type Fx = Record<string, number>;
@@ -80,7 +85,7 @@ export type Fx = Record<string, number>;
  */
 export const FX_RULE: Record<string, 'mul' | 'add'> = {
   time: 'mul', ql: 'mul', weight: 'mul', walk: 'mul', fail: 'mul', wear: 'mul', need: 'mul', bill: 'mul',
-  grow: 'mul', rotate: 'mul',
+  grow: 'mul', rotate: 'mul', feed: 'mul', fill: 'mul', knack: 'mul', rot: 'mul', cool: 'mul',
   carry: 'add', jobs: 'add', plus: 'add', bumper: 'add', fodder: 'add', tool: 'add',
 };
 
@@ -1130,6 +1135,125 @@ const FARMER: Seed[] = [
   },
 ];
 
+/** A Cook's dishes: what a cooking recipe makes that is food. */
+const DISHES = RECIPES.filter((r) => r.skill === 'cooking' && ITEM_DEFS[r.result]?.category === 'food');
+const DISH_ITEMS = [...new Set(DISHES.map((r) => r.result))];
+const onDishes = (fam: string, v: number): Fx => Object.fromEntries(DISH_ITEMS.map((id) => [`${fam}:${id}`, v]));
+const onDishRecipes = (fam: string, v: number): Fx => Object.fromEntries(DISHES.map((r) => [`${fam}:${r.id}`, v]));
+/** What a Cook's Big Pot makes one more of, a go. */
+const BIG_POT = ['stew', 'pottage', 'porridge', 'preserves'];
+const madeOfItem = (id: string): number => RECIPES.find((r) => r.result === id)?.count ?? 1;
+/** What a Cook's Hide Keeper takes better off a carcass. */
+const HIDES = ['hide', 'fur', 'bone'];
+
+const COOK: Seed[] = [
+  {
+    num: 3, name: 'Fine Fare',
+    fx: onDishRecipes('ql', 1.1),
+    note: (fx) => `Dishes you cook come up at ${more(fx[`ql:${DISHES[0].id}`])} QL: every one of the ${DISHES.length} cooking recipes that make food.`,
+  },
+  {
+    num: 5, name: 'Big Pot',
+    fx: Object.fromEntries(BIG_POT.map((id) => [`count:${id}`, madeOfItem(id) + 1])),
+    note: (fx) => `${capital(listed(BIG_POT.map(itemName)))} each make one more a go: `
+      + `${listed(BIG_POT.map((id) => `${itemName(id)} ${numberWord(fx[`count:${id}`])} (now ${numberWord(madeOfItem(id))})`))}.`,
+  },
+  {
+    num: 6, name: 'Frugal Cook',
+    fx: onDishRecipes('keep', 0.2),
+    note: (fx) => `${oneIn(fx[`keep:${DISHES[0].id}`])} dishes you cook give back one of their first ingredient, other than a bucket, `
+      + 'at the quality of the stack it came off.',
+  },
+  {
+    num: 7, name: 'Hearty',
+    fx: onDishes('feed', 1.25),
+    note: (fx) => `Dishes you cook feed each of the ${numberWord(NUTRIENTS.length)} they feed ${percent(fx[`feed:${DISH_ITEMS[0]}`] - 1)} more, whoever eats them.`,
+  },
+  {
+    num: 8, name: 'Long-lasting',
+    fx: onDishes('rot', 0.5),
+    note: (fx) => `Dishes you cook rot ${less(fx[`rot:${DISH_ITEMS[0]}`])} slower lying on the ground, whoever sets them down. `
+      + 'Nothing rots in a pack or a store.',
+  },
+  {
+    num: 11, name: 'Flavoursome',
+    fx: onDishes('knack', 1.5),
+    note: (fx) => `The knack from a dish you cooked lasts ${percent(fx[`knack:${DISH_ITEMS[0]}`] - 1)} longer, whoever eats it.`,
+  },
+  {
+    num: 14, name: 'Balanced Diet',
+    fx: { 'table:best': 0.3 },
+    note: (fx) => `A full table is worth up to ${percent(fx['table:best'])} more on everything you learn (now ${percent(TABLE_BEST)}).`,
+  },
+  {
+    num: 15, name: 'Filling',
+    fx: onDishes('fill', 1.25),
+    note: (fx) => `Dishes you cook fill ${percent(fx[`fill:${DISH_ITEMS[0]}`] - 1)} more of the food bar, whoever eats them.`,
+  },
+  {
+    num: 18, name: 'Full Carcass',
+    fx: { 'share:butcher': 1.15 },
+    note: (fx) => `You take ${percent(fx['share:butcher'] - 1)} more of a carcass you butcher, and never more than all of it.`,
+  },
+  {
+    num: 20, name: 'Prime Cuts',
+    fx: { 'ql:meat': 1.1 },
+    note: (fx) => `${capital(itemName('meat'))} you butcher comes up at ${more(fx['ql:meat'])} QL.`,
+  },
+  {
+    num: 21, name: 'Hide Keeper',
+    fx: Object.fromEntries(HIDES.map((id) => [`ql:${id}`, 1.1])),
+    note: (fx) => `${capital(listed(HIDES.map((id) => plural(itemName(id)))))} you butcher come up at ${more(fx[`ql:${HIDES[0]}`])} QL.`,
+  },
+  {
+    num: 28, name: 'Strong Brew',
+    fx: Object.fromEntries(BREWS.map((b) => [`brewed:${b.id}`, 1.5])),
+    note: (fx) => `The knack from ${listed(BREWS.map((b) => b.name.toLowerCase()))} you brewed lasts ${percent(fx[`brewed:${BREWS[0].id}`] - 1)} longer, `
+      + 'whoever drinks it, from the barrel or from a bucket drawn off it.',
+  },
+  {
+    num: 31, name: 'Pantry Reach',
+    fx: { 'reach:cook': 6 },
+    note: (fx) => `Cooking takes what goes into it from containers within ${fx['reach:cook']} tiles (now ${CRAFT_REACH}).`,
+  },
+  {
+    num: 32, name: 'Cool Pack',
+    fx: { 'cool:food': 0.5 },
+    note: (fx) => `Food you drop rots ${less(fx['cool:food'])} slower where it lies, until it is picked up. Nothing rots in a pack.`,
+  },
+  {
+    num: 46, name: 'Broth',
+    fx: { broth: 1 },
+    note: () => {
+      const r = RECIPES.find((x) => x.id === 'make_broth')!;
+      const feeds = ITEM_DEFS.broth.feeds ?? {};
+      return `A new recipe, ${r.label}: ${listed(r.inputs.map((i) => `${numberWord(i.count ?? 1)} ${(i.count ?? 1) > 1 ? plural(itemName(i.item)) : itemName(i.item)}`))} `
+        + `over a campfire make ${numberWord(r.count ?? 1)} ${itemName('broth')}, each feeding all ${numberWord(NUTRIENTS.length)} a little: `
+        + `${listed(Object.entries(feeds).map(([k, v]) => `${k} ${percent((v ?? 0) * helpingOf(QL_TOP))}`))} at QL ${QL_TOP}.`;
+    },
+  },
+  {
+    num: 47, name: 'Distil',
+    fx: { distil: 1 },
+    note: () => `A new recipe for each brew: ${numberWord(DISTIL_BUCKETS)} buckets of it (${DISTIL_BUCKETS * BUCKET_LITRES} litres) boiled off over a campfire `
+      + `into one of spirit (${BUCKET_LITRES} litres), and ${numberWord(DISTIL_BUCKETS - 1)} buckets back. A drink of spirit at QL ${QL_TOP} `
+      + `gives a knack that lasts ${spanWords(boonTime('spirit_bucket', QL_TOP))} (${listed(BREWS.map((b) => `${b.name.toLowerCase()} `
+      + `${spanWords(boonTime(`${b.id}_bucket`, QL_TOP))}`))}).`,
+  },
+  {
+    num: 49, name: 'Bait Maker',
+    fx: { 'bait:butcher': 2 },
+    note: (fx) => `Butchering a carcass also gives ${numberWord(fx['bait:butcher'])} ${itemName(BUTCHER_BAIT)}, a fishing bait `
+      + `${BAIT_BY_ID.get(BUTCHER_BAIT)?.favours.length ? `that ${listed(BAIT_BY_ID.get(BUTCHER_BAIT)!.favours.map((f) => itemName(f)))} bite on` : ''}.`,
+  },
+  {
+    num: 50, name: 'Taste',
+    fx: { taste: 1 },
+    note: () => 'Examine on food or drink says how much of the food bar a helping fills (or of the thirst bar it quenches), how much of '
+      + `each of the ${numberWord(NUTRIENTS.length)} it feeds, and how long its knack lasts, at its quality and with its maker's hand in it.`,
+  },
+];
+
 /** Every trade's perks, in the order they were picked. */
 const SEEDS: Record<string, Seed[]> = {
   terraformer: TERRAFORMER,
@@ -1139,6 +1263,7 @@ const SEEDS: Record<string, Seed[]> = {
   smith: SMITH,
   forester: FORESTER,
   farmer: FARMER,
+  cook: COOK,
 };
 
 const slug = (name: string): string => name.toLowerCase().replace(/[’']/g, '').replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '');
@@ -1156,6 +1281,7 @@ export const TIERS: Record<string, number[][]> = {
   smith: [[8, 26, 27], [30, 32, 49], [12, 20, 22], [24, 25, 36], [7, 9, 13], [16, 38, 45]],
   forester: [[34, 43, 44], [21, 22, 40], [1, 2, 3], [7, 16, 24], [10, 11, 20], [5, 6, 14]],
   farmer: [[14, 25, 28], [4, 5, 8], [22, 23, 30], [6, 34, 39], [11, 40, 41], [15, 16, 17]],
+  cook: [[11, 18, 28], [31, 49, 50], [3, 7, 8], [5, 6, 15], [20, 21, 32], [14, 46, 47]],
 };
 
 /** Every perk there is, tier by tier, and in each tier by the number it was picked under, as the island lists them. */

@@ -21,6 +21,9 @@ export const BUTCHER_PARTS: Array<[ButcherPart, string]> = [
   ['scale', 'dragon_scale'],
 ];
 
+/** What a Cook's Bait Maker cuts from a carcass for the hook. */
+export const BUTCHER_BAIT = 'offal';
+
 /**
  * A hoard is not a part of the body. What a dragon has been sleeping on comes
  * out of the carcass with it, and it is the only place on the island four of
@@ -38,6 +41,10 @@ export const HOARD_MORE = 6;
  */
 export const butcherYield = (skill: number, knifeQl: number | null): number =>
   Math.min(1, (knifeQl === null ? 0.34 : 0.62 + (knifeQl / 100) * 0.3) + (skill / 100) * 0.28);
+
+/** How much of a carcass you take, with a Cook's Full Carcass, and never more than all of it. */
+export const butcherShare = (g: Game, knifeQl: number | null): number =>
+  Math.min(1, butcherYield(g.skills.get('butchering'), knifeQl) * g.perk('share:butcher', 1));
 
 /** Glands are the rare part: only a steady hand finds them intact. */
 const GLAND_CHANCE = 0.35;
@@ -59,7 +66,7 @@ export function butcherPreview(g: Game, item: Item): string {
   const def = corpseSpecies(item);
   if (!def) return '';
   const knife = g.inventory.tool('butchering_knife');
-  const share = butcherYield(g.skills.get('butchering'), knife ? knife.ql : null);
+  const share = butcherShare(g, knife ? knife.ql : null);
   const parts = BUTCHER_PARTS.filter(([p]) => (def.butcher[p] ?? 0) > 0).map(([, id]) => itemDef(id).name.toLowerCase());
   const [lo, hi] = productQlRange(g.skills.get('butchering'), knife ? knife.ql : 0);
   const ql = Math.round(lo) === Math.round(hi) ? `QL ${Math.round(hi)}` : `QL ${Math.round(lo)}–${Math.round(hi)}`;
@@ -87,7 +94,7 @@ export const BUTCHER_ACTIONS: ActionDef[] = [
       const def = item && corpseSpecies(item);
       if (!item || !def) return;
       const knife = g.inventory.tool('butchering_knife');
-      const share = butcherYield(g.skills.get('butchering'), knife ? knife.ql : null);
+      const share = butcherShare(g, knife ? knife.ql : null);
       const ql = Math.max(1, Math.min(100, butcherQl(g, knife ? knife.ql : null)));
       const taken: string[] = [];
       // What it was sleeping on, which is not a part of it at all.
@@ -112,8 +119,15 @@ export const BUTCHER_ACTIONS: ActionDef[] = [
         if (g.rand() < base * share - count) count += 1;
         if (part === 'gland' && count > 0 && g.rand() > GLAND_CHANCE * (0.5 + share)) count = 0;
         if (count <= 0) continue;
-        const made = g.gather(id, { count, ql });
+        // Better for a perk on the part (a Cook's Prime Cuts and Hide Keeper).
+        const made = g.gather(id, { count, ql: Math.min(100, ql * g.perk(`ql:${id}`, 1)) });
         taken.push(made.count > 1 && count > 1 ? `${count} × ${itemDef(id).name.toLowerCase()}` : itemDef(id).name.toLowerCase());
+      }
+      // And bait for the hook out of what is left (a Cook's Bait Maker), into the pack.
+      const bait = Math.floor(g.perk('bait:butcher', 0));
+      if (bait > 0) {
+        g.inventory.add(BUTCHER_BAIT, { count: bait, ql });
+        taken.push(`${bait} × ${itemDef(BUTCHER_BAIT).name.toLowerCase()}`);
       }
       removeCorpse(g, t, item);
       if (!taken.length) {

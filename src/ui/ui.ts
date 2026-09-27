@@ -50,7 +50,7 @@ import { DEED_ACTION_BY_ID, leaveQuestion, standingWord, upgradeProgress, upgrad
 import { CROP_BY_SEED, cropDef, describeCrop, emptyFields, sownPace, type CropDef } from '../game/farming';
 import { cornerReading, groundReading } from './tileinfo';
 import { deedWorkersAt, MAX_DEED_LEVEL, rankAtLeast, type Deed } from '../game/game';
-import { CRAFT_REACH, recipeNeeds, recipeReason, recipeStatus, RECIPES, type CraftStock } from '../game/recipes';
+import { CRAFT_REACH, reachFor, recipeNeeds, recipeReason, recipeStatus, RECIPES, type CraftStock, type Recipe } from '../game/recipes';
 import { CraftPanel } from './panels/craft';
 import { NewsPanel, unseenNews } from './panels/news';
 import { CratePanel } from './panels/crate';
@@ -1323,9 +1323,17 @@ export class UI {
   /** Everything a lit fire or a hot oven could turn into dinner. */
   private cookEntries(): MenuItem[] {
     const g = this.game;
-    // What is at hand, carried or stored within reach, listed once for every dish.
-    const stock = g.craftStock();
+    // What is at hand, carried or stored within reach, listed once for each
+    // reach the dishes ask for: a Cook's Pantry Reach takes cooking further.
+    const byReach = new Map<number, readonly CraftStock[]>();
+    const stockOf = (r: Recipe): readonly CraftStock[] => {
+      const reach = reachFor(g, r);
+      let found = byReach.get(reach);
+      if (!found) byReach.set(reach, (found = reach > CRAFT_REACH ? g.craftStock(undefined, false, reach) : g.craftStock()));
+      return found;
+    };
     return RECIPES.filter((r) => r.station === 'campfire').map((r) => {
+      const stock = stockOf(r);
       const def = ACTION_BY_ID.get(r.id);
       const st = recipeStatus(r, g, undefined, stock);
       const material = stock.find((s) => s.item.id === r.inputs[0].item)?.item;

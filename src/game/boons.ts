@@ -63,12 +63,16 @@ export const boonOf = (seed: number, itemId: string): string | null => {
   return BOON_SKILLS[hash(seed, itemId) % BOON_SKILLS.length];
 };
 
-/** How long a helping of it holds, by how good a helping it was. */
-export const boonTime = (itemId: string, ql: number): number => {
+/**
+ * How long a helping of it holds, by how good a helping it was, and past the
+ * ceiling its food and drink have: a spirit's own (`knack` on the thing) and
+ * its maker's (`knack`, a Cook's Flavoursome or Strong Brew, on the helping).
+ */
+export const boonTime = (itemId: string, ql: number, knack = 1): number => {
   const def = itemDef(itemId);
   // Something brewed sits with you far longer than something eaten.
   const body = (def.food ?? 0) + (def.drink ?? 0) * 2.4;
-  return Math.round(BOON_SECONDS * Math.min(2.5, body * 2.2) * (0.4 + Math.min(100, ql) / 140));
+  return Math.round(BOON_SECONDS * Math.min(2.5, body * 2.2) * (0.4 + Math.min(100, ql) / 140) * (def.knack ?? 1) * knack);
 };
 
 /** Minutes and seconds, the way a clock would put it. */
