@@ -86,6 +86,7 @@ import { seam } from './seam';
 import { SWAY_MAX, swayAt } from './sway';
 import { ColourPages } from './pages';
 import { spriteScaleFor, bushSprite, crateSprite, cropSprite, drawAnvil, drawCampfire, drawCreature, drawKiln, drawPlayer, drawSmelter, facingOf, pileSprite, tokenSprite, treeSprite, type Sprite, drawWorkPost, drawTrap, drawDeck, stumpSprite } from './sprites';
+import { wildermonTop } from './wildermon';
 import { FIGURE_TOP } from './figure';
 
 /** Result of picking a screen point: the tile, the approximate world position and the nearest corner. */
@@ -2215,9 +2216,13 @@ export class Renderer {
             fleece: cr.fleece,
             scale: ageDef(cr, this.game.time).scale,
             label: cr.mode === 'wild' ? undefined : cr.name,
+            id: cr.id,
+            graze: cr.state === 'forage',
           }),
         );
-        this.creatureHits.push({ x: ent.x, y: ent.y, left: ent.sx - 10 * zoom, top: ent.sy - 22 * zoom, w: 20 * zoom, h: 24 * zoom, creature: cr.id });
+        // As tall as it is drawn, for a kind that is a model: a big one is clicked by its head as well as its feet.
+        const tall = Math.max(22, (wildermonTop(def.id) ?? 0) * ageDef(cr, this.game.time).scale);
+        this.creatureHits.push({ x: ent.x, y: ent.y, left: ent.sx - 10 * zoom, top: ent.sy - tall * zoom, w: 20 * zoom, h: (tall + 2) * zoom, creature: cr.id });
         continue;
       }
       // The layers of a hull in front of somebody on her deck; see `takeAboard`.
@@ -2257,6 +2262,7 @@ export class Renderer {
               health: 1,
               fleece: inside.fleece,
               scale: ageDef(inside, this.game.time).scale * CRATE_SCALE,
+              id: inside.id,
             });
             drawFurniture(g, px, py, zoom, piece.kind, false, tint, 1, view, piece.material);
           });

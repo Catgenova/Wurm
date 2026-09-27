@@ -61,14 +61,14 @@ const rz = (a: number): M3 => { const c = Math.cos(a), s = Math.sin(a); return [
 
 /** A bone's frame: its turn, and where its joint is. */
 export interface Xf { m: M3; t: V3 }
-const ROOT: Xf = { m: [1, 0, 0, 0, 1, 0, 0, 0, 1], t: [0, 0, 0] };
+export const ROOT: Xf = { m: [1, 0, 0, 0, 1, 0, 0, 0, 1], t: [0, 0, 0] };
 /** A joint `at` in its parent's frame, turned by pitch, then roll, then yaw, in degrees. */
-function joint(p: Xf, at: V3, pitch = 0, roll = 0, yaw = 0): Xf {
+export function joint(p: Xf, at: V3, pitch = 0, roll = 0, yaw = 0): Xf {
   const r = mm(rz(yaw * DEG), mm(ry(roll * DEG), rx(pitch * DEG)));
   const o = mv(p.m, at);
   return { m: mm(p.m, r), t: [o[0] + p.t[0], o[1] + p.t[1], o[2] + p.t[2]] };
 }
-const place = (x: Xf, v: V3): V3 => { const o = mv(x.m, v); return [o[0] + x.t[0], o[1] + x.t[1], o[2] + x.t[2]]; };
+export const place = (x: Xf, v: V3): V3 => { const o = mv(x.m, v); return [o[0] + x.t[0], o[1] + x.t[1], o[2] + x.t[2]]; };
 const dot = (a: V3, b: V3): number => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
 const cross = (a: V3, b: V3): V3 => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
 const unit = (v: V3): V3 => { const l = Math.hypot(v[0], v[1], v[2]) || 1; return [v[0] / l, v[1] / l, v[2] / l]; };
@@ -87,7 +87,16 @@ export type GearMat = 'metal' | 'metalDark' | 'metalLit' | 'mail' | 'scale' | 's
   | 'cloth' | 'clothDark' | 'lining' | 'wood' | 'woodDark' | 'grip' | 'blade' | 'fitting' | 'gem' | 'string' | 'fletch' | 'rivet'
   // A circlet's three settings, each its stone or, while it is empty, its gold.
   | 'stone1' | 'stone2' | 'stone3';
-export type Mat = BodyMat | GearMat;
+/**
+ * And what a wildermon is made of (`./beasts`), looked up in its own
+ * palette: its coat and its markings, the colours of its variant, and the
+ * things of its kind -- a horn, a hoof, a leaf growing out of its back.
+ */
+export type BeastMat = 'coat' | 'coatDark' | 'coatLight' | 'mark' | 'belly' | 'muzzle' | 'nose' | 'inner' | 'eyeWhite' | 'lid'
+  | 'claw' | 'pad' | 'horn' | 'hornDark' | 'membrane' | 'hoof' | 'tooth' | 'tongue' | 'leaf' | 'leafDark' | 'stem' | 'petal' | 'bloom' | 'moss' | 'bark'
+  | 'stone' | 'stoneDark' | 'crystal' | 'crystalDark' | 'ember' | 'flame' | 'shell' | 'shellDark' | 'feather' | 'featherDark'
+  | 'bill' | 'billDark' | 'water' | 'cap' | 'spot';
+export type Mat = BodyMat | GearMat | BeastMat;
 /**
  * Worked into a facet's surface, in its own shade, where it is drawn big
  * enough to read: the rows of a mail shirt, the courses of scale, the channels
@@ -136,7 +145,7 @@ export interface Mesh {
   e: Array<[number, number, number, number]>;
 }
 
-function mesh(v: V3[], f: Face[]): Mesh {
+export function mesh(v: V3[], f: Face[]): Mesh {
   const at = new Map<string, [number, number, number, number]>();
   f.forEach((face, fi) => {
     if (face.decal) return;
@@ -194,7 +203,7 @@ function rings(rs: number[][], n: number, mat: Mat | ((band: number, j: number) 
 }
 
 /** A low-poly ball: `n` round and `k` bands from pole to pole. */
-function ball(c: V3, r: V3, n: number, k: number, mat: Mat): Mesh {
+export function ball(c: V3, r: V3, n: number, k: number, mat: Mat): Mesh {
   const v: V3[] = [[c[0], c[1], c[2] - r[2]]];
   for (let b = 1; b < k; b++) {
     const t = (b / k) * Math.PI, z = -Math.cos(t), s = Math.sin(t);
@@ -2326,6 +2335,23 @@ export const GEAR_BASE: Record<GearMat, RGB> = {
   fletch: [228, 220, 202], rivet: [200, 202, 208], stone1: [200, 168, 96], stone2: [200, 168, 96], stone3: [200, 168, 96],
 };
 
+/**
+ * A wildermon's colours before its coat and its own things go in: the coat
+ * and its markings are its variant's (`./beasts`), and these are the horn,
+ * hoof, leaf and ember any kind starts from. Nothing of a person is made of
+ * them.
+ */
+export const BEAST_BASE: Record<BeastMat, RGB> = {
+  coat: [150, 120, 96], coatDark: [118, 92, 76], coatLight: [184, 158, 134], mark: [214, 196, 170], belly: [200, 180, 154],
+  muzzle: [226, 212, 190], nose: [70, 52, 58], inner: [232, 170, 170], eyeWhite: [246, 242, 234], lid: [96, 74, 66],
+  claw: [96, 82, 76], pad: [92, 70, 72], horn: [226, 214, 188], hornDark: [196, 182, 152], membrane: [206, 160, 168], hoof: [88, 72, 64], tooth: [244, 236, 214], tongue: [220, 120, 128],
+  leaf: [132, 178, 104], leafDark: [92, 142, 86], stem: [112, 148, 84], petal: [246, 196, 214], bloom: [250, 222, 120],
+  moss: [124, 156, 92], bark: [132, 100, 76], stone: [168, 164, 156], stoneDark: [120, 118, 116], crystal: [170, 214, 236],
+  crystalDark: [118, 164, 200], ember: [246, 150, 72], flame: [255, 214, 120], shell: [226, 196, 164], shellDark: [184, 148, 120],
+  feather: [150, 120, 96], featherDark: [118, 92, 76], bill: [240, 176, 92], billDark: [206, 142, 70], water: [168, 214, 232], cap: [214, 92, 88],
+  spot: [248, 240, 226],
+};
+
 function paletteOf(p: FigurePose, look: Look): Palette {
   const skin = hex(skinColour(look)), hair = hex(hairColour(look)), tunic = hex(p.tunic ?? shirtColour(look));
   return {
@@ -2354,8 +2380,12 @@ function paletteOf(p: FigurePose, look: Look): Palette {
     iron: [128, 126, 132],
     // Nothing of the body is made of these; a piece of gear brings its own (`gearPalette`), and these are what it starts from.
     ...GEAR_BASE,
+    ...BEAST_BASE,
   };
 }
+
+/** Every colour at what it starts from, for a palette built over it: a wildermon's, which has a body's eyes and a goblin's leather. */
+export const PLAIN_PALETTE: Palette = paletteOf({ phase: 0, moving: false, facing: 0, swimming: false, working: false }, DEFAULT_LOOK);
 
 /**
  * The metals and scale of a piece of gear, whose dark side leans cool as well
@@ -2470,7 +2500,120 @@ export interface Part {
   hide?: Array<{ c: V3; r: V3 }>;
   /** The frame those solids are in, when not the part's own: a lock of hair swings from the head, and is hidden by the skull. */
   hideIn?: Xf;
+  /**
+   * A wildermon's piece (`./beasts`), lit its own way: from higher overhead
+   * than a person is, in three steps rather than a slope, the shadow step
+   * cooler as well as darker. A round mass is a lit top, a middle and a shade
+   * rather than a flicker of facets.
+   */
+  toon?: boolean;
+  /** Lines inside it or not: without, only the outline round the whole of it, for a fleece of puffs or a cloud. */
+  lines?: boolean;
+  /** Inked lightly, for what is airy: a seed head, a wisp. */
+  airy?: boolean;
+  /** Not inked at all, round the outside or in: what is too fine to carry a line. */
+  rim?: boolean;
+  /** Outlined at half the width, for what is thin enough that a full outline would be most of it: a wader's leg. */
+  thin?: boolean;
+  /** For a `toon` part, a rim of light in this colour where its top turns away from the viewer: a cloud's silver edge. */
+  sheen?: Mat;
+  /**
+   * One of the links of something in links -- a tail -- named for the whole
+   * of it: the lines round every link that follows another in the drawing go
+   * down together before any of them, fattened, so each link covers the
+   * others' lines where they join and the whole is lined as one thing, with
+   * no ring round it at every joint.
+   */
+  chain?: string;
 }
+
+/** A wildermon's light, in the steps a piece that is `toon` is lit in. */
+const TOON_LIT = 1.07, TOON_MID = 0.97, TOON_SHADE = 0.84;
+/** The light on a surface turned along `u`, before it is cut into steps: mostly from overhead, some from over the viewer's shoulder. */
+const toonD = (u: V3, L: V3): number => (u[0] * L[0] + u[1] * L[1] + u[2] * L[2]) * 0.5 + u[2] * 0.65;
+/** Where that light is cut into its steps. */
+const TOON_CUTS = [-0.12, 0.5];
+const toonStep = (d: number): number => (d > TOON_CUTS[1] ? TOON_LIT : d > TOON_CUTS[0] ? TOON_MID : TOON_SHADE);
+/** The step a facet in a part's sheen is drawn in: its sheen colour, lit. */
+const TOON_SHEEN = 2;
+/** Which step a facet turned along `u` is in. */
+const toonK = (u: V3, L: V3): number => toonStep(toonD(u, L));
+
+/** Lightness as the eye has it, nought to a hundred (CIE L*), and back; in the light a screen gives out, not the numbers it is sent. */
+const toLin = (v: number): number => { const x = Math.max(0, v) / 255; return x <= 0.04045 ? x / 12.92 : ((x + 0.055) / 1.055) ** 2.4; };
+const fromLin = (y: number): number => 255 * (y <= 0.0031308 ? y * 12.92 : 1.055 * Math.max(0, y) ** (1 / 2.4) - 0.055);
+const lumOf = (c: RGB): number => 0.2126 * toLin(c[0]) + 0.7152 * toLin(c[1]) + 0.0722 * toLin(c[2]);
+const lightness = (c: RGB): number => { const y = lumOf(c); return y > 216 / 24389 ? 116 * Math.cbrt(y) - 16 : (24389 / 27) * y; };
+const lumAt = (l: number): number => (l > 8 ? ((l + 16) / 116) ** 3 : (l * 27) / 24389);
+/** A colour taken to a lightness: darkened keeping its hue, or lightened toward `up`. */
+function atLightness(c: RGB, l: number, up: RGB = [255, 255, 255]): RGB {
+  const y = lumOf(c), want = lumAt(l);
+  const lc: RGB = [toLin(c[0]), toLin(c[1]), toLin(c[2])];
+  if (want <= y) {
+    const k = want / Math.max(1e-6, y);
+    return [fromLin(lc[0] * k), fromLin(lc[1] * k), fromLin(lc[2] * k)];
+  }
+  const lu: RGB = [toLin(up[0]), toLin(up[1]), toLin(up[2])];
+  const a = Math.min(1, (want - y) / Math.max(1e-6, lumOf(up) - y));
+  return [fromLin(lc[0] + (lu[0] - lc[0]) * a), fromLin(lc[1] + (lu[1] - lc[1]) * a), fromLin(lc[2] + (lu[2] - lc[2]) * a)];
+}
+
+/**
+ * The steps a `toon` colour is lit in, a set way apart whatever the colour
+ * is: the lit top eight lighter than the colour itself and the shade fourteen
+ * darker and cooler, toward the island's lavender shadow. A colour too pale
+ * for a lit step over it keeps its lit top by having its middle stepped down,
+ * a breath of lavender, rather than its light pushed past white.
+ */
+const TOON_COOL: RGB = [104, 108, 168];
+const TOON_LAVENDER: RGB = [214, 208, 240];
+const TOON_STEP = 8, TOON_DROP = 14, TOON_TOP = 97;
+const toonTones = new Map<number, string>();
+function toonTone(c: RGB, k: number): string {
+  const step = k >= TOON_LIT ? 2 : k >= TOON_MID ? 1 : 0;
+  const key = (((Math.round(c[0]) & 255) << 16) | ((Math.round(c[1]) & 255) << 8) | (Math.round(c[2]) & 255)) * 3 + step;
+  let s = toonTones.get(key);
+  if (s) return s;
+  const l = lightness(c);
+  const lit = Math.min(l + TOON_STEP, TOON_TOP), mid = Math.min(l, lit - TOON_STEP);
+  const out = step === 2 ? atLightness(mixRGB(c, WARM_LIGHT, 0.1), lit, WARM_LIGHT)
+    : step === 1 ? (mid < l - 0.5 ? atLightness(mixRGB(c, TOON_LAVENDER, 0.12), mid) : c)
+      : atLightness(mixRGB(c, TOON_COOL, 0.22), Math.max(4, mid - TOON_DROP));
+  s = shade(out, 1);
+  if (toonTones.size > 4096) toonTones.clear();
+  toonTones.set(key, s);
+  return s;
+}
+
+/** How dark a wildermon's outline is at the lightest, whatever it is round: dark enough to hold it off pale grass. */
+const TOON_INK_MAX = 30;
+const toonInk = (c: RGB): RGB => (lightness(c) > TOON_INK_MAX ? atLightness(c, TOON_INK_MAX) : c);
+/** The ink round a `toon` part only a pixel or two across: a darker shade of its own colour, rather than the dark round the body. */
+const toonThinInk = (c: RGB): RGB => atLightness(c, Math.min(lightness(c) * 0.55, 48));
+
+/**
+ * How wide a mesh is across, in its own units: the middle one of its three
+ * extents, which for anything long -- a whisker, a stalk, a petal -- is how
+ * wide it is rather than how long.
+ */
+const widths = new WeakMap<Mesh, number>();
+function acrossOf(m: Mesh): number {
+  let w = widths.get(m);
+  if (w === undefined) {
+    const lo: V3 = [Infinity, Infinity, Infinity], hi: V3 = [-Infinity, -Infinity, -Infinity];
+    for (const v of m.v) for (let q = 0; q < 3; q++) { lo[q] = Math.min(lo[q], v[q]); hi[q] = Math.max(hi[q], v[q]); }
+    w = [hi[0] - lo[0], hi[1] - lo[1], hi[2] - lo[2]].sort((a, b) => a - b)[1];
+    widths.set(m, w);
+  }
+  return w;
+}
+/**
+ * Pixels across under which a `toon` part is lined only at half the width,
+ * in a darker shade of its own colour and not along its folds (a leaf, a
+ * horn's tip); and under which it is not lined at all, being narrower than
+ * the line round it would be (a whisker, a spoke).
+ */
+const TOON_THIN_PX = 2, TOON_FLECK_PX = 0.8;
 
 /* ---- gear ------------------------------------------------------------------------------ */
 
@@ -4733,7 +4876,7 @@ function partsOf(kit: Kit, r: Rig, b: Bones, gear?: GearLook, pal?: Palette, fac
   return gear && pal ? dress(parts, named, kit, r, b, gear, pal, facing, lod) : parts;
 }
 
-interface View {
+export interface View {
   /** Where a step along the body's right and its front go on the screen. */
   ex: Pt;
   ey: Pt;
@@ -4752,7 +4895,7 @@ const SY = HALF_H / UNITS_PER_TILE;
  * island's ground is one of the eight compass steps; so a body walking
  * north-east faces the way it is walking at every one of the camera's turns.
  */
-function viewOf(facing: number): View {
+export function viewOf(facing: number): View {
   const th = Math.PI / 4 - (facing * Math.PI) / 4;
   const R: Pt = [-Math.sin(th), Math.cos(th)];
   const F: Pt = [Math.cos(th), Math.sin(th)];
@@ -4800,10 +4943,14 @@ interface Laid {
   s: Pt[];
   vis: boolean[];
   k: number[];
+  /** For a `toon` part, each facet the light's steps cut across, in its pieces: each piece's step and its corners on the screen. */
+  split?: Map<number, Array<[number, Pt[]]>>;
   d: number[];
   /** How squarely each facet faces the viewer: near nought at the edge of the thing, turning away. */
   t: number[];
   key: number;
+  /** For a `toon` part, how fine it is drawn: nought as anything else, one lined thinly (`TOON_THIN_PX`), two not lined at all. */
+  fine: number;
 }
 
 /* ---- what is worked into a surface ------------------------------------------------ */
@@ -5336,11 +5483,89 @@ function fourPoint(g: CanvasRenderingContext2D, r: number, waist: number): void 
  * of it that turns away from the viewer, which is what draws an arm over a
  * chest.
  */
+/** Which facets meet at each corner of a mesh, worked out once for it. */
+const cornersOf = new WeakMap<object, number[][]>();
+function facetsAt(mesh: Mesh): number[][] {
+  let at = cornersOf.get(mesh.f);
+  if (!at) {
+    at = mesh.v.map(() => [] as number[]);
+    mesh.f.forEach((face, fi) => { for (const vi of face.i) at![vi].push(fi); });
+    cornersOf.set(mesh.f, at);
+  }
+  return at;
+}
+
+/** The part of a polygon on one side of a level of what is known at its corners, with that at its new corners. */
+function clipAt(pts: readonly Pt[], val: readonly number[], level: number, above: boolean): [Pt[], number[]] {
+  const op: Pt[] = [], ov: number[] = [];
+  const n = pts.length;
+  for (let q = 0; q < n; q++) {
+    const a = pts[q], b = pts[(q + 1) % n], va = val[q], vb = val[(q + 1) % n];
+    const ina = above ? va >= level : va < level, inb = above ? vb >= level : vb < level;
+    if (ina) { op.push(a); ov.push(va); }
+    if (ina !== inb) {
+      const r = (level - va) / (vb - va);
+      op.push([a[0] + (b[0] - a[0]) * r, a[1] + (b[1] - a[1]) * r]);
+      ov.push(level);
+    }
+  }
+  return [op, ov];
+}
+
+/**
+ * Where the light's steps cross a `toon` part: the light worked out at each
+ * corner of each facet from the facets round it that turn the same way (not
+ * across a crease), so a step runs as one smooth line over a round mass
+ * rather than along the edges of its facets. A facet the line crosses is cut
+ * along it, each piece in its own step; a facet it does not cross takes the
+ * step of its corners.
+ */
+function toonSplit(mesh: Mesh, s: readonly Pt[], vis: readonly boolean[], k: number[], normals: readonly V3[], areas: readonly number[], L: V3, toward?: readonly number[]): Map<number, Array<[number, Pt[]]>> | undefined {
+  const at = facetsAt(mesh);
+  let out: Map<number, Array<[number, Pt[]]>> | undefined;
+  const val: number[] = [];
+  mesh.f.forEach((face, fi) => {
+    if (!vis[fi] || face.decal) return;
+    const u = normals[fi];
+    // Along the top of the outline, where the surface turns away: the sheen, whole.
+    if (toward && toward[fi] < 0.32 && u[2] > 0.3) { k[fi] = TOON_SHEEN; return; }
+    val.length = 0;
+    let lo = Infinity, hi = -Infinity;
+    for (const vi of face.i) {
+      let x = 0, y = 0, z = 0;
+      for (const gi of at[vi]) {
+        const w = normals[gi];
+        if (w[0] * u[0] + w[1] * u[1] + w[2] * u[2] < 0.5) continue;
+        x += w[0] * areas[gi]; y += w[1] * areas[gi]; z += w[2] * areas[gi];
+      }
+      const l = Math.sqrt(x * x + y * y + z * z);
+      const d = l > 1e-9 ? toonD([x / l, y / l, z / l], L) : toonD(u, L);
+      val.push(d);
+      if (d < lo) lo = d;
+      if (d > hi) hi = d;
+    }
+    const a = toonStep(lo), b = toonStep(hi);
+    if (a === b) { k[fi] = a; return; }
+    const pts = face.i.map((vi) => s[vi]);
+    const pieces: Array<[number, Pt[]]> = [];
+    const [top] = clipAt(pts, val, TOON_CUTS[1], true);
+    const [rest, restV] = clipAt(pts, val, TOON_CUTS[1], false);
+    const [mid] = clipAt(rest, restV, TOON_CUTS[0], true);
+    const [low] = clipAt(rest, restV, TOON_CUTS[0], false);
+    if (low.length > 2) pieces.push([TOON_SHADE, low]);
+    if (mid.length > 2) pieces.push([TOON_MID, mid]);
+    if (top.length > 2) pieces.push([TOON_LIT, top]);
+    (out ??= new Map()).set(fi, pieces);
+  });
+  return out;
+}
+
 /** Room for the outward squares of a facet's edges, kept between facets rather than made for each. */
 let EDGE_X = new Float64Array(32), EDGE_Y = new Float64Array(32);
 
-function render(g: CanvasRenderingContext2D, parts: Part[], pal: Palette, view: View, ink: number, px: number, now = 0): void {
+export function render(g: CanvasRenderingContext2D, parts: Part[], pal: Palette, view: View, ink: number, px: number, now = 0): void {
   const { ex, ey, T, L, H } = view;
+  const normals: V3[] = [], areas: number[] = [];
   // How far a step across the body goes on the screen, on the whole: what a pattern's rings are counted off.
   const hs = (Math.hypot(ex[0], ex[1]) + Math.hypot(ey[0], ey[1])) / 2;
   const laid: Laid[] = parts.map((part) => {
@@ -5367,13 +5592,18 @@ function render(g: CanvasRenderingContext2D, parts: Part[], pal: Palette, view: 
       const toward = u[0] * T[0] + u[1] * T[1] + u[2] * T[2];
       vis.push(l > 1e-9 && toward > 1e-4 && !(hidden && hidden(face.at ? place(part.xf, face.at) : c)) && !(off && off[0] * T[0] + off[1] * T[1] + off[2] * T[2] > 0.05));
       t.push(toward);
-      k.push(lightOn(u, L));
+      k.push(part.toon ? toonK(u, L) : lightOn(u, L));
       d.push(c[0] * T[0] + c[1] * T[1] + c[2] * T[2]);
+      if (part.toon) { normals.push(u); areas.push(l); }
     }
     let cx = 0, cy = 0, cz = 0;
     for (const p of pv) { cx += p[0]; cy += p[1]; cz += p[2]; }
     cx /= pv.length; cy /= pv.length; cz /= pv.length;
-    return { part, s, vis, k, d, t, key: cx * H[0] + cy * H[1] + cz * 0.02 + part.bias };
+    const split = part.toon ? toonSplit(part.mesh, s, vis, k, normals, areas, L, part.sheen ? t : undefined) : undefined;
+    normals.length = 0;
+    areas.length = 0;
+    const across = part.toon ? acrossOf(part.mesh) / px : Infinity;
+    return { part, s, vis, k, split, d, t, key: cx * H[0] + cy * H[1] + cz * 0.02 + part.bias, fine: across < TOON_FLECK_PX ? 2 : across < TOON_THIN_PX ? 1 : 0 };
   });
   // Each part goes after (or before) what it follows once that has itself been put in its place, whichever was made first: a
   // hand made with the body follows a grip made after it, and from behind the grip goes under the chest and the hand with it.
@@ -5416,14 +5646,16 @@ function render(g: CanvasRenderingContext2D, parts: Part[], pal: Palette, view: 
    * square to itself, which closes the seams between neighbours that
    * anti-aliasing leaves.
    */
-  const inks = {} as Record<Mat, string>;
-  for (const m of Object.keys(pal) as Mat[]) inks[m] = shade(inkOf(pal[m]), 1);
+  // Worked out for the colours that are drawn, as they are drawn, rather than every colour the palette has.
+  const inks: Partial<Record<Mat, string>> = {};
   // A piece of gear is in colours of its own, and inked in a dark shade of each of them.
   // A rare piece in its colours glazed toward its rarity's hue, and inked in a dark of them: its rim is its rarity's colour.
   const palOf = (l: Laid): Palette => (l.part.rare && l.part.pal ? rarePalette(l.part.pal, l.part.rare) : l.part.pal ?? pal);
   const partInks = new Map<Palette, Partial<Record<Mat, string>>>();
+  const airyInks: Partial<Record<Mat, string>> = {};
   const inkIn = (l: Laid, m: Mat): string => {
-    if (!l.part.pal) return inks[m];
+    if (l.part.airy) return (airyInks[m] ??= shade(mixRGB((l.part.pal ?? pal)[m], INK, 0.3), 1));
+    if (!l.part.pal) return (inks[m] ??= shade(inkOf(pal[m]), 1));
     const P = palOf(l);
     let c = partInks.get(P);
     if (!c) { c = {}; partInks.set(P, c); }
@@ -5434,24 +5666,27 @@ function render(g: CanvasRenderingContext2D, parts: Part[], pal: Palette, view: 
   const grow = 0.5 * px;
   const add = (path: Path2D, l: Laid, fi: number, fat = grow): void => {
     const idx = l.part.mesh.f[fi].i;
-    const n = idx.length, s = l.s;
+    addPts(path, idx.length, (q) => l.s[idx[q]], fat);
+  };
+  const addPts = (path: Path2D, n: number, pt: (q: number) => Pt, fat = grow): void => {
     if (!fat) {
-      path.moveTo(s[idx[0]][0], s[idx[0]][1]);
-      for (let q = 1; q < n; q++) path.lineTo(s[idx[q]][0], s[idx[q]][1]);
+      const p0 = pt(0);
+      path.moveTo(p0[0], p0[1]);
+      for (let q = 1; q < n; q++) { const p = pt(q); path.lineTo(p[0], p[1]); }
       path.closePath();
       return;
     }
     // Which way round it goes on the screen, so "out" is out.
     let area = 0;
     for (let q = 0; q < n; q++) {
-      const a = s[idx[q]], b = s[idx[(q + 1) % n]];
+      const a = pt(q), b = pt((q + 1) % n);
       area += a[0] * b[1] - b[0] * a[1];
     }
     const turn = area < 0 ? -1 : 1;
     // Each edge's outward square, once: edge q runs from corner q to the next.
     if (EDGE_X.length < n) { EDGE_X = new Float64Array(2 * n); EDGE_Y = new Float64Array(2 * n); }
     for (let q = 0; q < n; q++) {
-      const a = s[idx[q]], b = s[idx[(q + 1) % n]];
+      const a = pt(q), b = pt((q + 1) % n);
       const dx = b[0] - a[0], dy = b[1] - a[1], dl = Math.sqrt(dx * dx + dy * dy);
       if (dl > 1e-9) { EDGE_X[q] = (dy / dl) * turn; EDGE_Y[q] = (-dx / dl) * turn; } else { EDGE_X[q] = 0; EDGE_Y[q] = 0; }
     }
@@ -5462,12 +5697,20 @@ function render(g: CanvasRenderingContext2D, parts: Part[], pal: Palette, view: 
       if (!bx && !by) { bx = ax; by = ay; }
       // The mitre: both neighbouring edges pushed out by `fat`, where they meet; never more than three times as far.
       const k = Math.min(3, 1 / Math.max(1e-3, 1 + ax * bx + ay * by)) * fat;
-      const v = s[idx[q]];
+      const v = pt(q);
       const x = v[0] + (ax + bx) * k, y = v[1] + (ay + by) * k;
       if (q === 0) path.moveTo(x, y);
       else path.lineTo(x, y);
     }
     path.closePath();
+  };
+  // Something only a pixel or two across -- a flower, a leaf, a bead -- is lit and in its own colour, never in the cool shade: a
+  // step of lavender on it is a smudge.
+  const accent = (l: Laid, k: number): number => (l.fine && k < TOON_MID ? TOON_MID : k);
+  /** A facet of a `toon` part the light's steps cut across, each piece into the path of its own shade. */
+  const addSplit = (l: Laid, P: Palette, fi: number, pieces: Array<[number, Pt[]]>): void => {
+    const c = P[l.part.mesh.f[fi].m];
+    for (const [k, pts] of pieces) addPts(into(toonTone(c, accent(l, k))), pts.length, (q) => pts[q]);
   };
   // Where a facet that is seen meets one that is not, or nothing: the lines round a part, and along it where it turns away.
   // Each is [from, to, the facet seen, whether it is the open edge of the mesh rather than a fold where it turns away].
@@ -5507,11 +5750,14 @@ function render(g: CanvasRenderingContext2D, parts: Part[], pal: Palette, view: 
   };
   // The outline round the whole in the dark ink gear is drawn in, the body's own parts as well: in the body's lighter inks a bare
   // sleeve beside a coat of mail has half the line round it the mail has, and goes soft at the edge of the figure.
-  const outlines = {} as Record<Mat, string>;
-  for (const m of Object.keys(pal) as Mat[]) outlines[m] = shade(gearInk(pal[m]), 1);
+  const outlines: Partial<Record<Mat, string>> = {};
+  const toonOutlines: Partial<Record<Mat, string>> = {};
+  const thinOutlines: Partial<Record<Mat, string>> = {};
   const rimLine = (l: Laid, a: number, b: number, fi: number): void => {
     const m = l.part.mesh.f[fi].m;
-    const to = into(l.part.pal ? inkIn(l, m) : outlines[m]);
+    const to = into(l.part.pal || l.part.airy ? inkIn(l, m)
+      : l.part.toon ? (l.fine ? (thinOutlines[m] ??= shade(toonThinInk(pal[m]), 1)) : (toonOutlines[m] ??= shade(toonInk(gearInk(pal[m])), 1)))
+        : (outlines[m] ??= shade(gearInk(pal[m]), 1)));
     to.moveTo(l.s[a][0], l.s[a][1]);
     to.lineTo(l.s[b][0], l.s[b][1]);
   };
@@ -5519,8 +5765,10 @@ function render(g: CanvasRenderingContext2D, parts: Part[], pal: Palette, view: 
   g.lineCap = 'round';
   const edges = laid.map(edgesOf);
   // The outline: every part's own outline in its ink, fattened, so that only a rim shows round the outside once the facets go over it.
-  laid.forEach((l, li) => { for (const [a, b, fi] of edges[li]) rimLine(l, a, b, fi); });
+  laid.forEach((l, li) => { if (l.part.rim !== false && !l.part.thin && !l.fine) for (const [a, b, fi] of edges[li]) rimLine(l, a, b, fi); });
   flush(ink * 2, false);
+  laid.forEach((l, li) => { if (l.part.rim !== false && (l.part.thin || l.fine === 1)) for (const [a, b, fi] of edges[li]) rimLine(l, a, b, fi); });
+  flush(ink, false);
   const shines = laid.some((l) => l.part.rare) ? shinesOf(laid, now) : null;
   laid.forEach((l, li) => {
     const f = l.part.mesh.f;
@@ -5528,11 +5776,26 @@ function render(g: CanvasRenderingContext2D, parts: Part[], pal: Palette, view: 
     for (let fi = 0; fi < f.length; fi++) if (l.vis[fi] && !f[fi].decal) shown.push(fi);
     const P = palOf(l);
     const sh = shines && l.part.rare ? shines.get(l.part.rare) : undefined;
+    const tone = (fi: number, k = l.k[fi]): string => (l.part.toon ? (k === TOON_SHEEN && l.part.sheen ? toonTone(P[l.part.sheen], TOON_LIT) : toonTone(P[f[fi].m], accent(l, k))) : toneOf(P, f[fi].m, k, P !== pal));
+    // The links of a chain: the lines of this link and every one straight after it go down now, fattened, before any of them does.
+    const chain = l.part.chain;
+    if (chain !== undefined && (li === 0 || laid[li - 1].part.chain !== chain)) {
+      for (let r = li; r < laid.length && laid[r].part.chain === chain; r++) {
+        const m = laid[r];
+        if (m.part.lines !== false && m.part.rim !== false && !m.fine) for (const [a, b, fi] of edges[r]) line(m, a, b, fi);
+      }
+      flush(ink * 1.2, false);
+    }
+    const lined = l.part.lines !== false && l.part.rim !== false && !l.fine && chain === undefined;
     if (l.part.convex) {
-      for (const fi of shown) add(into(toneOf(P, f[fi].m, l.k[fi], P !== pal)), l, fi);
+      for (const fi of shown) {
+        const pieces = l.split?.get(fi);
+        if (pieces) addSplit(l, P, fi, pieces);
+        else add(into(tone(fi)), l, fi);
+      }
       flush(0, true);
       worked(g, l, shown, P, px, hs);
-      for (const [a, b, fi] of edges[li]) line(l, a, b, fi);
+      if (lined) for (const [a, b, fi] of edges[li]) line(l, a, b, fi);
       flush(ink * 0.6, false);
     } else {
       // Far to near, a run of one shade at a time, and after each run the lines along its edges.
@@ -5545,13 +5808,23 @@ function render(g: CanvasRenderingContext2D, parts: Part[], pal: Palette, view: 
       shown.sort((a, b) => l.d[a] - l.d[b]);
       let q = 0;
       while (q < shown.length) {
-        const c = toneOf(P, f[shown[q]].m, l.k[shown[q]], P !== pal);
+        // A facet the light's steps cut across goes down on its own, in its pieces, and its lines after it.
+        const pieces = l.split?.get(shown[q]);
+        if (pieces) {
+          addSplit(l, P, shown[q], pieces);
+          flush(0, true);
+          if (lined) for (const [a, b] of mine.get(shown[q]) ?? []) line(l, a, b, shown[q]);
+          flush(ink * 0.6, false);
+          q++;
+          continue;
+        }
+        const c = tone(shown[q]);
         let end = q;
-        while (end < shown.length && toneOf(P, f[shown[end]].m, l.k[shown[end]], P !== pal) === c) end++;
+        while (end < shown.length && !l.split?.has(shown[end]) && tone(shown[end]) === c) end++;
         for (let r = q; r < end; r++) add(into(c), l, shown[r]);
         flush(0, true);
         worked(g, l, shown.slice(q, end), P, px, hs);
-        for (let r = q; r < end; r++) for (const [a, b] of mine.get(shown[r]) ?? []) line(l, a, b, shown[r]);
+        if (lined) for (let r = q; r < end; r++) for (const [a, b] of mine.get(shown[r]) ?? []) line(l, a, b, shown[r]);
         flush(ink * 0.6, false);
         q = end;
       }
@@ -5561,7 +5834,8 @@ function render(g: CanvasRenderingContext2D, parts: Part[], pal: Palette, view: 
       if (!l.vis[fi] || !f[fi].decal) continue;
       const path = new Path2D();
       add(path, l, fi, 0);
-      g.fillStyle = toneOf(P, f[fi].m, f[fi].lit ? Math.max(l.k[fi], 1.06) : l.k[fi], P !== pal);
+      // Painted on a wildermon, flat: an eye is the same dark whichever way the head is turned, and a glint is always lit.
+      g.fillStyle = l.part.toon ? toonTone(P[f[fi].m], f[fi].lit ? TOON_LIT : TOON_MID) : toneOf(P, f[fi].m, f[fi].lit ? Math.max(l.k[fi], 1.06) : l.k[fi], P !== pal);
       g.fill(path);
     }
     // And if it is rare, the rest of its shine, before anything in front of it goes down.
@@ -5569,7 +5843,7 @@ function render(g: CanvasRenderingContext2D, parts: Part[], pal: Palette, view: 
   });
 }
 
-const onScreen = (view: View, p: V3): Pt => [p[0] * view.ex[0] + p[1] * view.ey[0], p[0] * view.ex[1] + p[1] * view.ey[1] - p[2] * HEIGHT_SCALE];
+export const onScreen = (view: View, p: V3): Pt => [p[0] * view.ex[0] + p[1] * view.ey[0], p[0] * view.ex[1] + p[1] * view.ey[1] - p[2] * HEIGHT_SCALE];
 
 /** The reins, from each hand out ahead to where a team would be. */
 function reins(g: CanvasRenderingContext2D, b: Bones, view: View, pal: Palette, ink: number): void {

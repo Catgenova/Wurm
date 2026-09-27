@@ -3,6 +3,7 @@ import type { Look } from '../game/look';
 import { emotePose } from '../game/emotes';
 import { drawBust, drawFigure, type FigurePose } from './figure';
 import { BUSH_DEFS, TREE_AGES, TREE_DEFS } from '../world/tiles';
+import { drawWildermon, drawWildermonPortrait, modelled, wildermonTop } from './wildermon';
 
 /** A pre-rendered sprite. Sizes are in zoom-1 pixels; the canvas is drawn at SPRITE_SCALE for crispness. */
 export interface Sprite {
@@ -1982,6 +1983,10 @@ export interface CreaturePose {
   fleece?: number;
   /** How much of its full size it is: a yearling is small and an old one heavy. */
   scale?: number;
+  /** Which one it is, for a body drawn frame after frame (`./wildermon`): it turns and settles smoothly, and breathes and looks about on its own clock. */
+  id?: number;
+  /** Head down at the ground, at whatever it forages. */
+  graze?: boolean;
 }
 
 /**
@@ -2422,6 +2427,14 @@ export function drawCreature(ctx: CanvasRenderingContext2D, sx: number, sy: numb
   // Age is drawn rather than written: a yearling is two thirds the size of
   // its parents and an old one has put weight on.
   zoom *= pose.scale ?? 1;
+  // A kind that is a model now is drawn as one; the rest as they always were.
+  if (modelled(pose.species)) {
+    drawWildermon(ctx, sx, sy, zoom, pose.species as string, pose.colors, {
+      id: pose.id, facing: pose.facing, phase: pose.phase, moving: pose.moving, gait: pose.gait, fleece: pose.fleece, graze: pose.graze,
+    });
+    drawCreatureOverlay(ctx, sx, sy, zoom, pose, wildermonTop(pose.species as string));
+    return;
+  }
   const kept = standingSprite(pose);
   if (kept) ctx.drawImage(kept.canvas, sx - kept.ax * zoom, sy - kept.ay * zoom, kept.w * zoom, kept.h * zoom);
   else drawBody(ctx, sx, sy, zoom, pose);
@@ -2504,6 +2517,10 @@ const PORTRAIT_BOX = new Map<string, { x: number; y: number; w: number; h: numbe
  */
 export function drawCreaturePortrait(ctx: CanvasRenderingContext2D, w: number, h: number, species: string, colors: [string, string],
   facing = 1, ink?: string): void {
+  if (modelled(species)) {
+    drawWildermonPortrait(ctx, w, h, species, colors, facing, ink);
+    return;
+  }
   const pose: CreaturePose = { species, colors, facing, phase: 0, moving: false, gait: 0, health: 1, fleece: 1 };
   const key = `${species}:${colors.join(',')}:${facing}`;
   if (!PORTRAIT_BOX.has(key)) {
@@ -4324,13 +4341,15 @@ function drawLumeBody(ctx: CanvasRenderingContext2D, sx: number, sy: number, zoo
   ctx.restore();
 }
 
-function drawCreatureOverlay(ctx: CanvasRenderingContext2D, sx: number, sy: number, zoom: number, pose: CreaturePose): void {
+/** The health bar and the name over a body, over the top of it: `top` is how high that is over its feet at zoom one. */
+function drawCreatureOverlay(ctx: CanvasRenderingContext2D, sx: number, sy: number, zoom: number, pose: CreaturePose, top = 21): void {
+  const bar = sy - (top + 3) * zoom;
   if (pose.health < 1) {
     const w = 18 * zoom;
     ctx.fillStyle = 'rgba(0,0,0,0.6)';
-    ctx.fillRect(sx - w / 2, sy - 24 * zoom, w, 3 * zoom);
+    ctx.fillRect(sx - w / 2, bar, w, 3 * zoom);
     ctx.fillStyle = pose.health > 0.5 ? '#7ccf5a' : pose.health > 0.25 ? '#e3b657' : '#e0574d';
-    ctx.fillRect(sx - w / 2, sy - 24 * zoom, w * Math.max(0, pose.health), 3 * zoom);
+    ctx.fillRect(sx - w / 2, bar, w * Math.max(0, pose.health), 3 * zoom);
   }
   if (pose.label) {
     ctx.font = `${Math.max(9, 10 * zoom)}px "Segoe UI", system-ui, sans-serif`;
@@ -4338,9 +4357,9 @@ function drawCreatureOverlay(ctx: CanvasRenderingContext2D, sx: number, sy: numb
     ctx.textBaseline = 'bottom';
     ctx.lineWidth = 3;
     ctx.strokeStyle = 'rgba(0,0,0,0.7)';
-    ctx.strokeText(pose.label, sx, sy - 26 * zoom);
+    ctx.strokeText(pose.label, sx, bar - 2 * zoom);
     ctx.fillStyle = '#e3b657';
-    ctx.fillText(pose.label, sx, sy - 26 * zoom);
+    ctx.fillText(pose.label, sx, bar - 2 * zoom);
   }
 }
 

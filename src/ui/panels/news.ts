@@ -32,6 +32,7 @@ import { weaponCarry } from '../../render/figure';
 import { TRY_LEARN } from '../../game/learn';
 import { CLIMB_LEARN_FROM, MAX_STEP } from '../../game/player';
 import { ALL_GOALS } from '../../game/journal';
+import { SPECIES } from '../../game/creatures';
 import type { UIWindow } from '../windows';
 
 /**
@@ -624,6 +625,17 @@ export const NEWS: News[] = [
     lines: () => [
       `On an island, the Wildermon window lists the wildermon you have tamed and nobody else's. It had listed every tame one near you, so somebody new was shown their neighbours' before taming any. "${ALL_GOALS.find((g) => g.id === 'five')?.text}", the wildermon you can set to a post and your herd's best tier had counted the same way, and count only yours now.`,
     ],
+  },
+  {
+    n: 48,
+    day: '2026-09-27',
+    lines: () => {
+      const kinds = ['rabba', 'woola', 'noot', 'seavic', 'vola', 'dowse', 'cudda', 'bura', 'sappa', 'cobbe', 'quarra', 'embra', 'bogga', 'wadd', 'holla', 'middun', 'sedra', 'warda', 'quill', 'lume'];
+      return [
+        `${NumberWord(kinds.length)} wildermon are drawn as models, each animated standing, walking, running and foraging: ${listed(kinds.map((k) => SPECIES[k]?.name ?? k))}. The rest are drawn as they were until theirs are done.`,
+        'One drawn as a model is clicked anywhere on it, its head as well as its feet, and its name and health sit over the top of it.',
+      ];
+    },
   },
 ];
 
