@@ -149,16 +149,20 @@ begin
   v := rpc_take_class(w.world_id, v_fight);
   insert into said values ('FOUGHT|' || coalesce(v->>'took', 'nothing') || '|' || coalesce(v->>'why', 'no why'));
 
-  -- 3. What the Tree tab draws.
+  /*
+   * 3. What the Tree tab draws: the fighting trade's tree. Every craft trade is
+   * on perks now, and a trade on perks has no nodes to draw, so everything
+   * asked of a node is asked of the trade that has them.
+   */
   v := rpc_tree(w.world_id);
   insert into said select 'TKEYS|' || string_agg(k, ',' order by k) from jsonb_object_keys(v) k;
   insert into said values ('TRADES|' || jsonb_array_length(v->'trades'));
   insert into said values ('CHANNELS|' || jsonb_array_length(v->'channels'));
   insert into said select 'NODES|' || jsonb_array_length(t.value->'nodes')
-    from jsonb_array_elements(v->'trades') t limit 1;
+    from jsonb_array_elements(v->'trades') t where jsonb_typeof(t.value->'nodes') = 'array' limit 1;
   insert into said select 'NFIELDS|' || coalesce(string_agg(distinct miss, ' | '), 'all there')
     from jsonb_array_elements(v->'trades') t,
-         jsonb_array_elements(t.value->'nodes') n,
+         jsonb_array_elements(case when jsonb_typeof(t.value->'nodes') = 'array' then t.value->'nodes' else '[]'::jsonb end) n,
     lateral (select n.value->>'id' || ':' || f as miss
              from unnest(array['id','col','rank','name','note','channel','cost','mul','taken']) f
              where not (n.value ? f) or n.value->f = 'null'::jsonb) z;
@@ -169,11 +173,12 @@ begin
              where not (c.value ? f) or c.value->f = 'null'::jsonb) z;
   -- The points line at the head of the tree.
   insert into said select 'POINTS|' || (t.value->>'points') || '|' || (t.value->>'spent')
-    from jsonb_array_elements(v->'trades') t limit 1;
+    from jsonb_array_elements(v->'trades') t where jsonb_typeof(t.value->'nodes') = 'array' limit 1;
 
   -- 4. Buy a node, the way the button does, and see the tree move.
   select n.value->>'id' into v_node
-    from jsonb_array_elements(v->'trades') t, jsonb_array_elements(t.value->'nodes') n
+    from jsonb_array_elements(v->'trades') t,
+         jsonb_array_elements(case when jsonb_typeof(t.value->'nodes') = 'array' then t.value->'nodes' else '[]'::jsonb end) n
    where n.value->>'why' is null and not (n.value->>'taken')::boolean limit 1;
   if v_node is null then
     insert into said values ('NODE|nothing affordable, which is fair on a body with no points');
@@ -182,7 +187,8 @@ begin
     insert into said values ('NODE|' || coalesce(v->>'took', 'nothing') || '|' || coalesce(v->>'why', 'no why'));
     v := rpc_tree(w.world_id);
     insert into said select 'AFTER|' || count(*) filter (where (n.value->>'taken')::boolean)
-      from jsonb_array_elements(v->'trades') t, jsonb_array_elements(t.value->'nodes') n;
+      from jsonb_array_elements(v->'trades') t,
+           jsonb_array_elements(case when jsonb_typeof(t.value->'nodes') = 'array' then t.value->'nodes' else '[]'::jsonb end) n;
   end if;
 
   -- 5. And the rite the panel puts at the head of the tree.

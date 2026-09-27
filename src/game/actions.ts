@@ -18,7 +18,7 @@ import { IMPROVE_ACTIONS, improvable } from './improve';
 import { FARM_ACTIONS } from './farming';
 import { BUTCHER_ACTIONS } from './butcher';
 import { ARCHAEOLOGY_ACTIONS } from './archaeology';
-import { maybeGem } from './gems';
+import { CIRCLET, CIRCLET_SET, CIRCLET_STONES, circletSays, circletWithRoom, gemOf, maybeGem, stonesOf } from './gems';
 import { TREASURE_ACTIONS, maybeMap } from './treasure';
 import { LOCK_ACTIONS } from './locks';
 import { FIRST_AID_ACTIONS } from './firstaid';
@@ -707,6 +707,13 @@ export const KIT_MEND = 50;
 describeFrom('repair_kit', { mend: KIT_MEND });
 /** Whether a thing could take a seal: anything but the sealant itself, and nothing sealed already. */
 const sealable = (item: Item): boolean => item.id !== 'sealant' && item.mark?.seal === undefined;
+
+/** What somebody without an Artisan's Glaze is told. The island says the same. */
+export const GLAZE_PERK = 'That wants an Artisan who has learned to glaze.';
+/** What takes a glaze: a fired pot, bowl or jar, and an amphora. The island's `glazeable`. */
+export const GLAZEABLE: ReadonlySet<string> = new Set(['clay_pot', 'clay_bowl', 'clay_jar', 'amphora']);
+/** The ashes a glaze is made of, for one thing. */
+export const GLAZE_ASH = 1;
 
 /** A share of a bar or a nutrient as a whole percentage, as the island says it. */
 const wholePct = (x: number): string => `${Math.round(x * 100)}%`;
@@ -2065,7 +2072,9 @@ export const ACTIONS: ActionDef[] = [
       // A knack comes off something somebody made, so the examine line says so
       // for the same things the eating does.
       const skill = knackable(item.id) ? boonOf(g.seed, item.id) : null;
-      const favours = skill ? ` It favours ${(SKILL_DEFS.find((d) => d.id === skill)?.name ?? skill).toLowerCase()}.` : '';
+      const favours = (skill ? ` It favours ${(SKILL_DEFS.find((d) => d.id === skill)?.name ?? skill).toLowerCase()}.` : '')
+        // And what an Artisan's circlet has in it.
+        + (item.id === CIRCLET ? circletSays(item) : '');
       // What it is worth at the work now, which is rarely the number stamped on it.
       const worth = g.toolWorth(item);
       const at = itemDef(item.id).category === 'tool' && Math.abs(worth - item.ql) >= 0.05 ? ` It works as a ${worth.toFixed(1)} today.` : '';
@@ -2323,6 +2332,92 @@ export const ACTIONS: ActionDef[] = [
       g.events.emit('inventory');
       g.gainSkill('repair', 0.1);
       g.logMsg(`You work the sealant over the ${itemName(item).toLowerCase()}. It will not decay now.`, 'event');
+    },
+  },
+  {
+    /*
+     * A stone set in an Artisan's circlet, off the stone's own menu, by anybody
+     * with a file: on jewellery at `CIRCLET_SET`, surer for a perk on it (an
+     * Artisan's Sure Setting), and a stone that will not seat is taken out
+     * again whole. It goes into the first circlet carried that has a setting
+     * empty, by the order they were made, which is the island's order too.
+     */
+    id: 'set_in_circlet',
+    label: 'Set in the circlet',
+    verb: 'setting a stone',
+    skill: 'jewellery',
+    tool: 'file',
+    stamina: 0.03,
+    baseTime: 10,
+    difficulty: CIRCLET_SET,
+    applies: (t, g) => {
+      if (t.kind !== 'item') return false;
+      const item = g.inventory.get(t.uid);
+      return item?.id === 'gem' && !!gemOf(item) && circletWithRoom(g.inventory.items) !== undefined;
+    },
+    check: (t, g) => {
+      if (t.kind !== 'item') return null;
+      const item = g.inventory.get(t.uid);
+      if (!item) return 'It is gone.';
+      if (item.id !== 'gem' || !gemOf(item)) return 'Only a stone goes in a circlet.';
+      if (!circletWithRoom(g.inventory.items)) return `You have no circlet with a setting empty: each takes ${CIRCLET_STONES} stones.`;
+      if (!g.inventory.has('file')) return 'You need a file.';
+      return null;
+    },
+    perform: (t, g) => {
+      if (t.kind !== 'item') return;
+      const item = g.inventory.get(t.uid);
+      const room = circletWithRoom(g.inventory.items);
+      const circlet = room ? g.inventory.get(room.uid) : undefined;
+      const gem = item ? gemOf(item) : undefined;
+      if (!item || !circlet || !gem) return;
+      if (!g.sureCheck('set_in_circlet', 'jewellery', CIRCLET_SET, g.toolQl('file'), g.mindEase())) {
+        g.missed();
+        g.logMsg(`The ${gem.name.toLowerCase()} will not seat, and you take it out again whole.`, 'event');
+        return;
+      }
+      if (!g.inventory.remove(item.uid, 1)) return;
+      circlet.extra = [...stonesOf(circlet).map((s) => s.name), gem.name].join(', ');
+      g.events.emit('inventory');
+      g.logMsg(`You seat the ${gem.name.toLowerCase()} in the circlet and close the claws over it: `
+        + `${stonesOf(circlet).length} of its ${CIRCLET_STONES} settings are filled.`, 'event');
+    },
+  },
+  {
+    /*
+     * An Artisan's Glaze: ashes worked into a slip and brushed over a fired
+     * pot, bowl or jar, or an amphora, which never decays after, wherever it
+     * is left (`glaze`, nought). Only an Artisan who has learned it.
+     */
+    id: 'glaze_item',
+    label: 'Glaze it',
+    verb: 'glazing',
+    skill: 'pottery',
+    stamina: 0.02,
+    baseTime: 6,
+    applies: (t, g) => {
+      if (t.kind !== 'item') return false;
+      const item = g.inventory.get(t.uid);
+      return !!item && GLAZEABLE.has(item.id) && item.mark?.glaze === undefined;
+    },
+    check: (t, g) => {
+      if (t.kind !== 'item') return null;
+      if (g.perk('glaze_item', 0) <= 0) return GLAZE_PERK;
+      const item = g.inventory.get(t.uid);
+      if (!item) return 'It is gone.';
+      if (!GLAZEABLE.has(item.id)) return 'Only a fired pot, bowl or jar, or an amphora, takes a glaze.';
+      if (item.mark?.glaze !== undefined) return 'It is glazed already.';
+      if (g.inventory.count('ash') < GLAZE_ASH) return 'You need ashes to make a glaze of.';
+      return null;
+    },
+    perform: (t, g) => {
+      if (t.kind !== 'item') return;
+      const item = g.inventory.get(t.uid);
+      if (!item || !GLAZEABLE.has(item.id) || item.mark?.glaze !== undefined || g.perk('glaze_item', 0) <= 0) return;
+      if (!g.inventory.consume('ash', GLAZE_ASH)) return;
+      item.mark = { ...(item.mark ?? {}), glaze: 0 };
+      g.events.emit('inventory');
+      g.logMsg(`You brush an ash glaze over the ${itemName(item).toLowerCase()} and it takes. It will not decay now.`, 'event');
     },
   },
   {

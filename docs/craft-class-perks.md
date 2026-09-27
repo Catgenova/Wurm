@@ -369,24 +369,24 @@ Main skill repair; also restoration.
 
 Main skill jewellery; also pottery and papyrusmaking.
 
-2. **Sure Setting** — setting a stone fails half as often.
-3. **Keep the Stone** — a failed setting never loses the stone (now it splits).
-4. **Bright Stone** — a jewel you set gives +15% skill gain on its trade (now +10%).
-7. **Cut True** — a jewel you set gives up to +5% more, depending on its QL (now QL makes no difference).
-9. **Fine Castings** — rings and pendants you cast come up at +10% QL.
-10. **Gem Eye** — your mining turns up gems twice as often.
-12. **More Stones** — six new gems that favour farming, masonry, cooking, tailoring, taming and pottery.
-13. **Focus Cutter** — a focus you set wears 25% slower when you cast from it.
-14. **Keen Focus** — spells cast from a focus you set are 10% stronger.
-26. **Deep Pot** — dishes cooked in a pot or bowl you made give 1 more serving.
-27. **Sealed Jar** — fruit preserved in a jar you made keeps twice as long.
-28. **Glaze** — a new job; a glazed pot, bowl or jar never decays.
-34. **Good Read** — books you bind teach 25% more.
-35. **Sturdy Binding** — books you bind take half the damage when studied (now 2–5 each time).
-36. **Trade Book** — a new book written on one of your skills; studying it teaches that skill instead of mind logic.
-46. **Amphora** — a new fired jar that holds 20 of one food or drink, which keeps twice as long inside it.
-48. **Circlet** — a new gold band worn on the head, set with 3 stones that each give half their bonus.
-49. **Potter's Wheel** — a new build; anyone shaping clay at it works 30% faster.
+2. **Sure Setting** — setting a stone fails half as often. Built as `fail:` on the three settings (`set_ring`, `set_pendant`, `set_focus`) and on a stone set in a circlet (`set_in_circlet`).
+3. **Keep the Stone** — a failed setting never loses the stone (now it splits). Only a focus could lose one; built as the stone kept out of a failed focus whole (`stone:set_focus`), the silver still lost, and a failure that says so.
+4. **Bright Stone** — a jewel you set gives +15% skill gain on its trade (now +10%). Built as a maker's mark on the ring, pendant or circlet (`bright`), times what a stone gives (`jewel_bonus`) wherever it is worn (`jewelGain`, `jewel_gain`).
+7. **Cut True** — a jewel you set gives up to +5% more, depending on its QL (now QL makes no difference). Built as a mark (`cut`): up to that much more by the jewel's quality, all of it at QL 100 and half at 50.
+9. **Fine Castings** — rings and pendants you cast come up at +10% QL. Built as the anvil's `ql:` on what it makes (`ql:ring`, `ql:pendant`), as a Smith's Toolsmith is.
+10. **Gem Eye** — your mining turns up gems twice as often. Built as the Miner's is (`gem:mine`), and the browser reads it now, as the island always had: it had not, for either trade.
+12. **More Stones** — six new gems that favour farming, masonry, cooking, tailoring, taming and pottery. Built as six stones marked with the perk that lets them out (`gem_def.perk`): opal, peridot, amethyst, jasper, onyx and amber, drawn with the rest by weight for a miner who has it (`rollGem`, `roll_gem`) and set and worn like any other.
+13. **Focus Cutter** — a focus you set wears 25% slower when you cast from it. Built as a mark on the focus (`thrift`), on its wear whoever casts (`spell_wear`).
+14. **Keen Focus** — spells cast from a focus you set are 10% stronger. Built as a mark (`force`), on what a spell does and on how long a hold lasts, whoever casts (`spell_force`, `do_spell`).
+26. **Deep Pot** — dishes cooked in a pot or bowl you made give 1 more serving. Built as a mark stamped on the unfired pot or bowl (`serve`), carried through the kiln, and a serving more of any dish made with it as the tool, whoever cooks; a drink out of a still is not a dish (`isDish`, `is_dish`). The kiln had dropped every maker's mark; it carries them now, on both sides.
+27. **Sealed Jar** — fruit preserved in a jar you made keeps twice as long. Built as a mark on the unfired jar (`keeps`), carried through the kiln, on the rot of whatever is put up with it as the tool.
+28. **Glaze** — a new job; a glazed pot, bowl or jar never decays. Built as **Glaze it**, on a fired pot, bowl or jar or an amphora, for one lot of ashes (`glaze_item`): a new mark family, `glaze`, nought on its decay on the ground, said on its own and not carried from a part, as a seal is.
+34. **Good Read** — books you bind teach 25% more. Built as a mark on a book or a trade book (`teach`), on every go of study in it, whoever reads.
+35. **Sturdy Binding** — books you bind take half the damage when studied (now 2–5 each time). Built as a mark (`sturdy`) on the wear a go of study does; the island had the wear, the lectern's worth and its reach written out by hand, and reads the browser's now (`study_wear`, `lectern_gain`, `lectern_reach`), where its lectern had reached a little further.
+36. **Trade Book** — a new book written on one of your skills; studying it teaches that skill instead of mind logic. Built as a recipe for each craft trade's main skill, on papyrusmaking (six papyrus, two leather and two ink, with a needle), refused below 50 in the trade; the book's trade is its label, and studying it raises that trade as much as a plain book raises mind logic.
+46. **Amphora** — a new fired jar that holds 20 of one food or drink, which keeps twice as long inside it. Built as an unfired amphora shaped on pottery and fired in a kiln into a bag for one kind of food or drink (`oneKind`, `one_kind`), which keeps half the weather off what is in it set down (`shelter`). On an island nothing in a bag on the ground had rotted at all; it rots at the bag's share now, as it always has offline, and a thing set down is no longer charged at its first round for the time it spent in a pack.
+48. **Circlet** — a new gold band worn on the head, set with 3 stones that each give half their bonus. Built as a recipe on jewellery (two gold lumps, with a file), worn in the head slot in place of a helm, and **Set in the circlet** on a stone, which anybody may do: on jewellery, a stone that will not seat taken out again whole. Its stones are its label, drawn on it one by one.
+49. **Potter's Wheel** — a new build; anyone shaping clay at it works 30% faster. Built as a piece (twelve planks, two shafts, a stone slab and twelve nails) with a pace on pottery (`pace`, `piece_pace`): a go at pottery within 2.4 tiles of one takes 0.7 of the time, after the floor, whoever built it.
 
 **Tiers** (swept): 50 — Sure Setting, Keep the Stone, Deep Pot · 60 — Cut True, Fine Castings, Gem Eye ·
 70 — Focus Cutter, Sealed Jar, Sturdy Binding · 80 — Bright Stone, Keen Focus, Good Read ·

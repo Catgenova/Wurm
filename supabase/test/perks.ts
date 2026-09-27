@@ -486,7 +486,7 @@ check('nobody keeps a node of the Terraformer\'s old tree', say('OLDNODES') === 
  * a skill for a slope. A typo there is a perk that reads nothing.
  */
 const JOBS = new Set(['time', 'ql', 'rare', 'map', 'fail', 'keep', 'more', 'gem', 'find', 'cap', 'into', 'spare', 'need', 'fewer', 'grown',
-  'grow', 'rotate', 'bumper', 'fodder', 'tool', 'passes', 'empty', 'mend', 'hook', 'haul', 'cost', 'harm', 'age', 'tier']);
+  'grow', 'rotate', 'bumper', 'fodder', 'tool', 'passes', 'empty', 'mend', 'hook', 'haul', 'cost', 'harm', 'age', 'tier', 'stone']);
 /*
  * And a kind of work, where the rule asks what is being worked rather than
  * which job: a wall or floor of stone or of timber, a bridge of each kind.
@@ -509,6 +509,7 @@ const OTHERS = new Set([
   'dress_others', 'herb_tea', 'salve', 'tincture',
   'reach:fish', 'reach:drag_net', 'bait:pull', 'bait:food', 'smoke_fish', 'fish_journal', 'fish_pond',
   'worn:armour', 'worn:shield', 'worn:weapon', 'rolls:bauble', 'floor:improve', 'repair_kit', 'sealant',
+  'more_stones', 'amphora', 'potters_wheel', 'glaze_item', 'trade_book', 'circlet',
   ...STRIDE_KEYS,
 ]);
 const unnamed = PERKS.flatMap((p) => Object.keys(p.fx).filter((key) => {

@@ -1,6 +1,6 @@
 import type { ActionDef, Target } from './actions';
 import type { Game } from './game';
-import { JEWEL_PIECES } from './gems';
+import { CIRCLET, JEWEL_PIECES } from './gems';
 import { describeFrom, itemDef, markOf, rarityOf, type Item } from './items';
 import { matOf } from './materials';
 import { HARD_HANDS } from './meditation';
@@ -198,6 +198,8 @@ export function slotOf(id: string): Slot | null {
   if (isShield(id)) return 'offhand';
   if (id === 'toolbelt') return 'belt';
   if (JEWEL_PIECES.includes(id)) return 'jewel';
+  // An Artisan's circlet, in place of a helm.
+  if (id === CIRCLET) return 'head';
   return null;
 }
 

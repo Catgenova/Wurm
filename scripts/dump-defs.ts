@@ -93,7 +93,10 @@ import {
   MAP_BANDS, MAP_KILL_CAP, MAP_KILL_SCALE, MAP_ODDS, MAP_RANGE, MAP_SNIPPET, TREASURE_TIERS,
   UNEARTH_REACH,
 } from '../src/game/treasure';
-import { GEMS, GEM_ODDS, JEWEL_BONUS, JEWEL_PIECES } from '../src/game/gems';
+import { CIRCLET_SET, CIRCLET_SHARE, CIRCLET_STONES, GEMS, GEM_ODDS, JEWEL_BONUS, JEWEL_PIECES } from '../src/game/gems';
+import { LECTERN_GAIN, LECTERN_REACH, STUDY_WEAR, STUDY_WEAR_SPREAD } from '../src/game/archaeology';
+import { GLAZE_ASH, GLAZEABLE } from '../src/game/actions';
+import { TRADE_BOOK_AT } from '../src/game/recipes';
 import { TRAPS } from '../src/game/traps';
 import { DEFAULT_LOOK, LOOK_TABLES } from '../src/game/look';
 import { ACTION_FLOOR, ACTION_PACE, COTTON_SECONDS, COTTON_WEIGHT, MINING_SECONDS, MINING_WEIGHT, WORKER_WEIGHT, WORLD_PACE } from '../src/game/pace';
@@ -317,6 +320,12 @@ out.push(`alter table item_def add column if not exists larder boolean not null 
 out.push(`alter table item_def add column if not exists knack real;`);
 /* What a cup of it puts back of your stamina: a Naturalist's herb tea. */
 out.push(`alter table item_def add column if not exists stamina real;`);
+/* How much of the weather a bag keeps off what is in it, set down, and a bag
+ * that holds one kind of food or drink and nothing else (an Artisan's
+ * amphora). The first was the browser's alone, so on an island nothing in a
+ * bag on the ground rotted at all. */
+out.push(`alter table item_def add column if not exists shelter real;`);
+out.push(`alter table item_def add column if not exists one_kind boolean not null default false;`);
 /* Ground with anything living in it, and the damp ground that is full of them. */
 out.push(`alter table tile_def add column if not exists wormy boolean not null default false;`);
 out.push(`alter table tile_def add column if not exists rich_worms boolean not null default false;`);
@@ -345,6 +354,10 @@ out.push(`alter table furniture_def add column if not exists hive real;`);
 /* And a Fisher's pond, which stocks itself up to this many fish. */
 out.push(`alter table furniture_def add column if not exists pond real;`);
 out.push(`alter table furniture_def add column if not exists trash real;`);
+/* A go at one trade near it takes this share of the time, within this reach (an Artisan's potter's wheel). */
+out.push(`alter table furniture_def add column if not exists pace_skill text;`);
+out.push(`alter table furniture_def add column if not exists pace real;`);
+out.push(`alter table furniture_def add column if not exists pace_reach real;`);
 /* A counter that sells while you are away, and a box the post uses. */
 out.push(`alter table furniture_def add column if not exists stall boolean not null default false;`);
 out.push(`alter table furniture_def add column if not exists post boolean not null default false;`);
@@ -370,6 +383,8 @@ out.push(`create table if not exists map_band (
 /* The stones the rock gives up, in the order they are drawn, and the pieces they are set in. */
 out.push(`create table if not exists gem_def (id text primary key, name text not null, skill text not null, weight real not null, flavour text not null, ord int not null);`);
 out.push(`create table if not exists jewel_def (id text primary key);`);
+/* The perk a miner has to hold for the rock to give a stone up to them at all (an Artisan's More Stones). */
+out.push(`alter table gem_def add column if not exists perk text;`);
 /* What you set and walk away from, and what it will hold. */
 out.push(`create table if not exists trap_def (
   id text primary key, name text not null, difficulty real not null, holds real not null,
@@ -865,6 +880,7 @@ out.push(emptied(['item_def', 'tile_def', 'skill_def', 'material_def', 'rarity_d
   'slab_def', 'vessel_def', 'liquid_def', 'relic_def', 'trap_def', 'treasure_def', 'map_band',
   'gem_def', 'jewel_def']));
 GEMS.forEach((g, i) => out.push(`insert into gem_def values (${q(g.id)}, ${q(g.name)}, ${q(g.skill)}, ${q(g.weight)}, ${q(g.flavour)}, ${q(i)});`));
+for (const g of GEMS) if (g.perk) out.push(`update gem_def set perk = ${q(g.perk)} where id = ${q(g.id)};`);
 for (const id of JEWEL_PIECES) out.push(`insert into jewel_def values (${q(id)});`);
 out.push('');
 
@@ -1068,6 +1084,8 @@ for (const [id, d] of Object.entries(ITEM_DEFS)) {
   if (d.stamina !== undefined) out.push(`update item_def set stamina = ${q(d.stamina)} where id = ${q(id)};`);
   if (d.description !== undefined) out.push(`update item_def set description = ${q(d.description)} where id = ${q(id)};`);
   if (d.holds !== undefined) out.push(`update item_def set holds = ${q(d.holds)} where id = ${q(id)};`);
+  if (d.shelter !== undefined) out.push(`update item_def set shelter = ${q(d.shelter)} where id = ${q(id)};`);
+  if (d.oneKind) out.push(`update item_def set one_kind = true where id = ${q(id)};`);
   for (const n of NUTRIENTS) {
     const v = d.feeds?.[n];
     if (v) out.push(`insert into item_feeds values (${q(id)}, ${q(n)}, ${q(v)});`);
@@ -1078,6 +1096,8 @@ out.push(`create or replace function boon_seconds() returns double precision lan
 out.push(`create or replace function boon_bonus() returns double precision language sql immutable as $fn$ select ${q(BOON_BONUS)}::double precision $fn$;`);
 /* A Naturalist's tincture: the trades it lifts, by how much, and for how long. */
 out.push(`create or replace function tincture_skills() returns text[] language sql immutable as $fn$ select array[${TINCTURE_SKILLS.map(q).join(', ')}]::text[] $fn$;`);
+/* What takes an Artisan's glaze. */
+out.push(`create or replace function glazeable(p_def text) returns boolean language sql immutable as $fn$ select p_def = any(array[${[...GLAZEABLE].map(q).join(', ')}]::text[]) $fn$;`);
 out.push(`create or replace function tincture_bonus() returns double precision language sql immutable as $fn$ select ${q(TINCTURE_BONUS)}::double precision $fn$;`);
 out.push(`create or replace function tincture_seconds() returns double precision language sql immutable as $fn$ select ${q(TINCTURE_SECONDS)}::double precision $fn$;`);
 for (const t of TITLES) out.push(`insert into title_def values (${q(t.id)}, ${q(t.skill)}, ${q(t.at)}, ${q(t.name)});`);
@@ -1284,6 +1304,10 @@ for (const [fn, v] of [
      a restoring that fails does to a piece and what its damage takes off what it restores to, and what a repair kit takes off. */
   ['post_life_min', POST_LIFE_MIN], ['post_life_max', POST_LIFE_MAX], ['improve_floor', IMPROVE_FLOOR],
   ['restore_harm', RESTORE_HARM], ['restore_harm_spread', RESTORE_HARM_SPREAD], ['restore_age', RESTORE_AGE], ['kit_mend', KIT_MEND],
+  /* An Artisan's: the skill a trade book is written at, the ashes a glaze takes; and what a lectern is worth, how near it has
+     to be, and what a go of study does to the pages, which the island had written out by hand. */
+  ['trade_book_at', TRADE_BOOK_AT], ['glaze_ash', GLAZE_ASH],
+  ['lectern_gain', LECTERN_GAIN], ['lectern_reach', LECTERN_REACH], ['study_wear', STUDY_WEAR], ['study_wear_spread', STUDY_WEAR_SPREAD],
   /* What a lump costs in ore, and what a lump of the rare six is worth against one. */
   ['ore_per_lump', ORE_PER_LUMP], ['rare_lump_factor', RARE_LUMP_FACTOR],
   ['tick_seconds', TICK_SECONDS], ['idle_logout', IDLE_LOGOUT], ['event_keep', EVENT_KEEP],
@@ -1476,6 +1500,8 @@ for (const [fn, v] of [
   ['map_range', MAP_RANGE], ['unearth_reach', UNEARTH_REACH], ['map_snippet', MAP_SNIPPET],
   /* A stone in the rock, and what a worn one is worth. */
   ['gem_odds', GEM_ODDS], ['jewel_bonus', JEWEL_BONUS],
+  /* And an Artisan's circlet: how many stones it takes, what each is worth against a ring's, and how hard one is to seat. */
+  ['circlet_stones', CIRCLET_STONES], ['circlet_share', CIRCLET_SHARE], ['circlet_set', CIRCLET_SET],
 ] as Array<[string, number]>) {
   out.push(`create or replace function ${fn}() returns double precision language sql immutable as $fn$ select ${q(v)}::double precision $fn$;`);
 }
@@ -1572,6 +1598,10 @@ for (const f of FURNITURE as unknown as A[]) {
   if (f.bed !== undefined) out.push(`update furniture_def set bed = ${q(f.bed)} where id = ${q(f.id)};`);
   if (f.crates !== undefined) out.push(`update furniture_def set crates = ${q(f.crates)} where id = ${q(f.id)};`);
   if (f.cart) out.push(`update furniture_def set cart = true where id = ${q(f.id)};`);
+  const pace = f.pace as { skill: string; by: number; reach: number } | undefined;
+  if (pace) {
+    out.push(`update furniture_def set pace_skill = ${q(pace.skill)}, pace = ${q(pace.by)}, pace_reach = ${q(pace.reach)} where id = ${q(f.id)};`);
+  }
   const v = f.vehicle as A | undefined;
   if (v) out.push(`insert into vehicle_def values (${q(f.id)}, ${q(v.yokes)}, ${q(v.needs)}, ${q(v.seat)});`);
   const b = f.boat as A | undefined;

@@ -93,6 +93,12 @@ export interface FurnitureDef {
   bed?: number;
   /** A perk that has to be held to build it at all, by its key (a Tailor's Tent). */
   perk?: string;
+  /**
+   * A go at one trade within `reach` tiles of it takes `by` the time, after
+   * the floor, whoever built it and whoever is working (an Artisan's potter's
+   * wheel). `Game.pieceSpeed`, and `piece_pace` on the island.
+   */
+  pace?: { skill: string; by: number; reach: number };
   /** A stone table to kneel at. Praying at one banks favour. */
   altar?: boolean;
   /**
@@ -289,6 +295,10 @@ export const FURNITURE: FurnitureDef[] = [
   piece('hive', 'Hive', 2, 1, [['plank', 24], ['shaft', 2], ['cloth', 4], ['nail', 24]], 18, 13, 'You nail up a hive of shallow boxes and turn the mouth of it south. Now it wants a swarm.', undefined, { hive: 40 }),
   // A Fisher's pond: dug and puddled with clay, a ring of stones round it and reeds at the edge. It stocks itself.
   piece('fish_pond', 'Fish pond', 2, 2, [['clay', 20], ['rock_shards', 12], ['reed', 8]], 20, 20, 'You dig the pond out, puddle the floor of it with clay, set stones round the rim and plant the reeds at its edge.', undefined, { pond: 10, skill: 'fishing', tool: 'shovel', perk: 'fish_pond', deed: true }),
+  // An Artisan's potter's wheel: a stone flywheel on a spindle in a plank frame, and anybody's pottery near it goes quicker.
+  piece('potters_wheel', 'Potter\'s wheel', 1, 1, [['plank', 12], ['shaft', 2], ['stone_slab', 1], ['nail', 12]], 18, 12,
+    'You true a stone wheel on a spindle over a kick wheel, and set a seat behind it.', undefined,
+    { skill: 'pottery', perk: 'potters_wheel', pace: { skill: 'pottery', by: 0.7, reach: 2.4 } }),
   // The two the cloth trade is built on. Stand at one to spin or weave.
   piece('spindle', 'Spindle', 1, 1, [['plank', 8], ['shaft', 3], ['nail', 16]], 14, 9, 'You turn a spindle and set it on its stand.'),
   piece('loom', 'Loom', 2, 2, [['plank', 32], ['timber', 16], ['shaft', 6], ['nail', 48]], 22, 18, 'You build a loom and thread the warp.'),
@@ -708,6 +718,10 @@ export const isHive = (f: { kind: string }): boolean => (furnitureDef(f.kind).hi
 export const POND_EVERY = 3600;
 export const isPond = (f: { kind: string }): boolean => (furnitureDef(f.kind).pond ?? 0) > 0;
 describeFrom('fish_pond', { every: POND_EVERY });
+{
+  const wheel = FURNITURE.find((f) => f.id === 'potters_wheel')?.pace;
+  if (wheel) describeFrom('potters_wheel', { reach: wheel.reach, less: 1 - wheel.by });
+}
 
 /**
  * What a raw material bin says to anything a bench has touched. The island

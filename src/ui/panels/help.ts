@@ -1,7 +1,8 @@
 import {
-  CHIP_CHANCE, CLEARED_TO, FRUIT_MATURE, FRUIT_OLD, KIT_MEND, MINE_COLLAPSE, MINE_DEPTH, PROSPECT_REACH, PROSPECT_STEP, REPAIR_FLOOR,
-  repairGo, RESIN_TREE,
+  CHIP_CHANCE, CLEARED_TO, FRUIT_MATURE, FRUIT_OLD, GLAZE_ASH, KIT_MEND, MINE_COLLAPSE, MINE_DEPTH, PROSPECT_REACH, PROSPECT_STEP,
+  REPAIR_FLOOR, repairGo, RESIN_TREE,
 } from '../../game/actions';
+import { CIRCLET_SHARE, CIRCLET_STONES, GEM_ODDS, GEMS, JEWEL_BONUS, tradeName } from '../../game/gems';
 import { ANVIL_SUBTILES } from '../../game/anvil';
 import { ARCHAEOLOGY_ACTION_BY_ID, LECTERN_GAIN, RELICS } from '../../game/archaeology';
 import { BELT_MAX, QL_PER_LOOP } from '../../game/belt';
@@ -60,7 +61,7 @@ import { KEPT_BEST, NUTRIENT_HOURS, NUTRIENT_NAMES, NUTRIENTS, TABLE_BEST } from
 import { OVEN_CAPACITY } from '../../game/placeables';
 import { BASE_SPEED, CARRY_CRAWL, CLIMB_LEARN_FROM, CLIMB_PER_LEVEL, MAX_STAND, MAX_STEP } from '../../game/player';
 import { POST_LIFE_MAX, POST_LIFE_MIN, postRadius } from '../../game/posts';
-import { CRAFT_REACH, RECIPE_BY_ID, RECIPES } from '../../game/recipes';
+import { CRAFT_REACH, RECIPE_BY_ID, RECIPES, TRADE_BOOK_AT, TRADE_BOOK_SKILLS } from '../../game/recipes';
 import { MIN_GAIN, SKILL_BY_ID, skillGain } from '../../game/skills';
 import { SMELTER_H, SMELTER_W } from '../../game/smelter';
 import { KNACK_BONUS, KNACK_CAP, KNACK_HOME, KNACK_ODDS, TITLE_STEPS, titlesFor } from '../../game/titles';
@@ -589,7 +590,7 @@ export function helpText(): string {
     harder for a fixed number of seconds, paid out of the same <b>favour</b> a prayer is paid from, and
     then a rest before you may ask again. The card gives each of those figures. Some trade one channel away
     for another &mdash; ${riteDef('redhour')?.name} is <i>${riteSays('redhour')}</i> &mdash; so read both halves before you call one.
-    Only the <b>fighting</b> trades have a rite; a craft trade has its nodes or its perks and none. It sits at
+    Only the <b>fighting</b> trades have a rite; a craft trade has its perks and none. It sits at
     the head of its trade's tree, with the reason underneath when you cannot call it.</p>
     <p>Every card has <b>What it offers</b>, which lays the trade open before you take it up: its
     ${numberWord(PERK_TIER_AT.length)} tiers of perks with the skill each opens at and what you have, or its rite and its
@@ -1554,6 +1555,9 @@ export function helpText(): string {
     <p>Right-click a book and <b>Study</b> it. Each go takes ${spanWords(goSeconds(STUDY_TIME))}, raises <b>mind logic</b>, which is
     what decides how many jobs you can keep in your head at once, and wears the pages a little. Held in
     one hand it is hard going; at a <b>lectern</b> you get ${times(LECTERN_GAIN)} as much out of the same go.</p>
+    <p>An Artisan who has learned it writes a <b>trade book</b> (${bill(`write_trade_book_${TRADE_BOOK_SKILLS[0]}`)}, with a needle) on any
+    craft trade they have ${TRADE_BOOK_AT} of, and studying it raises that trade where a plain book raises mind logic, as much a go.
+    Anybody may read one. A book an Artisan binds may teach more from a go or wear less for their perks, and its examine line says by how much.</p>
     <h3>Titles and knacks</h3>
     <p>A long climb leaves titles and knacks behind it, and neither is asked for. Every trade hands out a
     <b>title</b> at ${listed(TITLE_STEPS.map(String))} &mdash; ${titlesFor('carpentry').map((t) => t.name).join(', ')}
@@ -1652,6 +1656,20 @@ export function helpText(): string {
     included, pack the green ware in, and light it: each piece needs its own time at heat, and a
     well-built kiln works faster and keeps more of the potter's quality. Take the fired ware out and the
     bowl will cook, the pot makes pottage, the jar puts up preserves, and the brick will build.</p>
+    <p>An Artisan who has learned them shapes an <b>amphora</b> (${bill('make_amphora')}), fired like any pot, which holds
+    ${itemDef('amphora').holds} of one food or drink at a time, and what is in it rots at ${share(itemDef('amphora').shelter ?? 1)} the rate if it is
+    left lying about. They build a <b>potter's wheel</b> (${bill('make_potters_wheel')}), and anybody shaping clay within
+    ${furnitureDef('potters_wheel').pace?.reach} tiles of one takes ${percent(1 - (furnitureDef('potters_wheel').pace?.by ?? 1))} less time a go.
+    And they <b>glaze</b> a fired pot, bowl or jar, or an amphora, with ${numberWord(GLAZE_ASH)} lot of ashes, and it never decays after.</p>
+    <h3>Stones and jewels</h3>
+    <p>One go in ${numberWord(Math.round(1 / GEM_ODDS))} at the rock turns up a <b>gem</b>, and each favours one trade:
+    ${listed(GEMS.filter((g) => !g.perk).map((g) => `${article(g.name)} ${g.name.toLowerCase()} ${tradeName(g.skill)}`))}. A jeweller sets one with a
+    file, on <b>jewellery</b>, in a <b>ring</b> or a <b>pendant</b>, and worn in the jewel slot it gives ${percent(JEWEL_BONUS)} more skill from every
+    go at its trade; or in silver as a <b>focus</b>, which a spell is cast from. The crafting window lists each of them under Jewellery.</p>
+    <p>An Artisan who has learned it draws a gold <b>circlet</b> (${bill('make_circlet')}, with a file), worn on the head in place of a helm.
+    Anybody sets its ${numberWord(CIRCLET_STONES)} stones, one at a time, with <b>Set in the circlet</b> on the stone, and each gives
+    ${share(CIRCLET_SHARE)} what it would in a ring. The rock gives an Artisan with More Stones ${numberWord(GEMS.filter((g) => g.perk).length)} more:
+    ${listed(GEMS.filter((g) => g.perk).map((g) => `${article(g.name)} ${g.name.toLowerCase()} ${tradeName(g.skill)}`))}.</p>
     <h3>Digging up the past</h3>
     <p>People lived here before you did and left their things in the ground. Right-click any soil or
     sand and choose <b>Investigate</b>: with a <b>trowel</b> and the <b>Archaeology</b> skill you go

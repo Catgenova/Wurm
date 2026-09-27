@@ -2524,6 +2524,24 @@ const MODELS: Record<string, Model> = {
   },
 
   /*
+   * An Artisan's potter's wheel: a stone kick wheel on the floor, the spindle
+   * up out of it through a plank frame to the wheel head, a lump of clay on
+   * the head half drawn up, and the seat behind it the potter kicks from.
+   */
+  potters_wheel: ({ sc, wood }) => {
+    sc.shadows = [[-4, 4, -4.6, 4]];
+    const CLAY = paintOf(hex('#b8876a'));
+    for (const [x, y] of [[-3.4, -1.4], [3.4, -1.4], [-3.4, 3.4], [3.4, 3.4]]) sc.box(x - 0.4, x + 0.4, y - 0.4, y + 0.4, 0, 5.6, wood);
+    sc.lathe(0, 1, [[0.2, 2.7], [1.3, 2.7]], STONE, 16);
+    sc.rod([0, 1, 1.3], [0, 1, 6.2], 0.28, IRON);
+    for (const x of [-3.4, 3.4]) sc.box(x - 0.4, x + 0.4, -1.4, 3.4, 5.6, 6.1, wood, { top: grain(sc, wood, 1) });
+    sc.lathe(0, 1, [[6.2, 2.2], [6.7, 2.2]], wood, 16);
+    sc.lathe(0, 1, [[6.7, 1.1], [7.6, 1.25], [8.4, 0.95], [8.8, 0.55]], CLAY, 12);
+    for (const x of [-1.8, 1.8]) sc.box(x - 0.3, x + 0.3, -4.4, -3.4, 0, 3.4, wood);
+    sc.box(-2.3, 2.3, -4.6, -3.2, 3.4, 3.9, wood, { top: grain(sc, wood, 2) });
+  },
+
+  /*
    * A Fisher's pond: a round of dressed stones set in the ground with the
    * water near their top, pads floating on it and a fish or two turning
    * under it, and a clump of reeds at the back of the rim, a bulrush on the

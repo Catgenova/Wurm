@@ -2,7 +2,8 @@ import { tryGain } from './learn';
 import { TileType } from '../world/tiles';
 import type { ActionDef } from './actions';
 import type { Game } from './game';
-import { itemName, RARITY_ODDS, RARITY_WORD, rollRarity, type Item } from './items';
+import { itemName, markOf, RARITY_ODDS, RARITY_WORD, rollRarity, type Item } from './items';
+import { SKILL_DEFS } from './skills';
 import {
   BAUBLE_SHARE, BAUBLE_TIER_BY_ID, BAUBLE_TIERS, findKind, readBauble, REGRET, rollBauble, rollTier, TARNISHED, type BaubleTier, type BaubleTierDef,
 } from './baubles';
@@ -183,8 +184,21 @@ function restoreBauble(g: Game, item: Item): void {
   'event');
 }
 
-/** What studying at a lectern is worth over holding the book in one hand. */
+/** What studying at a lectern is worth over holding the book in one hand, and how near it has to be. */
 export const LECTERN_GAIN = 2;
+export const LECTERN_REACH = 2.4;
+/** The damage a go of study does to the pages: this, and up to `STUDY_WEAR_SPREAD` more. */
+export const STUDY_WEAR = 2;
+export const STUDY_WEAR_SPREAD = 3;
+
+/** The books there are to study. */
+export const BOOKS: ReadonlySet<string> = new Set(['book', 'trade_book']);
+/**
+ * What a book teaches: a plain one mind logic, and an Artisan's trade book the
+ * trade on its spine, which is its label. The island's `book_teaches`.
+ */
+export const bookTeaches = (item: { id: string; extra?: string }): string =>
+  (item.id === 'trade_book' && SKILL_DEFS.find((d) => d.name.toLowerCase() === item.extra?.toLowerCase())?.id) || 'mind_logic';
 
 export const ARCHAEOLOGY_ACTIONS: ActionDef[] = [
   {
@@ -328,22 +342,23 @@ export const ARCHAEOLOGY_ACTIONS: ActionDef[] = [
     verb: 'studying',
     stamina: 0.02,
     baseTime: 30,
-    applies: (t, g) => t.kind === 'item' && g.inventory.get(t.uid)?.id === 'book',
+    applies: (t, g) => t.kind === 'item' && BOOKS.has(g.inventory.get(t.uid)?.id ?? ''),
     check: (t, g) => {
       if (t.kind !== 'item') return null;
       const item = g.inventory.get(t.uid);
-      if (item?.id !== 'book') return 'That is not a book.';
+      if (!item || !BOOKS.has(item.id)) return 'That is not a book.';
       if (item.dmg >= 90) return 'The pages are too far gone to read. Repair it first.';
       return null;
     },
     perform: (t, g) => {
       if (t.kind !== 'item') return;
       const item = g.inventory.get(t.uid);
-      if (!item || item.id !== 'book') return;
+      if (!item || !BOOKS.has(item.id)) return;
       // A lectern holds the pages open at the right angle, and you get `LECTERN_GAIN` times as much out of the go.
-      const lectern = g.furnitureNear('lectern') !== undefined;
-      const gain = g.gainSkill('mind_logic', (0.5 + item.ql / 90) * (lectern ? LECTERN_GAIN : 1));
-      g.damageItem(item, 2 + g.rand() * 3);
+      const lectern = g.furnitureNear('lectern', LECTERN_REACH) !== undefined;
+      // More out of a book an Artisan with Good Read bound, and less wear on one bound with Sturdy Binding.
+      const gain = g.gainSkill(bookTeaches(item), (0.5 + item.ql / 90) * (lectern ? LECTERN_GAIN : 1) * markOf(item, 'teach'));
+      g.damageItem(item, (STUDY_WEAR + g.rand() * STUDY_WEAR_SPREAD) * markOf(item, 'sturdy'));
       const where = lectern ? ' The lectern holds it open at the right angle and you make good use of the hour.' : ' Held in one hand, it is hard going. A lectern would be better.';
       g.logMsg(`You work through the ${itemName(item).toLowerCase()}.${where}${gain > 0.0005 ? '' : ' There is nothing left in it you do not already know.'}`, 'event');
     },

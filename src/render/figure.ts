@@ -84,7 +84,9 @@ type BodyMat = 'skin' | 'lip' | 'hair' | 'brow' | 'edge' | 'eye' | 'white' | 'gl
  * own metal, wood, leather and dye.
  */
 export type GearMat = 'metal' | 'metalDark' | 'metalLit' | 'mail' | 'scale' | 'scaleDark' | 'leather' | 'leatherDark' | 'leatherLit' | 'lace'
-  | 'cloth' | 'clothDark' | 'lining' | 'wood' | 'woodDark' | 'grip' | 'blade' | 'fitting' | 'gem' | 'string' | 'fletch' | 'rivet';
+  | 'cloth' | 'clothDark' | 'lining' | 'wood' | 'woodDark' | 'grip' | 'blade' | 'fitting' | 'gem' | 'string' | 'fletch' | 'rivet'
+  // A circlet's three settings, each its stone or, while it is empty, its gold.
+  | 'stone1' | 'stone2' | 'stone3';
 export type Mat = BodyMat | GearMat;
 /**
  * Worked into a facet's surface, in its own shade, where it is drawn big
@@ -2321,7 +2323,7 @@ export const GEAR_BASE: Record<GearMat, RGB> = {
   scale: [104, 138, 124], scaleDark: [66, 92, 86], leather: [158, 112, 92], leatherDark: [120, 90, 80], leatherLit: [198, 152, 126], lace: [210, 190, 152],
   cloth: [194, 178, 142], clothDark: [156, 140, 108], lining: [210, 196, 164], wood: [176, 146, 114], woodDark: [124, 100, 80],
   grip: [100, 78, 62], blade: [220, 224, 228], fitting: [200, 168, 96], gem: [124, 184, 204], string: [228, 216, 192],
-  fletch: [228, 220, 202], rivet: [200, 202, 208],
+  fletch: [228, 220, 202], rivet: [200, 202, 208], stone1: [200, 168, 96], stone2: [200, 168, 96], stone3: [200, 168, 96],
 };
 
 function paletteOf(p: FigurePose, look: Look): Palette {
@@ -2528,6 +2530,7 @@ const WOOD_GEAR: Record<string, RGB> = {
 /** The stones a jewel is set with. */
 const GEM_TONE: Record<string, RGB> = {
   diamond: [226, 240, 248], ruby: [226, 98, 120], sapphire: [108, 148, 228], emerald: [98, 192, 146], garnet: [168, 64, 82], topaz: [242, 198, 102],
+  opal: [236, 222, 238], peridot: [176, 208, 96], amethyst: [168, 120, 208], jasper: [182, 92, 66], onyx: [58, 58, 66], amber: [232, 164, 64],
 };
 /** Dragon scale, off one kind of beast and one colour: a jade gone grey at the edges. */
 const DRAGON: RGB = [98, 146, 128];
@@ -2612,6 +2615,9 @@ function gearPalette(base: Palette, p: GearPiece, step = 0): Palette {
     gem: GEM_TONE[mat] ?? GEAR_BASE.gem,
     grip: GEAR_BASE.grip, lace: GEAR_BASE.lace, string: GEAR_BASE.string, fletch: GEAR_BASE.fletch,
   };
+  // A circlet's stones, one after another as its label has them, and a setting with none in it its gold.
+  const stones = mat.split(',').map((s) => GEM_TONE[s.trim()]);
+  [pal.stone1, pal.stone2, pal.stone3] = [stones[0] ?? pal.fitting, stones[1] ?? pal.fitting, stones[2] ?? pal.fitting];
   gearPals.set(key, pal);
   if (gearPals.size > 400) gearPals.delete(gearPals.keys().next().value as string);
   return pal;
@@ -3521,6 +3527,34 @@ const MODELS: Record<string, (b: Build, fit: number) => GearModel> = {
         },
       ],
       hides: ['belt'],
+    };
+  },
+
+  /*
+   * An Artisan's circlet, in the head's place for a helm: a thin gold band
+   * round the brow over the hair, down a little to the nape as a hat is worn,
+   * and its three settings over the brow, the middle one the largest.
+   */
+  circlet: (b) => {
+    const at = 2.36;
+    const [sx, sy, cy] = skull(b.fr, at);
+    const stone = (deg: number, m: Mat, r: number): Mesh => {
+      const a = deg * DEG;
+      return ball([Math.cos(a) * (sx + 0.17), cy + Math.sin(a) * (sy + 0.17), at + 0.02], [r, r * 0.7, r * 1.15], 5, 3, m);
+    };
+    return {
+      layer: 3,
+      bits: [
+        {
+          bone: 'head', over: HEAD_OVER, bias: 0.05,
+          mesh: grown(hat(b.fr, [{ f: at - 0.1, b: at - 0.34, out: 0.1, outB: 0.12 }, { f: at + 0.1, b: at - 0.14, out: 0.1, outB: 0.12 }], 14, 'fitting', false)),
+        },
+        // The stones over the head only while the brow is toward the viewer: from behind, the head is in front of them.
+        {
+          bone: 'head', over: HEAD_OVER, bias: 0.06, front: [0, 1, 0],
+          mesh: grown(join(stone(90, 'stone1', 0.17), stone(62, 'stone2', 0.13), stone(118, 'stone3', 0.13))),
+        },
+      ],
     };
   },
 

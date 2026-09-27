@@ -47,16 +47,18 @@ import { CLASSES, PERK_CLASSES, PERK_TIER_AT, PERKS_PER_TIER } from './classes';
 import {
   ACTION_BY_ID, CHIP_CHANCE, CLEARED_TO, DIG_TILE_TIME, DREDGE_DEPTH, FLATTEN_STEP, GRASS_PER_CUT, MINE_COLLAPSE, MINE_DEPTH, PAN_ORES,
   PLANTED_AGE, plantedAge, PROSPECT_REACH, PROSPECT_STEP, REED_CUT, REED_EXTRA_AT, RESIN_TREE, SLOPE_FLOOR, SLOPE_PER_SKILL, SPOIL_REACH,
-  TILE_CORNERS, KIT_MEND, repairGo,
+  TILE_CORNERS, KIT_MEND, repairGo, GLAZE_ASH, GLAZEABLE,
 } from './actions';
-import { FIND_BASE, FIND_CAP, FIND_PER_SKILL, FIND_PER_TOOL, RESTORE_AGE, RESTORE_HARM, RESTORE_HARM_SPREAD } from './archaeology';
+import {
+  FIND_BASE, FIND_CAP, FIND_PER_SKILL, FIND_PER_TOOL, RESTORE_AGE, RESTORE_HARM, RESTORE_HARM_SPREAD, STUDY_WEAR, STUDY_WEAR_SPREAD,
+} from './archaeology';
 import { BAUBLE_HIGH, BAUBLE_LOW, BAUBLE_SHARE, BAUBLE_TIERS } from './baubles';
 import { BRIDGES } from './bridges';
 import { BUILD_ACTION_BY_ID, REPOINT_BACK } from './buildActions';
 import { FENCE_TYPES, MATERIAL_BY_ID, MATERIALS, MAX_LEVELS, storeySkill, TALL_STOREYS, wallBill } from './building';
 import { BUCKET_LITRES, FURNITURE, furnitureDef } from './furniture';
 import { ARMOUR, ARMOUR_BY_ID, ARMOUR_CLASSES, HIT_CAP, SOAK_CAP, WEAPON_BY_ID, WEAPONS } from './gear';
-import { GEM_ODDS } from './gems';
+import { CIRCLET_SHARE, CIRCLET_STONES, GEM_ODDS, GEMS, JEWEL_BONUS, tradeName } from './gems';
 import {
   CARRY_BASE, CARRY_PER_STRENGTH, CHAR_START, goSeconds, MAX_MOUNT_SPEED, MAX_VEHICLE_SPEED, QL_TOP, QUEUE_PER_MIND, queueCapAt, TOOL_QL_SPAN,
 } from './game';
@@ -70,7 +72,7 @@ import {
   mouldUsesLeft,
 } from './metal';
 import { MAP_ODDS } from './treasure';
-import { CRAFT_REACH, DISTIL_BUCKETS, RECIPES, TAILOR_SKILLS, type Recipe } from './recipes';
+import { CRAFT_REACH, DISTIL_BUCKETS, isDish, RECIPES, TAILOR_SKILLS, TRADE_BOOK_AT, TRADE_BOOK_SKILLS, type Recipe } from './recipes';
 import { BUSH_DEFS, ROAD_TILES, ROCK_VARIANTS, TILE_DEFS, TileType, TREE_AGES, TREE_DAWN_UTC, TREE_DEFS } from '../world/tiles';
 import { walkKey } from './player';
 import { article, capital, listed, numberWord, percent, share, spanWords, times } from './words';
@@ -101,7 +103,8 @@ export const FX_RULE: Record<string, 'mul' | 'add'> = {
   time: 'mul', ql: 'mul', weight: 'mul', walk: 'mul', fail: 'mul', wear: 'mul', need: 'mul', bill: 'mul',
   grow: 'mul', rotate: 'mul', feed: 'mul', fill: 'mul', knack: 'mul', rot: 'mul', cool: 'mul', catch: 'mul', empty: 'mul', mend: 'mul',
   bite: 'mul', cost: 'mul', worn: 'mul', life: 'mul', harm: 'mul', age: 'mul',
-  carry: 'add', jobs: 'add', plus: 'add', bumper: 'add', fodder: 'add', tool: 'add', passes: 'add', hook: 'add', haul: 'add',
+  bright: 'mul', thrift: 'mul', force: 'mul', keeps: 'mul', teach: 'mul', sturdy: 'mul',
+  carry: 'add', serve: 'add', jobs: 'add', plus: 'add', bumper: 'add', fodder: 'add', tool: 'add', passes: 'add', hook: 'add', haul: 'add',
 };
 
 export const fxFamily = (key: string): string => key.split(':')[0];
@@ -1880,6 +1883,140 @@ const MENDER: Seed[] = [
   },
 ];
 
+/*
+ * ---------------------------------------------------------------------------
+ * The Artisan: the jeweller's file, the potter's hands and the binder's needle.
+ * ---------------------------------------------------------------------------
+ */
+/** The recipes a stone is set by: in a ring, a pendant or a focus. */
+const SETTINGS = ['set_ring', 'set_pendant', 'set_focus'];
+/** What a stone is set in to be worn. */
+const JEWELS = ['jewelled_ring', 'jewelled_pendant', 'circlet'];
+/** The dishes a recipe makes in one of these, as the recipes have them. */
+const madeIn = (tools: readonly string[]): string[] =>
+  [...new Set(RECIPES.filter((r) => r.tool && tools.includes(r.tool) && isDish(r.result)).map((r) => itemName(r.result)))];
+const POT_DISHES = madeIn(['clay_pot', 'clay_bowl']);
+const PUT_UP = madeIn(['clay_jar']);
+const MORE_STONES = GEMS.filter((g) => g.perk === 'more_stones');
+const CIRCLET_MAKE = recipeOf('make_circlet');
+const AMPHORA_SHAPE = recipeOf('make_amphora');
+const TRADE_BOOK = recipeOf(`write_trade_book_${TRADE_BOOK_SKILLS[0]}`);
+const WHEEL = furnitureDef('potters_wheel');
+/** "a clay pot, a clay bowl, a clay jar or an amphora". */
+const GLAZE_ON = either([...GLAZEABLE].map((id) => `${article(itemName(id))} ${itemName(id)}`));
+
+const ARTISAN: Seed[] = [
+  {
+    num: 2, name: 'Sure Setting',
+    fx: onEach('fail', [...SETTINGS, 'set_in_circlet'], 0.5),
+    note: (fx) => `Setting a stone in a ring, a pendant, a focus or a circlet fails ${share(fx['fail:set_ring'])} as often.`,
+  },
+  {
+    num: 3, name: 'Keep the Stone',
+    fx: { 'stone:set_focus': 1 },
+    note: () => 'A focus you fail to set gives you its stone back whole, and only the silver is lost (now the stone splits with it).',
+  },
+  {
+    num: 26, name: 'Deep Pot',
+    fx: { 'serve:unfired_clay_pot': 1, 'serve:unfired_clay_bowl': 1 },
+    note: (fx) => `A pot or a bowl you shape makes ${fx['serve:unfired_clay_pot']} more serving of every dish cooked in it, `
+      + `whoever cooks it: ${listed(POT_DISHES)}.`,
+  },
+  {
+    num: 7, name: 'Cut True',
+    fx: onEach('cut', JEWELS, 0.05),
+    note: (fx) => `A ring, a pendant or a circlet you make gives up to ${percent(fx['cut:jewelled_ring'])} more skill from every go at `
+      + `each stone's trade, by its quality: all of it at QL ${QL_TOP} and half of it at QL ${QL_TOP / 2} (now its quality makes no `
+      + `difference). A circlet's stones each give ${share(CIRCLET_SHARE)} of it.`,
+  },
+  {
+    num: 9, name: 'Fine Castings',
+    fx: { 'ql:ring': 1.1, 'ql:pendant': 1.1 },
+    note: (fx) => `Rings and pendants you forge from a casting come off the anvil ${by(fx['ql:ring'])} higher in quality, to ${QL_TOP} at most.`,
+  },
+  {
+    num: 10, name: 'Gem Eye',
+    fx: { 'gem:mine': 2 * GEM_ODDS },
+    note: (fx) => `Mine turns up a gem in ${oneIn(fx['gem:mine'])} goes (now ${oneIn(GEM_ODDS)}).`,
+  },
+  {
+    num: 13, name: 'Focus Cutter',
+    fx: { 'thrift:focus': 0.75 },
+    note: (fx) => `A focus you set wears ${less(fx['thrift:focus'])} slower when a spell is cast from it, whoever casts it.`,
+  },
+  {
+    num: 27, name: 'Sealed Jar',
+    fx: { 'keeps:unfired_clay_jar': 0.5 },
+    note: (fx) => `What is put up in a jar you shape keeps ${times(1 / fx['keeps:unfired_clay_jar'])} as long, whoever puts it up: `
+      + `${listed(PUT_UP)}.`,
+  },
+  {
+    num: 35, name: 'Sturdy Binding',
+    fx: onEach('sturdy', ['book', 'trade_book'], 0.5),
+    note: (fx) => `A book you bind takes ${share(fx['sturdy:book'])} the damage from a go of study (now ${STUDY_WEAR} to `
+      + `${STUDY_WEAR + STUDY_WEAR_SPREAD} a go).`,
+  },
+  {
+    num: 4, name: 'Bright Stone',
+    fx: onEach('bright', JEWELS, 1.5),
+    note: (fx) => `A ring or a pendant you make gives ${percent(JEWEL_BONUS * fx['bright:jewelled_ring'])} more skill from every go at its `
+      + `stone's trade (now ${percent(JEWEL_BONUS)}), and each stone in a circlet you make `
+      + `${percent(JEWEL_BONUS * CIRCLET_SHARE * fx['bright:circlet'])} (now ${percent(JEWEL_BONUS * CIRCLET_SHARE)}).`,
+  },
+  {
+    num: 14, name: 'Keen Focus',
+    fx: { 'force:focus': 1.1 },
+    note: (fx) => `A spell cast from a focus you set is ${by(fx['force:focus'])} stronger, and a hold it leaves lasts `
+      + `${by(fx['force:focus'])} longer, whoever casts it.`,
+  },
+  {
+    num: 34, name: 'Good Read',
+    fx: onEach('teach', ['book', 'trade_book'], 1.25),
+    note: (fx) => `A book you bind teaches ${by(fx['teach:book'])} more from every go of study, whoever reads it.`,
+  },
+  {
+    num: 12, name: 'More Stones',
+    fx: { more_stones: 1 },
+    note: () => `The rock gives up ${numberWord(MORE_STONES.length)} more stones to you, and to nobody without this: `
+      + `${listed(MORE_STONES.map((g) => `${article(g.name)} ${g.name.toLowerCase()} for ${tradeName(g.skill)}`))}. `
+      + 'Each is set and worn like any other stone.',
+  },
+  {
+    num: 46, name: 'Amphora',
+    fx: { amphora: 1 },
+    note: () => `A new thing to shape, on pottery: ${counted(AMPHORA_SHAPE)} make an unfired amphora, which a kiln fires into an amphora `
+      + `that holds ${ITEM_DEFS.amphora?.holds} of one food or drink at a time; what is in it rots at `
+      + `${share(ITEM_DEFS.amphora?.shelter ?? 1)} the rate if it is left lying about. Anybody may fill one.`,
+  },
+  {
+    num: 49, name: "Potter's Wheel",
+    fx: { potters_wheel: 1 },
+    note: () => `A new piece to build, a potter's wheel (${billWords(WHEEL.bill, false)}): anybody working at pottery within `
+      + `${WHEEL.pace?.reach} tiles of it takes ${less(WHEEL.pace?.by ?? 1)} less time a go, whatever else makes it quicker.`,
+  },
+  {
+    num: 28, name: 'Glaze',
+    fx: { glaze_item: 1 },
+    note: () => `A new job, Glaze it, on ${GLAZE_ON}: ${numberWord(GLAZE_ASH)} lot${GLAZE_ASH === 1 ? '' : 's'} of ashes brushed `
+      + 'over it, and it never decays after, wherever it is left.',
+  },
+  {
+    num: 36, name: 'Trade Book',
+    fx: { trade_book: 1 },
+    note: () => `A new book to write, on papyrusmaking: ${counted(TRADE_BOOK)}, with a ${itemName(TRADE_BOOK.tool ?? 'needle')}, make a `
+      + `book on any craft trade you have ${TRADE_BOOK_AT} of, and studying it teaches that trade, as much a go as a plain book `
+      + 'teaches mind logic. Anybody may read one.',
+  },
+  {
+    num: 48, name: 'Circlet',
+    fx: { circlet: 1 },
+    note: () => `A new thing to make, on jewellery: ${counted(CIRCLET_MAKE)}, with a ${itemName(CIRCLET_MAKE.tool ?? 'file')}, make a `
+      + `circlet, worn on the head in place of a helm. It takes ${numberWord(CIRCLET_STONES)} stones, set by anybody off each stone's `
+      + `menu, and each gives ${share(CIRCLET_SHARE)} what it would in a ring: ${percent(JEWEL_BONUS * CIRCLET_SHARE)} more skill from `
+      + 'every go at its trade.',
+  },
+];
+
 /** Every trade's perks, in the order they were picked. */
 const SEEDS: Record<string, Seed[]> = {
   terraformer: TERRAFORMER,
@@ -1895,6 +2032,7 @@ const SEEDS: Record<string, Seed[]> = {
   naturalist: NATURALIST,
   fisher: FISHER,
   mender: MENDER,
+  artisan: ARTISAN,
 };
 
 const slug = (name: string): string => name.toLowerCase().replace(/[’']/g, '').replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '');
@@ -1918,6 +2056,7 @@ export const TIERS: Record<string, number[][]> = {
   naturalist: [[2, 13, 23], [10, 11, 19], [3, 17, 24], [16, 29, 30], [12, 15, 34], [43, 44, 50]],
   fisher: [[1, 4, 13], [2, 15, 45], [17, 25, 33], [3, 14, 19], [5, 6, 9], [12, 27, 47]],
   mender: [[4, 9, 17], [3, 10, 19], [1, 14, 18], [2, 20, 21], [24, 25, 42], [26, 27, 50]],
+  artisan: [[2, 3, 26], [7, 9, 10], [13, 27, 35], [4, 14, 34], [12, 46, 49], [28, 36, 48]],
 };
 
 /** Every perk there is, tier by tier, and in each tier by the number it was picked under, as the island lists them. */

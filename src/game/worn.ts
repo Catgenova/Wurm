@@ -17,6 +17,7 @@ import type { GearLook } from '../render/figure';
 import { SLOTS, slotOf, type Slot } from './gear';
 import { materialOf } from './materials';
 import { DYE_BY_ID } from './dyestuffs';
+import { CIRCLET, stonesOf } from './gems';
 
 /** One piece: which thing, how rare, what it is made of as the item names it, and the dye's id. */
 export type WornPiece = [string, number, string | null, string | null];
@@ -41,7 +42,9 @@ export function gearFrom(raw: unknown): GearLook | undefined {
     const v = (raw as Record<string, unknown>)[slot];
     if (!Array.isArray(v) || typeof v[0] !== 'string' || slotOf(v[0]) !== slot) continue;
     const rare = typeof v[1] === 'number' && Number.isInteger(v[1]) ? Math.max(0, Math.min(3, v[1])) : 0;
-    const material = typeof v[2] === 'string' ? materialOf(v[2])?.id : undefined;
+    // A circlet is drawn with the stones in it, one after another, which is what its label is.
+    const material = typeof v[2] !== 'string' ? undefined
+      : v[0] === CIRCLET ? stonesOf({ id: v[0], extra: v[2] }).map((g) => g.id).join(',') || undefined : materialOf(v[2])?.id;
     const dye = typeof v[3] === 'string' ? DYE_BY_ID.get(v[3])?.colour : undefined;
     out[slot] = { id: v[0], rare: rare || undefined, material, dye };
     any = true;

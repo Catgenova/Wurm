@@ -4,7 +4,8 @@ import { dyeWord } from './dyestuffs';
 import { WALL_TYPES } from './building';
 import { candleBurn, lanternReach, torchBurn, torchReach } from './light';
 import { CLOSE_CLOTH, CLOSE_RIGHT } from './wounds';
-import { article, fill, listed, numberWord, share, times } from './words';
+import { article, capital, fill, listed, numberWord, share, times } from './words';
+import { CIRCLET_SHARE, CIRCLET_STONES, JEWEL_BONUS } from './gems';
 
 export type ItemCategory = 'tool' | 'material' | 'food' | 'plant' | 'misc';
 
@@ -71,6 +72,8 @@ export interface ItemDef {
    * the ground. Half means what is in it rots at half the rate.
    */
   shelter?: number;
+  /** A bag that holds food and drink only, and one kind of it at a time (an Artisan's amphora). */
+  oneKind?: boolean;
 }
 
 /**
@@ -112,8 +115,10 @@ export const ITEM_DEFS: Record<string, ItemDef> = {
   ring_mould: { name: 'Ring mould', category: 'tool', weight: 1.2, decay: 1 },
   pendant_mould: { name: 'Pendant mould', category: 'tool', weight: 1.2, decay: 1 },
   focus: { name: 'Focus', category: 'tool', weight: 0.3, description: 'A cut stone in a silver claw. A spell is cast out of it, and casting wears it away; when it is gone it is gone.' },
-  jewelled_ring: { name: 'Jewelled ring', category: 'misc', weight: 0.06, decay: 1, description: 'A band with a stone set in it. Worn, the stone favours its trade in you, a knack\'s worth, for as long as it is on your hand.' },
-  jewelled_pendant: { name: 'Jewelled pendant', category: 'misc', weight: 0.12, decay: 1, description: 'A drop with a stone set in it, on a loop. Worn, the stone favours its trade in you, a knack\'s worth, for as long as it hangs there.' },
+  jewelled_ring: { name: 'Jewelled ring', category: 'misc', weight: 0.06, decay: 1, description: 'A band with a stone set in it. Worn, the stone favours its trade in you, {bonus:pct} more skill from every go at it, for as long as it is on your hand.' },
+  jewelled_pendant: { name: 'Jewelled pendant', category: 'misc', weight: 0.12, decay: 1, description: 'A drop with a stone set in it, on a loop. Worn, the stone favours its trade in you, {bonus:pct} more skill from every go at it, for as long as it hangs there.' },
+  // An Artisan's Circlet.
+  circlet: { name: 'Circlet', category: 'misc', weight: 0.2, decay: 1, description: 'A gold band worn on the head, in place of a helm. It takes up to {stones:w} stones, each set from the stone\'s own menu, and worn, each favours its trade in you at {share:share} what it would in a ring: {each:pct} more skill from every go at it.' },
   horseshoe: { name: 'Horseshoes', category: 'material', weight: 0.25, stackable: true, decay: 1, description: '{per:W} to a lump and {shoes.perMount:w} to a mount, nailed on by a farrier with a mallet. They hold for {shoes.days:w} days: {shoes.quicker:share} quicker on laid stone, and a step {shoes.step} height units steeper.' },
   horseshoe_mould: { name: 'Horseshoe mould', category: 'tool', weight: 1.2, decay: 1 },
   coin_die: { name: 'Coin die', category: 'tool', weight: 1.5, description: 'A stamp of hard metal cut with a face. Set a lump of silver or gold on the anvil under it, strike, and it is {coinsPerLump:w} coins. It wears with every strike.' },
@@ -178,6 +183,8 @@ export const ITEM_DEFS: Record<string, ItemDef> = {
   clay_bowl: { name: 'Clay bowl', category: 'tool', weight: 0.6, description: 'A fired bowl. Stews and compotes are cooked in it over a campfire.' },
   clay_pot: { name: 'Clay pot', category: 'tool', weight: 1.2, description: 'A deep fired pot. A pottage simmers in it over a campfire and feeds you for half a day.' },
   clay_jar: { name: 'Clay jar', category: 'tool', weight: 0.8, description: 'A fired jar with a close lid. Fruit put up in one keeps far longer than fruit that is not.' },
+  // An Artisan's Amphora: a bag for one kind of food or drink.
+  amphora: { name: 'Amphora', category: 'misc', weight: 2.6, decay: 2, holds: 20, shelter: 0.5, oneKind: true, description: 'A tall fired jar with a handle either side and a stopper. It holds {holds} of one food or drink at a time, and what is in it rots at {shelter:share} the rate if it is left lying about.' },
   deed_stake: { name: 'Deed stake', category: 'misc', weight: 1, decay: 4, description: 'A shaft whittled to a point and notched for a claim. Plant it to found a settlement where you stand: {deedAcross} by {deedAcross} tiles around a token. You may hold one deed at a time.' },
   crate_log: { name: 'Log crate', category: 'misc', weight: 30, decay: 6, description: 'A rough crate that holds {capacity} things. Place it on any spot of a tile.' },
   crate_plank: { name: 'Plank crate', category: 'misc', weight: 15, decay: 6, description: 'A neat crate that holds {capacity} things. Place it on any spot of a tile.' },
@@ -212,6 +219,7 @@ export const ITEM_DEFS: Record<string, ItemDef> = {
   unfired_clay_bowl: { name: 'Unfired clay bowl', category: 'material', weight: 0.7, stackable: true, decay: 12, description: 'Green ware. It will not hold a stew until it has been through a kiln.' },
   unfired_clay_pot: { name: 'Unfired clay pot', category: 'material', weight: 1.4, stackable: true, decay: 12, description: 'Green ware, waiting on a kiln.' },
   unfired_clay_jar: { name: 'Unfired clay jar', category: 'material', weight: 0.9, stackable: true, decay: 12, description: 'Green ware, waiting on a kiln.' },
+  unfired_amphora: { name: 'Unfired amphora', category: 'material', weight: 3.2, stackable: true, decay: 12, description: 'Green ware: a tall jar with a handle either side, waiting on a kiln.' },
   clay_brick: { name: 'Clay brick', category: 'material', weight: 3, stackable: true, decay: 6 },
   adobe: { name: 'Adobe', category: 'material', weight: 3, stackable: true, decay: 10, description: 'Clay and grass pressed into a block.' },
   mortar: { name: 'Mortar', category: 'material', weight: 2, stackable: true, decay: 40 },
@@ -341,6 +349,8 @@ export const ITEM_DEFS: Record<string, ItemDef> = {
   papyrus: { name: 'Papyrus', category: 'material', weight: 0.05, stackable: true, decay: 14, description: 'A pressed sheet, smooth enough to take ink.' },
   ink: { name: 'Ink', category: 'material', weight: 0.1, stackable: true, decay: 8, description: 'Soot, gland and lye water, ground together until it flows black.' },
   book: { name: 'Book', category: 'misc', weight: 1.2, decay: 6, description: 'Papyrus sewn between leather boards. Reading it sharpens the head, and wears the pages.' },
+  // An Artisan's Trade Book: its trade is its label.
+  trade_book: { name: 'Trade book', category: 'misc', weight: 1.2, decay: 6, description: 'A book written on one trade, its name on the spine. Studied, it teaches that trade where a plain book teaches mind logic, and wears the pages as a plain one does.' },
   fragment: { name: 'Fragment', category: 'misc', weight: 0.6, decay: 3, description: 'A broken piece of something old. Find the rest of it and a restorer can put it back together.' },
   treasure_map: { name: 'Treasure map', category: 'misc', weight: 0.1, decay: 20, description: 'A square of oiled hide with a stretch of country drawn on it and no names anywhere. Read it to see the picture; walk until the ground matches, then dig. Something is always left to watch over a hoard. Keep it in a pack or a crate — left lying in a field it will rot, and take the hoard with it.' },
   statuette: { name: 'Statuette', category: 'misc', weight: 1.4, decay: 2, description: 'A small figure in worn stone, carried by people who are long gone.' },
@@ -467,6 +477,8 @@ export const ITEM_DEFS: Record<string, ItemDef> = {
   backpack: { name: 'Backpack', category: 'misc', weight: 2.4, decay: 4, holds: 60, shelter: 0.4, description: 'A deep leather pack on ribbon straps. Holds {holds} things, and what is in it rots at {shelter:share} the rate if it is left on the ground. Drop a full one at a work post and it keeps.' },
   work_post: { name: 'Work post', category: 'misc', weight: 5, decay: 4, description: 'A stake, a crossbar and a strip of metal for a marker. Driven into open ground off your deed, it stands {post.shortest:span} to {post.longest:span} by its quality, and one wildermon will work out of it as it would out of a settlement. When it goes over, the creature comes back to you.' },
   fish_pond: { name: 'Fish pond', category: 'misc', weight: 60, decay: 2, description: 'A pond dug and lined for fish. Set it down on your settlement and it stocks itself at a fish in {every:span}, up to {pond} of them.' },
+  // An Artisan's Potter's Wheel.
+  potters_wheel: { name: 'Potter\'s wheel', category: 'misc', weight: 40, decay: 2, description: 'A heavy wheel on an upright spindle, kicked round from below. Anybody shaping clay within {reach} tiles of it takes {less:pct} less time a go.' },
   // A Mender's two: a kit that mends anything anywhere, and a seal against decay.
   repair_kit: { name: 'Repair kit', category: 'misc', weight: 1.5, stackable: true, decay: 3, description: 'Cloth, nails and a plank, made up to put things right away from the bench. Used on anything damaged, it takes {mend} damage off it and none of its quality, and is used up.' },
   sealant: { name: 'Sealant', category: 'material', weight: 0.3, stackable: true, decay: 1, description: 'Tar and beeswax worked together. Worked over a thing it seals it, and a sealed thing never decays wherever it is left. A thing takes one sealant, and a pile one for each thing in it.' },
@@ -580,6 +592,11 @@ for (const d of Object.values(ITEM_DEFS)) {
   });
 }
 
+// What a stone set in a piece gives, off the rule that gives it (`jewelGain`).
+describeFrom('jewelled_ring', { bonus: JEWEL_BONUS });
+describeFrom('jewelled_pendant', { bonus: JEWEL_BONUS });
+describeFrom('circlet', { stones: CIRCLET_STONES, share: CIRCLET_SHARE, each: JEWEL_BONUS * CIRCLET_SHARE });
+
 /**
  * What a hoard is made of: the deep metals, best first.
  *
@@ -675,7 +692,14 @@ export interface Item {
  * `temper` is the one that is not: it is the quality a quench adds, once,
  * and a thing without it has none to add (`temperOf`). And `seal` is not a
  * maker's at all but whoever sealed it (a Mender's Sealant): nought, on how
- * fast it decays set down.
+ * fast it decays set down; `glaze` is an Artisan's the same way.
+ *
+ * An Artisan's: `bright` on what a jewel gives, `cut` the most a jewel adds
+ * to that at the top of its quality (none without it, `cutOf`), `thrift` on
+ * the wear a focus takes and `force` on what it casts, `serve` the servings a
+ * pot or bowl adds to a dish cooked in it (none without it, `serveOf`),
+ * `keeps` on how fast what is put up in a jar rots, and `teach` and `sturdy`
+ * on what a book teaches and the damage studying does it.
  *
  * A perk puts one in with the key `<family>:<what is made>` (`hold:chest`),
  * read off the maker's fold as the thing comes off the bench or the anvil. A
@@ -685,27 +709,37 @@ export interface Item {
  * map in the `mark` column of an item and of a piece set down, and carries it
  * between the two.
  */
-export type MarkFamily = 'hold' | 'speed' | 'damage' | 'range' | 'soak' | 'aim' | 'last' | 'temper' | 'feed' | 'fill' | 'knack' | 'rot' | 'catch' | 'seal';
-export const MARK_FAMILIES: readonly MarkFamily[] = ['hold', 'speed', 'damage', 'range', 'soak', 'aim', 'last', 'temper', 'feed', 'fill', 'knack', 'rot', 'catch', 'seal'];
+export type MarkFamily = 'hold' | 'speed' | 'damage' | 'range' | 'soak' | 'aim' | 'last' | 'temper' | 'feed' | 'fill' | 'knack' | 'rot' | 'catch' | 'seal'
+  | 'bright' | 'cut' | 'thrift' | 'force' | 'serve' | 'keeps' | 'glaze' | 'teach' | 'sturdy';
+export const MARK_FAMILIES: readonly MarkFamily[] = [
+  'hold', 'speed', 'damage', 'range', 'soak', 'aim', 'last', 'temper', 'feed', 'fill', 'knack', 'rot', 'catch', 'seal',
+  'bright', 'cut', 'thrift', 'force', 'serve', 'keeps', 'glaze', 'teach', 'sturdy',
+];
+/** The families that are whoever worked a thing over rather than its maker, said on their own and not carried from a part. */
+const OVER_WORK: readonly MarkFamily[] = ['seal', 'glaze'];
 export type Mark = Partial<Record<MarkFamily, number>>;
 
 /** A thing's mark on one family, which is one where it has none. */
 export const markOf = (thing: { mark?: Mark | null }, family: MarkFamily): number => thing.mark?.[family] ?? 1;
 /** The quality a quench would add to a thing, which is none unless its maker's mark says otherwise (a Smith's Temper Bath). */
 export const temperOf = (thing: { mark?: Mark | null }): number => thing.mark?.temper ?? 0;
+/** The most a jewel adds to what it gives at the top of its quality, which is nothing without its setter's mark (an Artisan's Cut True). */
+export const cutOf = (thing: { mark?: Mark | null }): number => thing.mark?.cut ?? 0;
+/** The servings a pot or bowl adds to a dish cooked in it, which is none without its maker's mark (an Artisan's Deep Pot). */
+export const serveOf = (thing: { mark?: Mark | null } | undefined): number => thing?.mark?.serve ?? 0;
 
 /**
  * What a thing fitted together from these parts carries of theirs: every
  * family any of them was marked with, the larger where two say the same, and
- * never a temper, which belongs to whoever finishes the thing, nor a seal,
- * which is on the part and not on what it went into.
+ * never a temper, which belongs to whoever finishes the thing, nor a seal or a
+ * glaze, which is on the part and not on what it went into.
  */
 export function partsMark(parts: ReadonlyArray<{ mark?: Mark | null }>): Mark {
   const out: Mark = {};
   for (const p of parts) {
     for (const f of MARK_FAMILIES) {
       const v = p.mark?.[f];
-      if (f === 'temper' || f === 'seal' || v === undefined) continue;
+      if (f === 'temper' || OVER_WORK.includes(f) || v === undefined) continue;
       out[f] = Math.max(out[f] ?? v, v);
     }
   }
@@ -753,10 +787,19 @@ export function markSays(mark: Mark | undefined | null): string {
     rot: (m) => `rots ${Math.round((1 - m) * 100)}% slower`,
     catch: (m) => `catches ${pct(m)} more`,
     seal: () => '',
+    bright: (m) => `gives ${pct(m)} more than a plain setting on its stone's trade`,
+    cut: (m) => `adds up to ${Math.round(m * 100)}% more skill from every go at its stone's trade, by its quality`,
+    thrift: (m) => `wears ${Math.round((1 - m) * 100)}% slower when a spell is cast from it`,
+    force: (m) => `makes a spell cast from it ${pct(m)} stronger, and a hold ${pct(m)} longer`,
+    serve: (m) => `gives ${m} more ${m === 1 ? 'serving' : 'servings'} of a dish cooked in it`,
+    keeps: (m) => `keeps what is put up in it ${times(1 / m)} as long`,
+    glaze: () => '',
+    teach: (m) => `teaches ${pct(m)} more`,
+    sturdy: (m) => `takes ${Math.round((1 - m) * 100)}% less damage when studied`,
   };
-  const parts = MARK_FAMILIES.filter((f) => f !== 'seal' && mark[f] !== undefined).map((f) => said[f](mark[f] as number));
-  // A seal is whoever sealed it, not the maker, and is said on its own: nought, which is the only one there is.
-  const sealed = mark.seal !== undefined ? ' It is sealed and never decays.' : '';
+  const parts = MARK_FAMILIES.filter((f) => !OVER_WORK.includes(f) && mark[f] !== undefined).map((f) => said[f](mark[f] as number));
+  // A seal and a glaze are whoever worked it over, not the maker, and are said on their own: nought, the only one there is.
+  const sealed = (mark.seal !== undefined ? ' It is sealed and never decays.' : '') + (mark.glaze !== undefined ? ' It is glazed and never decays.' : '');
   if (!parts.length) return sealed;
   const joined = parts.length < 2 ? parts[0] : `${parts.slice(0, -1).join(', ')} and ${parts[parts.length - 1]}`;
   return ` Its maker's hand is in it: it ${joined}.${sealed}`;
@@ -932,13 +975,14 @@ export const billWords = (bill: ReadonlyArray<readonly [string, number]>, figure
  * the rain is still a chest a long time after the pine one has gone. And a
  * dish rots slower for its maker's hand in it (a Cook's Long-lasting, `rot`),
  * and food a Cook with Cool Pack set down slower again (`cool`). A thing a
- * Mender's sealant is on does not decay at all (`seal`).
+ * Mender's sealant is on does not decay at all (`seal`), nor a pot an
+ * Artisan has glazed (`glaze`).
  */
 export function groundDecayRate(item: Item): number {
   const def = itemDef(item.id);
   const base = def.decay ?? CATEGORY_DECAY[def.category];
   return base * Math.max(0.3, 1.4 - item.ql / 120) * matOfItem(item).decay * rarityOf(item).keep * markOf(item, 'rot') * markOf(item, 'seal')
-    * (item.cool ?? 1);
+    * markOf(item, 'glaze') * (item.cool ?? 1);
 }
 
 /** What one of a thing weighs, which is its make and what it is made of. */
@@ -979,9 +1023,16 @@ export const storedLine = (count: number, what: string, where: string, left: num
  * bag inside a bag, and a weight nobody can work out.
  */
 export function bagRefuses(bag: Item, item: Item): string | null {
-  if (!isBag(bag)) return `A ${itemDef(bag.id).name.toLowerCase()} does not hold things.`;
+  const name = itemDef(bag.id).name.toLowerCase();
+  if (!isBag(bag)) return `A ${name} does not hold things.`;
   if (isBag(item)) return 'One bag will not go inside another.';
-  if (bagUnits(bag) + item.count > bagRoom(bag)) return `The ${itemDef(bag.id).name.toLowerCase()} is full.`;
+  // An Artisan's amphora: food and drink, and one kind of it at a time.
+  if (itemDef(bag.id).oneKind) {
+    if (itemDef(item.id).category !== 'food') return `${capital(article(name))} ${name} holds food and drink, and nothing else.`;
+    const had = bag.inside?.[0];
+    if (had && had.id !== item.id) return `The ${name} has ${itemDef(had.id).name.toLowerCase()} in it, and holds one kind of thing at a time.`;
+  }
+  if (bagUnits(bag) + item.count > bagRoom(bag)) return `The ${name} is full.`;
   return null;
 }
 

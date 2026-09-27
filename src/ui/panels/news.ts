@@ -5,12 +5,13 @@ import { INGOT_LUMPS, INGOT_WEIGHT, MOULD_BY_ID } from '../../game/metal';
 import { meltLumps } from '../../game/melt';
 import { ORDER_LIFE } from '../../game/orders';
 import { POST_LIFE_MIN } from '../../game/posts';
-import { KIT_MEND } from '../../game/actions';
-import { RECIPE_BY_ID, RECIPES } from '../../game/recipes';
+import { GLAZE_ASH, KIT_MEND } from '../../game/actions';
+import { CIRCLET_SHARE, CIRCLET_STONES, GEMS } from '../../game/gems';
+import { RECIPE_BY_ID, RECIPES, TRADE_BOOK_AT } from '../../game/recipes';
 import { BOARD_TOP } from '../../game/boards';
 import { IDLE_LOGOUT, WORKER_REST_EVERY, WORKER_REST_FIRST, WORKER_REST_MOST } from '../../game/keep';
 import { REPORTS_A_SESSION } from '../../net/errors';
-import { article, listed, numberWord, percent, share, spanWords, times } from '../../game/words';
+import { article, listed, NumberWord, numberWord, percent, share, spanWords, times } from '../../game/words';
 import { ANCIENT_EFFECTS, ANCIENT_PLUS, BAUBLE_HIGH, BAUBLE_LOW, BAUBLE_SHARE, BAUBLE_TIERS, baubleTimes, REGRET_SHARE, YIELD_TIMES } from '../../game/baubles';
 import { CLASS_CHANGE_COST, CLASSES, PERK_TIER_AT, PERKS_PER_TIER } from '../../game/classes';
 import { perksOf } from '../../game/perks';
@@ -588,6 +589,23 @@ export const NEWS: News[] = [
         'Offline, brushing a wildermon wears the brush by its quality, as on an island, where it had taken a sliver off whatever the brush.',
         `A hammer: a head cast in a hammer head mould at a smelter, beaten true on an anvil and fitted to a shaft. There had been none, so nothing that asks for one could be made; `
           + `${listed(RECIPES.filter((r) => r.tool === 'hammer').map((r) => itemDef(r.result).name.toLowerCase()))} can be now.`,
+      ];
+    },
+  },
+  {
+    n: 45,
+    day: '2026-09-27',
+    lines: () => {
+      const main = (CLASSES.find((c) => c.id === 'artisan')?.main ?? '').replace(/_/g, ' ');
+      const wheel = furnitureDef('potters_wheel').pace;
+      const more = GEMS.filter((g) => g.perk);
+      return [
+        `The Artisan has perks instead of a tree now: ${numberWord(PERK_TIER_AT.length)} tiers of ${numberWord(PERKS_PER_TIER)}, the first with the trade and the others at ${listed(PERK_TIER_AT.slice(1).map(String))} in ${main}. The nodes an Artisan had bought went with the tree, and no craft trade has a tree now.`,
+        `New for an Artisan who has learned them: a gold circlet, worn on the head, that takes ${numberWord(CIRCLET_STONES)} stones at ${share(CIRCLET_SHARE)} of a ring's each, set by anybody; an amphora, which holds ${itemDef('amphora').holds} of one food or drink; a potter's wheel, which takes ${percent(1 - (wheel?.by ?? 1))} off a go at pottery for anybody within ${wheel?.reach} tiles of it; a glaze of ${numberWord(GLAZE_ASH)} lot of ashes, after which a pot never decays; and a book on any craft trade the writer has ${TRADE_BOOK_AT} of, which teaches that trade.`,
+        `${NumberWord(more.length)} more stones in the rock for an Artisan with More Stones: ${listed(more.map((g) => g.name.toLowerCase()))}.`,
+        'Jewellery is a heading in the crafting window: a ring, a pendant and a focus had only been set from the stone\'s own menu.',
+        'A pot, a bowl or a jar keeps what its maker put into it through the kiln, where the fire had dropped it.',
+        'On an island, what is in a bag left lying about rots at the share of the weather the bag keeps off, as it always has offline, where it had not rotted at all; and a thing set down is not charged for the time it spent in a pack.',
       ];
     },
   },

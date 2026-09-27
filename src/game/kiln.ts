@@ -66,6 +66,8 @@ export const POTTERY: PotteryDef[] = [
   { unfired: 'unfired_clay_bowl', fired: 'clay_bowl', seconds: world(30) },
   { unfired: 'unfired_clay_pot', fired: 'clay_pot', seconds: world(40) },
   { unfired: 'unfired_clay_jar', fired: 'clay_jar', seconds: world(34) },
+  // An Artisan's amphora, the biggest thing a kiln takes.
+  { unfired: 'unfired_amphora', fired: 'amphora', seconds: world(50) },
 ];
 
 export const POTTERY_BY_UNFIRED = new Map(POTTERY.map((p) => [p.unfired, p]));

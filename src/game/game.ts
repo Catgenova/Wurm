@@ -21,7 +21,7 @@ import { anvilAnchor, anvilCovers, ANVIL_SUBTILES, type PlacedAnvil } from './an
 import { fireAnchor, fireCentre, fireCovers, FIRE_SUBTILES, type PlacedCampfire } from './campfire';
 import { smelterAnchor, smelterCentre, smelterCovers, SMELTER_H, SMELTER_W, type PlacedSmelter, type SmeltJob } from './smelter';
 import { kilnAnchor, kilnCovers, KILN_SUBTILES, type PlacedKiln } from './kiln';
-import { ACROSS_OF, DEED_PLACE, ONE_ALTAR, deckSpot, furnitureAnchor, furnitureCapacity, furnitureCentre, furnitureCovers, furnitureDef, furnitureHeft, furnitureHolds, furnitureKg, furnitureRefuses, furnitureRoom, furnitureUnits, hiveRate, hiveRoom, HIVE_SWARMS, HIVE_WAX, POND_EVERY, rackDeck, rackSpots, teamOf, vehicleOf, type LiquidKind, type PlacedFurniture, furnitureName, LIQUID_NAME, isBoat, furnitureFootprint, type BoatDef } from './furniture';
+import { ACROSS_OF, DEED_PLACE, FURNITURE, ONE_ALTAR, deckSpot, furnitureAnchor, furnitureCapacity, furnitureCentre, furnitureCovers, furnitureDef, furnitureHeft, furnitureHolds, furnitureKg, furnitureRefuses, furnitureRoom, furnitureUnits, hiveRate, hiveRoom, HIVE_SWARMS, HIVE_WAX, POND_EVERY, rackDeck, rackSpots, teamOf, vehicleOf, type LiquidKind, type PlacedFurniture, furnitureName, LIQUID_NAME, isBoat, furnitureFootprint, type BoatDef } from './furniture';
 import { emptyCrate, occupiedRefusal, shutIn } from './creaturecrate';
 import { bury, crumble, graveAt, graveRefusal, graveSays, GRAVE_MARK } from './graves';
 import { cropStageSeconds, RIPE, type Crop } from './farming';
@@ -31,7 +31,7 @@ import { Actor, type ActiveAction, type GuestSave } from './actor';
 import { HOST_ID, type PeerId } from '../net/protocol';
 import { Roster } from './roster';
 import { GameEmitter, type LogEntry, type LogKind } from './events';
-import { bagTake, DEED_DECAY, describeWith, foldInto, groundDecayRate, Inventory, ITEM_DEFS, itemName, type Item, markOf, type Mark, rarityOf, rarityStep, itemDef, sameStack, spendOut } from './items';
+import { bagTake, DEED_DECAY, describeWith, foldInto, groundDecayRate, Inventory, ITEM_DEFS, itemName, type Item, markOf, type Mark, rarityOf, rarityStep, itemDef, sameMark, sameStack, spendOut } from './items';
 import { BASE_SPEED, CARRY_CRAWL, CLIMB_LEARN, CLIMB_LEARN_FROM, CLIMB_LEARN_STEEP, CLIMB_PER_LEVEL, groundStep, MAX_STAND, MAX_STEP, Player, readPlayer, standsOn, walkKey, writePlayer, SWIM_DEPTH, SWIM_SPEED } from './player';
 import { randomLook, type Look } from './look';
 import { ACTION_FLOOR, ACTION_PACE, world } from './pace';
@@ -51,7 +51,7 @@ import { BRIDGES, bridgeDone, CLEARANCE, END_SLOP, spanBill, spanTiles, type Bri
 import { CLEAR_OF_BUILDINGS, LIFT_PER_MASONRY, concreteFor, foundationBill, foundationDone, liftFor, masonryFor, type Foundation } from './foundations';
 import { liveSettings, type Settings } from './settings';
 import { Skills, SKILL_DEFS, isQuiet } from './skills';
-import { gemOf, JEWEL_BONUS } from './gems';
+import { jewelGain } from './gems';
 import { earnedBy, knackBonus, knackLands, KNACK_CAP, KNACK_ODDS, TITLE_BY_ID } from './titles';
 import { TileIndex, Tally, keyX, keyY, tileKey } from './tileindex';
 import { DARK_HIT, NIGHT_EYES_FROM, WORK_HAND, WORK_WIND, WORK_WIND_SPENT, HEAVY_SKILLS, WORK_BACK } from './learn';
@@ -2308,7 +2308,8 @@ export class Game {
     // A knack earned on the way up never wears off, unlike a meal or a night's sleep.
     mult += knackBonus(this.player.knacks[id]);
     // And the stone you wear, worth a knack on the one trade it favours.
-    if (gemOf(this.worn('jewel'))?.skill === id) mult += JEWEL_BONUS;
+    // A jewel worn, and a circlet on the head, for each stone of theirs that favours it.
+    mult += jewelGain(this.worn('jewel'), id) + jewelGain(this.worn('head'), id);
     // And the reader's path is a tenth on everything, for good.
     if (this.walks('knowledge', 1)) mult += ATTENTIVE;
     // A table with all four things on it is worth a fifth more on everything.
@@ -3777,7 +3778,21 @@ export class Game {
     const toolQl = def.tool ? Math.min(QL_TOP, this.toolQl(def.tool) + this.perk(`tool:${def.id}`, 0)) : 0;
     // And less of it on a settlement whose altar has a bauble for the trade.
     return goSeconds(def.baseTime, skill, toolQl, this.controlSpeed() * baublePace(this.baubleHere(), def.skill))
-      * this.perk(`time:${def.id}`, 1);
+      * this.perk(`time:${def.id}`, 1) * this.pieceSpeed(def.skill);
+  }
+
+  /**
+   * What a piece standing near makes of a go at its trade, after the floor as
+   * a perk's time is: an Artisan's potter's wheel, anybody's pottery within
+   * its reach. The island's `piece_pace`.
+   */
+  pieceSpeed(skill: string | undefined): number {
+    if (!skill) return 1;
+    let m = 1;
+    for (const f of FURNITURE) {
+      if (f.pace?.skill === skill && this.furnitureNear(f.id, f.pace.reach)) m *= f.pace.by;
+    }
+    return m;
   }
 
   /** How many of a thing a go of this recipe makes for you: its own count, or a perk's (a Carpenter's Clean Sawing). */
@@ -6663,7 +6678,8 @@ export class Game {
       // As for the smelter: on an island the ware is the island's to fire.
       if (this.islandClock) { job.left = 0; continue; }
       k.jobs.shift();
-      const made: Item = { uid: this.inventory.nextUid++, id: job.makes, ql: job.ql, dmg: 0, count: 1 };
+      // With its shaper's mark, which a pot, a bowl or a jar carries through the fire (an Artisan's Deep Pot and Sealed Jar).
+      const made: Item = { uid: this.inventory.nextUid++, id: job.makes, ql: job.ql, dmg: 0, count: 1, ...(job.item.mark ? { mark: { ...job.item.mark } } : {}) };
       furnaceOut(k.output, made);
       this.logMsg(`The kiln fires a ${ITEM_DEFS[made.id]?.name.toLowerCase() ?? made.id}. (QL ${made.ql.toFixed(1)})`, 'event');
       this.events.emit('smelter');
@@ -7127,7 +7143,9 @@ export class Game {
  */
 export function furnaceOutput(furnace: number, rows: unknown[] | undefined): Item[] {
   return (rows ?? []).map((raw, i) => {
-    const o = raw as { id?: string; def?: string; ql?: number; dmg?: number; count?: number; extra?: string | null; piece?: string | null; uid?: number };
+    const o = raw as {
+      id?: string; def?: string; ql?: number; dmg?: number; count?: number; extra?: string | null; piece?: string | null; uid?: number; mark?: Mark | null;
+    };
     return {
       uid: typeof o.uid === 'number' ? o.uid : -(furnace * 1000 + i + 1),
       id: o.id ?? o.def ?? 'lump',
@@ -7136,6 +7154,7 @@ export function furnaceOutput(furnace: number, rows: unknown[] | undefined): Ite
       count: o.count ?? 1,
       extra: o.extra ?? undefined,
       piece: o.piece ?? undefined,
+      ...(o.mark ? { mark: o.mark } : {}),
     };
   });
 }
@@ -7148,7 +7167,8 @@ export function furnaceOutput(furnace: number, rows: unknown[] | undefined): Ite
  */
 export function furnaceOut(output: Item[], made: Item): void {
   const def = ITEM_DEFS[made.id];
-  const stack = def?.stackable ? output.find((it) => it.id === made.id && it.extra === made.extra && it.piece === made.piece) : undefined;
+  const stack = def?.stackable
+    ? output.find((it) => it.id === made.id && it.extra === made.extra && it.piece === made.piece && sameMark(it, made)) : undefined;
   if (stack) {
     stack.ql = (stack.ql * stack.count + made.ql * made.count) / (stack.count + made.count);
     stack.count += made.count;

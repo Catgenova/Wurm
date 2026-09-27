@@ -1687,6 +1687,20 @@ jobs:
             --outfile=node_modules/.cache/mender.mjs --log-level=error
           node node_modules/.cache/mender.mjs
 
+      - name: The Artisan's perks, each where its rule is
+        run: |
+          # Each of the Artisan's eighteen measured on the island, the dice put
+          # either side of a perk's number where it is a chance: a stone set
+          # surer and kept whole; a pot's serving and a jar's keeping, carried
+          # through the kiln; a ring and a circlet worn; the rock's odds and its
+          # six more stones; a focus's wear and force; a book's teaching and
+          # wear, and a trade book; the amphora and what is in a bag set down;
+          # the potter's wheel; the glaze; and the browser's words and numbers
+          # beside the island's.
+          npx esbuild supabase/test/artisan.ts --bundle --platform=node --format=esm \
+            --outfile=node_modules/.cache/artisan.mjs --log-level=error
+          node node_modules/.cache/artisan.mjs
+
       - name: The exact benefit, and where its number comes from
         run: |
           # Text the player reads says what changes and by how much, and where

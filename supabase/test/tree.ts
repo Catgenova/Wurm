@@ -1,8 +1,8 @@
 /**
  * Nine nodes to a trade.
  *
- * Each trade that has not moved to perks yet (`PERK_CLASSES`) carries three
- * columns of three: two minor at a point each and a major over them at three,
+ * Each trade that has not moved to perks (`PERK_CLASSES`), which is every
+ * fighting trade and no craft trade, carries three columns of three: two minor at a point each and a major over them at three,
  * which wants the two under it first. A trade is worth two points at fifty and twelve at a hundred, so
  * twelve buys two whole columns and two over -- never all three.
  *
@@ -18,17 +18,16 @@
  *   * the island's fold is the browser's `foldNodes` to the last bit, not to
  *     within a whisker;
  *   * a node tells on its own trade's skills and on nothing else;
- *   * and every one of the four channels actually moves the number it claims
- *     to, measured at the site that reads it: `skill_mult` for learning,
- *     `spend_wind` for wind, `act_duration` for hands, and a bench for
- *     fineness -- with the roll taken out of it, so the ratio is the
- *     multiplier and nothing else.
+ *   * and the two of the four channels a trade still has a column of actually
+ *     move the number they claim to, measured at the site that reads them:
+ *     `act_duration` for hands and `spend_wind` for wind. Learning and
+ *     fineness were craft trades' columns, and every craft trade has moved to
+ *     perks: the channels are still read where they were, and nothing buys
+ *     them.
  *
- * The trade walked through it is the Artisan, whose columns are hands,
- * fineness and learning, and the last craft trade on a tree: the Mender, whose
- * fineness on a mend ran backwards and was measured here, has moved to perks.
- * Wind is measured on the Archer, a fighting trade: the Fisher was the last
- * craft trade with a column of it, and it has moved to perks too.
+ * The trade walked through it is the Berserker, whose columns are edge, hands
+ * and wind: the Artisan, the last craft trade on a tree, has moved to perks.
+ * Wind is measured on the Archer, whose third column it is.
  *
  * Runs against the database the suite leaves behind.
  */
@@ -86,7 +85,6 @@ insert into said select 'WIRED|' || string_agg(ch.id || ':' || (
 -- 2. Somebody to hand a tree to.
 do $$
 declare w record; v jsonb; v_a double precision; v_b double precision;
-        v_c double precision; v_d double precision; v_hands text;
 begin
   /*
    * A named body rather than whichever row the heap hands over first, and a
@@ -113,101 +111,55 @@ begin
   -- not what any of it is about.
   delete from caller where uid = w.uid;
   delete from player_node where world_id = w.world_id and uid = w.uid;
-  insert into skill (world_id, uid, id, value) values (w.world_id, w.uid, 'jewellery', 100)
+  insert into skill (world_id, uid, id, value) values (w.world_id, w.uid, 'axes', 100)
     on conflict (world_id, uid, id) do update set value = 100;
   perform set_config('request.jwt.claims', json_build_object('sub', w.uid)::text, false);
-  perform rpc_take_class(w.world_id, 'artisan');
-  insert into said values ('BUDGET|' || class_points(w.world_id, w.uid, 'artisan')
-    || '|' || class_spent(w.world_id, w.uid, 'artisan'));
+  perform rpc_take_class(w.world_id, 'berserker');
+  insert into said values ('BUDGET|' || class_points(w.world_id, w.uid, 'berserker')
+    || '|' || class_spent(w.world_id, w.uid, 'berserker'));
 
   -- The four refusals, in the island's words.
-  insert into said values ('ORDER|' || coalesce(rpc_take_node(w.world_id, 'artisan_1_3')->>'why', 'IT WENT THROUGH'));
+  insert into said values ('ORDER|' || coalesce(rpc_take_node(w.world_id, 'berserker_2_3')->>'why', 'IT WENT THROUGH'));
   insert into said values ('THEIRS|' || coalesce(rpc_take_node(w.world_id, 'blade_1_1')->>'why', 'IT WENT THROUGH'));
-  perform rpc_take_node(w.world_id, 'artisan_1_1');
-  insert into said values ('TWICE|' || coalesce(rpc_take_node(w.world_id, 'artisan_1_1')->>'why', 'IT WENT THROUGH'));
+  perform rpc_take_node(w.world_id, 'berserker_2_1');
+  insert into said values ('TWICE|' || coalesce(rpc_take_node(w.world_id, 'berserker_2_1')->>'why', 'IT WENT THROUGH'));
 
   -- A whole column, and what it comes to.
-  perform rpc_take_node(w.world_id, 'artisan_1_2');
-  v := rpc_take_node(w.world_id, 'artisan_1_3');
+  perform rpc_take_node(w.world_id, 'berserker_2_2');
+  v := rpc_take_node(w.world_id, 'berserker_2_3');
   insert into said values ('COLUMN|' || coalesce(v->>'took', 'nothing') || '|' || (v->>'left'));
   insert into said select 'FOLD|' || (class_mul->>'hands') from player
     where world_id = w.world_id and uid = w.uid;
-  insert into said values ('SCOPE|' || class_mul(w.world_id, w.uid, 'hands', 'jewellery')
+  insert into said values ('SCOPE|' || class_mul(w.world_id, w.uid, 'hands', 'axes')
     || '|' || class_mul(w.world_id, w.uid, 'hands', 'masonry')
     || '|' || class_mul(w.world_id, w.uid, 'hands', null));
 
   -- Hands, at the arithmetic every one of its three sites hands to act_duration.
   insert into said values ('HANDS|' || act_duration(8, 100, 0, control_speed(w.world_id, w.uid))
     || '|' || act_duration(8, 100, 0, control_speed(w.world_id, w.uid)
-                * class_mul(w.world_id, w.uid, 'hands', 'jewellery')));
-
-  /*
-   * Learning, at the one site that reads it -- and the other trade measured
-   * the same way rather than against this one.
-   *
-   * Both skills are read before and after, because the only thing this can
-   * honestly claim is that the node moved one of them and left the other
-   * where it was. An earlier version asked masonry to equal the trade's starting
-   * figure, which is true only of a body with no knack, no stone, no path and
-   * an empty table -- and false the moment the suite hands over one that has
-   * been used. Every measurement in this file is a ratio across one change on
-   * one body for that reason: whatever else is true of the body cancels.
-   */
-  v_a := skill_mult(w.world_id, w.uid, 'jewellery');
-  v_c := skill_mult(w.world_id, w.uid, 'masonry');
-  perform rpc_take_node(w.world_id, 'artisan_3_1');
-  v_b := skill_mult(w.world_id, w.uid, 'jewellery');
-  v_d := skill_mult(w.world_id, w.uid, 'masonry');
-  insert into said values ('LEARN|' || v_a || '|' || v_b || '|' || v_c || '|' || v_d);
+                * class_mul(w.world_id, w.uid, 'hands', 'axes')));
 
   -- And the twelfth point, which does not stretch to a third column.
-  perform rpc_take_node(w.world_id, 'artisan_2_1');
-  perform rpc_take_node(w.world_id, 'artisan_2_2');
-  perform rpc_take_node(w.world_id, 'artisan_2_3');
-  perform rpc_take_node(w.world_id, 'artisan_3_2');
-  insert into said values ('SPENT|' || class_spent(w.world_id, w.uid, 'artisan')
-    || '|' || coalesce(rpc_take_node(w.world_id, 'artisan_3_3')->>'why', 'IT WENT THROUGH'));
+  perform rpc_take_node(w.world_id, 'berserker_1_1');
+  perform rpc_take_node(w.world_id, 'berserker_1_2');
+  perform rpc_take_node(w.world_id, 'berserker_1_3');
+  perform rpc_take_node(w.world_id, 'berserker_3_1');
+  perform rpc_take_node(w.world_id, 'berserker_3_2');
+  insert into said values ('SPENT|' || class_spent(w.world_id, w.uid, 'berserker')
+    || '|' || coalesce(rpc_take_node(w.world_id, 'berserker_3_3')->>'why', 'IT WENT THROUGH'));
 
   -- 3. Putting the trade down puts the tree down, which is the only undo: for
-  -- a trade on perks, the Mender, open at sixty in repair.
-  insert into skill (world_id, uid, id, value) values (w.world_id, w.uid, 'pottery', 60)
-    on conflict (world_id, uid, id) do update set value = 60;
-  insert into skill (world_id, uid, id, value) values (w.world_id, w.uid, 'repair', 60)
+  -- another fighting trade, the Skirmisher, open at sixty in throwing.
+  insert into skill (world_id, uid, id, value) values (w.world_id, w.uid, 'throwing', 60)
     on conflict (world_id, uid, id) do update set value = 60;
   perform give_coins(w.world_id, w.uid, class_change_cost()::bigint * 3);
-  perform rpc_take_class(w.world_id, 'mender');
+  perform rpc_take_class(w.world_id, 'skirmisher');
   insert into said select 'CLEARED|' || count(*) || '|'
     || coalesce((select class_mul->>'hands' from player
                   where world_id = w.world_id and uid = w.uid), 'gone')
     from player_node where world_id = w.world_id and uid = w.uid;
 
-  -- 4. Fineness at the bench, with the rolls taken out so the ratio is the node:
-  -- the check's, and the hands' own (product_ql), held still for the two
-  -- gos and put back after. On the Artisan again, a fresh tree: its jar, off
-  -- a lump of clay, whose quality is the hands' rather than the clay's.
-  perform rpc_take_class(w.world_id, 'artisan');
-  v_hands := pg_get_functiondef('product_ql(double precision, double precision)'::regprocedure);
-  create or replace function product_ql(p_skill double precision, p_tool_ql double precision default 0)
-    returns double precision language sql as 'select 40::double precision';
-  update recipe set difficulty = null where id = 'make_clay_jar';
-  delete from item where world_id = w.world_id and holder = 'player' and holder_uid = w.uid
-    and def in ('unfired_clay_jar', 'clay');
-  perform give(w.world_id, w.uid, 'clay', 1, 50);
-  perform perform_craft(w.world_id, w.uid, 'make_clay_jar', '{}'::jsonb);
-  select ql into v_a from item where world_id = w.world_id and holder = 'player'
-    and holder_uid = w.uid and def = 'unfired_clay_jar';
-  perform rpc_take_node(w.world_id, 'artisan_2_1');
-  update skill set value = 60 where world_id = w.world_id and uid = w.uid and id = 'pottery';
-  delete from item where world_id = w.world_id and holder = 'player' and holder_uid = w.uid
-    and def in ('unfired_clay_jar', 'clay');
-  perform give(w.world_id, w.uid, 'clay', 1, 50);
-  perform perform_craft(w.world_id, w.uid, 'make_clay_jar', '{}'::jsonb);
-  select ql into v_b from item where world_id = w.world_id and holder = 'player'
-    and holder_uid = w.uid and def = 'unfired_clay_jar';
-  execute v_hands;
-  insert into said values ('BENCH|' || coalesce(v_a::text, 'none') || '|' || coalesce(v_b::text, 'none'));
-
-  -- 5. Wind, with the body pinned so the only thing that moved is the node: on
+  -- 4. Wind, with the body pinned so the only thing that moved is the node: on
   -- the Archer, whose third column is wind, at the drawing of a bow.
   insert into skill (world_id, uid, id, value) values (w.world_id, w.uid, 'archery', 100)
     on conflict (world_id, uid, id) do update set value = 100;
@@ -283,45 +235,36 @@ check('every channel is read by something, so no column is quietly dead',
 check('a fresh trade is twelve points with none of them spent', said('BUDGET') === '12|0', said('BUDGET'));
 
 const mine = (taken: string[], id: string): string =>
-  nodeRefusal(nodeDef(id)!, 'artisan', taken, 12) ?? 'open';
+  nodeRefusal(nodeDef(id)!, 'berserker', taken, 12) ?? 'open';
 check('the major wants the minor under it, in the same words on both sides',
-  said('ORDER') === mine([], 'artisan_1_3') && said('ORDER') === `${nodeDef('artisan_1_2')!.name} comes first.`, said('ORDER'));
+  said('ORDER') === mine([], 'berserker_2_3') && said('ORDER') === `${nodeDef('berserker_2_2')!.name} comes first.`, said('ORDER'));
 check('another trade’s node is not yours, ditto',
   said('THEIRS') === mine([], 'blade_1_1'), said('THEIRS'));
 check('one you already have, ditto',
-  said('TWICE') === mine(['artisan_1_1'], 'artisan_1_1'), said('TWICE'));
+  said('TWICE') === mine(['berserker_2_1'], 'berserker_2_1'), said('TWICE'));
 
-check('a column taken in order leaves seven of the twelve', said('COLUMN') === 'artisan_1_3|7', said('COLUMN'));
+check('a column taken in order leaves seven of the twelve', said('COLUMN') === 'berserker_2_3|7', said('COLUMN'));
 check('and the island’s fold is the browser’s, to the last bit',
-  said('FOLD') === String(foldNodes(['artisan_1_1', 'artisan_1_2', 'artisan_1_3']).hands),
-  `island ${said('FOLD')}, browser ${foldNodes(['artisan_1_1', 'artisan_1_2', 'artisan_1_3']).hands}`);
+  said('FOLD') === String(foldNodes(['berserker_2_1', 'berserker_2_2', 'berserker_2_3']).hands),
+  `island ${said('FOLD')}, browser ${foldNodes(['berserker_2_1', 'berserker_2_2', 'berserker_2_3']).hands}`);
 
 const [onMine, onStone, onNeither] = said('SCOPE').split('|').map(Number);
 check('a node tells on its own trade’s skills and on nothing else',
   onMine < 1 && onStone === 1 && onNeither === 1,
-  `jewellery ${onMine}, masonry ${onStone}, no trade at all ${onNeither}`);
+  `axes ${onMine}, masonry ${onStone}, no trade at all ${onNeither}`);
 
 const [handsPlain, handsTree] = said('HANDS').split('|').map(Number);
 check('hands: a whole column takes a sixth off the time a go takes',
   near(handsTree / handsPlain, 0.97 * 0.96 * 0.9), `${handsPlain} → ${handsTree}`);
 
-const [learnPlain, learnTree, stonePlain, stoneTree] = said('LEARN').split('|').map(Number);
-check('learning: one minor is three per cent more out of every go, and nothing on another trade',
-  near(learnTree / learnPlain, 1.03) && stoneTree === stonePlain,
-  `jewellery ${learnPlain} → ${learnTree}, masonry ${stonePlain} → ${stoneTree}`);
-
 const [spent, broke] = said('SPENT').split('|');
 check('twelve spent, and the thirteenth point is refused in the same words',
-  spent === '12' && broke === nodeRefusal(nodeDef('artisan_3_3')!, 'artisan',
-    ['artisan_1_1', 'artisan_1_2', 'artisan_1_3', 'artisan_2_1', 'artisan_2_2', 'artisan_2_3', 'artisan_3_1', 'artisan_3_2'], 12),
+  spent === '12' && broke === nodeRefusal(nodeDef('berserker_3_3')!, 'berserker',
+    ['berserker_1_1', 'berserker_1_2', 'berserker_1_3', 'berserker_2_1', 'berserker_2_2', 'berserker_2_3', 'berserker_3_1', 'berserker_3_2'], 12),
   broke);
 
 check('putting the trade down puts the whole tree down with it',
   said('CLEARED') === '0|gone', said('CLEARED'));
-
-const [benchPlain, benchTree] = said('BENCH').split('|').map(Number);
-check('fineness: a minor is two per cent on what comes off the bench',
-  near(benchTree / benchPlain, 1.02, 1e-5), `QL ${benchPlain} → ${benchTree}`);
 
 const [windPlain, windTree, windTrade] = said('WIND').split('|');
 check('wind: one minor is three per cent less out of you, on the Archer drawing a bow',

@@ -1,7 +1,9 @@
 import { tryGain } from './learn';
 import type { ActionDef, Target } from './actions';
 import type { Game } from './game';
-import { describeFrom, describeWith, itemDef, makersMark, overParts, partsMark, rollRarity, RARITY_ODDS, RARITY_WORD, type Item } from './items';
+import {
+  describeFrom, describeWith, itemDef, makersMark, markOf, overParts, partsMark, rollRarity, RARITY_ODDS, RARITY_WORD, serveOf, type Item,
+} from './items';
 import { QL_PER_LOOP } from './belt';
 import { describeGoals } from './journal';
 import { countSaid, fill, listed, numberWord } from './words';
@@ -14,6 +16,9 @@ import { TRAPS } from './traps';
 import { BREWS } from './brewing';
 import { isMaterialKind, matOf, type MaterialKind } from './materials';
 import { TREE_DEFS } from '../world/tiles';
+import { CLASSES } from './classes';
+import { CIRCLET_STONES } from './gems';
+import { SKILL_DEFS } from './skills';
 
 /** What working a thing out with your hands teaches the head. */
 export const CRAFT_HEAD = 0.25;
@@ -140,6 +145,11 @@ export interface Recipe {
    * told.
    */
   perk?: string;
+  /**
+   * The trade a book is written on (an Artisan's Trade Book), which the writer
+   * has to have `TRADE_BOOK_AT` of. The island reads it off the recipe's id.
+   */
+  writes?: string;
 }
 
 /**
@@ -164,7 +174,21 @@ export const RECIPE_PERK_SAYS: Record<string, string> = {
   fish_pond: 'That wants a Fisher who has learned to make a fish pond.',
   repair_kit: 'That wants a Mender who has learned to make a repair kit.',
   sealant: 'That wants a Mender who has learned to make sealant.',
+  circlet: 'That wants an Artisan who has learned to make a circlet.',
+  amphora: 'That wants an Artisan who has learned to shape an amphora.',
+  potters_wheel: 'That wants an Artisan who has learned to build a potter\'s wheel.',
+  trade_book: 'That wants an Artisan who has learned to write a trade book.',
 };
+
+/**
+ * A dish: food that is eaten a serving at a time, rather than drunk out of the
+ * vessel it came in (a bucket of spirit off a still). What an Artisan's Deep
+ * Pot makes a serving more of. The island's `is_dish`.
+ */
+export const isDish = (id: string): boolean => itemDef(id).category === 'food' && !itemDef(id).charges;
+
+/** What a failed focus says when an Artisan's Keep the Stone has the stone out of it whole. The island says the same. */
+export const STONE_KEPT = 'The claw goes over too far and the silver is spoiled, but you have the stone out whole.';
 
 export const RECIPES: Recipe[] = [
   // Woodwork
@@ -538,6 +562,44 @@ RECIPES.push(
 );
 
 /**
+ * An Artisan's three things to make, each only by an Artisan who has learned
+ * it: a gold circlet, which takes its stones one at a time off each stone's
+ * own menu; an amphora, shaped here and fired in a kiln like any other pot;
+ * and a book on a trade, one recipe for each craft trade, written only by
+ * somebody who has `TRADE_BOOK_AT` of it. Anybody may wear the first, fill
+ * the second and read the third.
+ */
+export const TRADE_BOOK_AT = 50;
+/** The trades a book may be written on: the craft trades' own, one recipe each. */
+export const TRADE_BOOK_SKILLS: readonly string[] = CLASSES.filter((c) => c.kind === 'craft').map((c) => c.main);
+/** A trade by its name, "Animal husbandry". */
+export const skillName = (id: string): string => SKILL_DEFS.find((d) => d.id === id)?.name ?? id;
+RECIPES.push(
+  {
+    id: 'make_circlet', category: 'Jewellery', result: 'circlet',
+    inputs: [{ item: 'gold_lump', count: 2 }], tool: 'file', skill: 'jewellery',
+    label: 'Draw out a circlet', verb: 'drawing out a circlet', baseTime: 16, stamina: 0.04, difficulty: 24,
+    done: `You draw the gold out into a band, bend it round to sit on a brow and file ${numberWord(CIRCLET_STONES)} settings into the front of it.`,
+    fail: 'The gold tears where you draw it thin, and you fold it back into a lump.', perk: 'circlet',
+  },
+  {
+    id: 'make_amphora', category: 'Clay & thatch', result: 'unfired_amphora',
+    inputs: [{ item: 'clay', count: 4 }], skill: 'pottery',
+    label: 'Shape an amphora', verb: 'shaping an amphora', baseTime: 12, stamina: 0.04, difficulty: 18,
+    done: 'You coil the walls up tall, pull up a handle either side and cut a stopper. Fire it in a kiln.',
+    fail: 'The shoulder slumps under its own weight and you press it back into a lump.', perk: 'amphora',
+  },
+  ...TRADE_BOOK_SKILLS.map((skill): Recipe => ({
+    id: `write_trade_book_${skill}`, category: 'Writing', result: 'trade_book',
+    inputs: [{ item: 'papyrus', count: 6 }, { item: 'leather', count: 2 }, { item: 'ink', count: 2 }], tool: 'needle', skill: 'papyrusmaking',
+    label: `Write a book on ${skillName(skill).toLowerCase()}`, verb: 'writing a book', baseTime: 30, stamina: 0.07, difficulty: 32,
+    extra: skillName(skill), writes: skill,
+    done: `You write down what you know of ${skillName(skill).toLowerCase()}, sew the gatherings and bind them between leather boards.`,
+    fail: 'The ink runs on a sheet and the whole gathering is spoiled.', consumeOnFail: true, perk: 'trade_book',
+  })),
+);
+
+/**
  * Every dye is boiled the same way: a quantity of something that grows, a
  * bucket of lye to bite it into the fibre, and a long simmer. The dyestuff
  * is written on the pot, so one item id carries all eight colours.
@@ -685,8 +747,13 @@ const ALTARS = new Set(FURNITURE.filter((f) => f.altar).map((f) => f.id));
 /** Whether this recipe would be the settlement's second altar, for somebody standing where the player stands. */
 const secondAltar = (r: Recipe, g: Game): boolean => ALTARS.has(r.result) && !!g.altarOfDeedAt(g.player.tileX, g.player.tileY);
 
+/*
+ * Jewellery was a category from the day the stones came in and never one the
+ * window listed, so a ring, a pendant and a focus were set only off the
+ * stone's own menu. It is listed now, with the circlet.
+ */
 export const RECIPE_CATEGORIES: RecipeCategory[] = ['Woodwork', 'Furniture', 'Stonework', 'Clay & thatch', 'Cloth', 'Alchemy', 'Writing', 'Cooking', 'Smelting',
-  'Mending'];
+  'Jewellery', 'Mending'];
 export const stationName = (s: Station): string => STATION_NAME[s];
 
 export interface RecipeStatus {
@@ -917,6 +984,10 @@ export function chooseMaterial(g: Game, r: Recipe, preferUid?: number, want?: st
 /** Why a recipe cannot be made right now, or null. */
 export function recipeReason(r: Recipe, g: Game, preferUid?: number, stock: readonly CraftStock[] = g.craftStock(preferUid, false, reachFor(g, r))): string | null {
   if (r.perk && g.perk(r.perk, 0) <= 0) return RECIPE_PERK_SAYS[r.perk] ?? 'That wants a perk you have not taken.';
+  // A book on a trade is written only by somebody who knows enough of it.
+  if (r.writes && g.skills.get(r.writes) < TRADE_BOOK_AT) {
+    return `You know too little of ${skillName(r.writes).toLowerCase()} to write a book on it: that wants ${TRADE_BOOK_AT}.`;
+  }
   if (r.tool && !g.inventory.has(r.tool)) return `You need a ${lower(r.tool)}.`;
   if (r.station && !g.atStation(r.station)) return `You need to stand at a ${STATION_NAME[r.station]}.`;
   if (r.deed && !g.onDeed(g.player.tileX, g.player.tileY)) return DEED_ONLY;
@@ -1081,8 +1152,13 @@ export function recipeAction(r: Recipe): ActionDef {
         // the recipe (a Mason's or a Tailor's Nothing Wasted), as the island has it.
         const keep = r.consumeOnFail ? g.perk(`spare:${r.id}`, 0) : 0;
         const spared = keep > 0 && g.rand() < keep;
+        // And the stone out of it whole, whatever else is lost, for an Artisan's Keep the Stone.
+        const stone = r.consumeOnFail && !spared && g.perk(`stone:${r.id}`, 0) > 0 && r.inputs.some((i) => i.item === 'gem');
         if (r.consumeOnFail && !spared) {
-          for (const i of r.inputs) consumeAcross(stock, i.item, needOf(g, r, i), t.uid, mat, strict.get(i.item));
+          for (const i of r.inputs) {
+            if (stone && i.item === 'gem') continue;
+            consumeAcross(stock, i.item, needOf(g, r, i), t.uid, mat, strict.get(i.item));
+          }
           // The batch is wasted, not the vessel: you tip the ruin out and keep
           // the bucket.
           for (const [id, n] of r.salvage ?? r.returns ?? []) g.inventory.add(id, { count: n, ql: 20 });
@@ -1090,7 +1166,7 @@ export function recipeAction(r: Recipe): ActionDef {
         }
         g.missed();
         g.gainSkill('mind_logic', tryGain(false, CRAFT_HEAD));
-        g.logMsg(r.fail ?? `You fail to make ${lower(r.result)}.`, 'event');
+        g.logMsg(stone ? STONE_KEPT : r.fail ?? `You fail to make ${lower(r.result)}.`, 'event');
         if (spared) g.logMsg('Nothing that went into it is lost.', 'event');
         return more(t, g);
       }
@@ -1109,6 +1185,11 @@ export function recipeAction(r: Recipe): ActionDef {
       // and the full vessel stays as it was rather than coming back empty.
       const keepVessel = g.perk(`lye:${r.id}`, 0);
       const vesselKept = keepVessel > 0 && g.rand() < keepVessel;
+      // The pot, the bowl or the jar it is done in, and what its maker put into it: a serving more of
+      // a dish for an Artisan's Deep Pot, and what is put up in it keeping longer for their Sealed Jar.
+      const vessel = r.tool ? g.inventory.tool(r.tool) : undefined;
+      const served = isDish(r.result) ? serveOf(vessel) : 0;
+      const keeps = vessel ? markOf(vessel, 'keeps') : 1;
       for (const i of r.inputs) {
         if (vesselKept && VESSELS[i.item]) continue;
         if (!consumeAcross(stock, i.item, needOf(g, r, i), t.uid, mat, strict.get(i.item))) return;
@@ -1137,13 +1218,15 @@ export function recipeAction(r: Recipe): ActionDef {
       const ql = Math.min(100, made * g.perk(`ql:${r.id}`, 1));
       // More, the go a bauble on the trade comes up in the altar of the settlement
       // you work on, and more again for a perk (a Carpenter's Clean Sawing).
-      const count = g.baubleYield(r.result, g.madeAGo(r));
+      const goes = g.madeAGo(r) + served;
+      const count = g.baubleYield(r.result, goes);
       // What the maker's perks put into it, which stays with it (a Carpenter's
       // Deep Drawers, a Smith's Temper Bath, a Cook's Hearty), over what its
       // parts carried. A pile of the same thing marked the same way is one
       // pile, and it goes in with the mark so that it stacks by it.
       const stackable = !!itemDef(r.result).stackable;
-      const mark = stackable ? makersMark((k, d) => g.perk(k, d), r.result) : overParts(partsMark(parts), makersMark((k, d) => g.perk(k, d), r.result));
+      const own = stackable ? makersMark((k, d) => g.perk(k, d), r.result) : overParts(partsMark(parts), makersMark((k, d) => g.perk(k, d), r.result));
+      const mark = keeps !== 1 ? { ...(own ?? {}), rot: markOf({ mark: own }, 'rot') * keeps } : own;
       const marked = mark && Object.keys(mark).length ? mark : undefined;
       // Now and again a thing comes off the bench better than the hands that
       // made it had any right to produce, the odds bettered by a perk on the
@@ -1172,7 +1255,7 @@ export function recipeAction(r: Recipe): ActionDef {
       // Working a thing out with your hands is what sharpens the head.
       g.gainSkill('mind_logic', tryGain(true, CRAFT_HEAD));
       // Saying the count made, where a perk makes more than the recipe's own (a Tailor's Even Thread).
-      g.logMsg(`${countSaid(r.done, r.count ?? 1, g.madeAGo(r))} (${mat ? `${mat.toLowerCase()}, ` : ''}QL ${item.ql.toFixed(1)})`, 'event');
+      g.logMsg(`${countSaid(r.done, r.count ?? 1, goes)} (${mat ? `${mat.toLowerCase()}, ` : ''}QL ${item.ql.toFixed(1)})`, 'event');
       return more(t, g);
     },
   };
