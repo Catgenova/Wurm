@@ -158,6 +158,58 @@ function check(what: string, ok: boolean, detail = ''): void {
   if (!ok) failures += 1;
 }
 
+/*
+ * A corner worth digging: soil over the rock, above the water, a tile a shovel
+ * takes something off, and nothing steep round it.
+ *
+ * Digging has a slope door of its own: drop a corner beside a cliff and the
+ * face it leaves is steeper than the skill can cut, so the island refuses --
+ * "that would leave a slope of 52. Your digging allows 40". Perfectly correct,
+ * and nothing whatever to do with whether digging works, which is what the dig
+ * below is measuring. A live run picked exactly such a corner and failed on
+ * it. So the corner reached for is one with nothing steep around it: twenty
+ * units is a long way inside the forty a beginner is allowed.
+ */
+function worthDigging(w: World, x: number, y: number): boolean {
+  if (x < 1 || y < 1 || x >= w.w || y >= w.h) return false;
+  if (w.getDirt(x, y) <= 0 || w.getHeight(x, y) <= 0) return false;
+  if (!TILE_DEFS[w.getTile(x, y)]?.digYield) return false;
+  const here = w.getHeight(x, y);
+  for (let ny = y - 1; ny <= y + 1; ny++) {
+    for (let nx = x - 1; nx <= x + 1; nx++) {
+      if (Math.abs(w.getHeight(nx, ny) - here) > 20) return false;
+    }
+  }
+  return true;
+}
+
+/*
+ * Whether a body put down at (sx, sy) can walk to a corner worth digging.
+ *
+ * At the sixty-four tiles a side this test rolls, a seed now and then leaves
+ * nowhere to walk to at all: seed 1261438787 put the body in a pocket of one
+ * tile between trees and bare rock, with nothing it could step onto, and the
+ * dig found nothing on the whole island -- a fault in how small the island is,
+ * reported as a fault in digging. A real island never does (`findBaySpawn`
+ * finds room to walk at 256 tiles and up), so the roll is taken again until a
+ * body coming ashore has somewhere to go.
+ */
+function soilWithinWalk(w: World, sx: number, sy: number): boolean {
+  const farthest = Math.max(w.w, w.h);
+  for (let r = 0; r <= farthest; r++) {
+    for (let dy = -r; dy <= r; dy++) {
+      for (let dx = -r; dx <= r; dx++) {
+        if (Math.max(Math.abs(dx), Math.abs(dy)) !== r) continue;
+        const x = sx + dx;
+        const y = sy + dy;
+        if (!worthDigging(w, x, y)) continue;
+        if (!(dx || dy) || findPath(w, sx, sy, 0, x, y, pathOptions(w))) return true;
+      }
+    }
+  }
+  return false;
+}
+
 async function main(): Promise<void> {
   say(`the island keeper at ${PROJECT.url}`);
 
@@ -205,10 +257,16 @@ async function main(): Promise<void> {
     chart: async () => readAtlas(),
   });
 
-  const seed = (Math.random() * 0x7fffffff) >>> 0;
   // The same generator the join uses, or the island handed over and the island
-  // come back to are two different islands.
-  const gen = generateAtlasWorld(seed, readAtlas(), SIZE);
+  // come back to are two different islands. Rolled again, a few times at most,
+  // while it leaves the body nowhere to walk to that a shovel would take.
+  let seed = 0;
+  let gen: ReturnType<typeof generateAtlasWorld> | null = null;
+  for (let tries = 0; !gen || (tries < 20 && !soilWithinWalk(gen.world, gen.spawn.x, gen.spawn.y)); tries++) {
+    if (gen) say(`  seed ${seed} leaves the body nowhere to walk to that a shovel would take; rolling again`);
+    seed = (Math.random() * 0x7fffffff) >>> 0;
+    gen = generateAtlasWorld(seed, readAtlas(), SIZE);
+  }
   say(`  rolled a ${SIZE}×${SIZE} island, seed ${seed}, spawn ${gen.spawn.x},${gen.spawn.y}`);
 
   let id = '';
@@ -758,29 +816,8 @@ async function main(): Promise<void> {
           if (Math.max(Math.abs(dx), Math.abs(dy)) !== r) continue;
           const x = Math.floor(me.x) + dx;
           const y = Math.floor(me.y) + dy;
-          if (x < 1 || y < 1 || x >= back.w || y >= back.h) continue;
-          if (back.getDirt(x, y) <= 0 || back.getHeight(x, y) <= 0) continue;
-          if (!TILE_DEFS[back.getTile(x, y)]?.digYield) continue;
-          /*
-           * And somewhere the ground will take the spadeful.
-           *
-           * Digging has a slope door of its own now: drop a corner beside a
-           * cliff and the face it leaves is steeper than the skill can cut, so
-           * the island refuses — "that would leave a slope of 52. Your digging
-           * allows 40". Perfectly correct, and nothing whatever to do with
-           * whether digging works, which is what this is measuring. A live run
-           * picked exactly such a corner and failed on it. So the corner this
-           * reaches for is one with nothing steep around it: twenty units is a
-           * long way inside the forty a beginner is allowed.
-           */
-          const here = back.getHeight(x, y);
-          let steep = false;
-          for (let ny = y - 1; ny <= y + 1 && !steep; ny++) {
-            for (let nx = x - 1; nx <= x + 1; nx++) {
-              if (Math.abs(back.getHeight(nx, ny) - here) > 20) { steep = true; break; }
-            }
-          }
-          if (steep) continue;
+          // Soil, dry, a shovel's worth, and nothing steep round it (`worthDigging`).
+          if (!worthDigging(back, x, y)) continue;
           /*
            * And somewhere a body can actually stand.
            *
