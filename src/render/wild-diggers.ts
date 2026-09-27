@@ -1,9 +1,9 @@
 import {
-  add, beat, coatPalette, cross, curve, cyc, disc, merge, mirrored, moved, onEgg, orb, orbAlong, paint, quadBonesOf, scale, smile, taper, TAU, tube, unit,
+  add, beat, coatPalette, cross, curve, cyc, DEG, disc, lighter, merge, mirrored, moved, onEgg, orb, orbAlong, paint, quadBonesOf, scale, smile, sub, taper, TAU, tube, unit,
   type Anim, type Kind, type Piece, type QuadPose, type QuadSpec,
 } from './beasts';
 import { blade, cut, earMesh, hoofMesh, pawMesh, quadPieces } from './beastkit';
-import { mesh, place, type Mat, type Mesh, type RGB, type V3 } from './figure';
+import { joint, mesh, place, type Mat, type Mesh, type RGB, type V3 } from './figure';
 
 /** The diggers: the vola, the mola, the dowse and the snout, all long and low and nose-first. */
 
@@ -170,12 +170,19 @@ export const VOLA: Kind = {
  */
 const MOLA_SPEC = digger({ high: 1.0, len: 3.2, legs: 0.6, neck: 0.4, lean: 56, nose: 11 });
 const MOLA_HEAD = { c: [0, 0.4, 0.12] as V3, r: [1.08, 1.02, 0.9] as V3 };
-/** The middle of the crystal on its nose, in the head's frame: where its light is. */
-const MOLA_GLINT: V3 = [0, 1.66, 0.45];
+/**
+ * The crystal on its nose: where it grows from, on top of the end of the snout, and the way it points, tipped half-way and more
+ * from upright toward straight ahead, so it is a star on the snout under the eyes seen from ahead and points ahead side on.
+ */
+const MOLA_CRYSTAL = { at: [0, 1.56, 0.1] as V3, dir: [0, Math.sin(50 * DEG), Math.cos(50 * DEG)] as V3 };
+/** The middle of the crystal, in the head's frame: where its light is. */
+const MOLA_GLINT: V3 = add(MOLA_CRYSTAL.at, scale(MOLA_CRYSTAL.dir, 0.22));
 
 /**
  * A shut eye, smiling: an arch like a ∩ painted on an egg of a head, `w` across
- * and a band `th` wide, where the way out of the middle `dir` meets its shell.
+ * and a band `th` wide, where the way out of the middle `dir` meets its shell;
+ * every corner laid on the shell, so an arch as wide as this bends round the
+ * head rather than standing off it at its ends.
  */
 function shutEye(c: V3, r: V3, dir: V3, w: number, th: number): Mesh {
   const { p, n } = onEgg(c, r, dir);
@@ -185,7 +192,13 @@ function shutEye(c: V3, r: V3, dir: V3, w: number, th: number): Mesh {
     return [Math.cos(a), Math.sin(a) * 0.9 - 0.35];
   });
   const band = [...arc.map(([x, y]) => [x * (w + th / 2), y * (w + th / 2)]), ...arc.reverse().map(([x, y]) => [x * (w - th / 2), y * (w - th / 2)])];
-  return paint([{ v: band.map(([x, y]) => add(add(p, scale(n, 0.04)), add(scale(u, x), scale(up, y)))), m: 'eye' }]);
+  return paint([{
+    v: band.map(([x, y]) => {
+      const e = onEgg(c, r, sub(add(p, add(scale(u, x), scale(up, y))), c));
+      return add(e.p, scale(e.n, 0.04));
+    }),
+    m: 'eye',
+  }]);
 }
 
 /**
@@ -209,21 +222,29 @@ function molaBuild(lod: number): Piece[] {
     taper([[0, 0.9, -0.06], [0, 1.36, -0.09], [0, 1.6, -0.09]], 0.38, 0.23, n, 'muzzle'),
     orbAlong([0, 1.66, -0.07], [0, 1, 0], [0.2, 0.14, 0.17], 6, 3, 'nose'),
   );
-  // Happy shut eyes: two arches on the skin, set far enough round the head that one of them shows side on.
-  const face = merge(snout, shutEye(H.c, H.r, [0.64, 0.6, 0.44], 0.22, 0.11), shutEye(H.c, H.r, [-0.64, 0.6, 0.44], 0.22, 0.11), smile([0, 1.52, -0.36], [0, 1, -0.5], 0.24, 'eye'));
-  // The crystal on its nose: three points in a cluster, pale and bright, the middle one standing as tall as the head.
+  // Happy shut eyes: two arches on the skin, set far enough round the head that side on one of them shows whole, clear of the
+  // head's edge, and broad and dark enough to be a face at play size rather than a blank dome.
+  const face = merge(snout, shutEye(H.c, H.r, [0.72, 0.5, 0.44], 0.3, 0.22), shutEye(H.c, H.r, [-0.72, 0.5, 0.44], 0.3, 0.22), smile([0, 1.52, -0.36], [0, 1, -0.5], 0.24, 'eye'));
+  // The crystal on its nose: a star of short points fanned out of the end of the snout, forward and outward, pale and bright:
+  // one straight along the way it points, and four round it, each leaning 38 degrees out from it.
+  const C = MOLA_CRYSTAL, across: V3 = [1, 0, 0], down = cross(C.dir, across);
+  const shard = (d: V3, len: number, r: number, m: Mat): Mesh => taper([add(C.at, scale(d, 0.04)), add(C.at, scale(d, len))], r, 0, 6, m);
   const crystal = merge(
-    taper([[0, 1.56, 0.08], [0, 1.76, 0.85]], 0.22, 0.0, 6, 'crystal'),
-    taper([[0.13, 1.54, 0.06], [0.4, 1.68, 0.5]], 0.15, 0.0, 6, 'crystalDark'),
-    taper([[-0.13, 1.54, 0.06], [-0.38, 1.74, 0.47]], 0.14, 0.0, 6, 'crystal'),
+    shard(C.dir, 0.45, 0.14, 'crystal'),
+    ...[45, 135, 225, 315].map((a, q) => {
+      const out = add(scale(across, Math.cos(a * DEG)), scale(down, Math.sin(a * DEG)));
+      return shard(unit(add(scale(C.dir, Math.cos(38 * DEG)), scale(out, Math.sin(38 * DEG)))), q % 2 ? 0.36 : 0.4, 0.11, q % 2 ? 'crystalDark' : 'crystal');
+    }),
   );
   const flecks = paint(([[0.6, 0.4, 0.5], [-0.5, -0.4, 0.62], [0.3, -1.0, 0.55], [-0.2, 0.9, 0.62], [0.75, -0.6, 0.3]] as V3[]).map((c) => disc(c, [c[0], 0, 0.8], 0.16, 0.12, 6, 'gem', { lit: true })));
-  // Trowels: the fore paws broad, flat and pale, laid on the ground ahead of the leg, and three broad claws fanned out of each,
-  // which are the shape of its edge rather than things of their own, so they are not lost in their own lines.
-  const trowel = slab([
-    [0.26, -0.06], [0.4, 0.18], [0.46, 0.44], [0.5, 0.66], [0.46, 0.86], [0.34, 0.78], [0.24, 0.64], [0.16, 0.84], [0, 0.98],
-    [-0.16, 0.84], [-0.24, 0.64], [-0.34, 0.78], [-0.46, 0.86], [-0.5, 0.66], [-0.46, 0.44], [-0.4, 0.18], [-0.26, -0.06],
-  ], -0.13, 0.13, 'claw');
+  // Trowels: the fore paws broad, flat and pale, ahead of the leg, and three long claws fanned out of each, which are the shape
+  // of its edge rather than things of their own, so they are not lost in their own lines. Each is tipped up onto its outer edge
+  // with its back turned out, so from the side and from ahead it shows its face and its three claws, not the stepped edge of a
+  // block lying flat.
+  const trowel = moved(moved(slab([
+    [0.26, -0.06], [0.42, 0.18], [0.5, 0.46], [0.54, 0.72], [0.5, 0.92], [0.42, 1.02], [0.32, 0.8], [0.2, 0.56], [0.13, 0.9], [0, 1.15],
+    [-0.13, 0.9], [-0.2, 0.56], [-0.32, 0.8], [-0.42, 1.02], [-0.5, 0.92], [-0.54, 0.72], [-0.5, 0.46], [-0.42, 0.18], [-0.26, -0.06],
+  ], -0.13, 0.13, 'claw'), [-0.54, 0, 0.13]), [0.54, 0, -0.13], 0, 0, 30);
   return quadPieces({
     n, k,
     body: { y: [-1.75, -1.45, -0.8, 0, 0.7, 1.25, 1.6], z: [0.05, 0.12, 0.2, 0.25, 0.28, 0.3, 0.28], w: [0.2, 0.85, 1.1, 1.2, 1.2, 1.0, 0.3], h: [0.18, 0.66, 0.82, 0.86, 0.86, 0.74, 0.25] },
@@ -250,15 +271,17 @@ export const MOLA: Kind = {
     flatFore(p, MOLA_SPEC, 0.85);
   }),
   build: molaBuild,
-  // Its greys a cool slate, where the vola's and the dowse's are warm: the three are told apart at a glance.
-  palette: (coat, mark) => coatPalette(coat, mark, {
-    nose: [230, 140, 158], pad: [232, 170, 170], claw: [246, 236, 214], horn: [214, 200, 176], crystal: [186, 226, 250], crystalDark: [140, 184, 236], gem: [250, 190, 90],
+  // Its greys a cool slate, where the vola's and the dowse's are warm: the three are told apart at a glance. A pale slate, near
+  // the grass in lightness, so its light and shade show on it.
+  palette: (coat, mark) => coatPalette(lighter(coat, 0.25), lighter(mark, 0.25), {
+    nose: [230, 140, 158], pad: [232, 170, 170], claw: [236, 220, 190], horn: [214, 200, 176], crystal: [186, 226, 250], crystalDark: [140, 184, 236], gem: [250, 190, 90],
   }, 250),
   shadow: [1.9, 1.2],
   stride: 1.8,
   size: 2.05,
   blinks: 0,
-  glow: (b) => [{ p: place(b.head, MOLA_GLINT), r: 1.3, c: [170, 220, 255], a: 0.28 }],
+  // The crystal's light, brightening and dimming every four seconds as it smells for metal.
+  glow: (b, a) => [{ p: place(b.head, MOLA_GLINT), r: 1.3, c: [170, 220, 255], a: 0.28 + 0.08 * cyc(a.t, 6) }],
 };
 
 /* ---- the dowse ----------------------------------------------------------------------- */
@@ -286,8 +309,9 @@ function dowseBuild(lod: number): Piece[] {
     ...ROD_TIPS.map((t) => taper(curve([0, 0.35, 1.55], [t[0] * 0.6, (0.35 + t[1]) / 2, 1.8], t, 3), 0.07, 0.04, 5, 'horn')),
     ...ROD_TIPS.map((c) => orb(c, 0.13, 6, 4, 'crystal')),
   );
-  // Long whiskers out of the muzzle, fine and pale, and too fine for a line round them.
-  const whiskers = merge(...[-1, 1].flatMap((s) => [0.02, 0.14].map((z) => taper(curve([s * 0.3, 1.14, z], [s * 0.9, 1.27, z + 0.1], [s * 1.35, 1.17, z - 0.05], 3), 0.035, 0.012, 4, 'mark'))));
+  // Long whiskers out of the muzzle, fine and pale, and too fine for a line round them. They grow from ahead of the eyes and fan
+  // forward as well as out, so side on they spread in front of the face rather than standing in a streak across the eye.
+  const whiskers = merge(...[-1, 1].flatMap((s) => [0, 0.12].map((z, q) => taper(curve([s * 0.3, 1.28, z], [s * 0.82, 1.5, z + 0.12], [s * 1.22, 1.66, z + (q ? 0.14 : -0.02)], 3), 0.035, 0.012, 4, 'mark'))));
   // A muzzle standing forward of the eyes, so side on there is a nose line in front of them; the nose on the end of it a piece of
   // its own (below), which no lines are drawn across, as they would be most of it.
   const face = merge(
@@ -313,7 +337,8 @@ function dowseBuild(lod: number): Piece[] {
     extras: [
       { key: 'rod', mesh: rod, bone: 'head', bias: 0.25, after: ['head', 'ear0', 'ear1'] },
       { key: 'nose', mesh: nose, bone: 'head', bias: 0.23, after: 'head', hide: [{ c: H.c, r: H.r }], hideIn: 'head', lines: false },
-      { key: 'whiskers', mesh: whiskers, bone: 'head', bias: 0.24, after: ['head', 'nose'], rim: false },
+      // Hidden where they are behind the head or the muzzle, which seen from behind they would otherwise be drawn across.
+      { key: 'whiskers', mesh: whiskers, bone: 'head', bias: 0.24, after: ['head', 'nose'], rim: false, hide: [{ c: H.c, r: H.r }, { c: [0, 1.05, -0.08], r: [0.42, 0.4, 0.32] }], hideIn: 'head' },
       { key: 'spots', mesh: spots, bone: 'trunk', bias: 0.01, after: 'body' },
     ],
   });
@@ -341,26 +366,44 @@ export const DOWSE: Kind = {
  * wears like a trumpet with a flower at its end, pink petals round its
  * nostrils; sleepy lidded eyes, long soft ears, and folds down its back.
  */
-const SNOUT_SPEC: QuadSpec = { ...digger({ high: 1.15, len: 3.4, legs: 0.75, neck: 0.35, graze: 6, nose: 3, bow: 7 }), ears: { at: [0.7, -0.12, 0.42], out: 105, back: 25 } };
+const SNOUT_SPEC: QuadSpec = { ...digger({ high: 1.15, len: 3.4, legs: 0.75, neck: 0.35, graze: 6, nose: 3, bow: 7 }), ears: { at: [0.7, -0.12, 0.42], out: 140, back: 10 } };
 const SNOUT_HEAD = { c: [0, 0.2, 0.15] as V3, r: [0.95, 0.9, 0.8] as V3 };
-const SNOUT_EYE: V3 = [0.66, 0.6, 0.4];
-/** Where the trumpet ends, in the head's frame: the middle of the flower. */
+const SNOUT_EYE: V3 = [0.66, 0.6, 0.5];
+/** Where the trumpet goes into the head, and where it ends, in the head's frame: the middle of the flower. */
+const TRUMPET_ROOT: V3 = [0, 0.7, -0.05];
 const BELL: V3 = [0, 2.3, -0.28];
+
+/**
+ * How far the trumpet is swung round its root, in degrees, standing: sniffing over the ground from side to side once every four
+ * seconds. It is the trumpet that sweeps and not the head, so the face stays where somebody watching it side on can see it.
+ */
+const trumpetSwing = (a: Anim): number => 25 * Math.sin((a.t * TAU) / 4) * (1 - a.go);
+
+/** A point of the trumpet swung round its root by `deg` degrees, the more the further along it is, so it bends as it swings. */
+function swung(p: V3, deg: number): V3 {
+  const s = Math.min(1, Math.max(0, (p[1] - TRUMPET_ROOT[1]) / (BELL[1] - TRUMPET_ROOT[1]))) ** 1.5;
+  const t = deg * s * DEG, c = Math.cos(t), sn = Math.sin(t);
+  const y = p[1] - TRUMPET_ROOT[1];
+  return [p[0] * c - y * sn, TRUMPET_ROOT[1] + p[0] * sn + y * c, p[2]];
+}
 
 function snoutBuild(lod: number): Piece[] {
   const n = cut(lod, 8, 10), k = cut(lod, 5, 6);
   const H = SNOUT_HEAD;
-  // The trumpet: long, sagging a little along its length, wrinkled in bands, and flared at its end into a pink bell.
-  const line = curve([0, 0.7, -0.05], [0, 1.5, -0.44], [0, 2.18, -0.3], 6);
-  const trumpet = tube([...line, BELL], [0.32, 0.29, 0.26, 0.23, 0.21, 0.2, 0.2, 0.34], [0.3, 0.27, 0.24, 0.21, 0.19, 0.18, 0.18, 0.32], n,
+  // The trumpet: long, sagging a little along its length, wrinkled in bands, and flared at its end into a pink bell; slender, so
+  // the flower on its end is the widest thing about it and it is a nose rather than a trunk.
+  const line = curve(TRUMPET_ROOT, [0, 1.5, -0.44], [0, 2.18, -0.3], 6);
+  const trumpet = tube([...line, BELL], [0.24, 0.21, 0.19, 0.17, 0.16, 0.16, 0.17, 0.3], [0.23, 0.2, 0.18, 0.16, 0.15, 0.15, 0.16, 0.28], n,
     (ring) => (ring >= 6 ? 'petal' : ring % 2 ? 'coatDark' : 'coatLight'));
   // The flower round its nostrils: eight petals opening forward out of the rim of the bell, flat and turned to show their faces.
+  // Built from the trumpet's root, on a bone of its own there that swings with the trumpet's end.
   const petals = merge(...Array.from({ length: 8 }, (_, q) => {
     const a = ((q + 0.5) / 8) * TAU, c = Math.cos(a), sn = Math.sin(a);
-    const at = (r: number, y: number): V3 => [c * r, BELL[1] + y, BELL[2] + sn * r];
+    const at = (r: number, y: number): V3 => sub([c * r, BELL[1] + y, BELL[2] + sn * r], TRUMPET_ROOT);
     return blade([at(0.24, -0.06), at(0.36, 0.06), at(0.46, 0.18), at(0.52, 0.26)], [0.07, 0.13, 0.11, 0.03], [-c * 0.86, 0.5, -sn * 0.86], { fold: 0.3, thick: 0.04, mat: 'petal' });
   }));
-  const nostrils = paint([1, -1].map((s) => disc(add(BELL, [s * 0.1, 0.01, 0.02]), [0, 1, 0], 0.06, 0.09, 6, 'nose')));
+  const bell = sub(BELL, TRUMPET_ROOT);
+  const nostrils = paint([1, -1].map((s) => disc(add(bell, [s * 0.1, 0.01, 0.02]), [0, 1, 0], 0.06, 0.09, 6, 'nose')));
   // Sleepy: the top half of each eye under a heavy lid of its coat, painted after the eye so it lies over it, and the lid's edge
   // drawn across the eye in a dark line, sagging a little in the middle.
   const lids = paint([1, -1].flatMap((s) => {
@@ -375,32 +418,60 @@ function snoutBuild(lod: number): Piece[] {
     ];
   }));
   const folds = paint([-1.2, -0.5, 0.2, 0.9].map((y) => disc([0, y, 0.82], [0, 0, 1], 0.9, 0.08, 8, 'coatDark')));
-  return quadPieces({
+  const pieces = quadPieces({
     n, k,
     body: { y: [-1.9, -1.6, -0.9, 0, 0.9, 1.5, 1.8], z: [0.1, 0.16, 0.2, 0.22, 0.22, 0.25, 0.3], w: [0.2, 0.9, 1.12, 1.16, 1.08, 0.86, 0.25], h: [0.2, 0.66, 0.78, 0.82, 0.78, 0.66, 0.22], belly: true },
     neck: { w: 0.72, h: 0.62, len: 0.35 },
     head: { c: H.c, r: H.r, face: trumpet, eye: { dir: SNOUT_EYE, size: 0.3, rim: 0.08 }, blush: [[0.8, 0.45, -0.3], 0.18] },
-    // Long soft ears, hanging out and down either side of the head.
-    ear: earMesh(1.3, 0.3, n, { tilt: 0.2 }),
-    earTurn: 30,
+    // Long soft ears, hanging down either side of the face and turned out to show their faces: each a flap twisted along its
+    // length and cupped, so from no side is it an edge like a stick.
+    ear: blade(curve([0, 0, 0], [0, 0.04, 0.5], [0, 0.18, 1.0], 4), [0.15, 0.27, 0.29, 0.22, 0.07], [0, 1, 0], { twist: 0.9, fold: 0.4, thick: 0.08, mat: 'coat', rib: 'inner' }),
+    earTurn: 60,
     tail: [taper([[0, 0, 0], [0, -0.35, 0]], 0.14, 0.1, 5, 'coat'), taper([[0, 0, 0], [0, -0.35, 0]], 0.1, 0.02, 5, 'coat')],
     fore: { upper: [0.25, -0.42, 0.28, 0.22], lower: [0, -0.34, 0.22, 0.2], foot: hoofMesh(0.22, 0.12, n, 'pad') },
     hind: { upper: [0.3, -0.45, 0.34, 0.24], lower: [0, -0.38, 0.22, 0.2], foot: hoofMesh(0.22, 0.12, n, 'pad') },
     extras: [
       { key: 'folds', mesh: folds, bone: 'trunk', bias: 0.005, after: 'body' },
       { key: 'lids', mesh: lids, bone: 'head', bias: 0.2, after: 'head', hide: [{ c: H.c, r: H.r }], hideIn: 'head' },
-      // The flower goes on over the end of the trumpet with no lines across it, which on petals this small would be all of them.
-      { key: 'flower', mesh: merge(petals, nostrils), bone: 'head', bias: 0.22, after: 'head', hide: [{ c: H.c, r: H.r }, { c: add(BELL, [0, -0.06, 0]), r: [0.3, 0.06, 0.28] }], hideIn: 'head', lines: false },
+      // The flower goes on over the end of the trumpet with no lines across it, which on petals this small would be all of them;
+      // seen from behind, it goes under the head. Standing, its petals open and close a little once a second, sniffing.
+      {
+        key: 'flower', mesh: merge(petals, nostrils), bone: 'bell', bias: 0.22, after: 'head', front: [0, 1, 0], hide: [{ c: add(bell, [0, -0.06, 0]), r: [0.3, 0.06, 0.28] }], lines: false,
+        bent: (v, a) => {
+          const k = 1 + 0.14 * (0.5 + 0.5 * Math.sin(a.t * TAU)) * (1 - a.go);
+          return v.map((p, i) => (i < petals.v.length ? [bell[0] + (p[0] - bell[0]) * k, p[1], bell[2] + (p[2] - bell[2]) * k] : p));
+        },
+      },
     ],
+  });
+  // The trumpet bends as it swings: its corners in the head, the more the further along it they are.
+  return pieces.map((pc) => {
+    if (pc.key !== 'head') return pc;
+    const from = pc.mesh.v.indexOf(trumpet.v[0]), to = from + trumpet.v.length;
+    return from < 0 ? pc : { ...pc, bent: (v, a) => {
+      const deg = trumpetSwing(a);
+      return deg ? v.map((q, i) => (i >= from && i < to ? swung(q, deg) : q)) : [...v];
+    } };
   });
 }
 
+const snoutBones = quadBonesOf(SNOUT_SPEC, (p, a) => {
+  scurry(p, a);
+  // Standing, the head looks about only a little and follows the trumpet's sweep a little, so it never turns its face away. (On a
+  // neck carried as far forward as this, it is the head's tilt that turns it, and its turn that tilts it.)
+  if (a.go <= 0) {
+    p.neck[1] = 0.4 * p.neck[1] + 3 * Math.sin((a.t * TAU) / 4);
+    p.head[2] *= 0.5;
+  }
+});
+
 export const SNOUT: Kind = {
-  bones: quadBonesOf(SNOUT_SPEC, (p, a) => {
-    scurry(p, a);
-    // The trumpet swung over the ground, sniffing.
-    if (a.go <= 0) p.neck[1] += 18 * Math.sin((a.t * Math.PI * 2) / 4);
-  }),
+  // The flower on the trumpet's end has a bone of its own, at the trumpet's root, swung as far as the trumpet's end is.
+  bones: (a) => {
+    const b = snoutBones(a);
+    b.bell = joint(b.head, TRUMPET_ROOT, 0, 0, trumpetSwing(a));
+    return b;
+  },
   build: snoutBuild,
   // Its greys a dusty mauve.
   palette: (coat, mark) => coatPalette(coat, mark, { petal: [250, 180, 200], nose: [196, 104, 132], pad: [150, 120, 110] }, 300),

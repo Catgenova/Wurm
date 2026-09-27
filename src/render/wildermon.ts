@@ -1,12 +1,15 @@
 import { darker, drawBeast, drawBeastPortrait, topOf, type Anim, type BeastPose, type Kind } from './beasts';
-import { LUME } from './wild-air';
+import { LUME, VESP } from './wild-air';
 import { QUILL, SEDRA, WARDA } from './wild-birds';
-import { DOWSE, VOLA } from './wild-diggers';
-import { BURA, CUDDA, SAPPA } from './wild-herd';
-import { NOOT } from './wild-odd';
+import { DRAGON } from './wild-dragon';
+import { DOWSE, MOLA, SNOUT, VOLA } from './wild-diggers';
+import { BURA, CUDDA, GORRAL, ORSE, ROXXEN, SAPPA, SHAGGAN, SNEDDA } from './wild-herd';
+import { CRAWLER, MAGGA, NOOT } from './wild-odd';
+import { ULVA } from './wild-hunters';
 import { RABBA, SEAVIC, WOOLA } from './wild-small';
-import { BOGGA, EMBRA, HOLLA, MIDDUN, WADD } from './wild-brook';
-import { COBBE, QUARRA } from './wild-wild';
+import { GOBLIN, OGRE, ORC, TINKA } from './wild-upright';
+import { BEVERE, BOGGA, EMBRA, HOLLA, MIDDUN, PLUCKA, WADD } from './wild-brook';
+import { COBBE, GRUBBA, QUARRA, ROWL } from './wild-wild';
 
 /**
  * The wildermon, each as a body of its own (`./beasts` for what they are all
@@ -25,24 +28,44 @@ import { COBBE, QUARRA } from './wild-wild';
 export const WILDERMON: Record<string, Kind> = {
   rabba: RABBA,
   woola: WOOLA,
+  magga: MAGGA,
   noot: NOOT,
+  crawler: CRAWLER,
+  ulva: ULVA,
   seavic: SEAVIC,
   vola: VOLA,
+  mola: MOLA,
   dowse: DOWSE,
+  snout: SNOUT,
+  roxxen: ROXXEN,
+  orse: ORSE,
   cudda: CUDDA,
   bura: BURA,
+  gorral: GORRAL,
+  shaggan: SHAGGAN,
+  snedda: SNEDDA,
   sappa: SAPPA,
+  rowl: ROWL,
+  grubba: GRUBBA,
   cobbe: COBBE,
   quarra: QUARRA,
   embra: EMBRA,
   bogga: BOGGA,
+  bevere: BEVERE,
   wadd: WADD,
   holla: HOLLA,
+  plucka: PLUCKA,
   middun: MIDDUN,
   sedra: SEDRA,
   warda: WARDA,
   quill: QUILL,
+  tinka: TINKA,
+  goblin: GOBLIN,
+  orc: ORC,
+  ogre: OGRE,
+  vesp: VESP,
   lume: LUME,
+  dragon: DRAGON,
 };
 
 /** Whether a kind is drawn as a model here, or still by hand. */

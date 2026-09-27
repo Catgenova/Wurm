@@ -12,8 +12,13 @@ import { mesh, type Face, type Mat, type Mesh, type V3 } from './figure';
 /** How finely a kind is cut: coarser at the sizes the island is played at, finer drawn big. */
 export const cut = (lod: number, far: number, near: number): number => (lod ? near : far);
 
-/** Whether facet `j` of `n` round a tube is on its underside, within `spread` radians of straight down. */
-export const under = (n: number, j: number, spread = 0.95): boolean => Math.abs(((j + 0.5) / n) * Math.PI * 2 - Math.PI * 1.5) < spread;
+/**
+ * Whether facet `j` of `n` round a tube is on its underside, within `spread`
+ * radians of straight down. A facet lies between corners `j` and `j + 1`,
+ * which `tube` puts at half a step and a step and a half round, so its middle
+ * is `j + 1` steps round.
+ */
+export const under = (n: number, j: number, spread = 0.95): boolean => Math.abs(((j + 1) / n) * Math.PI * 2 - Math.PI * 1.5) < spread;
 
 export const clamp01 = (x: number): number => clamp(x);
 export const smooth01 = (x: number): number => smooth(x);

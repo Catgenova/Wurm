@@ -26,13 +26,18 @@ const MAGGA_SPEC: BirdSpec = {
   swing: [26, 40],
   hop: true,
   thrust: 7,
-  // Foraging, tipped well over, so that the beak meets the ground with the face still to be seen.
-  peck: 60,
-  tip: 45,
+  // Foraging, tipped well over, the neck bowed right down and crouched low on its legs, so that the beak meets the ground with the face
+  // still to be seen. The legs are swung forward past where they stood by as much as the bend at the knee would slant them back, so the
+  // shanks stand as steep as they did, under its middle, rather than trailing back.
+  peck: 120,
+  tip: 40,
   nose: 16,
+  crouch: 1.2,
+  stance: 1.8,
 };
 
-const MAGGA_HEAD = { c: [0, 0.22, 0.32] as V3, r: [0.6, 0.7, 0.56] as V3 };
+/** The head: long enough in the face that the eyes, turned well forward so both show from in front, still have face before them in profile. */
+const MAGGA_HEAD = { c: [0, 0.22, 0.32] as V3, r: [0.6, 0.82, 0.56] as V3 };
 
 function maggaBuild(lod: number): Piece[] {
   const n = cut(lod, 8, 11), k = cut(lod, 5, 7);
@@ -51,8 +56,9 @@ function maggaBuild(lod: number): Piece[] {
   );
   const H = MAGGA_HEAD;
   const skull = orb(H.c, H.r, n + 1, k, 'coat');
-  const beak = tube([[0, 0.76, 0.2], [0, 1.02, 0.15], [0, 1.3, 0.08]], [0.16, 0.1, 0.0], [0.13, 0.08, 0.0], 6, 'bill');
-  const look = (shut: boolean) => eyes(H.c, H.r, [0.84, 0.42, 0.3], 0.21, { tall: 1.15, shut, rim: 0.28 });
+  const beak = tube([[0, 0.88, 0.2], [0, 1.14, 0.15], [0, 1.42, 0.08]], [0.16, 0.1, 0.0], [0.13, 0.08, 0.0], 6, 'bill');
+  // The eyes turned about 55 degrees off the line of the beak, so that from in front they sit on the face rather than on its edge.
+  const look = (shut: boolean) => eyes(H.c, H.r, [0.7, 0.5, 0.3], 0.21, { tall: 1.15, shut, rim: 0.28 });
   // The crown: three short feathers standing up from the crown of the head, one behind another, each tipped with a spark.
   const crown = merge(...[-1, 0, 1].map((q) => merge(
     tube(curve([q * 0.03, 0.09 + q * 0.14, 0.78], [q * 0.05, 0.06 + q * 0.2, 1.0], [q * 0.07, -0.01 + q * 0.26, 1.14 - Math.abs(q) * 0.06], 2), [0.07, 0.06, 0.03], [0.07, 0.06, 0.03], 5, 'coat'),
@@ -75,13 +81,22 @@ function maggaBuild(lod: number): Piece[] {
 
 export const MAGGA: Kind = {
   bones: (a) => birdBones(MAGGA_SPEC, a, (p) => {
-    if (a.go > 0) return;
-    const t = a.t;
+    if (a.go > 0) {
+      // Going, the tail is carried a little under the line of the back and swung a third as far as a hop would swing it, so that
+      // hopping toward the viewer the stone at its end stays down behind the head rather than bobbing up over the crown.
+      p.tail[0] += smooth(a.go) * (8 * Math.sin(frac(a.u) * TAU) - 14);
+      return;
+    }
+    const t = a.t, gz = a.graze;
     // Its snapped looks about a little smaller than most birds', so its face stays turned to whoever is looking at it.
     p.head[1] *= 0.7;
     p.head[2] *= 0.7;
     // Twice a loop the tail pumped, up and down and up again, the way a magpie's is, swinging the stone at its end.
-    p.tail[0] += 24 * beat(t, [4.4, 4.85, 16.4, 16.85], 0.45) * (1 - a.graze);
+    p.tail[0] += 24 * beat(t, [4.4, 4.85, 16.4, 16.85], 0.45) * (1 - gz);
+    // Foraging, the tail is not cocked up as far as the body tips but held lower and turned aside, so that seen from in front it
+    // lies out beside the body rather than standing up over the head.
+    p.tail[0] -= 35 * gz;
+    p.tail[1] -= 35 * gz;
   }),
   build: maggaBuild,
   palette: (coat, mark) => coatPalette(coat, mark, {
@@ -132,9 +147,10 @@ function spiral(c: V3, r0: number, r1: number, turns: number, w: number, m: Disc
 
 function nootBuild(lod: number): Piece[] {
   const n = cut(lod, 8, 11), k = cut(lod, 5, 7);
-  // The body: a pear standing up, slate behind and white before, the white smeared with clay.
+  // The body: a pear standing up, slate behind and white before, the white smeared with clay. Each facet is white by the middle of it,
+  // which is a whole step round from the corner it starts at (`under` in `./beastkit`), so the white front sits square on the middle.
   const trunk = tube([[0, 0, -0.5], [0, 0.02, -0.32], [0, 0.05, 0.12], [0, 0.05, 0.55], [0, 0.03, 0.9], [0, 0, 1.08]], [0.42, 1.12, 1.26, 1.14, 0.9, 0.3], [0.38, 0.98, 1.1, 1.0, 0.8, 0.28], n,
-    (ring, j) => (ring > 0 && Math.abs(((j + 0.5) / n) * Math.PI * 2 - Math.PI * 0.5) < 1.1 ? 'mark' : 'coat'), { up: [0, 1, 0] });
+    (ring, j) => (ring > 0 && Math.abs(((j + 1) / n) * Math.PI * 2 - Math.PI * 0.5) < 1.1 ? 'mark' : 'coat'), { up: [0, 1, 0] });
   const clay = paint([
     disc([0.4, 1.06, 0.0], [0.3, 1, 0], 0.26, 0.18, 7, 'bark'),
     disc([-0.32, 1.08, 0.42], [-0.25, 1, 0.1], 0.2, 0.13, 7, 'bark'),
@@ -191,19 +207,22 @@ export const NOOT: Kind = {
     // Its looks about kept small, so that its face stays turned to whoever is looking at it.
     p.neck[1] *= 0.6;
     p.head[1] *= 0.6;
-    // Twice a loop, delighted with itself: flippers flung out and two little hops, the head up and the tail wagging.
+    // Twice a loop, delighted with itself: flippers flung out and three little hops, the head up and the tail wagging. The hops are
+    // timed so that the island's stills, six a second, catch it in the air and on the ground by turns, rather than at odd heights.
     const joy = beat(t, NOOT_JOY, NOOT_JOY_LEN) * (1 - gz);
     if (joy > 0) {
       p.arms = [[p.arms[0][0] + 10 * joy, p.arms[0][1] + 40 * joy, p.arms[0][2]], [p.arms[1][0] + 10 * joy, p.arms[1][1] + 40 * joy, p.arms[1][2]]];
-      p.lift += 0.3 * joy * Math.abs(Math.sin(t * TAU * 1.7));
+      p.lift += 0.3 * joy * Math.abs(Math.sin(t * TAU * 1.5 + Math.PI / 4));
       p.head[0] += 10 * joy;
       p.tail[1] += 16 * joy * Math.sin(t * TAU * 3);
     }
     if (gz > 0) {
       // Foraging, it is bent right over at the clay with its knees bent, the bill down in it and the face still to be seen, and its
-      // flippers scooping by turns.
+      // flippers scooping by turns; the stool of a tail is held back down near level against the bend, so it still shows its top rather
+      // than standing on edge.
       const dig = cyc(t, 30);
       p.pitch -= 52 * gz;
+      p.tail[0] -= 40 * gz;
       p.chest[0] += 32 * gz;
       p.head[0] += (56 + 3 * cyc(t, 72)) * gz;
       p.legs = [[gz * 50, gz * 0.6, 0], [gz * 50, gz * 0.6, 0]];
@@ -229,8 +248,11 @@ export const NOOT: Kind = {
  * going anywhere it goes sideways, as it would: its left and right are `y`.
  */
 
-/** Its legs, three a side, front to back: where each comes out from under the shell, and how far each is fanned round from straight out. */
-const CRAWLER_LEGS = [{ x: 0.5, fan: 26 }, { x: -0.08, fan: 2 }, { x: -0.62, fan: -24 }];
+/**
+ * Its legs, three a side, front to back: where each comes out from under the shell, and how far each is fanned round from straight
+ * out -- far enough apart that the near three stand apart seen side on, rather than as three posts.
+ */
+const CRAWLER_LEGS = [{ x: 0.5, fan: 38 }, { x: -0.08, fan: 4 }, { x: -0.62, fan: -34 }];
 /** A leg's two parts, and where its hip is on either side: out under the rim of the shell, and a little below its middle. */
 const CRAWLER_UPPER = 0.8, CRAWLER_LOWER = 1.1, CRAWLER_HIP: V3 = [0, 0.95, -0.1];
 /** How far out from its hip each foot is put down, standing: which with the parts above sets the upper leg at 35 degrees and the knee at a hundred. */
@@ -273,15 +295,16 @@ function crawlerBones(a: Anim): Bones {
     const sd = k ? 1 : -1;
     b[`eye${k}`] = joint(body, [0.62, sd * 0.34, 0.4], 8 * cyc(t, 3 + k, k) * (1 - go), 10 * cyc(t, 5, k * 2) * (1 - go) - 28 * run, 45 * go);
   }
-  // The claws: held up in front, opened and shut now and then, and the right one waved when it is pleased -- lifted and waggled, the
-  // arm and all, and pinching away; tucked in tight at a run, and scooping at the sand by turns as it forages.
+  // The claws: held up in front and out to either side, the pincers stood on end, so that they show from in front as well as from the
+  // side; opened and shut now and then, and the right one waved when it is pleased -- the arm lifted and the claw kept upright on it,
+  // waggled and pinching away; tucked in tight at a run, and scooping at the sand by turns as it forages.
   const wave = beat(t, [7.5, 19.5], 1.6) * (1 - go);
   for (let k = 0; k < 2; k++) {
     const sd = k ? 1 : -1;
     const lift = k === 1 ? wave : 0;
     const scoop = gz * (0.5 + 0.5 * Math.sin(t * TAU * 0.75 + k * Math.PI));
-    b[`arm${k}`] = joint(body, [0.72, sd * 0.86, 0.02], 0, -12 - 35 * lift + 25 * scoop + 10 * run, sd * (40 - 25 * run));
-    b[`claw${k}`] = joint(b[`arm${k}`], [0.9, 0, 0.1], 0, -(50 + 40 * lift + 15 * run) + 80 * scoop, sd * (-24 + 14 * Math.sin(t * 12) * lift - 20 * run));
+    b[`arm${k}`] = joint(body, [0.72, sd * 0.86, 0.02], 0, -20 - 35 * lift + 25 * scoop + 10 * run, sd * (60 - 25 * run));
+    b[`claw${k}`] = joint(b[`arm${k}`], [0.9, 0, 0.1], 0, -75 + 30 * lift - 15 * run + 80 * scoop, sd * (-24 + 14 * Math.sin(t * 12) * lift - 20 * run));
     b[`nip${k}`] = joint(b[`claw${k}`], [0.78, 0, 0.065], 0, 0, sd * (12 + 18 * Math.max(0, lift ? Math.sin(t * TAU * 3) : cyc(t, 11, k))));
   }
   // Three legs a side, each out and up from under the shell and down at a sharp knee to the ground: in two threes by turns, each foot put
@@ -329,19 +352,24 @@ function crawlerBuild(lod: number): Piece[] {
     return disc(add(at.p, scale(at.n, 0.04)), at.n, 0.16, 0.12, 7, 'spot');
   }));
   const mouth = smile([0.86, 0, 0.12], [1, 0, 0.25], 0.28);
-  // The tower of a shell it carries: a whorl narrowing to a point, in its own pale colours, with the dark mouth of it at its foot.
-  const whorl: V3[] = [];
-  for (let q = 0; q <= 12; q++) {
-    const s = (q / 12) * Math.PI * 5, r = 0.4 * (1 - q / 13);
-    whorl.push([-0.28 + Math.cos(s) * r, Math.sin(s) * r, 0.64 + q * 0.07]);
-  }
-  const base: V3 = [-0.28, 0, 0.64], baseR: V3 = [0.6, 0.56, 0.3];
-  const opening = onEgg(base, baseR, [0.25, 1, -0.35]);
+  // The tower of a shell it carries: a spire of whorls on a low dome, each whorl swelling and pinched in at the seam under the next, a
+  // dark band along the foot of the upper two, and the spire leaning a little forward -- a shell's cone rather than a swirl. Each ring
+  // of it: its height, how far out, and how far it leans.
+  const spire: Array<[number, number, number]> = [[0.62, 0.44, 0], [0.8, 0.5, 0.01], [0.94, 0.46, 0.03], [1.0, 0.33, 0.05], [1.1, 0.37, 0.06], [1.2, 0.33, 0.08],
+    [1.26, 0.22, 0.1], [1.34, 0.24, 0.12], [1.42, 0.19, 0.13], [1.48, 0.1, 0.15], [1.54, 0.02, 0.16]];
   const tower = merge(
-    orb(base, baseR, n, k, 'shell'),
-    tube(whorl, whorl.map((_, q) => 0.3 * (1 - q / 13.5)), whorl.map((_, q) => 0.26 * (1 - q / 13.5)), n, (ring) => (ring % 3 === 2 ? 'shellDark' : 'shell')),
-    paint([disc(add(opening.p, scale(opening.n, 0.02)), opening.n, 0.24, 0.15, 9, 'eye')]),
+    orb([-0.28, 0, 0.64], [0.6, 0.56, 0.3], n, k, 'shell'),
+    tube(spire.map(([z, , lean]) => [-0.28 + lean * 0.5, lean * 0.2, z] as V3), spire.map(([, r]) => r), spire.map(([, r]) => r), n,
+      (ring) => (ring === 4 || ring === 7 ? 'shellDark' : 'shell'), { up: [1, 0, 0] }),
   );
+  // Its mouth, on the side of the lowest whorl: dark, in a pink lip, as a whelk's is. A piece of its own, drawn over the spire and hidden
+  // whole when the spire is between it and the viewer.
+  const whorl = { c: [-0.28, 0, 0.8] as V3, r: [0.5, 0.5, 0.22] as V3 };
+  const opening = onEgg(whorl.c, whorl.r, [0, 1, -0.2]);
+  const shellMouth = paint([
+    disc(add(opening.p, scale(opening.n, 0.03)), opening.n, 0.34, 0.25, 10, 'inner'),
+    disc(add(opening.p, scale(opening.n, 0.04)), opening.n, 0.24, 0.16, 9, 'eye'),
+  ]);
   const stalk = merge(
     tube([[0, 0, 0], [0, 0, 0.36]], 0.09, 0.09, 6, 'coat'),
     orb([0.02, 0, 0.52], 0.25, n, k, 'eyeWhite'),
@@ -355,10 +383,13 @@ function crawlerBuild(lod: number): Piece[] {
   const pieces: Piece[] = [
     { key: 'body', mesh: merge(body, spots, mouth), bone: 'body', bias: 0, breathes: { c: [0, 0, 0], k: 0.03 } },
     { key: 'tower', mesh: tower, bone: 'body', bias: 0.05, after: 'body' },
+    { key: 'shellMouth', mesh: shellMouth, bone: 'body', bias: 0.055, after: 'tower', hide: [whorl] },
   ];
-  // Each leg's upper part out from under the shell, and its lower part down from the knee, dark at the tip.
-  const upperOf = (sd: number): Mesh => tube([[0, 0, 0], [0, sd * CRAWLER_UPPER, 0]], [0.13, 0.11], [0.13, 0.11], 6, 'coat', { seam: 'start' });
-  const lowerOf = (sd: number): Mesh => tube([[0, -sd * 0.06, 0], [0, sd * 0.6, 0], [0, sd * CRAWLER_LOWER, 0]], [0.1, 0.075, 0.02], [0.1, 0.075, 0.02], 6, (ring) => (ring === 1 ? 'coatDark' : 'coat'));
+  // Each leg's upper part out from under the shell, and its lower part down from the knee, darker at the tip: in a dark horn of their
+  // own, not the pale of the shell, so the fan of them stands out from the grass and says crab. The upper part is thick enough to be
+  // drawn two pixels across at the island's zoom 2, and so to be lined as the body is.
+  const upperOf = (sd: number): Mesh => tube([[0, 0, 0], [0, sd * CRAWLER_UPPER, 0]], [0.18, 0.15], [0.18, 0.15], 6, 'horn', { seam: 'start' });
+  const lowerOf = (sd: number): Mesh => tube([[0, -sd * 0.06, 0], [0, sd * 0.6, 0], [0, sd * CRAWLER_LOWER, 0]], [0.12, 0.09, 0.02], [0.12, 0.09, 0.02], 6, (ring) => (ring === 1 ? 'hornDark' : 'horn'));
   for (let s = 0; s < 2; s++) {
     const sd = s ? 1 : -1;
     const front: V3 = [0.6, sd * 0.8, 0];
@@ -371,7 +402,7 @@ function crawlerBuild(lod: number): Piece[] {
     const up = upperOf(sd), low = lowerOf(sd), lf: V3 = [0, sd, 0];
     for (let i = 0; i < 3; i++) {
       pieces.push(
-        { key: `leg${i}${s}0`, mesh: up, bone: `leg${i}${s}0`, bias: 0.01, after: 'body', front: lf, convex: true, thin: true },
+        { key: `leg${i}${s}0`, mesh: up, bone: `leg${i}${s}0`, bias: 0.01, after: 'body', front: lf, convex: true },
         { key: `leg${i}${s}1`, mesh: low, bone: `leg${i}${s}1`, bias: 0.015, after: 'body', front: lf, convex: true, thin: true },
       );
     }
@@ -382,7 +413,12 @@ function crawlerBuild(lod: number): Piece[] {
 export const CRAWLER: Kind = {
   bones: crawlerBones,
   build: crawlerBuild,
-  palette: (coat, mark) => coatPalette(coat, mark, { spot: lighter(mark, 0.35), shell: [246, 222, 214], shellDark: [224, 176, 170], nose: darker(coat, 0.45) }),
+  // The legs a dark of the variant's own colour as it is, before it is brought into the island's pastels: a sandy crab's brown, a red
+  // one's rust. The tower cream, banded in a pinkish brown, with a pink lip to its mouth.
+  palette: (coat, mark) => coatPalette(coat, mark, {
+    spot: lighter(mark, 0.35), shell: [244, 228, 204], shellDark: [190, 128, 110], inner: [238, 172, 160], nose: darker(coat, 0.45),
+    horn: darker(coat, 0.3), hornDark: darker(coat, 0.55),
+  }),
   shadow: [1.9, 1.3],
   stride: 1.8,
   size: 2.6,

@@ -1,5 +1,5 @@
 import {
-  beat, clamp, coatPalette, curve, cyc, darker, disc, frac, lerp, lighter, merge, moved, onEgg, orb, orbAlong, paint, pastel, quadBones, quadPose, smile, smooth, taper, TAU, tube,
+  beat, clamp, coatPalette, curve, cyc, darker, DEG, disc, frac, lerp, lighter, merge, moved, onEgg, orb, orbAlong, paint, pastel, quadBones, quadPose, smile, smooth, taper, TAU, tube,
   type Anim, type Bones, type Disc, type Kind, type Piece, type QuadPose, type QuadSpec,
 } from './beasts';
 import { blade, cut, earMesh, hoofMesh, pawMesh, quadPieces, type QuadLook } from './beastkit';
@@ -52,40 +52,92 @@ function quadWithEyes(o: QuadLook): Piece[] {
   return pieces;
 }
 
+/** How bright a colour looks (its luma), nought to 255: the island's grass is 177. */
+const luma = (c: RGB): number => 0.299 * c[0] + 0.587 * c[1] + 0.114 * c[2];
+
+/**
+ * A variant's colour made `rich` times as strong and then lighter by as little as brings it to `least` once it is painted
+ * (`pastel`, with the kind's `grey`): scaled up rather than mixed with white, which keeps its hue, where mixing it with white
+ * greys it. A kind whose variants are all one sort of brown then paints them as as many browns, not as one taupe.
+ */
+function brought(c0: RGB, grey: number, least: number, rich = 1): RGB {
+  const y = luma(c0);
+  const c = c0.map((x) => clamp(y + (x - y) * rich, 0, 255)) as RGB;
+  const up = (k: number): RGB => [Math.min(255, c[0] * k), Math.min(255, c[1] * k), Math.min(255, c[2] * k)];
+  let k = 1;
+  while (k < 3 && luma(pastel(up(k), grey)) < least) k += 0.02;
+  return up(k);
+}
+
+/** The hue of a colour, in degrees round the wheel: for a grey to be painted in its own (`pastel`) rather than in its kind's. */
+function hueOf(c: RGB): number {
+  const [r, g, b] = c, hi = Math.max(r, g, b), d = hi - Math.min(r, g, b);
+  if (!d) return 0;
+  return 60 * (hi === r ? (g - b) / d + (g < b ? 6 : 0) : hi === g ? (b - r) / d + 2 : (r - g) / d + 4);
+}
+
 /** How far over the ground a leg's sole is, at its toe or its heel, whichever is lower, as `quadBones` stands a body on them. */
 const soleOf = (b: Bones, key: string, leg: QuadSpec['fore']): number =>
   Math.min(...[leg.toe?.[0] ?? 0.3, -(leg.toe?.[1] ?? 0.3)].map((y) => place(b[`${key}2`], [0, y, -leg.len[2]])[2]));
 
 /**
  * A kind on four legs, its bones posed from its spec and its own pose laid
- * over that, as `quadBonesOf` has it -- but grazing with all four feet on
- * the ground. The chest bowed to the grass over folded fore legs tips the
- * body up behind, and it would be stood on its fore feet alone with its hind
- * ones in the air; so the fore legs are folded deeper still, as far as it
- * takes for the hind feet to come down to the ground as well. And it nibbles
- * rather than lunges: most of the tug at the grass on every other still is
- * taken back out of the chest and the neck, which on legs this short would
- * otherwise swing the muzzle through the ground and out of it.
+ * over that, as `quadBonesOf` has it -- but grazing with all four feet on the
+ * ground, its fore legs drawn back under its chest and folded there. The
+ * chest bowed to the grass tips the body up behind, and stood on its fore
+ * feet alone it would have its hind ones in the air; so the fore legs are
+ * drawn back by `tuck` degrees and folded as far as it takes to let the chest
+ * down till the hind feet are down too -- but never past the forearm lying
+ * level, for folded further the knee is the lowest thing under the chin and
+ * shows there as a pale wedge. Whatever they cannot take up, the body is
+ * tipped back by, toward level, the head kept at its pitch and the neck bowed
+ * the further to keep the head down at the grass: where folding the fore legs
+ * as deep as it took, knee or no knee, would have put it.
  */
-function grazing(s: QuadSpec, own: (p: QuadPose, a: Anim) => void): (a: Anim) => Bones {
+function grazing(s: QuadSpec, own: (p: QuadPose, a: Anim) => void, tuck = 0): (a: Anim) => Bones {
   return (a) => {
     const p = quadPose(s, a);
     own(p, a);
     if (a.graze <= 0 || a.go >= 1) return quadBones(s, p);
-    const tug = a.graze * cyc(a.t, 72) * (0.45 + 0.55 * Math.max(0, cyc(a.t, 8)));
-    p.pitch += 1.8 * tug;
-    p.head[0] -= 1.8 * tug;
-    p.neck[0] -= 5 * tug;
-    const folded = (e: number): QuadPose => ({ ...p, legs: p.legs.map((l, i) => (i < 2 ? [l[0], l[1] + e * a.graze, l[2]] : l) as [number, number, number]) });
-    const up = (e: number): number => { const b = quadBones(s, folded(e)); return Math.min(soleOf(b, 'hl', s.hind), soleOf(b, 'hr', s.hind)); };
-    let lo = 0, hi = 1.4;
-    if (up(lo) < 0.02) return quadBones(s, p);
-    for (let q = 0; q < 7; q++) {
-      const mid = (lo + hi) / 2;
-      if (up(mid) > 0.01) lo = mid;
-      else hi = mid;
+    const g = a.graze, pitch = p.pitch, nod = p.head[0], bow = p.neck[0];
+    // Tipped back from its bow by `back` degrees, the neck bowed `more`, and the fore legs folded `e` more and drawn back by `drawn`.
+    const pose = (back: number, more: number, e: number, drawn = tuck): Bones => quadBones(s, {
+      ...p, pitch: pitch + back, head: [nod - back, p.head[1], p.head[2]], neck: [bow + more, p.neck[1]],
+      legs: p.legs.map((l, i) => (i < 2 ? [l[0] - drawn * g, l[1] + e * g, l[2]] : l) as [number, number, number]),
+    });
+    const down = (b: Bones): boolean => Math.min(soleOf(b, 'hl', s.hind), soleOf(b, 'hr', s.hind)) <= 0.01;
+    // How far a forearm is swung back from hanging straight down, in degrees, from a quarter turn forward to three back: past a right
+    // angle, its knee is lower than its paw.
+    const swung = (b: Bones, k: string): number => {
+      const d = place(b[k], [0, 0, -1]), sw = Math.atan2(b[k].t[1] - d[1], b[k].t[2] - d[2]) / DEG;
+      return sw < -90 ? sw + 360 : sw;
+    };
+    // The last `x` that `past` is not true of and the first that it is, between `lo` where it is not and `hi` where it is.
+    const turn = (lo: number, hi: number, past: (x: number) => boolean): [number, number] => {
+      for (let q = 0; q < 7; q++) { const mid = (lo + hi) / 2; if (past(mid)) hi = mid; else lo = mid; }
+      return [lo, hi];
+    };
+    const headAt = pose(0, 0, turn(0, 1.4, (e) => down(pose(0, 0, e, 0)))[1], 0).head.t[2];
+    // Unfolded by this much, the fore legs are straight: they are never unfolded further, which would bend the knees the wrong way.
+    const straight = -Math.min(p.legs[0][1], p.legs[1][1]) / g;
+    // The most the fore legs fold at a tip: till each forearm slopes only a little down to its paw, 84 degrees from hanging straight
+    // down. It swings back evenly as the leg folds, so two poses say where that is.
+    const most = (back: number): number => {
+      const b0 = pose(back, 0, 0), b1 = pose(back, 0, 1);
+      return Math.max(straight, Math.min(...['fl1', 'fr1'].map((k) => {
+        const s0 = swung(b0, k), by = ((swung(b1, k) - s0 + 540) % 360) - 180;
+        return by > 0 ? (84 - s0) / by : 1.4;
+      })));
+    };
+    let back = 0, e = most(0);
+    if (down(pose(0, 0, e))) e = turn(straight, e, (x) => down(pose(0, 0, x)))[1];
+    else {
+      back = turn(0, Math.max(0, -pitch), (x) => down(pose(x, 0, most(x))))[1];
+      e = most(back);
     }
-    return quadBones(s, folded(hi));
+    // The neck bowed no further than hanging straight down.
+    const more = turn(0, Math.max(0, 172 - (s.neck.lean + bow) + pitch + back), (m) => pose(back, m, e).head.t[2] <= headAt)[1];
+    return pose(back, more, e);
   };
 }
 
@@ -145,7 +197,7 @@ function band(B: QuadLook['body'], n: number, y: number, t0: number, t1: number,
  * Dusk-violet, striped, with two glowing marks over its eyes, leaves for ear
  * tufts, and a tail that ends in a small light like a firefly's.
  */
-const ROWL_SPEC = { ...pawed({ high: 2.1, len: 3.4, legs: 1.5, neck: 0.55, lean: 40, swing: [26, 46], ears: [16, 4], tail: [0.55, -30, 28] }), graze: 55, nose: 8, bow: 20 };
+const ROWL_SPEC = { ...pawed({ high: 2.1, len: 3.4, legs: 1.5, neck: 0.55, lean: 40, swing: [26, 46], ears: [16, 4], tail: [0.55, -30, 28] }), graze: 55, nose: 6, bow: 20 };
 const ROWL_HEAD = { c: [0, 0.3, 0.2] as V3, r: [1.05, 0.95, 0.88] as V3 };
 /** Its trunk: a rump rounded off behind, a waist a little tucked up, and a deep chest. */
 const ROWL_BODY: QuadLook['body'] = {
@@ -159,17 +211,17 @@ function rowlBuild(lod: number): Piece[] {
   const n = cut(lod, 8, 10), k = cut(lod, 5, 6);
   const H = ROWL_HEAD;
   const face = merge(
-    muzzleAt({ at: 1.0, z: 0.04, r: [0.5, 0.4, 0.46], nose: 0.13 }, n, k),
+    muzzleAt({ at: 1.0, z: 0.14, r: [0.5, 0.4, 0.46], nose: 0.13 }, n, k),
     // The marks over its eyes, which glow in the half-light: a dash on each brow, slanting up and out.
-    paint([1, -1].map((s) => disc([s * ROWL_BROW.p[0], ROWL_BROW.p[1], ROWL_BROW.p[2]], [s * ROWL_BROW.n[0], ROWL_BROW.n[1], ROWL_BROW.n[2]], 0.2, 0.07, 6, 'flame', { lit: true, spin: -0.35 * s }))),
+    paint([1, -1].map((s) => disc([s * ROWL_BROW.p[0], ROWL_BROW.p[1], ROWL_BROW.p[2]], [s * ROWL_BROW.n[0], ROWL_BROW.n[1], ROWL_BROW.n[2]], 0.3, 0.1, 6, 'flame', { lit: true, spin: -0.35 * s }))),
   );
   // Tabby stripes over the back and down each flank, flat on the body.
   const stripes = paint([-1.5, -0.9, -0.3, 0.3].flatMap((y) => band(ROWL_BODY, n, y, -0.35, Math.PI + 0.35, [0.12, 0.03], 'coatDark', 0.12)));
   // A leaf for a tuft at the tip of each ear, and a smaller one behind it.
   const ear = merge(
     earMesh(0.62, 0.42, n, { point: true }),
-    blade(curve([0, -0.02, 0.44], [0.04, 0.0, 0.72], [0.1, -0.12, 0.98], 3), [0.04, 0.16, 0.13, 0.02], [0.5, 1, 0.1], { twist: 0.6, fold: 0.26, mat: 'leaf', rib: 'leafDark' }),
-    blade(curve([0.02, -0.06, 0.4], [0.1, -0.2, 0.6], [0.12, -0.42, 0.72], 3), [0.03, 0.12, 0.1, 0.02], [1, 0.1, 0.3], { twist: -0.4, fold: 0.26, mat: 'leaf', rib: 'leafDark' }),
+    blade(curve([0, -0.02, 0.44], [0.05, 0.01, 0.8], [0.13, -0.15, 1.14], 3), [0.05, 0.24, 0.2, 0.03], [0.5, 1, 0.1], { twist: 0.6, fold: 0.26, mat: 'leaf', rib: 'leafDark' }),
+    blade(curve([0.02, -0.06, 0.4], [0.12, -0.24, 0.66], [0.15, -0.53, 0.82], 3), [0.045, 0.18, 0.15, 0.03], [1, 0.1, 0.3], { twist: -0.4, fold: 0.26, mat: 'leaf', rib: 'leafDark' }),
   );
   const tail = [
     taper([[0, 0, 0], [0, -0.55, 0]], 0.2, 0.17, 6, 'coat'),
@@ -243,10 +295,11 @@ function rowlBound(p: QuadPose, a: Anim): void {
   p.lift = lerp(p.lift, 0.3 * bump(w, 0.33, 0.44) + 0.5 * bump(w, 0.77, 1), g);
   p.squash = lerp(p.squash, -0.04 * Math.max(0, Math.sin(TAU * (w - 0.25))), g);
   p.roll *= 1 - g;
-  // The tail streams out behind, and rises and falls a beat behind the back.
-  p.tail[0] = lerp(p.tail[0], 32 - 10 * Math.cos(TAU * (w - 0.1)), g);
-  p.tail[1] = lerp(p.tail[1], 8 * Math.sin(TAU * w), g);
-  p.tail[2] = lerp(p.tail[2], -18, g);
+  // The tail streams out straight behind, a little under level, and rises and falls a beat behind the back; still swung out to one
+  // side, so that seen head on the light at its tip is beside the back and not stood up over the head on the tail like a stalk.
+  p.tail[0] = lerp(p.tail[0], 12 - 10 * Math.cos(TAU * (w - 0.1)), g);
+  p.tail[1] = lerp(p.tail[1], 40 + 8 * Math.sin(TAU * w), g);
+  p.tail[2] = lerp(p.tail[2], -26, g);
 }
 
 export const ROWL: Kind = {
@@ -257,16 +310,19 @@ export const ROWL: Kind = {
     p.tail[1] += 50;
     // Low and level at a run, a stretch now and then standing.
     p.neck[0] += 14 * a.gait * a.go;
-    const stretch = a.go > 0 ? 0 : beat(a.t, [11.5], 1.8);
+    const stretch = a.go > 0 ? 0 : beat(a.t, [11.5], 1.8) * (1 - a.graze);
     p.pitch -= 10 * stretch;
     p.head[0] += 10 * stretch;
     p.legs[0][0] += 25 * stretch;
     p.legs[1][0] += 25 * stretch;
+    // Grazing, its sniff at the grass made three degrees deeper than the nod every kind makes there (`quadStill`, on the same beat),
+    // so that a head this small still moves a pixel.
+    p.head[0] -= 3 * a.graze * cyc(a.t, 72) * (0.45 + 0.55 * Math.max(0, cyc(a.t, 8)));
     rowlBound(p, a);
-  }),
+  }, 45),
   build: rowlBuild,
   // Its coat lifted a little toward the pale, so even its darkest stands off the grass it hunts through.
-  palette: (coat, mark) => coatPalette(lighter(coat, 0.22), mark, { crystal: [252, 230, 130], flame: [246, 204, 100], bloom: [248, 196, 90], leaf: [150, 204, 104], leafDark: [104, 160, 86] }, 250),
+  palette: (coat, mark) => coatPalette(lighter(coat, 0.22), mark, { crystal: [252, 230, 130], flame: [255, 226, 120], bloom: [248, 196, 90], leaf: [150, 204, 104], leafDark: [104, 160, 86] }, 250),
   shadow: [2.4, 1.1],
   stride: 0.9,
   size: 1.56,
@@ -275,7 +331,7 @@ export const ROWL: Kind = {
     const t = b.tail2, h = b.head;
     const out: Array<{ p: V3; r: number; c: RGB; a: number }> = [];
     if (t) out.push({ p: place(t, [0, -0.52, 0]), r: 1.5, c: [255, 240, 150], a: 0.35 });
-    if (h) for (const s of [1, -1]) out.push({ p: place(h, [s * ROWL_BROW.p[0], ROWL_BROW.p[1], ROWL_BROW.p[2] + 0.03]), r: 0.6, c: [255, 214, 120], a: 0.3 });
+    if (h) for (const s of [1, -1]) out.push({ p: place(h, [s * ROWL_BROW.p[0], ROWL_BROW.p[1], ROWL_BROW.p[2] + 0.03]), r: 0.9, c: [255, 214, 120], a: 0.45 });
     return out;
   },
 };
@@ -297,15 +353,14 @@ function grubbaBuild(lod: number): Piece[] {
   const H = GRUBBA_HEAD;
   const snout = merge(
     // A long pig's snout carried at the eyes' height, so side on there is snout in front of the eye; a pink disc on its end.
-    taper([[0, 0.8, -0.04], [0, 1.36, -0.08]], 0.44, 0.4, n, 'muzzle'),
-    orbAlong([0, 1.38, -0.08], [0, 1, 0], [0.38, 0.34, 0.1], n, 3, 'inner'),
-    paint([1, -1].map((s) => disc([s * 0.14, 1.49, -0.06], [0, 1, 0], 0.07, 0.1, 6, 'nose'))),
-    smile([0, 1.3, -0.44], [0, 1, -0.5], 0.26),
-    // Tusks: stout, curling up the snout's sides, each ending in a flat blade across it like a mattock's head.
-    ...[1, -1].map((s) => merge(
-      taper(curve([s * 0.3, 1.02, -0.36], [s * 0.62, 1.12, -0.3], [s * 0.66, 1.2, 0.14], 3), 0.13, 0.08, 5, 'tooth'),
-      orbAlong([s * 0.66, 1.21, 0.2], [s * 0.3, 0.3, 1], [0.16, 0.06, 0.1], 6, 3, 'tooth'),
-    )),
+    taper([[0, 0.8, -0.04], [0, 1.62, -0.08]], 0.44, 0.4, n, 'coat'),
+    orbAlong([0, 1.64, -0.08], [0, 1, 0], [0.38, 0.34, 0.1], n, 3, 'inner'),
+    paint([1, -1].map((s) => disc([s * 0.14, 1.75, -0.06], [0, 1, 0], 0.07, 0.1, 6, 'nose'))),
+    smile([0, 1.56, -0.44], [0, 1, -0.5], 0.26),
+    // Tusks: stout at the root, curling up the snout's sides past its top and flattening as they go into a blade like a mattock's
+    // head, broad along the snout and thin across it, so that side on it shows whole.
+    ...[1, -1].map((s) => tube(curve([s * 0.3, 1.2, -0.36], [s * 0.66, 1.3, -0.3], [s * 0.64, 1.36, 0.46], 4),
+      [0.17, 0.14, 0.12, 0.15, 0.22], [0.17, 0.12, 0.09, 0.07, 0.06], 6, 'tooth', { up: [1, 0, 0] })),
   );
   // The stump: bark in ridges down its sides, rooted onto the back, its top cut and tipped back, with the rings of its years on it.
   const S = STUMP, top = S.high;
@@ -330,7 +385,7 @@ function grubbaBuild(lod: number): Piece[] {
     ear: earMesh(0.45, 0.34, n, { tilt: 0.25 }),
     tail: [merge(taper(curve([0, 0, 0], [0, -0.2, 0.1], [0, -0.3, 0.3], 2), 0.07, 0.05, 5, 'coat'))],
     fore: { upper: [0.3, -0.52, 0.36, 0.3], lower: [0, -0.46, 0.3, 0.28], foot: pawMesh(0.28, n, k, 'coatDark') },
-    hind: { upper: [0.3, -0.56, 0.4, 0.3], lower: [0, -0.56, 0.28, 0.26], foot: pawMesh(0.26, n, k, 'coatDark') },
+    hind: { upper: [0.18, -0.56, 0.34, 0.3], lower: [0, -0.56, 0.28, 0.26], foot: pawMesh(0.26, n, k, 'coatDark') },
     extras: [
       { key: 'hump', mesh: stump, bone: 'trunk', bias: 0.04, after: 'body' },
       { key: 'toadstool', mesh: toadstool, bone: 'trunk', bias: 0.05, after: 'hump' },
@@ -341,17 +396,18 @@ function grubbaBuild(lod: number): Piece[] {
 export const GRUBBA: Kind = {
   bones: grazing(GRUBBA_SPEC, (p, a) => {
     trot(p, a);
-    // Rooting: the snout down and shoving, the rump up.
+    // Rooting: the snout down and shoving, the rump up. Grazing, with its snout at the grass already, it shoves only a little deeper.
     if (a.go <= 0) {
-      const root = beat(a.t, [6.4, 18.8], 1.6);
+      const root = beat(a.t, [6.4, 18.8], 1.6) * (1 - 0.7 * a.graze);
       p.neck[0] += 25 * root * (0.8 + 0.2 * Math.sin(a.t * Math.PI * 6));
       p.head[0] -= 15 * root;
       p.pitch -= 6 * root;
     }
-  }),
+  }, 40),
   build: grubbaBuild,
-  // Its coat lifted a little toward the pale, so it stands off the grass and the brown stump stands off it.
-  palette: (coat, mark) => coatPalette(lighter(coat, 0.18), mark, { bark: [150, 112, 86], stoneDark: [112, 84, 66], tooth: [250, 244, 228], inner: [238, 168, 176], nose: [150, 80, 96], cap: [224, 92, 84], spot: [252, 246, 234] }, 26),
+  // Its coat lifted to a little lighter than the grass, so it stands off it and the brown stump stands off the coat, and its browns
+  // made richer, so its variants come out a tan, a ginger, a dun and a caramel.
+  palette: (coat, mark) => coatPalette(brought(coat, 26, 180, 1.5), mark, { bark: [150, 112, 86], stoneDark: [112, 84, 66], tooth: [250, 244, 228], inner: [238, 168, 176], nose: [150, 80, 96], cap: [224, 92, 84], spot: [252, 246, 234] }, 26),
   shadow: [2.1, 1.4],
   stride: 1.1,
   size: 1.85,
@@ -373,11 +429,11 @@ const SHELL = { z: [0, 0.24, 0.29, 0.51, 0.56, 0.76, 0.81, 1.0], high: 1.0, w: 1
 function cobbeBuild(lod: number): Piece[] {
   const n = cut(lod, 8, 10), k = cut(lod, 5, 6);
   const H = COBBE_HEAD;
-  // The shell: a dome in courses of brick, a thin course of pale mortar between each two.
+  // The shell: a dome in courses of brick, a thin course of pale mortar between each two, and brick over its top, not a disc of mortar.
   const round = lod ? 12 : 10;
   const across = (z: number): number => Math.cos((z / SHELL.high) * 1.25);
   const dome = tube(SHELL.z.map((z) => [0, 0, 0.1 + z] as V3), SHELL.z.map((z) => SHELL.w * across(z)), SHELL.z.map((z) => SHELL.d * across(z)), round,
-    (ring) => (ring % 2 ? 'stone' : 'shell'), { up: [0, 1, 0] });
+    (ring) => (ring % 2 && ring < SHELL.z.length - 1 ? 'stone' : 'shell'), { up: [0, 1, 0] });
   // Where on the dome's facets a point is, `z` up it and `t` radians round.
   const onDome = (z: number, t: number): V3 => {
     const f = across(z), s = (t / TAU) * round - 0.5, j = Math.floor(s), e = s - j;
@@ -413,10 +469,13 @@ export const COBBE: Kind = {
     trot(p, a);
     p.roll += a.go * 4 * Math.sin((a.u % 1) * TAU);
     if (a.go > 0) return;
-    // A nod of that keystone of a head, as if agreeing with something; and now and then a shuffle of the shell, settling it.
-    p.head[0] -= 20 * beat(a.t, [5.5, 13.2, 19.8], 1.0);
+    // A nod of that keystone of a head, as if agreeing with something, the neck bowing into it so the head need not tip so far that
+    // its eye comes to the front of its outline; and now and then a shuffle of the shell, settling it. The nod not while it grazes.
+    const nod = beat(a.t, [5.5, 13.2, 19.8], 1.0) * (1 - a.graze);
+    p.head[0] -= 13 * nod;
+    p.neck[0] += 10 * nod;
     p.roll += 5 * beat(a.t, [9.1, 16.4], 1.2) * Math.sin(a.t * TAU * 2.5);
-  }),
+  }, 30),
   build: cobbeBuild,
   palette: (coat, mark) => coatPalette(lighter(coat, 0.12), mark, { shell: [198, 110, 86], shellDark: [170, 86, 68], stone: [240, 228, 210], spot: [246, 236, 222] }, 30),
   shadow: [1.9, 1.7],
@@ -450,10 +509,10 @@ function quarraBuild(lod: number): Piece[] {
   );
   // The chisel of a jaw: broad and flat, carried up at the eyes' height, with two big square front teeth hanging under its lip.
   const jaw = merge(
-    tube([[0, 0.9, -0.14], [0, 1.42, -0.18]], [0.56, 0.5], [0.32, 0.28], n, 'muzzle'),
-    ...[1, -1].map((s) => tube([[s * 0.11, 1.38, -0.36], [s * 0.11, 1.4, -0.58]], 0.1, 0.06, 4, 'tooth')),
-    orbAlong([0, 1.43, 0.02], [0, 1, 0.3], [0.14, 0.09, 0.1], 5, 3, 'nose'),
-    smile([0, 1.44, -0.28], [0, 1, -0.2], 0.3),
+    tube([[0, 0.9, -0.02], [0, 1.57, -0.06]], [0.56, 0.5], [0.32, 0.28], n, 'muzzle'),
+    ...[1, -1].map((s) => tube([[s * 0.11, 1.53, -0.24], [s * 0.11, 1.55, -0.46]], 0.1, 0.06, 4, 'tooth')),
+    orbAlong([0, 1.58, 0.14], [0, 1, 0.3], [0.14, 0.09, 0.1], 5, 3, 'nose'),
+    smile([0, 1.59, -0.16], [0, 1, -0.2], 0.3),
   );
   // The tail plated as the back is, each link a flattened plate over the next, and blunt at the end: it drags.
   const plate = (w0: number, w1: number, len: number, m: Mat): Mesh => taper([[0, 0.05, 0.02], [0, -len, 0]], w0, w1, 6, m, 0.5);
@@ -466,7 +525,7 @@ function quarraBuild(lod: number): Piece[] {
     ear: earMesh(0.32, 0.3, n),
     tail,
     fore: { upper: [0.3, -0.42, 0.36, 0.3], lower: [0, -0.37, 0.3, 0.28], foot: pawMesh(0.3, n, k, 'stoneDark') },
-    hind: { upper: [0.3, -0.45, 0.38, 0.3], lower: [0, -0.45, 0.3, 0.28], foot: pawMesh(0.3, n, k, 'stoneDark') },
+    hind: { upper: [0.18, -0.45, 0.33, 0.3], lower: [0, -0.45, 0.3, 0.28], foot: pawMesh(0.3, n, k, 'stoneDark') },
     extras: [
       { key: 'plates', mesh: plates, bone: 'trunk', bias: 0.03, after: 'body' },
       { key: 'crystals', mesh: crystals, bone: 'trunk', bias: 0.05, after: ['body', 'plates'] },
@@ -483,11 +542,13 @@ export const QUARRA: Kind = {
     p.head[0] += 3 * Math.sin(a.t * Math.PI * 4) + 5 * settle;
     p.squash += 0.06 * settle;
     p.pitch += 5 * settle * (1 - a.graze);
-  }),
+  }, 35),
   build: quarraBuild,
+  // Each variant the colour of its own rock -- a granite, a slate, a sandstone, an ironstone -- its greys painted in their own hue,
+  // made a little stronger, rather than all in one blue-grey.
   palette: (coat, mark) => {
-    const stone = pastel(coat, 200);
-    return coatPalette(coat, mark, { stone: lighter(stone, 0.35), stoneDark: darker(stone, 0.25), crystal: [210, 186, 246], crystalDark: [170, 150, 226], tooth: [250, 246, 236], nose: [150, 110, 120] }, 200);
+    const own = hueOf(coat), c = brought(coat, own, 0, 2.6), stone = pastel(c, own);
+    return coatPalette(c, mark, { stone: lighter(stone, 0.35), stoneDark: darker(stone, 0.25), crystal: [210, 186, 246], crystalDark: [170, 150, 226], tooth: [250, 246, 236], nose: [150, 110, 120] }, own);
   },
   shadow: [2.1, 1.5],
   stride: 1.2,

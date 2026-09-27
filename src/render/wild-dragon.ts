@@ -7,10 +7,10 @@ import { blade, cut, earMesh, pawMesh, quadPieces, under } from './beastkit';
 import { glower } from './wild-upright';
 
 /**
- * The dragon: there is one. A great slate-scaled body on four legs, its back
- * laid in courses of scale like a roof in slates, a furnace of a belly that
- * glows through the plates of it, a long neck and a long tail, a horned head
- * with big eyes, and wings that fold along its flanks.
+ * The dragon: there is one. A great body on four legs with a ridge of slate
+ * scales down its spine, lapped like a roof in slates, a furnace in it that
+ * lights its belly from under, a long neck and a long tail, a horned head
+ * with big eyes, and wings that fold back over its shoulders.
  */
 
 /** A flat thing a little thick, from a polygon of corners all in one plane: a wing's membrane between its fingers. */
@@ -77,25 +77,28 @@ function dragonBuild(lod: number): Piece[] {
   ), ...[0, 1, 2].map((q) => taper([[0, 0.3 - q * 0.45, 0.85 - q * 0.05], [0, 0.1 - q * 0.45, 1.2 - q * 0.08]], 0.12, 0.02, 5, 'stoneDark')));
   // The ears: fins of membrane, back along the head.
   const ear = earMesh(0.8, 0.42, n, { mat: 'mark', point: true });
-  // Slates down the back and flanks: courses of flat scales, each course lapped over the one below it.
+  // Scales down the back: two rows close along the spine, one either side of it, each scale rounded, pointed behind and lapped over
+  // the one behind it, all in dark slate so that the two rows are one scaled ridge. Squared slates laid all over the back and flanks
+  // were a patchwork at play size, the raised edges of them more than their colour; spread wider, the rows were spots.
   const slates: Mesh[] = [];
-  const along = 6, round = 4;
+  const along = 7;
   for (let i = 0; i < along; i++) {
-    const y = -2.7 + (i / (along - 1)) * 5.2;
+    const y = -2.8 + (i / (along - 1)) * 5.3;
     const girth = Math.sin(((y + 3.0) / 5.9) * Math.PI);
-    for (let j = 0; j < round; j++) {
-      const a = (j / (round - 1) - 0.5) * 2.3 + (i % 2 ? 0.12 : -0.12);
+    const len = 1.25 * (0.75 + 0.25 * girth), wide = 0.7 + 0.3 * girth;
+    for (const side of [1, -1]) {
+      const a = side * 0.25 + (i % 2 ? 0.06 : -0.06);
       const R = 1.45 * girth + 0.35, Rz = 1.3 * girth + 0.3;
       const c: V3 = [Math.sin(a) * R, y, 0.35 + Math.cos(a) * Rz];
       const out: V3 = [Math.sin(a), 0, Math.cos(a) * 0.9];
-      // Shaded by course, each course a band of one slate, rather than in a chequer that at play size is noise.
-      slates.push(blade([add(c, [0, 0.5, 0]), c, add(c, [0, -0.5, -0.04])], [0.44, 0.5, 0.44], out, { mat: i % 2 === 0 ? 'stone' : 'stoneDark', fold: 0.06, thick: 0.07 }));
+      const pts = [0, 1, 2, 3, 4].map((k): V3 => add(c, [0, len / 2 - (k / 4) * len, -0.01 * k]));
+      slates.push(blade(pts, [0.2, 0.36, 0.38, 0.26, 0.05].map((w) => w * wide), out, { mat: 'stoneDark', fold: 0.03, thick: 0.05 }));
     }
   }
-  // The furnace: a glowing strip down the belly, one piece from the hind legs to the chest, not a row of toes.
-  const belly = tube(Array.from({ length: 6 }, (_, q) => [0, -1.6 + q * 0.75, -0.9 + Math.sin((q / 5) * Math.PI) * -0.12] as V3), [0.5, 0.66, 0.72, 0.72, 0.66, 0.5], 0.16, n, 'ember');
-  // A wing: an arm to an elbow, three long fingers from it, membrane between, scalloped at the trailing edge.
-  const E: V3 = [1.7, 0.3, 0.1], F1: V3 = [3.9, 0.45, 0.25], F2: V3 = [3.3, -1.6, 0.05], F3: V3 = [2.0, -2.5, -0.1], B: V3 = [0, -2.1, -0.2];
+  // A wing: an arm to an elbow, three long fingers from it, membrane between, scalloped at the trailing edge. The middle finger
+  // is held low and the outer two high, so the membrane is pleated along it like a fan half shut: however the wing is turned, one
+  // side of the pleat is seen, and it is never a flat sheet edge on as a stick (folded, seen from in front; opened, from the side).
+  const E: V3 = [1.7, 0.3, 0.1], F1: V3 = [3.9, 0.45, 0.45], F2: V3 = [3.3, -1.6, -0.35], F3: V3 = [2.0, -2.5, 0.3], B: V3 = [0, -2.1, -0.2];
   const mid = (a: V3, b: V3, inset: number): V3 => { const m = add(a, b).map((x) => x / 2) as V3; return add(m, [(E[0] - m[0]) * inset, (E[1] - m[1]) * inset, (E[2] - m[2]) * inset]); };
   const wing = merge(
     taper([[0, 0, 0], E], 0.2, 0.15, 6, 'coat'),
@@ -125,7 +128,6 @@ function dragonBuild(lod: number): Piece[] {
       { key: 'brows', mesh: brows, bone: 'head', bias: 0.21, after: ['head', 'glare'], hide: [{ c: H.c, r: H.r }] },
       { key: 'horns', mesh: horns, bone: 'head', bias: 0.22, after: ['head', 'ear0', 'ear1'] },
       { key: 'slates', mesh: merge(...slates), bone: 'trunk', bias: 0.03, after: ['body', 'fl0', 'fr0', 'hl0', 'hr0'], lines: false },
-      { key: 'belly', mesh: belly, bone: 'trunk', bias: 0.002, after: 'body' },
       { key: 'wing0', mesh: mirrored(wing), bone: 'wing0', bias: 0.05, after: ['body', 'slates'], front: [-1, 0, 0.3], airy: false, bent: folded },
       { key: 'wing1', mesh: wing, bone: 'wing1', bias: 0.05, after: ['body', 'slates'], front: [1, 0, 0.3], bent: folded },
     ],
@@ -167,21 +169,29 @@ export const DRAGON: Kind = {
     const p = quadPose(DRAGON_SPEC, a);
     dragonOwn(p, a);
     const b = quadBones(DRAGON_SPEC, p);
-    // The wings from the shoulders: folded, a sail stood up along the top of each shoulder, its fingers back; opened, fanned out
-    // and up over the back, never edge on.
+    // The wings from the shoulders: folded, laid back along the top of each shoulder with the fingers back and leaned out, the two
+    // a V over the back (stood straight up, they were one fin from the side, and two sticks from in front); opened, fanned out and
+    // up over the back.
     const open = wingsOpen(a);
     for (let k = 0; k < 2; k++) {
       const sd = k ? 1 : -1;
-      b[`wing${k}`] = joint(b.body, [sd * 1.2, 1.5, 1.0], lerp(-90, -40, open), sd * lerp(0, -40, open), sd * lerp(-90, -15, open));
+      b[`wing${k}`] = joint(b.body, [sd * 1.2, 1.5, 1.0], lerp(-130, -40, open), sd * lerp(0, -40, open), sd * lerp(-90, -15, open));
     }
     return b;
   },
   build: dragonBuild,
   palette: (coat, mark) => {
-    const c = pastel(coat, 250);
+    // A green coat a good shade darker than the pastel the other colours are drawn in, to their lightness, and its lit back and
+    // its wings with it: as light as a pastel green comes out, it is the island's grass, and the dragon is an outline on it.
+    const p = pastel(coat, 250);
+    const green = p[1] > Math.max(p[0], p[2]) + 20;
+    const c = green ? darker(darker(p, 0.2), 0.1) : p;
     return coatPalette(coat, mark, {
-      stone: lighter(c, 0.06), stoneDark: darker(c, 0.18), membrane: mix(pastel(mark), c, 0.35), horn: [240, 228, 206], hornDark: [214, 198, 170],
-      ember: [255, 170, 90], bloom: [255, 196, 80], nose: darker(c, 0.4),
+      coat: c, coatDark: darker(c, 0.2), lid: darker(c, 0.42),
+      ...(green ? { coatLight: lighter(c, 0.18) } : {}),
+      stone: lighter(c, 0.06), stoneDark: darker(c, 0.18), membrane: green ? lighter(pastel(mark, 250), 0.25) : mix(pastel(mark), c, 0.35),
+      horn: [240, 228, 206], hornDark: [214, 198, 170],
+      bloom: [255, 196, 80], nose: darker(c, 0.4),
     }, 250);
   },
   shadow: [4.6, 2.3],

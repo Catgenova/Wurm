@@ -1,5 +1,5 @@
 import {
-  add, beat, coatPalette, cross, curve, cyc, darker, disc, lighter, merge, mirrored, mix, moved, onEgg, orb, orbAlong, paint, pastel, quadBonesOf, scale, smile, step, taper, TAU, tube, unit,
+  add, beat, coatPalette, cross, curve, cyc, darker, DEG, disc, dot, lighter, merge, mirrored, mix, moved, onEgg, orb, orbAlong, paint, pastel, quadBonesOf, scale, smile, step, sub, taper, TAU, tube, unit,
   type Anim, type Kind, type MatOf, type Piece, type QuadSpec,
 } from './beasts';
 import { blade, cut, earMesh, legPieces, pawMesh, quadPieces, under, type QuadLook } from './beastkit';
@@ -442,24 +442,28 @@ function bevereBuild(lod: number): Piece[] {
   );
   // A twig of antler from each side of the crown, in front of the ears: a stick that forks, a new leaf at the end of each fork.
   const twig = (s: number): Mesh => merge(
-    tube(curve([s * 0.3, 0.45, 0.8], [s * 0.4, 0.42, 1.12], [s * 0.6, 0.3, 1.38], 3), [0.075, 0.068, 0.058, 0.045], [0.075, 0.068, 0.058, 0.045], 5, 'bark', { seam: 'start' }),
-    tube(curve([s * 0.42, 0.42, 1.14], [s * 0.48, 0.56, 1.24], [s * 0.54, 0.7, 1.3], 2), [0.05, 0.045, 0.04], [0.05, 0.045, 0.04], 5, 'bark', { seam: 'start' }),
+    tube(curve([s * 0.3, 0.45, 0.8], [s * 0.4, 0.42, 1.12], [s * 0.6, 0.3, 1.38], 3), [0.09, 0.08, 0.068, 0.052], [0.09, 0.08, 0.068, 0.052], 5, 'bark', { seam: 'start' }),
+    tube(curve([s * 0.42, 0.42, 1.14], [s * 0.48, 0.56, 1.24], [s * 0.54, 0.7, 1.3], 2), [0.06, 0.054, 0.046], [0.06, 0.054, 0.046], 5, 'bark', { seam: 'start' }),
   );
-  const leaf = (s: number, at: V3, d: V3, len: number): Mesh => blade(curve(at, add(at, scale(d, len * 0.5)), add(at, scale(d, len)), 3), [0.02, 0.1, 0.09, 0.02], [s * 0.3, -0.2, 1], { twist: 0.6 * s, fold: 0.26, mat: 'leaf', rib: 'leafDark' });
+  const leaf = (s: number, at: V3, d: V3, len: number): Mesh => blade(curve(at, add(at, scale(d, len * 0.5)), add(at, scale(d, len)), 3), [0.03, 0.16, 0.14, 0.03], [s * 0.3, -0.2, 1], { twist: 0.6 * s, fold: 0.26, mat: 'leaf', rib: 'leafDark' });
   const leaves = merge(...[1, -1].flatMap((s) => [
-    leaf(s, [s * 0.6, 0.3, 1.38], unit([s * 0.55, -0.35, 0.75]), 0.44),
-    leaf(s, [s * 0.54, 0.7, 1.3], unit([s * 0.5, 0.75, 0.4]), 0.38),
+    leaf(s, [s * 0.6, 0.3, 1.38], unit([s * 0.55, -0.35, 0.75]), 0.6),
+    leaf(s, [s * 0.54, 0.7, 1.3], unit([s * 0.5, 0.75, 0.4]), 0.5),
   ]));
-  // The tail: a round, flat slice of a tree, the bark round its edge and its rings showing on top.
+  // The tail: a round, flat slice of a tree, the bark round its edge and three dark rings on its pale face, few and far enough
+  // apart that they stay rings when it is drawn small rather than running together into one colour.
   const R = 0.85;
+  const bands: Array<[number, Mat]> = [[1, 'bark'], [0.93, 'shell'], [0.84, 'bark'], [0.76, 'shell'], [0.54, 'bark'], [0.46, 'shell'], [0.24, 'bark'], [0.16, 'shell']];
   const slice = merge(
     tube([[0, 0, -0.06], [0, 0, 0.06]], R * 0.8, R, lod ? 14 : 10, (ring) => (ring ? 'shell' : 'bark'), { up: [0, 1, 0] }),
-    paint([1, 0.88, 0.75, 0.62, 0.45, 0.34, 0.15].map((r, q) => disc([0, 0, 0.065 + q * 0.002], [0, 0, 1], R * 0.8 * r, R * r, lod ? 14 : 10, q % 2 ? 'shell' : 'bark'))),
+    paint(bands.map(([r, m], q) => disc([0, 0, 0.065 + q * 0.002], [0, 0, 1], R * 0.8 * r, R * r, lod ? 14 : 10, m))),
   );
   const pieces = quadPieces({
     n, k,
     body: { y: [-1.45, -1.22, -0.65, 0, 0.65, 1.15, 1.4], z: [0.1, 0.15, 0.2, 0.2, 0.2, 0.22, 0.25], w: [0.3, 1.0, 1.2, 1.25, 1.2, 1.0, 0.3], h: [0.25, 0.7, 0.8, 0.82, 0.8, 0.7, 0.25], belly: true },
-    neck: { w: 0.85, h: 0.7, len: 0.35 },
+    // The neck shallow from front to back, so that side on its back edge stays inside the head and the back rather than showing
+    // as a dark tick over the shoulder.
+    neck: { w: 0.85, h: 0.42, len: 0.35 },
     head: { c: H.c, r: H.r, face, eye: { dir: [0.72, 0.52, 0.34], size: 0.28, rim: 0.12 }, blush: [[0.84, 0.4, -0.3], 0.2] },
     ear: earMesh(0.28, 0.22, n),
     tail: [moved(slice, [0, -0.72, 0])],
@@ -482,13 +486,14 @@ export const BEVERE: Kind = {
   }),
   build: bevereBuild,
   palette: (coat, mark) => {
-    // Browner than its variant says, toward a wet beaver's, where the pastel of it came out a piglet's pink.
-    const base = coatPalette(coat, mark, {}, 28), c = lighter(mix(base.coat, [150, 110, 80], 0.25), 0.06);
-    return { ...base, coat: c, coatDark: darker(c, 0.2), coatLight: lighter(c, 0.28), lid: darker(c, 0.42), muzzle: lighter(mix(c, base.mark, 0.5), 0.12), tooth: [246, 164, 80], bark: [138, 98, 68], shell: [232, 200, 158], leaf: [170, 214, 120], leafDark: [118, 170, 84] };
+    // Warmer than its variant says, toward a beaver's caramel, where the pastel of it came out a piglet's pink, and lighter, so
+    // it stands off the grass by colour and by lightness both; its bark and the rings in its tail stay dark against it.
+    const base = coatPalette(coat, mark, {}, 28), c = lighter(mix(base.coat, [226, 164, 108], 0.55), 0.12);
+    return { ...base, coat: c, coatDark: darker(c, 0.2), coatLight: lighter(c, 0.28), lid: darker(c, 0.42), muzzle: lighter(mix(c, base.mark, 0.5), 0.12), tooth: [246, 164, 80], bark: [170, 128, 88], shell: [232, 200, 158], leaf: [170, 214, 120], leafDark: [118, 170, 84] };
   },
   shadow: [2.0, 1.4],
   stride: 1.1,
-  size: 1.6,
+  size: 1.8,
 };
 
 /* ---- the wadd ------------------------------------------------------------------------ */
@@ -498,7 +503,7 @@ export const BEVERE: Kind = {
  * one thing on the island that will take a rider across deep water. Its ears
  * are fins, and a row of pale lights runs down each flank, as in deep water.
  */
-const WADD_SPEC = pawed({ high: 1.15, len: 3.4, legs: 0.7, neck: 0.5, lean: 55, swing: [24, 40], ears: [30, 34], tail: [0.55, 4, -2] });
+const WADD_SPEC = pawed({ high: 1.15, len: 3.4, legs: 0.7, neck: 0.5, lean: 55, swing: [24, 40], ears: [30, 34], tail: [0.55, -4, -6] });
 const WADD_HEAD = { c: [0, 0.4, 0.1] as V3, r: [1.1, 1.05, 0.9] as V3 };
 /** Where along each flank its lights are, front to back. */
 const WADD_LIGHTS = [1.15, 0.4, -0.35, -1.1];
@@ -526,13 +531,16 @@ function waddBuild(lod: number): Piece[] {
   ])));
   // A fin for an ear: swept back from its root, cupped, and turned out so it shows its face side on.
   const fin = blade(curve([0, 0.04, -0.05], [0, -0.08, 0.45], [0, -0.4, 0.86], 4), [0.17, 0.28, 0.28, 0.2, 0.03], [0, 1, 0], { fold: 0.42, mat: 'water', rib: 'crystal', thick: 0.05 });
-  // The tail tapers out of the body and ends in a rudder: a fin standing up at its tip.
+  // The tail tapers out of the body, carried a little low, and ends in a rudder: a fin swept back and up from its tip, low and
+  // cupped enough that from in front or behind it is a small fin over the tail rather than a spike standing up behind the head.
   const links = linked([0.55, 0.4, 0.26, 0.12], 0.62, n, 'coat');
-  const rudder = blade(curve([0, -0.3, -0.12], [0, -0.52, 0.2], [0, -0.78, 0.62], 3), [0.12, 0.28, 0.24, 0.04], [1, 0, 0], { fold: 0.12, mat: 'water', rib: 'crystal', thick: 0.06 });
+  const rudder = blade(curve([0, -0.3, -0.12], [0, -0.6, 0.12], [0, -0.92, 0.42], 3), [0.12, 0.3, 0.26, 0.05], [1, 0, 0], { fold: 0.3, mat: 'water', rib: 'crystal', thick: 0.06 });
   const pieces = quadPieces({
     n, k,
     body: { y: [-1.9, -1.62, -0.85, 0, 0.85, 1.5, 1.82], z: [0.15, 0.17, 0.2, 0.2, 0.2, 0.25, 0.3], w: [0.55, 0.95, 1.08, 1.1, 1.06, 0.92, 0.35], h: [0.5, 0.72, 0.8, 0.82, 0.8, 0.72, 0.32], belly: true },
-    neck: { w: 0.78, h: 0.72, len: 0.5 },
+    // The neck shallow from front to back, so that side on its back edge stays inside the head and the back rather than showing
+    // as a dark tick over the shoulder.
+    neck: { w: 0.78, h: 0.42, len: 0.5 },
     head: { c: H.c, r: H.r, face, eye: { dir: [0.7, 0.5, 0.4], size: 0.3, rim: 0.12 }, blush: [[0.84, 0.4, -0.3], 0.2] },
     ear: fin,
     earTurn: 45,
@@ -545,7 +553,8 @@ function waddBuild(lod: number): Piece[] {
 }
 
 export const WADD: Kind = {
-  bones: quadBonesOf(WADD_SPEC, (p, a) => {
+  // Grazing, its long neck bowed well down and its head carried nearer level, so the nod at the grass stays within twenty degrees.
+  bones: quadBonesOf({ ...WADD_SPEC, graze: 40, nose: 8, bow: 18 }, (p, a) => {
     trot(p, a);
     const w = a.u - Math.floor(a.u);
     if (a.go > 0) {
@@ -601,12 +610,17 @@ export const WADD: Kind = {
  * than you would credit -- clear, so you can see it slop -- and little fins
  * for ears; it carries the shore to your barrels.
  */
-const HOLLA_BASE = pawed({ high: 1.6, len: 2.4, legs: 1.0, neck: 0.35, lean: 55, swing: [22, 36], ears: [30, 45], tail: [0.3, 10, 0] });
-/** Grazing, it only dips its chin: the pouch goes down to the water, and it drinks with it. */
-const HOLLA_SPEC: QuadSpec = { ...HOLLA_BASE, graze: 0, nose: 3, bow: 8 };
+const HOLLA_BASE = pawed({ high: 1.6, len: 2.4, legs: 1.0, neck: 0.35, lean: 55, swing: [22, 36], ears: [30, 30], tail: [0.3, 10, 0] });
+/** Grazing, it puts its head down to drink: its bill to the ground, its pouch pressed on the ground under it (`HOLLA_PRESS`). */
+const HOLLA_SPEC: QuadSpec = { ...HOLLA_BASE, graze: 44, nose: 8, bow: 16 };
 const HOLLA_HEAD = { c: [0, 0.35, 0.15] as V3, r: [1.0, 0.95, 0.85] as V3 };
 /** The pouch under its chin: where its middle is and how big it is, and how high in it the water comes. */
 const HOLLA_POUCH = { c: [0, 0.74, -0.94] as V3, r: [0.8, 0.72, 0.64] as V3, level: 0.06 };
+/**
+ * How much flatter the pouch is pressed as it rests on the ground while the holla drinks, and how much wider it spreads: pressed
+ * straight down, which in the head's own frame is tipped back by as far as the head is carried nose-down to drink (`tip`, degrees).
+ */
+const HOLLA_PRESS = { down: 0.42, out: 0.16, tip: 18 };
 
 /** How far the water in the pouch is tipped against the head, in radians: the body rolls with its waddle, and the water stays level. */
 const hollaSlop = (a: Anim): number => {
@@ -618,9 +632,11 @@ function hollaBuild(lod: number): Piece[] {
   const n = cut(lod, 8, 10), k = cut(lod, 5, 6);
   const H = HOLLA_HEAD, P = HOLLA_POUCH;
   const face = merge(
-    // A flat bill, broad and well out in front of the eyes.
-    orbAlong([0, 1.32, -0.1], [0, 1, -0.1], [0.56, 0.2, 0.6], n, k, 'bill'),
-    paint([1, -1].map((s) => disc([s * 0.12, 1.66, 0.04], [0, 0.2, 1], 0.045, 0.03, 5, 'nose'))),
+    // The face drawn out in front of the eyes, so there is coat in front of them seen side on, and out of the lower front of it a
+    // flat bill, broad and well out in front.
+    orbAlong([0, 0.95, 0.12], [0, 1, 0], [0.62, 0.48, 0.55], n, k, 'coat'),
+    orbAlong([0, 1.42, -0.1], [0, 1, -0.1], [0.56, 0.2, 0.6], n, k, 'bill'),
+    paint([1, -1].map((s) => disc([s * 0.12, 1.76, 0.04], [0, 0.2, 1], 0.045, 0.03, 5, 'nose'))),
   );
   // The pouch: a clear skin with a glint on it, and the water in it, whose top stays level as the head rolls.
   const skin = merge(
@@ -632,27 +648,42 @@ function hollaBuild(lod: number): Piece[] {
   const zs = Array.from({ length: rings + 1 }, (_, q) => bottom + 0.02 + ((top - bottom - 0.02) * q) / rings);
   const across = (z: number): number => 0.97 * Math.sqrt(Math.max(0.02, 1 - ((z - P.c[2]) / P.r[2]) ** 2));
   const water = tube(zs.map((z) => [P.c[0], P.c[1], z] as V3), zs.map((z) => P.r[0] * across(z)), zs.map((z) => P.r[1] * across(z)), n + 1, 'water', { seam: 'end' });
+  // Grazing, the pouch resting on the ground as the head goes down to it: pressed flatter and spread wider, its top where it was.
+  const up: V3 = [0, -Math.sin(HOLLA_PRESS.tip * DEG), Math.cos(HOLLA_PRESS.tip * DEG)];
+  const crown = add(P.c, scale(up, P.r[2]));
+  const pressed = (v: readonly V3[], a: Anim): V3[] => {
+    const g = a.graze;
+    if (g <= 0) return [...v];
+    const down = 1 - HOLLA_PRESS.down * g, out = 1 + HOLLA_PRESS.out * g;
+    return v.map((p) => {
+      const d = sub(p, crown), along = dot(d, up);
+      return add(crown, add(scale(up, along * down), scale(sub(d, scale(up, along)), out)));
+    });
+  };
   // Its level tipped against the head as the head rolls, the bowl's rim going up on one side and down on the other.
   const slop = (v: readonly V3[], a: Anim): V3[] => {
     const t = Math.tan(hollaSlop(a));
     return v.map((p) => [p[0], p[1], p[2] + (p[0] - P.c[0]) * t * Math.max(0, (p[2] - bottom) / (top - bottom))] as V3);
   };
-  const fin = blade(curve([0, 0.04, -0.05], [0, -0.08, 0.35], [0, -0.3, 0.68], 4), [0.14, 0.2, 0.2, 0.14, 0.03], [0, 1, 0], { fold: 0.4, mat: 'water', rib: 'water', thick: 0.05 });
+  // A fin for an ear, broad and carried up enough to read as an ear from in front and behind as well as side on.
+  const fin = blade(curve([0, 0.04, -0.05], [0, -0.08, 0.35], [0, -0.3, 0.68], 4), [0.18, 0.26, 0.26, 0.18, 0.04], [0, 1, 0], { fold: 0.4, mat: 'water', rib: 'water', thick: 0.05 });
   // Flat feet, webbed, a softer orange than the bill.
   const foot = orbAlong([0, 0.26 * 0.35, -0.14 + 0.26 * 0.32], [0, 1, 0], [0.28, 0.1, 0.36], n, k, 'pad');
   return quadPieces({
     n, k,
     body: { y: [-1.55, -1.3, -0.6, 0, 0.6, 1.25, 1.5], z: [0.2, 0.25, 0.3, 0.3, 0.3, 0.3, 0.3], w: [0.3, 1.0, 1.2, 1.25, 1.2, 1.0, 0.3], h: [0.3, 0.85, 1.0, 1.05, 1.0, 0.86, 0.3] },
-    neck: { w: 0.8, h: 0.8, len: 0.35 },
-    head: { c: H.c, r: H.r, face, eye: { dir: [0.74, 0.48, 0.4], size: 0.32, rim: 0.12 }, blush: [[0.86, 0.4, -0.25], 0.2] },
+    // The neck shallow from front to back, so that side on its back edge stays inside the head and the back rather than showing
+    // as a dark tick over the shoulder.
+    neck: { w: 0.8, h: 0.45, len: 0.35 },
+    head: { c: H.c, r: H.r, face, eye: { dir: [0.8, 0.32, 0.42], size: 0.32, rim: 0.12 }, blush: [[0.86, 0.4, -0.25], 0.2] },
     ear: fin,
     earTurn: 45,
     tail: [orb([0, -0.2, 0.04], 0.28, n, k, 'mark')],
     fore: { upper: [0.3, -0.52, 0.3, 0.26], lower: [0, -0.46, 0.26, 0.24], foot },
     hind: { upper: [0.3, -0.56, 0.34, 0.28], lower: [0, -0.56, 0.26, 0.24], foot },
     extras: [
-      { key: 'pouch', mesh: skin, bone: 'head', bias: 0.18 },
-      { key: 'water', mesh: water, bone: 'head', bias: 0.181, after: 'pouch', bent: slop },
+      { key: 'pouch', mesh: skin, bone: 'head', bias: 0.18, bent: pressed },
+      { key: 'water', mesh: water, bone: 'head', bias: 0.181, after: 'pouch', bent: (v, a) => pressed(slop(v, a), a) },
     ],
   });
 }
@@ -678,35 +709,44 @@ export const HOLLA: Kind = {
  * child's and a tail it hangs by. Its ears are leaves, its tail is ringed
  * with leaf-green, and the tuft at the end of it is a bunch of berries.
  */
-const PLUCKA_BASE = pawed({ high: 1.55, len: 2.0, legs: 0.95, neck: 0.3, lean: 18, swing: [26, 42], ears: [30, 25], tail: [0.4, 35, 22] });
+const PLUCKA_BASE = pawed({ high: 1.55, len: 2.0, legs: 0.95, neck: 0.3, lean: 18, swing: [26, 42], ears: [30, 25], tail: [0.4, 5, 24] });
 /** Carried nose-up on arms longer than its legs, as a thing that climbs does on the ground. */
 const PLUCKA_TILT = 14;
 const PLUCKA_SPEC: QuadSpec = {
   ...PLUCKA_BASE,
-  // Its arms long and carried a little forward of straight down.
-  fore: { ...PLUCKA_BASE.fore, len: [0.8, 0.72, 0.14], rest: [12 - PLUCKA_TILT, -8, 0] },
+  // Its arms long, carried a little forward of straight down and bent at the elbow.
+  fore: { ...PLUCKA_BASE.fore, len: [0.8, 0.72, 0.14], rest: [15 - PLUCKA_TILT, -35, 0] },
   hind: { ...PLUCKA_BASE.hind, rest: [22 - PLUCKA_TILT, -44, 0] },
+  // Its tail carried out behind and curling up at the end, low enough that from in front the berries stay behind its head.
   tail: { ...PLUCKA_BASE.tail!, links: 4, len: 0.36 },
   ears: { at: [0.55, -0.2, 0.85], out: 30, back: 25 },
-  // Foraging, it gets down onto its arms to pick at the ground.
-  graze: 66,
-  bow: 38,
+  // Foraging, it crouches to pick at the ground (`PLUCKA_CROUCH`): the chest let down a little and the short neck bent right down,
+  // rather than the body tipped over onto its long arms.
+  graze: 90,
+  bow: 12,
   nose: 10,
 };
+/**
+ * How it crouches to forage: each arm swung forward (degrees) and folded under the chest (as a leg folds at the top of a
+ * stride), so its long arms let the chest down to where the head reaches the grass; and the hind legs folded a little more,
+ * so the haunches come down too and all four feet stay on the ground.
+ */
+const PLUCKA_CROUCH = { arm: 79, fold: 1.39, haunch: 0.25 };
 const PLUCKA_HEAD = { c: [0, 0.25, 0.25] as V3, r: [1.1, 1.0, 1.0] as V3 };
 
 function pluckaBuild(lod: number): Piece[] {
   const n = cut(lod, 8, 10), k = cut(lod, 5, 6);
   const H = PLUCKA_HEAD;
   const face = merge(
-    // A pale heart of a face, as a little climber has, and a small nub of a muzzle out in front of it with the nose on its end.
-    orbAlong([0, 0.72, -0.02], [0, 1, 0], [0.78, 0.44, 0.7], n, k, 'mark'),
-    muzzle({ at: 1.2, z: -0.16, r: [0.36, 0.28, 0.34], nose: 0.11, mouth: 0.2, mat: 'mark' }, n, k),
+    // A pale heart of a face, as a little climber has, standing out in front of the eyes, and a nub of a muzzle out in front of
+    // that with the nose on its end.
+    orbAlong([0, 0.72, 0.12], [0, 1, 0], [0.7, 0.62, 0.78], n, k, 'mark'),
+    muzzle({ at: 1.3, z: -0.16, r: [0.42, 0.32, 0.42], nose: 0.11, mouth: 0.2, mat: 'mark' }, n, k),
   );
   // A leaf for an ear, on a short stalk, twisted along its length so it shows its face from the side and from in front.
   const ear = merge(
     tube([[0, 0, -0.05], [0, 0, 0.14]], 0.06, 0.06, 5, 'stem', { seam: 'start' }),
-    blade(curve([0, 0, 0.12], [0, -0.04, 0.42], [0, 0, 0.72], 4), [0.06, 0.18, 0.2, 0.15, 0.02], [0, 1, 0], { twist: 0.87, fold: 0.26, mat: 'leaf', rib: 'leafDark' }),
+    blade(curve([0, 0, 0.12], [0, -0.04, 0.42], [0, 0, 0.72], 4), [0.06, 0.18, 0.2, 0.15, 0.02], [0, 1, 0], { twist: -0.87, fold: 0.26, mat: 'leaf', rib: 'leafDark' }),
   );
   const ring = (q: number): 'leaf' | 'coat' => (q % 2 ? 'leaf' : 'coat');
   const tail = [
@@ -725,15 +765,17 @@ function pluckaBuild(lod: number): Piece[] {
     n, k,
     body: { y: [-1.15, -0.95, -0.45, 0.1, 0.6, 0.95, 1.12], z: [0.1, 0.15, 0.22, 0.3, 0.4, 0.48, 0.52], w: [0.25, 0.82, 0.98, 1.0, 0.96, 0.8, 0.25], h: [0.25, 0.72, 0.84, 0.86, 0.82, 0.7, 0.25], belly: true },
     neck: { w: 0.6, h: 0.6, len: 0.3 },
-    head: { c: H.c, r: H.r, face, eye: { dir: [0.76, 0.52, 0.3], size: 0.36, rim: 0.12 }, blush: [[0.86, 0.4, -0.24], 0.2] },
+    head: { c: H.c, r: H.r, face, eye: { dir: [0.78, 0.45, 0.3], size: 0.36, rim: 0.12 }, blush: [[0.86, 0.4, -0.24], 0.2] },
     ear,
     earTurn: 20,
     tail,
     fore: { upper: [0.3, -0.8, 0.22, 0.18], lower: [0, -0.72, 0.18, 0.16], foot: hand(-30) },
     hind: { upper: [0.3, -0.53, 0.36, 0.28], lower: [0, -0.53, 0.26, 0.22], foot: hand(0) },
   });
-  // The leaf ears lined lightly, in a dark of their own green, so they read as leaves and not as ink.
-  return pieces.map((pc) => (pc.key === 'ear0' || pc.key === 'ear1' ? { ...pc, thin: true, airy: true } : pc));
+  // The leaf ears lined lightly, in a dark of their own green, so they read as leaves and not as ink; the forearms in the darker
+  // coat, so the pale hands at the ends of them read as hands and not as socks.
+  return pieces.map((pc) => (pc.key === 'ear0' || pc.key === 'ear1' ? { ...pc, thin: true, airy: true }
+    : pc.key === 'fl1' || pc.key === 'fr1' ? { ...pc, mesh: mesh(pc.mesh.v, pc.mesh.f.map((f) => ({ ...f, m: 'coatDark' as Mat }))) } : pc));
 }
 
 export const PLUCKA: Kind = {
@@ -741,6 +783,15 @@ export const PLUCKA: Kind = {
     trot(p, a);
     // Nose-up on its long arms, but not while it is down picking at the ground.
     p.pitch += PLUCKA_TILT * (1 - a.graze);
+    // Foraging, crouched, and its tail carried out behind rather than up over its back.
+    const gz = a.graze;
+    for (const i of [0, 1]) {
+      p.legs[i][0] += (PLUCKA_CROUCH.arm - p.legs[i][0]) * gz;
+      p.legs[i][1] += (PLUCKA_CROUCH.fold - p.legs[i][1]) * gz;
+    }
+    p.legs[2][1] += PLUCKA_CROUCH.haunch * gz;
+    p.legs[3][1] += PLUCKA_CROUCH.haunch * gz;
+    p.tail[0] -= 35 * gz;
     // Standing, up on its haunches now and then to look round, the tail's berries swinging.
     if (a.go <= 0) {
       const up = beat(a.t, [7.5, 18.2], 2.4) * (1 - a.graze);

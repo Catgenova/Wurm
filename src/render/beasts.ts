@@ -729,15 +729,17 @@ function quadStill(s: QuadSpec, a: Anim): QuadPose {
     // Seventy-two turns a loop: a half turn to each sixth of a second, which is what the stills are drawn at.
     const alt = cyc(t, 72);
     const tug = alt * burst;
-    const bow = gz * ((s.bow ?? 16) + 2.5 * tug);
+    const bow = gz * (s.bow ?? 16);
     p.pitch -= bow;
     p.legs[0][1] += gz * 0.85;
     p.legs[1][1] += gz * 0.85;
-    p.neck[0] += gz * ((s.graze ?? 22) + 7 * tug);
+    p.neck[0] += gz * (s.graze ?? 22);
     p.neck[1] *= 1 - gz * 0.7;
     // The head is carried at its own pitch against the body, so the chest's bow is given back to it: `nose` is how far past its
-    // own carriage it goes down, whatever the chest is doing, and the tug a nod of two degrees either way.
-    p.head[0] += bow - gz * ((s.nose ?? 14) + 2 * tug);
+    // own carriage it goes down, whatever the chest is doing. The tug is the head's alone, a nod of seven degrees either way with
+    // the jaw: put into the chest or the neck, it swung the muzzle a long way on a long neck and tipped the whole body on every
+    // other still, as the feet were stood again under it (`grazingBones`).
+    p.head[0] += bow - gz * ((s.nose ?? 14) + 7 * tug);
     p.head[1] *= 1 - gz * 0.6;
     p.head[2] *= 1 - gz * 0.8;
     p.jaw = gz * (0.5 + 0.5 * alt);
@@ -1411,6 +1413,10 @@ export interface BirdSpec {
   peck?: number;
   tip?: number;
   nose?: number;
+  /** Foraging, how far the legs bend at the knee (nought standing tall, one as deep as a hop's crouch). */
+  crouch?: number;
+  /** Foraging, how much of the body's tip the legs are given back (one: they stand as they did; nought: they tip with it). */
+  stance?: number;
   /** How far the body rolls from foot to foot: a waddle. */
   waddle?: number;
 }
@@ -1463,13 +1469,21 @@ function birdStill(s: BirdSpec, a: Anim): BirdPose {
     // degrees either way on every other still, in bursts.
     const burst = 0.45 + 0.55 * Math.max(0, cyc(t, 8));
     const tug = cyc(t, 72) * burst;
-    const tip = gz * ((s.tip ?? 30) + 2 * tug);
+    const tip = gz * (s.tip ?? 30);
     p.pitch -= tip;
-    p.neck[0] += gz * ((s.peck ?? 50) + 5 * tug);
-    // The head is carried against the body, so the tip is given back to it: it goes down `nose` past its own carriage.
+    p.neck[0] += gz * (s.peck ?? 50);
+    // The head is carried against the body, so the tip is given back to it: it goes down `nose` past its own carriage, and the
+    // pick is its nod alone.
     p.head[0] += tip - gz * ((s.nose ?? 18) + 3 * tug);
     p.head[1] *= 1 - gz * 0.8;
     p.head[2] *= 1 - gz * 0.8;
+    // The legs are jointed to the body, so tipping it swung them back under it: each thigh is given the tip back (`stance` of
+    // it), and the legs stand as they did, bent at the knee as far as `crouch` says, which is how a long-legged bird gets its
+    // bill down.
+    for (const l of p.legs) {
+      l[0] += tip * (s.stance ?? 1) + gz * 20 * (s.crouch ?? 0);
+      l[1] += gz * (s.crouch ?? 0);
+    }
   }
   return p;
 }

@@ -19,16 +19,17 @@ const flutter = (a: Anim): boolean => (a.go > 0 ? Math.floor(frac(a.u) * 12) : M
  */
 const VESP_BEES = 7;
 /** How much bigger the queen is than each of her six. */
-const VESP_QUEEN = 1.3;
+const VESP_QUEEN = 1.7;
 
 function vespBuild(lod: number): Piece[] {
   const n = cut(lod, 6, 8);
-  // A bee: a round body dark at the tail and in two broad bands, a ruff of pale fuzz round its neck, and a round head with big
-  // eyes.
+  // A bee: a round body in two broad dark bands, its tail honey to a small dark sting pointed down (a dark tail end is a hole, or
+  // an eye, as a bee flies off), a ruff of pale fuzz round its neck, and a round head with big eyes.
   const bee = (r: number): Mesh => merge(
     tube([[0, -r * 1.28, 0], [0, -r * 1.1, 0.01], [0, -r * 0.8, 0.02], [0, -r * 0.5, 0.03], [0, -r * 0.2, 0.04], [0, r * 0.12, 0.04], [0, r * 0.5, 0.04], [0, r * 0.95, 0.02]],
       [r * 0.12, r * 0.55, r * 0.84, r * 0.97, r, r, r * 0.92, r * 0.5], [r * 0.12, r * 0.53, r * 0.8, r * 0.93, r * 0.96, r * 0.96, r * 0.88, r * 0.5], n,
-      (ring) => (ring === 0 || ring === 2 || ring === 4 ? 'mark' : 'coat'), { up: [0, 0, 1] }),
+      (ring) => (ring === 2 || ring === 4 ? 'mark' : 'coat'), { up: [0, 0, 1] }),
+    taper([[0, -r * 1.2, -r * 0.04], [0, -r * 1.42, -r * 0.2]], r * 0.1, r * 0.02, 4, 'mark'),
     tube([[0, r * 0.6, 0.04], [0, r * 0.8, 0.05], [0, r * 1.0, 0.06]], [r * 0.72, r * 0.86, r * 0.62], [r * 0.7, r * 0.84, r * 0.6], n + 2, 'coatLight', { up: [0, 0, 1] }),
     orb([0, r * 1.2, 0.08], r * 0.66, n, 4, 'coat'),
     eyes([0, r * 1.2, 0.08], [r * 0.66, r * 0.66, r * 0.66], [0.55, 0.72, 0.28], r * 0.34, { tall: 1.1, rim: 0.05 }),
@@ -53,23 +54,27 @@ function vespBuild(lod: number): Piece[] {
       paint([disc(at, face, r * 0.36, r * 0.07, 6, 'glint', { lit: true, up: cross(face, along) })]),
     );
   }));
-  // The queen's crown: six petals round the top of her head, and a bud in the middle of them.
+  // The queen's crown: six petals round the top of her head, and a bud in the middle of them, all of a size with her head so
+  // that it is a pink flower on her at play size rather than a spot.
   const rq = 0.34 * VESP_QUEEN;
-  const top: V3 = [0, rq * 1.2, 0.08 + rq * 0.62];
+  const top: V3 = [0, rq * 1.08, 0.08 + rq * 0.66];
   const crown = merge(...Array.from({ length: 6 }, (_, q) => {
     const a = (q / 6) * TAU;
-    return orbAlong(add(top, [Math.cos(a) * rq * 0.34, Math.sin(a) * rq * 0.34, 0.06]), [Math.cos(a), Math.sin(a), 1.3], [0.13, 0.08, 0.2], 5, 3, 'petal');
-  }), orb(add(top, [0, 0, 0.1]), 0.09, 5, 3, 'bloom'));
+    return orbAlong(add(top, [Math.cos(a) * rq * 0.36, Math.sin(a) * rq * 0.36, rq * 0.12]), [Math.cos(a), Math.sin(a), 0.9], [rq * 0.34, rq * 0.12, rq * 0.5], 5, 3, 'petal');
+  }), orb(add(top, [0, 0, rq * 0.24]), rq * 0.22, 5, 3, 'bloom'));
   const out: Piece[] = [];
   for (let q = 0; q < VESP_BEES; q++) {
     const r = q === 0 ? rq : 0.34;
     out.push(
-      { key: `bee${q}`, mesh: q === 0 ? merge(bee(r), crown) : bee(r), bone: `bee${q}`, bias: 0 },
+      // The six inked lightly: in the dark ink round the queen, a bee of eight pixels is mostly outline, a dark bead on the grass.
+      { key: `bee${q}`, mesh: bee(r), bone: `bee${q}`, bias: 0, airy: q > 0 },
       { key: `feel${q}`, mesh: feelers(r), bone: `bee${q}`, bias: 0.001, after: `bee${q}`, front: [0, 1, 0.5], rim: false },
       { key: `up${q}`, mesh: wings(true, r), bone: `bee${q}`, bias: 0.001, airy: true, shown: (a) => flutter(a) },
       { key: `down${q}`, mesh: wings(false, r), bone: `bee${q}`, bias: 0.001, airy: true, shown: (a) => !flutter(a) },
     );
   }
+  // Her crown a piece of its own, outlined round the whole and not along every petal, which in ink is a dark knot.
+  out.push({ key: 'crown', mesh: crown, bone: 'bee0', bias: 0.002, after: 'bee0', lines: false, airy: true });
   return out;
 }
 
@@ -139,13 +144,15 @@ function lumeBuild(lod: number): Piece[] {
     smile([0, 1.06, -0.12], [0, 1, 0], 0.3),
     paint([1, -1].map((s) => disc([s * 0.58, 0.86, -0.08], [s * 0.55, 0.83, 0], 0.14, 0.1, 6, 'petal'))),
   );
-  // Feathered feelers: each a little plume up and forward off the crown, pale, with a dark quill.
-  const feeler = (s: number): Mesh => blade(curve([s * 0.12, 0.28, 0.86], [s * 0.26, 0.55, 1.4], [s * 0.5, 0.72, 1.62], 4), [0.03, 0.1, 0.13, 0.1, 0.03], [s * 0.3, 1, 0.2], { mat: 'petal', rib: 'crystalDark', fold: 0.2, thick: 0.03 });
-  // Soft moth's wings: a forewing and a smaller hindwing each side, each with an eye-spot.
+  // Feathered feelers: each a little plume off the crown, curved forward and out in a wide V, pale, with a dark quill. Stood
+  // straight up, from behind they were a rabbit's ears.
+  const feeler = (s: number): Mesh => blade(curve([s * 0.12, 0.28, 0.86], [s * 0.36, 0.58, 1.3], [s * 0.72, 0.9, 1.36], 4), [0.03, 0.1, 0.13, 0.1, 0.03], [s * 0.3, 1, 0.2], { mat: 'petal', rib: 'crystalDark', fold: 0.2, thick: 0.03 });
+  // Soft moth's wings: a forewing and a smaller hindwing each side, each with an eye-spot. The forewing is broadest at its end, cut
+  // square across as a moth's is, since a wing rounded at both ends and raised is an ear.
   const wing = merge(
-    blade(curve([0, 0.1, 0], [0.9, 0.35, 0.25], [1.7, 0.1, 0.35], 4), [0.1, 0.45, 0.55, 0.42, 0.12], [0, 0.2, 1], { mat: 'petal', rib: 'crystalDark', fold: 0.12, thick: 0.04 }),
+    blade(curve([0, 0.1, 0], [0.9, 0.35, 0.14], [1.7, 0.1, 0.2], 4), [0.1, 0.34, 0.48, 0.55, 0.46], [0, 0.2, 1], { mat: 'petal', rib: 'crystalDark', fold: 0.12, thick: 0.04 }),
     blade(curve([0, -0.1, -0.05], [0.7, -0.45, 0.0], [1.15, -0.7, -0.05], 3), [0.1, 0.3, 0.32, 0.08], [0, 0.2, 1], { mat: 'petal', rib: 'crystalDark', fold: 0.1, thick: 0.04 }),
-    paint([disc([1.05, 0.28, 0.38], [0, 0.1, 1], 0.16, 0.16, 7, 'bloom', { lit: true }), disc([1.05, 0.28, 0.4], [0, 0.1, 1], 0.07, 0.07, 6, 'crystalDark')]),
+    paint([disc([1.05, 0.28, 0.23], [0, 0.1, 1], 0.16, 0.16, 7, 'bloom', { lit: true }), disc([1.05, 0.28, 0.25], [0, 0.1, 1], 0.07, 0.07, 6, 'crystalDark')]),
   );
   // A ribbon in three links, one colour its whole length and narrowing all the way down, so that it is one streamer and not a leg
   // in joints.
@@ -172,12 +179,13 @@ function lumeBones(a: Anim): Bones {
   const bob = (1 - go) * 0.28 * cyc(t, 4) + go * 0.2 * Math.sin(w * TAU);
   const body = joint(ROOT, [0, 0, 2.3 + bob], -14 * go + 4 * cyc(t, 3) * (1 - go), 5 * cyc(t, 2) * (1 - go), 0);
   const b: Bones = { body };
-  // The wings from the sides of the bell, spread and swept a little back as a moth's are, beating slow and soft: once every
-  // couple of seconds standing, faster going.
+  // The wings from the back of the bell, spread and swept well back as a moth's are, beating slow and soft about level: once
+  // every couple of seconds standing, faster going. Raised much over level they stand up from the front like a rabbit's ears;
+  // from the sides of the bell, and not swept back, the near one lies across the bell in profile rather than behind it.
   const beatW = (1 - go) * Math.sin(t * TAU * 12 / LOOP) + go * Math.sin(w * TAU * 2);
   for (let k = 0; k < 2; k++) {
     const sd = k ? 1 : -1;
-    b[`wing${k}`] = joint(body, [sd * 0.8, -0.1, 0.3], 0, sd * (10 + 25 * beatW), sd * -20);
+    b[`wing${k}`] = joint(body, [sd * 0.62, -0.55, 0.35], 0, sd * (12 + 12 * beatW), sd * -40);
   }
   // Ribbons hanging from the rim, each link swinging a little behind the one above.
   for (let r = 0; r < LUME_RIBBONS; r++) {
@@ -206,13 +214,15 @@ export const LUME: Kind = {
   stride: 0.8,
   size: 2.3,
   blinks: 6,
-  // A soft light close about the bell, not so strong that its own wings and feelers are washed out to white in it.
+  // A soft light out of the mouth of the bell, on its rim and its ribbons and the air about it. Laid over the middle of the bell,
+  // it washed the bell's own light and shade out to one flat white by day.
   glow: (b, a) => {
     const B = b.body;
-    const pulse = 0.25 + 0.06 * cyc(a.t, 6);
+    const mouth = (down: number): V3 => [B.t[0] - B.m[2] * down, B.t[1] - B.m[5] * down, B.t[2] - B.m[8] * down];
+    const pulse = 0.18 + 0.05 * cyc(a.t, 6);
     return [
-      { p: [B.t[0], B.t[1], B.t[2] + 0.1], r: 1.8, c: [220, 240, 255], a: pulse },
-      { p: [B.t[0], B.t[1], B.t[2] + 0.1], r: 1.1, c: [255, 250, 230], a: 0.25 },
+      { p: mouth(0.45), r: 1.9, c: [220, 240, 255], a: pulse },
+      { p: mouth(0.5), r: 0.9, c: [255, 250, 230], a: 0.18 },
     ];
   },
 };

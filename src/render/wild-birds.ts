@@ -1,5 +1,5 @@
 import {
-  add, beat, birdBones, blush, clamp, coatPalette, cross, curve, cyc, darker, DEG, disc, dot, eyes, frac, lighter, LOOP, merge, mirrored, moved, onEgg, orb,
+  add, beat, birdBones, blush, clamp, coatPalette, cross, curve, cyc, darker, DEG, disc, dot, eyes, frac, lerp, lighter, LOOP, merge, mirrored, moved, onEgg, orb,
   orbAlong, paint, pastel, scale, taper, TAU, tube, unit, type Anim, type BirdSpec, type Bones, type Disc, type Kind, type Piece,
 } from './beasts';
 import { joint, onScreen, place, type Mat, type Mesh, type RGB, type V3, type View } from './figure';
@@ -54,10 +54,14 @@ const SEDRA_SPEC: BirdSpec = {
   tail: { at: [0, -1.05, 0.05], lift: -12 },
   swing: [22, 34],
   thrust: 14,
-  // Foraging, the long neck bowed right down in front of its feet, so that the shears reach the water with the face still to be seen.
+  // Foraging, the body tipped well over and the long neck bowed right down in front of its feet, so that the open shears reach the
+  // water with the face still to be seen; its knees a little bent, and the legs swung forward by as much as the bend would slant them
+  // back, so they still stand straight up under it.
   peck: 105,
-  tip: 32,
+  tip: 46,
   nose: 12,
+  crouch: 0.8,
+  stance: 1.52,
 };
 
 const SEDRA_HEAD = { c: [0, 0.12, 0.22] as V3, r: [0.6, 0.72, 0.56] as V3 };
@@ -80,7 +84,7 @@ function sedraBuild(lod: number): Piece[] {
   const R = SEDRA_RIVET;
   const upper = merge(
     tube([[0.03, 0.6, 0.17], [0.03, 0.86, 0.16], [0.03, 1.25, 0.13], [0.03, 1.65, 0.1], [0.03, 2.02, 0.06]], [0.13, 0.12, 0.09, 0.055, 0.005], [0.05, 0.05, 0.042, 0.034, 0.01], n, 'bill', { up: [1, 0, 0] }),
-    paint([1, -1].map((s) => disc([s * 0.1, R[1], R[2]], [s, 0, 0], 0.12, 0.12, 8, 'crystal', { lit: true }))),
+    paint([1, -1].map((s) => disc([s * 0.1, R[1], R[2]], [s, 0, 0], 0.18, 0.18, 8, 'crystal', { lit: true }))),
   );
   const lower = moved(tube([[-0.03, 0.6, -0.01], [-0.03, 0.86, -0.01], [-0.03, 1.25, -0.01], [-0.03, 1.6, 0.0], [-0.03, 1.93, 0.02]], [0.1, 0.095, 0.075, 0.045, 0.005], [0.045, 0.045, 0.04, 0.03, 0.01], n, 'billDark', { up: [1, 0, 0] }),
     [-R[0], -R[1], -R[2]]);
@@ -116,27 +120,24 @@ export const SEDRA: Kind = {
     let jaw = 0;
     const b = birdBones(SEDRA_SPEC, a, (p) => {
       const t = a.t, gz = a.graze;
-      // The shears never quite shut: the blades rest a little apart, so that they show as two.
-      p.jaw = Math.max(p.jaw, 0.25);
+      // The shears never quite shut: the blades rest twelve degrees apart, their tips a couple of pixels apart at the island's zoom 2, so
+      // that they show as the two blades of a pair of shears rather than one bill.
+      const rest = 1.2;
+      p.jaw = Math.max(p.jaw, rest);
       if (a.go <= 0) {
         // Its looks about are smaller than most birds', so that its face stays turned to whoever is looking at it.
         p.head[1] *= 0.6;
         p.head[2] *= 0.6;
         // On one leg for long stretches, the other drawn up under it, but not while it forages; a snip of the shears now and then, at
-        // nothing, opened wide.
+        // nothing: opened wide and shut to, by turns.
         const one = beat(t, [1.5, 13.5], 8.5) * (1 - gz);
         p.legs[1] = [p.legs[1][0] + 18 * one, p.legs[1][1] + 1.3 * one, p.legs[1][2] + one];
         p.roll -= 3 * one;
-        p.jaw = Math.max(p.jaw, 2.8 * Math.max(0, Math.sin(t * TAU * 3)) * beat(t, [6.2, 19.4], 0.9));
-        // Foraging, it cuts at what is in front of it: the blades open and shut on every other still, and that is its nibble, the long
-        // neck held steady rather than nodding the length of it.
-        if (gz > 0) {
-          p.jaw = Math.max(p.jaw, gz * (0.6 + 0.6 * cyc(t, 72)));
-          const tug = cyc(t, 72) * (0.45 + 0.55 * Math.max(0, cyc(t, 8))) * gz * 0.8;
-          p.pitch += 2 * tug;
-          p.neck[0] -= 5 * tug;
-          p.head[0] += tug;
-        }
+        const snip = Math.sin(t * TAU * 3) * beat(t, [6.2, 19.4], 0.9);
+        p.jaw += snip > 0 ? (2.8 - rest) * snip : rest * snip;
+        // Foraging, it cuts at what is in front of it: the blades open to eighteen degrees and close to six on every other still, and
+        // that is its nibble, the long neck held steady rather than nodding the length of it.
+        if (gz > 0) p.jaw = lerp(p.jaw, 1.2 + 0.6 * cyc(t, 72), gz);
       }
       jaw = p.jaw;
     });
@@ -172,10 +173,13 @@ const WARDA_SPEC: BirdSpec = {
   tail: { at: [0, -0.8, -0.2], lift: -30 },
   swing: [24, 38],
   thrust: 4,
-  // Foraging, the whole of it tipped far over its feet, so that its beak meets the ground with the face still to be seen.
-  peck: 95,
-  tip: 60,
+  // Foraging, the whole of it tipped far over and crouched right down, so that its beak meets the ground with the face still to be
+  // seen; the legs swung forward by as much as the deep bend at the knee would slant them back, so they stay under it as short posts.
+  peck: 110,
+  tip: 65,
   nose: 18,
+  crouch: 1.7,
+  stance: 1.7,
 };
 
 const WARDA_HEAD = { c: [0, 0.05, 0.42] as V3, r: [0.98, 0.86, 0.86] as V3 };
@@ -243,8 +247,9 @@ function wardaBuild(lod: number): Piece[] {
     { key: 'lamp', mesh: lamp, bone: 'lamp', bias: 0.22, after: 'tufts' },
     { key: 'wing0', mesh: mirrored(foldedWing(1.3, 0.46, n, { mat: 'coat' })), bone: 'wing0', bias: 0.03, after: 'body', front: [-1, 0, 0] },
     { key: 'wing1', mesh: foldedWing(1.3, 0.46, n, { mat: 'coat' }), bone: 'wing1', bias: 0.03, after: 'body', front: [1, 0, 0] },
-    ...birdLegPieces('bl', -1, 1.0, 0.15, 5, 'claw'),
-    ...birdLegPieces('br', 1, 1.0, 0.15, 5, 'claw'),
+    // The legs a darker tan than the beak, so that at the island's furthest zooms they still stand it on the grass.
+    ...birdLegPieces('bl', -1, 1.0, 0.15, 5, 'hoof'),
+    ...birdLegPieces('br', 1, 1.0, 0.15, 5, 'hoof'),
   ];
 }
 
@@ -315,7 +320,7 @@ export const WARDA: Kind = {
   },
   build: wardaBuild,
   palette: (coat, mark) => coatPalette(coat, mark, {
-    crystal: [255, 240, 180], bloom: [250, 186, 70], horn: [214, 172, 96], claw: [196, 170, 140], eye: [54, 36, 40],
+    crystal: [255, 240, 180], bloom: [250, 186, 70], horn: [214, 172, 96], claw: [196, 170, 140], hoof: [150, 124, 98], eye: [54, 36, 40],
   }, 230),
   shadow: [1.4, 1.0],
   stride: 1.0,
@@ -347,7 +352,7 @@ export const WARDA: Kind = {
  * A quill: a heavy, round ground-bird that would rather run than fly and
  * rather eat than run. Its tail is a bundle of arrows standing up out of its
  * rump like a full quiver, each fletched at the top in red or white, and the
- * long feathers of its wings are cut like fletching too.
+ * long feathers of its wings are the red of the fletching too.
  */
 const QUILL_SPEC: BirdSpec = {
   high: 1.35,
@@ -358,10 +363,13 @@ const QUILL_SPEC: BirdSpec = {
   tail: { at: [0, -0.9, 0.45], lift: -6 },
   swing: [26, 40],
   thrust: 12,
-  // Foraging, tipped well over, so that the beak meets the ground with the face still to be seen.
-  peck: 72,
-  tip: 42,
+  // Foraging, tipped well over and a little crouched, so that the beak meets the ground with the face still to be seen; the legs swung
+  // forward by as much as the bend would slant them back, so they stay straight under it.
+  peck: 105,
+  tip: 46,
   nose: 17,
+  crouch: 0.5,
+  stance: 1.33,
   waddle: 6,
 };
 
@@ -401,10 +409,11 @@ function quillBuild(lod: number): Piece[] {
     count += one.v.length;
     return one;
   }));
-  // The wing, its three long feathers cut like fletching: square at the ends and standing out past the edge of the wing, red and white.
+  // The wing, its three long feathers the red of the fletching, pale-shafted and standing out past the edge of the wing to points, so
+  // they read as the tips of a wing rather than a striped patch on the flank.
   const wing = merge(
     foldedWing(1.25, 0.55, n, { mat: 'feather' }),
-    ...[0, 1, 2].map((q) => blade([[0.06, -0.75 - q * 0.05, 0.02 - q * 0.07], [0.08, -1.15 - q * 0.07, 0.04 - q * 0.09], [0.08, -1.5 - q * 0.08, 0.06 - q * 0.11]], [0.09, 0.12, 0.1], [1, 0, 0.25], { mat: q % 2 ? 'white' : 'fletch', rib: 'bark', thick: 0.03 })),
+    ...[0, 1, 2].map((q) => blade([[0.06, -0.75 - q * 0.05, 0.02 - q * 0.07], [0.08, -1.15 - q * 0.07, 0.04 - q * 0.09], [0.08, -1.5 - q * 0.08, 0.06 - q * 0.11]], [0.09, 0.12, 0.015], [1, 0, 0.25], { mat: 'fletch', rib: 'bark', thick: 0.03 })),
   );
   const hide = [{ c: H.c, r: H.r }];
   return [
