@@ -127,7 +127,7 @@ export function generateWorld(seed: number, size = 256): GeneratedWorld {
       for (let dx = -2; dx <= 2; dx++) {
         const xx = x + dx;
         const yy = y + dy;
-        if (world.inBounds(xx, yy) && world.hasWater(xx, yy)) return true;
+        if (world.inBounds(xx, yy) && world.hasSea(xx, yy)) return true;
       }
     }
     return false;
@@ -242,7 +242,7 @@ export function generateWorld(seed: number, size = 256): GeneratedWorld {
    * the seabed is ore nobody can reach.
    */
   world.fillRock((x, y) => {
-    const density = world.hasWater(x, y) ? ORE_DENSITY.water : ORE_DENSITY.land;
+    const density = world.hasSea(x, y) ? ORE_DENSITY.water : ORE_DENSITY.land;
     const ore = oreKindFor(seed, x, y, density);
     return ore >= 0 ? ore : stoneKindAt(seed, x, y);
   });

@@ -93,7 +93,7 @@ export function footingAt(g: Game, x: number, y: number, level: number): Footing
   if (floor) return MATERIAL_BY_ID.get(floor.material)?.kind === 'stone' ? 'stone' : 'wood';
   const bridge = g.bridgeAt(tx, ty);
   if (bridge) return bridge.kind === 'stone' ? 'stone' : 'wood';
-  if (g.world.heightAt(x, y) < 0) return 'water';
+  if (g.world.hasWater(tx, ty) && g.world.heightAt(x, y) < g.world.surfaceAt(tx, ty)) return 'water';
   return FOOTINGS[g.world.viewTile(tx, ty, true)] ?? 'soft';
 }
 

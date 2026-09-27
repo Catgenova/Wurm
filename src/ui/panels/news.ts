@@ -35,6 +35,9 @@ import { CLIMB_LEARN_FROM, MAX_STEP } from '../../game/player';
 import { ALL_GOALS } from '../../game/journal';
 import { SPECIES } from '../../game/creatures';
 import { betterThanCommon, CHANNELS, husbandryOdds, pct as cardPct } from '../../game/traits';
+import { CHAIN_MOST, FALL_DROP, FILL_RATE, POOL_DEPTH, POOL_LIP, SPRING_DEPTH, SPRINGS_EACH } from '../../world/springs';
+import { POOL_FILL } from '../../game/foundations';
+import { SWIM_DEPTH } from '../../game/player';
 import type { UIWindow } from '../windows';
 
 /**
@@ -676,6 +679,20 @@ export const NEWS: News[] = [
       return [
         `A tree that dies of age leaves grass where it stood, not a stump. A stump is only left by felling a tree with timber in it, ${(age?.name ?? 'Young').toLowerCase()} or older.`,
         `Every stump goes at the next turn of the woods, at ${TREE_DAWN_UTC}:00 UTC, and goes for everybody: one you had seen stayed in your view until you next loaded the island.`,
+      ];
+    },
+  },
+  {
+    n: 51,
+    day: '2026-09-27',
+    lines: () => {
+      const m = (units: number): string => (units / 10).toFixed(1);
+      return [
+        `Dig a spring with a shovel at the bottom of a hollow that holds ${m(SPRING_DEPTH)} m of water or more: it fills the hollow to the lowest point of its rim, rising ${m(FILL_RATE)} m a second, at any height above the sea.`,
+        `Full, it spills over that point and runs downhill to the next hollow and fills that too, and so on to the sea, up to ${numberWord(CHAIN_MOST)} ponds. Hollows dug one below another down a slope are a stream of ponds, and wherever the water drops ${m(FALL_DROP)} m or more it falls.`,
+        `A pond is water to everything: a bucket fills from it, a line is cast into it, nothing is built in it, and deeper than ${m(SWIM_DEPTH)} m you swim. A notch cut in its rim lets it down to the notch; filling the hollow in, or Stop up the spring, takes its water away.`,
+        `Each of us keeps ${numberWord(SPRINGS_EACH)} springs at most. Off a settlement only whoever dug a spring may stop it up; on one, whoever may shape its ground may dig a spring or stop any there, and nobody else may.`,
+        `Dig a pool in a poured foundation with a pickaxe: it holds water ${m(POOL_DEPTH - POOL_LIP)} m deep, ${m(POOL_LIP)} m under the top of the slab, with or without a spring, and pools side by side poured to the same top are one pool. A spring dug in one goes over its lowest edge, down the slab to the ground or into a lower pool, and runs on from there. Filling a pool in takes ${POOL_FILL} concrete.`,
       ];
     },
   },

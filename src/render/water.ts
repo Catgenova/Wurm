@@ -187,3 +187,56 @@ export const WATER_PALETTE: readonly string[] = Array.from({ length: WATER_STEPS
 /** The step a depth lands on, for anybody indexing the palette directly. */
 export const waterLevel = (depth: number): number =>
   Math.min(WATER_STEPS - 1, Math.max(0, Math.floor(depth / WATER_STEP_UNITS)));
+
+/* ---- The water springs bring up -------------------------------------------
+ *
+ * Not the sea's. A spring's water is clear and stands shallow over pale
+ * ground, so it is turquoise rather than blue: a little deeper teal in the
+ * middle of a pond, lighter where it shelves up to the bank, and edged with a
+ * thin darker teal where it meets a bank or a wall. Its foam is white, and a
+ * fall comes down in streaks of near white and of darker teal. One set of
+ * colours for everything that draws it -- a pond, a stream, a fall, a pool
+ * poured in a slab -- so that they are all the one water.
+ */
+
+/** Spring water where a pond shelves up to its bank, over most of it, and in its deepest middle. */
+export const SPRING_SHALLOW: readonly [number, number, number] = [146, 226, 216];
+export const SPRING_WATER: readonly [number, number, number] = [104, 208, 204];
+export const SPRING_DEEP: readonly [number, number, number] = [66, 174, 180];
+/** The thin darker line where it meets a bank or a wall. */
+export const SPRING_EDGE: readonly [number, number, number] = [44, 134, 140];
+/** Foam, spray and the ripples on the surface. */
+export const SPRING_FOAM: readonly [number, number, number] = [248, 254, 252];
+/** The two streaks a fall comes down in: the near white, and the darker teal between them. */
+export const SPRING_PALE: readonly [number, number, number] = [214, 248, 242];
+export const SPRING_DARK: readonly [number, number, number] = [52, 156, 162];
+
+/** How deep spring water is, in height units, where it is its own colour through, and where it is as deep a colour as it goes. */
+const SPRING_WATER_AT = 5;
+const SPRING_DEEP_AT = 24;
+/** How far down the palette below reaches, and how fine it is cut, as with the sea's. */
+const SPRING_STEPS = Math.round(SPRING_DEEP_AT / WATER_STEP_UNITS) + 1;
+
+/** The colour of spring water over ground this far below its surface. */
+export function springRgb(depth: number): [number, number, number] {
+  const d = Math.max(0, depth);
+  const [a, b, t] = d < SPRING_WATER_AT
+    ? [SPRING_SHALLOW, SPRING_WATER, d / SPRING_WATER_AT]
+    : [SPRING_WATER, SPRING_DEEP, Math.min(1, (d - SPRING_WATER_AT) / (SPRING_DEEP_AT - SPRING_WATER_AT))];
+  return [Math.round(a[0] + (b[0] - a[0]) * t), Math.round(a[1] + (b[1] - a[1]) * t), Math.round(a[2] + (b[2] - a[2]) * t)];
+}
+
+/** The step of `SPRING_PALETTE` a depth lands on. */
+export const springLevel = (depth: number): number =>
+  Math.min(SPRING_STEPS - 1, Math.max(0, Math.floor(depth / WATER_STEP_UNITS)));
+
+/**
+ * And ready to paint, a string per step, made once: nearly solid, so a pond
+ * reads as turquoise water over any ground, with only its shallow rim thin
+ * enough to show the bank going down under it.
+ */
+export const SPRING_PALETTE: readonly string[] = Array.from({ length: SPRING_STEPS }, (_, i) => {
+  const depth = i * WATER_STEP_UNITS;
+  const [r, g, b] = springRgb(depth);
+  return `rgba(${r},${g},${b},${(0.8 + 0.15 * Math.min(1, depth / SPRING_WATER_AT)).toFixed(3)})`;
+});

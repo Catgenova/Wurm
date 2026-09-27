@@ -94,8 +94,9 @@ export const HOOK_MOST = 0.95;
 export const staysOn = (skill: number, rodQl: number, baited: boolean, plus = 0): number =>
   Math.min(HOOK_MOST, HOOK_BASE + skill / 190 + rodQl / 320 + (baited ? HOOK_BAIT : 0) + plus);
 
-/** How deep the water is on a tile, in height units; zero on dry land. */
-export const waterDepth = (g: Game, x: number, y: number): number => (g.world.hasWater(x, y) ? Math.max(0, -g.world.centerHeight(x, y)) : 0);
+/** How deep the water is on a tile, in height units, down from the sea's surface or a pond's; zero on dry land. */
+export const waterDepth = (g: Game, x: number, y: number): number =>
+  (g.world.hasWater(x, y) ? Math.max(0, g.world.surfaceAt(x, y) - g.world.bedCenter(x, y)) : 0);
 
 /** Water worth putting a line into: deep enough to hold anything at all. */
 export const fishable = (g: Game, x: number, y: number): boolean => g.world.inBounds(x, y) && waterDepth(g, x, y) >= 1;

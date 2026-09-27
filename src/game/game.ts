@@ -1,3 +1,4 @@
+import { Springs, type SpringSave } from './springs';
 import { generateWorld } from '../world/generate';
 import { EMOTES, EMOTE_BY_ID } from './emotes';
 import { rankAtLeast, type DeedRole } from './ranks';
@@ -49,6 +50,7 @@ import {
 import { BAIT_BY_ID, FISH, fishHere, pickFish, waterDepth } from './fishing';
 import { BRIDGES, bridgeDone, CLEARANCE, END_SLOP, spanBill, spanTiles, type Bridge, type BridgeKind } from './bridges';
 import { CLEAR_OF_BUILDINGS, LIFT_PER_MASONRY, concreteFor, foundationBill, foundationDone, liftFor, masonryFor, type Foundation } from './foundations';
+import { poolLevel } from '../world/springs';
 import { liveSettings, type Settings } from './settings';
 import { Skills, SKILL_DEFS, isQuiet } from './skills';
 import { jewelGain } from './gems';
@@ -254,6 +256,8 @@ export interface GameInit {
   nextTrapId?: number;
   bridges?: Bridge[];
   nextBridgeId?: number;
+  /** The springs dug here (`./springs`): where, and by whom. Their water is worked out again from the ground. */
+  springs?: SpringSave[];
   foundations?: Foundation[];
   nextFoundationId?: number;
   tally?: Record<string, number>;
@@ -592,6 +596,8 @@ export class Game {
   favourWind = -1e9;
   readonly bridges = new Map<number, Bridge>();
   nextBridgeId = 1;
+  /** The springs dug on this island, and the ponds and streams they keep (`./springs`). */
+  readonly springs: Springs;
   /** Tile key to the bridge whose deck covers it, rebuilt whenever one changes. */
   private deckIndex = new Map<string, number>();
   /** Concrete slabs poured over sloping tiles, one to a tile. */
@@ -1063,6 +1069,14 @@ export class Game {
       }
       if (!f.team.length) f.driven = false;
     }
+    this.springs = new Springs(this.world);
+    // What the water sees of the foundations: a slab is a wall to it, and a pool dug in one is water.
+    this.springs.slabs = (tx, ty) => {
+      const f = this.foundations.size ? this.slabAt(tx, ty) : undefined;
+      return f ? { top: f.top, pool: !!f.pool } : null;
+    };
+    this.springs.pools = () => [...this.foundations.values()].filter((f) => f.pool && foundationDone(f));
+    this.springs.load(init.springs);
     this.vision = new Vision(this);
     this.world.onChange((x, y) => {
       // Felling a tree or raising a wall changes what can be seen past it.
@@ -1159,7 +1173,7 @@ export class Game {
     if (!up || level !== 0) return null;
     if (!this.world.inBounds(x1, y1) || !this.world.isPassable(x1, y1)) return null;
     // Only the web-footed sort will take a rider into deep water.
-    if (!this.creatures.species(up).swims && this.world.heightAt(x1 + 0.5, y1 + 0.5) < -SWIM_DEPTH) return null;
+    if (!this.creatures.species(up).swims && this.world.bedAt(x1 + 0.5, y1 + 0.5) < this.world.surfaceAt(x1, y1) - SWIM_DEPTH) return null;
     if (this.buildings.blocksAt(0, x0, y0, x1, y1)) return null;
     return groundStep(this.world, x0, y0, x1, y1, this.mountStep(up)) && standsOn(this.world, x1, y1, this.mountStand(up)) ? 0 : null;
   };
@@ -1479,6 +1493,7 @@ export class Game {
      */
     const slab = this.foundationAt(x, y);
     if (slab && !foundationDone(slab)) return 'The foundation here is only shuttered. Pour it first.';
+    if (slab?.pool) return 'You cannot build in water.';
     if (!slab) {
       if (this.world.slope(x, y) !== 0) return 'The tile must be perfectly flat. Flatten it first.';
       if (this.world.hasWater(x, y)) return 'You cannot build in water.';
@@ -2875,6 +2890,8 @@ export class Game {
     if (this.traps.size) this.runTraps(dt);
     if (this.crops.size) this.growCrops();
     this.creatures.update(dt, this);
+    // Ground dug or filled this turn under or round a spring's water: settle it again, once.
+    this.springs.update(Date.now());
 
     this.decayClock += dt;
     // On an island what is lying about rots on the island's clock, and every
@@ -4015,7 +4032,8 @@ export class Game {
    */
   laidOver(x: number, y: number): number | null {
     const slab = this.foundations.size ? this.slabAt(x, y) : undefined;
-    if (slab) return slab.top;
+    // In a pool, a body swims with its head out, as in the sea.
+    if (slab) return slab.pool ? poolLevel(slab.top) - SWIM_DEPTH : slab.top;
     return this.bridges.size ? this.deckAt(x, y) : null;
   }
 
@@ -4092,7 +4110,7 @@ export class Game {
       // The bank of a ravine always shares a corner with the ravine, so what
       // matters is whether you can stand in the middle of the tile, not
       // whether every corner of it is dry.
-      if (!ends[i].level && !this.slabAt(x, y) && (!w.isPassable(x, y) || w.centerHeight(x, y) < 0)) {
+      if (!ends[i].level && !this.slabAt(x, y) && (!w.isPassable(x, y) || w.centerHeight(x, y) < w.surfaceAt(x, y) && w.hasWater(x, y))) {
         return 'Both ends want dry, solid ground to stand on.';
       }
       if (this.bridgeAt(x, y)) return 'One end is already under a bridge.';
@@ -4147,9 +4165,39 @@ export class Game {
     return f && foundationDone(f) ? f : undefined;
   }
 
-  /** How high the top of a tile is: a poured slab's, or the ground's own. */
+  /** How high the top of a tile is: a poured slab's, the water in a pool dug in one, or the ground's own. */
   surfaceHeight(x: number, y: number): number {
-    return this.slabAt(x, y)?.top ?? this.world.centerHeight(x, y);
+    const slab = this.slabAt(x, y);
+    if (slab) return slab.pool ? poolLevel(slab.top) : slab.top;
+    return this.world.centerHeight(x, y);
+  }
+
+  /**
+   * Why a pool cannot be dug in the foundation on a tile, or null.
+   *
+   * Whatever stands on the slab would go into the water, so it has to be
+   * cleared first, as a pour has to be; and a house stands on its floor.
+   */
+  poolReason(x: number, y: number): string | null {
+    const f = this.slabAt(x, y);
+    if (!f) return 'Dig a pool in a poured foundation.';
+    if (f.pool) return 'There is a pool here already.';
+    const b = this.buildings.buildingAt(x, y);
+    if (b) return `${b.name} stands on it.`;
+    if (this.isToken(x, y)) return 'The settlement token stands there.';
+    if (this.bridgeAt(x, y)) return 'A bridge is carried over that tile.';
+    if (this.groundAt(x, y).length) return 'Clear away the things lying there first: they would go into the water.';
+    const p = this.placed;
+    if (p.furniture.at(x, y).length || p.crates.at(x, y).length || p.campfires.at(x, y).length || p.smelters.at(x, y).length
+      || p.kilns.at(x, y).length || p.anvils.at(x, y).length || p.posts.at(x, y).length || p.traps.at(x, y).length) {
+      return 'Move what stands on the slab first: it would go into the water.';
+    }
+    return null;
+  }
+
+  /** A pool has been dug in a foundation or filled in: the water is laid again, and any spring it touches settled again. */
+  poolsChanged(x: number, y: number): void {
+    this.springs.touched(x, y, true);
   }
 
   /**
@@ -5653,7 +5701,7 @@ export class Game {
     if (!w.inBounds(x, y)) return false;
     // A slab is hard level ground with a road's worth of room on it; a cart
     // crosses one the way it crosses a bridge deck.
-    if (this.foundations.size && this.slabAt(x, y)) return true;
+    if (this.foundations.size && this.slabAt(x, y)) return !this.slabAt(x, y)!.pool;
     return w.isPassable(x, y) && !w.hasWater(x, y);
   }
 
@@ -6011,6 +6059,8 @@ export class Game {
         this.slabIndex.set(`${f.x},${f.y}`, f.id);
       }
       if (ground.nextFoundationId) this.nextFoundationId = ground.nextFoundationId;
+      // A pool dug in one is water: laid again with whatever the island says of them.
+      this.springs.lay();
     }
     for (const c of ground.crates ?? []) {
       this.crates.set(c.id, {

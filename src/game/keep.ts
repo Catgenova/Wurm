@@ -499,3 +499,10 @@ export const GROUND_EVERY = 1;
 
 /** And how far out, which is past anything a screen shows. */
 export const GROUND_RANGE = 40;
+
+/**
+ * Seconds between asking the island about the springs near you. A spring's
+ * water changes only when somebody digs, and anything you do yourself asks
+ * again at once, so this is how long somebody else's digging takes to show.
+ */
+export const SPRINGS_EVERY = 4;

@@ -60,8 +60,11 @@ import { cropDef } from '../game/farming';
 import { crateCentre, crateKindOfItem, subtileOf, SUBTILES } from '../game/crates';
 import { maxHealth, SPECIES, type Creature } from '../game/creatures';
 import { rarityOf } from '../game/items';
-import { CREST_ALPHA, FOAM_WIDTH, foamAlpha, LONG_WAVE, SHORT_WAVE, SWELL_SPEED, swellAt, swellShow, TROUGH_ALPHA, WATER_LIT, WATER_PALETTE, waterLevel } from './water';
+import { CREST_ALPHA, FOAM_WIDTH, foamAlpha, LONG_WAVE, SHORT_WAVE, SPRING_EDGE, SPRING_PALETTE, springLevel, SWELL_SPEED, swellAt, swellShow, TROUGH_ALPHA, WATER_LIT, WATER_PALETTE, waterLevel } from './water';
 import { Wakes } from './wake';
+import { SpringWater } from './ponds';
+import { drawPool } from './pools';
+import type { WaterField } from '../world/springs';
 import { Dust } from './dust';
 import { Gaits } from './gait';
 import type { Peer } from '../game/roster';
@@ -73,6 +76,9 @@ import { css, HAZE_REACH, rgba, skyAt, unknownInk, type Sky } from './sky';
  * rather than one per tree per frame.
  */
 const HAZE_STEPS = 6;
+
+/** The thin darker line where a pond meets its bank. */
+const POND_SHORE = `rgba(${SPRING_EDGE.join(',')},0.6)`;
 
 /** The top of a creature crate's floor, in pixels at zoom 1: 0.7 units up. */
 const CRATE_FLOOR = 0.7 * HEIGHT_SCALE;
@@ -579,6 +585,24 @@ export class Renderer {
   /** Whether any water was drawn this frame; an inland view skips the surface pass. */
   private drewWater = false;
   private seaPath = new Path2D();
+  /**
+   * The water springs have made above the sea: its ponds, streams, falls and
+   * wells as they are drawn (`./ponds`). Idle, and free, while there are none.
+   */
+  readonly springWater = new SpringWater();
+  /** Every pond's water drawn this frame, so a wake crossing a pond is kept on it; null while nothing is leaving a wake. */
+  private pondPath: Path2D | null = null;
+  /** The ponds with water on the tile being drawn: the level each stands at, and which of the tile's corners it covers, one bit each. */
+  private pondsHereLevel: number[] = [];
+  private pondsHereMask: number[] = [];
+  private pondsHereN = 0;
+  /** The highest of them. */
+  private pondTop = 0;
+  /** The corner a spring wells up at, for the drawing, by the spring's id. */
+  private readonly wellAt = (id: number): readonly [number, number] | null => {
+    const s = this.game.springs.list.get(id);
+    return s ? [s.cx, s.cy] : null;
+  };
   /** What everything on the water has left behind it. */
   readonly wakes = new Wakes();
   /** What has been kicked up underfoot. */
@@ -679,6 +703,8 @@ export class Renderer {
     this.colors = new ColourPages(game.world.w);
     this.memColors = new ColourPages(game.world.w);
     game.world.onChange((x, y) => this.invalidate(x, y));
+    // Ground dug under or beside a stream moves the line it runs along.
+    game.world.onChange((x, y) => this.springWater.touched(x, y));
     // Damage and skill both go up over the thing they happened to. Damage adds
     // up per target, skill per skill, so a flurry of either reads as one
     // running number rather than a stack of them.
@@ -699,7 +725,7 @@ export class Renderer {
       const tx = Math.floor(x);
       const ty = Math.floor(y);
       const w = game.world;
-      if (!w.inBounds(tx, ty) || w.heightAt(x, y) < 0) return;
+      if (!w.inBounds(tx, ty) || w.heightAt(x, y) < w.surfaceAt(tx, ty)) return;
       const tone = dustTone(this.groundColor(tx, ty, true, this.sunNow));
       this.dust.burst(x, y, this.time, tone, Math.max(0.45, dustiness(w.viewTile(tx, ty, true))));
     });
@@ -1567,6 +1593,16 @@ export class Renderer {
     this.trapHits.length = 0;
     this.deckHits.length = 0;
     this.drawnTiles = 0;
+    // The water springs have made, if any: where each pond stands this frame, how far each stream has run, and which line of the ground each piece goes after.
+    const water = world.water;
+    // Their outline only matters to a wake, so it is gathered only while something is leaving one.
+    this.pondPath = water && this.wakes.live(this.time).length ? new Path2D() : null;
+    if (water) {
+      this.springWater.frame({
+        world, cam, view: V, now: Date.now(), t: this.time, width: W, height: H, dLo, dHi,
+        lean: this.lean, sun, dark: this.game.darkness(), wellAt: this.wellAt,
+      }, water);
+    }
 
     for (let d = dLo; d <= dHi; d++) {
       this.ents.length = 0;
@@ -1626,7 +1662,10 @@ export class Renderer {
         ctx.closePath();
         ctx.fillStyle = color;
         ctx.fill();
-        const wet = c[0] < 0 || c[1] < 0 || c[2] < 0 || c[3] < 0;
+        // Under the sea where a corner is below nothing, and under a pond where its water has risen over a corner of the tile.
+        const sea = c[0] < 0 || c[1] < 0 || c[2] < 0 || c[3] < 0;
+        const pond = water !== null && water.wet(x, y) && this.pondsOn(water, x, y, c, co);
+        const wet = sea || pond;
         /*
          * What is on this tile, and what ground it counts as. For a tile of
          * forest those are two different answers: the first is a tree, the
@@ -1643,7 +1682,8 @@ export class Renderer {
         ctx.stroke();
         // Weed on the bottom goes under the water rather than over it.
         if (grassy && wet && DROWNS.has(here)) this.strewTile(here, x, y, pts, paveRot, zoom, lit);
-        if (wet) this.drawWater(V, x, y, c, fogged && !lit ? fogPath : undefined);
+        if (sea) this.drawWater(V, x, y, c, fogged && !lit ? fogPath : undefined);
+        if (pond) this.drawPonds(V, x, y, c, fogged && !lit ? fogPath : undefined);
 
         // A flat ground gets no speckles. A sward is a flat ground with clumps
         // growing in it, and the speckles are what it had instead of clumps:
@@ -1660,7 +1700,7 @@ export class Renderer {
          * tile counts as the sand it grows out of, and sand-coloured weed is
          * no weed at all.
          */
-        const wades = wet && WADES.has(t0) && (c[0] + c[1] + c[2] + c[3]) / 4 > -WADE_DEPTH;
+        const wades = wet && WADES.has(t0) && (c[0] + c[1] + c[2] + c[3]) / 4 > (pond ? Math.max(0, this.pondTop) : 0) - WADE_DEPTH;
         if (grassy && (!wet || wades) && STREWN.has(t0)) this.strewTile(t0, x, y, pts, paveRot, zoom, lit);
         /*
          * And where something greener grows beside this, it comes over the
@@ -1826,7 +1866,7 @@ export class Renderer {
             if (peer.uid && this.seated.has(peer.uid)) continue;
             const [px, py] = this.game.roster.drawnAt(peer);
             this.take('peer', x, y, cam.worldToScreenX(px, py),
-              cam.worldToScreenY(px, py, Math.max(world.heightAt(px, py), -4) + peer.level * WALL_HEIGHT), null).peer = peer;
+              cam.worldToScreenY(px, py, Math.max(world.heightAt(px, py), world.surfaceAt(Math.floor(px), Math.floor(py)) - 4) + peer.level * WALL_HEIGHT), null).peer = peer;
           }
         }
         if (this.game.creatures.list.size) {
@@ -1836,7 +1876,7 @@ export class Renderer {
             // One shut in a crate is drawn in the crate, by the crate.
             if (cr.mode === 'stored') continue;
             this.take('creature', x, y, cam.worldToScreenX(cr.x, cr.y),
-              cam.worldToScreenY(cr.x, cr.y, deckHere ?? Math.max(world.heightAt(cr.x, cr.y), -4)), null).creature = cr;
+              cam.worldToScreenY(cr.x, cr.y, deckHere ?? Math.max(world.heightAt(cr.x, cr.y), world.surfaceAt(Math.floor(cr.x), Math.floor(cr.y)) - 4)), null).creature = cr;
           }
         }
         if (this.game.foundations.size) this.drawFoundation(x, y, lit);
@@ -1847,7 +1887,8 @@ export class Renderer {
         // On a bridge you stand on the deck, not in whatever is under it.
         // On the deck unless you are in a hull passing under it.
         const deck = this.game.afloat() ? null : this.game.laidOver(player.tileX, player.tileY);
-        const ph = deck !== null ? deck : Math.max(world.heightAt(player.x, player.y), -4) + player.visualLevel * WALL_HEIGHT;
+        // Afloat in deep water, at the top of it: the sea's surface, or a pond's.
+        const ph = deck !== null ? deck : Math.max(world.heightAt(player.x, player.y), world.surfaceAt(player.tileX, player.tileY) - 4) + player.visualLevel * WALL_HEIGHT;
         // A driver is drawn on the seat, which is a lift in screen pixels
         // rather than in world height: the cart is under them, not the ground.
         const drivenBy = this.game.driving();
@@ -1869,6 +1910,8 @@ export class Renderer {
         this.specks(ctx, this.grainDark, this.grainN, 'rgba(0,0,0,0.095)');
         this.specks(ctx, this.grainPale, this.grainM, 'rgba(255,255,255,0.07)');
       }
+      // The light on this line's ponds, and the streams, falls and springs whose water lies on it, over the ground and under what stands on it.
+      if (water) this.springWater.row(ctx, d);
       // The roofs of the buildings whose last walls this line drew, before
       // anything standing in front of them.
       const roofs = this.roofQueue.get(d);
@@ -4212,6 +4255,17 @@ export class Renderer {
     if (cam.zoom >= 0.75) {
       if (paved) this.paving(t, x, y, data, quad, 0);
       else this.laidOver(concrete(), quad, 0, 'overlay');
+    }
+    if (f.pool) {
+      drawPool(ctx, cam, {
+        x, y, top: f.top, time: lit ? this.time : null, concrete: CONCRETE,
+        poolTop: (px, py) => {
+          const o = this.game.foundationAt(px, py);
+          return o?.pool && foundationDone(o) ? o.top : null;
+        },
+        spillsAt: (px, py) => world.water?.spillsAt(px, py),
+        ground: (cx, cy) => world.getHeight(cx, cy),
+      });
     }
     ctx.globalAlpha = 1;
   }
@@ -6936,7 +6990,7 @@ export class Renderer {
     const w = this.game.world;
     const now = this.time;
     const sun = this.sunNow;
-    const dry = (x: number, y: number): boolean => w.heightAt(x, y) >= 0;
+    const dry = (x: number, y: number): boolean => w.heightAt(x, y) >= w.surfaceAt(Math.floor(x), Math.floor(y));
     const kick = (id: string, x: number, y: number): void => {
       const tx = Math.floor(x);
       const ty = Math.floor(y);
@@ -6970,6 +7024,8 @@ export class Renderer {
       ctx.fill();
     }
     ctx.globalAlpha = 1;
+    // The mist off the falls, which hangs over everything the same as smoke does.
+    if (this.game.world.water) this.springWater.air(ctx);
     const fires = this.game.fires();
     if (!fires.length) return;
     const drift = this.lean.force * PUFF_DRIFT;
@@ -7110,7 +7166,7 @@ export class Renderer {
   private markWakes(): void {
     const w = this.game.world;
     const now = this.time;
-    const afloat = (x: number, y: number): boolean => w.heightAt(x, y) < -0.5;
+    const afloat = (x: number, y: number): boolean => w.heightAt(x, y) < w.surfaceAt(Math.floor(x), Math.floor(y)) - 0.5;
     const player = this.game.player;
     const boat = this.game.driving();
     const hull = boat && furnitureDef(boat.kind).boat ? boat : null;
@@ -7215,14 +7271,20 @@ export class Renderer {
     const trails = this.wakes.live(this.time);
     if (!trails.length) return;
     const cam = this.camera;
+    const w = this.game.world;
     ctx.save();
-    ctx.clip(this.seaPath);
+    // The sea and every pond: a swimmer in a pond leaves a wake on it too.
+    if (this.pondPath) {
+      const both = new Path2D(this.seaPath);
+      both.addPath(this.pondPath);
+      ctx.clip(both);
+    } else ctx.clip(this.seaPath);
     for (const trail of trails) {
       // One outline for the whole trail — up one side and back down the other
       // — so there is no seam anywhere along it. The width at each point is
       // how far that bit of water has had time to spread.
       const sx = (x: number, y: number): number => cam.worldToScreenX(x, y);
-      const sy = (x: number, y: number): number => cam.worldToScreenY(x, y, 0);
+      const sy = (x: number, y: number): number => cam.worldToScreenY(x, y, w.surfaceAt(Math.floor(x), Math.floor(y)));
       const side = (i: number, hand: number): [number, number] => {
         const p = trail[i];
         const a = trail[Math.max(0, i - 1)];
@@ -7335,6 +7397,115 @@ export class Renderer {
       ctx.lineTo(cam.worldToScreenX(edge[2], edge[3]), cam.worldToScreenY(edge[2], edge[3], 0));
       ctx.stroke();
       ctx.lineWidth = 1;
+    }
+  }
+
+  /**
+   * Which of the ponds on a tile have water on it this frame, into
+   * `pondsHereLevel` and `pondsHereMask`: a pond still rising has not got to
+   * every corner it will cover, and one only just dug has got to none. True
+   * when any has.
+   */
+  private pondsOn(water: WaterField, x: number, y: number, c: number[], co: View['corners']): boolean {
+    const cw = this.game.world.w + 1;
+    let n = 0;
+    this.pondTop = -Infinity;
+    for (const p of water.pondsAt(x, y)) {
+      const level = this.springWater.levelOf(p);
+      let mask = 0;
+      for (let i = 0; i < 4; i++) {
+        if (c[i] < level && p.wet.has((y + co[i][1]) * cw + x + co[i][0])) mask |= 1 << i;
+      }
+      if (!mask) continue;
+      this.pondsHereLevel[n] = level;
+      this.pondsHereMask[n] = mask;
+      n++;
+      if (level > this.pondTop) this.pondTop = level;
+    }
+    this.pondsHereN = n;
+    return n > 0;
+  }
+
+  /**
+   * A pond's water on a tile, the way the sea's is drawn but at the pond's own
+   * surface, and only over the corners it covers: cut where the ground comes
+   * up through the surface, which is its shore, and halfway along an edge that
+   * runs from its water to a corner lower than the surface but not in the
+   * pond, which is the far side of its lip. Coloured by depth off spring
+   * water's own ramp, turquoise and not the sea's blue, and edged at the bank
+   * with a thin line of darker teal rather than the sea's foam: nothing
+   * breaks on a pond.
+   */
+  private drawPonds(V: View, x: number, y: number, c: number[], fogInto?: Path2D): void {
+    const ctx = this.canvas.ctx;
+    const cam = this.camera;
+    const cs = V.corners;
+    const poly = this.waterPoly;
+    const edge = this.waterEdge;
+    for (let q = 0; q < this.pondsHereN; q++) {
+      const level = this.pondsHereLevel[q];
+      const mask = this.pondsHereMask[q];
+      let n = 0;
+      let cross = 0;
+      let sum = 0;
+      for (let i = 0; i < 4; i++) {
+        const j = (i + 1) & 3;
+        const ha = c[i];
+        const hb = c[j];
+        const wa = (mask >> i) & 1;
+        const wb = (mask >> j) & 1;
+        const ax = x + cs[i][0];
+        const ay = y + cs[i][1];
+        // Depth is measured to the ground under the water; a corner out of the pond counts as the waterline.
+        sum += wa ? ha : Math.max(ha, level);
+        if (wa) {
+          poly[n++] = ax;
+          poly[n++] = ay;
+        }
+        if (wa !== wb) {
+          const shore = (wa ? hb : ha) >= level;
+          const t = shore ? (level - ha) / (hb - ha) : 0.5;
+          const px = ax + (x + cs[j][0] - ax) * t;
+          const py = ay + (y + cs[j][1] - ay) * t;
+          if (shore) {
+            if (cross < 4) {
+              edge[cross++] = px;
+              edge[cross++] = py;
+            } else cross = 5;
+          }
+          poly[n++] = px;
+          poly[n++] = py;
+        }
+      }
+      if (n < 6) continue;
+      ctx.fillStyle = SPRING_PALETTE[springLevel(level - sum / 4)];
+      ctx.beginPath();
+      for (let k = 0; k < n; k += 2) {
+        const sx = cam.worldToScreenX(poly[k], poly[k + 1]);
+        const sy = cam.worldToScreenY(poly[k], poly[k + 1], level);
+        if (k === 0) {
+          ctx.moveTo(sx, sy);
+          fogInto?.moveTo(sx, sy);
+          this.pondPath?.moveTo(sx, sy);
+        } else {
+          ctx.lineTo(sx, sy);
+          fogInto?.lineTo(sx, sy);
+          this.pondPath?.lineTo(sx, sy);
+        }
+      }
+      ctx.closePath();
+      fogInto?.closePath();
+      this.pondPath?.closePath();
+      ctx.fill();
+      if (cross === 4) {
+        ctx.strokeStyle = POND_SHORE;
+        ctx.lineWidth = Math.max(0.8, 1.1 * cam.zoom);
+        ctx.beginPath();
+        ctx.moveTo(cam.worldToScreenX(edge[0], edge[1]), cam.worldToScreenY(edge[0], edge[1], level));
+        ctx.lineTo(cam.worldToScreenX(edge[2], edge[3]), cam.worldToScreenY(edge[2], edge[3], level));
+        ctx.stroke();
+        ctx.lineWidth = 1;
+      }
     }
   }
 

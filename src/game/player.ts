@@ -253,8 +253,9 @@ export class Player {
       }
     }
 
+    // Out of your depth in a pond as much as in the sea: measured down from whichever water is here.
     const h = world.heightAt(this.x, this.y);
-    this.swimming = !this.carried && h < -SWIM_DEPTH;
+    this.swimming = !this.carried && world.bedAt(this.x, this.y) < world.surfaceAt(Math.floor(this.x), Math.floor(this.y)) - SWIM_DEPTH;
 
     if (vx === 0 && vy === 0) {
       this.moving = false;
@@ -384,7 +385,7 @@ export function pathOptions(world: World, rule?: StepRule, levels = 1, wheelLoad
       let c = 1 / (def.speed * groundRoll(def.roll, wheelLoad));
       // Brush a walker goes through at full pace is no longer worth going round.
       c /= pace?.[world.getTile(x, y)] ?? 1;
-      if (world.centerHeight(x, y) < -SWIM_DEPTH) c *= 3.5;
+      if (world.bedCenter(x, y) < world.surfaceAt(x, y) - SWIM_DEPTH) c *= 3.5;
       return c;
     },
   };

@@ -12,6 +12,7 @@ import type { PlacedFurniture } from './furniture';
 import type { PlacedPost } from './posts';
 import type { PlacedTrap } from './traps';
 import type { Bridge } from './bridges';
+import type { SpringSave } from './springs';
 import type { Foundation } from './foundations';
 import type { Boon } from './boons';
 import type { Wound } from './wounds';
@@ -241,6 +242,7 @@ interface SaveData {
   nextTrapId?: number;
   bridges?: Bridge[];
   nextBridgeId?: number;
+  springs?: SpringSave[];
   foundations?: Foundation[];
   nextFoundationId?: number;
   tally?: Record<string, number>;
@@ -322,6 +324,7 @@ function meta(game: Game): SaveMeta {
     nextTrapId: game.nextTrapId,
     bridges: [...game.bridges.values()],
     nextBridgeId: game.nextBridgeId,
+    springs: game.springs.toJSON(),
     foundations: [...game.foundations.values()],
     nextFoundationId: game.nextFoundationId,
     tally: { ...game.tally },
@@ -466,7 +469,8 @@ async function loadFromDb(): Promise<{ meta: SaveMeta; ground: GroundBlob; fog: 
  */
 function layRock(world: World): void {
   world.fillRock((x, y) => {
-    const density = world.hasWater(x, y) ? ORE_DENSITY.water : ORE_DENSITY.land;
+    // The sea's, not a pond's: what is under a tile was settled when the island was made, before anybody dug a spring.
+    const density = world.hasSea(x, y) ? ORE_DENSITY.water : ORE_DENSITY.land;
     const ore = oreKindFor(world.seed, x, y, density);
     return ore >= 0 ? ore : stoneKindAt(world.seed, x, y);
   });
@@ -579,6 +583,7 @@ function finish(world: World, m: SaveMeta): Game {
     nextTrapId: m.nextTrapId,
     bridges: m.bridges,
     nextBridgeId: m.nextBridgeId,
+    springs: m.springs,
     foundations: m.foundations,
     nextFoundationId: m.nextFoundationId,
     tally: m.tally,

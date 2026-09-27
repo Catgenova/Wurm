@@ -289,6 +289,28 @@ jobs:
           npx esbuild supabase/test/rarebeast.ts --bundle --platform=node --format=esm \
             --outfile=node_modules/.cache/rarebeast.mjs --log-level=error
           node node_modules/.cache/rarebeast.mjs
+      - name: A spring fills its hollow and spills down to the next
+        run: |
+          # Asked for: player-made ponds, streams and waterfalls above the
+          # sea. A spring dug at the bottom of a hollow fills it to the lowest
+          # point of its rim and runs downhill into the next hollow, and so on
+          # to the sea. Both sides settle the same land into the same ponds and
+          # streams, the island keeps them as water to every rule, and the
+          # work is done when the land changes, never on the tick.
+          npx esbuild supabase/test/springs.ts --bundle --platform=node --format=esm \
+            --outfile=node_modules/.cache/springs.mjs --log-level=error
+          node node_modules/.cache/springs.mjs
+      - name: A pool dug in a foundation is water, and a spring in it spills over its edge
+        run: |
+          # Asked for: "Allow pools to be dug in foundations". A poured slab
+          # takes a pool broken out of it, water to every rule; one dug beside
+          # it poured to the same top is the same pool; and a spring dug in one
+          # goes over its lowest edge, down the slab to the ground or into a
+          # pool below, and on as any spring's water does. Both sides settle
+          # the same slabs into the same water.
+          npx esbuild supabase/test/pools.ts --bundle --platform=node --format=esm \
+            --outfile=node_modules/.cache/pools.mjs --log-level=error
+          node node_modules/.cache/pools.mjs
       - name: Nobody on the move is pulled back for going as fast as they can
         run: |
           # Reported as players rubberbanding when they move quickly. The

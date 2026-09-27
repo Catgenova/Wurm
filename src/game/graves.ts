@@ -146,7 +146,7 @@ export function graveSpot(g: Game, x: number, y: number): { x: number; y: number
   let fx = x;
   let fy = y;
   let shore = false;
-  if (g.world.inBounds(tx, ty) && g.world.centerHeight(tx, ty) < -SWIM_DEPTH) {
+  if (g.world.inBounds(tx, ty) && g.world.centerHeight(tx, ty) < g.world.surfaceAt(tx, ty) - SWIM_DEPTH) {
     const dry = shoreNear(g, GRAVE_REACH, [x, y]);
     if (dry) {
       tx = dry.x;

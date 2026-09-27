@@ -6,10 +6,11 @@ import { blankWorld, layChange, layHistory, layRows, rowsOf, type LandRow, type 
 import { generateAtlasWindow, loadAtlas, type Atlas } from '../world/atlas-world';
 import { PROJECT, supabase, signIn } from './supabase';
 import type { IslandCreature } from '../game/creatures';
+import type { IslandSpring } from '../game/springs';
 import { cleanLook, type Look } from '../game/look';
 import type { IslandCrate, IslandGround } from '../game/game';
 import type { Mark } from '../game/items';
-import { AWAY_SLOWER, BODY_EVERY, BODY_FRESH, CHANGE_PAGE, FOG_EVERY, FOUND_MAX, GROUND_EVERY, GROUND_IDLE, GROUND_RANGE, GUIDE_BATCH, GUIDE_EVERY, HEARTBEAT, LAND_ASK, LAND_NEAR, MOBS_EVERY, MOBS_RANGE, RECONCILE_EVERY, REGION, SNAP_GAP } from '../game/keep';
+import { AWAY_SLOWER, BODY_EVERY, BODY_FRESH, SPRINGS_EVERY, CHANGE_PAGE, FOG_EVERY, FOUND_MAX, GROUND_EVERY, GROUND_IDLE, GROUND_RANGE, GUIDE_BATCH, GUIDE_EVERY, HEARTBEAT, LAND_ASK, LAND_NEAR, MOBS_EVERY, MOBS_RANGE, RECONCILE_EVERY, REGION, SNAP_GAP } from '../game/keep';
 import type { GuideBook } from '../game/guide';
 import { packFog, unpackFog } from './fogpack';
 import type { Away } from '../game/away';
@@ -667,6 +668,14 @@ export interface IslandHooks {
    * settlement. Reported as "placed campfire doesn't show": it was there.
    */
   built?: (ground: IslandGround) => void;
+  /**
+   * The springs near us (`src/game/springs.ts`): every one in range with how
+   * many times the island has settled it, and the ponds and streams of any we
+   * did not have as they are now.
+   */
+  springs?: (near: Array<{ id: number; ver: number }>, chains: IslandSpring[]) => void;
+  /** What this side already holds of the springs, by id, for asking only for what has changed. */
+  knownSprings?: () => Record<string, number>;
   /** Somebody waved or hopped, which nothing but the renderer cares about. */
   emote?: (uid: string, name: string, emote: string) => void;
   /**
@@ -783,6 +792,7 @@ export class Island {
   private lastMove = 0;
   private lastMobs = 0;
   private lastGround = 0;
+  private lastSprings = 0;
   private lastSaid = '';
   /** Where the body was and what it was at, the last time that went out over Broadcast. */
   private lastShown = '';
@@ -2124,6 +2134,23 @@ export class Island {
     if (data) this.hooks.built(data as IslandGround);
   }
 
+  /**
+   * The springs near us, on a slower beat than the ground: a spring changes
+   * only when somebody digs, and what changed is asked for alone (`rpc_springs`
+   * is told what this side already holds). After anything we do ourselves it
+   * is asked for at once.
+   */
+  async refreshSprings(now: number): Promise<void> {
+    if (!this.info || !this.hooks.springs || now - this.lastSprings < SPRINGS_EVERY * this.slower()) return;
+    this.lastSprings = now;
+    const { data, error } = await supabase().rpc('rpc_springs', {
+      p_world: this.info.id, p_range: GROUND_RANGE, p_known: this.hooks.knownSprings?.() ?? {},
+    });
+    if (error || !data) return;
+    const said = data as { near?: Array<{ id: number; ver: number }>; chains?: IslandSpring[] };
+    this.hooks.springs(said.near ?? [], said.chains ?? []);
+  }
+
   async refreshPeople(): Promise<void> {
     if (!this.info) return;
     // And what each of them has on, which their rows cannot say: see `rpc_worn`.
@@ -2204,6 +2231,7 @@ export class Island {
     void this.reconcile(now);
     void this.refreshMobs(now);
     void this.refreshGround(now);
+    void this.refreshSprings(now);
     void this.keepFog(now);
     void this.keepGuide(now);
     const said = `${x.toFixed(2)},${y.toFixed(2)},${level}`;
@@ -2819,6 +2847,8 @@ export class Island {
     // than a stamp because nothing down here is holding the clock; the next
     // read turns it into one.
     this.stirred = true;
+    // And a spade in the ground can have moved a spring's water: asked for again at once.
+    this.lastSprings = 0;
     // We know when this ends before the island tells anybody, so ask to be
     // settled then rather than at the next heartbeat — and put the clock on
     // the screen now rather than a heartbeat from now.

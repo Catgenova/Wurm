@@ -59,7 +59,7 @@ import { COIN_WORTH } from '../../game/money';
 import { ORDER_LIFE } from '../../game/orders';
 import { KEPT_BEST, NUTRIENT_HOURS, NUTRIENT_NAMES, NUTRIENTS, TABLE_BEST } from '../../game/nutrition';
 import { OVEN_CAPACITY } from '../../game/placeables';
-import { BASE_SPEED, CARRY_CRAWL, CLIMB_LEARN_FROM, CLIMB_PER_LEVEL, MAX_STAND, MAX_STEP } from '../../game/player';
+import { BASE_SPEED, CARRY_CRAWL, CLIMB_LEARN_FROM, CLIMB_PER_LEVEL, MAX_STAND, MAX_STEP, SWIM_DEPTH } from '../../game/player';
 import { POST_LIFE_MAX, POST_LIFE_MIN, postRadius } from '../../game/posts';
 import { CRAFT_REACH, RECIPE_BY_ID, RECIPES, TRADE_BOOK_AT, TRADE_BOOK_SKILLS } from '../../game/recipes';
 import { MIN_GAIN, SKILL_BY_ID, skillGain } from '../../game/skills';
@@ -70,6 +70,8 @@ import {
   betterThanCommon, CHANNELS as BLOOD, FIGHT_SHARE, FIGHTING, GRADE_STEP, husbandryOdds, inheritChance, pct as cardPct, TIERS, TRAIT_SLOTS,
   TRAIT_SOURCES, TRAITS, upgradeChance, type TraitTier,
 } from '../../game/traits';
+import { CHAIN_MOST, FALL_DROP, FILL_RATE, POND_MOST, POOL_DEPTH, POOL_LIP, RUN_MOST, SPRING_DEPTH, SPRINGS_EACH } from '../../world/springs';
+import { POOL_FILL } from '../../game/foundations';
 import { AWARENESS, awarenessReach, BASE_SIGHT, LIGHT_GIVES_BACK, NIGHT_LOSS, TREE_OPACITY } from '../../game/vision';
 import { NO_GO, pointAt, windWord, windWorth } from '../../game/wind';
 import { article, capital, listed, NumberWord, numberWord, percent, share, spanWords, times } from '../../game/words';
@@ -164,6 +166,9 @@ const repairCost = (skill: number): string => `${+(WORN * repairGo(skill).cost).
 const KINDS = Object.values(WOUND_KINDS);
 /** What a go's quality is spread over when it is not simply your skill. */
 const QL_SPREAD = `${QL_LOW} to ${+(QL_LOW + QL_SPAN).toFixed(2)} times`;
+
+/** Height units as metres, a tenth of a metre each, to one place: 0.3 for three. */
+const metres = (units: number): string => (units / 10).toFixed(1);
 
 /** The steps of rarity above the ordinary. */
 const RARE_STEPS = RARITIES.map((_, i) => i).slice(1);
@@ -2096,6 +2101,34 @@ export function helpText(): string {
     ${GAIN_AT[2]}, and something like <b>${numberWord(Math.round(1 / MIN_GAIN))}</b> for the last. Nobody finishes a skill in passing; the last
     point of one is a thing to go after on purpose, and the log shows it moving at the fourth place
     after the point while you do.</p>
+    <h3>Springs, ponds and streams</h3>
+    <p>Water can stand above the sea. Dig a hollow, then right-click the bottom of it with a shovel and
+    choose <b>Dig a spring</b>: water wells up and fills the hollow to the height of the lowest point
+    of its rim, rising <b>${metres(FILL_RATE)} m a second</b>. The hollow has to hold at least
+    <b>${metres(SPRING_DEPTH)} m</b> of water before a spring will rise in it, and one that would spread
+    over more than <b>${POND_MOST} corners</b> is too wide ever to fill.</p>
+    <p>Full, it <b>spills</b> over that lowest point and runs downhill, the steepest way, to the next
+    hollow, fills that, spills again, and so on: into the sea, or away into the ground once it has run
+    <b>${RUN_MOST} tiles</b> with nothing to fill, found a hollow too wide to fill, or filled
+    <b>${numberWord(CHAIN_MOST)} ponds</b>. Level ground it crosses to the nearest way down. Dig hollows
+    one below another down a slope and you have a stream of ponds; wherever the water drops
+    <b>${metres(FALL_DROP)} m</b> or more from one corner to the next, it falls.</p>
+    <p>A pond is water to everything: fill a bucket or a skin at it, drink from it, cast a line into
+    it. Nothing is built or planted in one, no hull is launched in one, and deeper than
+    <b>${metres(SWIM_DEPTH)} m</b> you swim. It follows the ground under it: cut a notch in the rim and it
+    goes down to the notch, dig the hollow deeper and it deepens, fill the hollow in and the spring
+    stops. <b>Stop up the spring</b> takes it and all its water away. Each of us keeps
+    <b>${numberWord(SPRINGS_EACH)}</b> springs at most. Off a settlement only whoever dug a spring may stop
+    it up; on one, whoever may shape its ground may dig a spring or stop any there, and nobody else may.</p>
+    <p><b>Dig a pool</b> in a poured foundation with a pickaxe and it holds water
+    <b>${metres(POOL_DEPTH - POOL_LIP)} m</b> deep, <b>${metres(POOL_LIP)} m</b> under the top of the slab, with
+    or without a spring. Pools dug side by side in foundations poured to the same top are one pool;
+    whatever stands on a slab has to be moved off before a pool is dug in it. Dig a spring in a pool and
+    its water goes over the pool's lowest edge: down the face of the slab to the ground, falling where
+    the drop is <b>${metres(FALL_DROP)} m</b> or more, or into a lower pool beside it, and on down the
+    ground from there as any spring's water runs. A pool with nothing lower beside it keeps its water.
+    A foundation with no pool in it is a wall to water, and one poured over a spring stops it.
+    <b>Fill the pool in</b> takes a trowel and <b>${POOL_FILL}</b> concrete, and stops a spring in it.</p>
   `;
 }
 

@@ -5,7 +5,8 @@ import type { Renderer } from '../../render/renderer';
 import { ROCK_VARIANTS, TileType, TILE_DEFS } from '../../world/tiles';
 import { UNSEEN, VISIBLE } from '../../game/vision';
 import type { UIWindow } from '../windows';
-import { waterRgb } from '../../render/water';
+import { springRgb, waterRgb } from '../../render/water';
+import type { WaterField } from '../../world/springs';
 
 /** How wide the drawn map is, whatever size the island is. */
 const VIEW_SIZE = 512;
@@ -59,6 +60,9 @@ export class MinimapPanel {
   private lastFog = true;
   /** The window drawn last, in tiles: where it sits and how wide it is. */
   private win = { x: 0, y: 0, span: MIN_SPAN };
+  /** The springs' water as the map last painted it, and the tiles its streams run through, by `y * width + x`. */
+  private lastWater: WaterField | null = null;
+  private streamTiles = new Set<number>();
   /** The list of marks under the map, and whether names are drawn on it. */
   private marksEl: HTMLDivElement;
   private names = true;
@@ -281,7 +285,8 @@ export class MinimapPanel {
       // The same ramp the world is painted with. The map used to roll its own,
       // over a different pair of colours and a different depth, so a shelf
       // that read as pale green out of the window read as navy on the map.
-      [r, g, b] = waterRgb(Math.max(0, -h));
+      // A pond is spring water, turquoise, measured down from its own level.
+      [r, g, b] = w.hasSea(x, y) ? waterRgb(Math.max(0, -h)) : springRgb(w.surfaceAt(x, y) - h);
     } else {
       const slope = w.getHeight(x + 1, y + 1) - w.getHeight(x, y);
       const shade = 0.9 + Math.max(-0.35, Math.min(0.25, -slope / 60));
@@ -302,6 +307,13 @@ export class MinimapPanel {
         g *= hard;
         b *= hard;
       }
+      // A stream is narrower than a tile, and is drawn as a thread of water through the ground it crosses.
+      if (this.streamTiles.has(y * w.w + x)) {
+        const [wr, wg, wb] = springRgb(3);
+        r = r * 0.3 + wr * 0.7;
+        g = g * 0.3 + wg * 0.7;
+        b = b * 0.3 + wb * 0.7;
+      }
     }
     /*
      * Ground out of sight keeps its shape and loses its colour. Grey rather
@@ -318,6 +330,47 @@ export class MinimapPanel {
     d[i + 1] = Math.min(255, g);
     d[i + 2] = Math.min(255, b);
     d[i + 3] = 255;
+  }
+
+  /**
+   * Repaint the ground under the springs' water whenever it is laid again: a
+   * spring dug or stopped, or its ponds settled afresh. Where the water was
+   * and where it is now, and nothing else.
+   */
+  private followWater(): void {
+    const w = this.game.world;
+    const water = w.water;
+    if (water === this.lastWater) return;
+    const cw = w.w + 1;
+    const tiles = new Set<number>();
+    const note = (field: WaterField | null, streams: Set<number> | null): void => {
+      if (!field) return;
+      for (const p of field.ponds) {
+        for (const k of p.wet) {
+          const x = k % cw;
+          const y = (k - x) / cw;
+          for (let dy = -1; dy <= 0; dy++) for (let dx = -1; dx <= 0; dx++) if (w.inBounds(x + dx, y + dy)) tiles.add((y + dy) * w.w + x + dx);
+        }
+      }
+      // A pool is water whether or not a spring rises in it, dug or filled in with no pond moving.
+      for (const k of field.poolTiles()) tiles.add(k);
+      for (const st of field.streams) {
+        // Each step between two corners runs along the edge of the tile it is the top or the left of.
+        for (let i = 0; i + 3 < st.path.length; i += 2) {
+          const x = Math.min(st.path[i], st.path[i + 2]);
+          const y = Math.min(st.path[i + 1], st.path[i + 3]);
+          if (!w.inBounds(x, y)) continue;
+          tiles.add(y * w.w + x);
+          streams?.add(y * w.w + x);
+        }
+      }
+    };
+    note(this.lastWater, null);
+    this.streamTiles = new Set();
+    note(water, this.streamTiles);
+    this.lastWater = water;
+    for (const k of tiles) this.paint(k % w.w, Math.floor(k / w.w));
+    this.dirty = true;
   }
 
   /** Repaint the box the last look around changed, rather than the island. */
@@ -361,6 +414,7 @@ export class MinimapPanel {
     const now = performance.now();
     if (now - this.lastDraw < MAP_EVERY) return;
     this.lastDraw = now;
+    this.followWater();
     this.followVision();
     if (this.dirty) {
       this.baseCtx.putImageData(this.image, 0, 0);

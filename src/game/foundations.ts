@@ -1,6 +1,7 @@
 import type { ActionDef, Target } from './actions';
 import { isDone, progressOf, type Bill } from './building';
 import { TileType } from '../world/tiles';
+import { POOL_DEPTH, POOL_LIP, poolFloor, poolLevel } from '../world/springs';
 
 /**
  * Foundations.
@@ -55,7 +56,16 @@ export interface Foundation extends Bill {
   top: number;
   /** Who set it out. */
   madeBy?: string;
+  /** A pool dug in it: water \`POOL_LIP\` under its top over a floor \`POOL_DEPTH\` under it. */
+  pool?: boolean;
 }
+
+/**
+ * The concrete it takes to fill a pool back in: a barrowful for every step of
+ * its depth. Far less than pouring that depth over a whole tile would take,
+ * because the walls round it are still standing.
+ */
+export const POOL_FILL = POOL_DEPTH;
 
 /** Poured, rather than still a shuttered plan. */
 export const foundationDone = (f: Foundation): boolean => isDone(f);
@@ -153,9 +163,70 @@ export const FOUNDATION_ACTIONS: ActionDef[] = [
        * only what the top of the tile is surfaced with.
        */
       g.world.setTile(f.x, f.y, TileType.PackedDirt);
+      // A slab is a wall to water, and one poured over a spring stops it.
+      g.poolsChanged(f.x, f.y);
       g.note('poured_foundation');
       g.logMsg(`The last of it goes in and the slab stands level at ${f.top}. You can build on it, pave it, or bring a bridge to it.`, 'event');
       return false;
+    },
+  },
+  {
+    id: 'dig_pool',
+    label: 'Dig a pool',
+    verb: 'breaking out a pool',
+    skill: 'masonry',
+    tool: 'pickaxe',
+    stamina: 0.12,
+    baseTime: 30,
+    applies: (t, g) => isTile(t) && !!g.slabAt(t.x, t.y) && !g.slabAt(t.x, t.y)!.pool,
+    labelFor: (t, g) => {
+      const f = isTile(t) ? g.slabAt(t.x, t.y) : undefined;
+      return f ? `Dig a pool (water at ${poolLevel(f.top)} over a floor at ${poolFloor(f.top)})` : 'Dig a pool';
+    },
+    check: (t, g) => {
+      if (!isTile(t)) return null;
+      if (!g.inventory.has('pickaxe')) return 'You need a pickaxe to break out a pool.';
+      return g.poolReason(t.x, t.y);
+    },
+    perform: (t, g) => {
+      if (!isTile(t) || g.poolReason(t.x, t.y)) return;
+      const f = g.slabAt(t.x, t.y);
+      if (!f) return;
+      f.pool = true;
+      g.poolsChanged(f.x, f.y);
+      g.logMsg(
+        `You break the middle out of the slab down to ${poolFloor(f.top)}, leaving a lip round it, and it holds water at ${poolLevel(f.top)}:`
+        + ` ${((POOL_DEPTH - POOL_LIP) / 10).toFixed(1)} m deep. A pool beside it poured to the same top is the same pool; dig a spring in it and it spills over its lowest edge.`,
+        'event',
+      );
+      g.events.emit('world', t.x, t.y);
+    },
+  },
+  {
+    id: 'fill_pool',
+    label: 'Fill the pool in',
+    verb: 'filling the pool in',
+    skill: 'masonry',
+    tool: 'trowel',
+    stamina: 0.08,
+    baseTime: 20,
+    applies: (t, g) => isTile(t) && !!g.slabAt(t.x, t.y)?.pool,
+    labelFor: () => `Fill the pool in (wants ${POOL_FILL} concrete)`,
+    check: (t, g) => {
+      if (!isTile(t)) return null;
+      if (!g.slabAt(t.x, t.y)?.pool) return 'There is no pool here.';
+      if (!g.inventory.has('trowel')) return 'You need a trowel to work concrete.';
+      if (g.inventory.count('concrete') < POOL_FILL) return `Filling it in wants ${POOL_FILL} concrete, and you have ${g.inventory.count('concrete')}.`;
+      return null;
+    },
+    perform: (t, g) => {
+      if (!isTile(t)) return;
+      const f = g.slabAt(t.x, t.y);
+      if (!f?.pool || !g.inventory.consume('concrete', POOL_FILL)) return;
+      f.pool = false;
+      g.poolsChanged(f.x, f.y);
+      g.logMsg(`You fill the pool in with ${POOL_FILL} concrete, level with the top of the slab at ${f.top}. A spring that rose in it stops.`, 'event');
+      g.events.emit('world', t.x, t.y);
     },
   },
   {

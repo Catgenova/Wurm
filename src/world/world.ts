@@ -1,4 +1,5 @@
 import { TileType, TILE_DEFS, TREE_DEFS, BUSH_DEFS, ROCK_VARIANTS, SLAB_VARIANTS, treeSpecies, bushSpecies, slabVariant } from './tiles';
+import type { WaterField } from './springs';
 
 export type WorldListener = (x: number, y: number) => void;
 
@@ -113,6 +114,8 @@ export class World {
   minHeight = 0;
   maxHeight = 0;
   private listeners: WorldListener[] = [];
+  /** The water springs have made above the sea, pond by pond (`./springs`); null where there are none. */
+  water: WaterField | null = null;
 
   constructor(
     w: number,
@@ -764,8 +767,42 @@ export class World {
     return m;
   }
 
+  /**
+   * Whether there is water on a tile: the sea, wherever the ground is below
+   * nothing, or a pond a spring has filled (`water`). Everything that asks
+   * about water asks this -- a bucket, a line, a plough, a builder -- so to
+   * all of them a pond is water.
+   */
   hasWater(x: number, y: number): boolean {
+    return this.hasSea(x, y) || (this.water !== null && this.water.wet(x, y));
+  }
+
+  /** Whether the sea comes onto a tile: a corner of it below nothing. What a hull floats on, and what the ground was made with. */
+  hasSea(x: number, y: number): boolean {
     return this.getHeight(x, y) < 0 || this.getHeight(x + 1, y) < 0 || this.getHeight(x + 1, y + 1) < 0 || this.getHeight(x, y + 1) < 0;
+  }
+
+  /**
+   * How high the water over a tile stands: a pond's level where one lies,
+   * and the sea's nothing everywhere else. What a swimmer floats at and what
+   * depth is measured down from.
+   */
+  surfaceAt(x: number, y: number): number {
+    return this.water?.levelAt(x, y) ?? 0;
+  }
+
+  /**
+   * The bottom of the water at a point: the floor of a pool dug in a
+   * foundation there, and the ground everywhere else. What depth is measured
+   * down to, and what a body's feet are on when it is not swimming.
+   */
+  bedAt(x: number, y: number): number {
+    return this.water?.bedAt(Math.floor(x), Math.floor(y)) ?? this.heightAt(x, y);
+  }
+
+  /** The same for the middle of a tile. */
+  bedCenter(x: number, y: number): number {
+    return this.water?.bedAt(x, y) ?? this.centerHeight(x, y);
   }
 
   isSubmerged(x: number, y: number): boolean {

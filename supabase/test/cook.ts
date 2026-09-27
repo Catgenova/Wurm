@@ -121,6 +121,9 @@ create or replace function product_ql(p_skill double precision, p_tool_ql double
   returns double precision language sql as 'select ${HANDS}::double precision';
 create or replace function butcher_yield(p_skill double precision, p_knife_ql double precision)
   returns double precision language sql immutable as 'select ${SHARE}::double precision';
+-- Nothing cooked here comes out rare. A rare pot is a pile of its own, and one pot in a
+-- hundred would be: run 812 put the second marked pot beside the first, not on it.
+create or replace function rarity_roll() returns text language sql as 'select null::text';
 
 do $$
 declare w uuid; u uuid; tx int; ty int; v_t text; v_u text; v_it bigint; v_row bigint; v_chest bigint; v_barrel bigint;

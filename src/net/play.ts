@@ -260,6 +260,8 @@ export async function startIsland(params: URLSearchParams, tell: Telling): Promi
    * actions — and leaves it drawing the legs the island hands over.
    */
   game.creatures.fromIsland = true;
+  // And the springs: the island settles them and says where their water is.
+  game.springs.fromIsland = true;
   /*
    * And the body, which the island now keeps.
    *
@@ -306,6 +308,8 @@ export async function startIsland(params: URLSearchParams, tell: Telling): Promi
   // Whose uid this is, so the seat and the shafts that are ours can be told
   // from somebody else's.
   island.hooks.built = (ground) => game.sawGround(ground, island, island.uid || null);
+  island.hooks.springs = (near, chains) => game.springs.sawIsland(near, chains);
+  island.hooks.knownSprings = () => Object.fromEntries([...game.springs.list.values()].map((s) => [String(s.id), s.ver]));
   // Where the island put the body, which is only ever somewhere we did not put
   // it ourselves: dying does, and so does a keeper of the island moving a
   // stuck body, which takes it off whatever it was on as well.
