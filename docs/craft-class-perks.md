@@ -1,6 +1,6 @@
 # Craft class perks
 
-The perks chosen for the fourteen craft classes, class by class, on 26 September 2026, and the tiers they are offered in, settled on 27 September. They replace what a craft class gave before: its channels and its tree of nodes in `src/game/classes.ts`. The Terraformer, the Miner, the Mason, the Carpenter, the Smith, the Forester, the Farmer, the Cook and the Tailor are built, in `src/game/perks.ts` and on the island; the other five are not yet.
+The perks chosen for the fourteen craft classes, class by class, on 26 September 2026, and the tiers they are offered in, settled on 27 September. They replace what a craft class gave before: its channels and its tree of nodes in `src/game/classes.ts`. The Terraformer, the Miner, the Mason, the Carpenter, the Smith, the Forester, the Farmer, the Cook, the Tailor and the Herdsman are built, in `src/game/perks.ts` and on the island; the other four are not yet.
 
 ## Tiers
 
@@ -257,28 +257,30 @@ Main skill tailoring; also leatherworking and ropemaking.
 
 Main skill animal husbandry; also taming.
 
-1. **Soft Hand** — every offering is 10 points likelier to take.
-2. **Patient Coax** — each refused offering makes the next 6 points likelier (now 3).
+1. **Soft Hand** — every offering is 10 points likelier to take. Built as 10 points added after everything else that goes into the chance, under its ceiling of 95%.
+2. **Patient Coax** — each refused offering makes the next 6 points likelier (now 3). Built as the step of whoever makes the offering: the count of refused offerings is on the wildermon, and Examine says what it is worth to the one looking.
 9. **Young Trust** — young ones are 2.5 times as easy to tame (now 1.6 times).
-10. **Any Bait** — any food works as an offering to any kind (now each kind takes only its own few).
+10. **Any Bait** — any food works as an offering to any kind (now each kind takes only its own few). Built on taming only; feeding one you keep still takes its own food.
 11. **Brushwork** — a brushing adds 50% more care (now 18–74% of full care, depending on your skill and the brush).
-13. **Lasting Care** — care wears off over 6 hours (now 3).
+13. **Lasting Care** — care wears off over 6 hours (now 3). Built, like Well Kept, Light Eaters and Long-lived, as the keeper's: their numbers are stamped on every wildermon they keep (`creature.kept`) when its keeper changes, which is when it is tamed, born, bought or handed over, and again whenever the keeper's perks change. They go to the browser with it; offline, your own perks keep yours. One that changes hands takes its new keeper's.
 14. **Well Kept** — full care makes a wildermon work and learn 40% faster (now 25%).
 15. **Healing Hands** — a brushing heals 15% of its health (now 6%).
 16. **Light Eaters** — wildermon you keep get hungry 30% slower (now a follower empties in about 67 minutes, a settlement worker in about 42).
 18. **Long-lived** — wildermon you keep grow old at 25 hours (now 15).
-21. **Short Rest** — a pair can be put together again 25 minutes after a pairing (now 50).
+21. **Short Rest** — a pair can be put together again 25 minutes after a pairing (now 50). Built on both of the pair, and read off whoever put them together, as are Quick Gestation, Twins, True Blood, Bred Up and Choose the Sex. A pairing that does not take rests half of that.
 22. **Quick Gestation** — a mother you pair carries for 15 minutes (now 30).
-24. **Twins** — 1 pairing in 5 gives two young.
+24. **Twins** — 1 pairing in 5 gives two young. Built as the second young decided at the covering, its own draw of traits and its own sex, and dropped with the first. It goes where a second tamed one goes: into an empty creature crate once the first is following you.
 25. **True Blood** — each of a young one's traits is 10 points likelier to come from its parents (now 50%, plus 0.35 point per husbandry level, plus up to 11 points for care, 96% at most).
 26. **Bred Up** — each trait is 10 points likelier to come out a tier better (now 0.22 point per husbandry level plus up to 8 points for care, 30% at most).
-28. **Choose the Sex** — you choose whether a pairing gives a male or a female (now even odds).
+28. **Choose the Sex** — you choose whether a pairing gives a male or a female (now even odds). Built as two entries under Put it to a mate, For a female young and For a male young; twins take the sex asked for too, and a sex asked for without the perk is not heard.
 37. **Light Crate** — a creature crate weighs 3 kg in your pack (now 10).
-50. **Stud Book** — Examine on a pair shows the odds before you pair them: the chance the pairing takes, and each trait's chance to come through.
+50. **Stud Book** — Examine on a pair shows the odds before you pair them: the chance the pairing takes, and each trait's chance to come through. Built as Examine on one of yours that is out with you and has a mate in range: it says how often the pairing takes and how often each of the young's traits is drawn from the pair's blood and comes out a tier better, in the same words on the island and in the browser.
 
 **Tiers** (swept): 50 — Soft Hand, Brushwork, Short Rest · 60 — Healing Hands, Light Crate, Stud Book ·
 70 — Patient Coax, Lasting Care, Quick Gestation · 80 — Young Trust, Light Eaters, True Blood ·
 90 — Well Kept, Twins, Choose the Sex · 100 — Any Bait, Long-lived, Bred Up.
+
+Brush it down, Put it to a mate and Look it over were rules on both sides that no menu offered. They are on a wildermon's menu now, which is where most of these perks are reached.
 
 ## Naturalist
 

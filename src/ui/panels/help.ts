@@ -20,7 +20,7 @@ import { perksOf } from '../../game/perks';
 import { CREATURE_CRATE } from '../../game/creaturecrate';
 import { CRATE_DEFS, SUBTILES } from '../../game/crates';
 import {
-  AGES, BLOW_SHARE, BREED_REST, CARE_HOURS, COAX_LAPSE, COAX_STEP, GESTATION, HUNGRY, HUNT_SIGHT, MONSTER_CAP, MONSTER_KEEP_OFF,
+  AGES, BLOW_SHARE, BREED_REST, CARE_BONUS, CARE_HOURS, COAX_LAPSE, COAX_STEP, GESTATION, HUNGRY, HUNT_SIGHT, MONSTER_CAP, MONSTER_KEEP_OFF,
   MONSTER_SHARE, MONSTERS, OLD_AT, PULL_DEFAULT, RANGE_PER_STEP, rangeSteps, SKILL_STEP, SPECIES, trainedHit, YOUNG_FOR,
 } from '../../game/creatures';
 import { DEED_UPGRADES } from '../../game/deed';
@@ -254,6 +254,7 @@ const BRUSH_SIDE = 2 * (forester('Clear Brush').clear_brush ?? 0) + 1;
 const farmer = (name: string): Record<string, number> => perksOf('farmer').find((p) => p.name === name)?.fx ?? {};
 const cook = (name: string): Record<string, number> => perksOf('cook').find((p) => p.name === name)?.fx ?? {};
 const tailor = (name: string): Record<string, number> => perksOf('tailor').find((p) => p.name === name)?.fx ?? {};
+const herdsman = (name: string): Record<string, number> => perksOf('herdsman').find((p) => p.name === name)?.fx ?? {};
 const PATCH_SIDE = 2 * (farmer('Sow a Patch').sow_patch ?? 0) + 1;
 /** How many channels the rites push, from the narrowest to the widest. */
 const riteWidths = [...new Set(RITES.map((r) => Object.keys(r.muls).length))].sort((a, b) => a - b);
@@ -1966,6 +1967,17 @@ export function helpText(): string {
     <p>A young one's <b>pedigree</b> names its <b>dam</b> and <b>sire</b> on its card in the Wildermon
     window and when you point at it, and on the card each of its traits you can read says where it came
     from &mdash; ${PEDIGREE_SOURCES}.</p>
+    <p>A <b>Herdsman</b>'s keeping goes with every wildermon they keep, on an island and off it, and one that
+    changes hands takes its new keeper's. With Lasting Care its care wears off over
+    ${spanWords((herdsman('Lasting Care')['kept:care_hours'] ?? CARE_HOURS) * HOUR)} rather than ${spanWords(CARE_HOURS * HOUR)}; with Well Kept,
+    brushed to a shine, it works and learns ${percent(herdsman('Well Kept')['kept:care_bonus'] ?? CARE_BONUS)} faster rather than ${percent(CARE_BONUS)};
+    with Light Eaters it gets hungry ${percent(1 - (herdsman('Light Eaters')['kept:hunger'] ?? 1))} slower; and with Long-lived it grows old at
+    ${spanWords(herdsman('Long-lived')['kept:old_at'] ?? OLD_AT)} rather than ${spanWords(OLD_AT)}. A Herdsman with Choose the Sex picks
+    <i>For a female young</i> or <i>For a male young</i> under <b>Put it to a mate</b>. With Twins,
+    one in ${numberWord(Math.round(1 / (herdsman('Twins')['breed:twins'] ?? 1)))} of their pairings give a second young as well, which goes where a
+    second tamed one goes: into an empty creature crate once the first is following you. With Stud Book, <b>Examine</b> on one
+    of theirs out with them says how often it takes with the mate it would be put to, and how often each of the young's
+    traits is drawn from their blood and comes out a tier better.</p>
     <h3>Terraforming</h3>
     <p>Every corner of the map has soil sitting on bedrock. <b>Digging</b> lowers the corner nearest to
     where you click (the small marker) and takes a spadeful of that soil; when the last of it is gone

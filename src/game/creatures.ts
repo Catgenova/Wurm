@@ -61,6 +61,8 @@ export interface Unborn {
   /** The sire and where each trait came from; a covering made before pedigrees were kept has neither. */
   sire?: Parent;
   from?: Record<string, TraitSource>;
+  /** A second young, bred at the same covering (a Herdsman's Twins): its own traits and sex, the same sire. */
+  twin?: { traits: string[]; sex: Sex; from?: Record<string, TraitSource> };
 }
 
 /** What a card and a tooltip say of a pedigree: "Dam Snow · sire Horn". */
@@ -1692,13 +1694,32 @@ export const AGES: Record<Age, AgeDef> = {
   old: { id: 'old', name: 'old', speed: 0.85, pull: 0.8, yield: 1.35, growth: 0.6, scale: 1.12, tame: 0.8, works: true },
 };
 
-/** How old a creature is now. */
+/**
+ * What your own perks make of keeping a beast, offline: set from the fold
+ * whenever it changes (`Game.setPerks`), and read for every beast that is not
+ * wild when the island has not said otherwise.
+ */
+let LOCAL_KEPT: Record<string, number> = {};
+export const setLocalKept = (fx: Record<string, number>): void => {
+  LOCAL_KEPT = Object.fromEntries(Object.entries(fx).filter(([k]) => k.startsWith('kept:')));
+};
+/**
+ * One of its keeper's numbers for keeping it: what the island stamped on it,
+ * or offline your own; the rule's own number for a wild one or a keeper
+ * without the perk. The island's `kept`.
+ */
+export const keptOf = (c: { mode: CreatureMode; kept?: Record<string, number> | null }, key: string, dflt: number): number => {
+  if (c.kept !== undefined) return c.kept?.[key] ?? dflt;
+  return c.mode === 'wild' ? dflt : LOCAL_KEPT[key] ?? dflt;
+};
+
+/** How old a creature is now. Its keeper's Long-lived keeps it grown longer. */
 export const ageOf = (c: Creature, now: number): Age => {
   // Nothing born before the clock started has an age worth working out: what
   // was already walking about when the island was raised is simply grown.
   if (c.born <= 0) return 'grown';
   const lived = Math.max(0, now - c.born);
-  return lived < YOUNG_FOR ? 'young' : lived < OLD_AT ? 'grown' : 'old';
+  return lived < YOUNG_FOR ? 'young' : lived < keptOf(c, 'kept:old_at', OLD_AT) ? 'grown' : 'old';
 };
 export const ageDef = (c: Creature, now: number): AgeDef => AGES[ageOf(c, now)];
 /** How long until it is grown, in seconds; zero once it is. */
@@ -1711,10 +1732,9 @@ export const growsAt = (c: Creature, now: number): number => Math.max(0, c.born 
  * pairing throws anything worth keeping.
  */
 export const CARE_HOURS = 3;
-export const CARE_DECAY = 1 / (CARE_HOURS * 3600);
 /** What a thoroughly looked-after beast is worth over a neglected one. */
 export const CARE_BONUS = 0.25;
-export const careMul = (c: Creature): number => 1 + Math.max(0, Math.min(1, c.care)) * CARE_BONUS;
+export const careMul = (c: Creature): number => 1 + Math.max(0, Math.min(1, c.care)) * keptOf(c, 'kept:care_bonus', CARE_BONUS);
 /** How it reads on a card: groomed, kept, or let go. */
 export const careWord = (care: number): string =>
   care >= 0.75 ? 'well looked after' : care >= 0.4 ? 'kept' : care >= 0.12 ? 'wanting a brush' : 'neglected';
@@ -1789,6 +1809,8 @@ export interface IslandCreature {
   shod?: boolean;
   /** What the tack on it carries of its makers' marks, when anything (a Tailor's Saddler). */
   tack?: Record<string, Mark> | null;
+  /** What its keeper's perks make of keeping it (a Herdsman's), when anything. */
+  kept?: Record<string, number> | null;
   /** The vehicle it is in the traces of; absent from older islands. */
   hitchedTo?: number | null;
   /** The trade a worker was set to, which is its species' own unless it was told otherwise. */
@@ -1862,6 +1884,13 @@ export interface Creature {
   /** Its dam, its sire and where each trait came from, if it was bred. */
   pedigree: Pedigree | null;
   // Runtime state below; not saved.
+  /**
+   * What its keeper's perks make of keeping it (a Herdsman's Light Eaters,
+   * Lasting Care, Well Kept and Long-lived), as the island stamps it on the
+   * beast. Absent offline, where every kept beast is yours: `keptOf` reads
+   * your own perks then.
+   */
+  kept?: Record<string, number> | null;
   /**
    * The leg the island last said it was on, when the island is the one
    * thinking. Milliseconds off `Date.parse`, walked in `walkLegs`.
@@ -2005,7 +2034,7 @@ export interface CreatureJSON {
  * falls, so a wildermon goes most of an hour between meals rather than
  * needing one every few minutes.
  */
-const HUNGER_RATE: Record<Exclude<CreatureMode, 'stored'>, number> = {
+export const HUNGER_RATE: Record<Exclude<CreatureMode, 'stored'>, number> = {
   wild: 0.0005,
   active: 0.00025,
   deed: 0.0004,
@@ -2148,9 +2177,9 @@ export const wildTargetFor = (w: number, h: number): number =>
 export const COAX_STEP = 0.03;
 export const COAX_LAPSE = world(90);
 
-/** What a run of offerings is worth to the next one, 0 when the run has lapsed. */
-export const coaxBonus = (c: Creature, time: number): number =>
-  c.coaxed <= 0 || time - c.coaxedAt > COAX_LAPSE ? 0 : c.coaxed * COAX_STEP;
+/** What a run of offerings is worth to the next one, 0 when the run has lapsed; each worth more to a Herdsman's Patient Coax. */
+export const coaxBonus = (c: Creature, time: number, step = COAX_STEP): number =>
+  c.coaxed <= 0 || time - c.coaxedAt > COAX_LAPSE ? 0 : c.coaxed * step;
 
 /** Forget a run of offerings: it was tamed, or hurt, or simply left alone. */
 export const forgetCoaxing = (c: Creature): void => {
@@ -2411,6 +2440,8 @@ export class Creatures {
         if (r.tack) c.tack = r.tack;
         else delete c.tack;
       }
+      // What its keeper's perks make of keeping it: the island's word, never this machine's perks.
+      c.kept = r.kept ?? null;
       /*
        * And which traces it is in, which the island never said: every hitched
        * animal on an island read as free, so its menu offered to hitch it again
@@ -2973,8 +3004,8 @@ export class Creatures {
     // A yearling grows no fleece and gives no milk; an old one is slower at both.
     const growth = ageDef(c, game.time).growth;
     if (def.fleece && growth > 0 && c.fleece < 1) c.fleece = Math.min(1, c.fleece + elapsed * def.fleece * growth * bloodMul(c, 'grow'));
-    // A brushing wears off over a few hours of being left to itself.
-    if (c.care > 0) c.care = Math.max(0, c.care - elapsed * CARE_DECAY);
+    // A brushing wears off over a few hours of being left to itself: longer for a Herdsman's Lasting Care.
+    if (c.care > 0) c.care = Math.max(0, c.care - elapsed / (keptOf(c, 'kept:care_hours', CARE_HOURS) * 3600));
     return def;
   }
 
@@ -4096,21 +4127,42 @@ export class Creatures {
    * before the hour comes has already had his say. So is his name, and where
    * each trait came from, which the young one is born with as its pedigree.
    */
-  pair(game: Game, dam: Creature, sire: Creature, husbandry: number): void {
+  pair(game: Game, dam: Creature, sire: Creature, husbandry: number, sex?: Sex): void {
     const care = (dam.care + sire.care) / 2;
-    const bred = breedTraits(sire.traits, dam.traits, husbandry, care, game.rand);
-    dam.unborn = { traits: bred.traits, sex: game.rand() < 0.5 ? 'male' : 'female', sire: { id: sire.id, name: sire.name }, from: bred.from };
-    dam.due = game.time + GESTATION;
-    dam.bredAt = game.time;
-    sire.bredAt = game.time;
+    // More of the pair in it, and more of it a tier better, for a Herdsman's True Blood and Bred Up.
+    const keepPlus = game.perk('breed:inherit', 0);
+    const upPlus = game.perk('breed:upgrade', 0);
+    const young = (): { traits: string[]; sex: Sex; from: Record<string, TraitSource> } => {
+      const bred = breedTraits(sire.traits, dam.traits, husbandry, care, game.rand, keepPlus, upPlus);
+      // The one the breeder asked for (a Herdsman's Choose the Sex), or even odds.
+      return { traits: bred.traits, sex: sex ?? (game.rand() < 0.5 ? 'male' : 'female'), from: bred.from };
+    };
+    dam.unborn = { ...young(), sire: { id: sire.id, name: sire.name } };
+    // And a second at the same covering, now and then (a Herdsman's Twins).
+    if (game.rand() < game.perk('breed:twins', 0)) dam.unborn.twin = young();
+    // Carried for less of the time (a Herdsman's Quick Gestation).
+    dam.due = game.time + GESTATION * game.perk('breed:gestation', 1);
+    // And both ready again sooner (a Herdsman's Short Rest): the rest left is the perk's share of it.
+    dam.bredAt = game.time - BREED_REST * (1 - game.perk('breed:rest', 1));
+    sire.bredAt = dam.bredAt;
   }
 
-  /** The hour comes. */
+  /** The hour comes: one young, or two from a covering that threw twins, each placed as a tamed one is. */
   giveBirth(game: Game, dam: Creature): Creature | null {
     const coming = dam.unborn;
     dam.unborn = null;
     dam.due = 0;
     if (!coming) return null;
+    let first: Creature | null = null;
+    for (const one of [coming, ...(coming.twin ? [{ ...coming.twin, sire: coming.sire }] : [])]) {
+      const c = this.dropYoung(game, dam, one);
+      first ??= c;
+    }
+    return first;
+  }
+
+  /** One young dropped: where it goes, what it carries, and what is said. */
+  private dropYoung(game: Game, dam: Creature, coming: Unborn): Creature {
     const def = this.species(dam);
     /*
      * Where it goes, now that nothing is kept at the token: where a tamed one
@@ -4294,7 +4346,7 @@ export class Creatures {
   }
 
   private updateActive(c: Creature, dt: number, game: Game): void {
-    c.hunger = Math.max(0, c.hunger - dt * HUNGER_RATE.active * bloodMul(c, 'appetite'));
+    c.hunger = Math.max(0, c.hunger - dt * HUNGER_RATE.active * bloodMul(c, 'appetite') * keptOf(c, 'kept:hunger', 1));
     const p = game.player;
     const distP = Math.hypot(p.x - c.x, p.y - c.y);
     if (distP > 18) {
@@ -4390,7 +4442,7 @@ export class Creatures {
   }
 
   private updateWorker(c: Creature, dt: number, game: Game): void {
-    c.hunger = Math.max(0, c.hunger - dt * HUNGER_RATE.deed * bloodMul(c, 'appetite'));
+    c.hunger = Math.max(0, c.hunger - dt * HUNGER_RATE.deed * bloodMul(c, 'appetite') * keptOf(c, 'kept:hunger', 1));
     // A post stands in for the token: the same loop, a different middle.
     const deed = game.workSite(c);
     if (!deed) {

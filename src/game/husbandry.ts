@@ -14,7 +14,7 @@ import type { Game } from './game';
 import { clockLeft } from './boons';
 import { itemName } from './items';
 import { workingQl } from './materials';
-import { bestTier, traitList, traitTier } from './traits';
+import { bestTier, inheritChance, traitList, traitTier, TRAIT_SLOTS, upgradeChance } from './traits';
 
 /** What one pairing teaches, whether or not it takes. */
 export const BREED_GAIN = 0.9;
@@ -51,6 +51,9 @@ export const GROOM_CAP = 1;
  */
 export const groomGain = (skill: number, ql: number): number => 0.18 + (skill / 100) * 0.34 + (Math.min(100, ql) / 100) * 0.22;
 
+/** How much of its health a brushing sees to. */
+export const GROOM_HEAL = 0.06;
+
 /** The odds a pairing takes. */
 export const breedChance = (skill: number, care: number): number =>
   Math.min(0.97, 0.35 + (Math.max(0, Math.min(100, skill)) / 100) * 0.5 + Math.max(0, Math.min(1, care)) * 0.15);
@@ -86,6 +89,28 @@ export function pairRefuses(g: Game, a: Creature, b: Creature): string | null {
   return null;
 }
 
+/** A chance as a whole percentage, as the island rounds it. */
+const wholePct = (x: number): string => `${Math.round(x * 100)}%`;
+
+/**
+ * What a Herdsman's Stud Book says of one of yours and the mate it would be
+ * put to: the odds the pairing takes, and for each of the young's traits the
+ * odds it is drawn from their blood and comes out a tier better, at your
+ * husbandry, their care and your perks. Nothing without the perk, for one that
+ * is not yours or not out, or with no mate in reach. The island's `stud_book`.
+ */
+export function studBook(g: Game, c: Creature): string {
+  if (g.perk('stud_book', 0) <= 0 || c.mine === false || !outWithYou(c)) return '';
+  const mate = mateFor(g, c);
+  if (!mate) return '';
+  const skill = g.skills.get(HUSBANDRY);
+  const care = (c.care + mate.care) / 2;
+  const keep = Math.min(1, inheritChance(skill, care) + g.perk('breed:inherit', 0));
+  const up = Math.min(1, upgradeChance(skill, care) + g.perk('breed:upgrade', 0));
+  return ` Put to ${mate.name}, it takes ${wholePct(breedChance(skill, care))} of the time; each of the young's `
+    + `${TRAIT_SLOTS} traits is drawn from their blood ${wholePct(keep)} of the time and comes out a tier better ${wholePct(up)} of the time.`;
+}
+
 export const HUSBANDRY_ACTIONS: ActionDef[] = [
   {
     id: 'groom',
@@ -114,10 +139,11 @@ export const HUSBANDRY_ACTIONS: ActionDef[] = [
       if (!c || !brush) return;
       const skill = g.skills.get(HUSBANDRY);
       const before = c.care;
-      c.care = Math.min(GROOM_CAP, c.care + groomGain(skill, workingQl(brush.ql, brush.extra)));
-      // A brushing is also a looking-over: it finds the small hurts and sees to them.
+      // More of it at a go for a Herdsman's Brushwork.
+      c.care = Math.min(GROOM_CAP, c.care + groomGain(skill, workingQl(brush.ql, brush.extra)) * g.perk('groom:care', 1));
+      // A brushing is also a looking-over: it finds the small hurts and sees to them, more of them for Healing Hands.
       const top = maxHealth(c, SPECIES[c.species]);
-      if (c.health < top) c.health = Math.min(top, c.health + top * 0.06);
+      if (c.health < top) c.health = Math.min(top, c.health + top * g.perk('groom:heal', GROOM_HEAL));
       g.damageItem(brush, 0.03);
       g.gainSkill(HUSBANDRY, 0.4);
       g.note('groom');
@@ -172,16 +198,18 @@ export const HUSBANDRY_ACTIONS: ActionDef[] = [
       const took = g.rand() < breedChance(skill, care);
       g.gainSkill(HUSBANDRY, tryGain(took, BREED_GAIN));
       if (!took) {
-        // A failed pairing costs both of them a rest, but only half of one.
-        dam.bredAt = g.time - BREED_REST / 2;
-        sire.bredAt = g.time - BREED_REST / 2;
+        // A failed pairing costs both of them a rest, but only half of one: half a shorter one for Short Rest.
+        dam.bredAt = g.time - BREED_REST * (1 - g.perk('breed:rest', 1) / 2);
+        sire.bredAt = dam.bredAt;
         g.logMsg(`${dam.name} and ${sire.name} will have nothing to do with one another. Brush them, feed them, and try again.`, 'error');
         return;
       }
-      g.creatures.pair(g, dam, sire, skill);
+      // The sex a Herdsman with Choose the Sex asked for, and even odds without it.
+      const sex = g.perk('breed:sex', 0) > 0 && isCreature(t) && (t.sex === 'male' || t.sex === 'female') ? t.sex : undefined;
+      g.creatures.pair(g, dam, sire, skill, sex);
       g.note('paired');
       g.logMsg(
-        `${sire.name} is put to ${dam.name}. She is in young and will drop in about ${clockLeft(GESTATION)}. Between them they carry ${traitList([...new Set([...sire.traits, ...dam.traits])])}.`,
+        `${sire.name} is put to ${dam.name}. She is in young and will drop in about ${clockLeft(GESTATION * g.perk('breed:gestation', 1))}. Between them they carry ${traitList([...new Set([...sire.traits, ...dam.traits])])}.`,
         'event',
       );
       g.events.emit('creature');

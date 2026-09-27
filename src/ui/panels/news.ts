@@ -12,6 +12,7 @@ import { article, listed, numberWord, percent, share, spanWords, times } from '.
 import { ANCIENT_EFFECTS, ANCIENT_PLUS, BAUBLE_HIGH, BAUBLE_LOW, BAUBLE_SHARE, BAUBLE_TIERS, baubleTimes, REGRET_SHARE, YIELD_TIMES } from '../../game/baubles';
 import { CLASS_CHANGE_COST, CLASSES, PERK_TIER_AT, PERKS_PER_TIER } from '../../game/classes';
 import { perksOf } from '../../game/perks';
+import { HUSBANDRY_ACTIONS } from '../../game/husbandry';
 import { FED_SAID, MOTE_CHANCE } from '../../game/sacrifice';
 import { GRAVE_KEEPS, GRAVE_REACH } from '../../game/graves';
 import { UI_SIZE_MAX, UI_SIZE_MIN } from '../screen';
@@ -523,6 +524,19 @@ export const NEWS: News[] = [
         'Offline, every perk that makes a job fail less often now works as it does on an island, where before only the anvil\'s did; and so does Nothing Wasted, which keeps what a failed craft used.',
         ...(sprouts ? [`Offline, ${sprouts.name} gives its ${numberWord(sprouts.fx['count:sprout'])} sprouts, as it does on an island.`] : []),
         'Offline, a go that makes more than its recipe says now says how many it made, as it did on an island.',
+      ];
+    },
+  },
+  {
+    n: 41,
+    day: '2026-09-27',
+    lines: () => {
+      const main = (CLASSES.find((c) => c.id === 'herdsman')?.main ?? '').replace(/_/g, ' ');
+      const kept = perksOf('herdsman').filter((p) => Object.keys(p.fx).some((k) => k.startsWith('kept:'))).map((p) => p.name);
+      return [
+        `The Herdsman has perks instead of a tree now: ${numberWord(PERK_TIER_AT.length)} tiers of ${numberWord(PERKS_PER_TIER)}, the first with the trade and the others at ${listed(PERK_TIER_AT.slice(1).map(String))} in ${main}. The nodes a Herdsman had bought went with the tree.`,
+        `${listed(HUSBANDRY_ACTIONS.map((a) => a.label))} are on a wildermon's menu now. The rules had them and no menu offered them.`,
+        `${listed(kept)} work on every wildermon their Herdsman keeps, on an island and off it. One that changes hands takes its new keeper's.`,
       ];
     },
   },

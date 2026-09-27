@@ -481,10 +481,13 @@ export function breedTraits(
   husbandry: number,
   care: number,
   rand: () => number,
+  keepPlus = 0,
+  upPlus = 0,
 ): Bred {
   const pool = [...new Set([...sire, ...dam])];
-  const keep = inheritChance(husbandry, care);
-  const up = upgradeChance(husbandry, care);
+  // More of the pair and more of it a tier better, for a Herdsman's True Blood and Bred Up; never past certain.
+  const keep = Math.min(1, inheritChance(husbandry, care) + keepPlus);
+  const up = Math.min(1, upgradeChance(husbandry, care) + upPlus);
   const lift = Math.max(0, Math.min(100, husbandry)) / 100;
   const out: string[] = [];
   const from: Record<string, TraitSource> = {};

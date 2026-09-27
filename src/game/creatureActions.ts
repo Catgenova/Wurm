@@ -1,6 +1,7 @@
 import { DARK_SHOT, DARK_SWING, tryGain } from './learn';
 import type { ActionDef, Target } from './actions';
-import { isShod, SHOES_PER_MOUNT, TACK, ageDef, attackOf, BLOW_SHARE, bloodMul, careWord, coaxBonus, creatureLevel, forgetCoaxing, isBaitFor, maxHealth, SEX_NAMES, SPECIES, STANCE_NAMES, workRangeOf, type Creature, type Stance, type GatherKind } from './creatures';
+import { isShod, SHOES_PER_MOUNT, TACK, AGES, ageDef, ageOf, attackOf, BLOW_SHARE, bloodMul, careWord, coaxBonus, COAX_STEP, creatureLevel, forgetCoaxing, isBaitFor, maxHealth, SEX_NAMES, SPECIES, STANCE_NAMES, workRangeOf, type Creature, type Stance, type GatherKind } from './creatures';
+import { studBook } from './husbandry';
 import { numberWord } from './words';
 import { GENTLE_HAND } from './meditation';
 import { bestTier, traitList } from './traits';
@@ -30,15 +31,25 @@ type CreatureTarget = Extract<Target, { kind: 'creature' }>;
 const isCreature = (t: Target): t is CreatureTarget => t.kind === 'creature';
 const creatureOf = (g: Game, t: Target): Creature | undefined => (isCreature(t) ? g.creatures.get(t.id) : undefined);
 
-/** The first item in the inventory that a species will eat; a specific one when asked for. */
-function bait(g: Game, c: Creature, uid?: number) {
+/**
+ * The first item in the inventory that a species will eat; a specific one when
+ * asked for. An offering to tame one may be any food at all for a Herdsman's
+ * Any Bait, as the island's `bait_in_pack` has it; feeding one kept is its own
+ * diet whoever feeds it.
+ */
+function bait(g: Game, c: Creature, uid?: number, any = false) {
   const def = SPECIES[c.species];
+  const takes = (id: string): boolean => isBaitFor(def, id) || (any && (itemDef(id).food ?? 0) > 0);
   if (uid !== undefined) {
     const it = g.inventory.get(uid);
-    return it && isBaitFor(def, it.id) ? it : undefined;
+    return it && takes(it.id) ? it : undefined;
   }
-  return g.inventory.items.find((it) => isBaitFor(def, it.id));
+  return g.inventory.items.find((it) => takes(it.id));
 }
+/** An offering to tame one: its own diet, or any food for a Herdsman's Any Bait. */
+const offering = (g: Game, c: Creature, uid?: number) => bait(g, c, uid, g.perk('bait:any', 0) > 0);
+/** What each offering in a run is worth to the next: more for a Herdsman's Patient Coax. */
+export const coaxStep = (g: Game): number => g.perk('coax:step', COAX_STEP);
 
 /** "blueberries, raspberries or potatoes" — everything this one will take. */
 export const dietText = (c: Creature): string => {
@@ -56,12 +67,18 @@ export const baitHint = (c: Creature): string => SPECIES[c.species].baitHint;
  * and the love path if you walk it. The tooltip and the attempt itself read
  * the same number, so what you are told is what you get.
  */
+/** The most any one offering is ever worth: patience buys a hard tame rather than guaranteeing it. */
+export const TAME_MOST = 0.95;
+
 export function tameChance(g: Game, c: Creature): number {
   const def = SPECIES[c.species];
   if (!def || def.monster) return 0;
   const skill = g.skills.get('taming');
-  const raw = def.tameChance + (skill - def.tameLevel) / 200 + (c.hunger < 0.5 ? 0.1 : 0) + coaxBonus(c, g.time) + g.soulBonus();
-  return Math.max(0, Math.min(0.95, raw * ageDef(c, g.time).tame * (g.walks('love', 3) ? GENTLE_HAND : 1)));
+  const raw = def.tameChance + (skill - def.tameLevel) / 200 + (c.hunger < 0.5 ? 0.1 : 0) + coaxBonus(c, g.time, coaxStep(g)) + g.soulBonus();
+  // A young one easier still for a Herdsman's Young Trust.
+  const age = ageOf(c, g.time) === 'young' ? g.perk('tame:young', AGES.young.tame) : ageDef(c, g.time).tame;
+  // And every offering so many points likelier for a Herdsman's Soft Hand, over all the rest of it.
+  return Math.max(0, Math.min(TAME_MOST, raw * age * (g.walks('love', 3) ? GENTLE_HAND : 1) + g.perk('tame:offer', 0)));
 }
 
 function nearPlayer(g: Game, c: Creature): boolean {
@@ -140,7 +157,7 @@ export const CREATURE_ACTIONS: ActionDef[] = [
           g.logMsg(`A ${def.name.toLowerCase()}: ${def.description} It has ${Math.ceil(c.health)} of ${maxHealth(c, def)} in it and hits for ${attackOf(c, def).toFixed(0)}. It cannot be tamed. Kill it and butcher it, or keep well clear.`, 'error');
           return;
         }
-        const warm = coaxBonus(c, g.time);
+        const warm = coaxBonus(c, g.time, coaxStep(g));
         const used = warm > 0 ? ` It has taken ${c.coaxed === 1 ? 'an offering' : `${c.coaxed} offerings`} from your hand and is ${(warm * 100).toFixed(0)}% readier for the next.` : '';
         g.logMsg(`A wild ${def.name.toLowerCase()}: ${def.description} It eats ${dietText(c)}.${used} You would have to tame it to learn more.`, 'event');
         return;
@@ -148,7 +165,7 @@ export const CREATURE_ACTIONS: ActionDef[] = [
       const mood = c.hunger < 0.3 ? 'It looks hungry.' : c.hunger < 0.6 ? 'It could eat.' : 'It looks well fed.';
       const skills = Object.entries(c.skills).map(([id, v]) => `${id} ${v.toFixed(1)}`).join(', ');
       const range = c.mode === 'deed' && def.gathers ? ` It works up to ${workRangeOf(c, def)} tiles from the token.` : '';
-      g.logMsg(`${c.name} (${SEX_NAMES[c.sex]} ${def.name.toLowerCase()}, ${g.creatures.describe(c)}): ${def.description} Level ${creatureLevel(c)}, ${skills}. Health ${Math.ceil(c.health)}/${maxHealth(c, def)}. It is ${careWord(c.care)} and carries ${traitList(c.traits)}.${range} ${mood} It eats ${dietText(c)}.`, 'event');
+      g.logMsg(`${c.name} (${SEX_NAMES[c.sex]} ${def.name.toLowerCase()}, ${g.creatures.describe(c)}): ${def.description} Level ${creatureLevel(c)}, ${skills}. Health ${Math.ceil(c.health)}/${maxHealth(c, def)}. It is ${careWord(c.care)} and carries ${traitList(c.traits)}.${range} ${mood} It eats ${dietText(c)}.${studBook(g, c)}`, 'event');
     },
   },
   {
@@ -168,7 +185,7 @@ export const CREATURE_ACTIONS: ActionDef[] = [
       const def = SPECIES[c.species];
       if (def.monster) return `A ${def.name.toLowerCase()} is not a wildermon. There is nothing to be done with it but kill it.`;
       if (g.skills.get('taming') < def.tameLevel) return `You need taming ${def.tameLevel} to try.`;
-      if (!bait(g, c)) return `${def.name}s take ${dietText(c)}. Bring some.`;
+      if (!offering(g, c)) return `${def.name}s take ${dietText(c)}. Bring some.`;
       return tameRoomRefusal(g);
     },
     perform: (t, g) => {
@@ -179,7 +196,7 @@ export const CREATURE_ACTIONS: ActionDef[] = [
         g.logMsg(`The ${def.name.toLowerCase()} moved off before it noticed your offering.`, 'event');
         return;
       }
-      const food = bait(g, c);
+      const food = offering(g, c);
       if (!food) return;
       // The crate may have gone out of the pack since the offering was begun.
       const full = tameRoomRefusal(g);
@@ -218,7 +235,7 @@ export const CREATURE_ACTIONS: ActionDef[] = [
         // something to the next one.
         c.coaxed += 1;
         c.coaxedAt = g.time;
-        const won = coaxBonus(c, g.time);
+        const won = coaxBonus(c, g.time, coaxStep(g));
         const warming = won > 0 ? ` It is growing used to you: ${(won * 100).toFixed(0)}% readier than the first time.` : '';
         g.logMsg(`The ${def.name.toLowerCase()} ${def.tameFail.replace('{food}', foodName)}.${warming}`, 'event');
         g.gainSkill('taming', tryGain(false, TAME_GAIN));

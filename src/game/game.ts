@@ -25,7 +25,7 @@ import { ACROSS_OF, DEED_PLACE, ONE_ALTAR, deckSpot, furnitureAnchor, furnitureC
 import { emptyCrate, occupiedRefusal, shutIn } from './creaturecrate';
 import { bury, crumble, graveAt, graveRefusal, graveSays, GRAVE_MARK } from './graves';
 import { cropStageSeconds, RIPE, type Crop } from './farming';
-import { ageDef, bloodMul, CALL_WINDOW, Creatures, FIGHT_BACK_GOES, HAUL_SKILL, isBaitFor, isShod, PLAYER_ATTACKER, PULL_DEFAULT, SHOE_PACE, SHOE_STEP, SPECIES, tackSpeed, type Creature, type CreatureJSON, type Stance } from './creatures';
+import { ageDef, bloodMul, CALL_WINDOW, Creatures, setLocalKept, FIGHT_BACK_GOES, HAUL_SKILL, isBaitFor, isShod, PLAYER_ATTACKER, PULL_DEFAULT, SHOE_PACE, SHOE_STEP, SPECIES, tackSpeed, type Creature, type CreatureJSON, type Stance } from './creatures';
 import { CRAFT_REACH, knackable, type CraftStock, type Station } from './recipes';
 import { Actor, type ActiveAction, type GuestSave } from './actor';
 import { HOST_ID, type PeerId } from '../net/protocol';
@@ -881,6 +881,8 @@ export class Game {
     this.player.tilePace = Object.fromEntries(Object.keys(TILE_DEFS).map(Number)
       .map((t) => [t, this.perk(walkKey(t), 1)] as const).filter(([, v]) => v !== 1));
     this.inventory.weightMul = (id: string): number => this.perk(`weight:${id}`, 1);
+    // What keeping a beast comes to under your perks, for every one of yours offline (a Herdsman's).
+    setLocalKept(this.perkFx);
     this.events.emit('inventory');
   }
   rand: () => number = Math.random;

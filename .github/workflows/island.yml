@@ -1634,6 +1634,20 @@ jobs:
             --outfile=node_modules/.cache/tailor.mjs --log-level=error
           node node_modules/.cache/tailor.mjs
 
+      - name: The Herdsman's perks, each where its rule is
+        run: |
+          # Each of the Herdsman's eighteen measured on the island, the dice put
+          # either side of a perk's number where it is a chance: a wild one's
+          # odds, its coaxing and any food offered; a brushing's care and
+          # healing; the keeper's numbers stamped on what they keep and read by
+          # its hunger, its care, its work and its age; a pairing's rest, its
+          # carrying, twins, the sex asked for and the blood drawn; the lighter
+          # crate; the Stud Book's odds; and the browser's words and numbers
+          # beside the island's.
+          npx esbuild supabase/test/herdsman.ts --bundle --platform=node --format=esm \
+            --outfile=node_modules/.cache/herdsman.mjs --log-level=error
+          node node_modules/.cache/herdsman.mjs
+
       - name: The exact benefit, and where its number comes from
         run: |
           # Text the player reads says what changes and by how much, and where

@@ -76,7 +76,7 @@ import { SCHOOLS, SPELLS } from '../src/game/arcane';
 import { BRIDGES, CLEARANCE, END_SLOP } from '../src/game/bridges';
 import { BREWS } from '../src/game/brewing';
 import { DYEABLE_ITEMS } from '../src/game/dyes';
-import { PAIR_RANGE, GROOM_CAP, TIER_LEVEL } from '../src/game/husbandry';
+import { PAIR_RANGE, GROOM_CAP, GROOM_HEAL, TIER_LEVEL } from '../src/game/husbandry';
 import { BREED_REST, GESTATION } from '../src/game/creatures';
 import { REST_CAP, REST_MULT, REST_PER_SECOND } from '../src/game/boons';
 import { DAWN, DUSK, DAY_SECONDS, CARRY_BASE, CARRY_PER_STRENGTH, CARRY_STOP } from '../src/game/game';
@@ -85,7 +85,7 @@ import { RELICS, DIGGABLE } from '../src/game/archaeology';
 import { isSeam } from '../src/world/tiles';
 import { CHIP_CHANCE, TRY_LEARN } from '../src/game/actions';
 import { BRAZIER_BURN_AT_HUNDRED, BRAZIER_BURN_AT_ONE, BRAZIER_CAPACITY } from '../src/game/placeables';
-import { CARE_BONUS, GRAZE_FILL, GRAZE_HUNGRY, PER_REGION, WILD_TARGET } from '../src/game/creatures';
+import { CARE_BONUS, CARE_HOURS, GRAZE_FILL, GRAZE_HUNGRY, PER_REGION, WILD_TARGET } from '../src/game/creatures';
 import {
   MAP_BANDS, MAP_KILL_CAP, MAP_KILL_SCALE, MAP_ODDS, MAP_RANGE, MAP_SNIPPET, TREASURE_TIERS,
   UNEARTH_REACH,
@@ -1137,7 +1137,7 @@ out.push(`create or replace function board_top() returns int language sql immuta
  * will stand close enough to be put together. */
 for (const [fn, v] of [
   ['clearance', CLEARANCE], ['end_slop', END_SLOP], ['pair_range', PAIR_RANGE],
-  ['groom_cap', GROOM_CAP], ['breed_rest', BREED_REST], ['gestation', GESTATION],
+  ['groom_cap', GROOM_CAP], ['groom_heal', GROOM_HEAL], ['breed_rest', BREED_REST], ['gestation', GESTATION],
   ['rest_cap', REST_CAP], ['rest_mult', REST_MULT], ['rest_per_second', REST_PER_SECOND],
   ['dawn_hour', DAWN], ['dusk_hour', DUSK], ['day_seconds', DAY_SECONDS],
   /*
@@ -1251,7 +1251,7 @@ for (const [fn, v] of [
   /* And how many other people's settlements you may be a citizen of. */
   ['deeds_joined', DEEDS_JOINED], ['crowd_hides', CROWD_HIDES],
   /* And what a brush is worth, which the card had been claiming and no rule read. */
-  ['care_bonus', CARE_BONUS],
+  ['care_bonus', CARE_BONUS], ['care_hours', CARE_HOURS],
   /* What a lump costs in ore, and what a lump of the rare six is worth against one. */
   ['ore_per_lump', ORE_PER_LUMP], ['rare_lump_factor', RARE_LUMP_FACTOR],
   ['tick_seconds', TICK_SECONDS], ['idle_logout', IDLE_LOGOUT], ['event_keep', EVENT_KEEP],

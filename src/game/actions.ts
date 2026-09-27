@@ -128,7 +128,7 @@ export type Target =
       mote?: number;
     }
   | { kind: 'ground'; x: number; y: number; uid: number | null }
-  | { kind: 'creature'; id: number; stance?: Stance; itemUid?: number; job?: string };
+  | { kind: 'creature'; id: number; stance?: Stance; itemUid?: number; job?: string; sex?: string };
 
 /**
  * A name an action cannot go anywhere without.

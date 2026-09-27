@@ -75,7 +75,10 @@ import { BREWS } from './brewing';
 import { boonTime } from './boons';
 import { BAIT_BY_ID } from './fishing';
 import { BUTCHER_BAIT } from './butcher';
-import { SHEAR_FROM, SHEAR_WOOL } from './creatureActions';
+import { SHEAR_FROM, SHEAR_WOOL, TAME_MOST } from './creatureActions';
+import { AGES, BREED_REST, CARE_BONUS, CARE_HOURS, COAX_STEP, GESTATION, HUNGER_RATE, OLD_AT } from './creatures';
+import { GROOM_HEAL, groomGain } from './husbandry';
+import { inheritChance, TRAIT_SLOTS, upgradeChance } from './traits';
 
 /** What the perks somebody holds come to, key by key. */
 export type Fx = Record<string, number>;
@@ -1378,6 +1381,117 @@ const TAILOR: Seed[] = [
   },
 ];
 
+/** What a kept beast's hunger comes to, full to empty, at a pace. */
+const emptyIn = (mode: 'active' | 'deed', m: number): string => spanWords(1 / (HUNGER_RATE[mode] * m));
+const CRATE_KG = kg('creature_crate');
+
+const HERDSMAN: Seed[] = [
+  {
+    num: 1, name: 'Soft Hand',
+    fx: { 'tame:offer': 0.1 },
+    note: (fx) => `Every offering to tame a wildermon is ${points(fx['tame:offer'])} likelier to take, over everything else that goes into `
+      + `the chance (still ${percent(TAME_MOST)} at most).`,
+  },
+  {
+    num: 2, name: 'Patient Coax',
+    fx: { 'coax:step': 0.06 },
+    note: (fx) => `Each offering a wildermon refuses makes the next ${points(fx['coax:step'])} likelier (now ${points(COAX_STEP)}).`,
+  },
+  {
+    num: 9, name: 'Young Trust',
+    fx: { 'tame:young': 2.5 },
+    note: (fx) => `A young wildermon is ${fx['tame:young']} times as easy to tame as a grown one (now ${AGES.young.tame} times).`,
+  },
+  {
+    num: 10, name: 'Any Bait',
+    fx: { 'bait:any': 1 },
+    note: () => 'Any food will do as an offering to tame any kind (now each kind takes only its own few). Feeding one you keep '
+      + 'still takes its own.',
+  },
+  {
+    num: 11, name: 'Brushwork',
+    fx: { 'groom:care': 1.5 },
+    note: (fx) => `A brushing puts ${by(fx['groom:care'])} more care in (now ${percent(groomGain(0, 0))} to ${percent(groomGain(100, 100))} `
+      + 'of full care, by your husbandry and the brush).',
+  },
+  {
+    num: 13, name: 'Lasting Care',
+    fx: { 'kept:care_hours': 6 },
+    note: (fx) => `The care in a wildermon you keep wears off over ${spanWords(fx['kept:care_hours'] * 3600)} `
+      + `(now ${spanWords(CARE_HOURS * 3600)}), whoever brushed it.`,
+  },
+  {
+    num: 14, name: 'Well Kept',
+    fx: { 'kept:care_bonus': 0.4 },
+    note: (fx) => `A wildermon you keep works and learns ${percent(fx['kept:care_bonus'])} faster brushed to a shine `
+      + `(now ${percent(CARE_BONUS)}), and its share of that at less care: ${percent(fx['kept:care_bonus'] / 2)} at half.`,
+  },
+  {
+    num: 15, name: 'Healing Hands',
+    fx: { 'groom:heal': 0.15 },
+    note: (fx) => `A brushing heals ${percent(fx['groom:heal'])} of a wildermon's health (now ${percent(GROOM_HEAL)}).`,
+  },
+  {
+    num: 16, name: 'Light Eaters',
+    fx: { 'kept:hunger': 0.7 },
+    note: (fx) => `Wildermon you keep get hungry ${less(fx['kept:hunger'])} slower: one following you goes from fed to empty in `
+      + `${emptyIn('active', fx['kept:hunger'])} (now ${emptyIn('active', 1)}), one working a settlement in `
+      + `${emptyIn('deed', fx['kept:hunger'])} (now ${emptyIn('deed', 1)}).`,
+  },
+  {
+    num: 18, name: 'Long-lived',
+    fx: { 'kept:old_at': OLD_AT * 25 / 15 },
+    note: (fx) => `Wildermon you keep grow old at ${spanWords(fx['kept:old_at'])} (now ${spanWords(OLD_AT)}).`,
+  },
+  {
+    num: 21, name: 'Short Rest',
+    fx: { 'breed:rest': 0.5 },
+    note: (fx) => `A pair you put together can be put to a mate again ${spanWords(BREED_REST * fx['breed:rest'])} after `
+      + `(now ${spanWords(BREED_REST)}), and half that after a pairing that did not take (now ${spanWords(BREED_REST / 2)}).`,
+  },
+  {
+    num: 22, name: 'Quick Gestation',
+    fx: { 'breed:gestation': 0.5 },
+    note: (fx) => `A mother you pair carries for ${spanWords(GESTATION * fx['breed:gestation'])} (now ${spanWords(GESTATION)}).`,
+  },
+  {
+    num: 24, name: 'Twins',
+    fx: { 'breed:twins': 0.2 },
+    note: (fx) => `${oneIn(fx['breed:twins'])} pairings give a second young as well, bred for itself from the pair.`,
+  },
+  {
+    num: 25, name: 'True Blood',
+    fx: { 'breed:inherit': 0.1 },
+    note: (fx) => `Each of a young one's ${numberWord(TRAIT_SLOTS)} traits is ${points(fx['breed:inherit'])} likelier to be drawn `
+      + `from its parents' blood (now ${percent(inheritChance(0, 0))}, plus ${Number(((inheritChance(100, 0) - inheritChance(0, 0)) / 100 * 100).toFixed(2))} `
+      + `of a point for each husbandry level and up to ${points(inheritChance(0, 1) - inheritChance(0, 0))} for their care, `
+      + `${percent(inheritChance(100, 1))} at most), and never past certain.`,
+  },
+  {
+    num: 26, name: 'Bred Up',
+    fx: { 'breed:upgrade': 0.1 },
+    note: (fx) => `Each of a young one's traits is ${points(fx['breed:upgrade'])} likelier to come out a tier better (now `
+      + `${Number((upgradeChance(100, 0) / 100 * 100).toFixed(2))} of a point for each husbandry level and up to `
+      + `${points(upgradeChance(0, 1))} for their care, ${percent(upgradeChance(100, 1))} at most).`,
+  },
+  {
+    num: 28, name: 'Choose the Sex',
+    fx: { 'breed:sex': 1 },
+    note: () => 'You choose whether a pairing gives a male or a female young (now even odds), twins alike.',
+  },
+  {
+    num: 37, name: 'Light Crate',
+    fx: { 'weight:creature_crate': 0.3 },
+    note: (fx) => `A creature crate weighs ${kgSaid(CRATE_KG * fx['weight:creature_crate'])} in your pack (now ${kgSaid(CRATE_KG)}).`,
+  },
+  {
+    num: 50, name: 'Stud Book',
+    fx: { stud_book: 1 },
+    note: () => 'Examine on one of yours says, for the mate it would be put to, how often the pairing takes and how often each of the '
+      + 'young\'s traits is drawn from their blood and comes out a tier better.',
+  },
+];
+
 /** Every trade's perks, in the order they were picked. */
 const SEEDS: Record<string, Seed[]> = {
   terraformer: TERRAFORMER,
@@ -1389,6 +1503,7 @@ const SEEDS: Record<string, Seed[]> = {
   farmer: FARMER,
   cook: COOK,
   tailor: TAILOR,
+  herdsman: HERDSMAN,
 };
 
 const slug = (name: string): string => name.toLowerCase().replace(/[’']/g, '').replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '');
@@ -1408,6 +1523,7 @@ export const TIERS: Record<string, number[][]> = {
   farmer: [[14, 25, 28], [4, 5, 8], [22, 23, 30], [6, 34, 39], [11, 40, 41], [15, 16, 17]],
   cook: [[11, 18, 28], [31, 49, 50], [3, 7, 8], [5, 6, 15], [20, 21, 32], [14, 46, 47]],
   tailor: [[2, 3, 18], [27, 31, 37], [9, 19, 21], [16, 25, 34], [4, 7, 35], [11, 46, 49]],
+  herdsman: [[1, 11, 21], [15, 37, 50], [2, 13, 22], [9, 16, 25], [14, 24, 28], [10, 18, 26]],
 };
 
 /** Every perk there is, tier by tier, and in each tier by the number it was picked under, as the island lists them. */

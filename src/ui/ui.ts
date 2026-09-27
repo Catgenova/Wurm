@@ -2037,7 +2037,7 @@ export class UI {
     const target: Target = { kind: 'creature', id };
     const entries: MenuItem[] = [];
     const item = (actionId: string, t: Target = target, label?: string): MenuItem | null => {
-      const def = CREATURE_ACTION_BY_ID.get(actionId) ?? CREATURE_CRATE_ACTION_BY_ID.get(actionId);
+      const def = CREATURE_ACTION_BY_ID.get(actionId) ?? CREATURE_CRATE_ACTION_BY_ID.get(actionId) ?? ACTION_BY_ID.get(actionId);
       if (!def || !def.applies(t, g)) return null;
       const reason = def.check?.(t, g) ?? null;
       return { label: label ?? def.labelFor?.(t, g) ?? def.label, hint: reason ?? undefined, disabled: !!reason, onSelect: () => g.requestAction(def, t) };
@@ -2083,6 +2083,21 @@ export class UI {
     if ((SPECIES[c.species].pannier ?? 0) > 0 && c.mode !== 'wild' && c.mode !== 'stored') {
       entries.push({ label: 'Open the panniers', onSelect: () => this.cratePanel.openPannier(c.id) });
     }
+    /*
+     * Brushing, pairing and looking one over: the husbandry, which the rules
+     * have had on both sides since blood came in and this menu never offered.
+     * A Herdsman with Choose the Sex says which the young one is to be.
+     */
+    push(item('groom'));
+    const pairing = item('pair_creature');
+    const pairDef = ACTION_BY_ID.get('pair_creature');
+    if (pairing && !pairing.disabled && pairDef && g.perk('breed:sex', 0) > 0) {
+      entries.push({
+        label: pairing.label,
+        children: (['female', 'male'] as const).map((sex) => ({ label: `For a ${sex} young`, onSelect: () => g.requestAction(pairDef, { ...target, sex }) })),
+      });
+    } else push(pairing);
+    push(item('read_blood'));
     push(item('milk_creature'));
     push(item('tack_creature'));
     push(item('mount_creature'));

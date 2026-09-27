@@ -503,6 +503,9 @@ const OTHERS = new Set([
   'table:best', 'share:butcher', 'reach:cook', 'bait:butcher', 'cool:food', 'broth', 'distil', 'taste',
   'brewed:ale', 'brewed:cider', 'brewed:mead', 'brewed:wine',
   'lye:tan_hide', 'reach:tailor', 'patch_item', 'tent',
+  'tame:offer', 'coax:step', 'tame:young', 'bait:any', 'groom:care', 'groom:heal',
+  'kept:care_hours', 'kept:care_bonus', 'kept:hunger', 'kept:old_at',
+  'breed:rest', 'breed:gestation', 'breed:twins', 'breed:inherit', 'breed:upgrade', 'breed:sex', 'stud_book',
   ...STRIDE_KEYS,
 ]);
 const unnamed = PERKS.flatMap((p) => Object.keys(p.fx).filter((key) => {
