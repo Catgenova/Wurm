@@ -49,7 +49,7 @@ import {
 } from './traps';
 import { BAIT_BY_ID, FISH, fishHere, pickFish, waterDepth } from './fishing';
 import { BRIDGES, bridgeDone, CLEARANCE, END_SLOP, spanBill, spanTiles, type Bridge, type BridgeKind } from './bridges';
-import { CLEAR_OF_BUILDINGS, LIFT_PER_MASONRY, concreteFor, foundationBill, foundationDone, liftFor, masonryFor, type Foundation } from './foundations';
+import { CLEAR_OF_BUILDINGS, LIFT_PER_MASONRY, concreteFor, foundationBill, foundationDone, liftFor, masonryFor, soilSays, type Foundation } from './foundations';
 import { poolLevel } from '../world/springs';
 import { liveSettings, type Settings } from './settings';
 import { Skills, SKILL_DEFS, isQuiet } from './skills';
@@ -4236,6 +4236,9 @@ export class Game {
     const w = this.world;
     if (!w.inBounds(x, y)) return 'Not there.';
     if (this.foundationAt(x, y)) return 'There is already a foundation on that tile.';
+    // On bare rock and nowhere else: every spadeful of soil off all four corners first.
+    const soil = w.soilOn(x, y);
+    if (soil > 0) return soilSays(soil);
     const corners = w.tileCorners(x, y);
     const high = Math.max(...corners);
     // It fills a hole; it does not cut one. Pouring below the ground you are
@@ -5857,9 +5860,15 @@ export class Game {
   /**
    * Bring the tiles around a corner in line with the soil left on it: strip
    * the last dirt from all four corners of a tile and its bedrock shows.
+   *
+   * Except under a poured slab. Its top is packed ground, or whatever it was
+   * paved with, over corners that were bare rock before it was set out, so the
+   * rule would turn it into rock the first time a corner it shares was dug or
+   * mined, and nothing could be built or paved on it after. The island leaves
+   * it alone the same way (`reconcile`).
    */
   exposeRock(cx: number, cy: number): void {
-    this.world.reconcileAround(cx, cy);
+    for (let y = cy - 1; y <= cy; y++) for (let x = cx - 1; x <= cx; x++) if (!this.slabAt(x, y)) this.world.reconcile(x, y);
   }
 
   /**

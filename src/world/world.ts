@@ -425,6 +425,11 @@ export class World {
     return this.getHeight(cx, cy) - this.getDirt(cx, cy);
   }
 
+  /** The soil on a tile's four corners together: the spadefuls it would take to bare it. */
+  soilOn(x: number, y: number): number {
+    return this.getDirt(x, y) + this.getDirt(x + 1, y) + this.getDirt(x + 1, y + 1) + this.getDirt(x, y + 1);
+  }
+
   /** Whether every corner of a tile is bare rock. */
   allBare(x: number, y: number): boolean {
     return this.getDirt(x, y) === 0 && this.getDirt(x + 1, y) === 0 && this.getDirt(x + 1, y + 1) === 0 && this.getDirt(x, y + 1) === 0;

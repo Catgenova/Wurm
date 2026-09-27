@@ -109,6 +109,15 @@ const markSql = (m: Mark | null): string => (m ? `${q(JSON.stringify(m))}::jsonb
 
 const out = psql(`
 begin;
+-- Nothing made or restored here comes up rare at the plain odds, one in a hundred, which is
+-- what a craft or a restoring rolls with no perk to set them: a rare one is a pile of its own
+-- and holds, wears and is marked otherwise, so a check that was not asking about it failed a
+-- run in so many (runs 812 and 814). Odds a perk sets are rolled as ever, dice and all.
+alter function perk_rare(double precision) rename to perk_rare_rolled;
+create function perk_rare(p_chance double precision) returns text language sql volatile as $plain$
+  select case when p_chance is distinct from (select d.odds from rarity_def d order by d.ord limit 1)
+              then perk_rare_rolled(p_chance) end
+$plain$;
 create temp table said (k text, v text);
 
 create function pg_temp.hold(w uuid, u uuid, ids text[]) returns jsonb language plpgsql as $f$
@@ -121,9 +130,6 @@ create or replace function product_ql(p_skill double precision, p_tool_ql double
   returns double precision language sql as 'select ${HANDS}::double precision';
 create or replace function butcher_yield(p_skill double precision, p_knife_ql double precision)
   returns double precision language sql immutable as 'select ${SHARE}::double precision';
--- Nothing cooked here comes out rare. A rare pot is a pile of its own, and one pot in a
--- hundred would be: run 812 put the second marked pot beside the first, not on it.
-create or replace function rarity_roll() returns text language sql as 'select null::text';
 
 do $$
 declare w uuid; u uuid; tx int; ty int; v_t text; v_u text; v_it bigint; v_row bigint; v_chest bigint; v_barrel bigint;

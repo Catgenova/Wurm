@@ -696,6 +696,14 @@ export const NEWS: News[] = [
       ];
     },
   },
+  {
+    n: 52,
+    day: '2026-09-27',
+    lines: () => [
+      'A foundation is set out on bare rock only: plain stone, a seam or an ore. Dig the soil off every corner of the tile first. Set out a foundation is no longer offered on grass, dirt or any tile with soil left on a corner.',
+      'A poured slab stays packed ground to build or pave on when a corner it shares is dug or mined. Foundations already set out or poured stay as they are.',
+    ],
+  },
 ];
 
 /** The highest entry this browser has shown. */

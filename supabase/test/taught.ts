@@ -79,6 +79,15 @@ check('and both sides price a miss the same', Math.abs(islandTry - TRY_LEARN) < 
  */
 const isle = psql(`
 begin;
+-- Nothing made or restored here comes up rare at the plain odds, one in a hundred, which is
+-- what a craft or a restoring rolls with no perk to set them: a rare one is a pile of its own
+-- and holds, wears and is marked otherwise, so a check that was not asking about it failed a
+-- run in so many (runs 812 and 814). Odds a perk sets are rolled as ever, dice and all.
+alter function perk_rare(double precision) rename to perk_rare_rolled;
+create function perk_rare(p_chance double precision) returns text language sql volatile as $plain$
+  select case when p_chance is distinct from (select d.odds from rarity_def d order by d.ord limit 1)
+              then perk_rare_rolled(p_chance) end
+$plain$;
 update recipe set difficulty = 95 where id = 'make_bronze';
 do $$
 declare w uuid; u uuid; i int;
@@ -180,6 +189,15 @@ const CREEP = 0.05;
 const isleMind = (at: number): string => {
   const out = psql(`
 begin;
+-- Nothing made or restored here comes up rare at the plain odds, one in a hundred, which is
+-- what a craft or a restoring rolls with no perk to set them: a rare one is a pile of its own
+-- and holds, wears and is marked otherwise, so a check that was not asking about it failed a
+-- run in so many (runs 812 and 814). Odds a perk sets are rolled as ever, dice and all.
+alter function perk_rare(double precision) rename to perk_rare_rolled;
+create function perk_rare(p_chance double precision) returns text language sql volatile as $plain$
+  select case when p_chance is distinct from (select d.odds from rarity_def d order by d.ord limit 1)
+              then perk_rare_rolled(p_chance) end
+$plain$;
 insert into skill (world_id, uid, id, value) values (${W}, ${DANE}, 'mind_logic', ${at})
   on conflict (world_id, uid, id) do update set value = ${at};
 delete from event where uid = ${DANE};

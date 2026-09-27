@@ -31,7 +31,20 @@ import { POOL_DEPTH, POOL_LIP, poolFloor, poolLevel } from '../world/springs';
  * What it asks of you is the deepest part of that pour. Three units of lift a
  * point of masonry: a beginner can square off a step, and a hillside needs
  * somebody who has been doing this a while.
+ *
+ * And where it goes is bare rock. Asked for: "all dirt must be dug from a
+ * tile before planning a foundation", on "rocks or seams or ores". So every
+ * spadeful of soil comes off all four corners first, and then it is the same
+ * slab on plain stone, a seam or an ore: the pour asks nothing of the rock.
  */
+
+/**
+ * Why a foundation will not go over soil: what is left on the tile's four
+ * corners together, a spadeful apiece, and what to do about it. The island
+ * says it in the same words (`foundation_reason`).
+ */
+export const soilSays = (soil: number): string =>
+  `This tile still has ${soil} soil over rock on its corners. A foundation goes on bare rock, seam or ore: dig every corner down to the rock first.`;
 
 /** Concrete per step of one corner lifted. */
 export const CONCRETE_PER_STEP = 10;
@@ -100,7 +113,8 @@ export const FOUNDATION_ACTIONS: ActionDef[] = [
     tool: 'mallet',
     stamina: 0.03,
     baseTime: 4,
-    applies: (t, g) => isTile(t) && !g.foundationAt(t.x, t.y) && g.world.slope(t.x, t.y) > 0,
+    // Not offered over soil at all: the tile has to be dug down to bare rock first.
+    applies: (t, g) => isTile(t) && !g.foundationAt(t.x, t.y) && g.world.slope(t.x, t.y) > 0 && g.world.allBare(t.x, t.y),
     labelFor: (t, g) => {
       if (!isTile(t)) return 'Set out a foundation';
       const top = g.foundationTop(t.x, t.y);

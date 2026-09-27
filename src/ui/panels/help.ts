@@ -71,7 +71,7 @@ import {
   TRAIT_SOURCES, TRAITS, upgradeChance, type TraitTier,
 } from '../../game/traits';
 import { CHAIN_MOST, FALL_DROP, FILL_RATE, POND_MOST, POOL_DEPTH, POOL_LIP, RUN_MOST, SPRING_DEPTH, SPRINGS_EACH } from '../../world/springs';
-import { POOL_FILL } from '../../game/foundations';
+import { CLEAR_OF_BUILDINGS, CONCRETE_PER_STEP, LIFT_PER_MASONRY, POOL_FILL } from '../../game/foundations';
 import { AWARENESS, awarenessReach, BASE_SIGHT, LIGHT_GIVES_BACK, NIGHT_LOSS, TREE_OPACITY } from '../../game/vision';
 import { NO_GO, pointAt, windWord, windWorth } from '../../game/wind';
 import { article, capital, listed, NumberWord, numberWord, percent, share, spanWords, times } from '../../game/words';
@@ -2047,6 +2047,15 @@ export function helpText(): string {
     asked for at a bank stops the moment the bank is level, rather than when the run is done.
     The Tile window says how far the corner under the cursor stands from the mark. <b>Clear the
     level</b> puts it away.</p>
+    <p><b>A foundation</b> squares off a sloping tile without moving the ground round it, and it goes on
+    bare rock only: plain stone, a seam or an ore. Dig the soil off every corner of the tile
+    first. <b>Set out a foundation</b> is not offered on grass, dirt or any tile with soil left on a
+    corner, nor on a tile that is already level. With a mallet it shutters the tile to be poured level
+    with its highest corner, or with the level if you have taken one above that. <b>Pour the
+    foundation</b> with a trowel takes <b>${CONCRETE_PER_STEP}</b> concrete for every step each corner
+    is lifted, and the deepest corner wants a point of masonry for every <b>${LIFT_PER_MASONRY}</b>
+    steps of it. It keeps ${numberWord(CLEAR_OF_BUILDINGS)} tile clear of any building or plan. Poured, it
+    is packed ground to build or pave on, whatever is dug or mined round it.</p>
     <p><b>A spadeful out of the cart.</b> Dirt, clay and sand weigh <b>${itemDef('dirt').weight}kg</b> apiece, so a starting
     back carries ${numberWord(Math.floor((CARRY_BASE + CHAR_START * CARRY_PER_STRENGTH) / itemDef('dirt').weight))} before it starts to drag, and moving a bank is a great many walks. Dropping dirt and the packing-in half
     of flattening will take a spadeful out of any <b>crate, cart or bin within reach</b> when you are

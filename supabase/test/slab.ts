@@ -14,12 +14,17 @@
  * the barrowful. That is what this puts to them: the same tiles, the same
  * questions, and the two answers held against each other.
  *
+ * And asked for since: "Establish that all dirt must be dug from a tile before
+ * planning a foundation. Remove the option from dirt/grass etc tiles.
+ * Foundations can be planned on rocks or seams or ores." So every tile here is
+ * dug bare first, and the soil rule is put to both sides on its own.
+ *
  * Runs against the database the suite leaves behind: Hoarding, and Dane on it.
  */
 import { execFileSync } from 'node:child_process';
 import { Game } from '../../src/game/game';
-import { concreteFor, foundationDone, liftFor, masonryFor, CONCRETE_PER_STEP, LIFT_PER_MASONRY } from '../../src/game/foundations';
-import { TileType } from '../../src/world/tiles';
+import { concreteFor, foundationDone, liftFor, masonryFor, soilSays, CONCRETE_PER_STEP, FOUNDATION_ACTIONS, LIFT_PER_MASONRY } from '../../src/game/foundations';
+import { isSeam, ROCK_VARIANTS, TileType } from '../../src/world/tiles';
 
 const psql = (sql: string): string =>
   execFileSync('psql', ['-v', 'ON_ERROR_STOP=1', '-X', '-q', '-t', '-A', '-f', '-'], {
@@ -58,12 +63,20 @@ const TX = 60;
 const TY = 60;
 
 const game = Game.create(4242);
-const setShape = (h: [number, number, number, number]): void => {
+/** The four corners' heights, and the soil on them: none unless it is said, since a foundation goes on bare rock. */
+const setShape = (h: [number, number, number, number], soil: [number, number, number, number] = [0, 0, 0, 0]): void => {
   game.world.setHeight(TX, TY, h[0]);
   game.world.setHeight(TX + 1, TY, h[1]);
   game.world.setHeight(TX + 1, TY + 1, h[2]);
   game.world.setHeight(TX, TY + 1, h[3]);
+  game.world.setDirt(TX, TY, soil[0]);
+  game.world.setDirt(TX + 1, TY, soil[1]);
+  game.world.setDirt(TX + 1, TY + 1, soil[2]);
+  game.world.setDirt(TX, TY + 1, soil[3]);
 };
+/** The same corners bared on the island, in a block that has `w` in hand. */
+const bareSql = (x: number, y: number): string =>
+  [[x, y], [x + 1, y], [x + 1, y + 1], [x, y + 1]].map(([cx, cy]) => `perform land_set_dirt(w, ${cx}, ${cy}, 0);`).join(' ');
 
 const island = psql(`
 begin;
@@ -77,6 +90,7 @@ begin
   insert into skill (world_id, uid, id, value) values (w, u, 'masonry', 99)
     on conflict (world_id, uid, id) do update set value = 99;
   delete from foundation f where f.world_id = w;
+  ${bareSql(TX, TY)}
   for s in select * from (values ${SHAPES.map(([, a, b, c, d], i) => `(${i}, ${a}, ${b}, ${c}, ${d})`).join(', ')})
              v(i, n, e, s, w2) loop
     perform land_set_height(w, ${TX}, ${TY}, s.n);
@@ -136,6 +150,7 @@ begin
   perform land_set_height(w, ${TX + 1}, ${TY}, 10);
   perform land_set_height(w, ${TX + 1}, ${TY + 1}, 4);
   perform land_set_height(w, ${TX}, ${TY + 1}, 4);
+  ${bareSql(TX, TY)}
   insert into skill (world_id, uid, id, value) values (w, u, 'masonry', ${(want - 0.1).toFixed(4)})
     on conflict (world_id, uid, id) do update set value = ${(want - 0.1).toFixed(4)};
   insert into said values ('SHORT|' || coalesce(foundation_reason(w, u, ${TX}, ${TY}, 10), 'ALLOWED'));
@@ -179,6 +194,90 @@ check('a building one tile off is too close, and the refusal names it',
   nextDoor.startsWith('Oceanport is too close.'), `"${nextDoor}"`);
 check('and two tiles off is far enough', twoOff === 'ALLOWED', `"${twoOff}"`);
 
+/* ---- bare rock, a seam or an ore, and nothing with soil left on it -------- */
+const plan = FOUNDATION_ACTIONS.find((a) => a.id === 'plan_foundation')!;
+const here = { kind: 'tile' as const, x: TX, y: TY, cx: TX, cy: TY };
+const SOIL: [number, number, number, number] = [3, 0, 2, 0];
+const soilLeft = SOIL.reduce((n, d) => n + d, 0);
+const COAL = ROCK_VARIANTS.findIndex((r) => isSeam(r) && !r.yields.endsWith('_ore'));
+const IRON = ROCK_VARIANTS.findIndex((r) => r.yields === 'iron_ore');
+game.skills.values.set('masonry', 99);
+setShape([10, 10, 4, 4], SOIL);
+game.world.setTile(TX, TY, TileType.Grass);
+const onGrass = { offered: plan.applies(here, game), said: game.foundationReason(TX, TY, 10) ?? 'ALLOWED' };
+setShape([10, 10, 4, 4], [0, 0, 1, 0]);
+game.world.setTile(TX, TY, TileType.Dirt);
+const oneLeft = { offered: plan.applies(here, game), said: game.foundationReason(TX, TY, 10) ?? 'ALLOWED' };
+setShape([10, 10, 4, 4]);
+game.world.reconcile(TX, TY);
+const bared = game.world.getTile(TX, TY);
+const onRock = { offered: plan.applies(here, game), said: game.foundationReason(TX, TY, 10) ?? 'ALLOWED' };
+game.world.setTile(TX, TY, TileType.Rock, COAL);
+const onSeam = { offered: plan.applies(here, game), said: game.foundationReason(TX, TY, 10) ?? 'ALLOWED' };
+game.world.setTile(TX, TY, TileType.Rock, IRON);
+const onOre = { offered: plan.applies(here, game), said: game.foundationReason(TX, TY, 10) ?? 'ALLOWED' };
+
+const rock = psql(`
+begin;
+create temp table said (k text);
+do $$
+declare w uuid; u uuid; v_at jsonb := jsonb_build_object('kind', 'tile', 'x', ${TX}, 'y', ${TY});
+begin
+  select id into w from world where name = 'Hoarding';
+  select uid into u from player where world_id = w and name = 'Dane';
+  update player set x = ${TX}.5, y = ${TY}.5, level_h = null where world_id = w and uid = u;
+  insert into skill (world_id, uid, id, value) values (w, u, 'masonry', 99)
+    on conflict (world_id, uid, id) do update set value = 99;
+  delete from foundation f where f.world_id = w;
+  perform give(w, u, 'mallet', 1, 30);
+  perform land_set_height(w, ${TX}, ${TY}, 10);
+  perform land_set_height(w, ${TX + 1}, ${TY}, 10);
+  perform land_set_height(w, ${TX + 1}, ${TY + 1}, 4);
+  perform land_set_height(w, ${TX}, ${TY + 1}, 4);
+  perform land_set_tile(w, ${TX}, ${TY}, tile_id('Grass'));
+  perform land_set_dirt(w, ${TX}, ${TY}, ${SOIL[0]});
+  perform land_set_dirt(w, ${TX + 1}, ${TY}, ${SOIL[1]});
+  perform land_set_dirt(w, ${TX + 1}, ${TY + 1}, ${SOIL[2]});
+  perform land_set_dirt(w, ${TX}, ${TY + 1}, ${SOIL[3]});
+  insert into said values ('SOIL|' || coalesce(foundation_reason(w, u, ${TX}, ${TY}, 10), 'ALLOWED'));
+  -- Asked for the way a page asks, mallet in hand, and done anyway.
+  insert into said values ('ASKED|' || coalesce(foundation_refusal(w, u, 'plan_foundation', v_at), 'ALLOWED'));
+  perform perform_foundation(w, u, 'plan_foundation', v_at);
+  insert into said values ('SENT|' || (select count(*) from foundation f where f.world_id = w));
+  ${bareSql(TX, TY)}
+  perform land_set_dirt(w, ${TX + 1}, ${TY + 1}, 1);
+  insert into said values ('ONE|' || coalesce(foundation_reason(w, u, ${TX}, ${TY}, 10), 'ALLOWED'));
+  perform land_set_dirt(w, ${TX + 1}, ${TY + 1}, 0);
+  perform reconcile(w, ${TX}, ${TY});
+  insert into said values ('BARED|' || land_tile(w, ${TX}, ${TY}));
+  perform land_set_data(w, ${TX}, ${TY}, ${COAL});
+  insert into said values ('SEAM|' || coalesce(foundation_refusal(w, u, 'plan_foundation', v_at), 'ALLOWED'));
+  perform land_set_data(w, ${TX}, ${TY}, ${IRON});
+  insert into said values ('ORE|' || coalesce(foundation_refusal(w, u, 'plan_foundation', v_at), 'ALLOWED'));
+  perform perform_foundation(w, u, 'plan_foundation', v_at);
+  insert into said values ('PLANNED|' || (select count(*) from foundation f where f.world_id = w));
+end $$;
+select k from said;
+rollback;
+`);
+const soilWords = soilSays(soilLeft);
+check('grass with soil on its corners is not offered a foundation', !onGrass.offered);
+check(`and the soil left is said on both sides in the same words: ${soilLeft}, one spadeful each`,
+  onGrass.said === soilWords && field('SOIL', rock) === soilWords, `"${onGrass.said}" against "${field('SOIL', rock)}"`);
+check('a plan asked for over it anyway, mallet in hand, is refused and nothing is shuttered',
+  field('ASKED', rock) === soilWords && field('SENT', rock) === '0', `"${field('ASKED', rock)}", ${field('SENT', rock)} shuttered`);
+check('one spadeful left on one corner is still soil, on both sides',
+  !oneLeft.offered && oneLeft.said === soilSays(1) && field('ONE', rock) === soilSays(1), `"${oneLeft.said}" against "${field('ONE', rock)}"`);
+check('dug bare, the tile is rock on both sides',
+  bared === TileType.Rock && field('BARED', rock) === String(TileType.Rock), `${bared} and ${field('BARED', rock)}`);
+check('and bare rock is offered one and takes it',
+  onRock.offered && onRock.said === 'ALLOWED', `"${onRock.said}"`);
+check(`a ${ROCK_VARIANTS[COAL].name.toLowerCase()} takes one, on both sides`,
+  onSeam.offered && onSeam.said === 'ALLOWED' && field('SEAM', rock) === 'ALLOWED', `"${onSeam.said}" against "${field('SEAM', rock)}"`);
+check(`and so does an ${ROCK_VARIANTS[IRON].name.toLowerCase()}, and the island shutters it`,
+  onOre.offered && onOre.said === 'ALLOWED' && field('ORE', rock) === 'ALLOWED' && field('PLANNED', rock) === '1',
+  `"${onOre.said}" against "${field('ORE', rock)}", ${field('PLANNED', rock)} shuttered`);
+
 /* ---- poured, and what it is then ----------------------------------------- */
 setShape([10, 10, 4, 4]);
 game.world.setTile(TX, TY, TileType.Dirt);
@@ -193,6 +292,8 @@ check('shuttering is not ground you can stand on', !foundationDone(f) && game.sl
  */
 game.world.setHeight(TX + 2, TY, 10);
 game.world.setHeight(TX + 2, TY + 1, 4);
+game.world.setDirt(TX + 2, TY, 0);
+game.world.setDirt(TX + 2, TY + 1, 0);
 game.skills.values.set('masonry', 99);
 const beside = game.foundationReason(TX + 1, TY, 10) ?? 'ALLOWED';
 check('and a foundation may be set out next to another one', beside === 'ALLOWED', `"${beside}"`);
@@ -201,6 +302,46 @@ check('poured, it is the top of the tile', game.slabAt(TX, TY) !== undefined && 
   `surface ${game.surfaceHeight(TX, TY)} against ground ${game.world.centerHeight(TX, TY)}`);
 check('and it is the thing you stand on rather than the ground under it',
   game.laidOver(TX, TY) === 10 && game.standable(TX, TY, 0));
+
+/*
+ * And it stays packed ground when a corner it shares is worked. Every corner
+ * under a slab is bare rock now, and the rule that shows the rock when the last
+ * spadeful goes would otherwise turn the slab's top to rock, which takes no
+ * building and no paving.
+ */
+game.world.setTile(TX, TY, TileType.PackedDirt);
+game.world.setTile(TX + 1, TY, TileType.Grass);
+game.exposeRock(TX + 1, TY);
+check('a poured slab stays packed ground when a corner it shares is dug bare, and the grass beside it goes to rock',
+  game.world.getTile(TX, TY) === TileType.PackedDirt && game.world.getTile(TX + 1, TY) === TileType.Rock,
+  `${game.world.getTile(TX, TY)} and ${game.world.getTile(TX + 1, TY)}`);
+const kept = psql(`
+begin;
+create temp table said (k text);
+do $$
+declare w uuid; u uuid;
+begin
+  select id into w from world where name = 'Hoarding';
+  select uid into u from player where world_id = w and name = 'Dane';
+  delete from foundation f where f.world_id = w;
+  ${bareSql(TX, TY)} ${bareSql(TX + 1, TY)}
+  perform land_set_tile(w, ${TX}, ${TY}, tile_id('Packed dirt'));
+  perform land_set_tile(w, ${TX + 1}, ${TY}, tile_id('Grass'));
+  insert into foundation (world_id, id, x, y, top, needed, total, made_by)
+    values (w, 1, ${TX}, ${TY}, 10, '{"concrete": 0}'::jsonb, '{"concrete": 3}'::jsonb, u);
+  perform reconcile_around(w, ${TX + 1}, ${TY});
+  insert into said values ('POURED|' || land_tile(w, ${TX}, ${TY}) || '|' || land_tile(w, ${TX + 1}, ${TY}));
+  -- Shuttering is boards round a hole, and the rule goes on under it.
+  update foundation f set needed = '{"concrete": 3}'::jsonb where f.world_id = w;
+  perform reconcile_around(w, ${TX + 1}, ${TY});
+  insert into said values ('SHUTTERED|' || land_tile(w, ${TX}, ${TY}));
+end $$;
+select k from said;
+rollback;
+`);
+check('and so on the island, where shuttering is still just the ground',
+  field('POURED', kept) === `${TileType.PackedDirt}|${TileType.Rock}` && field('SHUTTERED', kept) === String(TileType.Rock),
+  `poured ${field('POURED', kept)}, shuttered ${field('SHUTTERED', kept)}`);
 
 /* And a slab is buildable ground, which is the point of pouring one. */
 const island2 = psql(`

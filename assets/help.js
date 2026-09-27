@@ -1704,6 +1704,15 @@ import{$r as e,A as t,Bt as n,Cn as r,Ct as i,Dt as a,F as o,Ht as s,M as c,O as
     asked for at a bank stops the moment the bank is level, rather than when the run is done.
     The Tile window says how far the corner under the cursor stands from the mark. <b>Clear the
     level</b> puts it away.</p>
+    <p><b>A foundation</b> squares off a sloping tile without moving the ground round it, and it goes on
+    bare rock only: plain stone, a seam or an ore. Dig the soil off every corner of the tile
+    first. <b>Set out a foundation</b> is not offered on grass, dirt or any tile with soil left on a
+    corner, nor on a tile that is already level. With a mallet it shutters the tile to be poured level
+    with its highest corner, or with the level if you have taken one above that. <b>Pour the
+    foundation</b> with a trowel takes <b>10</b> concrete for every step each corner
+    is lifted, and the deepest corner wants a point of masonry for every <b>3</b>
+    steps of it. It keeps ${g(1)} tile clear of any building or plan. Poured, it
+    is packed ground to build or pave on, whatever is dug or mined round it.</p>
     <p><b>A spadeful out of the cart.</b> Dirt, clay and sand weigh <b>${d(`dirt`).weight}kg</b> apiece, so a starting
     back carries ${g(Math.floor(220/d(`dirt`).weight))} before it starts to drag, and moving a bank is a great many walks. Dropping dirt and the packing-in half
     of flattening will take a spadeful out of any <b>crate, cart or bin within reach</b> when you are

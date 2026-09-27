@@ -129,6 +129,15 @@ const ROLLS = [2, 4.5];
 
 const out = psql(`
 begin;
+-- Nothing made or restored here comes up rare at the plain odds, one in a hundred, which is
+-- what a craft or a restoring rolls with no perk to set them: a rare one is a pile of its own
+-- and holds, wears and is marked otherwise, so a check that was not asking about it failed a
+-- run in so many (runs 812 and 814). Odds a perk sets are rolled as ever, dice and all.
+alter function perk_rare(double precision) rename to perk_rare_rolled;
+create function perk_rare(p_chance double precision) returns text language sql volatile as $plain$
+  select case when p_chance is distinct from (select d.odds from rarity_def d order by d.ord limit 1)
+              then perk_rare_rolled(p_chance) end
+$plain$;
 create temp table said (k text, v text);
 
 create function pg_temp.hold(w uuid, u uuid, ids text[]) returns jsonb language plpgsql as $f$
