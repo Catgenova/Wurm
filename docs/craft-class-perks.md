@@ -1,12 +1,12 @@
 # Craft class perks
 
-The perks chosen for the fourteen craft classes, class by class, on 26 September 2026. They replace what a craft class gives today: its channels and its tree of nodes in `src/game/classes.ts`. None of them is built yet.
+The perks chosen for the fourteen craft classes, class by class, on 26 September 2026, and the tiers they are offered in, settled on 27 September. They replace what a craft class gave before: its channels and its tree of nodes in `src/game/classes.ts`. The Terraformer and the Miner are built, in `src/game/perks.ts` and on the island; the other twelve are not yet.
 
-## Points
+## Tiers
 
-- A class is taken at 50 in one of its skills, and comes with 1 point.
-- Every 10 levels of the class's main skill after that give 1 more point: 6 at 100.
-- Each perk costs 1 point, so at 100 a player holds 6 of their class's 18.
+- A class is taken at 50 in one of its skills.
+- Its 18 perks are offered three at a time in six tiers. The first opens when the class is taken; the others open at 60, 70, 80, 90 and 100 in the class's main skill.
+- A player takes one perk at each tier, so at 100 they hold 6 of their class's 18. The **Tiers** line under each class says what each tier offers, and a built class's `TIERS` row in `src/game/perks.ts` must match it.
 
 Each class was offered 50 perks and 18 were picked. A perk keeps the number it was offered under, which is the number it was picked by. Figures in brackets are the game's own when the perks were chosen, so each line can be checked against the rule it changes when it is built.
 
@@ -87,6 +87,10 @@ Main skill masonry; also stonecutting.
 47. **Repoint** — re-lay a finished wall in a different stone; you pay the new stone and get half the old stone back.
 48. **Rubble Fill** — raise a rock corner with 5 rock shards instead of a concrete.
 
+**Tiers** (swept): 50 — Quick Chisel, Quick Mason, Concrete Hand · 60 — Sure Chisel, Double Lift, Steep Stone ·
+70 — Good Mix, Wet Set, Brick Porter · 80 — Three from a Shard, Two at a Time, Bridge Mason ·
+90 — Salvage, Hod Carrier, Rubble Fill · 100 — Tall Walls, Nothing Wasted, Repoint.
+
 ## Carpenter
 
 Main skill carpentry; also fine carpentry, bowyery and fletching.
@@ -109,6 +113,10 @@ Main skill carpentry; also fine carpentry, bowyery and fletching.
 32. **True Bow** — bows you make reach 10% further.
 37. **String Maker** — a bowstring takes 1 yarn (now 2) and never fails.
 45. **Saw Care** — saws, carving knives, mallets and files wear 50% less.
+
+**Tiers** (swept): 50 — Quick Saw, String Maker, Saw Care · 60 — Heavy Timber, Thatcher, Shipwright ·
+70 — Keel Layer, Timber Salvage, Bowyer's Draw · 80 — Deep Hold, Sure Hull, True Bow ·
+90 — Clean Sawing, Smooth Axle, Fence Builder · 100 — Master Joiner, Deep Drawers, Bridge Wright.
 
 ## Smith
 
@@ -133,6 +141,10 @@ Main skill blacksmithing; also smelting, weaponsmithing, armorsmithing, platesmi
 45. **Temper Bath** — quench a weapon or tool you finished for +5 QL, once per item.
 49. **Ingots** — pour 5 lumps into 1 ingot that weighs half and counts as 5 lumps.
 
+**Tiers** (swept): 50 — Glassblower, Mail Maker, Plate Maker · 60 — Toolsmith, Metal Polisher, Ingots ·
+70 — Hard Sand, Second Heat, Nail Maker · 80 — Keen Edge, Balanced, Forge Reach ·
+90 — Sure Alloy, Reclaimer, Clean Pour · 100 — Sure Hammer, Long Shift, Temper Bath.
+
 ## Forester
 
 Main skill woodcutting; also forestry.
@@ -155,6 +167,10 @@ Main skill woodcutting; also forestry.
 40. **Coppice** — cuts a mature or older tree back to young for 2 logs; the tree stays standing.
 43. **Tap Resin** — taps a pine for 1 tar once a day.
 44. **Clear Brush** — clears a 3×3 patch of bushes and reeds as one job.
+
+**Tiers** (swept): 50 — Woodsman's Stride, Tap Resin, Clear Brush · 60 — Nest Finder, Honey Hunter, Coppice ·
+70 — Clean Stroke, Heavy Swing, Sure Hatchet · 80 — Clean Drop, Fruitful, Kindling ·
+90 — Sprout Picker, Nursery, Hedge Harvest · 100 — Choice Logs, Rare Heartwood, Master Grafter.
 
 ## Farmer
 
@@ -179,6 +195,10 @@ Main skill farming; also milling.
 40. **Tend a Patch** — tends a 3×3 patch as one job.
 41. **Harvest a Patch** — harvests a 3×3 patch as one job.
 
+**Tiers** (swept): 50 — Fodder, Milkmaid, Sack Porter · 60 — Seed Saver, Fast Growth, Bumper Crop ·
+70 — More Meal, Full Press, Barn Reach · 80 — Crop Rotation, Worn-in Rake, Sow a Patch ·
+90 — Rare Harvest, Tend a Patch, Harvest a Patch · 100 — Herb Plot, Grain Master, Fibre Farmer.
+
 ## Cook
 
 Main skill cooking; also butchering and brewing.
@@ -201,6 +221,10 @@ Main skill cooking; also butchering and brewing.
 47. **Distil** — turns 15 L of a brew into 5 L of spirit whose knack lasts 3 times as long.
 49. **Bait Maker** — butchering also gives 2 fishing bait.
 50. **Taste** — Examine on a dish shows what it feeds and how long its knack lasts.
+
+**Tiers** (swept): 50 — Flavoursome, Full Carcass, Strong Brew · 60 — Pantry Reach, Bait Maker, Taste ·
+70 — Fine Fare, Hearty, Long-lasting · 80 — Big Pot, Frugal Cook, Filling ·
+90 — Prime Cuts, Hide Keeper, Cool Pack · 100 — Balanced Diet, Broth, Distil.
 
 ## Tailor
 
@@ -225,6 +249,10 @@ Main skill tailoring; also leatherworking and ropemaking.
 46. **Patch** — take 20 damage off a cloth or leather piece for 1 cloth or leather.
 49. **Tent** — pitch a tent and sleep anywhere, with half the rest a bed gives.
 
+**Tiers** (swept): 50 — Full Fleece, Quick Spindle, Sure Tan · 60 — Saddler, Fisher's Friend, Workshop Reach ·
+70 — Sure Needle, Lye Saver, Sure Awl · 80 — Sack Maker, Deep Pockets, Nothing Wasted ·
+90 — Even Thread, Tight Weave, Light Pack · 100 — Master Tailor, Patch, Tent.
+
 ## Herdsman
 
 Main skill animal husbandry; also taming.
@@ -247,6 +275,10 @@ Main skill animal husbandry; also taming.
 28. **Choose the Sex** — you choose whether a pairing gives a male or a female (now even odds).
 37. **Light Crate** — a creature crate weighs 3 kg in your pack (now 10).
 50. **Stud Book** — Examine on a pair shows the odds before you pair them: the chance the pairing takes, and each trait's chance to come through.
+
+**Tiers** (swept): 50 — Soft Hand, Brushwork, Short Rest · 60 — Healing Hands, Light Crate, Stud Book ·
+70 — Patient Coax, Lasting Care, Quick Gestation · 80 — Young Trust, Light Eaters, True Blood ·
+90 — Well Kept, Twins, Choose the Sex · 100 — Any Bait, Long-lived, Bred Up.
 
 ## Naturalist
 
@@ -271,6 +303,10 @@ Main skill foraging; also botanizing, alchemy and first aid.
 44. **Salve** — a new recipe; 2 herbs and 1 wax make a salve, and a dressed wound under it never gets infected.
 50. **Tincture** — a new recipe; 3 herbs make a tincture that gives +10% skill gain in foraging, botanizing, alchemy and first aid for 20 minutes.
 
+**Tiers** (swept): 50 — Keen Eye, Quick Lye, Quick Dressing · 60 — Hay Cutter, Reed Cutter, Ink Maker ·
+70 — Sure Find, Sure Boil, Sure Hands · 80 — Thrifty Dyer, Quick Mend, Cover Maker ·
+90 — Rare Find, Double Boil, Field Medic · 100 — Herb Tea, Salve, Tincture.
+
 ## Fisher
 
 Main skill fishing.
@@ -293,6 +329,10 @@ Main skill fishing.
 33. **Rod Care** — rods wear 50% less.
 45. **Fishing Journal** — looking at water also shows each fish's chance to bite with the bait you carry.
 47. **Fish Pond** — a new build on your settlement that holds 10 fish and gains 1 an hour.
+
+**Tiers** (swept): 50 — Quick Cast, Bait Saver, Quick Net · 60 — Long Cast, Wide Net, Fishing Journal ·
+70 — Net Care, Cool Pack, Rod Care · 80 — Steady Hand, Full Net, Deep Creel ·
+90 — Strong Bait, Any Bait, Big Fish · 100 — Rare Catch, Smoke Fish, Fish Pond.
 
 ## Mender
 
@@ -317,6 +357,10 @@ Main skill repair; also restoration.
 42. **Repair Kit** — a new item made from 2 cloth, 2 nails and a plank; it takes 50 damage off anything in one use, anywhere.
 50. **Sealant** — a new recipe; 1 tar and 1 wax seal an item so it never decays.
 
+**Tiers** (swept): 50 — Quick Hands, Tool Care, Quick Restore · 60 — Clean Repair, Armour Care, Gentle Hands ·
+70 — Big Mend, Post Keeper, Sure Restore · 80 — Light Touch, Fine Restore, Age Undone ·
+90 — Lucky Polish, Second Look, Repair Kit · 100 — Tier Up, Handyman, Sealant.
+
 ## Artisan
 
 Main skill jewellery; also pottery and papyrusmaking.
@@ -339,3 +383,7 @@ Main skill jewellery; also pottery and papyrusmaking.
 46. **Amphora** — a new fired jar that holds 20 of one food or drink, which keeps twice as long inside it.
 48. **Circlet** — a new gold band worn on the head, set with 3 stones that each give half their bonus.
 49. **Potter's Wheel** — a new build; anyone shaping clay at it works 30% faster.
+
+**Tiers** (swept): 50 — Sure Setting, Keep the Stone, Deep Pot · 60 — Cut True, Fine Castings, Gem Eye ·
+70 — Focus Cutter, Sealed Jar, Sturdy Binding · 80 — Bright Stone, Keen Focus, Good Read ·
+90 — More Stones, Amphora, Potter's Wheel · 100 — Glaze, Trade Book, Circlet.
