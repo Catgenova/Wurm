@@ -32,7 +32,7 @@ import { HOST_ID, type PeerId } from '../net/protocol';
 import { Roster } from './roster';
 import { GameEmitter, type LogEntry, type LogKind } from './events';
 import { bagTake, DEED_DECAY, describeWith, foldInto, groundDecayRate, Inventory, ITEM_DEFS, itemName, type Item, markOf, type Mark, rarityOf, rarityStep, itemDef, sameStack, spendOut } from './items';
-import { BASE_SPEED, CARRY_CRAWL, CLIMB_LEARN, CLIMB_LEARN_FROM, CLIMB_LEARN_STEEP, CLIMB_PER_LEVEL, groundStep, MAX_STAND, MAX_STEP, Player, readPlayer, standsOn, writePlayer, SWIM_DEPTH, SWIM_SPEED } from './player';
+import { BASE_SPEED, CARRY_CRAWL, CLIMB_LEARN, CLIMB_LEARN_FROM, CLIMB_LEARN_STEEP, CLIMB_PER_LEVEL, groundStep, MAX_STAND, MAX_STEP, Player, readPlayer, standsOn, walkKey, writePlayer, SWIM_DEPTH, SWIM_SPEED } from './player';
 import { randomLook, type Look } from './look';
 import { ACTION_FLOOR, ACTION_PACE, world } from './pace';
 import { ARMOUR_BY_ID, ARMOUR_CLASSES, HIT_LOCATIONS, pieceBurden, pieceSoak, SHIELDS, WEAPON_BY_ID, type Slot, SLOTS } from './gear';
@@ -869,6 +869,9 @@ export class Game {
   setPerks(fx: Record<string, number> | null | undefined): void {
     this.perkFx = { ...(fx ?? {}) };
     this.player.roadPace = this.perk('walk:road', 1);
+    // And through brush, for a Forester's Woodsman's Stride: each tile that has a pace in the perks.
+    this.player.tilePace = Object.fromEntries(Object.keys(TILE_DEFS).map(Number)
+      .map((t) => [t, this.perk(walkKey(t), 1)] as const).filter(([, v]) => v !== 1));
     this.inventory.weightMul = (id: string): number => this.perk(`weight:${id}`, 1);
     this.events.emit('inventory');
   }
@@ -6828,6 +6831,21 @@ export class Game {
 
   markForaged(x: number, y: number, kind: string): void {
     this.foraged.set(this.forageKey(x, y, kind), this.time);
+  }
+
+  /**
+   * When each pine was last tapped for resin (a Forester's Tap Resin), in
+   * wall-clock seconds, as the woods keep time: a pine gives once a day, the
+   * day turning at the woods' dawn. The island keeps the same in `foraged`.
+   */
+  private tapped = new Map<number, number>();
+  tappedToday(x: number, y: number): boolean {
+    const at = this.tapped.get(y * this.world.w + x);
+    return at !== undefined && at >= lastDawn(Date.now() / 1000);
+  }
+
+  markTapped(x: number, y: number): void {
+    this.tapped.set(y * this.world.w + x, Date.now() / 1000);
   }
 
   private die(): void {

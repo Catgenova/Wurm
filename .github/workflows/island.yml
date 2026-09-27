@@ -1582,6 +1582,18 @@ jobs:
             --outfile=node_modules/.cache/smith.mjs --log-level=error
           node node_modules/.cache/smith.mjs
 
+      - name: The Forester's perks, each where its rule is
+        run: |
+          # Each of the Forester's eighteen measured on the island with the dice
+          # taken out where they can be: Cut down's time, strokes, stroke that
+          # lands, and what a felled tree gives and leaves; a bush's shafts; the
+          # sprouts, the planting, the graft and one more fruit; the three new
+          # jobs with every refusal, Tap Resin's day included; Look counting the
+          # strokes; and the browser's pace through brush and its menus.
+          npx esbuild supabase/test/forester.ts --bundle --platform=node --format=esm \
+            --outfile=node_modules/.cache/forester.mjs --log-level=error
+          node node_modules/.cache/forester.mjs
+
       - name: The exact benefit, and where its number comes from
         run: |
           # Text the player reads says what changes and by how much, and where

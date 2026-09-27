@@ -1940,8 +1940,11 @@ update player set x = 2.5, y = 9.5, wounds = '[]'::jsonb,
 -- Stood still at a measured distance rather than wherever the walk took it.
 select creature_spawn(:'world2', 'ulva', 10.5, 9.5, 'wild', now() - interval '3 hours') as stalker \gset
 select creature_spawn(:'world2', 'goblin', 10.5, 9.5, 'wild', now() - interval '3 hours') as gob \gset
+-- And with no traits: three are rolled at random for anything spawned wild,
+-- and a hard-biting or snappish ulva can kill him inside the ten seconds of 297.
 update creature set from_x = to_x, from_y = to_y, leg_at = now(), leg_ends = now(),
-    until = now() + interval '1 hour', settled_at = now() - interval '1 second', hunting = null
+    until = now() + interval '1 hour', settled_at = now() - interval '1 second', hunting = null,
+    traits = '{}'
   where world_id = :'world2' and id in (:'stalker', :'gob');
 select creature_settle(:'world2', :'stalker'), creature_settle(:'world2', :'gob') \g /dev/null
 select '294. eight tiles off, an ulva '
@@ -2006,7 +2009,8 @@ update player set act = null, act_target = null, act_started = null, act_ends = 
 update player set x = 1.5, y = 9.5 where world_id = :'world2' and uid = :'ivar';
 select creature_spawn(:'world2', 'goblin', 15.5, 9.5, 'wild', now() - interval '3 hours') as gob2 \gset
 update creature set hunting = :'ivar', from_x = 15.5, from_y = 9.5, to_x = 15.5, to_y = 9.5,
-    leg_at = now(), leg_ends = now(), until = now() + interval '1 hour', settled_at = now() - interval '1 second'
+    leg_at = now(), leg_ends = now(), until = now() + interval '1 hour', settled_at = now() - interval '1 second',
+    traits = '{}'
   where world_id = :'world2' and id in (:'stalker', :'gob2');
 select creature_settle(:'world2', :'stalker'), creature_settle(:'world2', :'gob2') \g /dev/null
 select '299. fourteen tiles of open ground later the ulva '

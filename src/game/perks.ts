@@ -45,8 +45,8 @@
  */
 import { CLASSES, PERK_CLASSES, PERK_TIER_AT, PERKS_PER_TIER } from './classes';
 import {
-  ACTION_BY_ID, CHIP_CHANCE, DIG_TILE_TIME, DREDGE_DEPTH, FLATTEN_STEP, MINE_COLLAPSE, MINE_DEPTH, PAN_ORES, PROSPECT_REACH,
-  PROSPECT_STEP, SLOPE_FLOOR, SLOPE_PER_SKILL, SPOIL_REACH, TILE_CORNERS,
+  ACTION_BY_ID, CHIP_CHANCE, CLEARED_TO, DIG_TILE_TIME, DREDGE_DEPTH, FLATTEN_STEP, MINE_COLLAPSE, MINE_DEPTH, PAN_ORES, PLANTED_AGE,
+  plantedAge, PROSPECT_REACH, PROSPECT_STEP, RESIN_TREE, SLOPE_FLOOR, SLOPE_PER_SKILL, SPOIL_REACH, TILE_CORNERS,
 } from './actions';
 import { FIND_BASE, FIND_CAP, FIND_PER_SKILL, FIND_PER_TOOL } from './archaeology';
 import { BAUBLE_SHARE } from './baubles';
@@ -66,7 +66,8 @@ import {
 } from './metal';
 import { MAP_ODDS } from './treasure';
 import { CRAFT_REACH, RECIPES, type Recipe } from './recipes';
-import { ROAD_TILES, ROCK_VARIANTS, TILE_DEFS } from '../world/tiles';
+import { BUSH_DEFS, ROAD_TILES, ROCK_VARIANTS, TILE_DEFS, TileType, TREE_AGES, TREE_DAWN_UTC, TREE_DEFS } from '../world/tiles';
+import { walkKey } from './player';
 import { article, capital, listed, numberWord, percent, share, times } from './words';
 
 /** What the perks somebody holds come to, key by key. */
@@ -859,6 +860,135 @@ const SMITH: Seed[] = [
   },
 ];
 
+/*
+ * ---------------------------------------------------------------------------
+ * The Forester: the hatchet, the sickle and the growing wood.
+ * ---------------------------------------------------------------------------
+ */
+/** The ground a walker is slowed on that a Forester's Woodsman's Stride takes at full pace. */
+export const STRIDE = [TileType.Bush, TileType.Reed, TileType.Stump, TileType.Marsh];
+const tileName = (t: TileType): string => TILE_DEFS[t].name.toLowerCase();
+/** The stages a tree is felled in more than one stroke. */
+const MANY_STROKES = TREE_AGES.filter((a) => a.hits > 1);
+/** A tree that can be coppiced: one grown enough to bear. */
+const COPPICED = TREE_AGES.filter((a) => a.alive && a.bears);
+const age = (id: number): string => TREE_AGES[id].name.toLowerCase();
+
+const FORESTER: Seed[] = [
+  {
+    num: 1, name: 'Clean Stroke',
+    fx: { 'time:cut_down': 0.75 },
+    note: (fx) => `Each stroke of ${label('cut_down')} takes ${less(fx['time:cut_down'])} less time (${secs(base('cut_down'))} base), on a tree or a bush.`,
+  },
+  {
+    num: 2, name: 'Heavy Swing',
+    fx: { 'fewer:cut_down': 1 },
+    note: (fx) => `Trees come down in ${numberWord(fx['fewer:cut_down'])} stroke fewer, and never under one: `
+      + `${listed(MANY_STROKES.map((a) => `${a.name.toLowerCase()} ${Math.max(1, a.hits - fx['fewer:cut_down'])} (now ${a.hits})`))}.`,
+  },
+  {
+    num: 3, name: 'Sure Hatchet',
+    fx: { 'fail:cut_down': 0.5 },
+    note: (fx) => `${label('cut_down')} glances off ${share(fx['fail:cut_down'])} as often (now a check at difficulty `
+      + `${diff('cut_down')}), on a tree or a bush.`,
+  },
+  {
+    num: 5, name: 'Choice Logs',
+    fx: { 'ql:cut_down': 1.1 },
+    note: (fx) => `Logs from a tree you fell come up at ${more(fx['ql:cut_down'])} QL.`,
+  },
+  {
+    num: 6, name: 'Rare Heartwood',
+    fx: { 'rare:cut_down': RARITY_ODDS[0] },
+    note: (fx) => `${oneIn(fx['rare:cut_down'])} trees you fell give rare logs, rolling on to supreme and fantastic at the odds `
+      + 'crafting has. Felled logs are never rare without it.',
+  },
+  {
+    num: 7, name: 'Clean Drop',
+    fx: { 'stump:clear': 1 },
+    note: () => 'A tree you fell leaves grass where it stood (now a stump, for a day or until it is dug out).',
+  },
+  {
+    num: 10, name: 'Sprout Picker',
+    fx: { 'fail:pick_sprout': 0, 'count:sprout': 2 },
+    note: (fx) => `${label('pick_sprout')} never fails (now a check at difficulty ${diff('pick_sprout')}) and gives `
+      + `${numberWord(fx['count:sprout'])} sprouts (now one).`,
+  },
+  {
+    num: 11, name: 'Nursery',
+    fx: { 'grown:plant': 1 },
+    note: (fx) => {
+      const grown = TREE_AGES[plantedAge(fx['grown:plant'])];
+      return `A sprout you plant comes up ${article(grown.name.toLowerCase())} ${grown.name.toLowerCase()} tree (now ${age(PLANTED_AGE)}): `
+        + `it fells for ${numberWord(grown.logs)} logs (now ${numberWord(TREE_AGES[PLANTED_AGE].logs)})`
+        + `${grown.bears ? ', and a fruit tree bears at once' : ''}.`;
+    },
+  },
+  {
+    num: 14, name: 'Master Grafter',
+    fx: { 'fail:graft': 0, 'time:graft': 0.7 },
+    note: (fx) => `${label('graft')} never fails (now a check at difficulty ${diff('graft')}, and the sprout is spent either way) `
+      + `and takes ${less(fx['time:graft'])} less time (${secs(base('graft'))} base).`,
+  },
+  {
+    num: 16, name: 'Fruitful',
+    fx: { 'more:pick_fruit': 1 },
+    note: (fx) => `${fx['more:pick_fruit'] >= 1 ? 'Every pick' : `${percent(fx['more:pick_fruit'])} of picks`} of `
+      + `${label('pick_fruit')} gives one more fruit.`,
+  },
+  {
+    num: 20, name: 'Hedge Harvest',
+    fx: { 'more:harvest_bush': 1 },
+    note: (fx) => `${fx['more:harvest_bush'] >= 1 ? 'Every go' : `${percent(fx['more:harvest_bush'])} of goes`} of harvesting a bush `
+      + `gives one more of what it bears (${either(BUSH_DEFS.flatMap((b) => (b.yields ? [itemName(b.yields)] : [])))}).`,
+  },
+  {
+    num: 21, name: 'Nest Finder',
+    fx: { 'nest:chance': 0.1, 'nest:feathers': 3 },
+    note: (fx) => `${oneIn(fx['nest:chance'])} trees you fell for timber give ${numberWord(fx['nest:feathers'])} `
+      + `${itemName('feather')}, at the logs' QL.`,
+  },
+  {
+    num: 22, name: 'Honey Hunter',
+    fx: { 'honey:chance': 0.05, 'honey:count': 2 },
+    note: (fx) => `${oneIn(fx['honey:chance'])} trees you fell for timber give ${numberWord(fx['honey:count'])} `
+      + `${itemName('honey')}, at the logs' QL.`,
+  },
+  {
+    num: 24, name: 'Kindling',
+    fx: { 'bush:shaft': 2 },
+    note: (fx) => `Cutting down a bush gives ${numberWord(fx['bush:shaft'])} ${plural(itemName('shaft'))} (now nothing).`,
+  },
+  {
+    num: 34, name: "Woodsman's Stride",
+    fx: Object.fromEntries(STRIDE.map((t) => [walkKey(t), 1 / TILE_DEFS[t].speed])),
+    note: () => `You walk through ${listed(STRIDE.map(tileName))} at full pace, on foot `
+      + `(now ${listed(STRIDE.map((t) => `${tileName(t)} at ${percent(TILE_DEFS[t].speed)}`))} of it).`,
+  },
+  {
+    num: 40, name: 'Coppice',
+    fx: { coppice: 2 },
+    note: (fx) => `${label('coppice')} (a job with a hatchet, ${secs(base('coppice'))}, a check at difficulty ${diff('coppice')}): `
+      + `${article(COPPICED[0].name.toLowerCase())} ${either(COPPICED.map((a) => a.name.toLowerCase()))} tree is cut back to ${age(PLANTED_AGE)} for `
+      + `${numberWord(fx.coppice)} logs, and stays standing to grow on.`,
+  },
+  {
+    num: 43, name: 'Tap Resin',
+    fx: { tap_resin: 1 },
+    note: (fx) => `${label('tap_resin')} (a job with a carving knife, ${secs(base('tap_resin'))}): ${numberWord(fx.tap_resin)} `
+      + `${itemName('tar')} from a living ${TREE_DEFS[RESIN_TREE].name.toLowerCase()}, once a day for each; the day turns at `
+      + `${TREE_DAWN_UTC} o'clock UTC, when the trees grow.`,
+  },
+  {
+    num: 44, name: 'Clear Brush',
+    fx: { clear_brush: 1 },
+    note: (fx) => `${label('clear_brush')} (a job with a sickle, ${secs(base('clear_brush'))}): every bush and reed in the `
+      + `${2 * fx.clear_brush + 1}×${2 * fx.clear_brush + 1} tiles around the one you choose, cleared in one go. A bush leaves `
+      + `${tileName(CLEARED_TO[TileType.Bush] as TileType)} and reeds ${tileName(CLEARED_TO[TileType.Reed] as TileType)}; `
+      + 'it gives nothing.',
+  },
+];
+
 /** Every trade's perks, in the order they were picked. */
 const SEEDS: Record<string, Seed[]> = {
   terraformer: TERRAFORMER,
@@ -866,6 +996,7 @@ const SEEDS: Record<string, Seed[]> = {
   mason: MASON,
   carpenter: CARPENTER,
   smith: SMITH,
+  forester: FORESTER,
 };
 
 const slug = (name: string): string => name.toLowerCase().replace(/[’']/g, '').replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '');
@@ -881,6 +1012,7 @@ export const TIERS: Record<string, number[][]> = {
   mason: [[1, 8, 17], [4, 18, 19], [20, 22, 33], [2, 9, 29], [16, 35, 48], [47, 24, 12]],
   carpenter: [[1, 37, 45], [3, 6, 14], [15, 26, 31], [16, 19, 32], [2, 18, 25], [10, 12, 27]],
   smith: [[8, 26, 27], [30, 32, 49], [12, 20, 22], [24, 25, 36], [7, 9, 13], [16, 38, 45]],
+  forester: [[34, 43, 44], [21, 22, 40], [1, 2, 3], [7, 16, 24], [10, 11, 20], [5, 6, 14]],
 };
 
 /** Every perk there is, tier by tier, and in each tier by the number it was picked under, as the island lists them. */

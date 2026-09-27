@@ -33,13 +33,17 @@ import { execFileSync } from 'node:child_process';
 import { Game } from '../../src/game/game';
 import { ACTION_BY_ID, DIG_TILE_TIME, digDepth, FLATTEN_STEP, MINE_DEPTH, SLOPE_FLOOR, SLOPE_PER_SKILL, slopeNeeds, SPOIL_REACH, TILE_CORNERS } from '../../src/game/actions';
 import { CLASSES, PERK_CLASSES, PERK_TIER_AT, PERKS_PER_TIER } from '../../src/game/classes';
-import { foldFx, foldPerks, FX_RULE, type Fx, PERKS, perkRefusal, perksOf, type PerkDef } from '../../src/game/perks';
+import { foldFx, foldPerks, FX_RULE, type Fx, PERKS, perkRefusal, perksOf, STRIDE, type PerkDef } from '../../src/game/perks';
+import { walkKey } from '../../src/game/player';
 import { ITEM_DEFS, MARK_FAMILIES } from '../../src/game/items';
 import { MATERIALS as IMPROVE_MATERIALS } from '../../src/game/improve';
 import { BRIDGES } from '../../src/game/bridges';
 import { buildWork } from '../../src/game/buildActions';
 import { MATERIALS as BUILD_MATERIALS } from '../../src/game/building';
 import { ROAD_TILES, TILE_DEFS } from '../../src/world/tiles';
+
+/** A Forester's Woodsman's Stride: a pace on each tile that slows a walker, which the browser alone reads. */
+const STRIDE_KEYS = STRIDE.map(walkKey);
 
 const psql = (sql: string): string =>
   execFileSync('psql', ['-v', 'ON_ERROR_STOP=1', '-X', '-q', '-t', '-A', '-f', '-'], {
@@ -481,7 +485,7 @@ check('nobody keeps a node of the Terraformer\'s old tree', say('OLDNODES') === 
  * quality, a rarity, a map, a failure or a thing kept; a thing for a weight;
  * a skill for a slope. A typo there is a perk that reads nothing.
  */
-const JOBS = new Set(['time', 'ql', 'rare', 'map', 'fail', 'keep', 'more', 'gem', 'find', 'cap', 'into', 'spare', 'need']);
+const JOBS = new Set(['time', 'ql', 'rare', 'map', 'fail', 'keep', 'more', 'gem', 'find', 'cap', 'into', 'spare', 'need', 'fewer', 'grown']);
 /*
  * And a kind of work, where the rule asks what is being worked rather than
  * which job: a wall or floor of stone or of timber, a bridge of each kind.
@@ -493,6 +497,8 @@ const OTHERS = new Set([
   'ore:below', 'chip:chance', 'chip:step', 'slide:more', 'depth:mine', 'further:prospect', 'fit:relic', 'share:bauble', 'pan',
   'depth:raise_rock', 'lift:raise_rock', 'repoint', 'rubble',
   'melt:share', 'melt:keep', 'pour:wear', 'reach:forge', 'jobs', 'ingot',
+  'stump:clear', 'nest:chance', 'nest:feathers', 'honey:chance', 'honey:count', 'bush:shaft', 'coppice', 'tap_resin', 'clear_brush',
+  ...STRIDE_KEYS,
 ]);
 const unnamed = PERKS.flatMap((p) => Object.keys(p.fx).filter((key) => {
   const [fam, rest] = key.split(':');
@@ -508,7 +514,14 @@ const unnamed = PERKS.flatMap((p) => Object.keys(p.fx).filter((key) => {
 }).map((key) => `${p.id} ${key}`));
 check('every key names a job, a thing or a rule that exists', unnamed.length === 0, unnamed.join('; '));
 const wired = say('WIRED').split('|').map((s) => s.split(':'));
-const dead = wired.filter((w) => Number(w[w.length - 1]) === 0).map((w) => w.slice(0, -1).join(':'));
+/*
+ * Save the ground a walker is slowed on, which the island has never read: it
+ * holds a body to the pace it could go anywhere (`travel_speed`), so a
+ * Forester's Woodsman's Stride is the browser's pace alone, and has nothing on
+ * the island to change.
+ */
+const dead = wired.filter((w) => Number(w[w.length - 1]) === 0).map((w) => w.slice(0, -1).join(':'))
+  .filter((key) => !STRIDE_KEYS.includes(key));
 check('and every key is read by a rule on the island', wired.length > 0 && dead.length === 0,
   dead.length ? `nothing reads ${dead.join(', ')}` : `${wired.length} keys`);
 

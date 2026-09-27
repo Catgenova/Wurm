@@ -469,6 +469,18 @@ export const NEWS: News[] = [
       ];
     },
   },
+  {
+    n: 37,
+    day: '2026-09-27',
+    lines: () => {
+      const main = (CLASSES.find((c) => c.id === 'forester')?.main ?? '').replace(/_/g, ' ');
+      return [
+        `The Forester has perks instead of a tree now: ${numberWord(PERK_TIER_AT.length)} tiers of ${numberWord(PERKS_PER_TIER)}, the first with the trade and the others at ${listed(PERK_TIER_AT.slice(1).map(String))} in ${main}. The nodes a Forester had bought went with the tree.`,
+        'Three of them are new jobs: Coppice cuts a grown tree back to young for its logs and leaves it standing, Tap Resin takes tar from a living pine once a day, and Clear Brush clears the bushes and reeds around a tile in one go.',
+        'And Look on a tree with strokes in it counts them as you would fell it, for a Forester who fells in fewer.',
+      ];
+    },
+  },
 ];
 
 /** The highest entry this browser has shown. */

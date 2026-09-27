@@ -1,5 +1,6 @@
 import {
-  CHIP_CHANCE, FRUIT_MATURE, FRUIT_OLD, MINE_COLLAPSE, MINE_DEPTH, PROSPECT_REACH, PROSPECT_STEP, REPAIR_FLOOR, repairGo,
+  CHIP_CHANCE, CLEARED_TO, FRUIT_MATURE, FRUIT_OLD, MINE_COLLAPSE, MINE_DEPTH, PROSPECT_REACH, PROSPECT_STEP, REPAIR_FLOOR,
+  repairGo, RESIN_TREE,
 } from '../../game/actions';
 import { ANVIL_SUBTILES } from '../../game/anvil';
 import { ARCHAEOLOGY_ACTION_BY_ID, LECTERN_GAIN, RELICS } from '../../game/archaeology';
@@ -247,6 +248,9 @@ const nodeSays = (ch: Channel, rank: number): string => CLASS_NODES.find((n) => 
 /** The trades moved over to perks, and the first perk of the first of them, as its card says it. */
 const PERK_TRADES = CLASSES.filter((c) => PERK_CLASSES.has(c.id));
 const FIRST_PERK = PERK_TRADES.length ? perksOf(PERK_TRADES[0].id)[0] : undefined;
+/** A Forester's perk's numbers, by the perk's name. */
+const forester = (name: string): Record<string, number> => perksOf('forester').find((p) => p.name === name)?.fx ?? {};
+const BRUSH_SIDE = 2 * (forester('Clear Brush').clear_brush ?? 0) + 1;
 /** How many channels the rites push, from the narrowest to the widest. */
 const riteWidths = [...new Set(RITES.map((r) => Object.keys(r.muls).length))].sort((a, b) => a - b);
 /** What a rite does to its channels, as its card says it. */
@@ -761,6 +765,13 @@ export function helpText(): string {
     <p>All of them are also <b>woods</b>, and good ones: apple is as hard-wearing as oak and takes a finer
     edge, cherry is the best handle wood on the island, and olive is murder to work and outlasts
     everything. You get one log a tree, so an orchard felled is an orchard gone.</p>
+    <p>A Forester can learn these jobs of the woods. <b>Coppice</b>, with a hatchet, cuts a mature or older
+    tree back to young for ${numberWord(forester('Coppice').coppice ?? 0)} logs and leaves it standing to grow on.
+    <b>Tap resin</b>, with a carving knife, takes ${numberWord(forester('Tap Resin').tap_resin ?? 0)} tar from a living
+    ${TREE_DEFS[RESIN_TREE].name.toLowerCase()}, once a day for each; the day turns when the woods do. <b>Clear brush</b>,
+    with a sickle, clears every bush and reed in the ${BRUSH_SIDE}&times;${BRUSH_SIDE} tiles around the one you choose
+    in one go, and leaves ${TILE_DEFS[CLEARED_TO[TileType.Bush] as TileType].name.toLowerCase()} where the bushes were and
+    ${TILE_DEFS[CLEARED_TO[TileType.Reed] as TileType].name.toLowerCase()} where the reeds were.</p>
     <h3>Farming</h3>
     <p>With a <b>rake</b> in your pack, <b>Till</b> any grass or dirt to rake it into a field. Seeds turn
     up while foraging and botanizing &mdash; vegetables and starches in the one, spices and fibres in the

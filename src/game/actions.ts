@@ -274,6 +274,43 @@ export const GRAFT_SKILL = 50;
 export const fruitSprout = (it: { id: string; extra?: string }): boolean =>
   it.id === 'sprout' && !!TREE_DEFS.find((d) => d.name === it.extra)?.fruit;
 
+/**
+ * The stage a sprout comes up at when it goes in the ground: a young tree,
+ * which bears nothing yet. A Forester's Nursery (`grown:plant`) brings it up
+ * that many stages further on, along the stages' own order.
+ */
+export const PLANTED_AGE = 0;
+export const plantedAge = (steps: number): number => {
+  let age = PLANTED_AGE;
+  for (let i = 0; i < steps; i++) age = TREE_AGES[age].next ?? age;
+  return age;
+};
+/**
+ * A Forester's Coppice takes a tree grown enough to bear -- mature and older,
+ * and living -- back to where a planted one starts, for its logs.
+ */
+export const coppiceable = (data: number): boolean => treeAge(data).alive && treeAge(data).bears;
+/** The one tree a Forester's Tap Resin taps. */
+export const RESIN_TREE = TREE_DEFS.findIndex((d) => d.name === 'Pine');
+/** A living pine with timber in it: not a sapling, and not one clipped to a shrub. */
+export const tappable = (data: number): boolean =>
+  treeSpecies(data) === RESIN_TREE && treeAge(data).alive && treeAge(data).logs > 0;
+/**
+ * What a Forester's Clear Brush clears, and what it leaves: grass where a bush
+ * stood, bare dirt where the reeds were.
+ */
+export const CLEARED_TO: Partial<Record<number, TileType>> = { [TileType.Bush]: TileType.Grass, [TileType.Reed]: TileType.Dirt };
+/** The brush within `r` tiles of (x, y), that tile included. */
+export function brushAround(w: World, x: number, y: number, r: number): Array<[number, number]> {
+  const out: Array<[number, number]> = [];
+  for (let ty = y - r; ty <= y + r; ty++) {
+    for (let tx = x - r; tx <= x + r; tx++) {
+      if (tx >= 0 && ty >= 0 && tx < w.w && ty < w.h && CLEARED_TO[w.getTile(tx, ty)] !== undefined) out.push([tx, ty]);
+    }
+  }
+  return out;
+}
+
 const cornerName = (t: Target & { kind: 'tile' }): string => {
   const ns = t.cy === t.y ? 'north' : 'south';
   const ew = t.cx === t.x ? 'west' : 'east';
@@ -1561,10 +1598,13 @@ export const ACTIONS: ActionDef[] = [
         TREE_DEFS.findIndex((d) => d.name === sprout.extra),
       );
       g.inventory.remove(sprout.uid, 1);
-      g.world.setTile(t.x, t.y, TileType.Tree, packTreeData(species, 0));
+      // Young, or further on for a Forester's Nursery.
+      const age = plantedAge(g.perk('grown:plant', 0));
+      g.world.setTile(t.x, t.y, TileType.Tree, packTreeData(species, age));
       g.note('planted');
       if (TREE_DEFS[species].fruit) g.note('orchard');
-      g.logMsg(`You plant the ${TREE_DEFS[species].name.toLowerCase()} sprout.`, 'event');
+      const name = TREE_DEFS[species].name.toLowerCase();
+      g.logMsg(`You plant the ${name} sprout.${age === PLANTED_AGE ? '' : ` It comes up a ${TREE_AGES[age].name.toLowerCase()} ${name}.`}`, 'event');
     },
   },
   {
@@ -1616,6 +1656,121 @@ export const ACTIONS: ActionDef[] = [
       g.world.setTile(t.x, t.y, TileType.Tree, packTreeData(species, treeVariant(data)));
       g.note('orchard');
       g.logMsg(`You graft the ${TREE_DEFS[species].name.toLowerCase()} sprout onto the ${was.name.toLowerCase()}. It is a ${treeAge(data).name.toLowerCase()} ${TREE_DEFS[species].name.toLowerCase()} tree now.`, 'event');
+    },
+  },
+  /*
+   * A Forester's Coppice: a tree grown enough to bear cut back to the stool
+   * for `coppice` logs, and left standing, young, to grow on. It grows on the
+   * same clock as any other, so it is mature again at the next dawn. The
+   * island does the same in `perform_ground`.
+   */
+  {
+    id: 'coppice',
+    label: 'Coppice',
+    verb: 'coppicing',
+    skill: 'woodcutting',
+    tool: 'hatchet',
+    stamina: 0.07,
+    baseTime: 8,
+    difficulty: 10,
+    applies: (t, g) => t.kind === 'tile' && g.perk('coppice', 0) > 0 && tile(t, g) === TileType.Tree,
+    check: (t, g) => {
+      if (t.kind !== 'tile') return null;
+      // The tool first and then the rest, in the order the island asks them.
+      if (!g.inventory.has('hatchet')) return 'You need a hatchet to coppice.';
+      if (g.perk('coppice', 0) <= 0) return 'That wants a Forester who has learned to coppice.';
+      if (g.world.getTile(t.x, t.y) !== TileType.Tree) return 'There is no tree here to coppice.';
+      const data = g.world.getData(t.x, t.y);
+      if (!treeAge(data).alive) return 'There is no coppicing a dead tree.';
+      if (!coppiceable(data)) return `The ${TREE_DEFS[treeSpecies(data)].name.toLowerCase()} is too young to coppice. Let it grow.`;
+      return null;
+    },
+    perform: (t, g) => {
+      if (t.kind !== 'tile') return;
+      const w = g.world;
+      const data = w.getData(t.x, t.y);
+      if (w.getTile(t.x, t.y) !== TileType.Tree || !coppiceable(data)) return;
+      const def = TREE_DEFS[treeSpecies(data)];
+      if (!g.skillCheck('woodcutting', 10, g.toolQl('hatchet'))) {
+        g.missed();
+        g.logMsg('Your hatchet glances off and you fail to make headway.', 'event');
+        return;
+      }
+      // A fresh trunk off the stool: whatever notch was in the old one went with it.
+      w.setTile(t.x, t.y, TileType.Tree, packTreeData(treeSpecies(data), PLANTED_AGE));
+      w.setNotch(t.x, t.y, 0);
+      const n = g.perk('coppice', 0);
+      const item = g.gather('log', { count: n, ql: g.productQl('woodcutting', g.toolQl('hatchet')), extra: def.name });
+      g.logMsg(`You cut the ${treeAge(data).name.toLowerCase()} ${def.name.toLowerCase()} back to the stool and get ${n} ${n === 1 ? 'log' : 'logs'}. (QL ${item.ql.toFixed(1)}) `
+        + `It stands as a ${TREE_AGES[PLANTED_AGE].name.toLowerCase()} ${def.name.toLowerCase()} now.`, 'event');
+    },
+  },
+  /*
+   * A Forester's Tap Resin: `tap_resin` tar out of a living pine, once a day
+   * for each pine -- the day turning at the woods' dawn. The island keeps
+   * which pines are tapped (`foraged`, kind `resin`), and so does a game
+   * played alone.
+   */
+  {
+    id: 'tap_resin',
+    label: 'Tap resin',
+    verb: 'tapping resin',
+    skill: 'forestry',
+    tool: 'carving_knife',
+    stamina: 0.03,
+    baseTime: 6,
+    applies: (t, g) => t.kind === 'tile' && g.perk('tap_resin', 0) > 0 && tile(t, g) === TileType.Tree
+      && treeSpecies(g.world.getData(t.x, t.y)) === RESIN_TREE,
+    check: (t, g) => {
+      if (t.kind !== 'tile') return null;
+      if (!g.inventory.has('carving_knife')) return 'You need a carving knife to tap resin.';
+      if (g.perk('tap_resin', 0) <= 0) return 'That wants a Forester who has learned to tap resin.';
+      if (g.world.getTile(t.x, t.y) !== TileType.Tree) return 'There is no tree here to tap.';
+      const data = g.world.getData(t.x, t.y);
+      const pine = TREE_DEFS[RESIN_TREE].name.toLowerCase();
+      if (treeSpecies(data) !== RESIN_TREE) return `Only a ${pine} gives resin.`;
+      if (!treeAge(data).alive) return `A dead ${pine} gives no resin.`;
+      if (!tappable(data)) return `The ${pine} is too small to tap. Let it grow.`;
+      if (g.tappedToday(t.x, t.y)) return `This ${pine} has given its resin today. It runs again at dawn.`;
+      return null;
+    },
+    perform: (t, g) => {
+      if (t.kind !== 'tile') return;
+      const data = g.world.getData(t.x, t.y);
+      if (g.world.getTile(t.x, t.y) !== TileType.Tree || !tappable(data) || g.tappedToday(t.x, t.y)) return;
+      g.markTapped(t.x, t.y);
+      const n = g.perk('tap_resin', 0);
+      const item = g.gather('tar', { count: n, ql: g.productQl('forestry', g.toolQl('carving_knife')) });
+      g.logMsg(`You cut the ${TREE_DEFS[RESIN_TREE].name.toLowerCase()}'s bark and collect ${n} ${itemDef('tar').name.toLowerCase()} from it. (QL ${item.ql.toFixed(1)})`, 'event');
+    },
+  },
+  /*
+   * A Forester's Clear Brush: every bush and reed within `clear_brush` tiles
+   * of the one chosen, cleared in one go. A bush leaves grass and reeds leave
+   * bare dirt, as `CLEARED_TO` has it; nothing comes of it but the clearing.
+   */
+  {
+    id: 'clear_brush',
+    label: 'Clear brush',
+    verb: 'clearing brush',
+    skill: 'forestry',
+    tool: 'sickle',
+    stamina: 0.08,
+    baseTime: 16,
+    applies: (t, g) => t.kind === 'tile' && g.perk('clear_brush', 0) > 0 && CLEARED_TO[tile(t, g)] !== undefined,
+    check: (t, g) => {
+      if (t.kind !== 'tile') return null;
+      if (!g.inventory.has('sickle')) return 'You need a sickle to clear brush.';
+      if (g.perk('clear_brush', 0) <= 0) return 'That wants a Forester who has learned to clear brush.';
+      if (CLEARED_TO[g.world.getTile(t.x, t.y)] === undefined) return 'There is no brush here to clear.';
+      return null;
+    },
+    perform: (t, g) => {
+      if (t.kind !== 'tile') return;
+      const w = g.world;
+      const spots = brushAround(w, t.x, t.y, g.perk('clear_brush', 0));
+      for (const [x, y] of spots) w.setTile(x, y, CLEARED_TO[w.getTile(x, y)] as TileType);
+      g.logMsg(`You clear the brush off ${spots.length} ${spots.length === 1 ? 'tile' : 'tiles'}.`, 'event');
     },
   },
   {

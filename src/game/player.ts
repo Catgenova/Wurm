@@ -181,6 +181,12 @@ export class Player {
    */
   roadPace = 1;
   /**
+   * And what a Forester's Woodsman's Stride is worth on ground that slows a
+   * walker, tile by tile (`walk:` and the tile's name), on foot: nothing, so
+   * the tile's own pace, for everybody else. Set by `Game.setPerks`.
+   */
+  tilePace: Partial<Record<number, number>> = {};
+  /**
    * How full whatever is under you is, 0..1, and 0 when you are on your own
    * feet. It decides how much the ground tells on you.
    */
@@ -201,7 +207,8 @@ export class Player {
 
   /** Path to a tile; returns false when unreachable. */
   walkTo(world: World, tx: number, ty: number, rule?: StepRule, levels = 1): boolean {
-    const path = findPath(world, this.tileX, this.tileY, this.level, tx, ty, pathOptions(world, rule, levels, this.wheelLoad));
+    const path = findPath(world, this.tileX, this.tileY, this.level, tx, ty,
+      pathOptions(world, rule, levels, this.wheelLoad, this.speedMul === 1 ? this.tilePace : undefined));
     if (!path) return false;
     this.path = path.length ? path : null;
     return true;
@@ -260,6 +267,8 @@ export class Player {
     let speed = BASE_SPEED * tileDef.speed * this.speedMul * groundRoll(tileDef.roll, this.wheelLoad);
     // Your own legs on a made road, if a trade has taught them one.
     if (this.speedMul === 1 && this.roadPace !== 1 && ROAD_TILES.includes(world.getTile(this.tileX, this.tileY))) speed *= this.roadPace;
+    // And through brush, if a trade has taught them that.
+    if (this.speedMul === 1) speed *= this.tilePace[world.getTile(this.tileX, this.tileY)] ?? 1;
     if (this.swimming) speed *= this.swimSpeed;
     if (this.stats.stamina < 0.1) speed *= 0.5;
     if (this.burden > 0) speed /= 1 + this.burden;
@@ -356,7 +365,13 @@ export type StepBlock = (x0: number, y0: number, x1: number, y1: number) => bool
 /** Decides a step between tiles: the storey you land on, or null when it is not allowed. */
 export type StepRule = (x0: number, y0: number, level: number, x1: number, y1: number) => number | null;
 
-export function pathOptions(world: World, rule?: StepRule, levels = 1, wheelLoad = 0) {
+/**
+ * The key a pace on this tile is kept under, as the Terraformer's `walk:road`
+ * is: `walk:` and the tile's name (a Forester's Woodsman's Stride).
+ */
+export const walkKey = (t: number): string => `walk:${TILE_DEFS[t as keyof typeof TILE_DEFS].name.toLowerCase()}`;
+
+export function pathOptions(world: World, rule?: StepRule, levels = 1, wheelLoad = 0, pace?: Partial<Record<number, number>>) {
   return {
     passable: (x: number, y: number) => world.isPassable(x, y),
     step: (x0: number, y0: number, level: number, x1: number, y1: number): number | null =>
@@ -367,6 +382,8 @@ export function pathOptions(world: World, rule?: StepRule, levels = 1, wheelLoad
       // A laden wagon is routed the way a carter would take it: round the bog
       // and along the stone, even when the stone is the longer way about.
       let c = 1 / (def.speed * groundRoll(def.roll, wheelLoad));
+      // Brush a walker goes through at full pace is no longer worth going round.
+      c /= pace?.[world.getTile(x, y)] ?? 1;
       if (world.centerHeight(x, y) < -SWIM_DEPTH) c *= 3.5;
       return c;
     },

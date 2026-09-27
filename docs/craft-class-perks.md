@@ -1,6 +1,6 @@
 # Craft class perks
 
-The perks chosen for the fourteen craft classes, class by class, on 26 September 2026, and the tiers they are offered in, settled on 27 September. They replace what a craft class gave before: its channels and its tree of nodes in `src/game/classes.ts`. The Terraformer, the Miner, the Mason, the Carpenter and the Smith are built, in `src/game/perks.ts` and on the island; the other nine are not yet.
+The perks chosen for the fourteen craft classes, class by class, on 26 September 2026, and the tiers they are offered in, settled on 27 September. They replace what a craft class gave before: its channels and its tree of nodes in `src/game/classes.ts`. The Terraformer, the Miner, the Mason, the Carpenter, the Smith and the Forester are built, in `src/game/perks.ts` and on the island; the other eight are not yet.
 
 ## Tiers
 
@@ -156,7 +156,7 @@ Main skill woodcutting; also forestry.
 6. **Rare Heartwood** — 1 tree in 100 you fell gives rare logs, rolling on to supreme and fantastic at crafting's odds.
 7. **Clean Drop** — a tree you fell leaves no stump.
 10. **Sprout Picker** — Pick sprout never fails (now difficulty 15) and gives 2.
-11. **Nursery** — sprouts you plant come up as young trees, skipping the sapling stage.
+11. **Nursery** — sprouts you plant come up mature, a stage on from young. (As chosen it said young, skipping the sapling stage; but a planted sprout already comes up young for everybody, and only a tree that seeds itself starts as a sapling, so it moved one stage on.)
 14. **Master Grafter** — Graft never fails (now difficulty 40) and takes 30% less time.
 16. **Fruitful** — Pick fruit gives 1 more fruit per pick.
 20. **Hedge Harvest** — Harvest bush gives 1 more per go.
