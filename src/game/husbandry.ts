@@ -257,8 +257,7 @@ export const TIER_LEVEL = { common: 0, rare: 15, supreme: 35, fantastic: 60 } as
 /** What a herd is worth at a glance, for the journal and the panel. */
 export const herdBest = (g: Game): string => {
   let best = 'common';
-  for (const c of g.creatures.list.values()) {
-    if (c.mode === 'wild') continue;
+  for (const c of g.creatures.yours()) {
     const t = bestTier(c.traits);
     if (['common', 'rare', 'supreme', 'fantastic'].indexOf(t) > ['common', 'rare', 'supreme', 'fantastic'].indexOf(best)) best = t;
   }

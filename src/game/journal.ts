@@ -78,7 +78,7 @@ const atSkill = (id: string, at: number, hint: (at: number) => string): Pick<Goa
   ({ hint: hint(at), met: skill(id, at) });
 
 /** Distinct species you have tamed and still keep. */
-const kept = (g: Game): number => new Set([...g.creatures.list.values()].filter((c) => c.mode !== 'wild').map((c) => c.species)).size;
+const kept = (g: Game): number => new Set(g.creatures.yours().map((c) => c.species)).size;
 
 export const JOURNAL: Chapter[] = [
   {

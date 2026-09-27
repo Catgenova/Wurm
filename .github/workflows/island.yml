@@ -268,6 +268,16 @@ jobs:
           npx esbuild supabase/test/wild.ts --bundle --platform=node --format=esm \
             --outfile=node_modules/.cache/wild.mjs --log-level=error
           node node_modules/.cache/wild.mjs
+      - name: The Wildermon window lists your own wildermon
+        run: |
+          # Reported as a new player seeing everybody's wildermon in their
+          # Wildermon window before taming anything. The island sends every
+          # tame one near you, marked yours or not, and the window listed all
+          # that were not wild; the journal's five species, the post list and
+          # the herd's best tier counted the same way.
+          npx esbuild supabase/test/yours.ts --bundle --platform=node --format=esm \
+            --outfile=node_modules/.cache/yours.mjs --log-level=error
+          node node_modules/.cache/yours.mjs
       - name: A rack takes eight crates and says which spots are full
         run: |
           # Reported as no way to add crates to a crate shelf. The rules knew

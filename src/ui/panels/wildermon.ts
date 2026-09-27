@@ -205,7 +205,7 @@ export class WildermonPanel {
   }
 
   render(): void {
-    const owned = [...this.game.creatures.list.values()].filter((c) => c.mode !== 'wild');
+    const owned = this.game.creatures.yours();
     const shown = owned.filter((c) => this.matches(c));
     if (!owned.length) {
       this.place([this.note('none', 'You have no tamed wildermon yet. Carry a berry for a Rabba or a spice for a Vola, then try Tame on a wild one.')]);

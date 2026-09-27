@@ -2598,6 +2598,15 @@ export class Creatures {
     return undefined;
   }
 
+  /**
+   * Every tamed wildermon that is yours. On an island everybody's come in the
+   * one list, each marked yours or not by the island (`mine`); by yourself
+   * every tame one is, as there is nobody else to have tamed it.
+   */
+  yours(): Creature[] {
+    return [...this.list.values()].filter((c) => c.mode !== 'wild' && c.mine !== false);
+  }
+
   /** The ones shut in creature crates. */
   stored(): Creature[] {
     return [...this.list.values()].filter((c) => c.mode === 'stored');

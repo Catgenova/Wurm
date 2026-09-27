@@ -90,9 +90,9 @@ const nearPost = (g: Game, p: PlacedPost): boolean => {
   return Math.hypot(cx - g.player.x, cy - g.player.y) <= 2.4;
 };
 
-/** Every tamed wildermon that could be set to a post right now. */
+/** Every tamed wildermon of yours that could be set to a post right now. */
 export const postCandidates = (g: Game): Creature[] =>
-  [...g.creatures.list.values()].filter((c) => c.mode !== 'wild' && c.hitchedTo === null && !c.ridden && c.post === null);
+  g.creatures.yours().filter((c) => c.hitchedTo === null && !c.ridden && c.post === null);
 
 export const POST_ACTIONS: ActionDef[] = [
   {
