@@ -16,7 +16,7 @@
  *   * restoring: Quick Restore's time, Sure Restore's failing less, Gentle
  *     Hands' no harm, Fine Restore's and Age Undone's quality, and on a bauble
  *     Lucky Polish's rarity, Second Look's better roll and Tier Up's better
- *     tier;
+ *     tier; and what a go of it teaches Restoration, come off or not;
  *   * Handyman's floor under improving;
  *   * the repair kit and the sealant, refused without their perks, made with
  *     them, and used by anybody;
@@ -29,6 +29,7 @@ import { execFileSync } from 'node:child_process';
 import { Game, goSeconds } from '../../src/game/game';
 import { ACTION_BY_ID, KIT_MEND, repairGo, type Target } from '../../src/game/actions';
 import { RESTORE_AGE, RESTORE_HARM, RESTORE_HARM_SPREAD } from '../../src/game/archaeology';
+import { TRY_LEARN } from '../../src/game/learn';
 import { MINOR_SKILLS } from '../../src/game/baubles';
 import { IMPROVE_FLOOR, improveCeiling } from '../../src/game/improve';
 import { groundDecayRate, markSays, partsMark, RARITIES, rollRarity, type Item } from '../../src/game/items';
@@ -336,6 +337,8 @@ begin
   v_t := '';
   foreach v_t in array array['', ${q(P('Fine Restore').id)}, ${q(P('Age Undone').id)}] loop
     perform pg_temp.hold(w, u, case when v_t = '' then '{}'::text[] else array[v_t] end);
+    -- At the restorer's skill, which every go of restoring before this one has raised.
+    ${skillAt('restoration', SKILL)};
     v_b := ${thing('tarnished_bauble', BAUBLE_QL, BAUBLE_DMG, "'minor'")};
     ${dice(PLAIN_ROLL)};
     perform restore_bauble(w, u, ${row('v_b')});
@@ -404,6 +407,7 @@ begin
     ${clearAll};
   end loop;
   perform pg_temp.hold(w, u, array[${q(P('Sure Restore').id)}, ${q(P('Fine Restore').id)}, ${q(P('Age Undone').id)}]::text[]);
+  ${skillAt('restoration', SKILL)};
   v_it := ${thing('fragment', BAUBLE_QL, BAUBLE_DMG, "'old pot 1/2'")};
   v_b := ${thing('fragment', BAUBLE_QL, BAUBLE_DMG, "'old pot 2/2'")};
   ${dice(SURE_ROLL)};
@@ -412,6 +416,30 @@ begin
   insert into said values ('RELIC', coalesce((select ql::text from item where id = ${newest('clay_pot')}), 'none'));
   ${clearAll};
   ${checks(true)};
+
+  /* ---- What a go of restoring teaches Restoration: a bauble and a relic, each come off and not. ---- */
+  perform pg_temp.hold(w, u, '{}');
+  v_t := '';
+  foreach v_c in array array[1, 0, 1, 0] loop
+    if v_c = 1 then ${checks(true)}; else ${checks(false)}; end if;
+    ${skillAt('restoration', SKILL)};
+    if length(v_t) - length(replace(v_t, '|', '')) < 2 then
+      v_b := ${thing('tarnished_bauble', BAUBLE_QL, BAUBLE_DMG, "'minor'")};
+      ${dice(PLAIN_ROLL)};
+      perform restore_bauble(w, u, ${row('v_b')});
+    else
+      v_it := ${thing('fragment', BAUBLE_QL, BAUBLE_DMG, "'old pot 1/2'")};
+      v_b := ${thing('fragment', BAUBLE_QL, BAUBLE_DMG, "'old pot 2/2'")};
+      ${dice(PLAIN_ROLL)};
+      perform perform_dig(w, u, 'restore_relic', ${itemT('v_it')});
+    end if;
+    ${nodice};
+    v_t := v_t || ((select value from skill where world_id = w and uid = u and id = 'restoration') - ${SKILL}) || '|';
+    ${clearAll};
+  end loop;
+  insert into said values ('LEARN', v_t);
+  ${checks(true)};
+  ${skillAt('restoration', SKILL)};
 
   /* ---- Handyman: the floor under improving, at a low skill and a high one. ---- */
   perform pg_temp.hold(w, u, '{}');
@@ -587,6 +615,12 @@ check('a relic that will not go together marks each piece, and not with Gentle H
   `${say('PIECESplain')} / ${say(`PIECES${P('Gentle Hands').id}`)}`);
 check('and a relic Sure Restore puts together comes out finer and with nothing off for its damage',
   near(Number(say('RELIC')), BAUBLE_QL * (0.72 + SKILL / 260) * fx('Fine Restore', 'ql:restore_relic'), 1e-4), say('RELIC'));
+const [baubleOn, baubleOff, relicOn, relicOff] = say('LEARN').split('|').map(Number);
+check(`a bauble restored teaches Restoration, and one whose tarnish will not lift ${TRY_LEARN} of that`,
+  // A skill is kept to a real's precision on the island, which at seventy is a few hundred-thousandths.
+  baubleOn > 0 && near(baubleOff / baubleOn, TRY_LEARN, 2e-3), say('LEARN'));
+check(`a relic put back together teaches Restoration, and one whose pieces will not sit ${TRY_LEARN} of that`,
+  relicOn > 0 && near(relicOff / relicOn, TRY_LEARN, 2e-3) && near(relicOn, baubleOn, 1e-4), say('LEARN'));
 
 /* ---- Handyman ------------------------------------------------------------------------------ */
 
@@ -693,6 +727,27 @@ check('its restored bauble comes out at the island\'s quality, plain, with Fine 
   near(restoredWith({}), Number(say('QLplain')), 1e-4) && near(restoredWith(P('Fine Restore').fx), Number(say(`QL${P('Fine Restore').id}`)), 1e-4)
     && near(restoredWith(P('Age Undone').fx), Number(say(`QL${P('Age Undone').id}`)), 1e-4),
   `${restoredWith({})} / ${restoredWith(P('Fine Restore').fx)} / ${restoredWith(P('Age Undone').fx)}`);
+// A go of restoring that does not come off is a missed go, which the browser's runner pays at `TRY_LEARN` of Restoration,
+// as the island's `try_gain` does; one that comes off is a whole go.
+const own = game as unknown as { swingMissed: boolean; sureCheck: () => boolean };
+const missedOn = (pass: boolean, what: 'bauble' | 'relic'): boolean => {
+  game.setPerks({});
+  own.swingMissed = false;
+  own.sureCheck = () => pass;
+  const first = what === 'bauble'
+    ? Object.assign(game.inventory.add('tarnished_bauble', { ql: BAUBLE_QL, extra: 'minor' }), { dmg: BAUBLE_DMG })
+    : Object.assign(game.inventory.add('fragment', { ql: BAUBLE_QL, extra: 'old pot 1/2' }), { dmg: BAUBLE_DMG });
+  if (what === 'relic') Object.assign(game.inventory.add('fragment', { ql: BAUBLE_QL, extra: 'old pot 2/2' }), { dmg: BAUBLE_DMG });
+  restoreDef.perform(itemTarget(first), game);
+  const was = own.swingMissed;
+  delete (own as { sureCheck?: unknown }).sureCheck;
+  own.swingMissed = false;
+  for (const it of [...game.inventory.items]) if (['tarnished_bauble', 'fragment', 'bauble_minor', 'clay_pot'].includes(it.id)) game.inventory.remove(it.uid, it.count);
+  return was;
+};
+check('its restoring pays Restoration as the island does: a whole go when it comes off, a missed one when it does not',
+  !missedOn(true, 'bauble') && missedOn(false, 'bauble') && !missedOn(true, 'relic') && missedOn(false, 'relic'),
+  `${missedOn(true, 'bauble')} ${missedOn(false, 'bauble')} ${missedOn(true, 'relic')} ${missedOn(false, 'relic')}`);
 game.setPerks(P('Tier Up').fx);
 const tarnished = game.inventory.add('tarnished_bauble', { ql: BAUBLE_QL, extra: 'minor' });
 tarnished.dmg = BAUBLE_DMG;

@@ -29,6 +29,7 @@ import { ARMOUR, SHIELDS, WEAPONS } from '../../game/gear';
 import { JEWEL_PIECES } from '../../game/gems';
 import { itemDef, RARITIES } from '../../game/items';
 import { weaponCarry } from '../../render/figure';
+import { TRY_LEARN } from '../../game/learn';
 import { CLIMB_LEARN_FROM, MAX_STEP } from '../../game/player';
 import type { UIWindow } from '../windows';
 
@@ -608,6 +609,13 @@ export const NEWS: News[] = [
         'On an island, what is in a bag left lying about rots at the share of the weather the bag keeps off, as it always has offline, where it had not rotted at all; and a thing set down is not charged for the time it spent in a pack.',
       ];
     },
+  },
+  {
+    n: 46,
+    day: '2026-09-27',
+    lines: () => [
+      `On an island, restoring a relic or a bauble raises Restoration: a whole go when it comes off and ${percent(TRY_LEARN)} of one when it does not, as offline. It had raised only Mind Logic, so Restoration stood where it started however much you restored.`,
+    ],
   },
 ];
 

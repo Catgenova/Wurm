@@ -156,6 +156,8 @@ function restoreBauble(g: Game, item: Item): void {
   const found = BAUBLE_TIER_BY_ID.get(item.extra as BaubleTier) ?? BAUBLE_TIER_BY_ID.get('minor');
   if (!found) return;
   if (!g.sureCheck('restore_relic', 'restoration', found.difficulty, 0, g.mindEase())) {
+    // A go that did not come off teaches Restoration a share of one, as the island's `restore_bauble` pays it.
+    g.missed();
     g.gainSkill('mind_logic', tryGain(false, RESTORE_GAIN));
     const gentle = g.perk('harm:restore_relic', 1) <= 0;
     g.damageItem(item, restoreHarm(g));
@@ -319,6 +321,8 @@ export const ARCHAEOLOGY_ACTIONS: ActionDef[] = [
       const pieces = piecesHeld(g, f.relic);
       if (pieces.length < f.relic.parts) return;
       if (!g.sureCheck('restore_relic', 'restoration', f.relic.difficulty, 0, g.mindEase())) {
+        // A share of a go's Restoration for one that did not come off, as the island's `perform_dig` pays it.
+        g.missed();
         g.gainSkill('mind_logic', tryGain(false, RESTORE_GAIN));
         const gentle = g.perk('harm:restore_relic', 1) <= 0;
         for (const p of pieces) g.damageItem(p, restoreHarm(g));
