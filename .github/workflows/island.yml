@@ -1538,6 +1538,16 @@ jobs:
             --outfile=node_modules/.cache/perks.mjs --log-level=error
           node node_modules/.cache/perks.mjs
 
+      - name: The Miner's perks, each where its rule is
+        run: |
+          # Each of the Miner's eighteen measured on the island with the dice
+          # taken out where they can be: the face and what it asks, Chip
+          # corner, the trowel, and Pan; and the browser reading the same
+          # numbers where it draws or asks them.
+          npx esbuild supabase/test/miner.ts --bundle --platform=node --format=esm \
+            --outfile=node_modules/.cache/miner.mjs --log-level=error
+          node node_modules/.cache/miner.mjs
+
       - name: The exact benefit, and where its number comes from
         run: |
           # Text the player reads says what changes and by how much, and where

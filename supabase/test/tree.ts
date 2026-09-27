@@ -107,33 +107,33 @@ begin
   -- not what any of it is about.
   delete from caller where uid = w.uid;
   delete from player_node where world_id = w.world_id and uid = w.uid;
-  insert into skill (world_id, uid, id, value) values (w.world_id, w.uid, 'mining', 100)
+  insert into skill (world_id, uid, id, value) values (w.world_id, w.uid, 'fishing', 100)
     on conflict (world_id, uid, id) do update set value = 100;
   perform set_config('request.jwt.claims', json_build_object('sub', w.uid)::text, false);
-  perform rpc_take_class(w.world_id, 'miner');
-  insert into said values ('BUDGET|' || class_points(w.world_id, w.uid, 'miner')
-    || '|' || class_spent(w.world_id, w.uid, 'miner'));
+  perform rpc_take_class(w.world_id, 'fisher');
+  insert into said values ('BUDGET|' || class_points(w.world_id, w.uid, 'fisher')
+    || '|' || class_spent(w.world_id, w.uid, 'fisher'));
 
   -- The four refusals, in the island's words.
-  insert into said values ('ORDER|' || coalesce(rpc_take_node(w.world_id, 'miner_1_3')->>'why', 'IT WENT THROUGH'));
-  insert into said values ('THEIRS|' || coalesce(rpc_take_node(w.world_id, 'mason_1_1')->>'why', 'IT WENT THROUGH'));
-  perform rpc_take_node(w.world_id, 'miner_1_1');
-  insert into said values ('TWICE|' || coalesce(rpc_take_node(w.world_id, 'miner_1_1')->>'why', 'IT WENT THROUGH'));
+  insert into said values ('ORDER|' || coalesce(rpc_take_node(w.world_id, 'fisher_1_3')->>'why', 'IT WENT THROUGH'));
+  insert into said values ('THEIRS|' || coalesce(rpc_take_node(w.world_id, 'blade_1_1')->>'why', 'IT WENT THROUGH'));
+  perform rpc_take_node(w.world_id, 'fisher_1_1');
+  insert into said values ('TWICE|' || coalesce(rpc_take_node(w.world_id, 'fisher_1_1')->>'why', 'IT WENT THROUGH'));
 
   -- A whole column, and what it comes to.
-  perform rpc_take_node(w.world_id, 'miner_1_2');
-  v := rpc_take_node(w.world_id, 'miner_1_3');
+  perform rpc_take_node(w.world_id, 'fisher_1_2');
+  v := rpc_take_node(w.world_id, 'fisher_1_3');
   insert into said values ('COLUMN|' || coalesce(v->>'took', 'nothing') || '|' || (v->>'left'));
   insert into said select 'FOLD|' || (class_mul->>'hands') from player
     where world_id = w.world_id and uid = w.uid;
-  insert into said values ('SCOPE|' || class_mul(w.world_id, w.uid, 'hands', 'mining')
+  insert into said values ('SCOPE|' || class_mul(w.world_id, w.uid, 'hands', 'fishing')
     || '|' || class_mul(w.world_id, w.uid, 'hands', 'masonry')
     || '|' || class_mul(w.world_id, w.uid, 'hands', null));
 
   -- Hands, at the arithmetic every one of its three sites hands to act_duration.
   insert into said values ('HANDS|' || act_duration(8, 100, 0, control_speed(w.world_id, w.uid))
     || '|' || act_duration(8, 100, 0, control_speed(w.world_id, w.uid)
-                * class_mul(w.world_id, w.uid, 'hands', 'mining')));
+                * class_mul(w.world_id, w.uid, 'hands', 'fishing')));
 
   /*
    * Learning, at the one site that reads it -- and the other trade measured
@@ -141,16 +141,16 @@ begin
    *
    * Both skills are read before and after, because the only thing this can
    * honestly claim is that the node moved one of them and left the other
-   * where it was. An earlier version asked masonry to equal mining's starting
+   * where it was. An earlier version asked masonry to equal fishing's starting
    * figure, which is true only of a body with no knack, no stone, no path and
    * an empty table -- and false the moment the suite hands over one that has
    * been used. Every measurement in this file is a ratio across one change on
    * one body for that reason: whatever else is true of the body cancels.
    */
-  v_a := skill_mult(w.world_id, w.uid, 'mining');
+  v_a := skill_mult(w.world_id, w.uid, 'fishing');
   v_c := skill_mult(w.world_id, w.uid, 'masonry');
-  perform rpc_take_node(w.world_id, 'miner_3_1');
-  v_b := skill_mult(w.world_id, w.uid, 'mining');
+  perform rpc_take_node(w.world_id, 'fisher_3_1');
+  v_b := skill_mult(w.world_id, w.uid, 'fishing');
   v_d := skill_mult(w.world_id, w.uid, 'masonry');
   insert into said values ('LEARN|' || v_a || '|' || v_b || '|' || v_c || '|' || v_d);
 
@@ -159,24 +159,24 @@ begin
     on conflict (world_id, uid, id) do update set value = 20;
   update player set stats = jsonb_set(coalesce(stats, '{}'::jsonb), '{stamina}', to_jsonb(1.0::double precision))
     where world_id = w.world_id and uid = w.uid;
-  perform spend_wind(w.world_id, w.uid, 'mine');
+  perform spend_wind(w.world_id, w.uid, 'fish');
   select 1 - (stats->>'stamina')::double precision into v_a from player
     where world_id = w.world_id and uid = w.uid;
-  perform rpc_take_node(w.world_id, 'miner_2_1');
+  perform rpc_take_node(w.world_id, 'fisher_2_1');
   update skill set value = 20 where world_id = w.world_id and uid = w.uid and id = 'body_stamina';
   update player set stats = jsonb_set(stats, '{stamina}', to_jsonb(1.0::double precision))
     where world_id = w.world_id and uid = w.uid;
-  perform spend_wind(w.world_id, w.uid, 'mine');
+  perform spend_wind(w.world_id, w.uid, 'fish');
   select 1 - (stats->>'stamina')::double precision into v_b from player
     where world_id = w.world_id and uid = w.uid;
   insert into said values ('WIND|' || coalesce(v_a::text, 'none') || '|' || coalesce(v_b::text, 'none'));
 
   -- And the twelfth point, which does not stretch to a third column.
-  perform rpc_take_node(w.world_id, 'miner_2_2');
-  perform rpc_take_node(w.world_id, 'miner_2_3');
-  perform rpc_take_node(w.world_id, 'miner_3_2');
-  insert into said values ('SPENT|' || class_spent(w.world_id, w.uid, 'miner')
-    || '|' || coalesce(rpc_take_node(w.world_id, 'miner_3_3')->>'why', 'IT WENT THROUGH'));
+  perform rpc_take_node(w.world_id, 'fisher_2_2');
+  perform rpc_take_node(w.world_id, 'fisher_2_3');
+  perform rpc_take_node(w.world_id, 'fisher_3_2');
+  insert into said values ('SPENT|' || class_spent(w.world_id, w.uid, 'fisher')
+    || '|' || coalesce(rpc_take_node(w.world_id, 'fisher_3_3')->>'why', 'IT WENT THROUGH'));
 
   -- 3. Putting the trade down puts the tree down, which is the only undo.
   insert into skill (world_id, uid, id, value) values (w.world_id, w.uid, 'smelting', 60)
@@ -276,23 +276,23 @@ check('every channel is read by something, so no column is quietly dead',
 check('a fresh trade is twelve points with none of them spent', said('BUDGET') === '12|0', said('BUDGET'));
 
 const mine = (taken: string[], id: string): string =>
-  nodeRefusal(nodeDef(id)!, 'miner', taken, 12) ?? 'open';
+  nodeRefusal(nodeDef(id)!, 'fisher', taken, 12) ?? 'open';
 check('the major wants the minor under it, in the same words on both sides',
-  said('ORDER') === mine([], 'miner_1_3') && said('ORDER') === 'Swing II comes first.', said('ORDER'));
+  said('ORDER') === mine([], 'fisher_1_3') && said('ORDER') === `${nodeDef('fisher_1_2')!.name} comes first.`, said('ORDER'));
 check('another trade’s node is not yours, ditto',
-  said('THEIRS') === mine([], 'mason_1_1'), said('THEIRS'));
+  said('THEIRS') === mine([], 'blade_1_1'), said('THEIRS'));
 check('one you already have, ditto',
-  said('TWICE') === mine(['miner_1_1'], 'miner_1_1'), said('TWICE'));
+  said('TWICE') === mine(['fisher_1_1'], 'fisher_1_1'), said('TWICE'));
 
-check('a column taken in order leaves seven of the twelve', said('COLUMN') === 'miner_1_3|7', said('COLUMN'));
+check('a column taken in order leaves seven of the twelve', said('COLUMN') === 'fisher_1_3|7', said('COLUMN'));
 check('and the island’s fold is the browser’s, to the last bit',
-  said('FOLD') === String(foldNodes(['miner_1_1', 'miner_1_2', 'miner_1_3']).hands),
-  `island ${said('FOLD')}, browser ${foldNodes(['miner_1_1', 'miner_1_2', 'miner_1_3']).hands}`);
+  said('FOLD') === String(foldNodes(['fisher_1_1', 'fisher_1_2', 'fisher_1_3']).hands),
+  `island ${said('FOLD')}, browser ${foldNodes(['fisher_1_1', 'fisher_1_2', 'fisher_1_3']).hands}`);
 
 const [onMine, onStone, onNeither] = said('SCOPE').split('|').map(Number);
 check('a node tells on its own trade’s skills and on nothing else',
   onMine < 1 && onStone === 1 && onNeither === 1,
-  `mining ${onMine}, masonry ${onStone}, no trade at all ${onNeither}`);
+  `fishing ${onMine}, masonry ${onStone}, no trade at all ${onNeither}`);
 
 const [handsPlain, handsTree] = said('HANDS').split('|').map(Number);
 check('hands: a whole column takes a sixth off the time a go takes',
@@ -301,7 +301,7 @@ check('hands: a whole column takes a sixth off the time a go takes',
 const [learnPlain, learnTree, stonePlain, stoneTree] = said('LEARN').split('|').map(Number);
 check('learning: one minor is three per cent more out of every go, and nothing on another trade',
   near(learnTree / learnPlain, 1.03) && stoneTree === stonePlain,
-  `mining ${learnPlain} → ${learnTree}, masonry ${stonePlain} → ${stoneTree}`);
+  `fishing ${learnPlain} → ${learnTree}, masonry ${stonePlain} → ${stoneTree}`);
 
 const [windPlain, windTree] = said('WIND').split('|').map(Number);
 check('wind: one minor is three per cent less out of you',
@@ -309,8 +309,8 @@ check('wind: one minor is three per cent less out of you',
 
 const [spent, broke] = said('SPENT').split('|');
 check('twelve spent, and the thirteenth point is refused in the same words',
-  spent === '12' && broke === nodeRefusal(nodeDef('miner_3_3')!, 'miner',
-    ['miner_1_1', 'miner_1_2', 'miner_1_3', 'miner_2_1', 'miner_2_2', 'miner_2_3', 'miner_3_1', 'miner_3_2'], 12),
+  spent === '12' && broke === nodeRefusal(nodeDef('fisher_3_3')!, 'fisher',
+    ['fisher_1_1', 'fisher_1_2', 'fisher_1_3', 'fisher_2_1', 'fisher_2_2', 'fisher_2_3', 'fisher_3_1', 'fisher_3_2'], 12),
   broke);
 
 check('putting the trade down puts the whole tree down with it',

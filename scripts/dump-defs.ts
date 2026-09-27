@@ -55,8 +55,9 @@ import { DYES } from '../src/game/dyestuffs';
 import { SLAB_VARIANTS } from '../src/world/tiles';
 import {
   DREDGE_DEPTH, MINE_DEPTH, WORMY, RICH_WORMS, FLATTEN_STEP, SPOIL_REACH, SLOPE_PER_SKILL, SLOPE_FLOOR,
-  TILE_CORNERS, DIG_TILE_TIME,
+  TILE_CORNERS, DIG_TILE_TIME, PAN_ORES,
 } from '../src/game/actions';
+import { FIND_BASE, FIND_CAP, FIND_PER_SKILL, FIND_PER_TOOL } from '../src/game/archaeology';
 import { MELT_HEAT, MELT_KEEP, MELT_SHARE, METAL_CONTENT } from '../src/game/melt';
 import { COIN_DIFFICULTY, COIN_METALS, COINS_PER_LUMP, DIE_WEAR } from '../src/game/metal';
 import { ORDER_LIFE } from '../src/game/orders';
@@ -479,6 +480,10 @@ out.push(`create table if not exists perk_fx_rule (
 );`);
 out.push(`create table if not exists perk_tier (
   tier int primary key, at int not null
+);`);
+/* What a Miner's Pan washes out of sand, each as likely. */
+out.push(`create table if not exists pan_ore (
+  item text primary key
 );`);
 /*
  * And the rites: one per class, and the only thing a class may ask the island
@@ -964,7 +969,7 @@ out.push(emptied(['melt_def', 'wall_fitting', 'recipe', 'recipe_input', 'recipe_
   'improvable_def', 'item_feeds', 'boon_skill', 'plantable', 'buryable', 'title_def',
   'knack_kin', 'category_decay', 'vehicle_def', 'boat_def', 'tack_def', 'cast_def', 'path_def',
   'path_step', 'class_def', 'class_skill', 'class_channel', 'class_node', 'class_perk',
-  'perk_fx_rule', 'perk_tier', 'rite_def',
+  'perk_fx_rule', 'perk_tier', 'pan_ore', 'rite_def',
   'school_def', 'school_stone', 'spell_def', 'bridge_def', 'bridge_bill', 'brew_def',
   'dyeable_item', 'dyeable_class']));
 
@@ -1222,6 +1227,8 @@ for (const [fn, v] of [
   ['flatten_step', FLATTEN_STEP], ['spoil_reach', SPOIL_REACH],
   ['slope_per_skill', SLOPE_PER_SKILL], ['slope_floor', SLOPE_FLOOR],
   ['corners_per_tile', TILE_CORNERS], ['dig_tile_time', DIG_TILE_TIME],
+  /* How likely a turn of the trowel is to find anything: a base, per skill, per trowel, and the cap. */
+  ['find_base', FIND_BASE], ['find_per_skill', FIND_PER_SKILL], ['find_per_tool', FIND_PER_TOOL], ['find_cap', FIND_CAP],
   /* What the fire gives back of a thing melted down, and the heat it takes. */
   ['melt_share', MELT_SHARE], ['melt_keep', MELT_KEEP], ['melt_heat', MELT_HEAT],
   /* Coins: how many a lump strikes, what a strike costs the die, and how hard a strike is. */
@@ -1568,6 +1575,7 @@ for (const [family, rule] of Object.entries(FX_RULE)) {
   out.push(`insert into perk_fx_rule values (${q(family)}, ${q(rule)});`);
 }
 PERK_TIER_AT.forEach((at, i) => out.push(`insert into perk_tier values (${q(i + 1)}, ${q(at)});`));
+for (const ore of PAN_ORES) out.push(`insert into pan_ore values (${q(ore)});`);
 for (const sc of SCHOOLS) {
   out.push(`insert into school_def values (${q(sc.id)}, ${q(sc.name)}, ${q(sc.skill)}, ${q(sc.note)});`);
   sc.stones.forEach((g, i) => out.push(`insert into school_stone values (${q(sc.id)}, ${q(g)}, ${q(i)});`));

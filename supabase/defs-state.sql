@@ -218,6 +218,9 @@ create table if not exists perk_fx_rule (
 create table if not exists perk_tier (
   tier int primary key, at int not null
 );
+create table if not exists pan_ore (
+  item text primary key
+);
 create table if not exists school_def (
   id text primary key, name text not null, skill text not null, note text not null
 );
@@ -1056,6 +1059,7 @@ insert into action_def (id, label, verb, skill, tool, corner, range, stamina, ba
 insert into action_def (id, label, verb, skill, tool, corner, range, stamina, base_time, difficulty, instant, repeatable) values ('mine', 'Mine', 'mining', 'mining', 'pickaxe', true, null, 0.06, 8, 12, false, false);
 insert into action_def (id, label, verb, skill, tool, corner, range, stamina, base_time, difficulty, instant, repeatable) values ('chip_corner', 'Chip corner', 'chipping at the face', 'mining', 'pickaxe', true, null, 0.07, 9, null, false, false);
 insert into action_def (id, label, verb, skill, tool, corner, range, stamina, base_time, difficulty, instant, repeatable) values ('prospect', 'Prospect', 'prospecting', 'prospecting', 'pickaxe', false, null, 0.03, 5, null, false, false);
+insert into action_def (id, label, verb, skill, tool, corner, range, stamina, base_time, difficulty, instant, repeatable) values ('pan', 'Pan', 'panning', 'prospecting', null, false, null, 0.04, 8, null, false, false);
 insert into action_def (id, label, verb, skill, tool, corner, range, stamina, base_time, difficulty, instant, repeatable) values ('cut_down', 'Cut down', 'cutting down', 'woodcutting', 'hatchet', false, null, 0.07, 8, 10, false, false);
 insert into action_def (id, label, verb, skill, tool, corner, range, stamina, base_time, difficulty, instant, repeatable) values ('dig_stump', 'Dig out the stump', 'digging out the stump', 'digging', 'shovel', false, null, 0.06, 8, 5, false, false);
 insert into action_def (id, label, verb, skill, tool, corner, range, stamina, base_time, difficulty, instant, repeatable) values ('pick_sprout', 'Pick sprout', 'picking a sprout', 'forestry', null, false, null, 0.02, 4, 15, false, false);
@@ -1564,6 +1568,7 @@ delete from class_node;
 delete from class_perk;
 delete from perk_fx_rule;
 delete from perk_tier;
+delete from pan_ore;
 delete from rite_def;
 delete from school_def;
 delete from school_stone;
@@ -3705,6 +3710,10 @@ create or replace function slope_per_skill() returns double precision language s
 create or replace function slope_floor() returns double precision language sql immutable as $fn$ select 40::double precision $fn$;
 create or replace function corners_per_tile() returns double precision language sql immutable as $fn$ select 4::double precision $fn$;
 create or replace function dig_tile_time() returns double precision language sql immutable as $fn$ select 16::double precision $fn$;
+create or replace function find_base() returns double precision language sql immutable as $fn$ select 0.14::double precision $fn$;
+create or replace function find_per_skill() returns double precision language sql immutable as $fn$ select 0.4::double precision $fn$;
+create or replace function find_per_tool() returns double precision language sql immutable as $fn$ select 0.1::double precision $fn$;
+create or replace function find_cap() returns double precision language sql immutable as $fn$ select 0.7::double precision $fn$;
 create or replace function melt_share() returns double precision language sql immutable as $fn$ select 0.5::double precision $fn$;
 create or replace function melt_keep() returns double precision language sql immutable as $fn$ select 0.7::double precision $fn$;
 create or replace function melt_heat() returns double precision language sql immutable as $fn$ select 0.5::double precision $fn$;
@@ -4215,7 +4224,7 @@ update tier_odds set level = 60 where tier = 'fantastic';
 insert into class_def values ('terraformer', 'craft', 'Terraformer', 'A perk to take at each of six tiers: the first with the trade, then at 60, 70, 80, 90 and 100 in digging.', 'digging', 'Each tier offers three perks and you take one of them: six in all, out of eighteen.');
 insert into class_skill values ('terraformer', 'digging');
 insert into class_skill values ('terraformer', 'paving');
-insert into class_def values ('miner', 'craft', 'Miner', 'Nodes apply to mining, prospecting and archaeology.', 'mining', 'Bought out: time per action −16%, stamina per action −16%, skill gained per action +18%.');
+insert into class_def values ('miner', 'craft', 'Miner', 'A perk to take at each of six tiers: the first with the trade, then at 60, 70, 80, 90 and 100 in mining.', 'mining', 'Each tier offers three perks and you take one of them: six in all, out of eighteen.');
 insert into class_skill values ('miner', 'mining');
 insert into class_skill values ('miner', 'prospecting');
 insert into class_skill values ('miner', 'archaeology');
@@ -4308,15 +4317,6 @@ insert into class_channel values ('tame', 'Quiet', 'Chance to tame', false);
 insert into class_channel values ('force', 'Force', 'Spell damage, hold and skin', false);
 insert into class_channel values ('reach', 'Reach', 'Spell range', false);
 insert into class_channel values ('thrift', 'Thrift', 'Stone wear per cast', true);
-insert into class_node values ('miner_1_1', 'miner', 1, 1, 'Swing I', 'Time per action −3%', 'hands', 1, null, 0.97);
-insert into class_node values ('miner_1_2', 'miner', 1, 2, 'Swing II', 'Time per action −4%', 'hands', 1, 'miner_1_1', 0.96);
-insert into class_node values ('miner_1_3', 'miner', 1, 3, 'Facewright', 'Time per action −10%', 'hands', 3, 'miner_1_2', 0.9);
-insert into class_node values ('miner_2_1', 'miner', 2, 1, 'Lungs I', 'Stamina per action −3%', 'wind', 1, null, 0.97);
-insert into class_node values ('miner_2_2', 'miner', 2, 2, 'Lungs II', 'Stamina per action −4%', 'wind', 1, 'miner_2_1', 0.96);
-insert into class_node values ('miner_2_3', 'miner', 2, 3, 'Deep Breath', 'Stamina per action −10%', 'wind', 3, 'miner_2_2', 0.9);
-insert into class_node values ('miner_3_1', 'miner', 3, 1, 'Ear for Rock I', 'Skill gained per action +3%', 'learn', 1, null, 1.03);
-insert into class_node values ('miner_3_2', 'miner', 3, 2, 'Ear for Rock II', 'Skill gained per action +4%', 'learn', 1, 'miner_3_1', 1.04);
-insert into class_node values ('miner_3_3', 'miner', 3, 3, 'Dowser', 'Skill gained per action +10%', 'learn', 3, 'miner_3_2', 1.1);
 insert into class_node values ('mason_1_1', 'mason', 1, 1, 'Chisel I', 'Time per action −3%', 'hands', 1, null, 0.97);
 insert into class_node values ('mason_1_2', 'mason', 1, 2, 'Chisel II', 'Time per action −4%', 'hands', 1, 'mason_1_1', 0.96);
 insert into class_node values ('mason_1_3', 'mason', 1, 3, 'Straight Cut', 'Time per action −10%', 'hands', 3, 'mason_1_2', 0.9);
@@ -4533,6 +4533,24 @@ insert into class_perk values ('terraformer_soil_porter', 'terraformer', 5, 32, 
 insert into class_perk values ('terraformer_strong_back', 'terraformer', 6, 33, 'Strong Back', 'You carry 40 kg more before the load slows you (now 120 kg, and 5 more for every level of body strength).', '{"carry":40}');
 insert into class_perk values ('terraformer_long_reach', 'terraformer', 6, 34, 'Long Reach', 'Drop dirt and Flatten take soil from carts and containers within 5 tiles (now 2.5), and what you dig goes into the nearest unlocked cart or wagon within 5 tiles that nobody else is pulling or driving (now into your pack).', '{"reach:soil":5}');
 insert into class_perk values ('terraformer_dig_out_the_tile', 'terraformer', 6, 44, 'Dig Out the Tile', 'A new job, Dig out the tile: all four corners of a tile come down by one in a single go of 16 s base (four digs take 24 s), and it gives four of the material.', '{"dig_tile":1}');
+insert into class_perk values ('miner_quick_pick', 'miner', 1, 1, 'Quick Pick', 'Mine takes 25% less time a go (8 s base).', '{"time:mine":0.75}');
+insert into class_perk values ('miner_rich_seam', 'miner', 1, 2, 'Rich Seam', '15% of goes of Mine bring up one more of what they bring up.', '{"more:mine":0.15}');
+insert into class_perk values ('miner_sure_swing', 'miner', 1, 3, 'Sure Swing', 'Mine fails half as often (now a check at difficulty 12, with the pickaxe''s QL).', '{"fail:mine":0.5}');
+insert into class_perk values ('miner_rare_ore', 'miner', 2, 6, 'Rare Ore', '1 in 100 goes of Mine bring what they bring up rare, rolling on to supreme and fantastic at the odds crafting has. Nothing mined is rare without it.', '{"rare:mine":0.01}');
+insert into class_perk values ('miner_ore_sense', 'miner', 2, 7, 'Ore Sense', 'Mine and Chip corner work every ore at 10 less mining than it wants: copper, iron and tin at any mining, zinc at 10, lead at 20, silver at 30, gold at 40, adamantine at 50, glimmersteel at 60, mithril at 70 and seryll at 80 (now copper at 1, iron at 5, tin at 10, zinc at 20, lead at 30, silver at 40, gold at 50, adamantine at 60, glimmersteel at 70, mithril at 80 and seryll at 90).', '{"ore:below":10}');
+insert into class_perk values ('miner_coal_hand', 'miner', 2, 8, 'Coal Hand', 'Mine on a coal seam brings up two coal a go (now one).', '{"count:coal":2}');
+insert into class_perk values ('miner_chipper', 'miner', 3, 9, 'Chipper', 'Chip corner takes the corner down in 1 in 2 goes (now 1 in 4).', '{"chip:chance":0.5}');
+insert into class_perk values ('miner_face_shaper', 'miner', 3, 11, 'Face Shaper', 'When Chip corner takes the corner down, it drops two steps (now one), but never past a level you have taken.', '{"chip:step":2}');
+insert into class_perk values ('miner_rock_slide', 'miner', 3, 13, 'Rock Slide', 'When the face drops of its own accord as you mine (1 in 30 goes), three more of what you are mining come down with it.', '{"slide:more":3}');
+insert into class_perk values ('miner_wet_work', 'miner', 4, 14, 'Wet Work', 'Mine and Chip corner work in water up to 20 deep (now 10).', '{"depth:mine":20}');
+insert into class_perk values ('miner_gem_eye', 'miner', 4, 15, 'Gem Eye', 'Mine turns up a gem in 1 in 150 goes (now 1 in 400).', '{"gem:mine":0.006666666666666667}');
+insert into class_perk values ('miner_treasure_in_the_rock', 'miner', 4, 17, 'Treasure in the Rock', 'Mine turns up a treasure map in 1 in 200 goes (now 1 in 1000).', '{"map:mine":0.005}');
+insert into class_perk values ('miner_far_reader', 'miner', 5, 19, 'Far Reader', 'Prospect reads three tiles further (now three, and one more for every 10 prospecting).', '{"further:prospect":3}');
+insert into class_perk values ('miner_keen_trowel', 'miner', 5, 25, 'Keen Trowel', 'Investigate finds something 15 percentage points more often, up to 85% (now 14%, plus 40% of your archaeology and 10% of the trowel''s QL, at most 70%).', '{"find:investigate":0.15,"cap:investigate":0.85}');
+insert into class_perk values ('miner_pieces_that_fit', 'miner', 5, 27, 'Pieces that Fit', 'While you hold pieces of a relic that is not yet whole, half of the relic pieces Investigate turns up are a piece you are missing of one of those.', '{"fit:relic":0.5}');
+insert into class_perk values ('miner_bauble_hunter', 'miner', 6, 28, 'Bauble Hunter', '40% of what Investigate finds is a tarnished bauble (now 30%).', '{"share:bauble":0.4}');
+insert into class_perk values ('miner_ore_cart', 'miner', 6, 35, 'Ore Cart', 'What Mine brings up goes into the nearest unlocked cart or wagon that nobody else is pulling or driving, or container you built or that stands on your settlement, within 5 tiles (now into your pack).', '{"into:mine":5}');
+insert into class_perk values ('miner_pan', 'miner', 6, 50, 'Pan', 'A new job, Pan, on sand with water at one of its corners: 1 in 8 goes give copper ore, tin ore, silver ore or gold ore, each as likely, at a QL set by your prospecting.', '{"pan":0.125}');
 insert into perk_fx_rule values ('time', 'mul');
 insert into perk_fx_rule values ('ql', 'mul');
 insert into perk_fx_rule values ('weight', 'mul');
@@ -4547,6 +4565,10 @@ insert into perk_tier values (3, 70);
 insert into perk_tier values (4, 80);
 insert into perk_tier values (5, 90);
 insert into perk_tier values (6, 100);
+insert into pan_ore values ('copper_ore');
+insert into pan_ore values ('tin_ore');
+insert into pan_ore values ('silver_ore');
+insert into pan_ore values ('gold_ore');
 insert into school_def values ('kindling', 'Kindling', 'kindling', 'Heat, out of the warm stones. What it touches burns, and goes on burning.');
 insert into school_stone values ('kindling', 'garnet', 0);
 insert into school_stone values ('kindling', 'ruby', 1);

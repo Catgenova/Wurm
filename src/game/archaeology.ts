@@ -3,7 +3,7 @@ import { TileType } from '../world/tiles';
 import type { ActionDef } from './actions';
 import type { Game } from './game';
 import { itemName, RARITY_WORD, rollRarity, type Item } from './items';
-import { BAUBLE_TIER_BY_ID, findKind, REGRET, rollBauble, rollTier, TARNISHED, type BaubleTier } from './baubles';
+import { BAUBLE_SHARE, BAUBLE_TIER_BY_ID, findKind, REGRET, rollBauble, rollTier, TARNISHED, type BaubleTier } from './baubles';
 
 /** What one go at putting a relic back together teaches. */
 export const RESTORE_GAIN = 0.4;
@@ -90,8 +90,18 @@ export function partsMissing(g: Game, relic: RelicDef): number[] {
   return out;
 }
 
-/** How likely a turn of the trowel is to find anything at all. */
-export const findChance = (skill: number, toolQl: number): number => Math.min(0.7, 0.14 + (skill / 100) * 0.4 + (toolQl / 100) * 0.1);
+/**
+ * How likely a turn of the trowel is to find anything at all: a base, a share
+ * of your archaeology and a share of the trowel's QL, up to a cap. A Miner's
+ * Keen Trowel adds to it (`find:investigate`) and raises the cap
+ * (`cap:investigate`).
+ */
+export const FIND_BASE = 0.14;
+export const FIND_PER_SKILL = 0.4;
+export const FIND_PER_TOOL = 0.1;
+export const FIND_CAP = 0.7;
+export const findChance = (skill: number, toolQl: number, more = 0, cap = FIND_CAP): number =>
+  Math.min(cap, FIND_BASE + (skill / 100) * FIND_PER_SKILL + (toolQl / 100) * FIND_PER_TOOL + more);
 
 /** The relics a given archaeologist would recognise if they turned one up. */
 export const relicsWithin = (skill: number): RelicDef[] => RELICS.filter((r) => r.difficulty <= skill + 14);
@@ -147,7 +157,7 @@ export const ARCHAEOLOGY_ACTIONS: ActionDef[] = [
       g.markForaged(t.x, t.y, 'dig');
       const skill = g.skills.get('archaeology');
       const toolQl = g.toolQl('trowel');
-      if (g.rand() > findChance(skill, toolQl)) {
+      if (g.rand() > findChance(skill, toolQl, g.perk('find:investigate', 0), g.perk('cap:investigate', FIND_CAP))) {
         g.missed();
         g.logMsg('You go through the soil and turn up nothing but roots and small stones.', 'event');
         return;
@@ -155,7 +165,7 @@ export const ARCHAEOLOGY_ACTIONS: ActionDef[] = [
       // A share of whatever comes up is a bauble, whatever the archaeologist
       // knows: now and again a Bauble of Regret, whole; otherwise whole but
       // black with age, and good for nothing until restored.
-      const kind = findKind(g.rand());
+      const kind = findKind(g.rand(), g.perk('share:bauble', BAUBLE_SHARE));
       if (kind === 'regret') {
         const found = g.gather(REGRET, { ql: Math.max(1, g.productQl('archaeology', toolQl) * (0.55 + g.rand() * 0.35)) });
         g.events.emit('inventory');
@@ -171,7 +181,14 @@ export const ARCHAEOLOGY_ACTIONS: ActionDef[] = [
         return;
       }
       const within = relicsWithin(skill);
-      if (!within.length) {
+      // A piece of a relic you already hold part of, now and again, for a Miner's
+      // Pieces that Fit. Nothing is rolled for it without the perk, so the dice
+      // everybody else throws fall as they always have.
+      const fitShare = g.perk('fit:relic', 0);
+      const unfinished = fitShare > 0 ? RELICS.filter((r) => piecesHeld(g, r).length > 0 && partsMissing(g, r).length > 0) : [];
+      const fit = unfinished.length > 0 && g.rand() < fitShare
+        ? unfinished[Math.floor(g.rand() * unfinished.length)] : undefined;
+      if (!fit && !within.length) {
         g.missed();
         g.logMsg('You turn up a scrap of something worked, but you cannot tell what it was and it crumbles.', 'event');
         return;
@@ -179,8 +196,8 @@ export const ARCHAEOLOGY_ACTIONS: ActionDef[] = [
       // The commonplace comes up far more often than the rare, as it did when it was lost.
       const weights = within.map((r) => 1 / (1 + r.difficulty / 12));
       let roll = g.rand() * weights.reduce((a, b) => a + b, 0);
-      let relic = within[0];
-      for (let i = 0; i < within.length; i++) {
+      let relic = fit ?? within[0];
+      for (let i = 0; !fit && i < within.length; i++) {
         roll -= weights[i];
         if (roll <= 0) {
           relic = within[i];

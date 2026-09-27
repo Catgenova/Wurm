@@ -386,6 +386,17 @@ export const NEWS: News[] = [
       ];
     },
   },
+  {
+    n: 29,
+    day: '2026-09-27',
+    lines: () => {
+      const main = (CLASSES.find((c) => c.id === 'miner')?.main ?? '').replace(/_/g, ' ');
+      return [
+        `The Miner has perks instead of a tree too: ${numberWord(PERK_TIER_AT.length)} tiers of ${numberWord(PERKS_PER_TIER)}, the first with the trade and the others at ${listed(PERK_TIER_AT.slice(1).map(String))} in ${main}. Among them a new job, Pan, on sand with water at a corner.`,
+        'The nodes a Miner had bought went with the tree.',
+      ];
+    },
+  },
 ];
 
 /** The highest entry this browser has shown. */

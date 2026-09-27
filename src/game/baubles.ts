@@ -64,9 +64,13 @@ export const REGRET = 'bauble_regret';
 // What breaking one saves, for its description: the silver a change otherwise costs.
 describeWith({ regret: { saves: CLASS_CHANGE_COST } });
 
-/** Which of these a find is, off one roll: a Bauble of Regret, a tarnished bauble, or a piece of a relic. */
-export const findKind = (roll: number): 'regret' | 'bauble' | 'relic' =>
-  roll < REGRET_SHARE ? 'regret' : roll < REGRET_SHARE + BAUBLE_SHARE ? 'bauble' : 'relic';
+/**
+ * Which of these a find is, off one roll: a Bauble of Regret, a tarnished
+ * bauble, or a piece of a relic. A Miner's Bauble Hunter makes more of them
+ * baubles (`share:bauble`), out of the relics' share.
+ */
+export const findKind = (roll: number, baubles = BAUBLE_SHARE): 'regret' | 'bauble' | 'relic' =>
+  roll < REGRET_SHARE ? 'regret' : roll < REGRET_SHARE + baubles ? 'bauble' : 'relic';
 
 /** What the island says when a trade cannot be undone: `rpc_regret_class`. */
 export const REGRET_SAID = {

@@ -42,12 +42,18 @@
  * benefit check reads these functions as it reads any other note.
  */
 import { CLASSES, PERK_CLASSES, PERK_TIER_AT, PERKS_PER_TIER } from './classes';
-import { ACTION_BY_ID, DIG_TILE_TIME, DREDGE_DEPTH, FLATTEN_STEP, MINE_DEPTH, SLOPE_FLOOR, SLOPE_PER_SKILL, SPOIL_REACH, TILE_CORNERS } from './actions';
+import {
+  ACTION_BY_ID, CHIP_CHANCE, DIG_TILE_TIME, DREDGE_DEPTH, FLATTEN_STEP, MINE_COLLAPSE, MINE_DEPTH, PAN_ORES, PROSPECT_REACH,
+  PROSPECT_STEP, SLOPE_FLOOR, SLOPE_PER_SKILL, SPOIL_REACH, TILE_CORNERS,
+} from './actions';
+import { FIND_BASE, FIND_CAP, FIND_PER_SKILL, FIND_PER_TOOL } from './archaeology';
+import { BAUBLE_SHARE } from './baubles';
+import { GEM_ODDS } from './gems';
 import { CARRY_BASE, CARRY_PER_STRENGTH } from './game';
 import { ITEM_DEFS } from './items';
 import { MAP_ODDS } from './treasure';
-import { ROAD_TILES, TILE_DEFS } from '../world/tiles';
-import { listed, numberWord, percent } from './words';
+import { ROAD_TILES, ROCK_VARIANTS, TILE_DEFS } from '../world/tiles';
+import { listed, numberWord, percent, share } from './words';
 
 /** What the perks somebody holds come to, key by key. */
 export type Fx = Record<string, number>;
@@ -109,6 +115,12 @@ const secs = (s: number): string => `${Number(s.toFixed(1))} s`;
 const base = (id: string): number => ACTION_BY_ID.get(id)?.baseTime ?? 0;
 const diff = (id: string): number => ACTION_BY_ID.get(id)?.difficulty ?? 0;
 const kg = (id: string): number => ITEM_DEFS[id]?.weight ?? 0;
+/** "15 percentage points", from 0.15 added to a chance. */
+const points = (x: number): string => `${Math.round(x * 100)} percentage points`;
+/** "a, b or c". */
+const either = (xs: readonly string[]): string =>
+  xs.length > 1 ? `${xs.slice(0, -1).join(', ')} or ${xs[xs.length - 1]}` : (xs[0] ?? '');
+const itemName = (id: string): string => (ITEM_DEFS[id]?.name ?? id).toLowerCase();
 
 /*
  * ---------------------------------------------------------------------------
@@ -218,9 +230,129 @@ const TERRAFORMER: Seed[] = [
   },
 ];
 
+/*
+ * ---------------------------------------------------------------------------
+ * The Miner: the face, the seam, and what else is in the ground.
+ * ---------------------------------------------------------------------------
+ */
+/** The veins an ore comes out of, from the least mining they want to the most. */
+const ORES = ROCK_VARIANTS.filter((r) => r.yields.endsWith('_ore'))
+  .map((r) => ({ yields: r.yields, level: r.level ?? 0 })).sort((a, b) => a.level - b.level);
+const oreName = (yields: string): string => itemName(yields).replace(/ ore$/, '');
+/** Each ore with the mining it would want of somebody `below` short of it: "gold at 40". */
+const oresAt = (below: number): string => {
+  const any = ORES.filter((o) => o.level - below <= 0).map((o) => oreName(o.yields));
+  const rest = ORES.filter((o) => o.level - below > 0).map((o) => `${oreName(o.yields)} at ${o.level - below}`);
+  return listed([...(any.length ? [`${listed(any)} at any mining`] : []), ...rest]);
+};
+
+const MINER: Seed[] = [
+  {
+    num: 1, name: 'Quick Pick',
+    fx: { 'time:mine': 0.75 },
+    note: (fx) => `Mine takes ${less(fx['time:mine'])} less time a go (${secs(base('mine'))} base).`,
+  },
+  {
+    num: 2, name: 'Rich Seam',
+    fx: { 'more:mine': 0.15 },
+    note: (fx) => `${percent(fx['more:mine'])} of goes of Mine bring up one more of what they bring up.`,
+  },
+  {
+    num: 3, name: 'Sure Swing',
+    fx: { 'fail:mine': 0.5 },
+    note: (fx) => `Mine fails ${share(fx['fail:mine'])} as often (now a check at difficulty ${diff('mine')}, with the pickaxe's QL).`,
+  },
+  {
+    num: 6, name: 'Rare Ore',
+    fx: { 'rare:mine': 0.01 },
+    note: (fx) => `${oneIn(fx['rare:mine'])} goes of Mine bring what they bring up rare, `
+      + 'rolling on to supreme and fantastic at the odds crafting has. Nothing mined is rare without it.',
+  },
+  {
+    num: 7, name: 'Ore Sense',
+    fx: { 'ore:below': 10 },
+    note: (fx) => `Mine and Chip corner work every ore at ${fx['ore:below']} less mining than it wants: ${oresAt(fx['ore:below'])} `
+      + `(now ${oresAt(0)}).`,
+  },
+  {
+    num: 8, name: 'Coal Hand',
+    fx: { 'count:coal': 2 },
+    note: (fx) => `Mine on a coal seam brings up ${numberWord(fx['count:coal'])} coal a go (now one).`,
+  },
+  {
+    num: 9, name: 'Chipper',
+    fx: { 'chip:chance': 0.5 },
+    note: (fx) => `Chip corner takes the corner down in ${oneIn(fx['chip:chance'])} goes (now ${oneIn(CHIP_CHANCE)}).`,
+  },
+  {
+    num: 11, name: 'Face Shaper',
+    fx: { 'chip:step': 2 },
+    note: (fx) => `When Chip corner takes the corner down, it drops ${numberWord(fx['chip:step'])} steps (now one), `
+      + 'but never past a level you have taken.',
+  },
+  {
+    num: 13, name: 'Rock Slide',
+    fx: { 'slide:more': 3 },
+    note: (fx) => `When the face drops of its own accord as you mine (${oneIn(MINE_COLLAPSE)} goes), `
+      + `${numberWord(fx['slide:more'])} more of what you are mining come down with it.`,
+  },
+  {
+    num: 14, name: 'Wet Work',
+    fx: { 'depth:mine': 20 },
+    note: (fx) => `Mine and Chip corner work in water up to ${fx['depth:mine']} deep (now ${MINE_DEPTH}).`,
+  },
+  {
+    num: 15, name: 'Gem Eye',
+    fx: { 'gem:mine': 1 / 150 },
+    note: (fx) => `Mine turns up a gem in ${oneIn(fx['gem:mine'])} goes (now ${oneIn(GEM_ODDS)}).`,
+  },
+  {
+    num: 17, name: 'Treasure in the Rock',
+    fx: { 'map:mine': 1 / 200 },
+    note: (fx) => `Mine turns up a treasure map in ${oneIn(fx['map:mine'])} goes (now ${oneIn(MAP_ODDS)}).`,
+  },
+  {
+    num: 19, name: 'Far Reader',
+    fx: { 'further:prospect': 3 },
+    note: (fx) => `Prospect reads ${numberWord(fx['further:prospect'])} tiles further `
+      + `(now ${numberWord(PROSPECT_REACH)}, and one more for every ${PROSPECT_STEP} prospecting).`,
+  },
+  {
+    num: 25, name: 'Keen Trowel',
+    fx: { 'find:investigate': 0.15, 'cap:investigate': 0.85 },
+    note: (fx) => `Investigate finds something ${points(fx['find:investigate'])} more often, up to ${percent(fx['cap:investigate'])} `
+      + `(now ${percent(FIND_BASE)}, plus ${percent(FIND_PER_SKILL)} of your archaeology and ${percent(FIND_PER_TOOL)} `
+      + `of the trowel's QL, at most ${percent(FIND_CAP)}).`,
+  },
+  {
+    num: 27, name: 'Pieces that Fit',
+    fx: { 'fit:relic': 0.5 },
+    note: (fx) => `While you hold pieces of a relic that is not yet whole, ${share(fx['fit:relic'])} of the relic pieces `
+      + 'Investigate turns up are a piece you are missing of one of those.',
+  },
+  {
+    num: 28, name: 'Bauble Hunter',
+    fx: { 'share:bauble': 0.4 },
+    note: (fx) => `${percent(fx['share:bauble'])} of what Investigate finds is a tarnished bauble (now ${percent(BAUBLE_SHARE)}).`,
+  },
+  {
+    num: 35, name: 'Ore Cart',
+    fx: { 'into:mine': 5 },
+    note: (fx) => `What Mine brings up goes into the nearest unlocked cart or wagon that nobody else is pulling or driving, `
+      + `or container you built or that stands on your settlement, within ${fx['into:mine']} tiles (now into your pack).`,
+  },
+  {
+    num: 50, name: 'Pan',
+    fx: { pan: 1 / 8 },
+    note: (fx) => `A new job, Pan, on sand with water at one of its corners: ${oneIn(fx.pan)} goes give `
+      + `${either(PAN_ORES.map(itemName))}, each as likely, at a QL set by your prospecting.`,
+  },
+];
+
 /** Every trade's perks, in the order they were picked. */
 const SEEDS: Record<string, Seed[]> = {
   terraformer: TERRAFORMER,
+  miner: MINER,
 };
 
 const slug = (name: string): string => name.toLowerCase().replace(/[’']/g, '').replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '');

@@ -482,6 +482,23 @@ export const CHIP_CHANCE = 0.25;
 export const PROSPECT_REACH = 3;
 export const PROSPECT_STEP = 10;
 export const prospectRadius = (skill: number): number => PROSPECT_REACH + Math.floor(skill / PROSPECT_STEP);
+/** How far this body reads the ground: a Miner's Far Reader reads further (`further:prospect`). */
+export const prospectReach = (g: Game): number => prospectRadius(g.skills.get('prospecting')) + g.perk('further:prospect', 0);
+
+/** How deep a pick works through water, for this body: a Miner's Wet Work works deeper (`depth:mine`). */
+export const mineDepth = (g: Game): number => g.perk('depth:mine', MINE_DEPTH);
+/** The mining an ore wants of this body before it can be worked: a Miner's Ore Sense wants less (`ore:below`). */
+export const oreNeeds = (g: Game, level: number): number => Math.max(0, level - g.perk('ore:below', 0));
+
+/**
+ * A Miner's Pan: sand with water at a corner, washed in a pan. What comes out
+ * of it when anything does, each as likely, and how long a go takes.
+ */
+export const PAN_ORES = ['copper_ore', 'tin_ore', 'silver_ore', 'gold_ore'];
+export const PAN_TIME = 8;
+/** Whether a tile has water at one of its corners, which panning wants. */
+export const besideWater = (g: Game, x: number, y: number): boolean =>
+  tileCorners(x, y).some(([cx, cy]) => g.world.getHeight(cx, cy) < 0);
 
 /**
  * The steepest slope a spade or a trowel may leave: this many times the skill,
@@ -1058,9 +1075,9 @@ export const ACTIONS: ActionDef[] = [
     check: (t, g) => {
       if (t.kind !== 'tile') return null;
       if (!g.inventory.has('pickaxe')) return 'You need a pickaxe to mine.';
-      if (g.world.getHeight(t.cx, t.cy) < -MINE_DEPTH) return 'The water is too deep here to work in.';
+      if (g.world.getHeight(t.cx, t.cy) < -mineDepth(g)) return 'The water is too deep here to work in.';
       const ore = oreAt(g.world, t.x, t.y);
-      if (ore && g.skills.get('mining') < ore.level) return `${ore.name} needs mining ${ore.level} to work. Yours is ${g.skills.get('mining').toFixed(1)}.`;
+      if (ore && g.skills.get('mining') < oreNeeds(g, ore.level)) return `${ore.name} needs mining ${oreNeeds(g, ore.level)} to work. Yours is ${g.skills.get('mining').toFixed(1)}.`;
       return null;
     },
     perform: (t, g) => {
@@ -1111,9 +1128,9 @@ export const ACTIONS: ActionDef[] = [
       if (!g.inventory.has('pickaxe')) return 'You need a pickaxe to cut rock.';
       const under = cornerUnderBuilding(g, t.cx, t.cy);
       if (under) return under;
-      if (g.world.getHeight(t.cx, t.cy) < -MINE_DEPTH) return 'The water is too deep here to work in.';
+      if (g.world.getHeight(t.cx, t.cy) < -mineDepth(g)) return 'The water is too deep here to work in.';
       const ore = oreAt(g.world, t.x, t.y);
-      if (ore && g.skills.get('mining') < ore.level) return `${ore.name} needs mining ${ore.level} to work. Yours is ${g.skills.get('mining').toFixed(1)}.`;
+      if (ore && g.skills.get('mining') < oreNeeds(g, ore.level)) return `${ore.name} needs mining ${oreNeeds(g, ore.level)} to work. Yours is ${g.skills.get('mining').toFixed(1)}.`;
       return levelStop(g, t.cx, t.cy, -1);
     },
     perform: (t, g) => {
@@ -1148,7 +1165,7 @@ export const ACTIONS: ActionDef[] = [
     perform: (t, g) => {
       if (t.kind !== 'tile') return;
       const w = g.world;
-      const radius = prospectRadius(g.skills.get('prospecting'));
+      const radius = prospectReach(g);
       const found: string[] = [];
       const tiles: number[] = [];
       for (let y = t.y - radius; y <= t.y + radius; y++) {
@@ -1184,6 +1201,40 @@ export const ACTIONS: ActionDef[] = [
       for (const n of found) tally.set(n, (tally.get(n) ?? 0) + 1);
       const parts = [...tally].map(([n, c]) => (c > 1 ? `${c} tiles of ${n}` : `a tile of ${n}`));
       g.logMsg(`Within ${radius} tiles you read ${parts.join(' and ')}, buried or bare. They are marked for a while.`, 'event');
+    },
+  },
+  /*
+   * A Miner's Pan: sand washed at the water's edge, and now and then something
+   * heavy left in the bottom of the pan. Offered only to somebody holding the
+   * perk (`pan`, which is also the share of goes that find anything); the
+   * island asks the same of it in `act_refusal_rules` and does it in
+   * `perform_pan`.
+   */
+  {
+    id: 'pan',
+    label: 'Pan',
+    verb: 'panning',
+    skill: 'prospecting',
+    stamina: 0.04,
+    baseTime: PAN_TIME,
+    applies: (t, g) => t.kind === 'tile' && g.perk('pan', 0) > 0 && tile(t, g) === TileType.Sand && besideWater(g, t.x, t.y),
+    check: (t, g) => {
+      if (t.kind !== 'tile') return null;
+      if (g.perk('pan', 0) <= 0) return 'That wants a Miner who has learned to pan.';
+      if (tile(t, g) !== TileType.Sand) return 'Panning is done on sand.';
+      if (!besideWater(g, t.x, t.y)) return 'There is no water at this sand to wash it in.';
+      return null;
+    },
+    perform: (t, g) => {
+      if (t.kind !== 'tile') return;
+      if (g.rand() >= g.perk('pan', 0)) {
+        g.missed();
+        g.logMsg('You swirl the sand and water round the pan and find nothing in the bottom of it.', 'event');
+        return;
+      }
+      const ore = PAN_ORES[Math.floor(g.rand() * PAN_ORES.length)];
+      const item = g.gather(ore, { ql: g.productQl('prospecting', 0) });
+      g.logMsg(`Something heavy settles in the bottom of the pan: ${itemDef(ore).name.toLowerCase()}. (QL ${item.ql.toFixed(1)})`, 'event');
     },
   },
   {

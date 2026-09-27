@@ -477,12 +477,15 @@ check('nobody keeps a node of the Terraformer\'s old tree', say('OLDNODES') === 
  * quality, a rarity, a map, a failure or a thing kept; a thing for a weight;
  * a skill for a slope. A typo there is a perk that reads nothing.
  */
-const JOBS = new Set(['time', 'ql', 'rare', 'map', 'fail', 'keep']);
-const OTHERS = new Set(['depth:dig', 'depth:dredge', 'flatten:step', 'stump:log', 'walk:road', 'reach:soil', 'carry', 'dig_tile']);
+const JOBS = new Set(['time', 'ql', 'rare', 'map', 'fail', 'keep', 'more', 'gem', 'find', 'cap', 'into']);
+const OTHERS = new Set([
+  'depth:dig', 'depth:dredge', 'flatten:step', 'stump:log', 'walk:road', 'reach:soil', 'carry', 'dig_tile',
+  'ore:below', 'chip:chance', 'chip:step', 'slide:more', 'depth:mine', 'further:prospect', 'fit:relic', 'share:bauble', 'pan',
+]);
 const unnamed = PERKS.flatMap((p) => Object.keys(p.fx).filter((key) => {
   const [fam, rest] = key.split(':');
   if (JOBS.has(fam)) return !ACTION_BY_ID.has(rest);
-  if (fam === 'weight') return !ITEM_DEFS[rest];
+  if (fam === 'weight' || fam === 'count') return !ITEM_DEFS[rest];
   if (fam === 'slope') return !['digging', 'masonry'].includes(rest);
   return !OTHERS.has(key);
 }).map((key) => `${p.id} ${key}`));
