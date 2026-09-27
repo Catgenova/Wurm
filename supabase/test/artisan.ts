@@ -174,6 +174,11 @@ begin
 end $f$;
 create or replace function product_ql(p_skill double precision, p_tool_ql double precision default 0)
   returns double precision language sql as 'select ${HANDS}::double precision';
+-- Nothing made here comes out rare. A rare thing wears less than a plain one, and one
+-- thing in a hundred made would be rare: a book bound supreme took 0.6 of a go's wear
+-- on top of its Sturdy Binding, and the go measured a perk it was not measuring.
+create or replace function perk_rare(p_chance double precision) returns text language sql as 'select null::text';
+create or replace function rarity_roll() returns text language sql as 'select null::text';
 
 do $$
 declare w uuid; u uuid; v_it bigint; v_b bigint; v_c bigint; v_pl bigint; v_t text; v_a double precision; v_bb double precision;
