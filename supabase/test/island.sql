@@ -7529,12 +7529,11 @@ select '852. and two days after that: ' || :'day3' || '; a fourth: ' || :'day4'
 -- The sixth day is the last one.
 select pg_temp.one_day(:'world7') \g /dev/null
 select '853. and on the sixth day: ' || (select name from tile_def where id = land_tile(:'world7',60,60))
-     || ' where it stood — of its own kind, ' || lower((select name from tree_def where id = tree_species(land_data(:'world7',60,60))))
-     || ', for a day — and ' || (select count(*) from (
+     || ' where it stood, not a stump — a stump is what a hatchet leaves — and ' || (select count(*) from (
           select q.gx, q.gy from (select 60 + dx as gx, 60 + dy as gy
             from generate_series(-2, 2) dx, generate_series(-2, 2) dy) q
           where land_tile(:'world7', q.gx, q.gy) = tile_id('Tree')) t)
-     || ' saplings of its own kind standing within ' || tree_seed_reach() || ' tiles of the stump'
+     || ' saplings of its own kind standing within ' || tree_seed_reach() || ' tiles of where it stood'
      || ' — nought to ' || tree_seeds() || ' of them, by a roll averaging '
      || round((1 + tree_seed_both() - tree_seed_none())::numeric, 2) || ' and by the room it had';
 select '854. and what they are: ' || coalesce(string_agg(distinct

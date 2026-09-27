@@ -812,8 +812,8 @@ export class Game {
   private treeRow = -1;
   /** The moment the turn in progress is for, banked until it finishes. */
   private treeTurn = 0;
-  /** Stumps left by the turn in progress, seeded once the whole island is done. */
-  private treeStumps: Array<[number, number, number]> = [];
+  /** The trees the turn in progress has seen the end of, which seed once the whole island is done. */
+  private treeGone: Array<[number, number, number]> = [];
   /**
    * The height everything that shapes the ground is working towards, or null.
    *
@@ -6826,8 +6826,12 @@ export class Game {
   private static readonly FIRST = TREE_AGES.find((a) => !TREE_AGES.some((b) => b.next === a.id))?.id ?? 0;
 
   /**
-   * A day in the woods: every tree one stage older, the old ones gone, and two
-   * saplings out of each stump.
+   * A day in the woods: every tree one stage older, the old ones gone, and up
+   * to two saplings round each of them.
+   *
+   * A tree that dies of age leaves grass where it stood, not a stump. A stump
+   * is what a hatchet leaves, and only on a tree with timber in it; every
+   * stump there is, however it got there, is grass after the next turn.
    *
    * Once a day and not a moment otherwise. The first cut of this crept — a
    * slice of the map every few seconds, each tree carrying its own hour so the
@@ -6849,8 +6853,8 @@ export class Game {
      * A day's growth, a strip of the island at a time.
      *
      * The woods turn at one moment for everybody, and turning them means
-     * looking at every tile there is: aging the trees, clearing yesterday's
-     * stumps and counting the days a lawn has been kept cut. On a four
+     * looking at every tile there is: aging the trees, clearing the stumps
+     * left since the last turn and counting the days a lawn has been kept cut. On a four
      * thousand square map that is sixteen and three quarter million tiles in
      * one go, in the middle of a frame — and it fires the moment a saved
      * world is opened, because a world that has been shut since before the
@@ -6859,7 +6863,7 @@ export class Game {
      * So the walk is cut into strips and carried across frames. The day still
      * turns at the one moment — `treesAt` is only moved on when the last
      * strip is done, so an interrupted pass starts again rather than leaving
-     * half an island a day behind — and the stumps still seed after the whole
+     * half an island a day behind — and the dead still seed after the whole
      * island has turned, which is the rule that stops a sapling dropped into
      * ground the walk has not reached yet being aged the same day.
      */
@@ -6867,14 +6871,14 @@ export class Game {
       if (this.treesAt >= lastDawn(nowSeconds)) return;
       this.treeRow = 0;
       this.treeTurn = nowSeconds;
-      this.treeStumps.length = 0;
+      this.treeGone.length = 0;
     }
-    const stumps = this.treeStumps;
+    const gone = this.treeGone;
     const until = Math.min(w.h, this.treeRow + TREE_STRIP);
     for (let y = this.treeRow; y < until; y++) {
       for (let x = 0; x < w.w; x++) {
         const here = w.getTile(x, y);
-        // A stump left a day is gone.
+        // Every stump goes at the turn, however long it has stood.
         if (here === TileType.Stump) {
           w.setTile(x, y, TileType.Grass, 0);
           continue;
@@ -6894,9 +6898,9 @@ export class Game {
         const data = w.getData(x, y);
         const age = treeAge(data);
         if (age.next === null) {
-          // What a dead tree leaves: a stump of its kind, for a day.
-          w.setTile(x, y, TileType.Stump, packTreeData(treeSpecies(data), 0));
-          stumps.push([x, y, treeSpecies(data)]);
+          // A tree that dies of age leaves grass. Stumps are a hatchet's.
+          w.setTile(x, y, TileType.Grass, 0);
+          gone.push([x, y, treeSpecies(data)]);
         } else {
           w.setTile(x, y, TileType.Tree, packTreeData(treeSpecies(data), age.next));
         }
@@ -6909,10 +6913,14 @@ export class Game {
     this.treesAt = this.treeTurn;
     // A year's growth closes whatever was cut into anything.
     w.notches.clear();
-    // The stumps seed after the whole island has turned, so a sapling dropped
+    // The dead seed after the whole island has turned, so a sapling dropped
     // into ground the walk had not reached yet cannot be aged the same day.
-    for (const [x, y, species] of stumps) this.seedTrees(x, y, species);
-    stumps.length = 0;
+    // Nor where one of them stood: that ground took the day to clear, as it
+    // did when a stump stood on it for the day, so a wood that dies together
+    // comes back as thickly as it always did rather than in its own footprint.
+    const cleared = new Set(gone.map(([x, y]) => y * w.w + x));
+    for (const [x, y, species] of gone) this.seedTrees(x, y, species, cleared);
+    gone.length = 0;
   }
 
   /**
@@ -6920,7 +6928,7 @@ export class Game {
    * have been planted in, and not inside anybody's settlement. A wood is
    * welcome to spread, and not over the place somebody levelled and built on.
    */
-  private seedTrees(x: number, y: number, species: number): void {
+  private seedTrees(x: number, y: number, species: number, cleared: ReadonlySet<number>): void {
     const w = this.world;
     const spots: Array<[number, number]> = [];
     for (let dy = -TREE_SEED_REACH; dy <= TREE_SEED_REACH; dy++) {
@@ -6928,7 +6936,7 @@ export class Game {
         if (!dx && !dy) continue;
         const gx = x + dx;
         const gy = y + dy;
-        if (!w.inBounds(gx, gy) || !PLANTABLE.has(w.getTile(gx, gy))) continue;
+        if (!w.inBounds(gx, gy) || !PLANTABLE.has(w.getTile(gx, gy)) || cleared.has(gy * w.w + gx)) continue;
         if (this.deedAt(gx, gy)) continue;
         spots.push([gx, gy]);
       }

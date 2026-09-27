@@ -1,4 +1,5 @@
 import { MATERIAL_BY_ID } from '../../game/building';
+import { TREE_AGES, TREE_DAWN_UTC } from '../../world/tiles';
 import { furnitureDef, liquidCapacity, POND_EVERY, type PlacedFurniture } from '../../game/furniture';
 import { billWords, type Item } from '../../game/items';
 import { INGOT_LUMPS, INGOT_WEIGHT, MOULD_BY_ID } from '../../game/metal';
@@ -662,6 +663,19 @@ export const NEWS: News[] = [
         `Its ${listed(up)} go up by ${each((s) => by(RARITIES[s].blood))}, and its ${listed(down)} go down by ${each((s) => by(1 / RARITIES[s].blood))}.`,
         `One out of the wild rolls its traits on better odds: ${listed(steps.map((s) => `${better(s)} of ${article(name(s))} ${name(s)} one's`))} come out better than common, where ${better(0)} of an ordinary one's do.`,
         'The whole beast shimmers in its rarity\'s colour the way rare gear does, and its card, the Wildermon window and Look it over say how rare it is and what that does.',
+      ];
+    },
+  },
+  {
+    n: 50,
+    day: '2026-09-27',
+    lines: () => {
+      // The youngest a tree is with timber in it, along the stages it grows through from the first.
+      let age = TREE_AGES.find((a) => !TREE_AGES.some((b) => b.next === a.id));
+      while (age && !age.logs && age.next !== null) age = TREE_AGES.find((a) => a.id === age?.next);
+      return [
+        `A tree that dies of age leaves grass where it stood, not a stump. A stump is only left by felling a tree with timber in it, ${(age?.name ?? 'Young').toLowerCase()} or older.`,
+        `Every stump goes at the next turn of the woods, at ${TREE_DAWN_UTC}:00 UTC, and goes for everybody: one you had seen stayed in your view until you next loaded the island.`,
       ];
     },
   },

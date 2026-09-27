@@ -39,14 +39,22 @@
  *     both ways, on a row of heights as wide and as compressible as a real one;
  *   * the saplings are drawn from a band of ground read out once, not from a
  *     join to the land per candidate;
- *   * a die-off on a real island still leaves stumps where the trees stood,
- *     saplings round them and nowhere else, and all of it written down;
+ *   * a die-off on a real island leaves grass where the trees stood, not
+ *     stumps -- a stump is what a hatchet leaves -- saplings round them and
+ *     nowhere else, not on the ground the dead stood on, and all of it
+ *     written down; and a stump a hatchet left is gone at the same turn,
+ *     written down for everybody and not only for whoever is near enough to
+ *     watch, or a browser that saw it would draw it until it next loaded;
  *   * and the tick takes one island a go, every minute of the dawn hour, with
  *     five minutes to do it in.
+ *
+ * And the woods of a game of your own turn by the same rule.
  *
  * Runs against the database the suite leaves behind.
  */
 import { execFileSync } from 'node:child_process';
+import { Game } from '../../src/game/game';
+import { lastDawn, packTreeData, TileType, TREE_AGES, TREE_SEED_REACH, treeAge } from '../../src/world/tiles';
 
 const psql = (sql: string): string =>
   execFileSync('psql', ['-v', 'ON_ERROR_STOP=1', '-X', '-q', '-t', '-A', '-f', '-'], {
@@ -266,7 +274,7 @@ end $$;
 --    clearing, with a settlement over one corner of the clearing.
 do $$
 declare w record; v_first int := tree_first(); v_before int; v_after int;
-        v_stumps int; v_saplings int; v_far int; v_deeded int; v_unplantable int; v_told int; v_wrong int;
+        v_stumps int; v_grass int; v_felled text; v_saplings int; v_far int; v_deeded int; v_unplantable int; v_told int; v_wrong int;
 begin
   select * into w from world where ready and size >= 64 and size <= 128 order by name limit 1;
   if w is null then insert into said values ('DIEOFF|no island'); return; end if;
@@ -290,6 +298,9 @@ begin
     perform land_set_tile(w.id, i, j, 16);
     perform land_set_data(w.id, i, j, tree_pack(2, (select id from tree_age_def where next is null and not alive)));
   end loop; end loop;
+  -- And a stump a hatchet left yesterday, further from the oaks than a seed goes.
+  perform land_set_tile(w.id, 31, 31, tile_id('Stump'));
+  perform land_set_data(w.id, 31, 31, tree_pack(2, 0));
   insert into deed (world_id, name, x, y, radius, level, founded_by)
   values (w.id, 'The corner', 12, 12, 3, 1, '00000000-0000-4000-8000-00000000dead');
   update world set trees_at = tree_last_dawn() - interval '1 minute' where id = w.id;
@@ -299,6 +310,10 @@ begin
          count(*) filter (where land_tile(w.id, i, j) = 16 and tree_age(land_data(w.id, i, j)) = v_first)
     into v_stumps, v_saplings
     from generate_series(10, 33) i, generate_series(10, 33) j;
+  select count(*) into v_grass
+    from generate_series(16, 27) i, generate_series(16, 27) j
+   where land_tile(w.id, i, j) = tile_id('Grass') and land_data(w.id, i, j) = 0;
+  v_felled := case when land_tile(w.id, 31, 31) = tile_id('Grass') then 'grass' else 'tile ' || land_tile(w.id, 31, 31) end;
   -- A sapling further from every stump than a seed goes, on the settlement, or
   -- on anything but the grass it was all laid as.
   select count(*) filter (where not exists (select 1 from generate_series(16, 27) si, generate_series(16, 27) sj
@@ -321,7 +336,8 @@ begin
                                 land_height(w.id, c.x + 1, c.y + 1), land_height(w.id, c.x, c.y + 1)]);
   insert into said values ('DIEOFF|' || v_stumps || '|' || v_saplings || '|' || v_far || '|' || v_deeded
     || '|' || v_unplantable || '|' || v_told || '|' || v_wrong
-    || '|' || case when (select trees_at from world where id = w.id) >= tree_last_dawn() then 'marked' else 'unmarked' end);
+    || '|' || case when (select trees_at from world where id = w.id) >= tree_last_dawn() then 'marked' else 'unmarked' end
+    || '|' || v_grass || '|' || v_felled);
 end $$;
 
 -- 6. One island a go: two owed, three goes.
@@ -396,21 +412,62 @@ check('and the island is marked as having had it',
   marked === 'marked' && Number(isles) >= 1, `${marked}, ${isles} island(s)`);
 check('and the very next go finds nothing owed', said('AGAIN') === '0', `${said('AGAIN')} island(s)`);
 
-const [stumps, saplings, far, deeded, unplantable, told, wrong, dieMarked] = said('DIEOFF').split('|');
-check('a die-off leaves a stump where every tree stood',
-  stumps === '144', `${stumps} stumps where 144 shrivelled oaks were`);
+const [stumps, saplings, far, deeded, unplantable, told, wrong, dieMarked, grass, felled] = said('DIEOFF').split('|');
+check('a die-off leaves grass where every tree stood, not a stump',
+  grass === '144' && stumps === '0', `${grass} of 144 shrivelled oaks are grass, ${stumps} stumps in the clearing`);
+check('and a stump a hatchet left is gone at the same turn', felled === 'grass', felled);
 check('and saplings round them, none further than a seed goes and none on the settlement',
   Number(saplings) > 0 && far === '0' && deeded === '0',
   `${saplings} saplings; ${far} out of reach, ${deeded} on the settlement`);
-check('and none where the stumps are, which is not ground a seed takes',
-  unplantable === '0', `${unplantable} trees standing among the stumps`);
-check('and every one of them written down, as the land has it',
-  Number(told) === Number(stumps) + Number(saplings) && wrong === '0' && dieMarked === 'marked',
-  `${told} rows for ${stumps} stumps and ${saplings} saplings, ${wrong} that disagree with the land, island ${dieMarked}`);
+check('and none where the dead stood, which takes the day to clear as it did under a stump',
+  unplantable === '0', `${unplantable} trees standing where the oaks were`);
+check('and every one of them written down, as the land has it, the stump\'s going too, with nobody about to see it',
+  Number(told) === 144 + 1 + Number(saplings) && wrong === '0' && dieMarked === 'marked',
+  `${told} rows for 144 trees gone, a stump gone and ${saplings} saplings, ${wrong} that disagree with the land, island ${dieMarked}`);
 
 const [go1, go2, go3, turned] = said('GOES').split('|');
 check('the tick takes one island a go: two owed, turned one and then the other, and then none',
   go1 === '1' && go2 === '1' && go3 === '0' && turned === '2', `${go1}, ${go2}, ${go3}; ${turned} of 2 turned`);
+
+/* ---- And a game of your own, by the same rule ------------------------------ */
+
+{
+  const game = Game.create(4242);
+  const w = game.world;
+  const now = Date.now() / 1000;
+  const SHRIVELLED = TREE_AGES.find((a) => a.next === null)?.id ?? 5;
+  // A clearing where you came ashore, a block of shrivelled oaks in it, and a
+  // stump a hatchet left further from them than a seed goes.
+  const ox = Math.floor(game.player.x) - 12;
+  const oy = Math.floor(game.player.y) - 12;
+  for (let y = oy; y < oy + 24; y++) for (let x = ox; x < ox + 24; x++) w.setTile(x, y, TileType.Grass, 0);
+  for (let y = oy + 6; y < oy + 18; y++) for (let x = ox + 6; x < ox + 18; x++) w.setTile(x, y, TileType.Tree, packTreeData(2, SHRIVELLED));
+  const [sx, sy] = [ox + 18 + TREE_SEED_REACH + 1, oy + 18 + TREE_SEED_REACH + 1];
+  w.setTile(sx, sy, TileType.Stump, packTreeData(2, 0));
+  game.treesAt = lastDawn(now) - 60;
+  // The turn is walked a strip a frame, and is done when the day is marked.
+  for (let k = 0; k < 10000 && game.treesAt < lastDawn(now); k++) game.growTrees(now);
+  let stumpsLeft = 0;
+  let grassWhereOaks = 0;
+  let treesWhereOaks = 0;
+  let saplingsRound = 0;
+  for (let y = oy; y < oy + 24; y++) {
+    for (let x = ox; x < ox + 24; x++) {
+      const t = w.getTile(x, y);
+      const inBlock = x >= ox + 6 && x < ox + 18 && y >= oy + 6 && y < oy + 18;
+      if (t === TileType.Stump) stumpsLeft++;
+      if (inBlock && t === TileType.Grass && w.getData(x, y) === 0) grassWhereOaks++;
+      if (inBlock && t === TileType.Tree) treesWhereOaks++;
+      if (!inBlock && t === TileType.Tree && treeAge(w.getData(x, y)).next !== null) saplingsRound++;
+    }
+  }
+  check('in a game of your own, a tree that dies of age leaves grass, not a stump',
+    game.treesAt >= lastDawn(now) && grassWhereOaks === 144 && stumpsLeft === 0,
+    `${grassWhereOaks} of 144 shrivelled oaks are grass, ${stumpsLeft} stumps in the clearing`);
+  check('and the stump a hatchet left is gone at the same turn', w.getTile(sx, sy) === TileType.Grass, `tile ${w.getTile(sx, sy)}`);
+  check('and the dead still seed round them, and not where they stood',
+    saplingsRound > 0 && treesWhereOaks === 0, `${saplingsRound} saplings round them, ${treesWhereOaks} where the oaks were`);
+}
 
 for (const line of [...ok, ...bad]) console.log(line);
 if (bad.length) {

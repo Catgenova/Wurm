@@ -739,8 +739,9 @@ export const TREE_AGES: TreeAge[] = [
  * Asked for from the island as "a real life day" per stage, so this is wall
  * clock and not the world's own faster hours: a tree planted on a Tuesday is a
  * young tree on Wednesday whether or not anybody was logged in for any of it.
- * Six days from a sapling to a stump — the last two of them very old and then
- * shrivelled — and the stump leaves two saplings behind it.
+ * Six days from a sapling to the end of a tree — the last two of them very old
+ * and then shrivelled — and it leaves up to two saplings behind it, and grass
+ * where it stood.
  *
  * Asked for next: "make the tree tick fire at 6am UTC-7 every day". The day
  * used to be measured from the last turnover, so it crept ten minutes a day
@@ -774,7 +775,7 @@ export const TREE_SEEDS = 2;
  * hair over one fills the island slowly, a hair under empties it slowly.
  *
  * So the roll is a little over replacement and the *room* does the regulating.
- * A stump in the open leaves 1.1 on average; a stump hemmed in leaves fewer or
+ * A tree dying in the open leaves 1.1 on average; one hemmed in leaves fewer or
  * none. That gives a wood somewhere to settle rather than somewhere to run to,
  * and it settles there from either side — measured on a real island, the same
  * ground sown at a fifth and at four fifths, forty days each:
@@ -791,9 +792,9 @@ export const TREE_SEEDS = 2;
  * never fires — moving the thresholds anywhere between 3+ and 8+ barely
  * touched it.
  *
- * The reason is worth keeping: seeds are lost to more than crowding. Two stumps
- * that pick the same tile plant one tree between them, a stump at the island's
- * edge has fewer neighbours to try, and a stump beside a settlement may have
+ * The reason is worth keeping: seeds are lost to more than crowding. Two dead
+ * trees that pick the same tile plant one between them, one at the island's
+ * edge has fewer neighbours to try, and one beside a settlement may have
  * nowhere at all. Every one of those is a seed gone and none of them ever gives
  * one back, so the surplus has to cover them before it can hold a wood up.
  *
@@ -804,11 +805,15 @@ export const TREE_SEEDS = 2;
 export const TREE_SEED_NONE = 0.2;
 export const TREE_SEED_BOTH = 0.3;
 
-/** Free ground round the stump, of the twenty-four tiles near it, for two and for one. */
+/**
+ * Free ground round a tree that has died, of the twenty-four tiles near it, for
+ * two and for one. Not counting where any tree that died the same day stood:
+ * that ground clears with the turn and takes no seed until the next.
+ */
 export const TREE_ROOM_TWO = 8;
 export const TREE_ROOM_ONE = 4;
 
-/** How far from the stump one of them may take, in tiles. */
+/** How far from where it stood one of them may take, in tiles. */
 export const TREE_SEED_REACH = 2;
 
 /**
