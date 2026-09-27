@@ -56,7 +56,8 @@ import { FENCE_TYPES, MATERIAL_BY_ID, MATERIALS, MAX_LEVELS, storeySkill, TALL_S
 import { FURNITURE, furnitureDef } from './furniture';
 import { ARMOUR, ARMOUR_BY_ID, ARMOUR_CLASSES, HIT_CAP, SOAK_CAP, WEAPON_BY_ID, WEAPONS } from './gear';
 import { GEM_ODDS } from './gems';
-import { CARRY_BASE, CARRY_PER_STRENGTH, CHAR_START, MAX_VEHICLE_SPEED, QUEUE_PER_MIND, queueCapAt } from './game';
+import { CARRY_BASE, CARRY_PER_STRENGTH, CHAR_START, MAX_VEHICLE_SPEED, QL_TOP, QUEUE_PER_MIND, queueCapAt, TOOL_QL_SPAN } from './game';
+import { CROP_LIST, cropYield, RIPE, type CropDef } from './farming';
 import { improveStepAt } from './improve';
 import { ITEM_DEFS, RARITY_ODDS, type Item } from './items';
 import { MELT_KEEP, MELT_SHARE, meltLumps } from './melt';
@@ -79,7 +80,8 @@ export type Fx = Record<string, number>;
  */
 export const FX_RULE: Record<string, 'mul' | 'add'> = {
   time: 'mul', ql: 'mul', weight: 'mul', walk: 'mul', fail: 'mul', wear: 'mul', need: 'mul', bill: 'mul',
-  carry: 'add', jobs: 'add',
+  grow: 'mul', rotate: 'mul',
+  carry: 'add', jobs: 'add', plus: 'add', bumper: 'add', fodder: 'add', tool: 'add',
 };
 
 export const fxFamily = (key: string): string => key.split(':')[0];
@@ -989,6 +991,145 @@ const FORESTER: Seed[] = [
   },
 ];
 
+/** What a quern presses: juice and cider into a bucket, and olive oil. */
+const PRESSES = RECIPES.filter((r) => ['juice_bucket', 'cider_bucket', 'olive_oil'].includes(r.result));
+/** The fruit a press takes, which is its first input. */
+const pressFruit = (r: Recipe): number => r.inputs[0]?.count ?? 1;
+/** Each crop's produce and seed, flour and cornmeal: what a Farmer's Sack Porter lightens. */
+const SACKED = [...CROP_LIST.flatMap((c) => [c.produce, c.seed]), 'flour', 'cornmeal'];
+const cropNames = (list: readonly CropDef[]): string => listed(list.map((c) => c.name.toLowerCase()));
+const HERBS = CROP_LIST.filter((c) => c.look === 'herb');
+const GRAINS = CROP_LIST.filter((c) => c.look === 'grain');
+const FIBRES = CROP_LIST.filter((c) => c.kind === 'fibre');
+const plusOn = (list: readonly CropDef[], n: number): Fx => Object.fromEntries(list.map((c) => [`plus:${c.produce}`, n]));
+/** The quickest crop and the slowest, for what a Farmer's pace does to a stage. */
+const QUICKEST = CROP_LIST.reduce((a, b) => (b.stageSeconds < a.stageSeconds ? b : a));
+const SLOWEST = CROP_LIST.reduce((a, b) => (b.stageSeconds > a.stageSeconds ? b : a));
+const stageRange = (m: number): string =>
+  `from ${QUICKEST.name.toLowerCase()}'s ${secs(QUICKEST.stageSeconds * m)} (now ${secs(QUICKEST.stageSeconds)}) `
+  + `to ${SLOWEST.name.toLowerCase()}'s ${secs(SLOWEST.stageSeconds * m)} (now ${secs(SLOWEST.stageSeconds)})`;
+/** "3×3", the patch a Farmer's patch job covers at a reach of `r`. */
+const patchSide = (r: number): string => `${2 * r + 1}×${2 * r + 1}`;
+const madeOf = (id: string): number => RECIPES.find((r) => r.id === id)?.count ?? 1;
+const recipeLabel = (id: string): string => RECIPES.find((r) => r.id === id)?.label ?? id;
+
+const FARMER: Seed[] = [
+  {
+    num: 4, name: 'Seed Saver',
+    fx: { 'keep:plant_seed': 0.25 },
+    note: (fx) => `${oneIn(fx['keep:plant_seed'])} fields you sow, with Sow or Sow a patch, use no seed.`,
+  },
+  {
+    num: 5, name: 'Fast Growth',
+    fx: { 'grow:plant_seed': 0.8 },
+    note: (fx) => `Each stage of a crop you sow takes ${less(fx['grow:plant_seed'])} less time, ${stageRange(fx['grow:plant_seed'])}.`,
+  },
+  {
+    num: 6, name: 'Crop Rotation',
+    fx: { 'rotate:plant_seed': 0.75 },
+    note: (fx) => `Each stage of a crop you sow on a field last sown with a different crop takes ${less(fx['rotate:plant_seed'])} less time, `
+      + `${stageRange(fx['rotate:plant_seed'])}. A field never sown, or broken up since, has no last crop.`,
+  },
+  {
+    num: 8, name: 'Bumper Crop',
+    fx: { 'bumper:harvest_crop': 1 },
+    note: (fx) => `A crop tended at all ${numberWord(RIPE)} stages gives ${cropYield(RIPE, fx['bumper:harvest_crop']).produce} `
+      + `produce when you harvest it (now ${cropYield(RIPE).produce}).`,
+  },
+  {
+    num: 11, name: 'Rare Harvest',
+    fx: { 'rare:harvest_crop': RARITY_ODDS[0] },
+    note: (fx) => `${oneIn(fx['rare:harvest_crop'])} crops you harvest come up rare, rolling on to supreme and fantastic at the odds `
+      + 'crafting has; the seed does not. A harvest is never rare without it.',
+  },
+  {
+    num: 14, name: 'Fodder',
+    fx: { 'fodder:harvest_crop': 2 },
+    note: (fx) => `Every crop you harvest also gives ${numberWord(fx['fodder:harvest_crop'])} ${itemName('mixed_grass')}, `
+      + "at the harvest's QL, into your pack.",
+  },
+  {
+    num: 15, name: 'Herb Plot',
+    fx: plusOn(HERBS, 2),
+    note: (fx) => `${capital(cropNames(HERBS))} give ${numberWord(fx[`plus:${HERBS[0].produce}`])} more each time you harvest one.`,
+  },
+  {
+    num: 16, name: 'Grain Master',
+    fx: plusOn(GRAINS, 2),
+    note: (fx) => `${capital(cropNames(GRAINS))} give ${numberWord(fx[`plus:${GRAINS[0].produce}`])} more each time you harvest one.`,
+  },
+  {
+    num: 17, name: 'Fibre Farmer',
+    fx: plusOn(FIBRES, 2),
+    note: (fx) => `${capital(cropNames(FIBRES))} give ${numberWord(fx[`plus:${FIBRES[0].produce}`])} more each time you harvest one.`,
+  },
+  {
+    num: 22, name: 'More Meal',
+    fx: { 'count:flour': 2, 'count:cornmeal': 2 },
+    note: (fx) => `${recipeLabel('make_flour')} makes ${numberWord(fx['count:flour'])} ${itemName('flour')} a go `
+      + `(now ${numberWord(madeOf('make_flour'))}), and ${recipeLabel('make_cornmeal')} ${numberWord(fx['count:cornmeal'])} `
+      + `${itemName('cornmeal')} (now ${numberWord(madeOf('make_cornmeal'))}).`,
+  },
+  {
+    num: 23, name: 'Full Press',
+    fx: Object.fromEntries(PRESSES.map((r) => [`need:${r.id}`, 0.8])),
+    note: (fx) => {
+      const m = fx[`need:${PRESSES[0].id}`];
+      const took = [...new Set(PRESSES.map(pressFruit))].sort((a, b) => a - b);
+      return `Pressing juice, cider or olive oil at the quern takes ${less(m)} less fruit, `
+        + `${listed(took.map((n) => `${Math.max(1, Math.ceil(n * m))} where it took ${n}`))}: `
+        + `${percent(1 / m - 1)} more from the same fruit. Juice and cider still take one bucket to a pressing.`;
+    },
+  },
+  {
+    num: 25, name: 'Milkmaid',
+    fx: { 'time:milk_creature': 0.6, 'more:milk_creature': 0.5 },
+    note: (fx) => `${capital(ACTION_BY_ID.get('milk_creature')?.verb ?? 'milking')} takes ${less(fx['time:milk_creature'])} less time (${secs(base('milk_creature'))} base), `
+      + `and ${oneIn(fx['more:milk_creature'])} goes fill a second bucket of milk, if you carry another empty bucket.`,
+  },
+  {
+    num: 28, name: 'Sack Porter',
+    fx: Object.fromEntries(SACKED.map((id) => [`weight:${id}`, 0.5])),
+    note: (fx) => `The produce and seed of every crop, flour and cornmeal weigh ${less(fx[`weight:${SACKED[0]}`])} less in your pack: `
+      + `${listed(['potato', 'wheat_seed', 'flour'].map((id) => `${itemName(id)} ${kg(id) * fx[`weight:${id}`]} kg a unit (now ${kg(id)} kg)`))}.`,
+  },
+  {
+    num: 30, name: 'Barn Reach',
+    fx: { 'into:harvest_crop': 5, 'into:harvest_patch': 5 },
+    note: (fx) => `What Harvest and Harvest a patch bring up goes into the nearest unlocked cart or wagon that nobody else is pulling `
+      + `or driving, or container you built or that stands on your settlement, within ${fx['into:harvest_crop']} tiles `
+      + '(now into your pack).',
+  },
+  {
+    num: 34, name: 'Worn-in Rake',
+    fx: { 'tool:till': 20 },
+    note: (fx) => `When you till, your rake counts as ${fx['tool:till']} QL better than it is, to at most ${QL_TOP}. `
+      + `A tool takes one part in ${TOOL_QL_SPAN} of a go's time off for each point of its QL, so that is ${percent(fx['tool:till'] / TOOL_QL_SPAN)} `
+      + `of ${label('till')}'s time (${secs(base('till'))} base).`,
+  },
+  {
+    num: 39, name: 'Sow a Patch',
+    fx: { sow_patch: 1 },
+    note: (fx) => `${label('sow_patch')} (a job, ${secs(base('sow_patch'))}, as long as ${numberWord(base('sow_patch') / base('plant_seed'))} `
+      + `sowings): the seed you choose, sown on every empty field in the ${patchSide(fx.sow_patch)} tiles around the one you choose, `
+      + 'one seed a field.',
+  },
+  {
+    num: 40, name: 'Tend a Patch',
+    fx: { tend_patch: 1 },
+    note: (fx) => `${label('tend_patch')} (a job, ${secs(base('tend_patch'))}, as long as ${numberWord(base('tend_patch') / base('tend_crop'))} `
+      + `tendings): every crop in the ${patchSide(fx.tend_patch)} tiles around the one you choose that is not ripe and not yet `
+      + 'tended at the stage it is at, tended.',
+  },
+  {
+    num: 41, name: 'Harvest a Patch',
+    fx: { harvest_patch: 1 },
+    note: (fx) => `${label('harvest_patch')} (a job, ${secs(base('harvest_patch'))}, as long as `
+      + `${numberWord(base('harvest_patch') / base('harvest_crop'))} harvests): every ripe crop in the ${patchSide(fx.harvest_patch)} `
+      + 'tiles around the one you choose, harvested, each for what its own tending earned.',
+  },
+];
+
 /** Every trade's perks, in the order they were picked. */
 const SEEDS: Record<string, Seed[]> = {
   terraformer: TERRAFORMER,
@@ -997,6 +1138,7 @@ const SEEDS: Record<string, Seed[]> = {
   carpenter: CARPENTER,
   smith: SMITH,
   forester: FORESTER,
+  farmer: FARMER,
 };
 
 const slug = (name: string): string => name.toLowerCase().replace(/[’']/g, '').replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '');
@@ -1013,6 +1155,7 @@ export const TIERS: Record<string, number[][]> = {
   carpenter: [[1, 37, 45], [3, 6, 14], [15, 26, 31], [16, 19, 32], [2, 18, 25], [10, 12, 27]],
   smith: [[8, 26, 27], [30, 32, 49], [12, 20, 22], [24, 25, 36], [7, 9, 13], [16, 38, 45]],
   forester: [[34, 43, 44], [21, 22, 40], [1, 2, 3], [7, 16, 24], [10, 11, 20], [5, 6, 14]],
+  farmer: [[14, 25, 28], [4, 5, 8], [22, 23, 30], [6, 34, 39], [11, 40, 41], [15, 16, 17]],
 };
 
 /** Every perk there is, tier by tier, and in each tier by the number it was picked under, as the island lists them. */

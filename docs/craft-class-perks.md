@@ -1,6 +1,6 @@
 # Craft class perks
 
-The perks chosen for the fourteen craft classes, class by class, on 26 September 2026, and the tiers they are offered in, settled on 27 September. They replace what a craft class gave before: its channels and its tree of nodes in `src/game/classes.ts`. The Terraformer, the Miner, the Mason, the Carpenter, the Smith and the Forester are built, in `src/game/perks.ts` and on the island; the other eight are not yet.
+The perks chosen for the fourteen craft classes, class by class, on 26 September 2026, and the tiers they are offered in, settled on 27 September. They replace what a craft class gave before: its channels and its tree of nodes in `src/game/classes.ts`. The Terraformer, the Miner, the Mason, the Carpenter, the Smith, the Forester and the Farmer are built, in `src/game/perks.ts` and on the island; the other seven are not yet.
 
 ## Tiers
 
@@ -177,8 +177,8 @@ Main skill woodcutting; also forestry.
 Main skill farming; also milling.
 
 4. **Seed Saver** — 1 sowing in 4 uses no seed.
-5. **Fast Growth** — crops you sow go through each stage 20% faster.
-6. **Crop Rotation** — a field sown with a different crop from its last one grows 25% faster.
+5. **Fast Growth** — crops you sow go through each stage 20% faster. Built as each stage taking 20% less time, stamped on the crop as it is sown, so it grows at that pace whoever harvests it.
+6. **Crop Rotation** — a field sown with a different crop from its last one grows 25% faster. Built as each stage taking 25% less time; a field never sown, or broken up since, has no last crop.
 8. **Bumper Crop** — a crop tended at every stage gives 5 produce (now 4).
 11. **Rare Harvest** — 1 harvest in 100 comes up rare, rolling on to supreme and fantastic at crafting's odds.
 14. **Fodder** — every harvest also gives 2 mixed grass.
@@ -186,8 +186,8 @@ Main skill farming; also milling.
 16. **Grain Master** — wheat and corn give 2 more per harvest.
 17. **Fibre Farmer** — cotton and wemp give 2 more per harvest.
 22. **More Meal** — Make flour and Make cornmeal give 1 more per go.
-23. **Full Press** — pressing fruit gives 25% more juice, cider or oil.
-25. **Milkmaid** — milking takes 40% less time and gives 50% more milk.
+23. **Full Press** — pressing fruit gives 25% more juice, cider or oil. Built as a pressing taking 20% less fruit (8 where it took 10, 16 where it took 20): a bucket of juice or cider cannot hold a quarter more, so the same bucket comes from less fruit, which is 25% more from the same fruit.
+25. **Milkmaid** — milking takes 40% less time and gives 50% more milk. Built as 1 milking in 2 filling a second bucket, if you carry another empty one: a bucket of milk is full at one milking.
 28. **Sack Porter** — produce, seeds and flour weigh half in your pack.
 30. **Barn Reach** — harvests go straight into a container within 5 tiles.
 34. **Worn-in Rake** — your rake counts as 20 QL higher when tilling (at most 100).

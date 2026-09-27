@@ -1,7 +1,7 @@
 import { TileType, TILE_DEFS } from '../world/tiles';
 import type { ActionDef, Target } from './actions';
 import type { Game } from './game';
-import { itemDef, itemName } from './items';
+import { itemDef, itemName, type Item } from './items';
 import { world } from './pace';
 import { ABUNDANCE } from './meditation';
 
@@ -86,6 +86,13 @@ export interface Crop {
   tendedNow: boolean;
   /** Quality the harvest will carry, built up while tending. */
   ql: number;
+  /**
+   * How long each of its stages takes, as a share of the crop's own: 1 for
+   * anybody's, less for a Farmer's with Fast Growth, or Crop Rotation on a
+   * field last sown with something else. Stamped when it is sown, so putting
+   * the trade down later takes nothing back from a field already growing.
+   */
+  pace?: number;
 }
 
 /** Tiles a field can be raked out of. */
@@ -94,32 +101,127 @@ export const TILLABLE = new Set<number>([TileType.Grass, TileType.Dirt, TileType
 /**
  * What a harvest gives. An untended field returns the seed it was sown from
  * and a single crop; tending every stage doubles the seed and quadruples the
- * crop.
+ * crop. `bumper` is a Farmer's Bumper Crop: that many more on a crop tended at
+ * every stage, and nothing on one that was not.
  */
-export function cropYield(tended: number): { seeds: number; produce: number } {
+export function cropYield(tended: number, bumper = 0): { seeds: number; produce: number } {
   const t = Math.max(0, Math.min(CROP_STAGES - 1, tended));
-  return { seeds: t >= 2 ? 2 : 1, produce: 1 + t };
+  return { seeds: t >= 2 ? 2 : 1, produce: 1 + t + (t >= RIPE ? bumper : 0) };
 }
 
 export const cropDef = (id: string): CropDef => CROPS[id] ?? CROPS.onion;
 export const cropReady = (c: Crop): boolean => c.stage >= RIPE;
 export const cropStageName = (c: Crop): string => STAGE_NAMES[Math.min(RIPE, c.stage)];
+/** Seconds one stage of this crop takes, at the pace it was sown at. */
+export const cropStageSeconds = (c: Crop): number => cropDef(c.id).stageSeconds * (c.pace ?? 1);
 
 /** Seconds until this crop moves on, or null once it is ripe. */
 export function cropTimeLeft(c: Crop, now: number): number | null {
   if (cropReady(c)) return null;
-  return Math.max(0, cropDef(c.id).stageSeconds - (now - c.stageAt));
+  return Math.max(0, cropStageSeconds(c) - (now - c.stageAt));
 }
 
-export function describeCrop(c: Crop, now: number): string {
+/** Look on a field. `bumper` is the looker's own Bumper Crop, for what it would give them. */
+export function describeCrop(c: Crop, now: number, bumper = 0): string {
   const def = cropDef(c.id);
   const left = cropTimeLeft(c, now);
   const when = left === null ? 'ready to harvest' : left > 90 ? `${Math.ceil(left / 60)} minutes to the next stage` : `${Math.ceil(left)} seconds to the next stage`;
-  const y = cropYield(c.tended);
+  const y = cropYield(c.tended, bumper);
   return `${def.name}, ${cropStageName(c)} · ${when} · tended ${c.tended} of ${RIPE} times, for ${y.produce} ${itemDef(def.produce).name.toLowerCase()} and ${y.seeds} seed${y.seeds > 1 ? 's' : ''}`;
 }
 
 const cropOf = (g: Game, t: Target): Crop | undefined => (t.kind === 'tile' ? g.cropAt(t.x, t.y) : undefined);
+
+/**
+ * The tiles within `r` of (x, y), that tile included, row by row from the
+ * north-west: a Farmer's patch, three by three at a reach of one.
+ */
+export const patchAround = (g: Game, x: number, y: number, r: number): Array<[number, number]> => {
+  const out: Array<[number, number]> = [];
+  for (let ty = y - r; ty <= y + r; ty++) {
+    for (let tx = x - r; tx <= x + r; tx++) if (tx >= 0 && ty >= 0 && tx < g.world.w && ty < g.world.h) out.push([tx, ty]);
+  }
+  return out;
+};
+/** A patch job takes as long as this many of the one-tile job it does up to nine of. */
+export const PATCH_TIME = 3;
+/** The one-tile jobs' own times and stamina, which the patch jobs are made from. */
+const SOW = { baseTime: 3, stamina: 0.02 };
+const TEND = { baseTime: 4, stamina: 0.03 };
+const HARVEST = { baseTime: 5, stamina: 0.04 };
+const patchOf = (job: { baseTime: number; stamina: number }): { baseTime: number; stamina: number } =>
+  ({ baseTime: job.baseTime * PATCH_TIME, stamina: job.stamina * PATCH_TIME });
+
+/** The empty fields in a patch: tilled, and nothing growing. */
+export const emptyFields = (g: Game, x: number, y: number, r: number): Array<[number, number]> =>
+  patchAround(g, x, y, r).filter(([tx, ty]) => g.world.getTile(tx, ty) === TileType.Field && !g.cropAt(tx, ty));
+/** The crops in a patch that want tending: not ripe, and not tended at the stage they are at. */
+export const wantTending = (g: Game, x: number, y: number, r: number): Crop[] =>
+  patchAround(g, x, y, r).flatMap(([tx, ty]) => {
+    const c = g.cropAt(tx, ty);
+    return c && !cropReady(c) && !c.tendedNow ? [c] : [];
+  });
+/** The ripe crops in a patch. */
+export const ripeIn = (g: Game, x: number, y: number, r: number): Crop[] =>
+  patchAround(g, x, y, r).flatMap(([tx, ty]) => {
+    const c = g.cropAt(tx, ty);
+    return c && cropReady(c) ? [c] : [];
+  });
+
+/**
+ * The pace a crop sown here now grows at, for whoever is sowing it: a
+ * Farmer's Fast Growth, and Crop Rotation on a field whose last crop was
+ * another one. A field never sown before has no last crop to differ from.
+ */
+export function sownPace(g: Game, x: number, y: number, id: string): number {
+  const last = g.lastSown(x, y);
+  return g.perk('grow:plant_seed', 1) * (last !== undefined && last !== id ? g.perk('rotate:plant_seed', 1) : 1);
+}
+
+/**
+ * Sow one field from a seed in the pack. A Farmer's Seed Saver keeps the seed
+ * now and then; null when there was no seed left to spend.
+ */
+function sowOne(g: Game, x: number, y: number, seed: Item, def: CropDef): 'sown' | 'kept' | null {
+  const kept = g.rand() < g.perk('keep:plant_seed', 0);
+  const ql = seed.ql;
+  if (!kept && !g.inventory.remove(seed.uid, 1)) return null;
+  g.plantCrop(x, y, def.id, ql, sownPace(g, x, y, def.id));
+  return kept ? 'kept' : 'sown';
+}
+
+/** Tend one crop at the stage it is at. */
+function tendOne(g: Game, c: Crop): void {
+  c.tendedNow = true;
+  c.tended += 1;
+  // Quality follows the farmer, averaged over the care the field was given.
+  c.ql = (c.ql * c.tended + g.productQl('farming')) / (c.tended + 1);
+  g.events.emit('world', c.x, c.y);
+}
+
+/**
+ * Harvest one ripe crop into the pack, or the cart being worked from: what
+ * its tending earned, the gardener's path, and a Farmer's Bumper Crop, the
+ * two more of Herb Plot, Grain Master and Fibre Farmer, and Fodder's grass.
+ */
+function reapOne(g: Game, c: Crop): { produce: Item; got: number; seeds: number; ql: number } {
+  const def = cropDef(c.id);
+  const y = cropYield(c.tended, g.perk('bumper:harvest_crop', 0));
+  // The field's own quality, lifted by the farmer's skill at harvest.
+  const ql = Math.max(1, Math.min(100, (c.ql + g.productQl('farming')) / 2));
+  // The gardener's path takes more out of the same ground.
+  const more = g.walks('love', 5) ? ABUNDANCE : 1;
+  const got = Math.max(1, Math.round(y.produce * more)) + g.perk(`plus:${def.produce}`, 0);
+  const produce = g.gather(def.produce, { count: got, ql });
+  g.gather(def.seed, { count: y.seeds, ql });
+  const grass = g.perk('fodder:harvest_crop', 0);
+  if (grass > 0) g.inventory.add('mixed_grass', { count: grass, ql });
+  g.removeCrop(c.x, c.y);
+  return { produce, got, seeds: y.seeds, ql };
+}
+
+/** "That wants a Farmer who has learned to sow a patch." */
+const unlearned = (what: string): string => `That wants a Farmer who has learned to ${what}.`;
 
 export const FARM_ACTIONS: ActionDef[] = [
   {
@@ -151,8 +253,7 @@ export const FARM_ACTIONS: ActionDef[] = [
     verb: 'sowing',
     skill: 'farming',
     hidden: true,
-    stamina: 0.02,
-    baseTime: 3,
+    ...SOW,
     applies: (t, g) => t.kind === 'tile' && g.world.getTile(t.x, t.y) === TileType.Field,
     check: (t, g) => {
       if (t.kind !== 'tile') return 'Choose a field.';
@@ -166,9 +267,11 @@ export const FARM_ACTIONS: ActionDef[] = [
       if (t.kind !== 'tile' || t.itemUid === undefined) return;
       const seed = g.inventory.get(t.itemUid);
       const def = seed && CROP_BY_SEED.get(seed.id);
-      if (!seed || !def || !g.inventory.remove(seed.uid, 1)) return;
-      g.plantCrop(t.x, t.y, def.id, seed.ql);
-      g.logMsg(`You sow ${def.name.toLowerCase()}. It should be ${STAGE_NAMES[1]} in a couple of minutes.`, 'event');
+      if (!seed || !def) return;
+      const sown = sowOne(g, t.x, t.y, seed, def);
+      if (!sown) return;
+      g.logMsg(`You sow ${def.name.toLowerCase()}. It should be ${STAGE_NAMES[1]} in a couple of minutes.`
+        + `${sown === 'kept' ? ' It cost you no seed.' : ''}`, 'event');
     },
   },
   {
@@ -176,8 +279,7 @@ export const FARM_ACTIONS: ActionDef[] = [
     label: 'Tend',
     verb: 'tending the field',
     skill: 'farming',
-    stamina: 0.03,
-    baseTime: 4,
+    ...TEND,
     applies: (t, g) => cropOf(g, t) !== undefined,
     check: (t, g) => {
       const c = cropOf(g, t);
@@ -189,12 +291,8 @@ export const FARM_ACTIONS: ActionDef[] = [
     perform: (t, g) => {
       const c = cropOf(g, t);
       if (!c || c.tendedNow || cropReady(c)) return;
-      c.tendedNow = true;
-      c.tended += 1;
-      // Quality follows the farmer, averaged over the care the field was given.
-      c.ql = (c.ql * c.tended + g.productQl('farming')) / (c.tended + 1);
-      const y = cropYield(c.tended);
-      g.events.emit('world', c.x, c.y);
+      tendOne(g, c);
+      const y = cropYield(c.tended, g.perk('bumper:harvest_crop', 0));
       const what = itemDef(cropDef(c.id).produce).name.toLowerCase();
       g.logMsg(`You weed and water the ${cropDef(c.id).name.toLowerCase()}. It should give ${y.produce} ${what} and ${y.seeds} seed${y.seeds > 1 ? 's' : ''}.`, 'event');
     },
@@ -204,8 +302,7 @@ export const FARM_ACTIONS: ActionDef[] = [
     label: 'Harvest',
     verb: 'harvesting',
     skill: 'farming',
-    stamina: 0.04,
-    baseTime: 5,
+    ...HARVEST,
     applies: (t, g) => cropOf(g, t) !== undefined,
     check: (t, g) => {
       const c = cropOf(g, t);
@@ -217,17 +314,9 @@ export const FARM_ACTIONS: ActionDef[] = [
       const c = cropOf(g, t);
       if (!c || !cropReady(c)) return;
       const def = cropDef(c.id);
-      const y = cropYield(c.tended);
-      // The field's own quality, lifted by the farmer's skill at harvest.
-      const ql = Math.max(1, Math.min(100, (c.ql + g.productQl('farming')) / 2));
-      // The gardener's path takes more out of the same ground.
-      const more = g.walks('love', 5) ? ABUNDANCE : 1;
-      const got = Math.max(1, Math.round(y.produce * more));
-      const produce = g.gather(def.produce, { count: got, ql });
-      g.gather(def.seed, { count: y.seeds, ql });
-      g.removeCrop(c.x, c.y);
+      const r = reapOne(g, c);
       g.logMsg(
-        `You harvest ${got} × ${itemName(produce).toLowerCase()} and ${y.seeds} ${itemDef(def.seed).name.toLowerCase()}. The field is ready to sow again. (QL ${ql.toFixed(1)})`,
+        `You harvest ${r.got} × ${itemName(r.produce).toLowerCase()} and ${r.seeds} ${itemDef(def.seed).name.toLowerCase()}. The field is ready to sow again. (QL ${r.ql.toFixed(1)})`,
         'event',
       );
     },
@@ -244,8 +333,97 @@ export const FARM_ACTIONS: ActionDef[] = [
       if (t.kind !== 'tile') return;
       const c = g.cropAt(t.x, t.y);
       if (c) g.removeCrop(t.x, t.y);
+      // Broken up, it is not a field any more, and has no last crop.
+      g.forgetSown(t.x, t.y);
       g.world.setTile(t.x, t.y, TileType.Dirt);
       g.logMsg(c ? `You turn the ${cropDef(c.id).name.toLowerCase()} back into the soil.` : 'You break the field back up into plain dirt.', 'event');
+    },
+  },
+  // ---- A Farmer's patch jobs: the three by three around a tile, as one job. ----
+  {
+    id: 'sow_patch',
+    label: 'Sow a patch',
+    verb: 'sowing a patch',
+    skill: 'farming',
+    hidden: true,
+    ...patchOf(SOW),
+    applies: (t, g) => t.kind === 'tile' && g.perk('sow_patch', 0) > 0 && g.world.getTile(t.x, t.y) === TileType.Field,
+    check: (t, g) => {
+      if (t.kind !== 'tile') return 'Choose a field.';
+      if (g.perk('sow_patch', 0) <= 0) return unlearned('sow a patch');
+      const seed = t.itemUid !== undefined ? g.inventory.get(t.itemUid) : undefined;
+      if (!seed || !CROP_BY_SEED.has(seed.id)) return 'Choose a seed to sow.';
+      if (!emptyFields(g, t.x, t.y, g.perk('sow_patch', 0)).length) return 'There is no empty field in the patch to sow.';
+      return null;
+    },
+    perform: (t, g) => {
+      if (t.kind !== 'tile' || t.itemUid === undefined) return;
+      const first = g.inventory.get(t.itemUid);
+      const def = first && CROP_BY_SEED.get(first.id);
+      if (!first || !def) return;
+      let sown = 0;
+      let kept = 0;
+      for (const [x, y] of emptyFields(g, t.x, t.y, g.perk('sow_patch', 0))) {
+        const seed = g.inventory.get(t.itemUid);
+        if (!seed) break;
+        const how = sowOne(g, x, y, seed, def);
+        if (!how) break;
+        sown += 1;
+        if (how === 'kept') kept += 1;
+      }
+      if (!sown) return;
+      g.logMsg(`You sow ${sown} ${sown === 1 ? 'field' : 'fields'} with ${def.name.toLowerCase()}.`
+        + `${kept ? ` ${kept === sown ? (sown === 1 ? 'It' : 'They') : `${kept} of them`} cost you no seed.` : ''}`, 'event');
+    },
+  },
+  {
+    id: 'tend_patch',
+    label: 'Tend a patch',
+    verb: 'tending a patch',
+    skill: 'farming',
+    ...patchOf(TEND),
+    applies: (t, g) => t.kind === 'tile' && g.perk('tend_patch', 0) > 0 && g.cropAt(t.x, t.y) !== undefined,
+    check: (t, g) => {
+      if (t.kind !== 'tile') return 'Choose a field.';
+      if (g.perk('tend_patch', 0) <= 0) return unlearned('tend a patch');
+      if (!wantTending(g, t.x, t.y, g.perk('tend_patch', 0)).length) return 'Nothing in the patch wants tending.';
+      return null;
+    },
+    perform: (t, g) => {
+      if (t.kind !== 'tile') return;
+      const crops = wantTending(g, t.x, t.y, g.perk('tend_patch', 0));
+      for (const c of crops) tendOne(g, c);
+      if (crops.length) g.logMsg(`You weed and water ${crops.length} ${crops.length === 1 ? 'crop' : 'crops'}.`, 'event');
+    },
+  },
+  {
+    id: 'harvest_patch',
+    label: 'Harvest a patch',
+    verb: 'harvesting a patch',
+    skill: 'farming',
+    ...patchOf(HARVEST),
+    applies: (t, g) => t.kind === 'tile' && g.perk('harvest_patch', 0) > 0 && g.cropAt(t.x, t.y) !== undefined,
+    check: (t, g) => {
+      if (t.kind !== 'tile') return 'Choose a field.';
+      if (g.perk('harvest_patch', 0) <= 0) return unlearned('harvest a patch');
+      if (!ripeIn(g, t.x, t.y, g.perk('harvest_patch', 0)).length) return 'Nothing in the patch is ripe.';
+      return null;
+    },
+    perform: (t, g) => {
+      if (t.kind !== 'tile') return;
+      const crops = ripeIn(g, t.x, t.y, g.perk('harvest_patch', 0));
+      // What came up, by the thing, in the order it first came up.
+      const tally = new Map<string, number>();
+      for (const c of crops) {
+        const def = cropDef(c.id);
+        const r = reapOne(g, c);
+        tally.set(def.produce, (tally.get(def.produce) ?? 0) + r.got);
+        tally.set(def.seed, (tally.get(def.seed) ?? 0) + r.seeds);
+      }
+      if (!crops.length) return;
+      g.logMsg(`You harvest ${crops.length} ${crops.length === 1 ? 'field' : 'fields'}: `
+        + `${[...tally].map(([id, n]) => `${n} × ${itemDef(id).name.toLowerCase()}`).join(', ')}. `
+        + `${crops.length === 1 ? 'The field is' : 'The fields are'} ready to sow again.`, 'event');
     },
   },
 ];

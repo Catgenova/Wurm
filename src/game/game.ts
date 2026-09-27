@@ -24,7 +24,7 @@ import { kilnAnchor, kilnCovers, KILN_SUBTILES, type PlacedKiln } from './kiln';
 import { ACROSS_OF, DEED_PLACE, ONE_ALTAR, deckSpot, furnitureAnchor, furnitureCapacity, furnitureCentre, furnitureCovers, furnitureDef, furnitureHeft, furnitureHolds, furnitureKg, furnitureRefuses, furnitureRoom, furnitureUnits, hiveRoom, rackDeck, rackSpots, teamOf, vehicleOf, type LiquidKind, type PlacedFurniture, furnitureName, LIQUID_NAME, isBoat, furnitureFootprint, type BoatDef } from './furniture';
 import { emptyCrate, occupiedRefusal, shutIn } from './creaturecrate';
 import { bury, crumble, graveAt, graveRefusal, graveSays, GRAVE_MARK } from './graves';
-import { cropDef, RIPE, type Crop } from './farming';
+import { cropStageSeconds, RIPE, type Crop } from './farming';
 import { ageDef, bloodMul, CALL_WINDOW, Creatures, FIGHT_BACK_GOES, HAUL_SKILL, isBaitFor, isShod, PLAYER_ATTACKER, PULL_DEFAULT, SHOE_PACE, SHOE_STEP, SPECIES, type Creature, type CreatureJSON, type Stance } from './creatures';
 import { CRAFT_REACH, knackable, type CraftStock, type Station } from './recipes';
 import { Actor, type ActiveAction, type GuestSave } from './actor';
@@ -260,6 +260,8 @@ export interface GameInit {
   guide?: GuideBook;
   anvils?: PlacedAnvil[];
   crops?: Crop[];
+  /** The crop last sown on each field, as `[x, y, crop]`. */
+  sown?: Array<[number, number, string]>;
   marks?: Marker[];
   hoards?: Hoard[];
   player?: { x: number; y: number; name: string; stats: Player['stats']; level?: number; equipped?: Record<string, number | null>; rested?: number; boons?: Boon[]; knacks?: Record<string, number>; nutrition?: Record<Nutrient, number>;
@@ -434,7 +436,11 @@ export const ORDINARY_GAIN = 0.45;
  * whoever is acting, and the help asks it of somebody new to the work.
  */
 export const goSeconds = (baseTime: number, skill = 50, toolQl = 0, control = 1): number =>
-  Math.max(ACTION_FLOOR, baseTime * ACTION_PACE * (1 - skill / 140) * (1 - toolQl / 400) * control);
+  Math.max(ACTION_FLOOR, baseTime * ACTION_PACE * (1 - skill / 140) * (1 - toolQl / TOOL_QL_SPAN) * control);
+/** Each point of a tool's QL takes one part in this many off a go's time: a QL 100 tool, a quarter of it. */
+export const TOOL_QL_SPAN = 400;
+/** The best a thing's QL can be. */
+export const QL_TOP = 100;
 
 /**
  * What you wash ashore with: each tool, the quality it comes at and what its
@@ -772,6 +778,8 @@ export class Game {
   nextAnvilId = 1;
   /** Crops growing on tilled fields, keyed by "x,y". */
   readonly crops = new Map<number, Crop>();
+  /** The crop last sown on each field, by tile, for a Farmer's Crop Rotation. */
+  readonly sown = new Map<number, string>();
   /** Tiles a prospector has marked, and when the marks fade. */
   prospected: { tiles: Set<number>; until: number } | null = null;
   hooks: GameHooks = { prompt: async (_q, fallback) => fallback, confirm: async () => true };
@@ -988,6 +996,7 @@ export class Game {
       if (f.id >= this.nextFireId) this.nextFireId = f.id + 1;
     }
     for (const c of init.crops ?? []) this.crops.set(tileKey(c.x, c.y), c);
+    for (const [x, y, id] of init.sown ?? []) this.sown.set(tileKey(x, y), id);
     for (const k of init.kilns ?? []) {
       this.kilns.set(k.id, k);
       if (k.id >= this.nextKilnId) this.nextKilnId = k.id + 1;
@@ -3724,7 +3733,8 @@ export class Game {
    */
   duration(def: ActionDef): number {
     const skill = def.skill ? this.skills.get(def.skill) : 50;
-    const toolQl = def.tool ? this.toolQl(def.tool) : 0;
+    // A Farmer's Worn-in Rake counts the rake better than it is, to the top.
+    const toolQl = def.tool ? Math.min(QL_TOP, this.toolQl(def.tool) + this.perk(`tool:${def.id}`, 0)) : 0;
     // And less of it on a settlement whose altar has a bauble for the trade,
     // and for a perk on the job's own time (a Carpenter's Quick Saw).
     return goSeconds(def.baseTime, skill, toolQl,
@@ -6007,6 +6017,7 @@ export class Game {
           x: c.x, y: c.y, id: c.id, stage: c.stage,
           stageAt: this.time - (Number.isFinite(c.ago) ? c.ago : 0),
           tended: c.tended, tendedNow: c.tendedNow, ql: c.ql,
+          ...(c.pace !== undefined && c.pace !== 1 ? { pace: c.pace } : {}),
         });
       }
     }
@@ -6585,11 +6596,23 @@ export class Game {
     return this.crops.get(tileKey(x, y));
   }
 
-  plantCrop(x: number, y: number, id: string, seedQl: number): Crop {
+  plantCrop(x: number, y: number, id: string, seedQl: number, pace = 1): Crop {
     const c: Crop = { x, y, id, stage: 0, stageAt: this.time, tended: 0, tendedNow: false, ql: seedQl };
+    if (pace !== 1) c.pace = pace;
     this.crops.set(tileKey(x, y), c);
+    this.sown.set(tileKey(x, y), id);
     this.events.emit('world', x, y);
     return c;
+  }
+
+  /** The crop last sown on a field, which a Farmer's Crop Rotation asks after; none on a field never sown. */
+  lastSown(x: number, y: number): string | undefined {
+    return this.sown.get(tileKey(x, y));
+  }
+
+  /** A field broken up has no last crop any more. */
+  forgetSown(x: number, y: number): void {
+    this.sown.delete(tileKey(x, y));
   }
 
   removeCrop(x: number, y: number): void {
@@ -6603,7 +6626,8 @@ export class Game {
       if (c.stage >= RIPE) continue;
       // The gardener's path hurries everything that is in your own ground.
       const green = this.walks('love', 1) && this.deed && this.onDeed(c.x, c.y) ? GREEN_THUMB : 1;
-      const per = cropDef(c.id).stageSeconds * green;
+      // And the pace it was sown at: a Farmer's Fast Growth and Crop Rotation.
+      const per = cropStageSeconds(c) * green;
       let moved = false;
       while (c.stage < RIPE && this.time - c.stageAt >= per) {
         c.stage += 1;
@@ -7185,7 +7209,7 @@ export interface IslandGround {
    * counts in its own world seconds, and the one thing the two agree on
    * without any arrangement is how long a second is.
    */
-  crops?: Array<{ x: number; y: number; id: string; stage: number; ago: number; tended: number; tendedNow: boolean; ql: number }>;
+  crops?: Array<{ x: number; y: number; id: string; stage: number; ago: number; tended: number; tendedNow: boolean; ql: number; pace?: number }>;
   /**
    * The felling notches near you and how long ago the woods last turned
    * over, both on the slow half. Look reads them: "2 of 3 strokes in it", and

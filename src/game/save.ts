@@ -24,6 +24,7 @@ import type { Nutrient } from './nutrition';
 import type { Ledger } from './ledger';
 import type { GuideBook } from './guide';
 import type { Crop } from './farming';
+import { keyX, keyY } from './tileindex';
 import type { PlacedCrate } from './crates';
 import type { CreatureJSON } from './creatures';
 import type { Item } from './items';
@@ -249,6 +250,8 @@ interface SaveData {
   guide?: GuideBook;
   anvils?: PlacedAnvil[];
   crops?: Crop[];
+  /** The crop last sown on each field, as `[x, y, crop]`. A save from before it has none. */
+  sown?: Array<[number, number, string]>;
   crate?: { x: number; y: number; items: Item[] } | null;
   /**
    * Everybody who has ever visited, and what they had when they left.
@@ -327,6 +330,7 @@ function meta(game: Game): SaveMeta {
     guide: game.guide.toJSON(),
     anvils: [...game.anvils.values()],
     crops: [...game.crops.values()],
+    sown: [...game.sown].map(([k, id]): [number, number, string] => [keyX(k), keyY(k), id]),
     guests: game.guestRecords(),
   };
 }
@@ -583,6 +587,7 @@ function finish(world: World, m: SaveMeta): Game {
     guide: m.guide,
     anvils: m.anvils,
     crops: m.crops,
+    sown: m.sown,
     marks: m.marks,
     hoards: m.hoards,
     crate: m.crate ?? null,

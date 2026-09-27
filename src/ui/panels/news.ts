@@ -481,6 +481,19 @@ export const NEWS: News[] = [
       ];
     },
   },
+  {
+    n: 38,
+    day: '2026-09-27',
+    lines: () => {
+      const main = (CLASSES.find((c) => c.id === 'farmer')?.main ?? '').replace(/_/g, ' ');
+      return [
+        `The Farmer has perks instead of a tree now: ${numberWord(PERK_TIER_AT.length)} tiers of ${numberWord(PERKS_PER_TIER)}, the first with the trade and the others at ${listed(PERK_TIER_AT.slice(1).map(String))} in ${main}. The nodes a Farmer had bought went with the tree.`,
+        'Three of them are new jobs: Sow a patch, Tend a patch and Harvest a patch work every field in the square around the one you choose as one job.',
+        'A crop keeps the pace it was sown at, so a field a Farmer sowed faster grows faster whoever harvests it.',
+        'And a wildermon set to farm brings home the harvest and leaves the seed in the furrow. It had them the wrong way round on an island.',
+      ];
+    },
+  },
 ];
 
 /** The highest entry this browser has shown. */

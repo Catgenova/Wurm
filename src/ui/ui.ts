@@ -47,7 +47,7 @@ import { jobName, smelterAnchor, smelterState, type PlacedSmelter } from '../gam
 import { isGreenware, kilnAnchor, kilnState, type PlacedKiln } from '../game/kiln';
 import { furnitureAnchor, furnitureCapacity, furnitureDef, furnitureHeft, furnitureHolds, furnitureKg, furnitureName, furnitureState, furnitureUnits, isFurniture, rackDeck, rackSpots, type PlacedFurniture, turnedFacing } from '../game/furniture';
 import { DEED_ACTION_BY_ID, leaveQuestion, standingWord, upgradeProgress, upgradeReason } from '../game/deed';
-import { CROP_BY_SEED, cropDef, describeCrop } from '../game/farming';
+import { CROP_BY_SEED, cropDef, describeCrop, emptyFields, sownPace, type CropDef } from '../game/farming';
 import { cornerReading, groundReading } from './tileinfo';
 import { deedWorkersAt, MAX_DEED_LEVEL, rankAtLeast, type Deed } from '../game/game';
 import { CRAFT_REACH, recipeNeeds, recipeReason, recipeStatus, RECIPES, type CraftStock } from '../game/recipes';
@@ -755,7 +755,7 @@ export class UI {
     } else {
       lines.push(w.tileName(pick.x, pick.y));
     }
-    if (growing) lines.push(describeCrop(growing, this.game.time));
+    if (growing) lines.push(describeCrop(growing, this.game.time, this.game.perk('bumper:harvest_crop', 0)));
     lines.push(`${pick.x}, ${pick.y} · slope ${w.slope(pick.x, pick.y)}`);
     lines.push(cornerReading(this.game, pick.cx, pick.cy));
     const reading = groundReading(this.game, pick.x, pick.y);
@@ -1066,29 +1066,40 @@ export class UI {
         })),
       });
     }
-    // Sowing on a tilled field: pick from the seeds you carry.
-    const sowDef = ACTION_BY_ID.get('plant_seed');
-    if (sowDef && sowDef.applies(target, this.game) && !this.game.cropAt(pick.x, pick.y)) {
-      const seeds = this.game.inventory.items.filter((it) => CROP_BY_SEED.has(it.id));
+    // Sowing on a tilled field: pick from the seeds you carry. A Farmer who has
+    // learned to sow a patch is offered that too, from the same seeds.
+    const seedsCarried = this.game.inventory.items.filter((it) => CROP_BY_SEED.has(it.id));
+    const sowMenu = (def: ActionDef, label: string, note: (crop: CropDef) => string): void => {
       entries.push({
-        label: 'Sow',
-        disabled: !seeds.length,
-        hint: seeds.length ? undefined : 'You carry no seeds. Forage and botanize for them.',
-        children: seeds.length
-          ? seeds.map((it) => {
+        label,
+        disabled: !seedsCarried.length,
+        hint: seedsCarried.length ? undefined : 'You carry no seeds. Forage and botanize for them.',
+        children: seedsCarried.length
+          ? seedsCarried.map((it) => {
               const crop = CROP_BY_SEED.get(it.id)!;
               const st: Target = { ...target, itemUid: it.uid };
-              const reason = sowDef.check?.(st, this.game) ?? null;
+              const reason = def.check?.(st, this.game) ?? null;
               return {
                 label: it.count > 1 ? `${itemName(it)} (${it.count})` : itemName(it),
-                note: `${crop.name}, ${crop.stageSeconds}s a stage`,
+                note: note(crop),
                 hint: reason ?? undefined,
                 disabled: !!reason,
-                onSelect: () => this.game.requestAction(sowDef, st),
+                onSelect: () => this.game.requestAction(def, st),
               };
             })
           : undefined,
       });
+    };
+    const sowDef = ACTION_BY_ID.get('plant_seed');
+    if (sowDef && sowDef.applies(target, this.game) && !this.game.cropAt(pick.x, pick.y)) {
+      // At the pace this sowing would grow at: a Farmer's Fast Growth and Crop Rotation.
+      sowMenu(sowDef, 'Sow', (crop) => `${crop.name}, ${Math.round(crop.stageSeconds * sownPace(this.game, pick.x, pick.y, crop.id))}s a stage`);
+    }
+    const patchDef = ACTION_BY_ID.get('sow_patch');
+    if (patchDef && patchDef.applies(target, this.game)) {
+      const r = this.game.perk('sow_patch', 0);
+      const empty = emptyFields(this.game, pick.x, pick.y, r).length;
+      sowMenu(patchDef, 'Sow a patch', (crop) => `${crop.name} on ${empty} empty ${empty === 1 ? 'field' : 'fields'} of the ${2 * r + 1}×${2 * r + 1}`);
     }
     const smelterDef = ACTION_BY_ID.get('place_smelter');
     const smelterItem = this.game.inventory.find('smelter');

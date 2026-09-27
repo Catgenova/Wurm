@@ -485,7 +485,8 @@ check('nobody keeps a node of the Terraformer\'s old tree', say('OLDNODES') === 
  * quality, a rarity, a map, a failure or a thing kept; a thing for a weight;
  * a skill for a slope. A typo there is a perk that reads nothing.
  */
-const JOBS = new Set(['time', 'ql', 'rare', 'map', 'fail', 'keep', 'more', 'gem', 'find', 'cap', 'into', 'spare', 'need', 'fewer', 'grown']);
+const JOBS = new Set(['time', 'ql', 'rare', 'map', 'fail', 'keep', 'more', 'gem', 'find', 'cap', 'into', 'spare', 'need', 'fewer', 'grown',
+  'grow', 'rotate', 'bumper', 'fodder', 'tool']);
 /*
  * And a kind of work, where the rule asks what is being worked rather than
  * which job: a wall or floor of stone or of timber, a bridge of each kind.
@@ -498,6 +499,7 @@ const OTHERS = new Set([
   'depth:raise_rock', 'lift:raise_rock', 'repoint', 'rubble',
   'melt:share', 'melt:keep', 'pour:wear', 'reach:forge', 'jobs', 'ingot',
   'stump:clear', 'nest:chance', 'nest:feathers', 'honey:chance', 'honey:count', 'bush:shaft', 'coppice', 'tap_resin', 'clear_brush',
+  'sow_patch', 'tend_patch', 'harvest_patch',
   ...STRIDE_KEYS,
 ]);
 const unnamed = PERKS.flatMap((p) => Object.keys(p.fx).filter((key) => {
@@ -507,8 +509,10 @@ const unnamed = PERKS.flatMap((p) => Object.keys(p.fx).filter((key) => {
   // How much a pass of Improve adds, by what the thing is made of.
   if (fam === 'improve') return !(rest in IMPROVE_MATERIALS);
   if (WORK_FAMILIES.has(fam) || (fam === 'reach' && rest?.startsWith('build_'))) return !WORKS.has(rest);
-  // A thing: what it weighs, how many come, how it wears, and a maker's mark on it.
-  if (fam === 'weight' || fam === 'count' || fam === 'wear' || (MARK_FAMILIES as readonly string[]).includes(fam)) return !ITEM_DEFS[rest];
+  // A thing: what it weighs, how many come or how many more, how it wears, and a maker's mark on it.
+  if (fam === 'weight' || fam === 'count' || fam === 'plus' || fam === 'wear' || (MARK_FAMILIES as readonly string[]).includes(fam)) {
+    return !ITEM_DEFS[rest];
+  }
   if (fam === 'slope') return !['digging', 'masonry'].includes(rest);
   return !OTHERS.has(key);
 }).map((key) => `${p.id} ${key}`));

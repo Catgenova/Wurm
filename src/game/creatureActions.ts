@@ -570,9 +570,15 @@ export const CREATURE_ACTIONS: ActionDef[] = [
       // What it has been fed on is what comes out of it.
       const ql = Math.max(1, Math.min(100, 20 + c.fleece * 40 + c.hunger * 30));
       g.inventory.add('milk_bucket', { ql });
+      // A Farmer's Milkmaid fills a second bucket now and then, if there is one.
+      const spare = g.rand() < g.perk('more:milk_creature', 0) ? g.inventory.find('bucket') : undefined;
+      if (spare) {
+        g.inventory.remove(spare.uid, 1);
+        g.inventory.add('milk_bucket', { ql });
+      }
       c.fleece = 0;
       g.gainSkill('farming', 0.3);
-      g.logMsg(`You milk ${c.name} into the bucket. (QL ${ql.toFixed(1)})`, 'event');
+      g.logMsg(`You milk ${c.name} into the bucket${spare ? ' and fill another' : ''}. (QL ${ql.toFixed(1)})`, 'event');
     },
   },
   // ---- The saddle: tack fitted, and a rider up. ----

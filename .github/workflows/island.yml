@@ -1594,6 +1594,18 @@ jobs:
             --outfile=node_modules/.cache/forester.mjs --log-level=error
           node node_modules/.cache/forester.mjs
 
+      - name: The Farmer's perks, each where its rule is
+        run: |
+          # Each of the Farmer's eighteen measured on the island with the dice
+          # taken out where they can be: the seed kept, the pace a crop is sown
+          # at and grown at, the field's last crop; the harvest's bumper, two
+          # more, rarity, grass and store; the quern's flour and fruit, the
+          # milk, the load and the rake; the three patch jobs with every
+          # refusal; a worker's harvest; and the browser's menus and numbers.
+          npx esbuild supabase/test/farmer.ts --bundle --platform=node --format=esm \
+            --outfile=node_modules/.cache/farmer.mjs --log-level=error
+          node node_modules/.cache/farmer.mjs
+
       - name: The exact benefit, and where its number comes from
         run: |
           # Text the player reads says what changes and by how much, and where

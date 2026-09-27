@@ -305,8 +305,11 @@ export const baubleTwice = (list: readonly DeedBauble[] | undefined, skill: stri
 };
 
 /** What the baubles add to a yield of this job. */
+/** The job a job counts as for an ancient bauble: a Farmer's patch harvest is so many harvests. */
+const BAUBLE_JOB_AS: Record<string, string> = { harvest_patch: 'harvest_crop' };
 export const baublePlus = (list: readonly DeedBauble[] | undefined, action: string | undefined): number => {
-  const effect = action ? ANCIENT_EFFECTS.find((e) => e.action === action) : undefined;
+  const job = action ? BAUBLE_JOB_AS[action] ?? action : undefined;
+  const effect = job ? ANCIENT_EFFECTS.find((e) => e.action === job) : undefined;
   return effect ? baubleBonus(list, 'plus', effect.id) : 0;
 };
 

@@ -25,7 +25,7 @@ import {
 } from '../../game/creatures';
 import { DEED_UPGRADES } from '../../game/deed';
 import { DYES } from '../../game/dyestuffs';
-import { CROP_BY_SEED, cropYield, RIPE, STAGE_NAMES } from '../../game/farming';
+import { CROP_BY_SEED, cropYield, PATCH_TIME, RIPE, STAGE_NAMES } from '../../game/farming';
 import { CASTS, FAITH, FAVOUR_CEILING, favourCap, PRAYER_BASE, PRAYER_LIFT, PRAYER_PEAKS, PRAYER_REST, PRAYER_TAPER } from '../../game/faith';
 import { ANCIENT_EFFECTS, ANCIENT_PLUS, BAUBLE_HIGH, BAUBLE_KINDS, BAUBLE_LOW, BAUBLE_SHARE, BAUBLE_TIERS, baubleTimes, MAJOR_SKILLS, MINOR_SKILLS, REGRET_SHARE, YIELD_TIMES } from '../../game/baubles';
 import { MOTE_CHANCE } from '../../game/sacrifice';
@@ -251,6 +251,8 @@ const FIRST_PERK = PERK_TRADES.length ? perksOf(PERK_TRADES[0].id)[0] : undefine
 /** A Forester's perk's numbers, by the perk's name. */
 const forester = (name: string): Record<string, number> => perksOf('forester').find((p) => p.name === name)?.fx ?? {};
 const BRUSH_SIDE = 2 * (forester('Clear Brush').clear_brush ?? 0) + 1;
+const farmer = (name: string): Record<string, number> => perksOf('farmer').find((p) => p.name === name)?.fx ?? {};
+const PATCH_SIDE = 2 * (farmer('Sow a Patch').sow_patch ?? 0) + 1;
 /** How many channels the rites push, from the narrowest to the widest. */
 const riteWidths = [...new Set(RITES.map((r) => Object.keys(r.muls).length))].sort((a, b) => a - b);
 /** What a rite does to its channels, as its card says it. */
@@ -783,6 +785,12 @@ export function helpText(): string {
     and tilling both train <b>Farming</b>, and your farming skill sets the quality of what you harvest.
     Harvesting leaves the ground still tilled, so a field can be sown again without raking it afresh
     &mdash; which is what lets a Seavic keep one running on its own.</p>
+    <p>A Farmer can learn to work a patch at a time: <b>Sow a patch</b>, <b>Tend a patch</b> and <b>Harvest
+    a patch</b> each take the ${PATCH_SIDE}&times;${PATCH_SIDE} tiles around the field you choose as one job, in the time of
+    ${numberWord(PATCH_TIME)} of the one-field job. Sow a patch sows the seed you choose on every empty field in it, one
+    seed a field; Tend a patch tends every crop in it not yet tended at the stage it is at; Harvest a patch
+    harvests every ripe crop in it, each for what its own tending earned. A crop keeps the pace it was sown
+    at, so a field a Farmer sowed faster grows faster whoever harvests it.</p>
     <h3>Campfires and cooking</h3>
     <p>Right-click any dry, open spot and choose <b>Build campfire</b> to lay one from ${numberWord(FIRE_COST)} shafts; it
     fills a ${numberWord(FIRE_SUBTILES)} by ${numberWord(FIRE_SUBTILES)} block of the tile's spots. Feed it anything that burns &mdash; thatch, shafts,
