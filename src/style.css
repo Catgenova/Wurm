@@ -2891,9 +2891,26 @@ kbd {
   font-size: 11px;
 }
 
-/* A trade whose main skill is not there yet: readable, and plainly not open. */
-.trade-shut {
+/*
+ * A trade whose main skill is not there yet: readable, and plainly not open.
+ * What it offers is left at full strength once laid open, since reading that
+ * is the whole reason for opening it, and so is the button that opens it.
+ */
+.trade-shut > :not(.trade-offer):not(.trade-acts) {
   opacity: 0.55;
+}
+
+/* A card's buttons, in a row that wraps when the window is narrow. */
+.trade-acts {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+}
+
+.trade-page .tb-btn:disabled {
+  opacity: 0.45;
+  cursor: default;
 }
 
 .trade-take,
@@ -2990,5 +3007,55 @@ kbd {
 
 .trade-tier-shut .trade-col-head {
   color: var(--ui-dim);
+}
+
+/*
+ * What a trade offers, laid open under its card from the rulebook. Set in
+ * from the card's edge with a rule down the side, so it reads as belonging to
+ * the card above it rather than as the next card.
+ */
+.trade-offer {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  margin-top: 3px;
+  padding: 4px 0 2px 8px;
+  border-left: 2px solid var(--ui-border);
+}
+
+.trade-offer .trade-tier {
+  margin-bottom: 2px;
+}
+
+/* The second press: what it will do, and the way out of it. */
+.trade-confirm {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 6px 7px;
+  border: 1px solid var(--ui-accent);
+  border-radius: 3px;
+  background: rgba(227, 182, 87, 0.08);
+}
+
+.trade-confirm-ask {
+  color: var(--ui-text);
+  font-weight: 600;
+}
+
+.trade-confirm-line {
+  color: var(--ui-text);
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.trade-go {
+  border-color: var(--ui-accent);
+  color: var(--ui-accent);
+}
+
+/* The perk the second press is about, among the three it closes. */
+.trade-node-asked {
+  border-color: var(--ui-accent);
 }
 

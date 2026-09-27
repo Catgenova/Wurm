@@ -546,7 +546,7 @@ export function helpText(): string {
       <tr><td><kbd>Page Up</kbd> / <kbd>Page Down</kbd></td><td>Look at the storey above or below</td></tr>
       <tr><td><kbd>X</kbd></td><td>Cut away the walls facing you</td></tr>
       <tr><td><kbd>K</kbd></td><td>Skills</td></tr>
-      <tr><td><kbd>F</kbd></td><td>Trades: the trade you took up, its tree or its perks, and its rite</td></tr>
+      <tr><td><kbd>F</kbd></td><td>Trades: what every trade offers, the one you took up, its tree or its perks, and its rite</td></tr>
       <tr><td><kbd>L</kbd></td><td>Event log</td></tr>
       <tr><td><kbd>M</kbd></td><td>Map</td></tr>
       <tr><td><kbd>G</kbd></td><td>Toggle the tile grid</td></tr>
@@ -580,7 +580,12 @@ export function helpText(): string {
     for another &mdash; ${riteDef('redhour')?.name} is <i>${riteSays('redhour')}</i> &mdash; so read both halves before you call one.
     Only the <b>fighting</b> trades have a rite; a craft trade has its nodes or its perks and none. It sits at
     the head of its trade's tree, with the reason underneath when you cannot call it.</p>
-    <p>Everything on that window is the <b>island's</b> answer rather than this browser's guess &mdash;
+    <p>Every card has <b>What it offers</b>, which lays the trade open before you take it up: its
+    ${numberWord(PERK_TIER_AT.length)} tiers of perks with the skill each opens at and what you have, or its rite and its
+    ${numberWord(COLUMNS)} columns with what each node costs and does. That is read from the rulebook, and it is there playing by
+    yourself too. <b>Take up</b> and <b>Take this one</b> each ask a second time before anything is done, saying what
+    goes with it, what it costs and which perks close.</p>
+    <p>Everything else on that window is the <b>island's</b> answer rather than this browser's guess &mdash;
     what you have spent, what is in your purse, whether the altar will hear you &mdash; so when a button
     will not press, the sentence under it is the island's own, and it is the truth.</p>
     <p>Putting a trade down for another costs <b>${CLASS_CHANGE_COST} silver</b>, and the nodes you bought or the perks you

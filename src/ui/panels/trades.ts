@@ -4,6 +4,13 @@ import type {
 } from '../../net/island';
 import { SKILL_DEFS } from '../../game/skills';
 import { REGRET } from '../../game/baubles';
+import {
+  CHANNELS, CLASS_CHANGE_COST, CLASS_COLUMNS, CLASS_NODES, CLASS_POINTS_MAX, CLASSES, classDef, classOpen,
+  classPoints, PERK_CLASSES, PERK_TIER_AT, RITES,
+} from '../../game/classes';
+import type { ClassDef } from '../../game/classes';
+import { perksOf } from '../../game/perks';
+import { article, listed, numberWord } from '../../game/words';
 import type { UIWindow } from '../windows';
 
 /**
@@ -14,20 +21,34 @@ import type { UIWindow } from '../windows';
  * and what it came to, and `rpc_take_class`, `rpc_take_node` and `rpc_rite`
  * are how a person spends any of it. This is the window.
  *
- * ## It works out nothing for itself
+ * ## Nothing about you is worked out here
  *
- * Not one number here is the browser's. The rulebook in `src/game/classes.ts`
- * is what generated the island's rows, so the browser could in principle draw
- * the shape of a tree from memory -- but it has no idea which trade is yours,
- * how many points it has earned, what you have spent, what is in your purse or
- * whether the altar will hear you. All of that is the island's, and asking is
- * the whole design: the island is the authority, the browser asks and listens.
+ * The browser has no idea which trade is yours, how many points it has earned,
+ * what you have spent, what is in your purse or whether the altar will hear
+ * you. All of that is the island's, and asking is the whole design: the island
+ * is the authority, the browser asks and listens.
  *
  * So each door answers with what to draw *and* with its own refusal. A node
  * arrives carrying `why`, a rite arrives carrying `why`, and this window puts
  * that sentence under the button rather than guessing at the rule. There is
  * exactly one place that decides whether you may buy a node, and it is not
  * here.
+ *
+ * ## What a trade offers is read from the rulebook
+ *
+ * What a trade *offers* is the same for everybody, and it is written in
+ * `src/game/classes.ts` and `src/game/perks.ts`, which are what generated the
+ * island's rows. So any card can lay open its six tiers of perks, or its rite
+ * and its tree, before the trade is taken up, on an island or playing alone.
+ * That is a reading and nothing more: the button that takes the trade up is
+ * still the island's, and so is the sentence under it.
+ *
+ * ## Asked twice where it cannot be taken back
+ *
+ * Taking up a trade and taking a perk are undone only by silver or by a Bauble
+ * of Regret, so neither happens on one press. The first press says what the
+ * second will do in so many words: what is put down, what it costs, and which
+ * perks close. The second does it.
  *
  * ## Two tabs, because there are two questions
  *
@@ -44,6 +65,8 @@ const REFRESH = 4;
 
 type Tab = 'trades' | 'tree';
 
+const GROUPS: Array<['craft' | 'combat', string]> = [['craft', 'Crafting'], ['combat', 'Fighting']];
+
 export class TradesPanel {
   private readonly tabs = new Map<Tab, HTMLButtonElement>();
   private readonly page: HTMLDivElement;
@@ -54,6 +77,19 @@ export class TradesPanel {
   /** One ask at a time, and not twice a frame. */
   private asking = false;
   private lastAsk = -1e9;
+  /** An ask wanted while one was already out, so the answer after a choice is never a stale one. */
+  private again = false;
+  /**
+   * The last answer drawn, as text. The window asks every few seconds, and
+   * redrawing an unchanged answer throws away the button under the pointer
+   * and the one with the keyboard on it.
+   */
+  private seen = '';
+
+  /** The trades laid open under their cards, which a redraw keeps open. */
+  private readonly opened = new Set<string>();
+  /** The one choice waiting on its second press: `class:<id>` or `perk:<id>`. */
+  private confirming: string | null = null;
 
   constructor(
     private readonly win: UIWindow,
@@ -64,14 +100,8 @@ export class TradesPanel {
     const bar = document.createElement('div');
     bar.className = 'trade-tabs';
     for (const [id, label] of [['trades', 'Trades'], ['tree', 'Tree']] as Array<[Tab, string]>) {
-      const b = document.createElement('button');
-      b.type = 'button';
-      b.className = 'tb-btn tb-small';
-      b.textContent = label;
-      b.addEventListener('click', () => {
-        this.tab = id;
-        this.draw();
-      });
+      const b = button(label);
+      b.addEventListener('click', () => this.show(id));
       this.tabs.set(id, b);
       bar.append(b);
     }
@@ -102,33 +132,64 @@ export class TradesPanel {
     void this.ask();
   }
 
-  private async ask(): Promise<void> {
-    if (!this.island || this.asking) return;
+  /** Ask the island, and draw what it said if it said anything new, or if `fresh` wants a redraw regardless. */
+  private async ask(fresh = false): Promise<void> {
+    if (!this.island) return;
+    if (this.asking) {
+      if (fresh) this.again = true;
+      return;
+    }
     this.asking = true;
+    let changed = fresh;
     try {
       const [said, tree] = await Promise.all([this.island.classes(), this.island.tree()]);
       this.said = said;
       this.tree = tree;
       // The fold, fresh: the perks it holds are also this browser's to draw by.
       if (tree?.mul) this.game.setPerks((tree.mul as { fx?: Record<string, number> }).fx);
+      const seen = JSON.stringify([said, tree]);
+      if (seen !== this.seen) changed = true;
+      this.seen = seen;
     } finally {
       this.asking = false;
     }
-    this.draw();
+    if (changed) this.draw();
+    if (this.again) {
+      this.again = false;
+      await this.ask(true);
+    }
   }
 
   /** Do a thing at a door, say what it said, and ask again. */
   private async doorway(what: Promise<string | null>): Promise<void> {
     const why = await what;
     if (why) this.game.logMsg(why, 'error');
-    await this.ask();
+    await this.ask(true);
+  }
+
+  private show(tab: Tab): void {
+    this.tab = tab;
+    this.confirming = null;
+    this.draw();
   }
 
   private draw(): void {
     for (const [id, b] of this.tabs) b.classList.toggle('tb-on', id === this.tab);
+    // Redrawn on the clock, so it must not throw the reader back to the top.
+    const top = this.page.scrollTop;
     this.page.replaceChildren();
+    this.drawPage();
+    this.page.scrollTop = top;
+  }
+
+  private drawPage(): void {
     if (!this.island) {
-      this.page.append(this.note('Trades are the island’s to keep. Playing by yourself in this browser, there is nobody holding the ledger.'));
+      if (this.tab === 'tree') {
+        this.page.append(this.note('Playing by yourself in this browser there is no trade to hold, so there is no tree to spend. The Trades tab has what every trade offers.'));
+        return;
+      }
+      this.page.append(this.note('Trades are the island’s to keep. Playing by yourself in this browser there is nobody holding the ledger, so none can be taken up, but what each one offers is here to read.'));
+      this.drawBook();
       return;
     }
     if (!this.said) {
@@ -137,6 +198,7 @@ export class TradesPanel {
     }
     if (this.said.why) {
       this.page.append(this.note(this.said.why));
+      if (this.tab === 'trades') this.drawBook();
       return;
     }
     if (this.tab === 'trades') this.drawTrades(this.said);
@@ -150,6 +212,13 @@ export class TradesPanel {
     return d;
   }
 
+  private group(title: string): HTMLDivElement {
+    const group = document.createElement('div');
+    group.className = 'trade-group';
+    group.textContent = title;
+    return group;
+  }
+
   /* ---- the trades, and taking one up -------------------------------- */
 
   private drawTrades(said: ClassesSaid): void {
@@ -158,14 +227,11 @@ export class TradesPanel {
     const taken = [said.taken.craft, said.taken.combat].filter(Boolean).length;
     head.textContent = taken === 2
       ? `A trade of each. Putting one down for another costs ${said.change_cost} silver; you have ${Math.floor(said.purse)}.`
-      : `A trade opens at ${said.at} in its main skill, and you may hold one craft and one fighting trade at once.`;
+      : `A trade opens at ${said.at} in any skill it covers, and you may hold one craft and one fighting trade at once.`;
     this.page.append(head);
 
-    for (const [kind, title] of [['craft', 'Crafting'], ['combat', 'Fighting']] as Array<['craft' | 'combat', string]>) {
-      const group = document.createElement('div');
-      group.className = 'trade-group';
-      group.textContent = title;
-      this.page.append(group);
+    for (const [kind, title] of GROUPS) {
+      this.page.append(this.group(title));
       const mine = kind === 'craft' ? said.taken.craft : said.taken.combat;
       for (const c of said.classes.filter((x) => x.kind === kind)) {
         this.page.append(this.card(c, c.id === mine, said));
@@ -173,7 +239,29 @@ export class TradesPanel {
     }
   }
 
-  private card(c: ClassCard, mine: boolean, said: ClassesSaid): HTMLDivElement {
+  /** Every trade as the rulebook has it, with nothing to take: alone in the browser, or not on this island. */
+  private drawBook(): void {
+    for (const [kind, title] of GROUPS) {
+      this.page.append(this.group(title));
+      const book = CLASSES.filter((c) => c.kind === kind).sort((a, b) => a.name.localeCompare(b.name));
+      for (const c of book) this.page.append(this.card(this.read(c), false, null));
+    }
+  }
+
+  /** A trade from the rulebook, standing where this browser's own skills put it. */
+  private read(c: ClassDef): ClassCard {
+    const at = (s: string): number => this.game.skills.get(s);
+    return {
+      id: c.id, kind: c.kind, name: c.name, note: c.note, main: c.main, lever: c.lever, skills: c.skills,
+      points: classPoints(Math.max(...c.skills.map(at))), open: classOpen(c, at), why: null,
+    };
+  }
+
+  /**
+   * One trade's card. `said` is the island's answer, and without it the card
+   * is only read: what the trade offers can be laid open, but nothing taken.
+   */
+  private card(c: ClassCard, mine: boolean, said: ClassesSaid | null): HTMLDivElement {
     const row = document.createElement('div');
     row.className = `trade-card${mine ? ' trade-mine' : ''}${c.open || mine ? '' : ' trade-shut'}`;
 
@@ -184,7 +272,7 @@ export class TradesPanel {
     name.textContent = c.name;
     const pts = document.createElement('span');
     pts.className = 'trade-points';
-    pts.textContent = mine ? `${c.points} points` : `would be ${c.points}`;
+    pts.textContent = this.standing(c, mine);
     top.append(name, pts);
 
     const note = document.createElement('div');
@@ -199,13 +287,18 @@ export class TradesPanel {
     lever.className = 'trade-lever';
     lever.textContent = c.lever;
 
-    row.append(top, note, covers, lever);
+    const acts = document.createElement('div');
+    acts.className = 'trade-acts';
+    row.append(top, note, covers, lever, acts);
 
     if (mine) {
-      const worn = document.createElement('div');
+      const worn = document.createElement('span');
       worn.className = 'trade-worn';
       worn.textContent = 'Yours.';
-      row.append(worn);
+      // Your own trade is drawn on the Tree tab, with what you have taken of it.
+      const tree = button('Open the Tree tab', 'trade-take');
+      tree.addEventListener('click', () => this.show('tree'));
+      acts.append(worn, tree);
       /*
        * And the way back out of it, for somebody carrying a Bauble of Regret,
        * loose or in a bag: the island breaks the bauble and puts the trade
@@ -214,33 +307,239 @@ export class TradesPanel {
        * the island says why it will not break.
        */
       const carried = this.game.inventory.items.some((it) => it.id === REGRET || it.inside?.some((b) => b.id === REGRET));
-      if (carried) {
-        const undo = document.createElement('button');
-        undo.type = 'button';
-        undo.className = 'tb-btn tb-small trade-take';
-        undo.textContent = 'Undo, breaking the Bauble of Regret';
-        undo.title = `Puts the ${c.name.toLowerCase()}’s trade down and clears its tree. The next trade you take up in its place costs nothing, not ${said.change_cost} silver.`;
+      if (carried && said) {
+        const undo = button('Undo, breaking the Bauble of Regret', 'trade-take');
+        undo.title = `Puts the ${c.name.toLowerCase()}’s trade down and clears ${PERK_CLASSES.has(c.id) ? 'the perks taken for it' : 'its tree'}. The next trade you take up in its place costs nothing, not ${said.change_cost} silver.`;
         undo.addEventListener('click', () => void this.doorway(this.island!.regretClass(c.kind)));
-        row.append(undo);
+        acts.append(undo);
       }
       return row;
     }
 
-    const take = document.createElement('button');
-    take.type = 'button';
-    take.className = 'tb-btn tb-small trade-take';
-    const had = c.kind === 'craft' ? said.taken.craft : said.taken.combat;
-    take.textContent = had ? `Take up, for ${said.change_cost} silver` : 'Take up';
-    take.disabled = !!c.why;
-    take.addEventListener('click', () => void this.doorway(this.island!.takeClass(c.id)));
-    row.append(take);
+    const open = this.opened.has(c.id);
+    const look = button(open ? 'Hide what it offers' : 'What it offers', 'trade-take');
+    look.setAttribute('aria-expanded', String(open));
+    look.addEventListener('click', () => {
+      if (open) this.opened.delete(c.id);
+      else this.opened.add(c.id);
+      this.draw();
+    });
+    acts.append(look);
+
+    // Only while the island would allow it: a refusal since then draws the refusal instead.
+    const asking = this.confirming === `class:${c.id}` && !c.why;
+    if (said && !asking) {
+      const had = c.kind === 'craft' ? said.taken.craft : said.taken.combat;
+      const take = button(had ? `Take up, for ${said.change_cost} silver` : 'Take up', 'trade-take');
+      take.disabled = !!c.why;
+      take.addEventListener('click', () => this.ask2(`class:${c.id}`));
+      acts.append(take);
+    }
     /*
      * The island's sentence, not ours. It knows the level you are at, what is
      * in your purse and how long ago you last changed your mind; repeating any
      * of that reasoning here would be a second place for it to be wrong.
      */
-    if (c.why) row.append(this.why(c.why));
+    if (said && c.why) row.append(this.why(c.why));
+    if (said && asking) row.append(this.confirmClass(c, said));
+    if (open) row.append(this.offer(c));
     return row;
+  }
+
+  /**
+   * The figure at the top of a card: tiers open for a trade on perks, points
+   * for a trade with a tree. The tiers are counted from this browser's copy of
+   * your skills, the same way the island opens them.
+   */
+  private standing(c: ClassCard, mine: boolean): string {
+    if (!PERK_CLASSES.has(c.id)) return mine ? `${c.points} points` : `would be ${c.points}`;
+    const main = this.game.skills.get(c.main);
+    const open = c.open || mine ? PERK_TIER_AT.filter((at, i) => i === 0 || main >= at).length : 0;
+    return mine ? `${open} of ${PERK_TIER_AT.length} tiers open` : `would open ${open} of ${PERK_TIER_AT.length}`;
+  }
+
+  /**
+   * The first press: say what the second will do.
+   *
+   * The keyboard is left where it was rather than put on the second press. A
+   * button with the keyboard on it is pressed by the space bar, and somebody
+   * who has just clicked is as likely to press that next for something else.
+   */
+  private ask2(what: string): void {
+    this.confirming = what;
+    this.draw();
+  }
+
+  /** What taking up a trade will do, before it is done. */
+  private confirmClass(c: ClassCard, said: ClassesSaid): HTMLDivElement {
+    const had = c.kind === 'craft' ? said.taken.craft : said.taken.combat;
+    const lines: string[] = [];
+    if (had) {
+      lines.push(`This puts the ${(classDef(had)?.name ?? had).toLowerCase()}’s trade down, and every `
+        + `${PERK_CLASSES.has(had) ? 'perk you took' : 'node you bought'} for it goes with it. `
+        + `It costs ${said.change_cost} silver; you have ${Math.floor(said.purse)}.`);
+    } else {
+      lines.push(`Putting it down later for another trade costs ${said.change_cost} silver, or a Bauble of Regret.`);
+    }
+    if (PERK_CLASSES.has(c.id)) {
+      const first = perksOf(c.id).filter((p) => p.tier === 1).map((p) => p.name);
+      lines.push(`Its first tier opens at once, and you take one of ${either(first)} on the Tree tab.`);
+    } else {
+      lines.push(`You would have ${c.points} point${c.points === 1 ? '' : 's'} to spend in its tree now, and at most ${CLASS_POINTS_MAX}.`);
+    }
+    return this.confirm(`Take up the ${c.name.toLowerCase()}’s trade?`, lines, `Take up the ${c.name}`,
+      () => this.island!.takeClass(c.id));
+  }
+
+  /**
+   * The second press, and the way out of it. The first line is the question,
+   * the rest is what answering it does.
+   */
+  private confirm(ask: string, lines: string[], yes: string, act: () => Promise<string | null>): HTMLDivElement {
+    const box = document.createElement('div');
+    box.className = 'trade-confirm';
+    box.setAttribute('role', 'group');
+    const q = document.createElement('div');
+    q.className = 'trade-confirm-ask';
+    q.textContent = ask;
+    box.append(q);
+    for (const line of lines) {
+      const d = document.createElement('div');
+      d.className = 'trade-confirm-line';
+      d.textContent = line;
+      box.append(d);
+    }
+    const acts = document.createElement('div');
+    acts.className = 'trade-acts';
+    const go = button(yes, 'trade-take trade-go');
+    go.addEventListener('click', () => {
+      go.disabled = true;
+      this.confirming = null;
+      void this.doorway(act());
+    });
+    const no = button('Not yet', 'trade-take');
+    no.addEventListener('click', () => {
+      this.confirming = null;
+      this.draw();
+    });
+    acts.append(go, no);
+    box.append(acts);
+    box.setAttribute('aria-label', ask);
+    return box;
+  }
+
+  /**
+   * What a trade offers, laid open under its card: its six tiers of perks, or
+   * its rite and its tree, as the rulebook has them. Nothing here can be
+   * pressed; it is there to be read before the trade is taken up.
+   */
+  private offer(c: ClassCard): HTMLDivElement {
+    const box = document.createElement('div');
+    box.className = 'trade-offer';
+    if (PERK_CLASSES.has(c.id)) {
+      const main = this.game.skills.get(c.main);
+      const perks = perksOf(c.id);
+      PERK_TIER_AT.forEach((at, i) => {
+        // The first opens with the trade, the rest in its main skill.
+        const reached = i === 0 ? c.open : main >= at;
+        const tier = document.createElement('div');
+        tier.className = `trade-tier${reached ? '' : ' trade-tier-shut'}`;
+        const cap = document.createElement('div');
+        cap.className = 'trade-card-top';
+        const says = document.createElement('span');
+        says.className = 'trade-col-head';
+        says.textContent = i === 0 ? `Tier ${i + 1} · with the trade` : `Tier ${i + 1} · at ${at} in ${skillName(c.main).toLowerCase()}`;
+        cap.append(says);
+        if (!reached && i > 0) {
+          const have = document.createElement('span');
+          have.className = 'trade-points';
+          have.textContent = `you have ${Math.floor(main)}`;
+          cap.append(have);
+        }
+        const row = document.createElement('div');
+        row.className = 'trade-grid';
+        for (const p of perks.filter((x) => x.tier === i + 1)) row.append(this.shown(p.name, p.note));
+        tier.append(cap, row);
+        box.append(tier);
+      });
+      return box;
+    }
+
+    for (const r of RITES.filter((x) => x.class === c.id)) {
+      box.append(this.caption('Rite'));
+      const rite = document.createElement('div');
+      rite.className = 'trade-rite';
+      const top = document.createElement('div');
+      top.className = 'trade-card-top';
+      const name = document.createElement('span');
+      name.className = 'trade-name';
+      name.textContent = r.name;
+      const cost = document.createElement('span');
+      cost.className = 'trade-points';
+      cost.textContent = `${r.cost} favour · ${r.level} prayer`;
+      top.append(name, cost);
+      const note = document.createElement('div');
+      note.className = 'trade-card-note';
+      note.textContent = r.note;
+      rite.append(top, note);
+      box.append(rite);
+    }
+
+    const nodes = CLASS_NODES.filter((n) => n.class === c.id);
+    const whole = nodes.reduce((sum, n) => sum + n.cost, 0);
+    box.append(this.caption('Tree'));
+    const sums = document.createElement('div');
+    sums.className = 'trade-covers';
+    sums.textContent = `All ${numberWord(nodes.length)} nodes cost ${whole} points, and a trade earns at most ${CLASS_POINTS_MAX}. `
+      + 'Each column is bought from the top down.';
+    box.append(sums);
+    const grid = document.createElement('div');
+    grid.className = 'trade-grid';
+    CLASS_COLUMNS[c.id].forEach((col, ci) => {
+      const column = document.createElement('div');
+      column.className = 'trade-col';
+      const head = document.createElement('div');
+      head.className = 'trade-col-head';
+      head.textContent = CHANNELS[col.channel].name;
+      head.title = CHANNELS[col.channel].note;
+      column.append(head);
+      for (const n of nodes.filter((x) => x.col === ci + 1).sort((a, b) => a.rank - b.rank)) {
+        column.append(this.shown(n.name, n.note, `${n.cost} point${n.cost === 1 ? '' : 's'}`));
+      }
+      grid.append(column);
+    });
+    box.append(grid);
+    return box;
+  }
+
+  private caption(text: string): HTMLDivElement {
+    const cap = document.createElement('div');
+    cap.className = 'trade-col-head';
+    cap.textContent = text;
+    return cap;
+  }
+
+  /** A perk or a node as the rulebook has it: its name, what it does, and what it costs. */
+  private shown(name: string, note: string, cost?: string): HTMLDivElement {
+    const box = document.createElement('div');
+    box.className = 'trade-node';
+    const top = document.createElement('div');
+    top.className = 'trade-card-top';
+    const n = document.createElement('span');
+    n.className = 'trade-node-name';
+    n.textContent = name;
+    top.append(n);
+    if (cost) {
+      const c = document.createElement('span');
+      c.className = 'trade-points';
+      c.textContent = cost;
+      top.append(c);
+    }
+    const worth = document.createElement('div');
+    worth.className = 'trade-worth';
+    worth.textContent = note;
+    box.append(top, worth);
+    return box;
   }
 
   /* ---- the tree, the rite, and spending points ----------------------- */
@@ -259,7 +558,7 @@ export class TradesPanel {
     for (const t of tree.trades) {
       if (t.tiers) {
         this.page.append(this.tierHead(t));
-        for (const tier of t.tiers) this.page.append(this.tier(tier));
+        for (const tier of t.tiers) this.page.append(this.tier(tier, t));
         continue;
       }
       this.page.append(this.trade(t));
@@ -289,9 +588,11 @@ export class TradesPanel {
   /**
    * A tier: the skill it opens at and its three perks side by side. Once one
    * is taken the other two are drawn shut, since a tier gives one; before the
-   * tier opens all three are shut, with the island's reason under each.
+   * tier opens all three are shut, with the island's reason under each. The
+   * second press for one of them goes under all three, since it is about all
+   * three.
    */
-  private tier(tier: TreeTier): HTMLDivElement {
+  private tier(tier: TreeTier, t: TreeTrade): HTMLDivElement {
     const box = document.createElement('div');
     box.className = `trade-tier${tier.open ? '' : ' trade-tier-shut'}`;
     const cap = document.createElement('div');
@@ -301,12 +602,15 @@ export class TradesPanel {
     row.className = 'trade-grid';
     for (const p of tier.perks) row.append(this.perk(p));
     box.append(cap, row);
+    const asked = tier.perks.find((p) => this.confirming === `perk:${p.id}` && !p.taken && !p.why);
+    if (asked) box.append(this.confirmPerk(asked, tier, t));
     return box;
   }
 
   private perk(p: TreePerk): HTMLDivElement {
+    const asked = this.confirming === `perk:${p.id}` && !p.taken && !p.why;
     const box = document.createElement('div');
-    box.className = `trade-node${p.taken ? ' trade-node-taken' : ''}${!p.taken && p.why ? ' trade-node-shut' : ''}`;
+    box.className = `trade-node${p.taken ? ' trade-node-taken' : ''}${!p.taken && p.why ? ' trade-node-shut' : ''}${asked ? ' trade-node-asked' : ''}`;
     const top = document.createElement('div');
     top.className = 'trade-card-top';
     const name = document.createElement('span');
@@ -324,17 +628,25 @@ export class TradesPanel {
     note.className = 'trade-worth';
     note.textContent = p.note;
     box.append(top, note);
-    if (!p.taken) {
-      const take = document.createElement('button');
-      take.type = 'button';
-      take.className = 'tb-btn tb-small trade-buy';
-      take.textContent = 'Take this one';
+    if (!p.taken && !asked) {
+      const take = button('Take this one', 'trade-buy');
       take.disabled = !!p.why;
-      take.addEventListener('click', () => void this.doorway(this.island!.takePerk(p.id)));
+      take.addEventListener('click', () => this.ask2(`perk:${p.id}`));
       box.append(take);
-      if (p.why) box.append(this.why(p.why));
     }
+    if (!p.taken && p.why) box.append(this.why(p.why));
     return box;
+  }
+
+  /** What taking a perk will do: the other two close, and only putting the trade down opens them again. */
+  private confirmPerk(p: TreePerk, tier: TreeTier, t: TreeTrade): HTMLDivElement {
+    const others = tier.perks.filter((x) => x.id !== p.id).map((x) => x.name);
+    const cost = this.said?.change_cost ?? CLASS_CHANGE_COST;
+    return this.confirm(`Take ${p.name}?`, [
+      p.note,
+      `A tier gives one perk: ${listed(others)} ${others.length === 1 ? 'closes' : 'close'} for as long as you are ${article(t.name)} ${t.name.toLowerCase()}.`,
+      `Choosing again means putting the whole trade down, and every perk taken for it: a Bauble of Regret does that, or taking up another trade for ${cost} silver.`,
+    ], `Take ${p.name}`, () => this.island!.takePerk(p.id));
   }
 
   private trade(t: TreeTrade): HTMLDivElement {
@@ -376,10 +688,7 @@ export class TradesPanel {
     note.className = 'trade-card-note';
     note.textContent = r.note;
 
-    const call = document.createElement('button');
-    call.type = 'button';
-    call.className = 'tb-btn tb-small trade-call';
-    call.textContent = 'Call it';
+    const call = button('Call it', 'trade-call');
     call.disabled = !!r.why;
     call.addEventListener('click', () => void this.doorway(this.island!.callRite(r.id)));
 
@@ -433,10 +742,7 @@ export class TradesPanel {
 
 
     if (!n.taken) {
-      const buy = document.createElement('button');
-      buy.type = 'button';
-      buy.className = 'tb-btn tb-small trade-buy';
-      buy.textContent = `Buy for ${n.cost}`;
+      const buy = button(`Buy for ${n.cost}`, 'trade-buy');
       buy.disabled = !!n.why;
       buy.addEventListener('click', () => void this.doorway(this.island!.takeNode(n.id)));
       box.append(buy);
@@ -451,6 +757,20 @@ export class TradesPanel {
     d.textContent = text;
     return d;
   }
+}
+
+/** A small button of this window's, with whatever else it is for. */
+function button(label: string, extra = ''): HTMLButtonElement {
+  const b = document.createElement('button');
+  b.type = 'button';
+  b.className = `tb-btn tb-small${extra ? ` ${extra}` : ''}`;
+  b.textContent = label;
+  return b;
+}
+
+/** "a, b or c": one of them, not all. */
+function either(xs: readonly string[]): string {
+  return xs.length < 2 ? (xs[0] ?? '') : `${xs.slice(0, -1).join(', ')} or ${xs[xs.length - 1]}`;
 }
 
 /** A skill's name as the skills window spells it, and its id if it has none. */

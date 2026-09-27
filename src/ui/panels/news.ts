@@ -422,6 +422,14 @@ export const NEWS: News[] = [
       ];
     },
   },
+  {
+    n: 33,
+    day: '2026-09-27',
+    lines: () => [
+      `Every card in the Trades window has What it offers: the trade’s ${numberWord(PERK_TIER_AT.length)} tiers of perks, or its rite and its tree, laid out before you take it up, with the skill each tier opens at and what you have. Playing by yourself, the window shows the same for every trade.`,
+      'Taking up a trade and taking a perk now ask a second time, saying what goes, what it costs and which perks close.',
+    ],
+  },
 ];
 
 /** The highest entry this browser has shown. */
