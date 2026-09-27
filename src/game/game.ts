@@ -41,8 +41,11 @@ import { cleanSaid } from './chat';
 import { ALL_GOALS } from './journal';
 import { FieldGuide, GUIDE_LOOK, seenLine, type GuideBook, type GuideMark } from './guide';
 import { matOf, rollEase, workingQl } from './materials';
-import { postCentre, postDecayRate, postName, postRadius, postSite, type PlacedPost } from './posts';
-import { catchChance, CHECK_EVERY, CREEL_BAIT_LOSS, creelHold, creelOdds, trapCentre, trapDecayRate, trapHolds, trapName, TRAPS, type PlacedTrap, type TrapKind } from './traps';
+import { postCentre, postDecayRate, postKeep, postName, postRadius, postSite, type PlacedPost } from './posts';
+import {
+  catchChance, CHECK_EVERY, CREEL_BAIT_LOSS, creelHold, creelOdds, trapCentre, trapDecayRate, trapHolds, trapKeep, trapName, TRAPS, type PlacedTrap,
+  type TrapKind,
+} from './traps';
 import { BAIT_BY_ID, FISH, fishHere, pickFish, waterDepth } from './fishing';
 import { BRIDGES, bridgeDone, CLEARANCE, END_SLOP, spanBill, spanTiles, type Bridge, type BridgeKind } from './bridges';
 import { CLEAR_OF_BUILDINGS, LIFT_PER_MASONRY, concreteFor, foundationBill, foundationDone, liftFor, masonryFor, type Foundation } from './foundations';
@@ -1945,7 +1948,8 @@ export class Game {
       const chance = Math.min(0.6, sh.block * (0.6 + shield.ql / 160) + this.skills.get('shields') / 400);
       this.gainSkill('shields', 0.12);
       if (this.rand() < chance) {
-        shield.dmg = Math.min(100, shield.dmg + raw * 3);
+        // Less for a Mender's Armour Care, as `hurt_player` has it.
+        shield.dmg = Math.min(100, shield.dmg + raw * 3 * this.perk('worn:shield', 1));
         this.gainSkill('shields', 0.5);
         this.events.emit('inventory');
         return { taken: 0, part: 'offhand', worn: shield, blocked: true };
@@ -1968,7 +1972,7 @@ export class Game {
     const soak = pieceSoak(def, item, this.skills.get(skillId));
     // Armour is learned by being hit in it, and worn out the same way.
     this.gainSkill(skillId, 0.4);
-    item.dmg = Math.min(100, item.dmg + raw * 4);
+    item.dmg = Math.min(100, item.dmg + raw * 4 * this.perk('worn:armour', 1));
     if (item.dmg >= 100) {
       this.inventory.remove(item.uid, 1);
       this.player.equipped[part] = null;
@@ -3761,15 +3765,19 @@ export class Game {
    * it from there, and the floor moves with the pace so that the quickest jobs
    * stay quick relative to everything else rather than all landing on the same
    * second.
+   *
+   * A perk on the job's own time (a Carpenter's Quick Saw, a Mender's Quick
+   * Hands) comes off after the floor, as the island has it: it says a job takes
+   * that much less time, and a job already down on the floor -- a go of Repair
+   * always is -- would otherwise take none less.
    */
   duration(def: ActionDef): number {
     const skill = def.skill ? this.skills.get(def.skill) : 50;
     // A Farmer's Worn-in Rake counts the rake better than it is, to the top.
     const toolQl = def.tool ? Math.min(QL_TOP, this.toolQl(def.tool) + this.perk(`tool:${def.id}`, 0)) : 0;
-    // And less of it on a settlement whose altar has a bauble for the trade,
-    // and for a perk on the job's own time (a Carpenter's Quick Saw).
-    return goSeconds(def.baseTime, skill, toolQl,
-      this.controlSpeed() * baublePace(this.baubleHere(), def.skill) * this.perk(`time:${def.id}`, 1));
+    // And less of it on a settlement whose altar has a bauble for the trade.
+    return goSeconds(def.baseTime, skill, toolQl, this.controlSpeed() * baublePace(this.baubleHere(), def.skill))
+      * this.perk(`time:${def.id}`, 1);
   }
 
   /** How many of a thing a go of this recipe makes for you: its own count, or a perk's (a Carpenter's Clean Sawing). */
@@ -4269,7 +4277,8 @@ export class Game {
    */
   private runTraps(dt: number): void {
     for (const t of [...this.traps.values()]) {
-      t.dmg = Math.min(100, t.dmg + dt * trapDecayRate(t));
+      // Slower for a Mender's Post Keeper, whose traps these all are.
+      t.dmg = Math.min(100, t.dmg + dt * (trapDecayRate(t) / trapKeep(this, t.kind)));
       if (t.dmg >= 100) {
         if (t.caught !== null) this.springTrap(t, `The ${trapName(t).toLowerCase()} rots through and whatever was in it walks away.`);
         this.removeTrap(t.id);
@@ -4459,7 +4468,8 @@ export class Game {
   private runPosts(dt: number): void {
     for (const p of [...this.posts.values()]) {
       const before = p.dmg;
-      p.dmg = Math.min(100, p.dmg + postDecayRate(p.ql) * dt);
+      // Slower for a Mender's Post Keeper, whose posts these all are.
+      p.dmg = Math.min(100, p.dmg + (postDecayRate(p.ql) / postKeep(this)) * dt);
       // One word of warning, once, when it is nearly through.
       if (before < 85 && p.dmg >= 85 && p.worker !== null) {
         const [cx, cy] = postCentre(p);

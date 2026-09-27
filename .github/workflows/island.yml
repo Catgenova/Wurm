@@ -1674,6 +1674,19 @@ jobs:
             --outfile=node_modules/.cache/fisher.mjs --log-level=error
           node node_modules/.cache/fisher.mjs
 
+      - name: The Mender's perks, each where its rule is
+        run: |
+          # Each of the Mender's eighteen measured on the island, the dice put
+          # either side of a perk's number where it is a chance: a go of Repair
+          # and the time off the floor under it; the wear on a tool, armour, a
+          # shield and a sword; a post and a snare standing longer for their
+          # setter; restoring surer, gentler, finer, rarer, a better roll and a
+          # better tier; the floor under improving; the kit and the sealant;
+          # and the browser's words and numbers beside the island's.
+          npx esbuild supabase/test/mender.ts --bundle --platform=node --format=esm \
+            --outfile=node_modules/.cache/mender.mjs --log-level=error
+          node node_modules/.cache/mender.mjs
+
       - name: The exact benefit, and where its number comes from
         run: |
           # Text the player reads says what changes and by how much, and where

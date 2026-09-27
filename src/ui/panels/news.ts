@@ -4,7 +4,9 @@ import { billWords, type Item } from '../../game/items';
 import { INGOT_LUMPS, INGOT_WEIGHT, MOULD_BY_ID } from '../../game/metal';
 import { meltLumps } from '../../game/melt';
 import { ORDER_LIFE } from '../../game/orders';
-import { RECIPE_BY_ID } from '../../game/recipes';
+import { POST_LIFE_MIN } from '../../game/posts';
+import { KIT_MEND } from '../../game/actions';
+import { RECIPE_BY_ID, RECIPES } from '../../game/recipes';
 import { BOARD_TOP } from '../../game/boards';
 import { IDLE_LOGOUT, WORKER_REST_EVERY, WORKER_REST_FIRST, WORKER_REST_MOST } from '../../game/keep';
 import { REPORTS_A_SESSION } from '../../net/errors';
@@ -570,6 +572,22 @@ export const NEWS: News[] = [
         'A net clicked on water out of its reach goes into the deepest water within the whole tiles of its reach, as a line does. On an island it used to look further round you than offline.',
         'Offline a rod, a net and a spadeful turned for worms wore their tool as much again on top of their own wear; they wear as they do on an island now.',
         'Offline a net let the deep fish in all together or not at all; each deep fish in a haul is its own chance now, as on an island.',
+      ];
+    },
+  },
+  {
+    n: 44,
+    day: '2026-09-27',
+    lines: () => {
+      const main = (CLASSES.find((c) => c.id === 'mender')?.main ?? '').replace(/_/g, ' ');
+      return [
+        `The Mender has perks instead of a tree now: ${numberWord(PERK_TIER_AT.length)} tiers of ${numberWord(PERKS_PER_TIER)}, the first with the trade and the others at ${listed(PERK_TIER_AT.slice(1).map(String))} in ${main}. The nodes a Mender had bought went with the tree.`,
+        `New for a Mender who has learned them, and for anybody to use: a repair kit, which takes ${KIT_MEND} damage off anything, anywhere, and none of its quality; and sealant, which stops a thing decaying wherever it is left, one to a thing.`,
+        'A perk that takes time off a job takes it off after the shortest time a job may take, where it had taken it off before: it is what it says at any skill now, and a go of Repair, which is always that short, takes less for a Mender\'s Quick Hands.',
+        `On an island the roughest work post stands ${spanWords(POST_LIFE_MIN)} now, as it does offline; it had fallen over in well under half that.`,
+        'Offline, brushing a wildermon wears the brush by its quality, as on an island, where it had taken a sliver off whatever the brush.',
+        `A hammer: a head cast in a hammer head mould at a smelter, beaten true on an anvil and fitted to a shaft. There had been none, so nothing that asks for one could be made; `
+          + `${listed(RECIPES.filter((r) => r.tool === 'hammer').map((r) => itemDef(r.result).name.toLowerCase()))} can be now.`,
       ];
     },
   },

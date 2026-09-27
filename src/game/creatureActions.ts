@@ -465,7 +465,8 @@ export const CREATURE_ACTIONS: ActionDef[] = [
         const bane = banes(item) && def.glow ? BANE_BONUS : 1;
         const dmg = weaponDamage(g, usable, item) * bane * (0.75 + g.rand() * 0.5);
         g.creatures.hurt(g, c, dmg, 'player');
-        if (item) g.damageItem(item, 0.35);
+        // Less for a Mender's Armour Care, as `perform_fight` has it.
+        if (item) g.damageItem(item, 0.35 * g.perk('worn:weapon', 1));
         g.logMsg(
           `You strike the ${def.name.toLowerCase()}${item ? ` with your ${itemName(item).toLowerCase()}` : ''}. ${before > c.health ? `It is down to ${Math.max(0, Math.ceil(c.health))} of ${maxHealth(c, def)}.` : ''}`,
           'fight',
@@ -532,7 +533,7 @@ export const CREATURE_ACTIONS: ActionDef[] = [
         const bane = head.bane && def.glow ? BANE_BONUS : 1;
         const dmg = weaponDamage(g, bow, held) * head.edge * bane * (0.6 + arrow.ql / 140) * (0.8 + g.rand() * 0.4);
         g.creatures.hurt(g, c, dmg, 'player');
-        g.damageItem(held, 0.25);
+        g.damageItem(held, 0.25 * g.perk('worn:weapon', 1));
         g.logMsg(`Your arrow goes home. The ${def.name.toLowerCase()} is down to ${Math.max(0, Math.ceil(c.health))} of ${maxHealth(c, def)}.`, 'fight');
       }
       if (c.health <= 0) return false;

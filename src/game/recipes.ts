@@ -1,10 +1,10 @@
 import { tryGain } from './learn';
 import type { ActionDef, Target } from './actions';
 import type { Game } from './game';
-import { describeWith, itemDef, makersMark, overParts, partsMark, rollRarity, RARITY_ODDS, RARITY_WORD, type Item } from './items';
+import { describeFrom, describeWith, itemDef, makersMark, overParts, partsMark, rollRarity, RARITY_ODDS, RARITY_WORD, type Item } from './items';
 import { QL_PER_LOOP } from './belt';
 import { describeGoals } from './journal';
-import { countSaid, fill, numberWord } from './words';
+import { countSaid, fill, listed, numberWord } from './words';
 import { FURNITURE, ONE_ALTAR, VESSELS } from './furniture';
 import { castWhole, INGOT_LUMPS, ingotOf, METAL_BY_LUMP, MOULD_BY_MAKES, MOULDS } from './metal';
 import { FISH } from './fishing';
@@ -54,7 +54,8 @@ const article = (id: string): string => (/^[aeiou]/.test(lower(id)) ? 'an ' : 'a
  * up) that become a result. Each recipe is also an item action, so it shows on
  * the material's menu as well as in the crafting window.
  */
-export type RecipeCategory = 'Woodwork' | 'Furniture' | 'Stonework' | 'Clay & thatch' | 'Cloth' | 'Alchemy' | 'Writing' | 'Cooking' | 'Smelting' | 'Jewellery';
+export type RecipeCategory = 'Woodwork' | 'Furniture' | 'Stonework' | 'Clay & thatch' | 'Cloth' | 'Alchemy' | 'Writing' | 'Cooking' | 'Smelting' | 'Jewellery'
+  | 'Mending';
 /** A place a recipe has to be worked at, beyond what is carried. */
 export type Station = 'campfire' | 'smelter' | 'spindle' | 'loom';
 const STATION_NAME: Record<Station, string> = { campfire: 'lit campfire', smelter: 'hot smelter', spindle: 'spindle', loom: 'loom' };
@@ -161,6 +162,8 @@ export const RECIPE_PERK_SAYS: Record<string, string> = {
   tincture: 'That wants a Naturalist who has learned to make a tincture.',
   smoke_fish: 'That wants a Fisher who has learned to smoke fish.',
   fish_pond: 'That wants a Fisher who has learned to make a fish pond.',
+  repair_kit: 'That wants a Mender who has learned to make a repair kit.',
+  sealant: 'That wants a Mender who has learned to make sealant.',
 };
 
 export const RECIPES: Recipe[] = [
@@ -198,6 +201,7 @@ export const RECIPES: Recipe[] = [
   { id: 'fit_shovel_head', category: 'Woodwork', result: 'shovel', inputs: [{ item: 'shovel_head' }, { item: 'shaft' }, { item: 'nail', count: 2 }], skill: 'carpentry', qlFromInputs: true,  material: 'metal', label: 'Fit a shaft', verb: 'fitting a shaft', baseTime: 5, stamina: 0.02, done: 'You fit a shaft and the shovel is finished.' },
   { id: 'fit_hatchet_head', category: 'Woodwork', result: 'hatchet', inputs: [{ item: 'hatchet_head' }, { item: 'shaft' }, { item: 'nail', count: 2 }], skill: 'carpentry', qlFromInputs: true,  material: 'metal', label: 'Fit a shaft', verb: 'fitting a shaft', baseTime: 5, stamina: 0.02, done: 'You fit a shaft and the hatchet is finished.' },
   { id: 'fit_sickle_blade', category: 'Woodwork', result: 'sickle', inputs: [{ item: 'sickle_blade' }, { item: 'shaft' }, { item: 'nail', count: 2 }], skill: 'carpentry', qlFromInputs: true,  material: 'metal', label: 'Fit a handle', verb: 'fitting a handle', baseTime: 5, stamina: 0.02, done: 'You fit a handle and the sickle is finished.' },
+  { id: 'fit_hammer_head', category: 'Woodwork', result: 'hammer', inputs: [{ item: 'hammer_head' }, { item: 'shaft' }, { item: 'nail' }], skill: 'carpentry', qlFromInputs: true,  material: 'metal', label: 'Fit a hammer shaft', verb: 'fitting a shaft', baseTime: 5, stamina: 0.02, done: 'You wedge a shaft into the head and the hammer is finished.' },
   { id: 'fit_pickaxe_head', category: 'Woodwork', result: 'pickaxe', inputs: [{ item: 'pickaxe_head' }, { item: 'shaft' }, { item: 'nail', count: 2 }], skill: 'carpentry', qlFromInputs: true,  material: 'metal', label: 'Fit a shaft', verb: 'fitting a shaft', baseTime: 5, stamina: 0.02, done: 'You fit a shaft and the pickaxe is finished.' },
   { id: 'fit_knife_blade', category: 'Woodwork', result: 'butchering_knife', inputs: [{ item: 'knife_blade' }, { item: 'shaft' }, { item: 'nail', count: 2 }], skill: 'carpentry', qlFromInputs: true,  material: 'metal', label: 'Fit a shaft', verb: 'fitting a shaft', baseTime: 5, stamina: 0.02, done: 'You fit a shaft and the butchering knife is finished.' },
   { id: 'fit_sword_blade', category: 'Woodwork', result: 'sword', inputs: [{ item: 'sword_blade' }, { item: 'shaft' }, { item: 'nail', count: 2 }], skill: 'carpentry', qlFromInputs: true,  material: 'metal', label: 'Fit a shaft', verb: 'fitting a shaft', baseTime: 5, stamina: 0.02, done: 'You fit a shaft and the sword is finished.' },
@@ -512,6 +516,28 @@ const SMOKE_RECIPES: Recipe[] = FISH.map((f) => ({
 RECIPES.push(...SMOKE_RECIPES);
 
 /**
+ * A Mender's two, on repair: a kit that takes damage off anything anywhere,
+ * and a sealant that stops a thing decaying. Only a Mender who has learned one
+ * may make it; anybody may use it.
+ */
+RECIPES.push(
+  {
+    id: 'make_repair_kit', category: 'Mending', result: 'repair_kit',
+    inputs: [{ item: 'cloth', count: 2 }, { item: 'nail', count: 2 }, { item: 'plank' }], tool: 'hammer', skill: 'repair',
+    label: 'Make up a repair kit', verb: 'making up a repair kit', baseTime: 8, stamina: 0.03, difficulty: 20,
+    done: 'You roll the cloth round the plank and the nails. A repair kit.',
+    fail: 'The roll will not stay rolled and comes apart in your hands.', perk: 'repair_kit',
+  },
+  {
+    id: 'make_sealant', category: 'Mending', result: 'sealant',
+    inputs: [{ item: 'tar' }, { item: 'wax' }], skill: 'repair',
+    label: 'Mix sealant', verb: 'mixing sealant', baseTime: 6, stamina: 0.02, difficulty: 16,
+    done: 'You work the wax into the tar until it runs smooth. Sealant.',
+    fail: 'The tar will not take the wax and sets in a lump.', perk: 'sealant',
+  },
+);
+
+/**
  * Every dye is boiled the same way: a quantity of something that grows, a
  * bucket of lye to bite it into the fibre, and a long simmer. The dyestuff
  * is written on the pot, so one item id carries all eight colours.
@@ -629,6 +655,11 @@ const TRAP_RECIPES: Recipe[] = Object.values(TRAPS)
 
 RECIPES.push(...TRAP_RECIPES);
 
+// What a hammer is for, off the recipes that ask for one, so its text cannot name one that does not.
+describeFrom('hammer', {
+  uses: listed(RECIPES.filter((r) => r.tool === 'hammer').map((r) => `${article(r.result)}${lower(r.result)}`)),
+});
+
 /*
  * A recipe's lines say how many it makes and how many of a thing go in off
  * the recipe itself -- `{count:w}`, `{inputs.rope:w}` -- so "three planks"
@@ -654,7 +685,8 @@ const ALTARS = new Set(FURNITURE.filter((f) => f.altar).map((f) => f.id));
 /** Whether this recipe would be the settlement's second altar, for somebody standing where the player stands. */
 const secondAltar = (r: Recipe, g: Game): boolean => ALTARS.has(r.result) && !!g.altarOfDeedAt(g.player.tileX, g.player.tileY);
 
-export const RECIPE_CATEGORIES: RecipeCategory[] = ['Woodwork', 'Furniture', 'Stonework', 'Clay & thatch', 'Cloth', 'Alchemy', 'Writing', 'Cooking', 'Smelting'];
+export const RECIPE_CATEGORIES: RecipeCategory[] = ['Woodwork', 'Furniture', 'Stonework', 'Clay & thatch', 'Cloth', 'Alchemy', 'Writing', 'Cooking', 'Smelting',
+  'Mending'];
 export const stationName = (s: Station): string => STATION_NAME[s];
 
 export interface RecipeStatus {

@@ -48,8 +48,14 @@ const clampQl = (ql: number): number => Math.max(1, Math.min(100, ql));
 export const postLife = (ql: number): number => POST_LIFE_MIN + ((clampQl(ql) - 1) / 99) * (POST_LIFE_MAX - POST_LIFE_MIN);
 /** Damage it takes a second, which is the same thing said the other way round. */
 export const postDecayRate = (ql: number): number => 100 / postLife(ql);
-/** Seconds it has left in it. */
-export const postLeft = (p: PlacedPost): number => Math.max(0, postLife(p.ql) * (1 - p.dmg / 100));
+/**
+ * How many times as long a post stands for whoever set it (a Mender's Post
+ * Keeper). The island reads it off the setter (`made_by`); every post in the
+ * browser is its own player's.
+ */
+export const postKeep = (g: Game): number => g.perk('life:work_post', 1);
+/** Seconds it has left in it, for a setter whose posts stand `keep` times as long. */
+export const postLeft = (p: PlacedPost, keep = 1): number => Math.max(0, postLife(p.ql) * keep * (1 - p.dmg / 100));
 
 /**
  * How far the wildermon set to it will range. A post is a work site and not a
@@ -62,8 +68,8 @@ export const postCentre = (p: PlacedPost): [number, number] => [p.x + (p.sx + 0.
 export const postName = (p: PlacedPost): string => (p.name ? p.name : p.material ? `Work post (${p.material.toLowerCase()})` : 'Work post');
 
 /** How long it has left, said the way a person would say it. */
-export function postState(p: PlacedPost): string {
-  const left = postLeft(p);
+export function postState(p: PlacedPost, keep = 1): string {
+  const left = postLeft(p, keep);
   if (left <= 0) return 'falling over';
   const mins = Math.ceil(left / 60);
   return mins >= 60 ? `${Math.floor(mins / 60)}h ${mins % 60}m left` : `${mins}m left`;
@@ -109,7 +115,7 @@ export const POST_ACTIONS: ActionDef[] = [
       if (!item || item.id !== 'work_post' || !g.inventory.remove(item.uid, 1)) return;
       const p = g.addPost(t.x, t.y, t.sx, t.sy, item.ql, item.extra);
       g.logMsg(
-        `You drive the post in and tack the ribbon to it. It will stand about ${Math.round(postLife(p.ql) / 60)} minutes and reach ${postRadius(p.ql)} tiles. Set a wildermon to it.`,
+        `You drive the post in and tack the ribbon to it. It will stand about ${Math.round(postLife(p.ql) * postKeep(g) / 60)} minutes and reach ${postRadius(p.ql)} tiles. Set a wildermon to it.`,
         'event',
       );
       g.events.emit('world', p.x, p.y);
@@ -158,7 +164,7 @@ export const POST_ACTIONS: ActionDef[] = [
       const reach = Math.min(workRangeOf(c, def), postRadius(p.ql));
       const job = def.gathers ? `${GATHER_DO[def.gathers]} within ${reach} tiles of the post` : 'keep to the post';
       g.note('posted');
-      g.logMsg(`${c.name} will ${job} while it stands. (${postState(p)})`, 'system');
+      g.logMsg(`${c.name} will ${job} while it stands. (${postState(p, postKeep(g))})`, 'system');
       g.events.emit('creature');
     },
   },

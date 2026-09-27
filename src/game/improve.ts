@@ -95,10 +95,12 @@ export const canImprove = (id: string): boolean => !isMould(id) && improvable(id
 /**
  * A thing cannot be bettered past the hands doing the work — except that a
  * rare thing has something in it the hands did not put there, and goes a
- * little further than they could take an ordinary one.
+ * little further than they could take an ordinary one. Nor is anybody held
+ * under `IMPROVE_FLOOR`, and a Mender with Handyman under a floor of their
+ * own (`floor:improve`), whatever the trade, as `improve_ceiling` has it.
  */
 export const improveCeiling = (g: Game, skill: string, item?: Item): number =>
-  Math.max(IMPROVE_FLOOR, g.skills.get(skill)) + (item ? rarityOf(item).ceiling : 0);
+  Math.max(g.perk('floor:improve', IMPROVE_FLOOR), g.skills.get(skill)) + (item ? rarityOf(item).ceiling : 0);
 
 /** How much a successful pass adds at this skill to a thing of this quality: a great deal at first, very little near the end. */
 export const improveStepAt = (level: number, ql: number): number => Math.max(0.08, Math.max(0, 100 - ql) * 0.05 * (0.35 + level / 130));

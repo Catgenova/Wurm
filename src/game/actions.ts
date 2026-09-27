@@ -47,7 +47,10 @@ import { materialOfItem } from './materials';
 import { boonOf, boonTime, clockLeft } from './boons';
 import { helpingOf, NUTRIENTS } from './nutrition';
 import { SKILL_DEFS } from './skills';
-import { itemDef, itemName, itemWeight, markOf, markSays, rarityOf, bagAdd, bagRefuses, bagSpare, isBag, storedLine, RARITIES, RARITY_WORD, rollRarity, type Item } from './items';
+import {
+  describeFrom, itemDef, itemName, itemWeight, markOf, markSays, rarityOf, bagAdd, bagRefuses, bagSpare, isBag, storedLine, RARITIES, RARITY_WORD, rollRarity,
+  type Item,
+} from './items';
 import { listed, numberWord } from './words';
 import { knackable, RECIPE_ACTIONS } from './recipes';
 
@@ -698,6 +701,12 @@ export const patchWith = (id: string): 'cloth' | 'leather' | null => {
   const m = improvable(id)?.material.id;
   return m === 'cloth' || m === 'leather' ? m : null;
 };
+
+/** Damage a Mender's repair kit takes off a thing, and none of its quality. The island's `kit_mend`. */
+export const KIT_MEND = 50;
+describeFrom('repair_kit', { mend: KIT_MEND });
+/** Whether a thing could take a seal: anything but the sealant itself, and nothing sealed already. */
+const sealable = (item: Item): boolean => item.id !== 'sealant' && item.mark?.seal === undefined;
 
 /** A share of a bar or a nutrient as a whole percentage, as the island says it. */
 const wholePct = (x: number): string => `${Math.round(x * 100)}%`;
@@ -2184,10 +2193,14 @@ export const ACTIONS: ActionDef[] = [
       if (!item || item.dmg <= 0) return;
       // A second's work: some of the damage comes out, and a little of the quality
       // with it — a little, not much, so mending a thing is not the end of it.
+      // More out at a go for a Mender's Big Mend, less quality for each point of
+      // it for Light Touch, and now and then none at all for Clean Repair.
       const go = repairGo(g.skills.get('repair'));
-      const healed = Math.min(item.dmg, go.healed);
+      const healed = Math.min(item.dmg, go.healed * g.perk('mend:repair_item', 1));
+      const keep = g.perk('keep:repair_item', 0);
+      const clean = keep > 0 && g.rand() < keep;
       item.dmg = Math.max(0, item.dmg - healed);
-      item.ql = Math.max(REPAIR_FLOOR, item.ql - healed * go.cost);
+      if (!clean) item.ql = Math.max(REPAIR_FLOOR, item.ql - healed * go.cost * g.perk('cost:repair_item', 1));
       g.events.emit('inventory');
       g.gainSkill('repair', 0.25);
       if (item.dmg <= 0) {
@@ -2237,6 +2250,79 @@ export const ACTIONS: ActionDef[] = [
       g.gainSkill(improvable(item.id)?.skill ?? 'tailoring', 0.25);
       // The piece by its plain name, as the island says it.
       g.logMsg(`You patch the ${itemDef(item.id).name.toLowerCase()} with ${stuff}. (damage ${item.dmg.toFixed(2)})`, 'event');
+    },
+  },
+  {
+    /*
+     * A Mender's repair kit, which anybody who has one may use: `KIT_MEND`
+     * damage off anything, wherever you are, and nothing off its quality, and
+     * the kit is used up.
+     */
+    id: 'mend_kit',
+    label: 'Use a repair kit',
+    verb: 'mending',
+    stamina: 0.02,
+    baseTime: 3,
+    applies: (t, g) => {
+      if (t.kind !== 'item') return false;
+      const item = g.inventory.get(t.uid);
+      return !!item && item.dmg > 0 && item.id !== 'repair_kit' && g.inventory.count('repair_kit') > 0;
+    },
+    check: (t, g) => {
+      if (t.kind !== 'item') return null;
+      const item = g.inventory.get(t.uid);
+      if (!item) return 'It is gone.';
+      if (item.dmg <= 0) return 'There is nothing wrong with it.';
+      if (item.id === 'repair_kit') return 'A kit does not mend itself.';
+      if (g.inventory.count('repair_kit') < 1) return 'You have no repair kit.';
+      return null;
+    },
+    perform: (t, g) => {
+      if (t.kind !== 'item') return;
+      const item = g.inventory.get(t.uid);
+      const kit = g.inventory.find('repair_kit');
+      if (!item || !kit || item.dmg <= 0 || !g.inventory.remove(kit.uid, 1)) return;
+      item.dmg = Math.max(0, item.dmg - KIT_MEND);
+      g.events.emit('inventory');
+      g.gainSkill('repair', 0.25);
+      g.logMsg(`You mend the ${itemDef(item.id).name.toLowerCase()} with a repair kit. (damage ${item.dmg.toFixed(2)})`, 'event');
+    },
+  },
+  {
+    /*
+     * A Mender's sealant, which anybody who has some may work over a thing: it
+     * never decays after, wherever it is left (`seal`, nought). A pile takes one
+     * for each thing in it.
+     */
+    id: 'seal_item',
+    label: 'Seal it',
+    verb: 'sealing',
+    stamina: 0.02,
+    baseTime: 3,
+    applies: (t, g) => {
+      if (t.kind !== 'item') return false;
+      const item = g.inventory.get(t.uid);
+      return !!item && sealable(item) && g.inventory.count('sealant') > 0;
+    },
+    check: (t, g) => {
+      if (t.kind !== 'item') return null;
+      const item = g.inventory.get(t.uid);
+      if (!item) return 'It is gone.';
+      if (item.id === 'sealant') return 'Sealant does not seal itself.';
+      if (item.mark?.seal !== undefined) return 'It is sealed already.';
+      const have = g.inventory.count('sealant');
+      if (have < item.count) return `You need ${item.count} sealant to seal all ${item.count} of them; you have ${have}.`;
+      return null;
+    },
+    perform: (t, g) => {
+      if (t.kind !== 'item') return;
+      const item = g.inventory.get(t.uid);
+      if (!item || !sealable(item) || g.inventory.count('sealant') < item.count) return;
+      g.inventory.consume('sealant', item.count);
+      item.mark = { ...(item.mark ?? {}), seal: 0 };
+      g.events.emit('inventory');
+      g.gainSkill('repair', 0.1);
+      g.logMsg(`You work the sealant over the ${itemName(item).toLowerCase()}. It will not decay now.`, 'event');
     },
   },
   {

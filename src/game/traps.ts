@@ -133,7 +133,14 @@ export const trapLife = (kind: TrapKind, ql: number): number => {
   return d.lifeMin + ((clampQl(ql) - 1) / 99) * (d.lifeMax - d.lifeMin);
 };
 export const trapDecayRate = (t: PlacedTrap): number => 100 / trapLife(t.kind, t.ql);
-export const trapLeft = (t: PlacedTrap): number => Math.max(0, trapLife(t.kind, t.ql) * (1 - t.dmg / 100));
+/**
+ * How many times as long a trap or a creel stands for whoever set it (a
+ * Mender's Post Keeper). The island reads it off the setter (`made_by`); every
+ * trap in the browser is its own player's.
+ */
+export const trapKeep = (g: Game, kind: TrapKind): number => g.perk(`life:${kind}`, 1);
+/** Seconds it has left in it, for a setter whose traps stand `keep` times as long. */
+export const trapLeft = (t: PlacedTrap, keep = 1): number => Math.max(0, trapLife(t.kind, t.ql) * keep * (1 - t.dmg / 100));
 export const trapCentre = (t: PlacedTrap): [number, number] => [t.x + (t.sx + 0.5) / SUBTILES, t.y + (t.sy + 0.5) / SUBTILES];
 export const trapName = (t: PlacedTrap): string =>
   t.name ? t.name : t.material ? `${trapDef(t).name} (${t.material.toLowerCase()})` : trapDef(t).name;
@@ -175,14 +182,14 @@ export function catchChance(t: PlacedTrap, c: Creature): number {
 export function trapState(t: PlacedTrap, g: Game): string {
   if (trapDef(t).water) {
     const n = (t.fish ?? []).reduce((a, f) => a + f.count, 0);
-    const left = Math.ceil(trapLeft(t) / 60);
+    const left = Math.ceil(trapLeft(t, trapKeep(g, t.kind)) / 60);
     return `${n ? `${n} in it` : 'empty'} \u00b7 ${t.bait ? `baited with ${itemName(t.bait).toLowerCase()}` : 'not baited'} \u00b7 ${left}m left`;
   }
   if (t.caught !== null) {
     const c = g.creatures.get(t.caught);
     if (c) return `${SPECIES[c.species]?.name ?? 'Something'} in it`;
   }
-  const left = trapLeft(t);
+  const left = trapLeft(t, trapKeep(g, t.kind));
   const mins = Math.ceil(left / 60);
   const when = mins >= 60 ? `${Math.floor(mins / 60)}h ${mins % 60}m left` : `${mins}m left`;
   return t.bait ? `set and baited with ${itemName(t.bait).toLowerCase()} · ${when}` : `set but not baited · ${when}`;
@@ -229,7 +236,7 @@ export const TRAP_ACTIONS: ActionDef[] = [
       const trap = g.addTrap(item.id as TrapKind, t.x, t.y, t.sx, t.sy, item.ql, item.extra);
       // Its maker's hand goes into the water with it (a Tailor's Fisher's Friend).
       if (item.mark && Object.keys(item.mark).length) trap.mark = item.mark;
-      const mins = Math.round(trapLife(trap.kind, trap.ql) / 60);
+      const mins = Math.round(trapLife(trap.kind, trap.ql) * trapKeep(g, trap.kind) / 60);
       g.logMsg(
         trapDef(trap).water
           ? `You sink the ${trapName(trap).toLowerCase()} and make the line fast. It will fish about ${mins} minutes and holds ${creelHold(trap)}. Bait it.`

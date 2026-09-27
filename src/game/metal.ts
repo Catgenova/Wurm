@@ -154,6 +154,8 @@ export const MOULDS: MouldDef[] = [
   { id: 'hatchet_head_mould', name: 'Hatchet head mould', makes: 'hatchet_head', skill: 'blacksmithing', sand: 2, difficulty: 12, lumps: 1 },
   { id: 'sickle_blade_mould', name: 'Sickle blade mould', makes: 'sickle_blade', skill: 'blacksmithing', sand: 2, difficulty: 12, lumps: 1 },
   { id: 'pickaxe_head_mould', name: 'Pickaxe head mould', makes: 'pickaxe_head', skill: 'blacksmithing', sand: 2, difficulty: 12, lumps: 1 },
+  // The hammer a padlock, a lantern and a repair kit are made with, which nothing had made.
+  { id: 'hammer_head_mould', name: 'Hammer head mould', makes: 'hammer_head', skill: 'blacksmithing', sand: 2, difficulty: 10, lumps: 1 },
   { id: 'knife_blade_mould', name: 'Knife blade mould', makes: 'knife_blade', skill: 'blacksmithing', sand: 2, difficulty: 14, lumps: 1 },
   { id: 'sword_blade_mould', name: 'Sword blade mould', makes: 'sword_blade', skill: 'weaponsmithing', sand: 3, difficulty: 18, lumps: 2 },
   { id: 'helm_mould', name: 'Helm mould', makes: 'helm', skill: 'platesmithing', sand: 3, difficulty: 16, lumps: 2 },
@@ -286,6 +288,7 @@ export const HEAD_TO_TOOL: Record<string, string> = {
   hatchet_head: 'hatchet',
   sickle_blade: 'sickle',
   pickaxe_head: 'pickaxe',
+  hammer_head: 'hammer',
   knife_blade: 'butchering_knife',
   sword_blade: 'sword',
   short_sword_blade: 'short_sword',

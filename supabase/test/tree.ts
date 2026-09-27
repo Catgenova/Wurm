@@ -20,13 +20,15 @@
  *   * a node tells on its own trade's skills and on nothing else;
  *   * and every one of the four channels actually moves the number it claims
  *     to, measured at the site that reads it: `skill_mult` for learning,
- *     `spend_wind` for wind, `act_duration` for hands, and a bench and a mend
- *     for fineness -- the last two with the roll taken out of them, so the
- *     ratio is the multiplier and nothing else.
+ *     `spend_wind` for wind, `act_duration` for hands, and a bench for
+ *     fineness -- with the roll taken out of it, so the ratio is the
+ *     multiplier and nothing else.
  *
- * The trade walked through it is the Mender, whose columns are hands, fineness
- * and learning. Wind is measured on the Archer, a fighting trade: the Fisher
- * was the last craft trade with a column of it, and it has moved to perks.
+ * The trade walked through it is the Artisan, whose columns are hands,
+ * fineness and learning, and the last craft trade on a tree: the Mender, whose
+ * fineness on a mend ran backwards and was measured here, has moved to perks.
+ * Wind is measured on the Archer, a fighting trade: the Fisher was the last
+ * craft trade with a column of it, and it has moved to perks too.
  *
  * Runs against the database the suite leaves behind.
  */
@@ -84,7 +86,7 @@ insert into said select 'WIRED|' || string_agg(ch.id || ':' || (
 -- 2. Somebody to hand a tree to.
 do $$
 declare w record; v jsonb; v_a double precision; v_b double precision;
-        v_c double precision; v_d double precision; v_it bigint; v_hands text;
+        v_c double precision; v_d double precision; v_hands text;
 begin
   /*
    * A named body rather than whichever row the heap hands over first, and a
@@ -111,33 +113,33 @@ begin
   -- not what any of it is about.
   delete from caller where uid = w.uid;
   delete from player_node where world_id = w.world_id and uid = w.uid;
-  insert into skill (world_id, uid, id, value) values (w.world_id, w.uid, 'repair', 100)
+  insert into skill (world_id, uid, id, value) values (w.world_id, w.uid, 'jewellery', 100)
     on conflict (world_id, uid, id) do update set value = 100;
   perform set_config('request.jwt.claims', json_build_object('sub', w.uid)::text, false);
-  perform rpc_take_class(w.world_id, 'mender');
-  insert into said values ('BUDGET|' || class_points(w.world_id, w.uid, 'mender')
-    || '|' || class_spent(w.world_id, w.uid, 'mender'));
+  perform rpc_take_class(w.world_id, 'artisan');
+  insert into said values ('BUDGET|' || class_points(w.world_id, w.uid, 'artisan')
+    || '|' || class_spent(w.world_id, w.uid, 'artisan'));
 
   -- The four refusals, in the island's words.
-  insert into said values ('ORDER|' || coalesce(rpc_take_node(w.world_id, 'mender_1_3')->>'why', 'IT WENT THROUGH'));
+  insert into said values ('ORDER|' || coalesce(rpc_take_node(w.world_id, 'artisan_1_3')->>'why', 'IT WENT THROUGH'));
   insert into said values ('THEIRS|' || coalesce(rpc_take_node(w.world_id, 'blade_1_1')->>'why', 'IT WENT THROUGH'));
-  perform rpc_take_node(w.world_id, 'mender_1_1');
-  insert into said values ('TWICE|' || coalesce(rpc_take_node(w.world_id, 'mender_1_1')->>'why', 'IT WENT THROUGH'));
+  perform rpc_take_node(w.world_id, 'artisan_1_1');
+  insert into said values ('TWICE|' || coalesce(rpc_take_node(w.world_id, 'artisan_1_1')->>'why', 'IT WENT THROUGH'));
 
   -- A whole column, and what it comes to.
-  perform rpc_take_node(w.world_id, 'mender_1_2');
-  v := rpc_take_node(w.world_id, 'mender_1_3');
+  perform rpc_take_node(w.world_id, 'artisan_1_2');
+  v := rpc_take_node(w.world_id, 'artisan_1_3');
   insert into said values ('COLUMN|' || coalesce(v->>'took', 'nothing') || '|' || (v->>'left'));
   insert into said select 'FOLD|' || (class_mul->>'hands') from player
     where world_id = w.world_id and uid = w.uid;
-  insert into said values ('SCOPE|' || class_mul(w.world_id, w.uid, 'hands', 'repair')
+  insert into said values ('SCOPE|' || class_mul(w.world_id, w.uid, 'hands', 'jewellery')
     || '|' || class_mul(w.world_id, w.uid, 'hands', 'masonry')
     || '|' || class_mul(w.world_id, w.uid, 'hands', null));
 
   -- Hands, at the arithmetic every one of its three sites hands to act_duration.
   insert into said values ('HANDS|' || act_duration(8, 100, 0, control_speed(w.world_id, w.uid))
     || '|' || act_duration(8, 100, 0, control_speed(w.world_id, w.uid)
-                * class_mul(w.world_id, w.uid, 'hands', 'repair')));
+                * class_mul(w.world_id, w.uid, 'hands', 'jewellery')));
 
   /*
    * Learning, at the one site that reads it -- and the other trade measured
@@ -151,26 +153,29 @@ begin
    * been used. Every measurement in this file is a ratio across one change on
    * one body for that reason: whatever else is true of the body cancels.
    */
-  v_a := skill_mult(w.world_id, w.uid, 'repair');
+  v_a := skill_mult(w.world_id, w.uid, 'jewellery');
   v_c := skill_mult(w.world_id, w.uid, 'masonry');
-  perform rpc_take_node(w.world_id, 'mender_3_1');
-  v_b := skill_mult(w.world_id, w.uid, 'repair');
+  perform rpc_take_node(w.world_id, 'artisan_3_1');
+  v_b := skill_mult(w.world_id, w.uid, 'jewellery');
   v_d := skill_mult(w.world_id, w.uid, 'masonry');
   insert into said values ('LEARN|' || v_a || '|' || v_b || '|' || v_c || '|' || v_d);
 
   -- And the twelfth point, which does not stretch to a third column.
-  perform rpc_take_node(w.world_id, 'mender_2_1');
-  perform rpc_take_node(w.world_id, 'mender_2_2');
-  perform rpc_take_node(w.world_id, 'mender_2_3');
-  perform rpc_take_node(w.world_id, 'mender_3_2');
-  insert into said values ('SPENT|' || class_spent(w.world_id, w.uid, 'mender')
-    || '|' || coalesce(rpc_take_node(w.world_id, 'mender_3_3')->>'why', 'IT WENT THROUGH'));
+  perform rpc_take_node(w.world_id, 'artisan_2_1');
+  perform rpc_take_node(w.world_id, 'artisan_2_2');
+  perform rpc_take_node(w.world_id, 'artisan_2_3');
+  perform rpc_take_node(w.world_id, 'artisan_3_2');
+  insert into said values ('SPENT|' || class_spent(w.world_id, w.uid, 'artisan')
+    || '|' || coalesce(rpc_take_node(w.world_id, 'artisan_3_3')->>'why', 'IT WENT THROUGH'));
 
-  -- 3. Putting the trade down puts the tree down, which is the only undo.
+  -- 3. Putting the trade down puts the tree down, which is the only undo: for
+  -- a trade on perks, the Mender, open at sixty in repair.
   insert into skill (world_id, uid, id, value) values (w.world_id, w.uid, 'pottery', 60)
     on conflict (world_id, uid, id) do update set value = 60;
+  insert into skill (world_id, uid, id, value) values (w.world_id, w.uid, 'repair', 60)
+    on conflict (world_id, uid, id) do update set value = 60;
   perform give_coins(w.world_id, w.uid, class_change_cost()::bigint * 3);
-  perform rpc_take_class(w.world_id, 'artisan');
+  perform rpc_take_class(w.world_id, 'mender');
   insert into said select 'CLEARED|' || count(*) || '|'
     || coalesce((select class_mul->>'hands' from player
                   where world_id = w.world_id and uid = w.uid), 'gone')
@@ -178,8 +183,9 @@ begin
 
   -- 4. Fineness at the bench, with the rolls taken out so the ratio is the node:
   -- the check's, and the hands' own (product_ql), held still for the two
-  -- gos and put back after. On a trade still on its tree: the Artisan's jar,
-  -- off a lump of clay, whose quality is the hands' rather than the clay's.
+  -- gos and put back after. On the Artisan again, a fresh tree: its jar, off
+  -- a lump of clay, whose quality is the hands' rather than the clay's.
+  perform rpc_take_class(w.world_id, 'artisan');
   v_hands := pg_get_functiondef('product_ql(double precision, double precision)'::regprocedure);
   create or replace function product_ql(p_skill double precision, p_tool_ql double precision default 0)
     returns double precision language sql as 'select 40::double precision';
@@ -201,22 +207,7 @@ begin
   execute v_hands;
   insert into said values ('BENCH|' || coalesce(v_a::text, 'none') || '|' || coalesce(v_b::text, 'none'));
 
-  -- 5. And at a mend, where the same number runs the other way.
-  insert into skill (world_id, uid, id, value) values (w.world_id, w.uid, 'repair', 60)
-    on conflict (world_id, uid, id) do update set value = 60;
-  perform rpc_take_class(w.world_id, 'mender');
-  v_it := give(w.world_id, w.uid, 'hammer', 1, 50);
-  update item set dmg = 30, ql = 50 where id = v_it;
-  perform perform_item(w.world_id, w.uid, 'repair_item', jsonb_build_object('uid', v_it));
-  select 50 - ql into v_a from item where id = v_it;
-  perform rpc_take_node(w.world_id, 'mender_2_1');
-  update skill set value = 60 where world_id = w.world_id and uid = w.uid and id = 'repair';
-  update item set dmg = 30, ql = 50 where id = v_it;
-  perform perform_item(w.world_id, w.uid, 'repair_item', jsonb_build_object('uid', v_it));
-  select 50 - ql into v_b from item where id = v_it;
-  insert into said values ('MEND|' || coalesce(v_a::text, 'none') || '|' || coalesce(v_b::text, 'none'));
-
-  -- 6. Wind, with the body pinned so the only thing that moved is the node: on
+  -- 5. Wind, with the body pinned so the only thing that moved is the node: on
   -- the Archer, whose third column is wind, at the drawing of a bow.
   insert into skill (world_id, uid, id, value) values (w.world_id, w.uid, 'archery', 100)
     on conflict (world_id, uid, id) do update set value = 100;
@@ -292,23 +283,23 @@ check('every channel is read by something, so no column is quietly dead',
 check('a fresh trade is twelve points with none of them spent', said('BUDGET') === '12|0', said('BUDGET'));
 
 const mine = (taken: string[], id: string): string =>
-  nodeRefusal(nodeDef(id)!, 'mender', taken, 12) ?? 'open';
+  nodeRefusal(nodeDef(id)!, 'artisan', taken, 12) ?? 'open';
 check('the major wants the minor under it, in the same words on both sides',
-  said('ORDER') === mine([], 'mender_1_3') && said('ORDER') === `${nodeDef('mender_1_2')!.name} comes first.`, said('ORDER'));
+  said('ORDER') === mine([], 'artisan_1_3') && said('ORDER') === `${nodeDef('artisan_1_2')!.name} comes first.`, said('ORDER'));
 check('another trade’s node is not yours, ditto',
   said('THEIRS') === mine([], 'blade_1_1'), said('THEIRS'));
 check('one you already have, ditto',
-  said('TWICE') === mine(['mender_1_1'], 'mender_1_1'), said('TWICE'));
+  said('TWICE') === mine(['artisan_1_1'], 'artisan_1_1'), said('TWICE'));
 
-check('a column taken in order leaves seven of the twelve', said('COLUMN') === 'mender_1_3|7', said('COLUMN'));
+check('a column taken in order leaves seven of the twelve', said('COLUMN') === 'artisan_1_3|7', said('COLUMN'));
 check('and the island’s fold is the browser’s, to the last bit',
-  said('FOLD') === String(foldNodes(['mender_1_1', 'mender_1_2', 'mender_1_3']).hands),
-  `island ${said('FOLD')}, browser ${foldNodes(['mender_1_1', 'mender_1_2', 'mender_1_3']).hands}`);
+  said('FOLD') === String(foldNodes(['artisan_1_1', 'artisan_1_2', 'artisan_1_3']).hands),
+  `island ${said('FOLD')}, browser ${foldNodes(['artisan_1_1', 'artisan_1_2', 'artisan_1_3']).hands}`);
 
 const [onMine, onStone, onNeither] = said('SCOPE').split('|').map(Number);
 check('a node tells on its own trade’s skills and on nothing else',
   onMine < 1 && onStone === 1 && onNeither === 1,
-  `repair ${onMine}, masonry ${onStone}, no trade at all ${onNeither}`);
+  `jewellery ${onMine}, masonry ${onStone}, no trade at all ${onNeither}`);
 
 const [handsPlain, handsTree] = said('HANDS').split('|').map(Number);
 check('hands: a whole column takes a sixth off the time a go takes',
@@ -317,12 +308,12 @@ check('hands: a whole column takes a sixth off the time a go takes',
 const [learnPlain, learnTree, stonePlain, stoneTree] = said('LEARN').split('|').map(Number);
 check('learning: one minor is three per cent more out of every go, and nothing on another trade',
   near(learnTree / learnPlain, 1.03) && stoneTree === stonePlain,
-  `repair ${learnPlain} → ${learnTree}, masonry ${stonePlain} → ${stoneTree}`);
+  `jewellery ${learnPlain} → ${learnTree}, masonry ${stonePlain} → ${stoneTree}`);
 
 const [spent, broke] = said('SPENT').split('|');
 check('twelve spent, and the thirteenth point is refused in the same words',
-  spent === '12' && broke === nodeRefusal(nodeDef('mender_3_3')!, 'mender',
-    ['mender_1_1', 'mender_1_2', 'mender_1_3', 'mender_2_1', 'mender_2_2', 'mender_2_3', 'mender_3_1', 'mender_3_2'], 12),
+  spent === '12' && broke === nodeRefusal(nodeDef('artisan_3_3')!, 'artisan',
+    ['artisan_1_1', 'artisan_1_2', 'artisan_1_3', 'artisan_2_1', 'artisan_2_2', 'artisan_2_3', 'artisan_3_1', 'artisan_3_2'], 12),
   broke);
 
 check('putting the trade down puts the whole tree down with it',
@@ -331,10 +322,6 @@ check('putting the trade down puts the whole tree down with it',
 const [benchPlain, benchTree] = said('BENCH').split('|').map(Number);
 check('fineness: a minor is two per cent on what comes off the bench',
   near(benchTree / benchPlain, 1.02, 1e-5), `QL ${benchPlain} → ${benchTree}`);
-
-const [mendPlain, mendTree] = said('MEND').split('|').map(Number);
-check('and two per cent less quality off what you mend, the same number backwards',
-  near(mendTree / mendPlain, 1 / 1.02, 1e-5), `${mendPlain} lost → ${mendTree}`);
 
 const [windPlain, windTree, windTrade] = said('WIND').split('|');
 check('wind: one minor is three per cent less out of you, on the Archer drawing a bow',

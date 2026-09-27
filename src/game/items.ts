@@ -94,6 +94,7 @@ export const DEED_DECAY = 0.1;
 export const ITEM_DEFS: Record<string, ItemDef> = {
   shovel: { name: 'Shovel', category: 'tool', weight: 3, description: 'A shovel for digging, flattening and packing dirt.' },
   pickaxe: { name: 'Pickaxe', category: 'tool', weight: 4, description: 'A pickaxe for mining rock.' },
+  hammer: { name: 'Hammer', category: 'tool', weight: 1.5, description: 'A metal head on a shaft, for driving nails and beating metal cold: {uses} are made with one.' },
   hatchet: { name: 'Hatchet', category: 'tool', weight: 2, description: 'A small axe for felling trees.' },
   sickle: { name: 'Sickle', category: 'tool', weight: 1.5, description: 'A curved blade on a short handle. The forester\'s own: it prunes a tree back a stage and cuts what a bush has on it.' },
   carving_knife: { name: 'Carving knife', category: 'tool', weight: 0.5, description: 'A knife for carving wood.' },
@@ -281,6 +282,7 @@ export const ITEM_DEFS: Record<string, ItemDef> = {
   rose_petals: { name: 'Rose petals', category: 'material', weight: 0.05, stackable: true, raw: true, decay: 6, description: 'Cut off a rose bush with a sickle. Boiled, they give a pink that nothing else on the island gives.' },
   lavender: { name: 'Lavender', category: 'material', weight: 0.05, stackable: true, raw: true, decay: 6, description: 'Cut off a lavender bush with a sickle. Boiled, it gives a violet.' },
   pickaxe_head: { name: 'Pickaxe head', category: 'material', weight: 1.2, stackable: true, decay: 1 },
+  hammer_head: { name: 'Hammer head', category: 'material', weight: 1, stackable: true, decay: 1 },
   knife_blade: { name: 'Knife blade', category: 'material', weight: 1.2, stackable: true, decay: 1 },
   saw_blade: { name: 'Saw blade', category: 'material', weight: 1.2, stackable: true, decay: 1 },
   trowel_blade: { name: 'Trowel blade', category: 'material', weight: 1, stackable: true, decay: 1 },
@@ -465,6 +467,9 @@ export const ITEM_DEFS: Record<string, ItemDef> = {
   backpack: { name: 'Backpack', category: 'misc', weight: 2.4, decay: 4, holds: 60, shelter: 0.4, description: 'A deep leather pack on ribbon straps. Holds {holds} things, and what is in it rots at {shelter:share} the rate if it is left on the ground. Drop a full one at a work post and it keeps.' },
   work_post: { name: 'Work post', category: 'misc', weight: 5, decay: 4, description: 'A stake, a crossbar and a strip of metal for a marker. Driven into open ground off your deed, it stands {post.shortest:span} to {post.longest:span} by its quality, and one wildermon will work out of it as it would out of a settlement. When it goes over, the creature comes back to you.' },
   fish_pond: { name: 'Fish pond', category: 'misc', weight: 60, decay: 2, description: 'A pond dug and lined for fish. Set it down on your settlement and it stocks itself at a fish in {every:span}, up to {pond} of them.' },
+  // A Mender's two: a kit that mends anything anywhere, and a seal against decay.
+  repair_kit: { name: 'Repair kit', category: 'misc', weight: 1.5, stackable: true, decay: 3, description: 'Cloth, nails and a plank, made up to put things right away from the bench. Used on anything damaged, it takes {mend} damage off it and none of its quality, and is used up.' },
+  sealant: { name: 'Sealant', category: 'material', weight: 0.3, stackable: true, decay: 1, description: 'Tar and beeswax worked together. Worked over a thing it seals it, and a sealed thing never decays wherever it is left. A thing takes one sealant, and a pile one for each thing in it.' },
   hive: { name: 'Hive', category: 'misc', weight: 10, decay: 4, description: 'A stack of shallow boxes for a swarm to live in. Set it down on your deed and keep a Vesp there, and it fills itself with honey and beeswax. Holds {hive} of them.' },
   rope_tool: { name: 'Rope tool', category: 'tool', weight: 1.2, description: 'A grooved block the strands are laid round and twisted against. Nothing is roped without one.' },
   spindle: { name: 'Spindle', category: 'misc', weight: 5, decay: 4, description: 'Spins wool, cotton and wemp into yarn. Stand at it to work.' },
@@ -668,7 +673,9 @@ export interface Item {
  * armour turns aside, `aim` on how often a weapon lands and `last` on how
  * many fillings a mould lasts (the wear a filling does is divided by it).
  * `temper` is the one that is not: it is the quality a quench adds, once,
- * and a thing without it has none to add (`temperOf`).
+ * and a thing without it has none to add (`temperOf`). And `seal` is not a
+ * maker's at all but whoever sealed it (a Mender's Sealant): nought, on how
+ * fast it decays set down.
  *
  * A perk puts one in with the key `<family>:<what is made>` (`hold:chest`),
  * read off the maker's fold as the thing comes off the bench or the anvil. A
@@ -678,8 +685,8 @@ export interface Item {
  * map in the `mark` column of an item and of a piece set down, and carries it
  * between the two.
  */
-export type MarkFamily = 'hold' | 'speed' | 'damage' | 'range' | 'soak' | 'aim' | 'last' | 'temper' | 'feed' | 'fill' | 'knack' | 'rot' | 'catch';
-export const MARK_FAMILIES: readonly MarkFamily[] = ['hold', 'speed', 'damage', 'range', 'soak', 'aim', 'last', 'temper', 'feed', 'fill', 'knack', 'rot', 'catch'];
+export type MarkFamily = 'hold' | 'speed' | 'damage' | 'range' | 'soak' | 'aim' | 'last' | 'temper' | 'feed' | 'fill' | 'knack' | 'rot' | 'catch' | 'seal';
+export const MARK_FAMILIES: readonly MarkFamily[] = ['hold', 'speed', 'damage', 'range', 'soak', 'aim', 'last', 'temper', 'feed', 'fill', 'knack', 'rot', 'catch', 'seal'];
 export type Mark = Partial<Record<MarkFamily, number>>;
 
 /** A thing's mark on one family, which is one where it has none. */
@@ -690,14 +697,15 @@ export const temperOf = (thing: { mark?: Mark | null }): number => thing.mark?.t
 /**
  * What a thing fitted together from these parts carries of theirs: every
  * family any of them was marked with, the larger where two say the same, and
- * never a temper, which belongs to whoever finishes the thing.
+ * never a temper, which belongs to whoever finishes the thing, nor a seal,
+ * which is on the part and not on what it went into.
  */
 export function partsMark(parts: ReadonlyArray<{ mark?: Mark | null }>): Mark {
   const out: Mark = {};
   for (const p of parts) {
     for (const f of MARK_FAMILIES) {
       const v = p.mark?.[f];
-      if (f === 'temper' || v === undefined) continue;
+      if (f === 'temper' || f === 'seal' || v === undefined) continue;
       out[f] = Math.max(out[f] ?? v, v);
     }
   }
@@ -744,11 +752,14 @@ export function markSays(mark: Mark | undefined | null): string {
     knack: (m) => `gives a knack that lasts ${pct(m)} longer`,
     rot: (m) => `rots ${Math.round((1 - m) * 100)}% slower`,
     catch: (m) => `catches ${pct(m)} more`,
+    seal: () => '',
   };
-  const parts = MARK_FAMILIES.filter((f) => mark[f] !== undefined).map((f) => said[f](mark[f] as number));
-  if (!parts.length) return '';
+  const parts = MARK_FAMILIES.filter((f) => f !== 'seal' && mark[f] !== undefined).map((f) => said[f](mark[f] as number));
+  // A seal is whoever sealed it, not the maker, and is said on its own: nought, which is the only one there is.
+  const sealed = mark.seal !== undefined ? ' It is sealed and never decays.' : '';
+  if (!parts.length) return sealed;
   const joined = parts.length < 2 ? parts[0] : `${parts.slice(0, -1).join(', ')} and ${parts[parts.length - 1]}`;
-  return ` Its maker's hand is in it: it ${joined}.`;
+  return ` Its maker's hand is in it: it ${joined}.${sealed}`;
 }
 
 /** Whether two things carry the same mark, or both none. */
@@ -920,12 +931,14 @@ export const billWords = (bill: ReadonlyArray<readonly [string, number]>, figure
  * up longer, and what it is made of decides the rest. A cedar chest left in
  * the rain is still a chest a long time after the pine one has gone. And a
  * dish rots slower for its maker's hand in it (a Cook's Long-lasting, `rot`),
- * and food a Cook with Cool Pack set down slower again (`cool`).
+ * and food a Cook with Cool Pack set down slower again (`cool`). A thing a
+ * Mender's sealant is on does not decay at all (`seal`).
  */
 export function groundDecayRate(item: Item): number {
   const def = itemDef(item.id);
   const base = def.decay ?? CATEGORY_DECAY[def.category];
-  return base * Math.max(0.3, 1.4 - item.ql / 120) * matOfItem(item).decay * rarityOf(item).keep * markOf(item, 'rot') * (item.cool ?? 1);
+  return base * Math.max(0.3, 1.4 - item.ql / 120) * matOfItem(item).decay * rarityOf(item).keep * markOf(item, 'rot') * markOf(item, 'seal')
+    * (item.cool ?? 1);
 }
 
 /** What one of a thing weighs, which is its make and what it is made of. */

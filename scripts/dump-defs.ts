@@ -34,7 +34,7 @@ import { BOARD_TOP } from '../src/game/boards';
 import { CRAFT_HEAD, CRAFT_REACH } from '../src/game/recipes';
 import { SMITH_GAIN } from '../src/game/anvil';
 import { BREW_GAIN } from '../src/game/brewing';
-import { IMPROVE_GAIN } from '../src/game/improve';
+import { IMPROVE_FLOOR, IMPROVE_GAIN } from '../src/game/improve';
 import { RESTORE_GAIN } from '../src/game/archaeology';
 import { FREE_GAIN } from '../src/game/traps';
 import { BANDAGE_GAIN, CLEAN_GAIN, DRESS_CHECK } from '../src/game/firstaid';
@@ -60,7 +60,8 @@ import {
   DREDGE_DEPTH, MINE_DEPTH, WORMY, RICH_WORMS, FLATTEN_STEP, SPOIL_REACH, SLOPE_PER_SKILL, SLOPE_FLOOR,
   TILE_CORNERS, DIG_TILE_TIME, PAN_ORES,
 } from '../src/game/actions';
-import { FIND_BASE, FIND_CAP, FIND_PER_SKILL, FIND_PER_TOOL } from '../src/game/archaeology';
+import { FIND_BASE, FIND_CAP, FIND_PER_SKILL, FIND_PER_TOOL, RESTORE_AGE, RESTORE_HARM, RESTORE_HARM_SPREAD } from '../src/game/archaeology';
+import { POST_LIFE_MAX, POST_LIFE_MIN } from '../src/game/posts';
 import { MELT_HEAT, MELT_KEEP, MELT_SHARE, METAL_CONTENT } from '../src/game/melt';
 import { COIN_DIFFICULTY, COIN_METALS, COINS_PER_LUMP, DIE_WEAR } from '../src/game/metal';
 import { ORDER_LIFE } from '../src/game/orders';
@@ -85,7 +86,7 @@ import { DAWN, DUSK, DAY_SECONDS, CARRY_BASE, CARRY_PER_STRENGTH, CARRY_STOP } f
 import { CARRY_CRAWL } from '../src/game/player';
 import { RELICS, DIGGABLE } from '../src/game/archaeology';
 import { isSeam } from '../src/world/tiles';
-import { CHIP_CHANCE, TRY_LEARN } from '../src/game/actions';
+import { CHIP_CHANCE, KIT_MEND, TRY_LEARN } from '../src/game/actions';
 import { BRAZIER_BURN_AT_HUNDRED, BRAZIER_BURN_AT_ONE, BRAZIER_CAPACITY } from '../src/game/placeables';
 import { CARE_BONUS, CARE_HOURS, GRAZE_FILL, GRAZE_HUNGRY, PER_REGION, WILD_TARGET } from '../src/game/creatures';
 import {
@@ -1278,6 +1279,11 @@ for (const [fn, v] of [
      and the most a net brings up before the roll, and how often a Fisher's pond stocks itself. */
   ['bait_pull', BAIT_PULL], ['bait_shy', BAIT_SHY], ['hook_base', HOOK_BASE], ['hook_bait', HOOK_BAIT], ['hook_most', HOOK_MOST],
   ['net_least', NET_LEAST], ['net_haul', NET_HAUL], ['pond_every', POND_EVERY],
+  /* How long a work post stands at the roughest and at the finest. `post_life` had thirty minutes written out by hand for the
+     first, where the browser's is a world half hour, which is seventy-five. And the floor nobody is held under at improving, what
+     a restoring that fails does to a piece and what its damage takes off what it restores to, and what a repair kit takes off. */
+  ['post_life_min', POST_LIFE_MIN], ['post_life_max', POST_LIFE_MAX], ['improve_floor', IMPROVE_FLOOR],
+  ['restore_harm', RESTORE_HARM], ['restore_harm_spread', RESTORE_HARM_SPREAD], ['restore_age', RESTORE_AGE], ['kit_mend', KIT_MEND],
   /* What a lump costs in ore, and what a lump of the rare six is worth against one. */
   ['ore_per_lump', ORE_PER_LUMP], ['rare_lump_factor', RARE_LUMP_FACTOR],
   ['tick_seconds', TICK_SECONDS], ['idle_logout', IDLE_LOGOUT], ['event_keep', EVENT_KEEP],

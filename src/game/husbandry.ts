@@ -144,7 +144,10 @@ export const HUSBANDRY_ACTIONS: ActionDef[] = [
       // A brushing is also a looking-over: it finds the small hurts and sees to them, more of them for Healing Hands.
       const top = maxHealth(c, SPECIES[c.species]);
       if (c.health < top) c.health = Math.min(top, c.health + top * g.perk('groom:heal', GROOM_HEAL));
-      g.damageItem(brush, 0.03);
+      // Three uses' wear on the brush, as the island has it (`wear_tool`): it had been a flat
+      // three hundredths here, where the island wore it by its quality, and a Mender's Tool Care
+      // is read there.
+      g.wearTool('brush', 3);
       g.gainSkill(HUSBANDRY, 0.4);
       g.note('groom');
       if (c.care >= 0.995) g.note('groomfull');

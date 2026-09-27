@@ -2,8 +2,11 @@ import { tryGain } from './learn';
 import { TileType } from '../world/tiles';
 import type { ActionDef } from './actions';
 import type { Game } from './game';
-import { itemName, RARITY_WORD, rollRarity, type Item } from './items';
-import { BAUBLE_SHARE, BAUBLE_TIER_BY_ID, findKind, REGRET, rollBauble, rollTier, TARNISHED, type BaubleTier } from './baubles';
+import { itemName, RARITY_ODDS, RARITY_WORD, rollRarity, type Item } from './items';
+import {
+  BAUBLE_SHARE, BAUBLE_TIER_BY_ID, BAUBLE_TIERS, findKind, readBauble, REGRET, rollBauble, rollTier, TARNISHED, type BaubleTier, type BaubleTierDef,
+} from './baubles';
+import { article } from './words';
 
 /** What one go at putting a relic back together teaches. */
 export const RESTORE_GAIN = 0.4;
@@ -107,30 +110,77 @@ export const findChance = (skill: number, toolQl: number, more = 0, cap = FIND_C
 export const relicsWithin = (skill: number): RelicDef[] => RELICS.filter((r) => r.difficulty <= skill + 14);
 
 /**
+ * What a restoring that fails does to each piece: `RESTORE_HARM` and up to
+ * `RESTORE_HARM_SPREAD` more, or nothing for a Mender's Gentle Hands. The
+ * island's `restore_harm` and `restore_harm_spread`.
+ */
+export const RESTORE_HARM = 5;
+export const RESTORE_HARM_SPREAD = 9;
+const restoreHarm = (g: Game): number => (RESTORE_HARM + g.rand() * RESTORE_HARM_SPREAD) * g.perk('harm:restore_relic', 1);
+/**
+ * The damage on a piece that would halve what it restores to: each point takes
+ * one `RESTORE_AGE`th off, or nothing for a Mender's Age Undone. The island's
+ * `restore_age`.
+ */
+export const RESTORE_AGE = 200;
+const aged = (g: Game, dmg: number): number => 1 - (dmg / RESTORE_AGE) * g.perk('age:restore_relic', 1);
+/** What restoring brings out of what went in, at the restorer's skill, and more for a Mender's Fine Restore. */
+const restoredQl = (g: Game, ql: number): number =>
+  Math.max(1, Math.min(100, ql * (0.72 + g.skills.get('restoration') / 260) * g.perk('ql:restore_relic', 1)));
+
+/**
+ * What a bauble of this tier and rarity is rolled to give, and for a Mender's
+ * Second Look the better of more rolls: the one that gives the most, and the
+ * first where they give the same, which an ancient one always does.
+ */
+function bestRoll(g: Game, tier: BaubleTierDef, rare: number): string {
+  let best = rollBauble(tier.id, rare, g.rand);
+  const amount = (text: string): number => readBauble({ id: tier.item, extra: text })?.amount ?? 0;
+  for (let i = 1; i < g.perk('rolls:bauble', 1); i++) {
+    const again = rollBauble(tier.id, rare, g.rand);
+    if (amount(again) > amount(best)) best = again;
+  }
+  return best;
+}
+
+/**
  * A tarnished bauble put right: at its tier's difficulty, and only as good as
  * it came out of the ground, less what age took, as a relic is. What it does
  * is rolled now, and its rarity with it, which multiplies what it does
- * (`rollBauble`); all of it is then written on the bauble.
+ * (`rollBauble`); all of it is then written on the bauble. A Mender's perks
+ * are the island's `restore_bauble`'s: surer, gentler on a failure, better
+ * and rarer, and now and then a tier better than it looked.
  */
 function restoreBauble(g: Game, item: Item): void {
-  const tier = BAUBLE_TIER_BY_ID.get(item.extra as BaubleTier) ?? BAUBLE_TIER_BY_ID.get('minor');
-  if (!tier) return;
-  if (!g.skillCheck('restoration', tier.difficulty, 0, g.mindEase())) {
+  const found = BAUBLE_TIER_BY_ID.get(item.extra as BaubleTier) ?? BAUBLE_TIER_BY_ID.get('minor');
+  if (!found) return;
+  if (!g.sureCheck('restore_relic', 'restoration', found.difficulty, 0, g.mindEase())) {
     g.gainSkill('mind_logic', tryGain(false, RESTORE_GAIN));
-    g.damageItem(item, 5 + g.rand() * 9);
-    g.logMsg(`The tarnish will not lift from the ${tier.id} bauble and you mark it trying.`, 'event');
+    const gentle = g.perk('harm:restore_relic', 1) <= 0;
+    g.damageItem(item, restoreHarm(g));
+    g.logMsg(gentle
+      ? `The tarnish will not lift from the ${found.id} bauble, and it takes no harm from the trying.`
+      : `The tarnish will not lift from the ${found.id} bauble and you mark it trying.`, 'event');
     return;
   }
-  const ql = Math.max(1, Math.min(100, item.ql * (1 - item.dmg / 200) * (0.72 + g.skills.get('restoration') / 260)));
-  const rare = rollRarity(g.rand);
+  // A tier better under the tarnish than it looked, now and then, for a Mender's Tier Up.
+  const up = BAUBLE_TIERS[BAUBLE_TIERS.indexOf(found) + 1];
+  const lift = g.perk('tier:restore_relic', 0);
+  const tier = up && lift > 0 && g.rand() < lift ? up : found;
+  const ql = restoredQl(g, item.ql * aged(g, item.dmg));
+  // Rarer for a Mender's Lucky Polish: the first step at its odds, the rest at their own.
+  const rare = rollRarity(g.rand, g.perk('rare:restore_relic', RARITY_ODDS[0]));
   if (!g.inventory.remove(item.uid, 1)) return;
-  const made = g.inventory.add(tier.item, { ql, extra: rollBauble(tier.id, rare, g.rand) });
+  const made = g.inventory.add(tier.item, { ql, extra: bestRoll(g, tier, rare) });
   if (rare) {
     made.rare = rare;
     g.logMsg(RARITY_WORD[rare], 'skill');
   }
   g.gainSkill('mind_logic', tryGain(true, RESTORE_GAIN));
-  g.logMsg(`The tarnish comes away and the bauble is whole: ${itemName(made).toLowerCase()}. (QL ${made.ql.toFixed(1)})`, 'event');
+  g.logMsg(tier === found
+    ? `The tarnish comes away and the bauble is whole: ${itemName(made).toLowerCase()}. (QL ${made.ql.toFixed(1)})`
+    : `The tarnish comes away and the ${found.id} bauble is ${article(tier.id)} ${tier.id} one: ${itemName(made).toLowerCase()}. (QL ${made.ql.toFixed(1)})`,
+  'event');
 }
 
 /** What studying at a lectern is worth over holding the book in one hand. */
@@ -254,15 +304,18 @@ export const ARCHAEOLOGY_ACTIONS: ActionDef[] = [
       if (!f) return;
       const pieces = piecesHeld(g, f.relic);
       if (pieces.length < f.relic.parts) return;
-      if (!g.skillCheck('restoration', f.relic.difficulty, 0, g.mindEase())) {
+      if (!g.sureCheck('restore_relic', 'restoration', f.relic.difficulty, 0, g.mindEase())) {
         g.gainSkill('mind_logic', tryGain(false, RESTORE_GAIN));
-        for (const p of pieces) g.damageItem(p, 5 + g.rand() * 9);
-        g.logMsg(`The pieces of the ${f.relic.name} will not sit together and you mark them trying.`, 'event');
+        const gentle = g.perk('harm:restore_relic', 1) <= 0;
+        for (const p of pieces) g.damageItem(p, restoreHarm(g));
+        g.logMsg(gentle
+          ? `The pieces of the ${f.relic.name} will not sit together, and they take no harm from the trying.`
+          : `The pieces of the ${f.relic.name} will not sit together and you mark them trying.`, 'event');
         return;
       }
       // What comes out is only as good as the pieces that went in, less what age took.
-      const avgQl = pieces.reduce((sum, p) => sum + p.ql * (1 - p.dmg / 200), 0) / pieces.length;
-      const ql = Math.max(1, Math.min(100, avgQl * (0.72 + g.skills.get('restoration') / 260)));
+      const avgQl = pieces.reduce((sum, p) => sum + p.ql * aged(g, p.dmg), 0) / pieces.length;
+      const ql = restoredQl(g, avgQl);
       for (const p of pieces) g.inventory.remove(p.uid, 1);
       const made = g.inventory.add(f.relic.result, { ql });
       g.gainSkill('mind_logic', tryGain(true, RESTORE_GAIN));

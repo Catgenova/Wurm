@@ -342,24 +342,24 @@ The browser had drifted from the island here too. A rod and a net wore their own
 
 Main skill repair; also restoration.
 
-1. **Big Mend** — each repair takes out 50% more damage.
-2. **Light Touch** — repairing costs half the QL.
-3. **Clean Repair** — 1 repair in 4 costs no QL.
-4. **Quick Hands** — each repair takes 40% less time (1 s base).
-9. **Tool Care** — all your tools wear 25% slower.
-10. **Armour Care** — armour and weapons you wear take 25% less damage.
-14. **Post Keeper** — work posts, traps and creels you set last 50% longer.
+1. **Big Mend** — each repair takes out 50% more damage. Built as a multiplier on what a go takes out (`mend:repair_item`), at the same quality for each point of it.
+2. **Light Touch** — repairing costs half the QL. Built as a multiplier on the quality each point of damage taken out costs (`cost:repair_item`). The tree's fineness on repair, which divided that cost on the island and nowhere else, went with the tree.
+3. **Clean Repair** — 1 repair in 4 costs no QL. Built as a go's chance of costing nothing (`keep:repair_item`), rolled only for somebody who has it.
+4. **Quick Hands** — each repair takes 40% less time (1 s base). A go of Repair is always down on the floor under every job, where a perk on its time did nothing, so a perk on a job's time (`time:`) now comes off after the floor rather than before it, on both sides and for every trade: every quick perk is what it says at any skill.
+9. **Tool Care** — all your tools wear 25% slower. Built as `wear:` on every tool a job or a recipe wears, and the brush. The browser had worn a brush a flat sliver a grooming; it wears it by its quality now, as the island does.
+10. **Armour Care** — armour and weapons you wear take 25% less damage. Built as three keys (`worn:armour`, `worn:shield`, `worn:weapon`): a piece of armour a blow lands on, a shield that stops one, and a weapon that lands one or a bow that puts an arrow home.
+14. **Post Keeper** — work posts, traps and creels you set last 50% longer. Built as the life of the thing times its setter's perk (`life:work_post`, `life:snare`, `life:deadfall`, `life:creel`), read off whoever set it (`kept_life`), wherever its damage and its time left are asked. The island had thirty minutes written out for the roughest post, where the browser's is a world half hour; both read the same two numbers now (`post_life_min`, `post_life_max`).
 17. **Quick Restore** — restoring takes 40% less time (20 s base).
-18. **Sure Restore** — restoration fails half as often.
-19. **Gentle Hands** — a failed restoration does no damage (now 5–14 to each piece).
-20. **Fine Restore** — what you restore comes up at +10% QL.
-21. **Age Undone** — damage on the pieces no longer lowers the QL of what you restore.
-24. **Lucky Polish** — baubles you restore come out rare twice as often (now 1 in 100).
-25. **Second Look** — a bauble you restore is rolled twice, and you keep the better roll.
-26. **Tier Up** — 1 restoration in 10 turns a minor bauble into a major one, or a major into an ancient one.
-27. **Handyman** — you can improve anything up to QL 30, whatever your skill in its trade (now 10).
-42. **Repair Kit** — a new item made from 2 cloth, 2 nails and a plank; it takes 50 damage off anything in one use, anywhere.
-50. **Sealant** — a new recipe; 1 tar and 1 wax seal an item so it never decays.
+18. **Sure Restore** — restoration fails half as often. Built as `fail:restore_relic`, on a relic and a bauble alike.
+19. **Gentle Hands** — a failed restoration does no damage (now 5–14 to each piece). Built as a multiplier on that damage (`harm:restore_relic`), nought; what a failure says says so.
+20. **Fine Restore** — what you restore comes up at +10% QL. Built as ten per cent on the quality, to a hundred at most (`ql:restore_relic`); it takes the place of the tree's fineness there.
+21. **Age Undone** — damage on the pieces no longer lowers the QL of what you restore. Built as a multiplier on what each point of damage takes off (`age:restore_relic`), nought.
+24. **Lucky Polish** — baubles you restore come out rare twice as often (now 1 in 100). Built as the first step of rarity at twice its odds (`rare:restore_relic`), the steps after it at theirs.
+25. **Second Look** — a bauble you restore is rolled twice, and you keep the better roll. Built as the roll that gives the most kept (`rolls:bauble`), the first where two give the same, which an ancient bauble's always do.
+26. **Tier Up** — 1 restoration in 10 turns a minor bauble into a major one, or a major into an ancient one. Built as a roll after the restoring has gone through, at the tier's own difficulty, before what it gives is rolled (`tier:restore_relic`); what it says names both tiers.
+27. **Handyman** — you can improve anything up to QL 30, whatever your skill in its trade (now 10). Built as the floor under improving (`floor:improve`) over `improve_floor`.
+42. **Repair Kit** — a new item made from 2 cloth, 2 nails and a plank; it takes 50 damage off anything in one use, anywhere. Built as a recipe on repair, with a hammer, and **Use a repair kit** on anything damaged, which anybody who has one may do: `kit_mend` damage off, none of the quality, the kit used up.
+50. **Sealant** — a new recipe; 1 tar and 1 wax seal an item so it never decays. Built as a recipe on repair and **Seal it**, which anybody who has some may do: one to a thing and one for each thing in a pile, and it marks the thing sealed (`seal`, nought on its decay on the ground). A seal is whoever sealed it rather than a maker's, is said on its own, and is not carried from a part into what the part goes into.
 
 **Tiers** (swept): 50 — Quick Hands, Tool Care, Quick Restore · 60 — Clean Repair, Armour Care, Gentle Hands ·
 70 — Big Mend, Post Keeper, Sure Restore · 80 — Light Touch, Fine Restore, Age Undone ·

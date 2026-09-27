@@ -29,8 +29,8 @@ import { nearestSide } from '../render/renderer';
 import { crateKindOfItem, crateName, crateCapacity, crateUnits, subtileOf } from '../game/crates';
 import { butcherPreview } from '../game/butcher';
 import { anvilAnchor, anvilName, type PlacedAnvil } from '../game/anvil';
-import { postCandidates, postLife, postName, postRadius, postState, type PlacedPost } from '../game/posts';
-import { baitInPack, creelHold, trapDef, trapHolds, trapLife, trapName, TRAPS, trapState, type PlacedTrap } from '../game/traps';
+import { postCandidates, postKeep, postLife, postName, postRadius, postState, type PlacedPost } from '../game/posts';
+import { baitInPack, creelHold, trapDef, trapHolds, trapKeep, trapLife, trapName, TRAPS, trapState, type PlacedTrap } from '../game/traps';
 import { BAIT_BY_ID } from '../game/fishing';
 import { BRIDGES, bridgeDef, bridgeName, bridgeState, spanWants, type Bridge } from '../game/bridges';
 import { foundationState } from '../game/foundations';
@@ -911,7 +911,7 @@ export class UI {
     const anvilHere = pick.anvil !== undefined ? this.game.anvils.get(pick.anvil) : undefined;
     if (anvilHere) return { title: `${anvilName(anvilHere)} (QL ${anvilHere.ql.toFixed(0)})`, entries: this.anvilEntries(anvilHere) };
     const postHere = pick.post !== undefined ? this.game.posts.get(pick.post) : undefined;
-    if (postHere) return { title: `${postName(postHere)} (${postState(postHere)})`, entries: [...this.postEntries(postHere), ...this.nameEntry({ kind: 'post', id: postHere.id })] };
+    if (postHere) return { title: `${postName(postHere)} (${postState(postHere, postKeep(this.game))})`, entries: [...this.postEntries(postHere), ...this.nameEntry({ kind: 'post', id: postHere.id })] };
     const trapHere = pick.trap !== undefined ? this.game.traps.get(pick.trap) : undefined;
     if (trapHere) return { title: `${trapName(trapHere)} (${trapState(trapHere, this.game)})`, entries: [...this.trapEntries(trapHere), ...this.nameEntry({ kind: 'trap', id: trapHere.id })] };
     const bridgeHere = pick.bridge !== undefined ? this.game.bridges.get(pick.bridge) : undefined;
@@ -959,7 +959,7 @@ export class UI {
         const reason = postDef.check?.(pt, this.game) ?? null;
         entries.push({
           label: `Drive ${itemName(it).toLowerCase()} in here (spot ${px0 + 1},${py0 + 1})`,
-          note: reason ? undefined : `${Math.round(postLife(it.ql) / 60)} min · reaches ${postRadius(it.ql)} tiles`,
+          note: reason ? undefined : `${Math.round(postLife(it.ql) * postKeep(this.game) / 60)} min · reaches ${postRadius(it.ql)} tiles`,
           hint: reason ?? undefined,
           disabled: !!reason,
           onSelect: () => this.game.requestAction(postDef, pt),
@@ -1045,7 +1045,7 @@ export class UI {
         const kind = TRAPS[it.id as 'snare' | 'deadfall' | 'creel'];
         entries.push({
           label: `Set ${itemName(it).toLowerCase()} here (spot ${tx0 + 1},${ty0 + 1})`,
-          note: reason ? undefined : `${Math.round(trapLife(it.id as 'snare' | 'deadfall' | 'creel', it.ql) / 60)} min · ${kind.water ? `holds ${Math.round((kind.hold ?? 8) * markOf(it, 'hold'))} fish` : `holds to taming ${Math.round(kind.holds * (0.6 + Math.max(1, Math.min(100, it.ql)) / 250))}`}`,
+          note: reason ? undefined : `${Math.round(trapLife(it.id as 'snare' | 'deadfall' | 'creel', it.ql) * trapKeep(this.game, it.id as 'snare' | 'deadfall' | 'creel') / 60)} min · ${kind.water ? `holds ${Math.round((kind.hold ?? 8) * markOf(it, 'hold'))} fish` : `holds to taming ${Math.round(kind.holds * (0.6 + Math.max(1, Math.min(100, it.ql)) / 250))}`}`,
           hint: reason ?? undefined,
           disabled: !!reason,
           onSelect: () => this.game.requestAction(trapSet, tt),
@@ -1770,7 +1770,7 @@ export class UI {
     const entries: MenuItem[] = [];
     const worker = p.worker !== null ? g.creatures.get(p.worker) : undefined;
     const reach = postRadius(p.ql);
-    entries.push({ label: `QL ${p.ql.toFixed(0)} · reaches ${reach} tiles · ${postState(p)}`, disabled: true });
+    entries.push({ label: `QL ${p.ql.toFixed(0)} · reaches ${reach} tiles · ${postState(p, postKeep(this.game))}`, disabled: true });
     if (worker) {
       const def = SPECIES[worker.species];
       entries.push({ label: `${worker.name} works out of it`, note: def.gathers ? GATHER_VERB[def.gathers] : 'no job', disabled: true });

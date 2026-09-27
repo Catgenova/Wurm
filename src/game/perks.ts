@@ -47,20 +47,23 @@ import { CLASSES, PERK_CLASSES, PERK_TIER_AT, PERKS_PER_TIER } from './classes';
 import {
   ACTION_BY_ID, CHIP_CHANCE, CLEARED_TO, DIG_TILE_TIME, DREDGE_DEPTH, FLATTEN_STEP, GRASS_PER_CUT, MINE_COLLAPSE, MINE_DEPTH, PAN_ORES,
   PLANTED_AGE, plantedAge, PROSPECT_REACH, PROSPECT_STEP, REED_CUT, REED_EXTRA_AT, RESIN_TREE, SLOPE_FLOOR, SLOPE_PER_SKILL, SPOIL_REACH,
-  TILE_CORNERS,
+  TILE_CORNERS, KIT_MEND, repairGo,
 } from './actions';
-import { FIND_BASE, FIND_CAP, FIND_PER_SKILL, FIND_PER_TOOL } from './archaeology';
-import { BAUBLE_SHARE } from './baubles';
+import { FIND_BASE, FIND_CAP, FIND_PER_SKILL, FIND_PER_TOOL, RESTORE_AGE, RESTORE_HARM, RESTORE_HARM_SPREAD } from './archaeology';
+import { BAUBLE_HIGH, BAUBLE_LOW, BAUBLE_SHARE, BAUBLE_TIERS } from './baubles';
 import { BRIDGES } from './bridges';
 import { BUILD_ACTION_BY_ID, REPOINT_BACK } from './buildActions';
 import { FENCE_TYPES, MATERIAL_BY_ID, MATERIALS, MAX_LEVELS, storeySkill, TALL_STOREYS, wallBill } from './building';
 import { BUCKET_LITRES, FURNITURE, furnitureDef } from './furniture';
 import { ARMOUR, ARMOUR_BY_ID, ARMOUR_CLASSES, HIT_CAP, SOAK_CAP, WEAPON_BY_ID, WEAPONS } from './gear';
 import { GEM_ODDS } from './gems';
-import { CARRY_BASE, CARRY_PER_STRENGTH, CHAR_START, MAX_MOUNT_SPEED, MAX_VEHICLE_SPEED, QL_TOP, QUEUE_PER_MIND, queueCapAt, TOOL_QL_SPAN } from './game';
+import {
+  CARRY_BASE, CARRY_PER_STRENGTH, CHAR_START, goSeconds, MAX_MOUNT_SPEED, MAX_VEHICLE_SPEED, QL_TOP, QUEUE_PER_MIND, queueCapAt, TOOL_QL_SPAN,
+} from './game';
 import { CROP_LIST, cropYield, RIPE, type CropDef } from './farming';
-import { improveStepAt } from './improve';
-import { billWords, ITEM_DEFS, RARITY_ODDS, type Item } from './items';
+import { IMPROVE_FLOOR, improveStepAt } from './improve';
+import { POST_LIFE_MAX, POST_LIFE_MIN } from './posts';
+import { billWords, countOf, ITEM_DEFS, RARITY_ODDS, type Item } from './items';
 import { MELT_KEEP, MELT_SHARE, meltLumps } from './melt';
 import {
   castWhole, COIN_DIFFICULTY, FORGE_WORK, INGOT_LUMPS, INGOT_WEIGHT, METALS, MOULD_BY_ID, MOULD_BY_MAKES, MOULD_DENT, mouldLumps, MOULDS,
@@ -97,7 +100,7 @@ export type Fx = Record<string, number>;
 export const FX_RULE: Record<string, 'mul' | 'add'> = {
   time: 'mul', ql: 'mul', weight: 'mul', walk: 'mul', fail: 'mul', wear: 'mul', need: 'mul', bill: 'mul',
   grow: 'mul', rotate: 'mul', feed: 'mul', fill: 'mul', knack: 'mul', rot: 'mul', cool: 'mul', catch: 'mul', empty: 'mul', mend: 'mul',
-  bite: 'mul',
+  bite: 'mul', cost: 'mul', worn: 'mul', life: 'mul', harm: 'mul', age: 'mul',
   carry: 'add', jobs: 'add', plus: 'add', bumper: 'add', fodder: 'add', tool: 'add', passes: 'add', hook: 'add', haul: 'add',
 };
 
@@ -1742,6 +1745,141 @@ const FISHER: Seed[] = [
   },
 ];
 
+/*
+ * ---------------------------------------------------------------------------
+ * The Mender: the repair bench, the tool kit and the restorer's table.
+ * ---------------------------------------------------------------------------
+ */
+/**
+ * The skill a trade's perk is first offered at, by the number it was picked
+ * under: where its tier opens. Read when the notes are written, after `TIERS`.
+ */
+const offeredAt = (cls: string, num: number): number => PERK_TIER_AT[Math.max(0, (TIERS[cls] ?? []).findIndex((row) => row.includes(num)))];
+/** Every tool a job or a recipe wears that there is, and the brush, which grooming wears by hand. */
+const WORN_TOOLS = [...TOOLS, 'brush'].filter((id) => ITEM_DEFS[id]).sort();
+const TRAP_KINDS = Object.keys(TRAPS);
+const KIT = recipeOf('make_repair_kit');
+const SEALANT = recipeOf('make_sealant');
+/** What goes into a recipe, counted: "two cloth, two nails and one plank". */
+const counted = (r: Recipe): string =>
+  listed(r.inputs.map((i) => ((i.count ?? 1) === 1 ? `one ${itemName(i.item)}` : countOf(i.item, i.count ?? 1))));
+/** "4.8", the damage a go of Repair takes out at this skill, times a perk's. */
+const healedAt = (skill: number, m = 1): string => tenth(repairGo(skill).healed * m);
+/** "0.0092", the quality a point of damage taken out costs at this skill, times a perk's. */
+const costAt = (skill: number, m = 1): string => `${Number((repairGo(skill).cost * m).toFixed(4))}`;
+/** "a minor one major and a major one ancient": what each tier of bauble comes out as a tier up. */
+const tiersUp = (): string =>
+  listed(BAUBLE_TIERS.slice(0, -1).map((t, i) => `${article(t.id)} ${t.id} one ${BAUBLE_TIERS[i + 1].id}`));
+
+const MENDER: Seed[] = [
+  {
+    num: 1, name: 'Big Mend',
+    fx: { 'mend:repair_item': 1.5 },
+    note: (fx) => `Each go of Repair takes ${by(fx['mend:repair_item'])} more damage out, for the same quality on each point of it: `
+      + `${healedAt(offeredAt('mender', 1), fx['mend:repair_item'])} at repair ${offeredAt('mender', 1)} (now ${healedAt(offeredAt('mender', 1))}).`,
+  },
+  {
+    num: 2, name: 'Light Touch',
+    fx: { 'cost:repair_item': 0.5 },
+    note: (fx) => `Repairing takes ${share(fx['cost:repair_item'])} the quality off for each point of damage it takes out: `
+      + `${costAt(offeredAt('mender', 2), fx['cost:repair_item'])} QL a point at repair ${offeredAt('mender', 2)} (now ${costAt(offeredAt('mender', 2))}).`,
+  },
+  {
+    num: 3, name: 'Clean Repair',
+    fx: { 'keep:repair_item': 0.25 },
+    note: (fx) => `${oneIn(fx['keep:repair_item'])} goes of Repair take nothing off the quality of what they mend.`,
+  },
+  {
+    num: 4, name: 'Quick Hands',
+    fx: { 'time:repair_item': 0.6 },
+    note: (fx) => `Each go of Repair takes ${less(fx['time:repair_item'])} less time: ${secs(goSeconds(base('repair_item')) * fx['time:repair_item'])}, `
+      + `where it takes ${secs(goSeconds(base('repair_item')))} now, the shortest any job takes without a perk on it.`,
+  },
+  {
+    num: 9, name: 'Tool Care',
+    fx: onEach('wear', WORN_TOOLS, 0.75),
+    note: (fx) => `Every tool you work with wears ${less(fx[`wear:${WORN_TOOLS[0]}`])} slower: each use puts that much less damage on it, `
+      + 'whatever the job and whatever the tool is made of.',
+  },
+  {
+    num: 10, name: 'Armour Care',
+    fx: { 'worn:armour': 0.75, 'worn:shield': 0.75, 'worn:weapon': 0.75 },
+    note: (fx) => `Armour you wear takes ${less(fx['worn:armour'])} less damage from each blow that lands on it, a shield `
+      + `${less(fx['worn:shield'])} less from each blow it stops, and a weapon ${less(fx['worn:weapon'])} less from each blow it lands `
+      + 'or arrow it puts home.',
+  },
+  {
+    num: 14, name: 'Post Keeper',
+    fx: onEach('life', ['work_post', ...TRAP_KINDS], 1.5),
+    note: (fx) => `Work posts, ${listed(TRAP_KINDS.map((k) => plural(TRAPS[k as keyof typeof TRAPS].name.toLowerCase())))} you set stand `
+      + `${by(fx['life:work_post'])} longer: a work post ${spanWords(POST_LIFE_MIN * fx['life:work_post'])} to `
+      + `${spanWords(POST_LIFE_MAX * fx['life:work_post'])} by its quality (now ${spanWords(POST_LIFE_MIN)} to ${spanWords(POST_LIFE_MAX)}).`,
+  },
+  {
+    num: 17, name: 'Quick Restore',
+    fx: { 'time:restore_relic': 0.6 },
+    note: (fx) => `Restoring a relic or a bauble takes ${less(fx['time:restore_relic'])} less time (${secs(base('restore_relic'))} base).`,
+  },
+  {
+    num: 18, name: 'Sure Restore',
+    fx: { 'fail:restore_relic': 0.5 },
+    note: (fx) => `Restoring a relic or a bauble fails ${share(fx['fail:restore_relic'])} as often.`,
+  },
+  {
+    num: 19, name: 'Gentle Hands',
+    fx: { 'harm:restore_relic': 0 },
+    note: (fx) => `A restoring that fails does ${fx['harm:restore_relic'] <= 0 ? 'no' : `${less(fx['harm:restore_relic'])} less`} damage `
+      + `to the pieces or the bauble (now ${RESTORE_HARM} to ${RESTORE_HARM + RESTORE_HARM_SPREAD} to each).`,
+  },
+  {
+    num: 20, name: 'Fine Restore',
+    fx: { 'ql:restore_relic': 1.1 },
+    note: (fx) => `What you restore comes out ${by(fx['ql:restore_relic'])} higher in quality than it would, a relic or a bauble, to `
+      + `${QL_TOP} at most.`,
+  },
+  {
+    num: 21, name: 'Age Undone',
+    fx: { 'age:restore_relic': 0 },
+    note: (fx) => `The damage on the pieces or the bauble takes ${fx['age:restore_relic'] <= 0 ? 'nothing' : `${less(fx['age:restore_relic'])} less`} `
+      + `off the quality of what you restore (now each point of it takes ${percent(1 / RESTORE_AGE)} off).`,
+  },
+  {
+    num: 24, name: 'Lucky Polish',
+    fx: { 'rare:restore_relic': 2 * RARITY_ODDS[0] },
+    note: (fx) => `${oneIn(fx['rare:restore_relic'])} baubles you restore come out rare (now ${oneIn(RARITY_ODDS[0])}); supreme and fantastic `
+      + 'follow at their usual odds.',
+  },
+  {
+    num: 25, name: 'Second Look',
+    fx: { 'rolls:bauble': 2 },
+    note: (fx) => `A minor or major bauble you restore is rolled ${times(fx['rolls:bauble'])} and keeps whichever roll gives the most `
+      + `(each gives ${BAUBLE_LOW} to ${BAUBLE_HIGH}% before its rarity); an ancient one gives the same whichever it keeps.`,
+  },
+  {
+    num: 26, name: 'Tier Up',
+    fx: { 'tier:restore_relic': 0.1 },
+    note: (fx) => `${oneIn(fx['tier:restore_relic'])} baubles you restore come out a tier better than they went in: ${tiersUp()}.`,
+  },
+  {
+    num: 27, name: 'Handyman',
+    fx: { 'floor:improve': 30 },
+    note: (fx) => `You can improve anything to QL ${fx['floor:improve']}, whatever your skill in its trade (now ${IMPROVE_FLOOR}); past that `
+      + 'your skill is the ceiling, as it is for everybody.',
+  },
+  {
+    num: 42, name: 'Repair Kit',
+    fx: { repair_kit: 1 },
+    note: () => `A new recipe, on repair: ${counted(KIT)}, with a ${itemName(KIT.tool ?? 'hammer')}, make a repair kit, `
+      + `which takes ${KIT_MEND} damage off anything in one use, anywhere, and none of its quality. Anybody may use one.`,
+  },
+  {
+    num: 50, name: 'Sealant',
+    fx: { sealant: 1 },
+    note: () => `A new recipe, on repair: ${counted(SEALANT)} make sealant, and a thing it is worked over never decays after, `
+      + 'wherever it is left: one to a thing, and one for each thing in a pile. Anybody may use it.',
+  },
+];
+
 /** Every trade's perks, in the order they were picked. */
 const SEEDS: Record<string, Seed[]> = {
   terraformer: TERRAFORMER,
@@ -1756,6 +1894,7 @@ const SEEDS: Record<string, Seed[]> = {
   herdsman: HERDSMAN,
   naturalist: NATURALIST,
   fisher: FISHER,
+  mender: MENDER,
 };
 
 const slug = (name: string): string => name.toLowerCase().replace(/[’']/g, '').replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '');
@@ -1778,6 +1917,7 @@ export const TIERS: Record<string, number[][]> = {
   herdsman: [[1, 11, 21], [15, 37, 50], [2, 13, 22], [9, 16, 25], [14, 24, 28], [10, 18, 26]],
   naturalist: [[2, 13, 23], [10, 11, 19], [3, 17, 24], [16, 29, 30], [12, 15, 34], [43, 44, 50]],
   fisher: [[1, 4, 13], [2, 15, 45], [17, 25, 33], [3, 14, 19], [5, 6, 9], [12, 27, 47]],
+  mender: [[4, 9, 17], [3, 10, 19], [1, 14, 18], [2, 20, 21], [24, 25, 42], [26, 27, 50]],
 };
 
 /** Every perk there is, tier by tier, and in each tier by the number it was picked under, as the island lists them. */

@@ -1,5 +1,5 @@
 import {
-  CHIP_CHANCE, CLEARED_TO, FRUIT_MATURE, FRUIT_OLD, MINE_COLLAPSE, MINE_DEPTH, PROSPECT_REACH, PROSPECT_STEP, REPAIR_FLOOR,
+  CHIP_CHANCE, CLEARED_TO, FRUIT_MATURE, FRUIT_OLD, KIT_MEND, MINE_COLLAPSE, MINE_DEPTH, PROSPECT_REACH, PROSPECT_STEP, REPAIR_FLOOR,
   repairGo, RESIN_TREE,
 } from '../../game/actions';
 import { ANVIL_SUBTILES } from '../../game/anvil';
@@ -1418,6 +1418,10 @@ export function helpText(): string {
     build with it.</p>
     <p>A Tailor can learn to <b>Patch</b> cloth and leather armour instead: one cloth or one leather, of the piece's own
     stuff, takes ${tailor('Patch').patch_item ?? 0} damage off it at a go and none of its quality.</p>
+    <p>A Mender who has learned it makes a <b>repair kit</b> (${bill('make_repair_kit')}, with a ${itemDef(recipe('make_repair_kit').tool ?? '').name.toLowerCase()}), which anybody may
+    <b>use</b> on anything damaged, wherever they are: it takes ${KIT_MEND} damage off and none of the quality, and is used up.
+    One who has learned <b>sealant</b> (${bill('make_sealant')}) works it over a thing with <b>Seal it</b>, one to a thing and
+    one for each thing in a pile, and a sealed thing never decays wherever it is left. Anybody may use sealant too.</p>
     <h3>Wounds, herbs and covers</h3>
     <p>A blow is not only a number off the bar. What gets through your armour leaves a <b>wound</b>, of
     a kind, in whichever place it landed, and that wound has its own life: it <b>bleeds</b> until it is
