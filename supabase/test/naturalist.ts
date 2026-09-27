@@ -30,7 +30,7 @@ import { TINCTURE_BONUS, TINCTURE_SECONDS, TINCTURE_SKILLS } from '../../src/gam
 import { DRESS_CHECK, FIELD_MEDIC_SAYS } from '../../src/game/firstaid';
 import { EMPTY_CHANCE, rollsAt } from '../../src/game/forage';
 import { hiveRate, HIVE_WAX } from '../../src/game/furniture';
-import { ITEM_DEFS, RARITIES, RARITY_ODDS } from '../../src/game/items';
+import { ITEM_DEFS, RARITIES } from '../../src/game/items';
 import { perksOf, type PerkDef } from '../../src/game/perks';
 import { RECIPE_BY_ID, RECIPE_PERK_SAYS } from '../../src/game/recipes';
 import { salveRefusal, TINCTURE_NAMES } from '../../src/game/remedies';
