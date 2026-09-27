@@ -60,6 +60,10 @@ Main skill mining; also prospecting and archaeology.
 35. **Ore Cart** — what you mine goes straight into a cart or container within 5 tiles.
 50. **Pan** — on sand beside water, 1 go in 8 gives copper, tin, silver or gold ore, at a QL set by your prospecting.
 
+**Tiers** (swept): 50 — Ore Sense, Coal Hand, Chipper · 60 — Rock Slide, Wet Work, Far Reader ·
+70 — Quick Pick, Rich Seam, Keen Trowel · 80 — Sure Swing, Pieces that Fit, Ore Cart ·
+90 — Face Shaper, Gem Eye, Bauble Hunter · 100 — Rare Ore, Treasure in the Rock, Pan.
+
 ## Mason
 
 Main skill masonry; also stonecutting.

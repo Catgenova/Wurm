@@ -404,6 +404,13 @@ export const NEWS: News[] = [
       'The Terraformer’s perks are set out in their final tiers. A perk you had taken that moved to another tier is cleared, and yours to choose again in the Trades window; the Wader and the Dredger stayed where they were.',
     ],
   },
+  {
+    n: 31,
+    day: '2026-09-27',
+    lines: () => [
+      'The Miner’s perks are set out in their final tiers too. A perk you had taken that moved is cleared, and yours to choose again in the Trades window; only Pan stayed where it was.',
+    ],
+  },
 ];
 
 /** The highest entry this browser has shown. */

@@ -366,7 +366,7 @@ const slug = (name: string): string => name.toLowerCase().replace(/[’']/g, '')
  */
 export const TIERS: Record<string, number[][]> = {
   terraformer: [[10, 17, 25], [9, 14, 23], [15, 12, 26], [32, 29, 27], [33, 34, 44], [5, 6, 20]],
-  miner: [[1, 2, 3], [6, 7, 8], [9, 11, 13], [14, 15, 17], [19, 25, 27], [28, 35, 50]],
+  miner: [[7, 8, 9], [14, 13, 19], [1, 2, 25], [3, 27, 35], [28, 15, 11], [50, 17, 6]],
 };
 
 /** Every perk there is, tier by tier, and in each tier by the number it was picked under, as the island lists them. */
