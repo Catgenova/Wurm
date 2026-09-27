@@ -1,6 +1,6 @@
 # Craft class perks
 
-The perks chosen for the fourteen craft classes, class by class, on 26 September 2026, and the tiers they are offered in, settled on 27 September. They replace what a craft class gave before: its channels and its tree of nodes in `src/game/classes.ts`. The Terraformer, the Miner, the Mason, the Carpenter, the Smith, the Forester, the Farmer, the Cook, the Tailor, the Herdsman and the Naturalist are built, in `src/game/perks.ts` and on the island; the other three are not yet.
+The perks chosen for the fourteen craft classes, class by class, on 26 September 2026, and the tiers they are offered in, settled on 27 September. They replace what a craft class gave before: its channels and its tree of nodes in `src/game/classes.ts`. The Terraformer, the Miner, the Mason, the Carpenter, the Smith, the Forester, the Farmer, the Cook, the Tailor, the Herdsman, the Naturalist and the Fisher are built, in `src/game/perks.ts` and on the island; the other two are not yet.
 
 ## Tiers
 
@@ -314,23 +314,25 @@ Main skill foraging; also botanizing, alchemy and first aid.
 Main skill fishing.
 
 1. **Quick Cast** — a cast takes 30% less time (9 s base).
-2. **Long Cast** — you cast up to 6 tiles (now 3.6).
-3. **Steady Hand** — a fish that bites stays on 15 points more often.
-4. **Bait Saver** — bait is used up only when you land a fish (now every cast uses one).
-5. **Strong Bait** — bait draws its fish twice as strongly (now 8 times for its first fish and 4 times for its second).
-6. **Any Bait** — any food works as bait (now only worms, corn, minnows, meat and perch).
-9. **Big Fish** — trout, pike and sturgeon bite twice as often.
-12. **Rare Catch** — 1 fish in 100 comes up rare.
+2. **Long Cast** — you cast up to 6 tiles (now 3.6). Built as the line's reach (`reach:fish`), which the walk to the water, the island's "too far" and the cast itself all read; water clicked beyond it is fished at the deepest water in the square of whole tiles the reach spans round your feet (six each way, now three).
+3. **Steady Hand** — a fish that bites stays on 15 points more often. Built as points added after everything else that goes into the chance, under the 95% ceiling (`hook:`, `stays_on`).
+4. **Bait Saver** — bait is used up only when you land a fish (now every cast uses one). Built as the bait taken after the bite rather than before it: with a landed fish, and with one that comes off unless the perk keeps it on (`spare:fish`).
+5. **Strong Bait** — bait draws its fish twice as strongly (now 8 times for its first fish and 4 times for its second). Built as a multiplier on a bait's pull (`bait:pull`), on the hook and in a creel, whose perks are its setter's.
+6. **Any Bait** — any food works as bait (now only worms, corn, minnows, meat and perch). Built as the first food carried going on the hook, or in a creel, when no bait that favours a fish is (`bait:food`): it draws every fish at its plain weight and helps a fish stay on as any bait does.
+9. **Big Fish** — trout, pike and sturgeon bite twice as often. Built as twice their weight in the draw of which fish bites (`bite:`), on the rod, in the net and in a creel: 51% of the bites where every fish runs on a bare hook, where it was 34%.
+12. **Rare Catch** — 1 fish in 100 comes up rare. Built for a rod and a net alike (`rare:fish`, `rare:drag_net`); a rare one in a haul is a pile of its own.
 13. **Quick Net** — dragging the net takes 30% less time (16 s base).
-14. **Full Net** — a net hauls 2 more fish (now 1–5).
-15. **Wide Net** — a net reaches 4 tiles (now 2.6).
+14. **Full Net** — a net hauls 2 more fish (now 1–5). Built as two added to the haul before the net's maker's mark is counted in (`haul:`).
+15. **Wide Net** — a net reaches 4 tiles (now 2.6). Built as Long Cast is, for the net (`reach:drag_net`); the square it looks in for water is four each way, now two, where the island had looked three for a net and a rod alike.
 17. **Net Care** — nets wear 50% less.
-19. **Deep Creel** — a creel holds 16 fish (now 8).
-25. **Cool Pack** — fish in your pack decay 50% slower.
-27. **Smoke Fish** — a new job; smoke fish over a fire so it keeps 5 times as long.
+19. **Deep Creel** — a creel holds 16 fish (now 8). Built as a maker's mark on a creel you make (`hold:creel`), which it keeps in the water and taken up (`creel_hold`, `creelHold`).
+25. **Cool Pack** — fish in your pack decay 50% slower. Built as the Cook's Cool Pack is: nothing rots in a pack, so it is fish you set down that rot half as fast where they lie, until picked up (`cool:<fish>`).
+27. **Smoke Fish** — a new job; smoke fish over a fire so it keeps 5 times as long. Built as five recipes, one for each fish, at a lit campfire on fishing rather than cooking: the same fish comes off at its own quality with the smoker's mark to rot a fifth as fast (`rot:<fish>`).
 33. **Rod Care** — rods wear 50% less.
-45. **Fishing Journal** — looking at water also shows each fish's chance to bite with the bait you carry.
-47. **Fish Pond** — a new build on your settlement that holds 10 fish and gains 1 an hour.
+45. **Fishing Journal** — looking at water also shows each fish's chance to bite with the bait you carry. Built as a line on Examine for water, the same words on both sides (`fish_journal`, `fishJournal`): the depth, each fish's share of the bites with the bait that would go on, and how often a fish that bites stays on with your rod.
+47. **Fish Pond** — a new build on your settlement that holds 10 fish and gains 1 an hour. Built as a piece (20 clay, 12 rock shards and 8 reeds, with a shovel, on fishing) set down only on your settlement, which stocks itself with any of the five fish at their plain weights, a fish an hour of real time up to ten, at about its own quality; nothing is put in, as with a hive (`pond_sweep` on the island's tidying round, `stockPond`).
+
+The browser had drifted from the island here too. A rod and a net wore their own measure and then a whole use more on top in the browser; they wear only their own now, as on an island, and so does a spadeful turned for worms (`ActionDef.wear`). A net in the browser let the deep fish into a haul all together or not at all; each one is its own chance now, as on an island.
 
 **Tiers** (swept): 50 — Quick Cast, Bait Saver, Quick Net · 60 — Long Cast, Wide Net, Fishing Journal ·
 70 — Net Care, Cool Pack, Rod Care · 80 — Steady Hand, Full Net, Deep Creel ·

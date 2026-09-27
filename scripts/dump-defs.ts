@@ -39,7 +39,7 @@ import { RESTORE_GAIN } from '../src/game/archaeology';
 import { FREE_GAIN } from '../src/game/traps';
 import { BANDAGE_GAIN, CLEAN_GAIN, DRESS_CHECK } from '../src/game/firstaid';
 import { SHOT_ARCHERY, SHOT_FIGHT, SWING_ARM, SWING_BODY, SWING_FIGHT, TAME_GAIN, TAME_NERVE } from '../src/game/creatureActions';
-import { NET_GAIN, ROD_GAIN } from '../src/game/fishing';
+import { BAIT_PULL, BAIT_SHY, HOOK_BAIT, HOOK_BASE, HOOK_MOST, NET_GAIN, NET_HAUL, NET_LEAST, ROD_GAIN } from '../src/game/fishing';
 import { BREED_GAIN } from '../src/game/husbandry';
 import { WEAPONS, ARMOUR, ARMOUR_CLASSES, SHIELDS, HIT_LOCATIONS } from '../src/game/gear';
 import { WOUND_KINDS } from '../src/game/wounds';
@@ -50,7 +50,7 @@ import { POTTERY } from '../src/game/kiln';
 import { MATERIALS as IMPROVE_MATERIALS, improvable, canImprove } from '../src/game/improve';
 import { NUTRIENTS } from '../src/game/nutrition';
 import { BOON_SKILLS, BOON_SECONDS, BOON_BONUS, TINCTURE_BONUS, TINCTURE_SECONDS, TINCTURE_SKILLS } from '../src/game/boons';
-import { HIVE_BASE, HIVE_PER_QL, HIVE_SWARMS, HIVE_WAX } from '../src/game/furniture';
+import { HIVE_BASE, HIVE_PER_QL, HIVE_SWARMS, HIVE_WAX, POND_EVERY } from '../src/game/furniture';
 import { GRASS_PER_CUT, REED_CUT, REED_EXTRA_AT } from '../src/game/actions';
 import { CROWD_HIDES, DEEDS_JOINED, PLANTABLE } from '../src/game/game';
 import { RARITIES, RARITY_LIFT, RARITY_ODDS, RARITY_WORD } from '../src/game/items';
@@ -341,6 +341,8 @@ out.push(`alter table furniture_def add column if not exists takes text;`);
  * at. */
 out.push(`alter table furniture_def add column if not exists heft real;`);
 out.push(`alter table furniture_def add column if not exists hive real;`);
+/* And a Fisher's pond, which stocks itself up to this many fish. */
+out.push(`alter table furniture_def add column if not exists pond real;`);
 out.push(`alter table furniture_def add column if not exists trash real;`);
 /* A counter that sells while you are away, and a box the post uses. */
 out.push(`alter table furniture_def add column if not exists stall boolean not null default false;`);
@@ -1272,6 +1274,10 @@ for (const [fn, v] of [
   ['dress_check', DRESS_CHECK],
   /* How a hive fills: comb a second at the roughest and for its quality, swarms to a hive, and the share that is wax. */
   ['hive_base', HIVE_BASE], ['hive_per_ql', HIVE_PER_QL], ['hive_swarms', HIVE_SWARMS], ['hive_wax', HIVE_WAX],
+  /* How hard a bait draws the fish it favours and how shy the rest are of it, what goes into a fish staying on, the least
+     and the most a net brings up before the roll, and how often a Fisher's pond stocks itself. */
+  ['bait_pull', BAIT_PULL], ['bait_shy', BAIT_SHY], ['hook_base', HOOK_BASE], ['hook_bait', HOOK_BAIT], ['hook_most', HOOK_MOST],
+  ['net_least', NET_LEAST], ['net_haul', NET_HAUL], ['pond_every', POND_EVERY],
   /* What a lump costs in ore, and what a lump of the rare six is worth against one. */
   ['ore_per_lump', ORE_PER_LUMP], ['rare_lump_factor', RARE_LUMP_FACTOR],
   ['tick_seconds', TICK_SECONDS], ['idle_logout', IDLE_LOGOUT], ['event_keep', EVENT_KEEP],
@@ -1555,6 +1561,7 @@ for (const f of FURNITURE as unknown as A[]) {
   if (f.bell) out.push(`update furniture_def set bell = true where id = ${q(f.id)};`);
   if (f.landmark) out.push(`update furniture_def set landmark = true where id = ${q(f.id)};`);
   if (f.hive !== undefined) out.push(`update furniture_def set hive = ${q(f.hive)} where id = ${q(f.id)};`);
+  if (f.pond !== undefined) out.push(`update furniture_def set pond = ${q(f.pond)} where id = ${q(f.id)};`);
   if (f.trash !== undefined) out.push(`update furniture_def set trash = ${q(f.trash)} where id = ${q(f.id)};`);
   if (f.bed !== undefined) out.push(`update furniture_def set bed = ${q(f.bed)} where id = ${q(f.id)};`);
   if (f.crates !== undefined) out.push(`update furniture_def set crates = ${q(f.crates)} where id = ${q(f.id)};`);

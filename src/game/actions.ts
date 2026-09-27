@@ -6,7 +6,7 @@ import { bedrockAt, oreAt } from '../world/ore';
 import { BUILD_ACTIONS } from './buildActions';
 import { ANVIL_ACTIONS } from './anvil';
 import { POST_ACTIONS } from './posts';
-import { FISHING_ACTIONS } from './fishing';
+import { FISHING_ACTIONS, fishJournal } from './fishing';
 import { BREWING_ACTIONS } from './brewing';
 import { CAMPFIRE_ACTIONS } from './campfire';
 import { SMELTER_ACTIONS } from './smelter';
@@ -170,6 +170,13 @@ export interface ActionDef {
   tool?: string;
   /** Tiles away the action can be done from; one (arm's length) by default. */
   range?: number;
+  /** The same for whoever is doing it, where a perk reaches further (a Fisher's Long Cast): `range` otherwise. */
+  rangeFor?(g: Game): number;
+  /**
+   * What a go wears the tool by, a go being one: a cast of a line is half a
+   * swing of an axe. The island's performer for the job wears it the same.
+   */
+  wear?: number;
   /** Acts on the corner of the tile target rather than the tile itself. */
   corner?: boolean;
   /** Completes immediately without walking or a timer. */
@@ -751,7 +758,8 @@ export const ACTIONS: ActionDef[] = [
       } else if (type === TileType.Bush) {
         text = `You see a ${BUSH_DEFS[bushSpecies(w.getData(t.x, t.y))].name.toLowerCase()} at (${t.x}, ${t.y}).`;
       }
-      const water = w.hasWater(t.x, t.y) ? ' Water laps over it.' : '';
+      // And for a Fisher with a Fishing Journal, what the water holds for them.
+      const water = w.hasWater(t.x, t.y) ? ` Water laps over it.${fishJournal(g, t.x, t.y)}` : '';
       let extra = '';
       const here = g.deedOfMineAt(t.x, t.y);
       if (here && g.isToken(t.x, t.y)) extra += ` The settlement token of ${here.name} stands here.`;
@@ -809,6 +817,8 @@ export const ACTIONS: ActionDef[] = [
     verb: 'turning the dirt over',
     skill: 'digging',
     tool: 'shovel',
+    // A spadeful turned over for worms is not a hole dug: the island's `perform_ground` wears the shovel as little.
+    wear: 0.4,
     stamina: 0.04,
     baseTime: 6,
     repeat: true,
@@ -822,7 +832,6 @@ export const ACTIONS: ActionDef[] = [
     perform: (t, g) => {
       if (t.kind !== 'tile') return;
       g.gainSkill('digging', 0.2);
-      g.wearTool('shovel', 0.4);
       // Damp ground gives more than dry: a marsh is full of them.
       const rich = RICH_WORMS.has(g.world.getTile(t.x, t.y));
       const n = Math.floor(g.rand() * (rich ? 5 : 3)) + (rich ? 1 : 0);
@@ -2418,8 +2427,8 @@ export const ACTIONS: ActionDef[] = [
       if (t.kind !== 'item') return;
       const item = g.inventory.take(t.uid, t.count ?? 1);
       if (!item) return;
-      // Food set down by a Cook with Cool Pack rots slower where it lies.
-      const cool = itemDef(item.id).category === 'food' ? g.perk('cool:food', 1) : 1;
+      // Food set down by a Cook with Cool Pack, and fish by a Fisher with theirs, rots slower where it lies.
+      const cool = (itemDef(item.id).category === 'food' ? g.perk('cool:food', 1) : 1) * g.perk(`cool:${item.id}`, 1);
       if (cool !== 1) item.cool = cool;
       else delete item.cool;
       g.dropOnGround(g.player.tileX, g.player.tileY, item);

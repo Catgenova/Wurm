@@ -2524,6 +2524,80 @@ const MODELS: Record<string, Model> = {
   },
 
   /*
+   * A Fisher's pond: a round of dressed stones set in the ground with the
+   * water near their top, pads floating on it and a fish or two turning
+   * under it, and a clump of reeds at the back of the rim, a bulrush on the
+   * tallest.
+   */
+  fish_pond: ({ sc }) => {
+    const R = 8.8, zk = 1.4, pool = 7;
+    sc.lathe(0, 0, [[0, R], [zk - 0.5, R], [zk - 0.5, R + 0.3], [zk, R + 0.3]], STONE, 28, {
+      courses: [0.45],
+      lid: () => {
+        const g = sc.g;
+        const ring = (r: number, z: number): Pt[] => Array.from({ length: 28 }, (_, i) => sc.P(Math.cos((i / 28) * TAU) * r, Math.sin((i / 28) * TAU) * r, z));
+        // The stones round the rim, a joint between each.
+        g.strokeStyle = rgb(STONE.ink, 1, 0.4);
+        g.lineWidth = sc.ink * 0.6;
+        for (let i = 0; i < 16; i++) {
+          const a = (i / 16) * TAU + 0.1;
+          const [p, q] = [sc.P(Math.cos(a) * pool, Math.sin(a) * pool, zk), sc.P(Math.cos(a) * (R + 0.3), Math.sin(a) * (R + 0.3), zk)];
+          g.beginPath(); g.moveTo(p[0], p[1]); g.lineTo(q[0], q[1]); g.stroke();
+        }
+        const top = ring(pool, zk);
+        sc.poly(top);
+        g.fillStyle = '#6c9cab';
+        g.fill();
+        g.save();
+        sc.poly(top);
+        g.clip();
+        // The deep middle darker, and the fish turning in it.
+        const [mx, my] = sc.P(0.6, 0.4, zk);
+        g.fillStyle = 'rgba(52, 92, 108, 0.45)';
+        g.beginPath(); g.ellipse(mx, my, pool * 0.62, pool * 0.3, 0, 0, TAU); g.fill();
+        for (const [fx, fy, turn] of [[-2.4, 1.2, 0.5], [2.2, -1.6, 2.6]]) {
+          const [px, py] = sc.P(fx, fy, zk);
+          g.save(); g.translate(px, py); g.rotate(turn);
+          g.fillStyle = 'rgba(214, 142, 84, 0.8)';
+          g.beginPath(); g.ellipse(0, 0, 1.5, 0.55, 0, 0, TAU); g.fill();
+          g.beginPath(); g.moveTo(-1.3, 0); g.lineTo(-2.2, -0.6); g.lineTo(-2.2, 0.6); g.closePath(); g.fill();
+          g.restore();
+        }
+        // The sky on the water, and a ring where something rose.
+        g.strokeStyle = 'rgba(238, 246, 250, 0.55)';
+        g.lineWidth = sc.ink * 0.7;
+        const [rx, ry] = sc.P(-1.2, -2.6, zk);
+        g.beginPath(); g.ellipse(rx, ry, 1.6, 0.7, 0, 0, TAU); g.stroke();
+        g.beginPath(); g.ellipse(rx, ry, 2.6, 1.15, 0, 0.3, 2.4); g.stroke();
+        g.restore();
+        // Pads floating on it, each with its notch.
+        for (const [px0, py0, r] of [[3.2, 2.8, 1.2], [4.5, 0.9, 0.85], [-3.9, -2.6, 1]]) {
+          const pad = Array.from({ length: 14 }, (_, i) => {
+            const a = (i / 13) * TAU * 0.9 + 0.35;
+            return sc.P(px0 + Math.cos(a) * r, py0 + Math.sin(a) * r, zk);
+          });
+          pad.push(sc.P(px0, py0, zk));
+          sc.poly(pad);
+          g.fillStyle = '#86a860';
+          g.fill();
+          g.strokeStyle = '#4d6a36';
+          g.lineWidth = sc.ink * 0.6;
+          g.stroke();
+        }
+        sc.poly(top);
+        g.strokeStyle = rgb(STONE.ink);
+        g.lineWidth = sc.ink;
+        g.stroke();
+      },
+    });
+    const REED = paintOf(hex('#7f9a58')), RUSH = paintOf(hex('#6b4a30'));
+    for (const [x, y, h] of [[-6.2, -5.4, 8.6], [-5.2, -6.4, 6.8], [-7.2, -4.2, 7.4], [-4.2, -7, 5.4], [-7.6, -2.8, 5]]) {
+      sc.rod([x, y, zk], [x + 0.3, y - 0.2, h], 0.28, REED);
+      if (h > 6) sc.rod([x + 0.24, y - 0.16, h - 2], [x + 0.29, y - 0.19, h - 0.5], 0.75, RUSH);
+    }
+  },
+
+  /*
    * What a settlement sets up to be seen. The bell hangs in a timber frame
    * under a little shingled roof, braced at the feet, its clapper showing
    * under the lip and the rope hanging from it. The statue is a robed figure

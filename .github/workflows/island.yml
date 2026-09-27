@@ -1661,6 +1661,19 @@ jobs:
             --outfile=node_modules/.cache/naturalist.mjs --log-level=error
           node node_modules/.cache/naturalist.mjs
 
+      - name: The Fisher's perks, each where its rule is
+        run: |
+          # Each of the Fisher's eighteen measured on the island, the dice put
+          # either side of a perk's number where it is a chance: a line's and a
+          # net's reach; a fish staying on, the bait kept, the bait's pull and
+          # food on the hook; the big fish, the rare ones and the fuller net;
+          # the time and the wear; a deeper creel, fish cooled where they lie,
+          # smoked fish, the journal's line on the water and a pond stocking
+          # itself; and the browser's words and numbers beside the island's.
+          npx esbuild supabase/test/fisher.ts --bundle --platform=node --format=esm \
+            --outfile=node_modules/.cache/fisher.mjs --log-level=error
+          node node_modules/.cache/fisher.mjs
+
       - name: The exact benefit, and where its number comes from
         run: |
           # Text the player reads says what changes and by how much, and where

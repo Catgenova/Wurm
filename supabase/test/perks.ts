@@ -486,7 +486,7 @@ check('nobody keeps a node of the Terraformer\'s old tree', say('OLDNODES') === 
  * a skill for a slope. A typo there is a perk that reads nothing.
  */
 const JOBS = new Set(['time', 'ql', 'rare', 'map', 'fail', 'keep', 'more', 'gem', 'find', 'cap', 'into', 'spare', 'need', 'fewer', 'grown',
-  'grow', 'rotate', 'bumper', 'fodder', 'tool', 'passes', 'empty', 'mend']);
+  'grow', 'rotate', 'bumper', 'fodder', 'tool', 'passes', 'empty', 'mend', 'hook', 'haul']);
 /*
  * And a kind of work, where the rule asks what is being worked rather than
  * which job: a wall or floor of stone or of timber, a bridge of each kind.
@@ -507,6 +507,7 @@ const OTHERS = new Set([
   'kept:care_hours', 'kept:care_bonus', 'kept:hunger', 'kept:old_at',
   'breed:rest', 'breed:gestation', 'breed:twins', 'breed:inherit', 'breed:upgrade', 'breed:sex', 'stud_book',
   'dress_others', 'herb_tea', 'salve', 'tincture',
+  'reach:fish', 'reach:drag_net', 'bait:pull', 'bait:food', 'smoke_fish', 'fish_journal', 'fish_pond',
   ...STRIDE_KEYS,
 ]);
 const unnamed = PERKS.flatMap((p) => Object.keys(p.fx).filter((key) => {
@@ -516,10 +517,12 @@ const unnamed = PERKS.flatMap((p) => Object.keys(p.fx).filter((key) => {
   // How much a pass of Improve adds, by what the thing is made of.
   if (fam === 'improve') return !(rest in IMPROVE_MATERIALS);
   if (WORK_FAMILIES.has(fam) || (fam === 'reach' && rest?.startsWith('build_'))) return !WORKS.has(rest);
-  // A thing: what it weighs, how many come or how many more, how it wears, and a maker's mark on it.
-  if (fam === 'weight' || fam === 'count' || fam === 'plus' || fam === 'wear' || (MARK_FAMILIES as readonly string[]).includes(fam)) {
+  // A thing: what it weighs, how many come or how many more, how it wears, how readily it bites, and a maker's mark on it.
+  if (fam === 'weight' || fam === 'count' || fam === 'plus' || fam === 'wear' || fam === 'bite' || (MARK_FAMILIES as readonly string[]).includes(fam)) {
     return !ITEM_DEFS[rest];
   }
+  // And how slowly it rots set down, a thing or all food (a Fisher's fish, a Cook's food).
+  if (fam === 'cool' && rest !== 'food') return !ITEM_DEFS[rest];
   if (fam === 'slope') return !['digging', 'masonry'].includes(rest);
   return !OTHERS.has(key);
 }).map((key) => `${p.id} ${key}`));

@@ -1,5 +1,5 @@
 import { MATERIAL_BY_ID } from '../../game/building';
-import { furnitureDef, liquidCapacity, type PlacedFurniture } from '../../game/furniture';
+import { furnitureDef, liquidCapacity, POND_EVERY, type PlacedFurniture } from '../../game/furniture';
 import { billWords, type Item } from '../../game/items';
 import { INGOT_LUMPS, INGOT_WEIGHT, MOULD_BY_ID } from '../../game/metal';
 import { meltLumps } from '../../game/melt';
@@ -554,6 +554,22 @@ export const NEWS: News[] = [
         'A Naturalist with Field Medic can dress somebody else\'s wounds, from that person\'s menu.',
         'On an island a hive now fills with honey and beeswax for the Vesp kept on its settlement, as it always did offline. Nothing on an island gave beeswax before.',
         'Offline, a rare thing made at a bench no longer makes the whole pile it goes onto rare.',
+      ];
+    },
+  },
+  {
+    n: 43,
+    day: '2026-09-27',
+    lines: () => {
+      const main = (CLASSES.find((c) => c.id === 'fisher')?.main ?? '').replace(/_/g, ' ');
+      const smoked = perksOf('fisher').find((p) => p.name === 'Smoke Fish')?.fx['rot:trout'] ?? 1;
+      return [
+        `The Fisher has perks instead of a tree now: ${numberWord(PERK_TIER_AT.length)} tiers of ${numberWord(PERKS_PER_TIER)}, the first with the trade and the others at ${listed(PERK_TIER_AT.slice(1).map(String))} in ${main}. The nodes a Fisher had bought went with the tree.`,
+        `New for a Fisher who has learned them: smoked fish, which rot ${percent(1 - smoked)} slower wherever they are left; a fish pond, set down on your settlement, `
+          + `which stocks itself at a fish in ${spanWords(POND_EVERY)} until it holds ${furnitureDef('fish_pond').pond}; and a Fishing Journal, which says what the water holds for you when you examine it.`,
+        'A net clicked on water out of its reach goes into the deepest water within the whole tiles of its reach, as a line does. On an island it used to look further round you than offline.',
+        'Offline a rod, a net and a spadeful turned for worms wore their tool as much again on top of their own wear; they wear as they do on an island now.',
+        'Offline a net let the deep fish in all together or not at all; each deep fish in a haul is its own chance now, as on an island.',
       ];
     },
   },

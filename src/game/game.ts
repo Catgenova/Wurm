@@ -21,7 +21,7 @@ import { anvilAnchor, anvilCovers, ANVIL_SUBTILES, type PlacedAnvil } from './an
 import { fireAnchor, fireCentre, fireCovers, FIRE_SUBTILES, type PlacedCampfire } from './campfire';
 import { smelterAnchor, smelterCentre, smelterCovers, SMELTER_H, SMELTER_W, type PlacedSmelter, type SmeltJob } from './smelter';
 import { kilnAnchor, kilnCovers, KILN_SUBTILES, type PlacedKiln } from './kiln';
-import { ACROSS_OF, DEED_PLACE, ONE_ALTAR, deckSpot, furnitureAnchor, furnitureCapacity, furnitureCentre, furnitureCovers, furnitureDef, furnitureHeft, furnitureHolds, furnitureKg, furnitureRefuses, furnitureRoom, furnitureUnits, hiveRate, hiveRoom, HIVE_SWARMS, HIVE_WAX, rackDeck, rackSpots, teamOf, vehicleOf, type LiquidKind, type PlacedFurniture, furnitureName, LIQUID_NAME, isBoat, furnitureFootprint, type BoatDef } from './furniture';
+import { ACROSS_OF, DEED_PLACE, ONE_ALTAR, deckSpot, furnitureAnchor, furnitureCapacity, furnitureCentre, furnitureCovers, furnitureDef, furnitureHeft, furnitureHolds, furnitureKg, furnitureRefuses, furnitureRoom, furnitureUnits, hiveRate, hiveRoom, HIVE_SWARMS, HIVE_WAX, POND_EVERY, rackDeck, rackSpots, teamOf, vehicleOf, type LiquidKind, type PlacedFurniture, furnitureName, LIQUID_NAME, isBoat, furnitureFootprint, type BoatDef } from './furniture';
 import { emptyCrate, occupiedRefusal, shutIn } from './creaturecrate';
 import { bury, crumble, graveAt, graveRefusal, graveSays, GRAVE_MARK } from './graves';
 import { cropStageSeconds, RIPE, type Crop } from './farming';
@@ -42,8 +42,8 @@ import { ALL_GOALS } from './journal';
 import { FieldGuide, GUIDE_LOOK, seenLine, type GuideBook, type GuideMark } from './guide';
 import { matOf, rollEase, workingQl } from './materials';
 import { postCentre, postDecayRate, postName, postRadius, postSite, type PlacedPost } from './posts';
-import { catchChance, CHECK_EVERY, CREEL_BAIT_LOSS, creelOdds, trapCentre, trapDecayRate, trapHolds, trapName, TRAPS, type PlacedTrap, type TrapKind } from './traps';
-import { BAIT_BY_ID, fishHere, pickFish, waterDepth } from './fishing';
+import { catchChance, CHECK_EVERY, CREEL_BAIT_LOSS, creelHold, creelOdds, trapCentre, trapDecayRate, trapHolds, trapName, TRAPS, type PlacedTrap, type TrapKind } from './traps';
+import { BAIT_BY_ID, FISH, fishHere, pickFish, waterDepth } from './fishing';
 import { BRIDGES, bridgeDone, CLEARANCE, END_SLOP, spanBill, spanTiles, type Bridge, type BridgeKind } from './bridges';
 import { CLEAR_OF_BUILDINGS, LIFT_PER_MASONRY, concreteFor, foundationBill, foundationDone, liftFor, masonryFor, type Foundation } from './foundations';
 import { liveSettings, type Settings } from './settings';
@@ -3075,7 +3075,7 @@ export class Game {
     this.baubleGo = { job: a.def, made: [] };
     const again = a.def.perform(a.target, this) === true;
     this.sayBaubleGo();
-    if (a.def.tool) this.wearTool(a.def.tool);
+    if (a.def.tool) this.wearTool(a.def.tool, a.def.wear ?? 1);
     const cost = this.staminaCost(a.def.stamina);
     this.player.stats.stamina = Math.max(0, this.player.stats.stamina - cost);
     /*
@@ -3702,7 +3702,7 @@ export class Game {
     const px = this.player.tileX;
     const py = this.player.tileY;
     if (def.corner && target.kind === 'tile') return px >= target.cx - 1 && px <= target.cx && py >= target.cy - 1 && py <= target.cy;
-    return Math.max(Math.abs(px - tile.x), Math.abs(py - tile.y)) <= (def.range ?? 1);
+    return Math.max(Math.abs(px - tile.x), Math.abs(py - tile.y)) <= (def.rangeFor?.(this) ?? def.range ?? 1);
   }
 
   private walkToward(def: ActionDef, target: Target): boolean {
@@ -4289,16 +4289,17 @@ export class Game {
    * gone — which is the whole of why a creel is worth weaving.
    */
   private rollCreel(t: PlacedTrap): void {
-    const def = TRAPS[t.kind];
     const held = (t.fish ?? []).reduce((a, f) => a + f.count, 0);
-    if (held >= (def.hold ?? 8)) return;
+    // As many as it holds, more for a Fisher's Deep Creel in it.
+    if (held >= creelHold(t)) return;
     const depth = waterDepth(this, t.x, t.y);
     const pool = fishHere(depth, this.skills.get('fishing'));
     if (!pool.length) return;
     // Better odds for its maker's hand in it (a Tailor's Fisher's Friend).
     if (this.rand() >= creelOdds(t.ql) * markOf(t, 'catch')) return;
+    // What its bait draws, and what its setter's perks make of that (a Fisher's Strong Bait and Big Fish).
     const bait = t.bait ? BAIT_BY_ID.get(t.bait.id) : undefined;
-    const got = pickFish(this, pool, bait);
+    const got = pickFish(this, pool, bait, (k, d) => this.perk(k, d));
     if (!got) return;
     t.fish ??= [];
     const ql = Math.max(1, Math.min(100, t.ql * (0.5 + this.rand() * 0.7)));
@@ -4938,6 +4939,26 @@ export class Game {
   }
 
   /**
+   * A Fisher's pond, stocking itself: a fish every `POND_EVERY` while it has
+   * room, any of the five at their plain weights, at about its own quality.
+   * The island's `pond_sweep`.
+   */
+  private stockPond(f: PlacedFurniture, dt: number): void {
+    let stock = (f.stock ?? 0) + dt / POND_EVERY;
+    let made = 0;
+    while (stock >= 1 && hiveRoom(f) > 0) {
+      stock -= 1;
+      const fish = pickFish(this, FISH);
+      if (!fish) break;
+      const ql = Math.min(100, Math.max(1, f.ql * (0.7 + this.rand() * 0.6)));
+      this.furnitureAdd(f, { uid: this.inventory.nextUid++, id: fish.id, ql, dmg: 0, count: 1 });
+      made++;
+    }
+    f.stock = stock;
+    if (made) this.events.emit('crate');
+  }
+
+  /**
    * Everything placed that works by itself: ovens burning down, wells filling,
    * rubbish rotting where it was thrown, a cart following you about, and a
    * grave whose hour is up crumbling.
@@ -4966,6 +4987,7 @@ export class Game {
         if (swarms < 0) swarms = this.swarms();
         if (swarms > 0) this.fillHive(f, swarms, dt);
       }
+      if (def.pond && hiveRoom(f) > 0 && this.onDeed(f.x, f.y)) this.stockPond(f, dt);
       if (f.ferment !== undefined && f.ferment > 0) {
         f.ferment = Math.max(0, f.ferment - dt);
         if (f.ferment === 0) {

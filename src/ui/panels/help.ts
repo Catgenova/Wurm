@@ -33,7 +33,7 @@ import { MOTE_CHANCE } from '../../game/sacrifice';
 import { HERB_HEAL, healAmount, SUITS_HEAL } from '../../game/firstaid';
 import { BAIT_BY_ID, biteShare, FISH, LINE_REACH } from '../../game/fishing';
 import { PER_ROLL, rollsAt } from '../../game/forage';
-import { BUCKET_LITRES, FURNITURE, furnitureDef, teamSaid } from '../../game/furniture';
+import { BUCKET_LITRES, FURNITURE, furnitureDef, POND_EVERY, teamSaid } from '../../game/furniture';
 import { GRAVE_KEEPS, GRAVE_REACH } from '../../game/graves';
 import {
   ASH_RATE, BASE_QUEUE, BOAT_LOAD_DRAG, CARRY_BASE, CARRY_PER_STRENGTH, CARRY_STOP, CHAR_START, DAMAGE_MAX, DAMAGE_WARN,
@@ -254,6 +254,7 @@ const forester = (name: string): Record<string, number> => perksOf('forester').f
 const BRUSH_SIDE = 2 * (forester('Clear Brush').clear_brush ?? 0) + 1;
 const farmer = (name: string): Record<string, number> => perksOf('farmer').find((p) => p.name === name)?.fx ?? {};
 const cook = (name: string): Record<string, number> => perksOf('cook').find((p) => p.name === name)?.fx ?? {};
+const fisher = (name: string): Record<string, number> => perksOf('fisher').find((p) => p.name === name)?.fx ?? {};
 const tailor = (name: string): Record<string, number> => perksOf('tailor').find((p) => p.name === name)?.fx ?? {};
 const herdsman = (name: string): Record<string, number> => perksOf('herdsman').find((p) => p.name === name)?.fx ?? {};
 const PATCH_SIDE = 2 * (farmer('Sow a Patch').sow_patch ?? 0) + 1;
@@ -760,6 +761,13 @@ export function helpText(): string {
     average, and a creel of theirs is ${percent((tailor("Fisher's Friend")['catch:creel'] ?? 1) - 1)} likelier to take one at each look.</p>
     <p>The <b>Wadd</b>, being the one thing on the island that swims, now fishes: set one to a deed or a
     work post and it works the banks in its range and carries the catch home.</p>
+    <p>A <b>Fisher</b> who has learned it <b>smokes</b> fish: choose <b>Smoke the</b> <i>fish</i> at a lit campfire, and it comes off the
+    same fish at its own quality, marked to rot ${percent(1 - (fisher('Smoke Fish')['rot:trout'] ?? 1))} slower wherever it is left. One
+    with the <b>Fishing Journal</b> reads the water when they examine it: how deep it is, each fish's share of the bites with the bait they
+    would put on, and how often a fish that bites stays on with their rod. One who has learned to dig a <b>fish pond</b>
+    (${bill('make_fish_pond')}, with a shovel) sets it down on their settlement, where it stocks itself at a fish in
+    ${spanWords(POND_EVERY)} until it holds ${furnitureDef('fish_pond').pond}; take the fish out of it as you would the comb from a hive,
+    and put nothing in.</p>
     <h3>Fruit trees</h3>
     <p>${NumberWord(FRUIT_TREES.length)} of the ${numberWord(TREE_DEFS.length)} trees bear. <b>Apple</b> and <b>olive</b> grow wild here and there in
     the warm low country of any island, and the rest are each held to one island of the chart, where they

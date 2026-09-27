@@ -159,6 +159,8 @@ export const RECIPE_PERK_SAYS: Record<string, string> = {
   herb_tea: 'That wants a Naturalist who has learned to make herb tea.',
   salve: 'That wants a Naturalist who has learned to make a salve.',
   tincture: 'That wants a Naturalist who has learned to make a tincture.',
+  smoke_fish: 'That wants a Fisher who has learned to smoke fish.',
+  fish_pond: 'That wants a Fisher who has learned to make a fish pond.',
 };
 
 export const RECIPES: Recipe[] = [
@@ -445,7 +447,7 @@ const FURNITURE_RECIPES: Recipe[] = FURNITURE.filter((f) => !f.grave).map((f) =>
   tool: f.tool ?? 'mallet',
   skill: f.skill ?? 'fine_carpentry',
   // A carpenter's piece is of the wood it is built from; a mason's is brick, and a tailor's cloth.
-  material: f.material ?? (f.skill === 'masonry' || f.skill === 'tailoring' ? undefined : ('wood' as const)),
+  material: f.material ?? (f.skill === 'masonry' || f.skill === 'tailoring' || f.skill === 'fishing' ? undefined : ('wood' as const)),
   ...(f.deed ? { deed: true } : {}),
   ...(f.perk ? { perk: f.perk } : {}),
   label: `Build ${f.name.toLowerCase()}`,
@@ -456,7 +458,8 @@ const FURNITURE_RECIPES: Recipe[] = FURNITURE.filter((f) => !f.grave).map((f) =>
   done: `${f.done} Set it down on any spot of a tile.`,
   fail: f.skill === 'masonry' ? `The courses will not run true and you knock the ${f.name.toLowerCase()} down again.`
     : f.skill === 'tailoring' ? `The seams will not lie flat and you unpick the ${f.name.toLowerCase()} again.`
-      : `The joints will not pull up square and you pull the ${f.name.toLowerCase()} apart again.`,
+      : f.skill === 'fishing' ? `The clay will not hold water and you dig the ${f.name.toLowerCase()} out again.`
+        : `The joints will not pull up square and you pull the ${f.name.toLowerCase()} apart again.`,
 }));
 
 RECIPES.push(...FURNITURE_RECIPES);
@@ -482,6 +485,31 @@ const FISH_RECIPES: Recipe[] = FISH.map((f) => ({
 }));
 
 RECIPES.push(...FISH_RECIPES);
+
+/**
+ * A Fisher's Smoke Fish: any fish hung in the smoke of a lit campfire comes
+ * off the same fish, keeping its own quality, with the smoker's mark on it to
+ * rot slower wherever it is left (`rot:<fish>`, which `groundDecayRate`
+ * reads). Worked with fishing rather than cooking, so a Cook's perks on the
+ * dishes leave it alone, and made only by a Fisher who has learned it.
+ */
+const SMOKE_RECIPES: Recipe[] = FISH.map((f) => ({
+  id: `smoke_${f.id}`,
+  category: 'Cooking' as RecipeCategory,
+  result: f.id,
+  inputs: [{ item: f.id }],
+  station: 'campfire' as Station,
+  skill: 'fishing',
+  qlFromInputs: true,
+  label: `Smoke the ${f.name.toLowerCase()}`,
+  verb: 'smoking fish',
+  baseTime: 8 + (FISH_PORTIONS[f.id] ?? 1),
+  stamina: 0.02,
+  done: `You hang the ${f.name.toLowerCase()} in the smoke until it is dry and dark all through.`,
+  perk: 'smoke_fish',
+}));
+
+RECIPES.push(...SMOKE_RECIPES);
 
 /**
  * Every dye is boiled the same way: a quantity of something that grows, a

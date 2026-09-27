@@ -78,7 +78,9 @@ import { EMPTY_CHANCE, PER_ROLL } from './forage';
 import { DRESS_CHECK } from './firstaid';
 import { TINCTURE_NAMES } from './remedies';
 import { FESTER_CLOTH, FESTER_WRONG } from './wounds';
-import { BAIT_BY_ID } from './fishing';
+import { BAIT_BY_ID, BAIT_PULL, BAITS, biteShare, CAST, FISH, HOOK_BAIT, HOOK_MOST, NET_HAUL, NET_LEAST, NET_REACH } from './fishing';
+import { POND_EVERY } from './furniture';
+import { TRAPS } from './traps';
 import { BUTCHER_BAIT } from './butcher';
 import { SHEAR_FROM, SHEAR_WOOL, TAME_MOST } from './creatureActions';
 import { AGES, BREED_REST, CARE_BONUS, CARE_HOURS, COAX_STEP, GESTATION, HUNGER_RATE, OLD_AT } from './creatures';
@@ -95,7 +97,8 @@ export type Fx = Record<string, number>;
 export const FX_RULE: Record<string, 'mul' | 'add'> = {
   time: 'mul', ql: 'mul', weight: 'mul', walk: 'mul', fail: 'mul', wear: 'mul', need: 'mul', bill: 'mul',
   grow: 'mul', rotate: 'mul', feed: 'mul', fill: 'mul', knack: 'mul', rot: 'mul', cool: 'mul', catch: 'mul', empty: 'mul', mend: 'mul',
-  carry: 'add', jobs: 'add', plus: 'add', bumper: 'add', fodder: 'add', tool: 'add', passes: 'add',
+  bite: 'mul',
+  carry: 'add', jobs: 'add', plus: 'add', bumper: 'add', fodder: 'add', tool: 'add', passes: 'add', hook: 'add', haul: 'add',
 };
 
 export const fxFamily = (key: string): string => key.split(':')[0];
@@ -1615,6 +1618,130 @@ const NATURALIST: Seed[] = [
   },
 ];
 
+/*
+ * ---------------------------------------------------------------------------
+ * The Fisher: the rod, the net and the creel.
+ * ---------------------------------------------------------------------------
+ */
+/** The fish that run in water a net mostly misses: trout and deeper. */
+const BIG_FISH = FISH.filter((f) => f.depth >= 8);
+const fishName = (id: string): string => itemName(id);
+const POND = furnitureDef('fish_pond');
+/** A share of bites where every fish runs and nothing is on the hook, with a Fisher's perks or without. */
+const bigShare = (fx: Fx): number => BIG_FISH.reduce((n, f) => n + biteShare(f.id, undefined, (k, d) => fx[k] ?? d), 0);
+const SMOKED = recipeOf('smoke_trout');
+
+const FISHER: Seed[] = [
+  {
+    num: 1, name: 'Quick Cast',
+    fx: { 'time:fish': 0.7 },
+    note: (fx) => `A cast takes ${less(fx['time:fish'])} less time (${secs(base('fish'))} base).`,
+  },
+  {
+    num: 2, name: 'Long Cast',
+    fx: { 'reach:fish': 6 },
+    note: (fx) => `Your line reaches water ${fx['reach:fish']} tiles off (now ${CAST}); click water further than that and it goes into `
+      + `the deepest water within ${Math.floor(fx['reach:fish'])} tiles of you each way (now ${Math.floor(CAST)}).`,
+  },
+  {
+    num: 3, name: 'Steady Hand',
+    fx: { 'hook:fish': 0.15 },
+    note: (fx) => `A fish that bites stays on ${points(fx['hook:fish'])} more often, over everything else that goes into it `
+      + `(still ${percent(HOOK_MOST)} at most).`,
+  },
+  {
+    num: 4, name: 'Bait Saver',
+    fx: { 'spare:fish': 1 },
+    note: (fx) => `${fx['spare:fish'] >= 1 ? 'A fish that comes off leaves' : `${percent(fx['spare:fish'])} of the fish that come off leave`} `
+      + 'your bait on the hook, so bait goes only with a fish you land (now every cast with bait on takes it).',
+  },
+  {
+    num: 5, name: 'Strong Bait',
+    fx: { 'bait:pull': 2 },
+    note: (fx) => `Bait draws the fish it favours ${times(fx['bait:pull'])} as hard, on the hook and in a creel you set: `
+      + `${BAIT_PULL * fx['bait:pull']} times its plain weight for the first it favours and ${(BAIT_PULL * fx['bait:pull']) / 2} for the `
+      + `second (now ${BAIT_PULL} and ${BAIT_PULL / 2}).`,
+  },
+  {
+    num: 6, name: 'Any Bait',
+    fx: { 'bait:food': 1 },
+    note: () => 'With no bait that draws a fish in your pack, any food goes on the hook or in a creel instead: it draws every fish at '
+      + `its plain weight, and a fish on it stays on ${points(HOOK_BAIT)} more often, as on any bait (now only `
+      + `${either(BAITS.map((b) => itemName(b.id)))} will do).`,
+  },
+  {
+    num: 9, name: 'Big Fish',
+    fx: onEach('bite', BIG_FISH.map((f) => f.id), 2),
+    note: (fx) => `${capital(listed(BIG_FISH.map((f) => fishName(f.id))))} weigh ${times(fx[`bite:${BIG_FISH[0].id}`])} as much in the draw `
+      + `of which fish bites, on your rod, in your net and in a creel you set: where every fish runs and nothing is on the hook, they `
+      + `are ${percent(bigShare(fx))} of the bites (now ${percent(bigShare({}))}).`,
+  },
+  {
+    num: 12, name: 'Rare Catch',
+    fx: { 'rare:fish': RARITY_ODDS[0], 'rare:drag_net': RARITY_ODDS[0] },
+    note: (fx) => `${oneIn(fx['rare:fish'])} fish you land on a rod or haul in a net come up rare (now none do); supreme and fantastic `
+      + 'follow at their usual odds.',
+  },
+  {
+    num: 13, name: 'Quick Net',
+    fx: { 'time:drag_net': 0.7 },
+    note: (fx) => `Dragging the net takes ${less(fx['time:drag_net'])} less time (${secs(base('drag_net'))} base).`,
+  },
+  {
+    num: 14, name: 'Full Net',
+    fx: { 'haul:drag_net': 2 },
+    note: (fx) => `A drag of the net hauls ${fx['haul:drag_net']} more fish: ${NET_LEAST + fx['haul:drag_net']} to `
+      + `${NET_HAUL + fx['haul:drag_net']} by the net's quality (now ${NET_LEAST} to ${NET_HAUL}), before its maker's mark is counted in.`,
+  },
+  {
+    num: 15, name: 'Wide Net',
+    fx: { 'reach:drag_net': 4 },
+    note: (fx) => `Your net reaches water ${fx['reach:drag_net']} tiles off (now ${NET_REACH}); click water further than that and it is `
+      + `dragged through the deepest water within ${Math.floor(fx['reach:drag_net'])} tiles of you each way (now ${Math.floor(NET_REACH)}).`,
+  },
+  {
+    num: 17, name: 'Net Care',
+    fx: { 'wear:fishing_net': 0.5 },
+    note: (fx) => `A fishing net takes ${share(fx['wear:fishing_net'])} the damage a drag, at any quality.`,
+  },
+  {
+    num: 19, name: 'Deep Creel',
+    fx: { 'hold:creel': 2 },
+    note: (fx) => `A creel you make holds ${Math.round((TRAPS.creel.hold ?? 0) * fx['hold:creel'])} fish before it takes no more `
+      + `(now ${TRAPS.creel.hold}).`,
+  },
+  {
+    num: 25, name: 'Cool Pack',
+    fx: onEach('cool', FISH.map((f) => f.id), 0.5),
+    note: (fx) => `${capital(listed(FISH.map((f) => fishName(f.id))))} you drop rot ${less(fx[`cool:${FISH[0].id}`])} slower where they lie, `
+      + 'until they are picked up. Nothing rots in a pack.',
+  },
+  {
+    num: 27, name: 'Smoke Fish',
+    fx: { smoke_fish: 1, ...onEach('rot', FISH.map((f) => f.id), 0.2) },
+    note: (fx) => `A new recipe: a fish hung in the smoke of a lit campfire, at your fishing, comes off at its own quality and rots `
+      + `${less(fx[`rot:${SMOKED.result}`])} slower wherever it is left: it keeps ${times(1 / fx[`rot:${SMOKED.result}`])} as long.`,
+  },
+  {
+    num: 33, name: 'Rod Care',
+    fx: { 'wear:fishing_rod': 0.5 },
+    note: (fx) => `A fishing rod takes ${share(fx['wear:fishing_rod'])} the damage a cast, at any quality and of any wood.`,
+  },
+  {
+    num: 45, name: 'Fishing Journal',
+    fx: { fish_journal: 1 },
+    note: () => 'Examining water also says how deep it is, what share of the bites there each fish you could land is with the bait you '
+      + 'would put on, and how often a fish that bites stays on with your rod.',
+  },
+  {
+    num: 47, name: 'Fish Pond',
+    fx: { fish_pond: 1 },
+    note: () => `A new piece to build, a ${POND.name.toLowerCase()} (${billWords(POND.bill, false)}, with a ${itemName(POND.tool ?? 'shovel')}), `
+      + `that you set down on your settlement: it stocks itself at a fish in ${spanWords(POND_EVERY)} until it holds ${POND.pond}, `
+      + 'drawn from every fish at its plain weight.',
+  },
+];
+
 /** Every trade's perks, in the order they were picked. */
 const SEEDS: Record<string, Seed[]> = {
   terraformer: TERRAFORMER,
@@ -1628,6 +1755,7 @@ const SEEDS: Record<string, Seed[]> = {
   tailor: TAILOR,
   herdsman: HERDSMAN,
   naturalist: NATURALIST,
+  fisher: FISHER,
 };
 
 const slug = (name: string): string => name.toLowerCase().replace(/[’']/g, '').replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '');
@@ -1649,6 +1777,7 @@ export const TIERS: Record<string, number[][]> = {
   tailor: [[2, 3, 18], [27, 31, 37], [9, 19, 21], [16, 25, 34], [4, 7, 35], [11, 46, 49]],
   herdsman: [[1, 11, 21], [15, 37, 50], [2, 13, 22], [9, 16, 25], [14, 24, 28], [10, 18, 26]],
   naturalist: [[2, 13, 23], [10, 11, 19], [3, 17, 24], [16, 29, 30], [12, 15, 34], [43, 44, 50]],
+  fisher: [[1, 4, 13], [2, 15, 45], [17, 25, 33], [3, 14, 19], [5, 6, 9], [12, 27, 47]],
 };
 
 /** Every perk there is, tier by tier, and in each tier by the number it was picked under, as the island lists them. */

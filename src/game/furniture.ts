@@ -115,6 +115,12 @@ export interface FurnitureDef {
    */
   hive?: number;
   /**
+   * A Fisher's pond. Nothing is put into it either: it stocks itself, a fish
+   * every `POND_EVERY` standing on a settlement, and the number is how many
+   * it holds before it stops until some are taken out.
+   */
+  pond?: number;
+  /**
    * Crate spots on its deck: one to a subtile, so a rack of `w` by `h` holds
    * `w * h` of them.
    *
@@ -281,6 +287,8 @@ export const FURNITURE: FurnitureDef[] = [
   piece('bell', 'Bell', 1, 1, [['bell_casting', 1], ['timber', 8], ['thick_rope', 1], ['nail', 16]], 22, 18, 'You hang the bell in its frame and knot the rope to the tongue. Rung on your settlement, every wildermon of the deed comes and every citizen hears where it hangs.', undefined, { bell: true, material: 'metal' }),
   piece('statue', 'Statue', 1, 1, [['statue_casting', 1], ['stone_slab', 1]], 24, 20, 'You set the casting on its slab and it stands, and will go on standing. It is on the map from here on.', undefined, { landmark: true, material: 'metal', skill: 'masonry', tool: 'trowel' }),
   piece('hive', 'Hive', 2, 1, [['plank', 24], ['shaft', 2], ['cloth', 4], ['nail', 24]], 18, 13, 'You nail up a hive of shallow boxes and turn the mouth of it south. Now it wants a swarm.', undefined, { hive: 40 }),
+  // A Fisher's pond: dug and puddled with clay, a ring of stones round it and reeds at the edge. It stocks itself.
+  piece('fish_pond', 'Fish pond', 2, 2, [['clay', 20], ['rock_shards', 12], ['reed', 8]], 20, 20, 'You dig the pond out, puddle the floor of it with clay, set stones round the rim and plant the reeds at its edge.', undefined, { pond: 10, skill: 'fishing', tool: 'shovel', perk: 'fish_pond', deed: true }),
   // The two the cloth trade is built on. Stand at one to spin or weave.
   piece('spindle', 'Spindle', 1, 1, [['plank', 8], ['shaft', 3], ['nail', 16]], 14, 9, 'You turn a spindle and set it on its stand.'),
   piece('loom', 'Loom', 2, 2, [['plank', 32], ['timber', 16], ['shaft', 6], ['nail', 48]], 22, 18, 'You build a loom and thread the warp.'),
@@ -446,6 +454,8 @@ export interface PlacedFurniture {
   driverId?: number;
   /** Comb drawn but not yet capped, for a hive. */
   comb?: number;
+  /** How far a pond is toward its next fish, a whole one being a fish. */
+  stock?: number;
   /** Seconds a brew still has to work before it can be drawn off. */
   ferment?: number;
   /**
@@ -548,7 +558,7 @@ export const furnitureUnits = (f: PlacedFurniture): number => f.items.reduce((n,
 export const furnitureSpare = (f: PlacedFurniture): number => Math.max(0, furnitureCapacity(f) - furnitureUnits(f));
 /** What it holds: its build, how strong a wood it was built out of, and its maker's mark. */
 export const furnitureCapacity = (f: PlacedFurniture): number =>
-  roomFor((furnitureDef(f.kind).capacity ?? furnitureDef(f.kind).hive ?? 0) * matOf(f.material).hold * markOf(f, 'hold'), f);
+  roomFor((furnitureDef(f.kind).capacity ?? furnitureDef(f.kind).hive ?? furnitureDef(f.kind).pond ?? 0) * matOf(f.material).hold * markOf(f, 'hold'), f);
 /** Kilograms it holds, for a piece measured that way. Nought for the rest. */
 export const furnitureHeft = (f: PlacedFurniture): number =>
   roomFor((furnitureDef(f.kind).heft ?? 0) * matOf(f.material).hold * markOf(f, 'hold'), f);
@@ -691,6 +701,15 @@ export const hiveRate = (ql: number): number => HIVE_BASE + (ql / 100) * HIVE_PE
 export const isHive = (f: { kind: string }): boolean => (furnitureDef(f.kind).hive ?? 0) > 0;
 
 /**
+ * How a Fisher's pond stocks itself: a fish every this many seconds while it
+ * stands on a settlement and has room, drawn from all five at their plain
+ * weights, at about the pond's quality. The island's `pond_sweep` reads the same.
+ */
+export const POND_EVERY = 3600;
+export const isPond = (f: { kind: string }): boolean => (furnitureDef(f.kind).pond ?? 0) > 0;
+describeFrom('fish_pond', { every: POND_EVERY });
+
+/**
  * What a raw material bin says to anything a bench has touched. The island
  * says it in the same words (`furniture_refuses`).
  */
@@ -740,6 +759,7 @@ export function furnitureRefuses(f: PlacedFurniture, item: Item): string | null 
   const it = `${/^[aeiou]/i.test(def.name) ? 'An' : 'A'} ${def.name.toLowerCase()}`;
   if (holdsLiquid(f)) return `${it} holds liquid and nothing else.`;
   if (def.hive) return `${it} is the swarm's, not yours. Take what is in it; do not put anything back.`;
+  if (def.pond) return `${it} stocks itself. Take the fish out of it; do not put anything back.`;
   if (!furnitureHolds(f)) return `${it} does not hold things.`;
   // Its id is spelled out rather than imported: creaturecrate.ts imports this file.
   if (item.id === 'creature_crate' && !def.stall) return 'A creature crate goes on a stall, and in no other store.';
@@ -761,6 +781,7 @@ export function furnitureState(f: PlacedFurniture): string {
   }
   if (def.hearth) return `${ql} · ${f.lit ? 'lit' : 'cold'}`;
   if (def.hive) return `${ql} · ${furnitureUnits(f)} / ${furnitureCapacity(f)} of comb`;
+  if (def.pond) return `${ql} · ${furnitureUnits(f)} / ${furnitureCapacity(f)} fish`;
   // A bin measured in kilograms says so; everything else counts things.
   const heft = furnitureHeft(f);
   if (heft) return `${ql} · ${furnitureKg(f).toFixed(0)} / ${heft} kg`;

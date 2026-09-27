@@ -5,8 +5,8 @@ import type { Game } from './game';
 import { isBaitFor, SPECIES, type Creature } from './creatures';
 import { emptyCrate, shutIn } from './creaturecrate';
 import { tameRoomRefusal } from './creatureActions';
-import { itemDef, itemName, type Item, type Mark } from './items';
-import { BAIT_BY_ID, isBait } from './fishing';
+import { itemDef, itemName, markOf, type Item, type Mark } from './items';
+import { BAIT_BY_ID, isBait, isFood } from './fishing';
 import { matOf } from './materials';
 import { world } from './pace';
 
@@ -148,6 +148,8 @@ export const CREEL_BAIT_LOSS = 0.14;
 
 /** What it will hold, once the build quality is counted in. */
 export const trapHolds = (t: PlacedTrap): number => Math.round(trapDef(t).holds * (0.6 + clampQl(t.ql) / 250));
+/** How many fish a creel holds before it takes no more, a Fisher's Deep Creel on it counted in. The island's `creel_hold`. */
+export const creelHold = (t: PlacedTrap): number => Math.round((trapDef(t).hold ?? 8) * markOf(t, 'hold'));
 
 /**
  * The odds one roll catches something. A well-made trap catches more; a
@@ -196,7 +198,12 @@ const nearTrap = (g: Game, t: PlacedTrap): boolean => {
 /** Anything in the pack some wild thing would come to. */
 export const baitInPack = (g: Game, t?: PlacedTrap): Item[] => {
   // A creel is baited with what fish come to; a land trap with what beasts eat.
-  if (t && trapDef(t).water) return g.inventory.items.filter((it) => isBait(it.id));
+  if (t && trapDef(t).water) {
+    const baits = g.inventory.items.filter((it) => isBait(it.id));
+    // With none of that, any food at all for a Fisher's Any Bait, which draws nothing in particular.
+    if (baits.length || g.perk('bait:food', 0) <= 0) return baits;
+    return g.inventory.items.filter((it) => !it.locked && isFood(it.id));
+  }
   return g.inventory.items.filter((it) => Object.values(SPECIES).some((s) => isBaitFor(s, it.id)));
 };
 
@@ -225,7 +232,7 @@ export const TRAP_ACTIONS: ActionDef[] = [
       const mins = Math.round(trapLife(trap.kind, trap.ql) / 60);
       g.logMsg(
         trapDef(trap).water
-          ? `You sink the ${trapName(trap).toLowerCase()} and make the line fast. It will fish about ${mins} minutes and holds ${trapDef(trap).hold ?? 8}. Bait it.`
+          ? `You sink the ${trapName(trap).toLowerCase()} and make the line fast. It will fish about ${mins} minutes and holds ${creelHold(trap)}. Bait it.`
           : `You set the ${trapName(trap).toLowerCase()} and cover the sign of it. It will stand about ${mins} minutes and will hold anything up to taming ${trapHolds(trap)}. Bait it.`,
         'event',
       );

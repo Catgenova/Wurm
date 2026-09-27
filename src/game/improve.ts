@@ -83,7 +83,8 @@ export function improvable(id: string): { material: MaterialDef; skill: string }
   if (WEAPON_BY_ID.has(id)) return { material: MATERIALS.metal, skill: 'weaponsmithing' };
   // A wagon is rough carpentry, whatever else in the workshop is fine work.
   const piece = FURNITURE_BY_ID.get(id);
-  if (piece) return { material: piece.skill === 'masonry' ? MATERIALS.stone : MATERIALS.wood, skill: piece.skill ?? 'fine_carpentry' };
+  // A Fisher's pond is set in stone, like a mason's work, whoever dug it.
+  if (piece) return { material: piece.skill === 'masonry' || piece.pond ? MATERIALS.stone : MATERIALS.wood, skill: piece.skill ?? 'fine_carpentry' };
   if (id === 'whetstone' || id === 'quern') return { material: MATERIALS.stone, skill: 'stonecutting' };
   // Everything else — food, materials, moulds, green ware — is left as it was made.
   return null;

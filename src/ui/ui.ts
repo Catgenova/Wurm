@@ -30,7 +30,7 @@ import { crateKindOfItem, crateName, crateCapacity, crateUnits, subtileOf } from
 import { butcherPreview } from '../game/butcher';
 import { anvilAnchor, anvilName, type PlacedAnvil } from '../game/anvil';
 import { postCandidates, postLife, postName, postRadius, postState, type PlacedPost } from '../game/posts';
-import { baitInPack, trapDef, trapHolds, trapLife, trapName, TRAPS, trapState, type PlacedTrap } from '../game/traps';
+import { baitInPack, creelHold, trapDef, trapHolds, trapLife, trapName, TRAPS, trapState, type PlacedTrap } from '../game/traps';
 import { BAIT_BY_ID } from '../game/fishing';
 import { BRIDGES, bridgeDef, bridgeName, bridgeState, spanWants, type Bridge } from '../game/bridges';
 import { foundationState } from '../game/foundations';
@@ -1045,7 +1045,7 @@ export class UI {
         const kind = TRAPS[it.id as 'snare' | 'deadfall' | 'creel'];
         entries.push({
           label: `Set ${itemName(it).toLowerCase()} here (spot ${tx0 + 1},${ty0 + 1})`,
-          note: reason ? undefined : `${Math.round(trapLife(it.id as 'snare' | 'deadfall' | 'creel', it.ql) / 60)} min · ${kind.water ? `holds ${kind.hold ?? 8} fish` : `holds to taming ${Math.round(kind.holds * (0.6 + Math.max(1, Math.min(100, it.ql)) / 250))}`}`,
+          note: reason ? undefined : `${Math.round(trapLife(it.id as 'snare' | 'deadfall' | 'creel', it.ql) / 60)} min · ${kind.water ? `holds ${Math.round((kind.hold ?? 8) * markOf(it, 'hold'))} fish` : `holds to taming ${Math.round(kind.holds * (0.6 + Math.max(1, Math.min(100, it.ql)) / 250))}`}`,
           hint: reason ?? undefined,
           disabled: !!reason,
           onSelect: () => this.game.requestAction(trapSet, tt),
@@ -1833,7 +1833,7 @@ export class UI {
     const entries: MenuItem[] = [];
     const def = trapDef(t);
     entries.push({
-      label: def.water ? `QL ${t.ql.toFixed(0)} · holds ${def.hold ?? 8} fish` : `QL ${t.ql.toFixed(0)} · holds to taming ${trapHolds(t)} · reaches ${def.reach} tiles`,
+      label: def.water ? `QL ${t.ql.toFixed(0)} · holds ${creelHold(t)} fish` : `QL ${t.ql.toFixed(0)} · holds to taming ${trapHolds(t)} · reaches ${def.reach} tiles`,
       disabled: true,
     });
     const held = t.caught !== null ? g.creatures.get(t.caught) : undefined;
