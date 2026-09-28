@@ -31,6 +31,7 @@ import { perksOf, type PerkDef } from '../../src/game/perks';
 import { RECIPES } from '../../src/game/recipes';
 import { TileType } from '../../src/world/tiles';
 import { YEAR_FROM } from '../../src/world/calendar';
+import { DAY_SECONDS } from '../../src/game/pace';
 
 const psql = (sql: string): string =>
   execFileSync('psql', ['-v', 'ON_ERROR_STOP=1', '-X', '-q', '-t', '-A', '-f', '-'], {
@@ -645,8 +646,8 @@ const carrotPace = game.cropAt(21, 21)?.pace ?? 1;
 check('the browser stamps the same pace: Fast Growth on wheat after wheat, and Crop Rotation too on carrots after it',
   near(wheatPace, fg) && near(carrotPace, fg * cr), `${wheatPace} / ${carrotPace}`);
 const c = game.cropAt(21, 21)!;
-// Asked on a day of spring, when a field grows at the whole of its pace, whatever day this runs on.
-const inSpring = YEAR_FROM + 2 * 24 * 3600;
+// Asked on a day of spring, when a field grows at the whole of its pace, whatever day this runs on: the third of the first.
+const inSpring = YEAR_FROM + 2 * DAY_SECONDS;
 check('and counts the stage down at that pace', near(cropTimeLeft(c, game.cropPer(c), c.stageAt, inSpring) ?? 0, CROPS.carrot.stageSeconds * fg * cr),
   String(cropTimeLeft(c, game.cropPer(c), c.stageAt, inSpring)));
 run('clear_field', 21, 21);
