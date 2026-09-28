@@ -14,10 +14,17 @@
  * the hole the camera looks at drop from the top to the water, and all the
  * rest of it is water.
  *
- * Water that goes over the edge goes through a notch in the rim and down the
- * face of the slab to whatever is at its foot: the ground, which the stream it
- * becomes runs on across, or a lower pool, whose rim has a notch where it
- * comes in. On a face the camera cannot see, what shows is the notch.
+ * Water that goes over the edge goes down the face of the slab to whatever is
+ * at its foot: the ground, which the stream it becomes runs on across, or a
+ * lower pool, whose rim is open where it comes in, as wide as the water
+ * coming. From one tile it goes through a notch in the rim. From a row of
+ * tiles of the pool along the side it goes over, whose outsides are all as low
+ * -- the same pool below, or ground at least as low -- it goes over the whole
+ * row as one curtain, a weir, with only the rim at the row's two ends left
+ * standing; each tile draws its own stretch of that curtain, and the curtain
+ * is drawn by the one painter every fall is (`./falls`), so the stretches are
+ * one sheet. On a face the camera cannot see, what shows is the water going
+ * over the rim.
  *
  * The look is the owner's picture of a garden basin: clear turquoise water
  * rather than the sea's blue, a glassy sheet streaked light and dark going over
@@ -26,17 +33,11 @@
  */
 import type { Camera } from '../engine/camera';
 import { POOL_LIP, type Spill } from '../world/springs';
-import { HALF_H, HALF_W } from './iso';
-import { SPRING_DARK, SPRING_EDGE, SPRING_FOAM, SPRING_PALE, SPRING_WATER } from './water';
+import { drawFoot, drawLip, drawSheet, fallView, place, type FallView, type Placed, type Sheet } from './falls';
+import { HALF_H, HALF_W, HEIGHT_SCALE } from './iso';
+import { SPRING_EDGE, SPRING_FOAM, SPRING_WATER } from './water';
 
 type RGB = readonly [number, number, number];
-
-/** Two colours mixed, `k` of the way from the first to the second. */
-const mixed = (a: RGB, b: RGB, k: number): RGB => [a[0] + (b[0] - a[0]) * k, a[1] + (b[1] - a[1]) * k, a[2] + (b[2] - a[2]) * k];
-/** A falling sheet, top to foot, in the colours the falls between ponds are drawn in (`ponds.ts`). */
-const SHEET_TOP = SPRING_WATER;
-const SHEET_MID = mixed(SPRING_WATER, SPRING_PALE, 0.42);
-const SHEET_FOOT = mixed(SPRING_PALE, SPRING_FOAM, 0.6);
 
 /** A lily pad, its rim, and the light along its top; and the flower some carry. */
 const PAD: RGB = [118, 196, 112];
@@ -52,11 +53,26 @@ const RIM = 0.12;
 const HAIR = 0.015;
 /** How far into the water the shade at the foot of a wall reaches, as a share of the tile. */
 const SHADE = 0.06;
+/** The most tiles a curtain over a pool's edge is followed along it either way from the tile its spill is on. */
+const RUN_MOST = 16;
+/** How far out from the face of its slab the water going over a pool's edge lands, in tiles: into a pool below, and on the ground. */
+const THROW_ONTO = 0.1;
+const THROW_DOWN = 0.075;
+/** How much of the width of the water going over an edge draws back toward the middle as it falls, in tiles at most. */
+const DRAW_BACK = 0.08;
+/** How far the curl carries water going over a pool's edge out from its face, as a share of the curl a fall over rock has. */
+const HUG = 0.6;
+/** How far along the side the foam, rings and broken water at a curtain's foot reach past where each comes down, in tiles. */
+const FOOT_REACH = 0.9;
 
 /** A side of a tile, by the way out through it. */
 type Side = 'n' | 'e' | 's' | 'w';
 const SIDES: readonly Side[] = ['n', 'e', 's', 'w'];
 const OUT: Record<Side, readonly [number, number]> = { n: [0, -1], e: [1, 0], s: [0, 1], w: [-1, 0] };
+/** Which axis a side of a tile runs along, 0 for x and 1 for y. */
+const ALONG: Record<Side, 0 | 1> = { n: 0, s: 0, e: 1, w: 1 };
+/** The side of the next tile across the edge from a side. */
+const FACING: Record<Side, Side> = { n: 's', s: 'n', e: 'w', w: 'e' };
 const DRY: readonly Spill[] = [];
 
 /** What the renderer knows that a pool needs to be drawn. */
@@ -71,10 +87,48 @@ export interface PoolScene {
   concrete: RGB;
   /** The top of the slab over a tile when there is a pool in it, or null. */
   poolTop: (x: number, y: number) => number | null;
+  /** The top of any poured slab over a tile, a pool in it or not, or null: one with no pool is a wall to water. */
+  slabTop: (x: number, y: number) => number | null;
   /** The water going over the edges of the pool dug in a tile; nothing where there is none. */
   spillsAt: (x: number, y: number) => readonly Spill[] | undefined;
   /** The ground at a corner. */
   ground: (cx: number, cy: number) => number;
+  /**
+   * How the water going over edges is drawn this frame: the projection it is
+   * drawn with; the line of the ground a tile is on; where the foot of a
+   * curtain onto the ground goes, to be laid after the line of the tile it
+   * lands on; and where its mist goes. Absent, a curtain is drawn with no
+   * foot and no mist.
+   */
+  falls?: {
+    view: FallView;
+    row: (x: number, y: number) => number;
+    foot: (row: number, placed: Placed, u0: number, u1: number) => void;
+    mist: (placed: Placed) => void;
+    foam: CanvasImageSource | null;
+  };
+  /** Kept from one tile to the next within a frame: the curtain each side of each tile is part of, by tile and side (a tile has one top in a frame). */
+  runs?: Map<number, Run | null>;
+}
+
+/**
+ * A row of a pool's tiles its water goes over as one curtain: the side it
+ * goes over, the first and last tile of the row along that side's axis, the
+ * corner line of the face it goes down, the spill, whether it falls into a
+ * pool below rather than onto the ground, where along the axis it goes over
+ * -- a notch in the middle of a tile alone, or the whole row but for the rim
+ * at each end -- and the top of the pool's slab.
+ */
+export interface Run {
+  side: Side;
+  lo: number;
+  hi: number;
+  line: number;
+  spill: Spill;
+  onto: boolean;
+  open0: number;
+  open1: number;
+  top: number;
 }
 
 /** Which side of the tile at `x`, `y` an edge is, or null for an edge that is not one of its sides. */
@@ -98,9 +152,89 @@ export function spillSpan(s: Spill, ontoPool: boolean, ground: (cx: number, cy: 
   return hb < ha ? [0.38, 0.82] : [0.18, 0.62];
 }
 
-/** A point in the tile, `d` in from a side and `t` along it, as a share of the tile each way. */
-const inFrom = (side: Side, t: number, d: number): [number, number] =>
-  side === 'n' ? [t, d] : side === 's' ? [t, 1 - d] : side === 'w' ? [d, t] : [1 - d, t];
+/** The two corners of a side of a tile, first the lower along the side's axis. */
+function sideEdge(x: number, y: number, side: Side): [number, number, number, number] {
+  return side === 'n' ? [x, y, x + 1, y] : side === 's' ? [x, y + 1, x + 1, y + 1] : side === 'w' ? [x, y, x, y + 1] : [x + 1, y, x + 1, y + 1];
+}
+
+/**
+ * The curtain the water of the pool poured to `top` goes over side `side` of
+ * tile `x`, `y` in, or null. The rules send a pool's water over one edge of
+ * one tile; from that tile, along the side it goes over, every tile of the
+ * same pool whose outside is as low -- the same pool below, or no slab and
+ * ground at least as low as what the water falls to -- goes over with it, as
+ * long as they touch.
+ */
+export function runOf(p: PoolScene, x: number, y: number, side: Side, top: number): Run | null {
+  const memo = p.runs;
+  const key = (y * 65536 + x) * 4 + SIDES.indexOf(side);
+  if (memo?.has(key)) return memo.get(key) ?? null;
+  const axis = ALONG[side];
+  const here = axis === 0 ? x : y;
+  const at = (i: number): [number, number] => (axis === 0 ? [i, y] : [x, i]);
+  const pool = (i: number): boolean => {
+    const [tx, ty] = at(i);
+    return p.poolTop(tx, ty) === top;
+  };
+  const spillAt = (i: number): Spill | null => {
+    const [tx, ty] = at(i);
+    for (const s of p.spillsAt(tx, ty) ?? DRY) if (sideOf(s.edge, tx, ty) === side) return s;
+    return null;
+  };
+  let found = NaN;
+  for (let i = here; i >= here - RUN_MOST && pool(i) && Number.isNaN(found); i--) if (spillAt(i)) found = i;
+  for (let i = here + 1; i <= here + RUN_MOST && pool(i) && Number.isNaN(found); i++) if (spillAt(i)) found = i;
+  let run: Run | null = null;
+  const spill = Number.isNaN(found) ? null : spillAt(found);
+  if (spill) {
+    const [ox, oy] = OUT[side];
+    const [fx, fy] = at(found);
+    const onto = p.slabTop(fx + ox, fy + oy) !== null;
+    const low = (i: number): boolean => {
+      if (!pool(i)) return false;
+      const [tx, ty] = at(i);
+      if (onto) {
+        const below = p.poolTop(tx + ox, ty + oy);
+        return below !== null && below - POOL_LIP === spill.to;
+      }
+      if (p.slabTop(tx + ox, ty + oy) !== null) return false;
+      const [ax, ay, bx, by] = sideEdge(tx, ty, side);
+      return Math.min(p.ground(ax, ay), p.ground(bx, by)) <= spill.to;
+    };
+    let lo = found;
+    let hi = found;
+    while (found - lo < RUN_MOST && low(lo - 1)) lo--;
+    while (hi - found < RUN_MOST && low(hi + 1)) hi++;
+    if (here >= lo && here <= hi) {
+      const [t0, t1] = lo === hi ? spillSpan(spill, onto, p.ground) : [RIM, hi - lo + 1 - RIM];
+      const line = side === 'e' ? x + 1 : side === 'w' ? x : side === 's' ? y + 1 : y;
+      run = { side, lo, hi, line, spill, onto, open0: lo + t0, open1: lo + t1, top };
+    }
+  }
+  memo?.set(key, run);
+  return run;
+}
+
+/**
+ * The sheet a curtain over a pool's edge is drawn as: from the face of its
+ * slab at the top, over where along the side the water goes over, drawing back
+ * a little from the walls of the notch as it falls, landing on the water of
+ * the pool below or on the ground at the foot of the face.
+ */
+export function sheetOf(p: PoolScene, run: Run): Sheet {
+  const axis = ALONG[run.side];
+  const land = new Float64Array(run.hi - run.lo + 2);
+  for (let i = 0; i < land.length; i++) {
+    const c = run.lo + i;
+    land[i] = run.onto ? run.spill.to : axis === 0 ? p.ground(c, run.line) : p.ground(run.line, c);
+  }
+  const back = Math.min(DRAW_BACK, (run.open1 - run.open0) * 0.2);
+  return {
+    axis, line: run.line, from: run.open0 + back, to: run.open1 - back, half: back,
+    way: run.side === 'e' || run.side === 's' ? 1 : -1, reach: run.onto ? THROW_ONTO : THROW_DOWN, curl: HUG,
+    top: run.top, landFrom: run.lo, land, wet: run.onto, grow: 1,
+  };
+}
 
 /** Three whole numbers to one in [0, 1), the same every time. */
 function hash3(a: number, b: number, c: number): number {
@@ -114,13 +248,13 @@ const rgb = (c: RGB, k = 1): string =>
   `rgb(${Math.min(255, c[0] * k) | 0}, ${Math.min(255, c[1] * k) | 0}, ${Math.min(255, c[2] * k) | 0})`;
 const rgba = (c: RGB, a: number): string => `rgba(${c[0] | 0}, ${c[1] | 0}, ${c[2] | 0}, ${a.toFixed(3)})`;
 
-/** Water in, or over, the rim: which side, how far along it, and the spill when it is going out rather than coming in. */
+/** Water over the rim, going out or coming in: which side, how far along it, and the curtain it is part of. */
 interface Notch {
   side: Side;
   t0: number;
   t1: number;
-  out: Spill | null;
-  onto: boolean;
+  run: Run;
+  out: boolean;
 }
 
 /** A wall of the hole in a tile: its two ends across the tile, and the way it faces, into the water. */
@@ -148,20 +282,26 @@ function layout(p: PoolScene, x: number, y: number, top: number): Layout {
   const joined: Record<Side, boolean> = { n: same(0, -1), e: same(1, 0), s: same(0, 1), w: same(-1, 0) };
 
   const notches: Notch[] = [];
-  for (const s of p.spillsAt(x, y) ?? DRY) {
-    const side = sideOf(s.edge, x, y);
-    // The same pool is filled by every spring upstream of it, and goes over the same edge for each.
-    if (!side || notches.some((n) => n.side === side)) continue;
-    const onto = p.poolTop(x + OUT[side][0], y + OUT[side][1]) !== null;
-    const [t0, t1] = spillSpan(s, onto, p.ground);
-    notches.push({ side, t0, t1, out: s, onto });
-  }
   for (const side of SIDES) {
-    if (notches.some((n) => n.side === side)) continue;
-    const s = (p.spillsAt(x + OUT[side][0], y + OUT[side][1]) ?? DRY).find((o) => sideOf(o.edge, x, y) === side);
-    if (!s) continue;
-    const [t0, t1] = spillSpan(s, true, p.ground);
-    notches.push({ side, t0, t1, out: null, onto: true });
+    const here = ALONG[side] === 0 ? x : y;
+    // Going out over this side, as part of a curtain along it.
+    const out = runOf(p, x, y, side, top);
+    if (out) {
+      const t0 = Math.max(0, out.open0 - here);
+      const t1 = Math.min(1, out.open1 - here);
+      if (t1 > t0) notches.push({ side, t0, t1, run: out, out: true });
+      continue;
+    }
+    // Or coming in over it, from a curtain off a pool above falling into this one.
+    const nx = x + OUT[side][0];
+    const ny = y + OUT[side][1];
+    const above = p.poolTop(nx, ny);
+    if (above === null || above <= top) continue;
+    const into = runOf(p, nx, ny, FACING[side], above);
+    if (!into || !into.onto || into.spill.to !== top - POOL_LIP) continue;
+    const t0 = Math.max(0, into.open0 - here);
+    const t1 = Math.min(1, into.open1 - here);
+    if (t1 > t0) notches.push({ side, t0, t1, run: into, out: false });
   }
 
   // The grid: the rim's inner lines both ways, and the ends of every notch along its side.
@@ -186,8 +326,13 @@ function layout(p: PoolScene, x: number, y: number, top: number): Layout {
       if (bu === 0 && bv === 0) o = true;
       else if (bu === 0) o = bv < 0 ? joined.n || notched('n', mu) : joined.s || notched('s', mu);
       else if (bv === 0) o = bu < 0 ? joined.w || notched('w', mv) : joined.e || notched('e', mv);
-      // A corner is water only where the pool goes on past it every way, the diagonal too.
-      else o = joined[bu < 0 ? 'w' : 'e'] && joined[bv < 0 ? 'n' : 's'] && same(bu, bv);
+      else {
+        // A corner is water where the pool goes on past it every way, the diagonal too, or where water going over one
+        // side of it goes on past it along a curtain into the next tile of the same pool.
+        const su: Side = bu < 0 ? 'w' : 'e';
+        const sv: Side = bv < 0 ? 'n' : 's';
+        o = (joined[su] && joined[sv] && same(bu, bv)) || (joined[sv] && notched(su, mv)) || (joined[su] && notched(sv, mu));
+      }
       open.push(o);
     }
   }
@@ -310,58 +455,31 @@ export function drawPool(ctx: CanvasRenderingContext2D, cam: Camera, p: PoolScen
     }
   }
 
-  for (const n of notches) {
-    if (n.out) {
-      // Water drawn toward the notch and over it.
-      if (t !== null && z >= 0.5) {
-        ctx.setLineDash([3 * z, 4 * z]);
-        ctx.lineDashOffset = -t * 10 * z;
-        ctx.strokeStyle = rgba(SPRING_FOAM, 0.45);
-        ctx.lineWidth = Math.max(0.7, 0.9 * z);
-        ctx.beginPath();
-        for (let k = 0; k < 3; k++) {
-          const along = n.t0 + ((n.t1 - n.t0) * (k + 0.5)) / 3;
-          const [u0, v0] = inFrom(n.side, along, RIM + 0.12);
-          const [u1, v1] = inFrom(n.side, along, 0);
-          ctx.moveTo(sx(u0, v0), sy(u0, v0, level));
-          ctx.lineTo(sx(u1, v1), sy(u1, v1, level));
-        }
-        ctx.stroke();
-        ctx.setLineDash([]);
-      }
-      const [a0, b0] = inFrom(n.side, n.t0, 0);
-      const [a1, b1] = inFrom(n.side, n.t1, 0);
-      ctx.strokeStyle = rgba(SPRING_FOAM, 0.85);
-      ctx.lineWidth = Math.max(1, 1.4 * z);
-      ctx.beginPath();
-      ctx.moveTo(sx(a0, b0), sy(a0, b0, level));
-      ctx.lineTo(sx(a1, b1), sy(a1, b1, level));
-      ctx.stroke();
-    } else if (t !== null) {
-      // Where water comes in from a pool above: rings spreading out from it, and froth.
-      const mid = (n.t0 + n.t1) / 2;
-      const [cu, cv] = inFrom(n.side, mid, RIM * 0.6);
-      const cx = sx(cu, cv);
-      const cy = sy(cu, cv, level);
-      ctx.lineWidth = Math.max(0.7, 0.9 * z);
-      for (let k = 0; k < 3; k++) {
-        const phase = (t * 0.55 + k / 3) % 1;
-        const r = (0.1 + 0.38 * phase) * Math.SQRT2 * z;
-        ctx.strokeStyle = rgba(SPRING_FOAM, 0.55 * (1 - phase));
-        ctx.beginPath();
-        ctx.ellipse(cx, cy, r * HALF_W, r * HALF_H, 0, 0, Math.PI * 2);
-        ctx.stroke();
-      }
-      for (let k = 0; k < 5; k++) {
-        const along = n.t0 + ((n.t1 - n.t0) * (k + 0.5)) / 5;
-        const pulse = 0.5 + 0.5 * Math.sin(t * 6 + k * 1.9 + x * 0.7 + y * 1.3);
-        const [u, v] = inFrom(n.side, along, 0.04 + 0.05 * ((k * 7) % 3));
-        ctx.fillStyle = rgba(SPRING_FOAM, 0.55 + 0.35 * pulse);
-        ctx.beginPath();
-        ctx.ellipse(sx(u, v), sy(u, v, level), (2 + 1.4 * pulse) * z, (1.1 + 0.7 * pulse) * z, 0, 0, Math.PI * 2);
-        ctx.fill();
-      }
-    }
+  /*
+   * Where water goes over the rim, the water drawn smooth into it: this
+   * tile's stretch and the hair either side of it, where the next tile of the
+   * pool lays its water over this one's and then lays the same stretch again.
+   */
+  const fv = fallsView(cam, p);
+  const placed = notches.map((n) => place(fv, sheetOf(p, n.run)));
+  notches.forEach((n, i) => {
+    const here = ALONG[n.side] === 0 ? x : y;
+    if (n.out) drawLip(ctx, fv, placed[i], here + n.t0 - HAIR, here + n.t1 + HAIR);
+  });
+  /*
+   * Where it comes in from a pool above, its foot: all of the foot that comes
+   * onto this tile's water, the lumps, rings and broken water of the tiles
+   * either side too, inside the same clip as the water. The next tile of the
+   * pool lays its water over the hair of this one's, and so over this one's
+   * foot there, and then lays the same foot again; so the shares meet with
+   * no join and nothing is laid twice, whichever tile comes first.
+   */
+  if (t !== null) {
+    notches.forEach((n, i) => {
+      if (n.out) return;
+      const here = ALONG[n.side] === 0 ? x : y;
+      drawFoot(ctx, fv, placed[i], here + n.t0 - FOOT_REACH, here + n.t1 + FOOT_REACH, p.falls?.foam ?? null);
+    });
   }
 
   // The walls last, over the water they stand in: one fill for each way they face, so the pieces of one wall join without a seam.
@@ -404,10 +522,30 @@ export function drawPool(ctx: CanvasRenderingContext2D, cam: Camera, p: PoolScen
   ctx.lineWidth = Math.max(0.8, 1.1 * z);
   ctx.stroke();
 
-  for (const n of notches) {
-    if (n.out && cam.nearSide(OUT[n.side][0], OUT[n.side][1]) > 0) fall(ctx, cam, p, n, n.out);
-  }
+  /*
+   * The curtain, this tile's stretch of it, down the face of the slab where
+   * the camera can see that face; and onto the ground, its foot, laid after
+   * the line of the tile it lands on, and the mist off it, once for the curtain.
+   */
+  notches.forEach((n, i) => {
+    if (!n.out) return;
+    const here = ALONG[n.side] === 0 ? x : y;
+    const sheet = placed[i].sheet;
+    let high = -Infinity;
+    for (let k = 0; k < sheet.land.length; k++) high = Math.max(high, sheet.land[k]);
+    if (sheet.top - high < 0.5) return;
+    if (cam.nearSide(OUT[n.side][0], OUT[n.side][1]) > 0) drawSheet(ctx, fv, placed[i], here + n.t0, here + n.t1);
+    if (t === null || !p.falls || n.run.onto) return;
+    p.falls.foot(p.falls.row(x + OUT[n.side][0], y + OUT[n.side][1]), placed[i], here + n.t0, here + n.t1);
+    if (here === n.run.lo) p.falls.mist(placed[i]);
+  });
   ctx.lineWidth = 1;
+}
+
+/** The projection the water going over a pool's edge is drawn with: this frame's, held still for land remembered rather than seen. */
+function fallsView(cam: Camera, p: PoolScene): FallView {
+  const base = p.falls?.view ?? fallView(cam, p.time ?? 0, Infinity, Infinity, HEIGHT_SCALE * cam.zoom);
+  return p.time === null ? { ...base, t: 0 } : base;
 }
 
 /**
@@ -447,133 +585,4 @@ function lilyPad(ctx: CanvasRenderingContext2D, cx: number, cy: number, r: numbe
   ctx.beginPath();
   ctx.arc(cx, fy, Math.max(0.7, 0.55 * flower), 0, Math.PI * 2);
   ctx.fill();
-}
-
-/**
- * The water going over the edge, down the face of the slab the camera sees.
- *
- * A glassy sheet from the lip of the notch to the foot of the face, thrown a
- * little clear of it as it goes and whitening as it falls, streaked light and
- * dark with the water in it running down; and a plume of froth where it lands
- * on the ground, with spray thrown out of it both ways. Into a lower pool the
- * froth is that pool's to draw, at the notch it comes in by, because the
- * pool's rim stands in front of where it lands.
- */
-function fall(ctx: CanvasRenderingContext2D, cam: Camera, p: PoolScene, n: Notch, s: Spill): void {
-  const [ax, ay, bx, by] = s.edge;
-  const [ox, oy] = OUT[n.side];
-  const ha = p.ground(ax, ay);
-  const hb = p.ground(bx, by);
-  const foot = (at: number): number => (n.onto ? s.to : ha + (hb - ha) * at);
-  const top = p.top;
-  const drop = top - Math.max(foot(n.t0), foot(n.t1));
-  if (drop < 0.5) return;
-  const z = cam.zoom;
-  /** A point `at` along the edge, `off` out from the face, at height `h`, on the screen. */
-  const q = (at: number, h: number, off: number): [number, number] => {
-    const wx = ax + (bx - ax) * at + ox * off;
-    const wy = ay + (by - ay) * at + oy * off;
-    return [cam.worldToScreenX(wx, wy), cam.worldToScreenY(wx, wy, h)];
-  };
-  const STEPS = 6;
-  const mid = (n.t0 + n.t1) / 2;
-  const throwAt = (f: number): number => 0.015 + 0.08 * Math.sqrt(f);
-  /** The line down the sheet from `at` along the lip, spreading a little as it falls. */
-  const line = (at: number): Array<[number, number]> => {
-    const pts: Array<[number, number]> = [];
-    for (let k = 0; k <= STEPS; k++) {
-      const f = k / STEPS;
-      const tt = at + (at - mid) * 0.06 * f;
-      pts.push(q(tt, top + (foot(tt) - top) * f, throwAt(f)));
-    }
-    return pts;
-  };
-  const trace = (pts: Array<[number, number]>): void => {
-    ctx.moveTo(pts[0][0], pts[0][1]);
-    for (let k = 1; k < pts.length; k++) ctx.lineTo(pts[k][0], pts[k][1]);
-  };
-  const left = line(n.t0);
-  const right = line(n.t1);
-  const yTop = Math.min(left[0][1], right[0][1]);
-  const yFoot = Math.max(left[STEPS][1], right[STEPS][1], yTop + 1);
-  const sheet = ctx.createLinearGradient(0, yTop, 0, yFoot);
-  sheet.addColorStop(0, rgba(SHEET_TOP, 0.92));
-  sheet.addColorStop(0.55, rgba(SHEET_MID, 0.9));
-  sheet.addColorStop(1, rgba(SHEET_FOOT, 0.95));
-  ctx.beginPath();
-  trace(left);
-  for (let k = STEPS; k >= 0; k--) ctx.lineTo(right[k][0], right[k][1]);
-  ctx.closePath();
-  ctx.fillStyle = sheet;
-  ctx.fill();
-  const [e0x, e0y] = left[STEPS >> 1];
-  const [e1x, e1y] = right[STEPS >> 1];
-  const across = ctx.createLinearGradient(e0x, e0y, e1x, e1y);
-  across.addColorStop(0, rgba(SPRING_EDGE, 0.42));
-  across.addColorStop(0.22, rgba(SPRING_EDGE, 0));
-  across.addColorStop(0.78, rgba(SPRING_EDGE, 0));
-  across.addColorStop(1, rgba(SPRING_EDGE, 0.42));
-  ctx.fillStyle = across;
-  ctx.fill();
-  ctx.strokeStyle = rgba(SPRING_EDGE, 0.5);
-  ctx.lineWidth = Math.max(0.6, 0.7 * z);
-  ctx.stroke();
-
-  const t = p.time;
-  if (t !== null && z >= 0.5) {
-    // The water in it running down, in streaks of light and of shade.
-    for (let k = 0; k < 7; k++) {
-      const light = k % 2 === 0;
-      const along = n.t0 + (n.t1 - n.t0) * (0.1 + 0.133 * k);
-      ctx.setLineDash(light ? [11 * z, 6 * z] : [15 * z, 9 * z]);
-      ctx.lineDashOffset = -(t * (light ? 28 : 21) + hash3(p.x, p.y, k) * 11) * z;
-      ctx.strokeStyle = light ? rgba(SPRING_PALE, 0.72) : rgba(SPRING_DARK, 0.34);
-      ctx.lineWidth = Math.max(0.8, (light ? 1.1 : 1.5) * z);
-      ctx.beginPath();
-      trace(line(along));
-      ctx.stroke();
-    }
-    ctx.setLineDash([]);
-  }
-  // The lip, round where it turns over the edge.
-  const [l0x, l0y] = q(n.t0, top, 0.015);
-  const [l1x, l1y] = q(n.t1, top, 0.015);
-  ctx.strokeStyle = rgba(mixed(SPRING_PALE, SPRING_FOAM, 0.5), 0.95);
-  ctx.lineWidth = Math.max(1.2, 2 * z);
-  ctx.lineCap = 'round';
-  ctx.beginPath();
-  ctx.moveTo(l0x, l0y);
-  ctx.lineTo(l1x, l1y);
-  ctx.stroke();
-  ctx.lineCap = 'butt';
-
-  if (n.onto || t === null) return;
-  // A plume of froth at the foot, highest in the middle, and spray thrown out of it both ways.
-  const plume = Math.min(4, 0.9 + drop * 0.1);
-  const [hx, hy] = q(mid, foot(mid) + 0.6, 0.04);
-  ctx.fillStyle = rgba(mixed(SPRING_PALE, SPRING_EDGE, 0.22), 0.5);
-  ctx.beginPath();
-  ctx.ellipse(hx, hy, 7 * z, 3 * z, 0, 0, Math.PI * 2);
-  ctx.fill();
-  for (let k = 0; k < 9; k++) {
-    const across = (k + 0.5) / 9;
-    const bell = 1 - Math.abs(2 * across - 1);
-    const along = n.t0 - 0.06 + (n.t1 - n.t0 + 0.12) * across;
-    const pulse = 0.5 + 0.5 * Math.sin(t * 7 + k * 1.9 + p.x * 0.7 + p.y * 1.3);
-    const [fx, fy] = q(along, foot(along) + 0.6 + plume * (0.3 + 0.7 * bell) * (0.8 + 0.2 * pulse), 0.04);
-    ctx.fillStyle = rgba(SPRING_FOAM, 0.75 + 0.2 * pulse);
-    ctx.beginPath();
-    ctx.arc(fx, fy, (1.6 + 2.6 * bell + 0.8 * pulse) * z, 0, Math.PI * 2);
-    ctx.fill();
-  }
-  for (let k = 0; k < 10; k++) {
-    const way = k % 2 ? 1 : -1;
-    const phase = (t * 1.3 + hash3(p.x, p.y, 20 + k)) % 1;
-    const along = mid + way * (0.1 + 0.45 * phase) * (n.t1 - n.t0 + 0.2);
-    const [dx, dy] = q(along, foot(along) + 0.8 + Math.sin(phase * Math.PI) * plume * 1.4, 0.05 + 0.25 * phase);
-    ctx.fillStyle = rgba(SPRING_FOAM, 0.75 * (1 - phase));
-    ctx.beginPath();
-    ctx.arc(dx, dy, Math.max(0.6, (1.1 - 0.4 * phase) * z), 0, Math.PI * 2);
-    ctx.fill();
-  }
 }

@@ -63,7 +63,7 @@ import { rarityOf } from '../game/items';
 import { CREST_ALPHA, FOAM_WIDTH, foamAlpha, LONG_WAVE, SHORT_WAVE, SPRING_EDGE, SPRING_PALETTE, springLevel, SWELL_SPEED, swellAt, swellShow, TROUGH_ALPHA, WATER_LIT, WATER_PALETTE, waterLevel } from './water';
 import { Wakes } from './wake';
 import { SpringWater } from './ponds';
-import { drawPool } from './pools';
+import { drawPool, type Run } from './pools';
 import type { WaterField } from '../world/springs';
 import { Dust } from './dust';
 import { Gaits } from './gait';
@@ -590,6 +590,8 @@ export class Renderer {
    * wells as they are drawn (`./ponds`). Idle, and free, while there are none.
    */
   readonly springWater = new SpringWater();
+  /** Which curtain each side of each pool's tiles is part of, worked out once a frame for all the tiles that ask (`runOf`). */
+  private readonly poolRuns = new Map<number, Run | null>();
   /** Every pond's water drawn this frame, so a wake crossing a pond is kept on it; null while nothing is leaving a wake. */
   private pondPath: Path2D | null = null;
   /** The ponds with water on the tile being drawn: the level each stands at, and which of the tile's corners it covers, one bit each. */
@@ -598,6 +600,8 @@ export class Renderer {
   private pondsHereN = 0;
   /** The highest of them. */
   private pondTop = 0;
+  /** Whether a poured slab stands over a tile, for the water running past it. */
+  private readonly slabOver = (x: number, y: number): boolean => !!this.game.slabAt(x, y);
   /** The corner a spring wells up at, for the drawing, by the spring's id. */
   private readonly wellAt = (id: number): readonly [number, number] | null => {
     const s = this.game.springs.list.get(id);
@@ -1403,6 +1407,7 @@ export class Renderer {
   render(dt: number): void {
     this.time += dt;
     this.frameDt = dt;
+    this.poolRuns.clear();
     this.roomTiles = this.myRoom();
     this.shades.clear();
     // Other people are walked along between one word about them and the next,
@@ -1601,6 +1606,7 @@ export class Renderer {
       this.springWater.frame({
         world, cam, view: V, now: Date.now(), t: this.time, width: W, height: H, dLo, dHi,
         lean: this.lean, sun, dark: this.game.darkness(), wellAt: this.wellAt,
+        slab: this.game.foundations.size ? this.slabOver : undefined,
       }, water);
     }
 
@@ -4257,14 +4263,27 @@ export class Renderer {
       else this.laidOver(concrete(), quad, 0, 'overlay');
     }
     if (f.pool) {
+      const water = this.springWater;
       drawPool(ctx, cam, {
         x, y, top: f.top, time: lit ? this.time : null, concrete: CONCRETE,
         poolTop: (px, py) => {
           const o = this.game.foundationAt(px, py);
           return o?.pool && foundationDone(o) ? o.top : null;
         },
+        slabTop: (px, py) => {
+          const o = this.game.foundationAt(px, py);
+          return o && foundationDone(o) ? o.top : null;
+        },
         spillsAt: (px, py) => world.water?.spillsAt(px, py),
         ground: (cx, cy) => world.getHeight(cx, cy),
+        falls: world.water ? {
+          view: water.view,
+          row: (tx, ty) => depthOf(cam.view, tx, ty),
+          foot: (row, placed, u0, u1) => water.footAfter(row, placed, u0, u1),
+          mist: (placed) => water.mistOf(placed),
+          foam: water.foam,
+        } : undefined,
+        runs: this.poolRuns,
       });
     }
     ctx.globalAlpha = 1;
@@ -7417,6 +7436,10 @@ export class Renderer {
         if (c[i] < level && p.wet.has((y + co[i][1]) * cw + x + co[i][0])) mask |= 1 << i;
       }
       if (!mask) continue;
+      // Two springs filling the same pond are one pond's water: laid once, not once for each.
+      let twice = false;
+      for (let k = 0; k < n && !twice; k++) twice = this.pondsHereLevel[k] === level && this.pondsHereMask[k] === mask;
+      if (twice) continue;
       this.pondsHereLevel[n] = level;
       this.pondsHereMask[n] = mask;
       n++;

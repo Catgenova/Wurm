@@ -27,9 +27,10 @@ import type { Camera } from '../engine/camera';
 import { hash2 } from '../world/noise';
 import { FALL_DROP, pondLevelAt, RUN_RATE, type PondWater, type StreamWater, type WaterField } from '../world/springs';
 import type { World } from '../world/world';
+import { DETAIL_FROM, drawFoot, drawLip, drawMist, drawSheet, footPoint, place, type FallView, type Placed, type Sheet } from './falls';
 import { HALF_H, HALF_W, HEIGHT_SCALE } from './iso';
 import { depthOf, type View } from './view';
-import { SPRING_DARK, SPRING_EDGE, SPRING_FOAM, SPRING_PALE, SPRING_WATER } from './water';
+import { SPRING_EDGE, SPRING_FOAM, SPRING_PALE, SPRING_WATER } from './water';
 
 /** What a frame of the water is drawn with, handed over by the renderer before the ground. */
 export interface WaterFrame {
@@ -52,6 +53,8 @@ export interface WaterFrame {
   dark: number;
   /** The corner a spring wells up at, by its id. */
   wellAt: (spring: number) => readonly [number, number] | null;
+  /** Whether a poured slab stands over a tile: water running on the ground beside one runs under its edge, not over it. */
+  slab?: (x: number, y: number) => boolean;
 }
 
 /** How deep the water running down a stream is over the ground, in height units: enough to lie on it. */
@@ -79,29 +82,13 @@ const WHITE_FULL = 12;
 /** How far apart the streaks on a stream are, in seconds of the water's travel, and how long each one is. */
 const STREAK_EVERY = 0.42;
 const STREAK_LONG = 0.24;
-/** Below this zoom the water is its shapes and colours: streaks, ripples, rings and lily pads are too small to see. */
-const DETAIL_FROM = 0.6;
-
-/** How far back from its lip a fall's smooth curl begins, on the water coming to it, in tiles. */
-const TONGUE = 0.12;
-/** Half the width of a falling sheet at its lip, in tiles, how much wider one is that spills straight out of a pond, and how much wider it has spread by the bottom. */
+/** Half the width of a falling sheet over a single corner, in tiles, and how much wider one is that spills straight out of a pond: the width carried past each end of a wider lip. */
 const SHEET_HALF = 0.22;
 const SHEET_SPILL = 1.4;
-const SHEET_SPREAD = 0.12;
-/**
- * The shape of a fall, as a curve from the lip (0, 0) to the foot (1, 1):
- * how far along the step it has gone against how far down. It leaves the lip
- * going straight out, which is the curl, and meets the foot coming straight
- * down.
- */
-const CURL_OUT = 0.55;
-const CURL_DOWN = 0.3;
-/** How fast the streaks and the broken edges of a sheet go down it at its lip, in pixels a second at zoom one. */
-const SHEET_SPEED = 46;
-/** A fall this tall, in height units, throws up the most spray and mist there is. */
+/** A fall this tall, in height units, is as wide over a single corner as a fall gets. */
 const FALL_TALL = 50;
-/** How much of the way down a sheet its threads of falling water start, below the smooth curl. */
-const THREADS_FROM = 0.1;
+/** The most corners a pond's sill is followed along its rim either way from its lip. */
+const SILL_MOST = 24;
 
 /** A step down a stream at least this tall, in height units, and short of a fall, comes down white and foams at its foot. */
 const CASCADE_DROP = 7;
@@ -114,8 +101,6 @@ const DRIFT = 0.12;
 /** How long a ring on a pond takes to open out and go, in seconds, and how wide it gets, in tiles. */
 const RING_LIFE = 3.4;
 const RING_WIDE = 0.42;
-/** Seconds a puff of mist lasts. */
-const MIST_LIFE = 3.4;
 
 /** How far a circle a tile in radius on the ground reaches on screen, at zoom one, to either side and up and down: the iso squash, the same at every turn of the view. */
 const DISC_W = HALF_W * Math.SQRT2;
@@ -146,6 +131,13 @@ interface PondDraw {
   rows: Int32Array;
   rowsFor: number;
   box: [number, number, number, number, number, number];
+  /**
+   * Whether an earlier pond in the list is this one over again: the same
+   * corners at the same level, filled by another spring upstream of it. The
+   * rules keep a pond for every spring whose water reaches it; it is one
+   * pond, and its ripples, rings and lily pads are drawn once, off the first.
+   */
+  twin: boolean;
 }
 
 /**
@@ -183,7 +175,11 @@ interface Run {
   box: [number, number, number, number, number, number];
 }
 
-/** A step down a stream tall enough to fall: from the lip at corner `at` of its path to the foot at `at + 1`. */
+/**
+ * A step down a stream tall enough to fall: from the lip at corner `at` of
+ * its path to the foot at `at + 1`. Straight out of a pond it goes over the
+ * whole of the level stretch of rim its lip is on, and is as wide as that.
+ */
 interface Fall {
   stream: number;
   at: number;
@@ -195,26 +191,28 @@ interface Fall {
   foot: number;
   dx: number;
   dy: number;
-  seed: number;
   /** Whether it goes over straight out of a pond, the whole of its spill at once, rather than partway down a stream. */
   spill: boolean;
+  /** The sheet it is drawn as, from the lip along the stretch it goes over; and the corner each corner of that lands on, as x, y pairs. */
+  sheet: Sheet;
+  feet: Int32Array;
   /**
-   * This frame: the line its sheet is drawn after, or NaN when it is not
-   * drawn (a line can be any number, below nought too); the line where it
-   * lands is drawn after, which is further forward, since the foam and the
-   * rings there lie out over the water in front of the foot; how much of it
-   * the water has reached; where it lands, and whether in water; and where
-   * the foot of the sheet came on screen, and half its width there.
+   * Where along the lip it is cut into pieces, a tile of width to a piece
+   * with the water carried past each end of the lip on the piece beside it;
+   * and for the turn of the view `rowsFor`, the line of the ground each
+   * piece's sheet and foot go after -- the nearest of the rock face under it
+   * and the tile it lands on -- and each piece's lip after, which is that or
+   * the tile behind the lip if nearer, so seen from behind the water turning
+   * over the edge lies on the pond rather than under it.
    */
-  row: number;
-  footRow: number;
+  cuts: Float64Array;
+  sheetRows: Int32Array;
+  lipRows: Int32Array;
+  rowsFor: number;
+  /** This frame: how much of it the water has reached, whether it lands in water, and where it is on the screen, null while it is not drawn. */
   reach: number;
-  land: number;
   wet: boolean;
-  footX: number;
-  footY: number;
-  footWx: number;
-  footWy: number;
+  placed: Placed | null;
 }
 
 interface StreamDraw {
@@ -326,7 +324,15 @@ export class SpringWater {
   private rowFaint: number[][] = [];
   /** The lily pads to lay after each line, as pond and pad. */
   private rowPads: number[][] = [];
+  /** The pieces of falls to lay after each line -- their sheets, feet and lips -- as fall and piece. */
+  private rowSheets: number[][] = [];
+  private rowLips: number[][] = [];
+  /** The feet of falls drawn in a pool's slab, to lay after the line of the ground each lands on; and their mist. */
+  private rowPoolFeet: Array<Array<{ placed: Placed; u0: number; u1: number }>> = [];
+  private poolMist: Placed[] = [];
   private rowBase = 0;
+  /** This frame's projection, as the falls are drawn with it. */
+  private fv: FallView = { ox: 0, oy: 0, xx: 0, xy: 0, yx: 0, yy: 0, hs: HEIGHT_SCALE, zoom: 1, t: 0, width: 1, height: 1 };
   private splashes: Splash[] = [];
   private rings: Ring[] = [];
   /** How strongly a bow shows in the spray this frame. */
@@ -368,6 +374,7 @@ export class SpringWater {
     this.yx = cam.worldToScreenY(1, 0, 0) - this.oy;
     this.yy = cam.worldToScreenY(0, 1, 0) - this.oy;
     this.hs = HEIGHT_SCALE * cam.zoom;
+    this.fv = { ox: this.ox, oy: this.oy, xx: this.xx, xy: this.xy, yx: this.yx, yy: this.yy, hs: this.hs, zoom: this.zoom, t: f.t, width: f.width, height: f.height };
     for (let i = 0; i < this.ponds.length; i++) this.levels[i] = pondLevelAt(this.ponds[i], f.now);
 
     // How far each stream's water has got, and where it goes under the water it runs into.
@@ -395,10 +402,13 @@ export class SpringWater {
 
     const rows = f.dHi - f.dLo + 1;
     this.rowBase = f.dLo;
-    for (const list of [this.rowPieces, this.rowRipples, this.rowFaint, this.rowPads]) {
+    for (const list of [this.rowPieces, this.rowRipples, this.rowFaint, this.rowPads, this.rowSheets, this.rowLips]) {
       while (list.length < rows) list.push([]);
       for (let i = 0; i < rows; i++) list[i].length = 0;
     }
+    while (this.rowPoolFeet.length < rows) this.rowPoolFeet.push([]);
+    for (let i = 0; i < rows; i++) this.rowPoolFeet[i].length = 0;
+    this.poolMist.length = 0;
     this.splashes.length = 0;
     this.rings.length = 0;
     const V = f.view;
@@ -429,7 +439,14 @@ export class SpringWater {
         if (!this.fallsAt(st, st.head)) this.splash(st, st.head, true);
       } else if (st.into !== 'lost' && !this.fallsAt(st, st.end)) this.splash(st, st.end, false);
     }
-    for (const fall of this.falls) this.placeFall(fall);
+    this.falls.forEach((fall, i) => {
+      this.placeFall(fall);
+      if (!fall.placed) return;
+      for (let k = 0; k < fall.sheetRows.length; k++) {
+        this.rowSheets[this.clampRow(fall.sheetRows[k]) - f.dLo].push(i, k);
+        this.rowLips[this.clampRow(fall.lipRows[k]) - f.dLo].push(i, k);
+      }
+    });
     for (const c of this.cascades) {
       c.row = NaN;
       const run = this.runs[c.run];
@@ -452,7 +469,7 @@ export class SpringWater {
       w.row = this.clampRow(Math.max(depthOf(V, x - 1, y - 1), depthOf(V, x, y - 1), depthOf(V, x - 1, y), depthOf(V, x, y)));
     }
     if (this.zoom >= DETAIL_FROM) {
-      for (let i = 0; i < this.ponds.length; i++) this.light(i, f, margin);
+      for (let i = 0; i < this.ponds.length; i++) if (!this.ponds[i].twin) this.light(i, f, margin);
     }
 
     // A bow stands in spray with the sun at your back and low enough for the drops to send it back to you.
@@ -503,7 +520,17 @@ export class SpringWater {
       return {
         pond: p, level: p.level, from: rise.from, since: rise.since, inX: p.lip[0], inY: p.lip[1], driftX: 0, driftY: 0, pads: [],
         inner: Int32Array.from(inner), innerTop: Float64Array.from(innerTop), rows: new Int32Array(inner.length / 2), rowsFor: -1, box,
+        twin: false,
       };
+    });
+    this.ponds.forEach((d, i) => {
+      const p = d.pond;
+      d.twin = this.ponds.slice(0, i).some((e) => {
+        const q = e.pond;
+        if (q.level !== p.level || q.floor !== p.floor || q.wet.size !== p.wet.size) return false;
+        for (const k of p.wet) if (!q.wet.has(k)) return false;
+        return true;
+      });
     });
     this.rising = keepRising;
     this.pondAt.clear();
@@ -570,7 +597,7 @@ export class SpringWater {
         if (drop >= CASCADE_DROP) this.cascades.push({ run: r, s: k + 1, drop, seed: hash2(st.px[k], st.py[k], 41), row: NaN, x: 0, y: 0 });
       }
     });
-    for (const d of this.ponds) this.plantPads(d, world);
+    for (const d of this.ponds) if (!d.twin) this.plantPads(d, world);
   }
 
   /**
@@ -585,7 +612,7 @@ export class SpringWater {
     const clear: number[] = [p.lip[0], p.lip[1], d.inX, d.inY];
     const well = this.wells.find((w) => this.ponds[w.pond] === d);
     if (well) clear.push(well.x, well.y);
-    for (const fall of this.falls) clear.push(fall.bx, fall.by);
+    for (const fall of this.falls) for (let k = 0; k < fall.feet.length; k++) clear.push(fall.feet[k]);
     for (let k = 0; k < d.inner.length / 2; k++) {
       const cx = d.inner[k * 2];
       const cy = d.inner[k * 2 + 1];
@@ -605,17 +632,99 @@ export class SpringWater {
   private lines(st: StreamDraw, index: number, world: World): void {
     const n = st.length + 1;
     let first = 0;
+    const above = this.ponds.find((d) => d.pond.spring === st.src.spring && d.pond.index === st.src.from)?.pond;
     for (let k = 0; k < n - 1; k++) {
       if (st.ph[k] - st.ph[k + 1] < FALL_DROP) continue;
       if (k > first) this.runs.push(this.run(st, index, first, k, world));
-      this.falls.push({
-        stream: index, at: k, ax: st.px[k], ay: st.py[k], top: st.ph[k], bx: st.px[k + 1], by: st.py[k + 1], foot: st.ph[k + 1],
-        dx: st.px[k + 1] - st.px[k], dy: st.py[k + 1] - st.py[k], seed: ((st.px[k] * 7919 + st.py[k] * 104729) % 1000) / 1000,
-        spill: k === st.lead, row: NaN, footRow: NaN, reach: 0, land: 0, wet: false, footX: 0, footY: 0, footWx: 0, footWy: 0,
-      });
+      this.falls.push(this.fall(st, index, k, k === st.lead && above?.wet.size ? above : null, world));
       first = k + 1;
     }
     if (n - 1 > first) this.runs.push(this.run(st, index, first, n - 1, world));
+  }
+
+  /**
+   * The fall at step `k` of a stream. Straight out of a pond it is as wide as
+   * the sill it goes over: from its lip, both ways along the edge square to
+   * the way it falls, every corner that stands at the pond's level with the
+   * ground one step on at least `FALL_DROP` lower, as long as they touch,
+   * carried past each end by the width of a fall over a single corner.
+   * Partway down a stream it is the stream's own width. Either way the
+   * stream carries on from the rules' own foot, `at + 1`.
+   */
+  private fall(st: StreamDraw, stream: number, k: number, pond: PondWater | null, world: World): Fall {
+    const ax = st.px[k];
+    const ay = st.py[k];
+    const bx = st.px[k + 1];
+    const by = st.py[k + 1];
+    const dx = bx - ax;
+    const dy = by - ay;
+    // Along the lip is along whichever axis the fall is square to, counted up that axis.
+    const axis: 0 | 1 = dx !== 0 ? 1 : 0;
+    const ex = axis === 0 ? 1 : 0;
+    const ey = axis === 1 ? 1 : 0;
+    let lo = 0;
+    let hi = 0;
+    if (pond) {
+      const level = pond.level;
+      const sill = (i: number): boolean => {
+        const cx = ax + ex * i;
+        const cy = ay + ey * i;
+        return world.cornerInBounds(cx + dx, cy + dy) && world.cornerInBounds(cx, cy)
+          && world.getHeight(cx, cy) === level && world.getHeight(cx + dx, cy + dy) <= level - FALL_DROP;
+      };
+      if (sill(0)) {
+        while (lo > -SILL_MOST && sill(lo - 1)) lo--;
+        while (hi < SILL_MOST && sill(hi + 1)) hi++;
+      }
+    }
+    const c = axis === 1 ? ay : ax;
+    const from = c + lo;
+    const to = c + hi;
+    const tall = Math.min(1, (st.ph[k] + FILM - st.ph[k + 1]) / FALL_TALL);
+    const half = SHEET_HALF * (k === st.lead ? SHEET_SPILL : 1) * (0.85 + 0.3 * tall);
+    const count = to - from + 1;
+    const feet = new Int32Array(count * 2);
+    for (let i = 0; i < count; i++) {
+      feet[i * 2] = axis === 1 ? bx : from + i;
+      feet[i * 2 + 1] = axis === 1 ? from + i : by;
+    }
+    // A cut at every corner inside the lip: each piece a tile of it, the ends carrying the water past the lip.
+    const cuts = [from - half];
+    for (let u = from + 1; u < to; u++) cuts.push(u);
+    cuts.push(to + half);
+    const sheet: Sheet = {
+      axis, line: axis === 1 ? ax : ay, from, to, half, way: (axis === 1 ? dx : dy) as 1 | -1, reach: 1, curl: 1,
+      top: st.ph[k] + FILM, landFrom: from, land: new Float64Array(count), wet: false, grow: 1,
+      feed: k === st.lead ? undefined : STREAM_HALF,
+    };
+    return {
+      stream, at: k, ax, ay, top: st.ph[k], bx, by, foot: st.ph[k + 1], dx, dy, spill: k === st.lead, sheet, feet,
+      cuts: Float64Array.from(cuts), sheetRows: new Int32Array(cuts.length - 1), lipRows: new Int32Array(cuts.length - 1), rowsFor: -1,
+      reach: 0, wet: false, placed: null,
+    };
+  }
+
+  /**
+   * Which line of the ground each piece of a fall goes after, from the tiles
+   * of each tile of width it covers: the rock face the sheet hangs over, the
+   * tile its foot lands on, and the tile behind its lip.
+   */
+  private fallRows(fall: Fall, V: View): void {
+    const s = fall.sheet;
+    // Across the lip's axis: the face tile, one on the way it falls, and one back.
+    const face = s.way > 0 ? s.line : s.line - 1;
+    const depth = (across: number, along: number): number => (s.axis === 1 ? depthOf(V, across, along) : depthOf(V, along, across));
+    for (let k = 0; k < fall.sheetRows.length; k++) {
+      let sheet = -Infinity;
+      let lip = -Infinity;
+      for (let c = Math.floor(fall.cuts[k] + 1e-6); c < Math.ceil(fall.cuts[k + 1] - 1e-6); c++) {
+        sheet = Math.max(sheet, depth(face, c), depth(face + s.way, c));
+        lip = Math.max(lip, depth(face - s.way, c));
+      }
+      fall.sheetRows[k] = sheet;
+      fall.lipRows[k] = Math.max(sheet, lip);
+    }
+    fall.rowsFor = this.f?.cam.rotation ?? -1;
   }
 
   /**
@@ -736,15 +845,31 @@ export class SpringWater {
     return run;
   }
 
-  /** Which line of the ground each piece of a run goes down after: the nearest of the tiles its water lies on, so all of them are down before it. */
+  /**
+   * Which line of the ground each piece of a run goes down after: the nearest
+   * of the tiles its water lies on, so all of them are down before it. A tile
+   * with a slab poured over it is not one: water running past the corner of a
+   * slab, where a pool's curtain lands and its stream sets off, runs under the
+   * edge of the slab, which is laid over it.
+   */
   private runRows(run: Run, V: View): void {
+    const slab = this.f?.slab;
     for (let j = 0; j < run.n - 1; j++) {
       const w = Math.max(run.half[j], run.half[j + 1]) * DAMP + 0.02;
       const x0 = Math.floor(Math.min(run.x[j], run.x[j + 1]) - w);
       const x1 = Math.floor(Math.max(run.x[j], run.x[j + 1]) + w - 1e-6);
       const y0 = Math.floor(Math.min(run.y[j], run.y[j + 1]) - w);
       const y1 = Math.floor(Math.max(run.y[j], run.y[j + 1]) + w - 1e-6);
-      run.rows[j] = Math.max(depthOf(V, x0, y0), depthOf(V, x1, y0), depthOf(V, x0, y1), depthOf(V, x1, y1));
+      let row = -Infinity;
+      let any = -Infinity;
+      for (let c = 0; c < 4; c++) {
+        const tx = c & 1 ? x1 : x0;
+        const ty = c & 2 ? y1 : y0;
+        const d = depthOf(V, tx, ty);
+        any = Math.max(any, d);
+        if (!slab || !slab(tx, ty)) row = Math.max(row, d);
+      }
+      run.rows[j] = row > -Infinity ? row : any;
     }
     run.rowsFor = this.f?.cam.rotation ?? -1;
   }
@@ -840,10 +965,13 @@ export class SpringWater {
     return this.clampRow(Math.max(depthOf(V, tx0, ty0), depthOf(V, tx1, ty0), depthOf(V, tx0, ty1), depthOf(V, tx1, ty1)));
   }
 
-  /** Where a fall is this frame: whether the water has got to it, how far down it has got, and what it lands on. */
+  /**
+   * Where a fall is this frame: whether the water has got to it, how far
+   * down it has got, and what each corner of its foot lands on -- the water
+   * it runs into, where that has risen over the foot, or the ground.
+   */
   private placeFall(fall: Fall): void {
-    fall.row = NaN;
-    fall.footRow = NaN;
+    fall.placed = null;
     const f = this.f;
     if (!f) return;
     const st = this.streams[fall.stream];
@@ -851,17 +979,24 @@ export class SpringWater {
     // Under the water it runs into, when a pond below has risen over its lip.
     if (fall.reach <= 0 || st.end <= fall.at + 0.02) return;
     fall.wet = st.end < fall.at + 1;
-    fall.land = fall.wet ? (st.into === 'sea' ? 0 : st.into === 'lost' ? fall.foot : this.levels[st.into]) : fall.foot;
-    if (fall.top + FILM - fall.land < 2) return;
-    const x0 = Math.min(fall.ax, fall.bx) - 1;
-    const y0 = Math.min(fall.ay, fall.by) - 1;
-    if (!this.onScreen([x0, y0, x0 + 3, y0 + 3, fall.land - 4, fall.top + 12], 80 * this.zoom)) return;
-    const V = f.view;
-    const bx = fall.bx;
-    const by = fall.by;
-    fall.row = this.clampRow(Math.max(depthOf(V, bx - 1, by - 1), depthOf(V, bx, by - 1), depthOf(V, bx - 1, by), depthOf(V, bx, by)));
-    // Out over water the foam and the rings spread a tile round the foot; on dry ground they keep closer in.
-    fall.footRow = Math.max(fall.row, fall.reach < 1 ? fall.row : this.rowAround(bx, by, fall.wet ? 1 : 0.5));
+    const surface = !fall.wet ? -Infinity : st.into === 'sea' ? 0 : st.into === 'lost' ? -Infinity : this.levels[st.into];
+    const s = fall.sheet;
+    let low = Infinity;
+    for (let i = 0; i < s.land.length; i++) {
+      s.land[i] = Math.max(f.world.getHeight(fall.feet[i * 2], fall.feet[i * 2 + 1]), surface);
+      low = Math.min(low, s.land[i]);
+    }
+    s.wet = fall.wet;
+    s.grow = fall.reach;
+    if (s.top - low < 2) return;
+    const lo = s.from - s.half - 1;
+    const hi = s.to + s.half + 1;
+    const box: [number, number, number, number, number, number] = s.axis === 1
+      ? [s.line - 2, lo, s.line + 2, hi, low - 4, s.top + 12]
+      : [lo, s.line - 2, hi, s.line + 2, low - 4, s.top + 12];
+    if (!this.onScreen(box, 80 * this.zoom)) return;
+    fall.placed = place(this.fv, s);
+    if (fall.rowsFor !== f.cam.rotation) this.fallRows(fall, f.view);
   }
 
   /**
@@ -953,8 +1088,18 @@ export class SpringWater {
     if (pieces && pieces.length) this.streamPieces(ctx, f, pieces);
     for (const c of this.cascades) if (c.row === d) this.drawCascade(ctx, f, c);
     for (const s of this.splashes) if (s.row === d) this.drawSplash(ctx, f, s);
-    for (const fall of this.falls) if (fall.row === d) this.drawFall(ctx, f, fall);
-    for (const fall of this.falls) if (fall.footRow === d && fall.reach >= 1) this.plunge(ctx, f, fall);
+    const sheets = this.rowSheets[at];
+    if (sheets && sheets.length) {
+      this.fallPieces(ctx, sheets, 0);
+      this.fallPieces(ctx, sheets, 1);
+    }
+    const poolFeet = this.rowPoolFeet[at];
+    if (poolFeet && poolFeet.length) {
+      this.foamTex ??= foamTexture();
+      for (const q of poolFeet) drawFoot(ctx, this.fv, q.placed, q.u0, q.u1, this.foamTex);
+    }
+    const lips = this.rowLips[at];
+    if (lips && lips.length) this.fallPieces(ctx, lips, 2);
     for (const w of this.wells) if (w.row === d) this.drawWell(ctx, f, w);
   }
 
@@ -1340,295 +1485,54 @@ export class SpringWater {
   /* ---- Falls ------------------------------------------------------------- */
 
   /**
-   * A fall: a wide sheet of water, smooth and glassy, going over the lip and
-   * down to the foot without narrowing.
-   *
-   * It is drawn on a curve that leaves the lip going straight out and meets
-   * the foot coming straight down, so the water curls over the edge and
-   * drops. Under it the body of the water, turquoise at the top and
-   * whitening toward the foot, where it has taken in air; down it, streaks
-   * of near white and of darker teal side by side, each broken into lengths
-   * that run down it; over them, threads of falling water speeding and
-   * stretching as they go, and the two thin edges of the sheet; and at the
-   * top the bright rounded lip where it turns over. Where it lands, a plume
-   * of foam, spray, and rings going out on the water.
+   * A line's pieces of falls, as fall and piece, drawn by the painter in
+   * `./falls`: `what` 0 their sheets, 1 their feet, 2 the water going over
+   * their lips. Pieces of one fall next to each other on the same line go down
+   * as one, so a fall seen square on is drawn whole.
    */
-  private drawFall(ctx: CanvasRenderingContext2D, f: WaterFrame, fall: Fall): void {
-    const z = this.zoom;
-    const t = f.t;
-    const top = fall.top + FILM;
-    const drop = top - fall.land;
-    const tall = Math.min(1, drop / FALL_TALL);
-    // The lip on screen, a tile's step along the fall, and half the sheet's width.
-    const tx = this.sx(fall.ax, fall.ay);
-    const ty = this.sy(fall.ax, fall.ay, top);
-    const fx = this.xx * fall.dx + this.xy * fall.dy;
-    const fy = this.yx * fall.dx + this.yy * fall.dy;
-    const half = SHEET_HALF * (fall.spill ? SHEET_SPILL : 1) * (0.85 + 0.3 * tall);
-    let wx = (this.xx * -fall.dy + this.xy * fall.dx) * half;
-    let wy = (this.yx * -fall.dy + this.yy * fall.dx) * half;
-    if (wx < 0 || (wx === 0 && wy < 0)) {
-      wx = -wx;
-      wy = -wy;
+  private fallPieces(ctx: CanvasRenderingContext2D, list: number[], what: number): void {
+    for (let i = 0; i < list.length; i += 2) {
+      const fall = this.falls[list[i]];
+      const placed = fall.placed;
+      if (!placed) continue;
+      let j = i;
+      while (j + 2 < list.length && list[j + 2] === list[i] && list[j + 3] === list[j + 1] + 1) j += 2;
+      const u0 = fall.cuts[list[i + 1]];
+      const u1 = fall.cuts[list[j + 1] + 1];
+      if (what === 0) drawSheet(ctx, this.fv, placed, u0, u1);
+      else if (what === 1) {
+        this.foamTex ??= foamTexture();
+        drawFoot(ctx, this.fv, placed, u0, u1, this.foamTex);
+      } else drawLip(ctx, this.fv, placed, u0, u1);
+      i = j;
     }
-    const across = 2 * Math.hypot(wx, wy);
-    const dropPx = drop * this.hs;
-    const reach = fall.reach;
-    // Enough slices that the curve reads as one, and no more.
-    const slices = Math.max(3, Math.min(10, Math.round((Math.hypot(fx, fy) + dropPx) / 16)));
-    const n = slices + 1;
-    const cx = FALL_CX;
-    const cy = FALL_CY;
-    const spread = FALL_SPREAD;
-    const len = FALL_LEN;
-    // Going over an edge away from you, the water is seen to drop from it rather than to leap out: thrown out as far,
-    // the sheet would rise up the screen as it went and stand over the edge in a hoop.
-    const out = CURL_OUT * (1 - 0.72 * Math.max(0, -fy / (Math.hypot(fx, fy) || 1)));
-    for (let i = 0; i < n; i++) {
-      const tau = (i / slices) * reach;
-      const u = 1 - tau;
-      const along = 3 * u * u * tau * out + 3 * u * tau * tau + tau * tau * tau;
-      const down = 3 * u * tau * tau * CURL_DOWN + tau * tau * tau;
-      cx[i] = tx + fx * along;
-      cy[i] = ty + fy * along + dropPx * down;
-      spread[i] = 1 + SHEET_SPREAD * tau;
-      len[i] = i ? len[i - 1] + Math.hypot(cx[i] - cx[i - 1], cy[i] - cy[i - 1]) : 0;
-    }
-    const outline = (grow: number): void => {
-      ctx.beginPath();
-      for (let i = 0; i < n; i++) {
-        const k = spread[i] * grow;
-        if (i === 0) ctx.moveTo(cx[i] - wx * k, cy[i] - wy * k);
-        else ctx.lineTo(cx[i] - wx * k, cy[i] - wy * k);
-      }
-      for (let i = n - 1; i >= 0; i--) ctx.lineTo(cx[i] + wx * spread[i] * grow, cy[i] + wy * spread[i] * grow);
-      ctx.closePath();
-    };
-    // A line down the sheet `u` of the way from its middle to an edge, from `p0` of its length to `p1`, onto the path:
-    // of the length drawn, which while the first water is still going over is only as far as it has got.
-    const total = len[n - 1] || 1;
-    const thread = (u: number, p0: number, p1: number): void => {
-      let first = true;
-      const put = (p: number): void => {
-        const at = p * total;
-        let i = 0;
-        while (i < n - 2 && len[i + 1] < at) i++;
-        const seg = len[i + 1] - len[i];
-        const k = seg > 0 ? Math.max(0, Math.min(1, (at - len[i]) / seg)) : 0;
-        const sp = (spread[i] + (spread[i + 1] - spread[i]) * k) * u;
-        const x = cx[i] + (cx[i + 1] - cx[i]) * k + wx * sp;
-        const y = cy[i] + (cy[i + 1] - cy[i]) * k + wy * sp;
-        if (first) ctx.moveTo(x, y);
-        else ctx.lineTo(x, y);
-        first = false;
-      };
-      put(p0);
-      for (let i = 1; i < n - 1; i++) {
-        const p = len[i] / total;
-        if (p > p0 && p < p1) put(p);
-      }
-      put(p1);
-    };
-    // The wet rock behind it, darkened, so the sheet stands off the face.
-    ctx.save();
-    ctx.translate(-fx * 0.07, -fy * 0.07);
-    outline(1.14);
-    ctx.restore();
-    ctx.fillStyle = FALL_WET_ROCK;
-    ctx.fill();
-    // The body: turquoise at the lip, paler as it falls, and white by the foot.
-    const endX = cx[n - 1];
-    const endY = cy[n - 1];
-    const body = ctx.createLinearGradient(tx, ty, endX, endY);
-    body.addColorStop(0, FALL_BODY[0]);
-    body.addColorStop(0.5, FALL_BODY[1]);
-    body.addColorStop(1, FALL_BODY[2]);
-    outline(1);
-    ctx.fillStyle = body;
-    ctx.fill();
-    // Streaks down it, near white and darker teal side by side, each broken into lengths that run down it, cut square.
-    for (let k = 0; k < FALL_STREAKS; k++) {
-      const h = hash2(k, 3, Math.round(fall.seed * 997));
-      const pale = k % 2 === 1;
-      const u = -0.8 + (1.6 * k) / (FALL_STREAKS - 1) + (h - 0.5) * 0.06;
-      // Long lengths and short breaks, so each reads as one streak coming down in pieces rather than as dashes.
-      const long = (30 + 34 * h) * z * (0.6 + 0.4 * tall);
-      ctx.setLineDash([long, (3 + 4 * h) * z]);
-      ctx.lineDashOffset = -t * SHEET_SPEED * z * (0.8 + 0.5 * h) - h * 90 * z;
-      ctx.strokeStyle = pale ? FALL_STREAK_PALE : FALL_STREAK_DARK;
-      ctx.lineWidth = across * (pale ? 0.15 : 0.11) * (0.85 + 0.3 * h);
-      ctx.beginPath();
-      thread(u, THREADS_FROM * 0.5, 1);
-      ctx.stroke();
-    }
-    ctx.setLineDash([]);
-    ctx.lineDashOffset = 0;
-    ctx.lineCap = 'round';
-    // A few threads of falling water over them, each let go below the curl and speeding and stretching as it falls.
-    const lanes = Math.max(3, Math.min(10, Math.round(across / 7)));
-    const period = 0.75 + 0.9 * tall;
-    ctx.strokeStyle = FALL_THREAD;
-    ctx.lineWidth = Math.max(0.7, 1.05 * z);
-    ctx.beginPath();
-    for (let k = 0; k < lanes; k++) {
-      for (let j = 0; j < 2; j++) {
-        const h = hash2(k, j, Math.round(fall.seed * 997));
-        if (h > 0.6) continue;
-        const u = -0.9 + (1.8 * (k + 0.5)) / lanes + (h - 0.5) * 0.08;
-        const age = (t / (period * (0.85 + 0.3 * h)) + h + j * 0.5) % 1;
-        const head = THREADS_FROM + (1 - THREADS_FROM) * age ** 1.6;
-        const tail = Math.max(THREADS_FROM, head - (0.05 + 0.26 * age) * (0.5 + 0.5 * tall));
-        thread(u, tail, head);
-      }
-    }
-    ctx.stroke();
-    // The two edges, thinnest and brightest, breaking up as they fall.
-    ctx.setLineDash([5 * z, 3 * z]);
-    ctx.lineDashOffset = -t * SHEET_SPEED * z;
-    ctx.strokeStyle = FALL_EDGE;
-    ctx.lineWidth = Math.max(0.8, 1.1 * z);
-    ctx.beginPath();
-    thread(-0.97, THREADS_FROM, 1);
-    thread(0.97, THREADS_FROM, 1);
-    ctx.stroke();
-    ctx.setLineDash([]);
-    ctx.lineDashOffset = 0;
-    // The lip: smooth and bright where the water turns over the edge, the streaks coming out of it as it falls. It
-    // starts a little back from the edge, on the water coming to it, so the sheet grows out of the surface rather
-    // than off a cut.
-    const capTo = Math.min(n - 1, Math.max(1, Math.round(n * 0.3)));
-    const bx0 = tx - fx * TONGUE;
-    const by0 = ty - fy * TONGUE;
-    const gx = cx[capTo] - bx0;
-    const gy = cy[capTo] - by0;
-    const lip = Math.max(0.02, Math.min(0.8, ((tx - bx0) * gx + (ty - by0) * gy) / (gx * gx + gy * gy || 1)));
-    const cap = ctx.createLinearGradient(bx0, by0, cx[capTo], cy[capTo]);
-    cap.addColorStop(0, FALL_CAP[0]);
-    cap.addColorStop(lip, FALL_CAP[1]);
-    cap.addColorStop(lip + (1 - lip) * 0.18, FALL_CAP[2]);
-    cap.addColorStop(lip + (1 - lip) * 0.45, FALL_CAP[3]);
-    cap.addColorStop(1, FALL_CAP[4]);
-    ctx.beginPath();
-    ctx.moveTo(bx0 - wx, by0 - wy);
-    for (let i = 0; i <= capTo; i++) ctx.lineTo(cx[i] - wx * spread[i], cy[i] - wy * spread[i]);
-    for (let i = capTo; i >= 0; i--) ctx.lineTo(cx[i] + wx * spread[i], cy[i] + wy * spread[i]);
-    ctx.lineTo(bx0 + wx, by0 + wy);
-    ctx.closePath();
-    ctx.fillStyle = cap;
-    ctx.fill();
-    // And the light along it, bowed as the water rounds over.
-    const l1 = Math.min(n - 1, 1);
-    const lipX = cx[0] + (cx[l1] - cx[0]) * 0.3;
-    const lipY = cy[0] + (cy[l1] - cy[0]) * 0.3;
-    ctx.strokeStyle = FALL_LIP;
-    ctx.lineWidth = Math.max(1, 1.6 * z);
-    ctx.beginPath();
-    ctx.moveTo(lipX - wx * 0.92, lipY - wy * 0.92);
-    ctx.quadraticCurveTo(lipX + fx * 0.06, lipY + fy * 0.06 + 1.6 * z, lipX + wx * 0.92, lipY + wy * 0.92);
-    ctx.stroke();
-    ctx.lineCap = 'butt';
-    ctx.lineWidth = 1;
-    if (reach < 1) {
-      // The front of the water, on its way down.
-      ctx.fillStyle = FOAM_SOLID;
-      ctx.beginPath();
-      ctx.ellipse(endX, endY, across * 0.55, across * 0.35, 0, 0, Math.PI * 2);
-      ctx.fill();
-      return;
-    }
-    fall.footX = endX;
-    fall.footY = endY;
-    fall.footWx = wx * spread[n - 1];
-    fall.footWy = wy * spread[n - 1];
+  }
+
+  /** This frame's projection, for a fall drawn in a pool's slab rather than here. */
+  get view(): FallView {
+    return this.fv;
+  }
+
+  /** The broken water spread in front of a fall's foot, for one drawn in a pool's slab. */
+  get foam(): HTMLCanvasElement {
+    this.foamTex ??= foamTexture();
+    return this.foamTex;
   }
 
   /**
-   * Where a fall lands: a plume of white foam heaped at the foot of the
-   * sheet, biggest in the middle; spray thrown out to either side and
-   * falling back; and rings going out on the water under it. On dry ground
-   * there are no rings: the water goes on as a stream.
+   * The foot of a stretch of a fall drawn in a pool's slab, to be laid after
+   * line `row` of the ground, the line of the tile it lands on, so the ground
+   * in front of it is laid over it and the ground behind is not.
    */
-  private plunge(ctx: CanvasRenderingContext2D, f: WaterFrame, fall: Fall): void {
-    const z = this.zoom;
-    const x = fall.footX;
-    const y = fall.footY;
-    const wx = fall.footWx;
-    const wy = fall.footWy;
-    const tall = Math.min(1, (fall.top + FILM - fall.land) / FALL_TALL);
-    const t = f.t;
-    const sheetHalf = Math.hypot(wx, wy);
-    const pool = 0.16 + 0.16 * tall;
-    if (fall.wet) {
-      ctx.lineWidth = Math.max(0.8, 1.3 * z);
-      for (let i = 0; i < 3; i++) {
-        const phase = (t / 2 + i / 3 + fall.seed) % 1;
-        const r = pool * (1.2 + 2.6 * phase);
-        ctx.strokeStyle = foam(0.6 * (1 - phase) * (1 - phase));
-        ctx.beginPath();
-        ctx.ellipse(x, y, r * DISC_W * z, r * DISC_H * z, 0, 0, Math.PI * 2);
-        ctx.stroke();
-      }
-      ctx.lineWidth = 1;
-      // A pale patch of broken water spread under it.
-      this.foamTex ??= foamTexture();
-      const r = pool * 2;
-      ctx.globalAlpha = 0.5;
-      ctx.drawImage(this.foamTex, x - r * DISC_W * z, y - r * DISC_H * z, 2 * r * DISC_W * z, 2 * r * DISC_H * z);
-      ctx.globalAlpha = 1;
-    }
-    // The plume: round lumps of foam heaped at the foot of the sheet and out a little past each edge of it, level on
-    // the water however the sheet is turned, the biggest and highest in the middle, each swelling and sinking in its
-    // turn; shaded underneath, then white over.
-    const lumps = 10 + Math.round(5 * tall);
-    const big = sheetHalf * (0.6 + 0.3 * tall);
-    const heap = sheetHalf * (0.5 + 0.45 * tall);
-    const wide = Math.max(wx, sheetHalf * 0.8);
-    const plume = PLUME;
-    let m = 0;
-    for (let i = 0; i < lumps; i++) {
-      const h = hash2(i, 5, Math.round(fall.seed * 997));
-      const u = -1.2 + (2.4 * (i + 0.5)) / lumps + (h - 0.5) * 0.25;
-      const middle = Math.max(0, 1 - Math.abs(u) / 1.25);
-      const pulse = 0.5 + 0.5 * Math.sin(t * (3.1 + 1.7 * h) + i * 2.3);
-      const r = big * (0.4 + 0.6 * middle) * (0.82 + 0.3 * pulse);
-      // The outer lumps come forward a little, round the foot, so the heap has a front as well as a top.
-      const px = x + wide * u + (h - 0.5) * big * 0.4;
-      const py = y + wy * u * 0.3 - heap * middle * (0.75 + 0.35 * pulse) + (1 - middle) * big * 0.3;
-      plume[m++] = px;
-      plume[m++] = py;
-      plume[m++] = r;
-    }
-    for (const [ink, lift] of [[PLUME_SHADE, -0.22], [FOAM_SOLID, 0.08]] as const) {
-      ctx.fillStyle = ink;
-      ctx.beginPath();
-      for (let i = 0; i < m; i += 3) {
-        const r = plume[i + 2] * (lift < 0 ? 1 : 0.9);
-        const py = plume[i + 1] - plume[i + 2] * lift;
-        ctx.moveTo(plume[i] + r, py);
-        ctx.arc(plume[i], py, r, 0, Math.PI * 2);
-      }
-      ctx.fill();
-    }
-    // Spray: drops thrown out to both sides from the top of the plume, arcing up and falling back, more and further
-    // off a taller fall.
-    const drops = 10 + Math.round(16 * tall);
-    const lift = (8 + 22 * tall) * z;
-    const reachOut = (sheetHalf * 1.2 + (6 + 10 * tall) * z);
-    ctx.fillStyle = FOAM_SOLID;
-    ctx.beginPath();
-    for (let i = 0; i < drops; i++) {
-      const h = hash2(i, 17, Math.round(fall.seed * 997));
-      const side = i % 2 ? 1 : -1;
-      const age = (t / (0.75 + 0.45 * h) + i * 0.618 + fall.seed) % 1;
-      const ox = side * reachOut * (0.5 + 0.8 * h) * age;
-      const oy = -lift * (0.6 + 0.8 * h) * (age * 2 - age * age * 1.7);
-      const px = x + ox + wide * side * 0.3;
-      const py = y - heap * 0.5 + oy;
-      const r = Math.max(0.6, (1.6 - age) * (0.8 + 0.6 * tall) * z * (0.7 + 0.6 * h));
-      ctx.moveTo(px + r, py);
-      ctx.arc(px, py, r, 0, Math.PI * 2);
-    }
-    ctx.fill();
+  footAfter(row: number, placed: Placed, u0: number, u1: number): void {
+    const f = this.f;
+    if (!f) return;
+    this.rowPoolFeet[this.clampRow(row) - f.dLo]?.push({ placed, u0, u1 });
+  }
+
+  /** The mist off a fall drawn in a pool's slab, to go up with the rest. */
+  mistOf(placed: Placed): void {
+    this.poolMist.push(placed);
   }
 
   /* ---- Springs ----------------------------------------------------------- */
@@ -1674,43 +1578,31 @@ export class SpringWater {
   /* ---- In the air -------------------------------------------------------- */
 
   /**
-   * The mist off every fall on screen, climbing and carried off down the
-   * wind, and a bow standing in it when the sun is low behind you. Drawn with
-   * the smoke, after everything on the ground, because it hangs over it.
+   * The mist off every fall on screen, along the whole of its foot, climbing
+   * and carried off down the wind, and a bow standing in it when the sun is
+   * low behind you. Drawn with the smoke, after everything on the ground,
+   * because it hangs over it.
    */
   air(ctx: CanvasRenderingContext2D): void {
     const f = this.f;
     if (!f) return;
-    let any = false;
-    for (const fall of this.falls) if (!Number.isNaN(fall.row) && fall.reach >= 1) any = true;
+    let any = this.poolMist.length > 0;
+    for (const fall of this.falls) if (fall.placed && fall.reach >= 1) any = true;
     if (!any) return;
     this.mistTex ??= mistTexture();
-    const z = this.zoom;
-    const t = f.t;
+    const tex = this.mistTex;
+    for (const placed of this.poolMist) drawMist(ctx, this.fv, placed, tex, f.lean, f.dark);
     for (const fall of this.falls) {
-      if (Number.isNaN(fall.row) || fall.reach < 1) continue;
-      const drop = fall.top + FILM - fall.land;
-      const tall = Math.min(1, drop / FALL_TALL);
-      if (tall < 0.2) continue;
-      const x = this.sx(fall.bx, fall.by);
-      const y = this.sy(fall.bx, fall.by, fall.land);
-      const puffs = 3 + Math.round(4 * tall);
-      // As big as the fall is tall, up to a point: closer in, the mist is more of the same rather than more screen.
-      const size = Math.min(84, (12 + 32 * tall) * z);
-      for (let i = 0; i < puffs; i++) {
-        const age = (t / MIST_LIFE + i / puffs + fall.seed) % 1;
-        const blown = f.lean.force * age * age * 40 * z;
-        const px = x + f.lean.x * blown + Math.sin(age * 5 + i * 2.1) * 5 * z;
-        const py = y - age * (18 + 56 * tall) * z + f.lean.y * blown * 0.4;
-        const r = size * (0.4 + 0.9 * age);
-        ctx.globalAlpha = 0.4 * tall * Math.sin(Math.PI * age) * (1 - 0.4 * f.dark);
-        ctx.drawImage(this.mistTex, px - r, py - r * 0.8, r * 2, r * 1.6);
-      }
-      if (this.bow > 0.02) {
-        // Standing in the thick of the mist, a little above the foot of the fall.
+      const placed = fall.placed;
+      if (!placed || fall.reach < 1) continue;
+      drawMist(ctx, this.fv, placed, tex, f.lean, f.dark);
+      if (this.bow > 0.02 && placed.tall >= 0.2) {
+        // Standing in the thick of the mist, a little above the middle of the foot.
+        const s = placed.sheet;
+        const [x, y] = footPoint(placed, (s.from + s.to) / 2);
         this.bowTex ??= bowTexture();
-        const r = size * 1.6;
-        ctx.globalAlpha = Math.min(0.5, this.bow * tall * 0.55);
+        const r = Math.min(84, (12 + 32 * placed.tall) * this.zoom) * 1.6 * (1 + 0.15 * (s.to - s.from));
+        ctx.globalAlpha = Math.min(0.5, this.bow * placed.tall * 0.55);
         ctx.drawImage(this.bowTex, x - r, y - r * 1.25, r * 2, r * 1.1);
       }
     }
@@ -1747,26 +1639,9 @@ const STREAK_WHITE = rgba(SPRING_FOAM, 0.88);
 const RIPPLE_BRIGHT = rgba(SPRING_FOAM, 0.9);
 const RIPPLE_FAINT = rgba(SPRING_FOAM, 0.5);
 
-/** How many streaks come down a fall side by side, near white and darker teal by turns. */
-const FALL_STREAKS = 6;
-/** A fall's colours: the wet rock behind it; its body at the lip, halfway and at the foot; its streaks, threads and edges; the light on its lip. */
-const FALL_WET_ROCK = 'rgba(18,58,62,0.14)';
-const FALL_BODY = [rgba(SPRING_WATER, 0.92), rgba(mix(SPRING_WATER, SPRING_PALE, 0.42), 0.9), rgba(mix(SPRING_PALE, SPRING_FOAM, 0.6), 0.95)];
-const FALL_STREAK_PALE = rgba(SPRING_PALE, 0.72);
-const FALL_STREAK_DARK = rgba(SPRING_DARK, 0.34);
-const FALL_THREAD = rgba(SPRING_FOAM, 0.5);
-const FALL_EDGE = rgba(SPRING_FOAM, 0.66);
-const FALL_LIP = rgba(SPRING_FOAM, 0.95);
-/** Its lip, from the water coming to it (clear) to where it turns over (bright) and on down into the sheet. */
-const FALL_CAP = [
-  rgba(SPRING_WATER, 0), rgba(mix(SPRING_WATER, SPRING_PALE, 0.55), 0.95), rgba(mix(SPRING_PALE, SPRING_FOAM, 0.5), 0.95),
-  rgba(mix(SPRING_WATER, SPRING_PALE, 0.25), 0.55), rgba(SPRING_WATER, 0),
-];
-/** Foam, and the shade under each lump of it. */
+/** Foam, and the shade under each lump of it, at the foot of a white step down a stream. */
 const FOAM_SOLID = rgb(SPRING_FOAM);
 const PLUME_SHADE = rgb(mix(SPRING_PALE, SPRING_EDGE, 0.22));
-/** Scratch for a plume's lumps, as x, y and radius. */
-const PLUME = new Float64Array(3 * 16);
 /** Scratch for a cascade's foot on screen, and for a line's lily pads: where, how wide and deep, which way the notch faces, and whether in flower. */
 const CASCADE_AT: number[] = [];
 const PAD_AT = new Float64Array(6 * 256);
@@ -1782,11 +1657,6 @@ const PAD_HEART = 'rgb(248,212,96)';
 /** Half the angle of the notch cut out of a lily pad. */
 const PAD_NOTCH = 0.32;
 
-/** Scratch for one fall's curve: the middle of each slice's edge on screen, how far it has spread, and how far down the curve it is. */
-const FALL_CX = new Float64Array(12);
-const FALL_CY = new Float64Array(12);
-const FALL_SPREAD = new Float64Array(12);
-const FALL_LEN = new Float64Array(12);
 /** Scratch for one line's streaks and flecks, filled and emptied rather than made each time. */
 const STREAKS: number[] = [];
 const STREAKS_DIM: number[] = [];
