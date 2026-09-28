@@ -42,7 +42,11 @@ import { SPECIES } from '../../game/creatures';
 import { betterThanCommon, CHANNELS, husbandryOdds, pct as cardPct } from '../../game/traits';
 import { CHAIN_MOST, FALL_DROP, FILL_RATE, POOL_DEPTH, POOL_LIP, SPRING_DEPTH, SPRINGS_EACH } from '../../world/springs';
 import { POOL_FILL } from '../../game/foundations';
-import { SWIM_DEPTH } from '../../game/player';
+import { MAX_STAND, SWIM_DEPTH } from '../../game/player';
+import { STEPS_BRICKS, STEPS_LEAST, STEPS_MOST, STEPS_PLANKS, STEPS_SLABS, STEPS_TWIST } from '../../world/tiles';
+import { STEPS_BACK, stepsBack, STONE_STEPS_BILL, TIMBER_STEPS_BILL } from '../../game/steps';
+import { ROSES_RULE } from '../../game/roses';
+import { DEVICE_COUNT } from '../../render/furniture';
 import type { UIWindow } from '../windows';
 
 /**
@@ -735,6 +739,19 @@ export const NEWS: News[] = [
         `The woods follow the island's year. ${capital(listed(keep))} keep their leaves; every other tree comes into leaf over the first ${numberWord(LEAF_DAYS)} days of spring, turns its own colour over the first ${numberWord(TURN_DAYS)} days of autumn, drops its leaves over the last ${numberWord(SHED_DAYS)}, and stands bare through winter. Roses and thorns do the same and lavender keeps its leaves.`,
         `Every tree old enough to fruit is in flower for all ${numberWord(SEASON_DAYS)} days of spring (${bloom.join('; ')}), and drops its petals on the wind and on any water under it. Roses and lavender flower from day ${BUSH_FLOWER_FROM} of spring to the end of summer. The look only: trees and bushes give what they gave.`,
         `Butterflies come out at whatever is in flower by day, dragonflies over ponds, pools and streams from morning to dusk, and fireflies over the grass by trees and water at night: ${lifeSeasons()}. Only to look at.`,
+      ];
+    },
+  },
+  {
+    n: 56,
+    day: '2026-09-28',
+    lines: () => {
+      const bill = (id: string): string => billWords((RECIPE_BY_ID.get(`make_${id}`)?.inputs ?? []).map((i) => [i.item, i.count ?? 1] as const));
+      return [
+        `Garden steps: lay a flight up a tile of packed dirt whose slope is ${STEPS_LEAST} to ${STEPS_MOST}, with the corners at each end within ${STEPS_TWIST} of each other. In stone with a trowel (masonry), ${STONE_STEPS_BILL}; in timber with a mallet (carpentry), ${TIMBER_STEPS_BILL}.`,
+        `A tile of steps is stood on at any slope up to ${STEPS_MOST}, where bare ground stops at ${MAX_STAND}, and a step onto it or off it is not held to the ${MAX_STEP} between tile centres that bare ground is. No cart or wagon goes onto one. Taking it up with a pickaxe keeps ${share(STEPS_BACK)} of it whole: ${numberWord(stepsBack(STEPS_SLABS))} of ${numberWord(STEPS_SLABS)} slabs and ${numberWord(stepsBack(STEPS_BRICKS))} of ${numberWord(STEPS_BRICKS)} bricks, or ${numberWord(stepsBack(STEPS_PLANKS))} of ${numberWord(STEPS_PLANKS)} planks.`,
+        `A rose arch (carpentry: ${bill('rose_arch')}) or a stone rose arch (masonry: ${bill('stone_rose_arch')}), set down over a path and walked through. ${ROSES_RULE}`,
+        `A flagpole (tailoring: ${bill('flagpole')}) flies its flag down the wind, straight out at its full force and hanging in a calm, and a banner's cloth swings down the same wind. Either takes dye, and on a settlement carries its device, one of ${numberWord(DEVICE_COUNT)} chosen by the settlement's name. A banner or a sail set down on the island keeps its dye now; it used to come out undyed.`,
       ];
     },
   },

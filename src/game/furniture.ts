@@ -6,6 +6,7 @@ import type { Game } from './game';
 import { describeFrom, describeWith, isWorked, ITEM_DEFS, itemDef, itemName, markOf, rarityOf, roomFor, storedLine, type Item, type Mark } from './items';
 import { fill, numberWord } from './words';
 import { matOf } from './materials';
+import { roseSays, ROSES_RULE } from './roses';
 
 /**
  * What a store takes, for the five that take one sort of thing: raw materials,
@@ -144,6 +145,12 @@ export interface FurnitureDef {
    * makes one, so it has no recipe. See `graves.ts`.
    */
   grave?: boolean;
+  /**
+   * Climbing roses grow on it, from the moment it is set down (`roses.ts`):
+   * the island hands every browser that moment for a piece with this, and no
+   * other (`rpc_ground`, `furniture_def.roses`).
+   */
+  roses?: boolean;
 }
 
 /**
@@ -317,6 +324,24 @@ export const FURNITURE: FurnitureDef[] = [
   piece('brazier', 'Brazier', 1, 1, [['stone_brick', 24], ['mortar', 8], ['ribbon', 4]], 20, 12, 'You lay a shallow bowl of brick and band it with iron. A brazier.', undefined, { skill: 'masonry', tool: 'trowel', hearth: true }),
   piece('altar', 'Altar', 2, 2, [['stone_brick', 64], ['mortar', 32], ['stone_slab', 4]], 40, 40, 'You lay the courses and bed the slab on top. Kneel here at dawn.', undefined, { skill: 'masonry', tool: 'trowel', altar: true, deed: true }),
   piece('banner', 'Banner', 1, 1, [['cloth', 16], ['shaft', 2], ['rope', 1], ['nail', 12]], 10, 10, 'You hem the cloth, lash it to the staff and run it up. Dye it and it is your colour.', undefined, { skill: 'tailoring' }),
+  /*
+   * A pole twice a banner's height with a flag on a halyard at the top of it,
+   * which streams out down the wind (`render/furniture.ts`). Dyed as cloth is,
+   * before it is set down, and on a settlement it carries the settlement's
+   * device as a banner does.
+   */
+  piece('flagpole', 'Flagpole', 1, 1, [['cloth', 12], ['timber', 2], ['rope', 2], ['nail', 8]], 14, 12, 'You hem the flag, raise the pole and run the flag up it on its halyard. Dye it and it flies your colour.', undefined, { skill: 'tailoring' }),
+  /*
+   * An arch over a path, a tile across and a subtile deep, walked through like
+   * any piece: a timber one a carpenter builds and a stone one a mason lays,
+   * each with a climbing rose planted at its feet (`roses.ts`).
+   */
+  piece('rose_arch', 'Rose arch', 4, 1, [['plank', 24], ['shaft', 6], ['nail', 36]], 16, 16,
+    `You raise the arch, trellis its sides and plant a climbing rose at the foot of each. ${ROSES_RULE}`, undefined,
+    { skill: 'carpentry', roses: true }),
+  piece('stone_rose_arch', 'Stone rose arch', 4, 1, [['stone_brick', 36], ['mortar', 12]], 24, 22,
+    `You lay the piers, turn the arch over them and plant a climbing rose at the foot of each. ${ROSES_RULE}`, undefined,
+    { skill: 'masonry', tool: 'trowel', roses: true }),
   piece('well', 'Well', 2, 2, [['stone_brick', 48], ['mortar', 16], ['shaft', 4], ['thick_rope', 1], ['nail', 16]], 30, 24, 'You line the shaft, cap it with a kerb and hang a windlass over it. It will find its own water.', undefined, { skill: 'masonry', tool: 'trowel', well: 50 }),
   // Storage of a different sort: raw materials, rubbish, and something to pull it in.
   piece('bulk_bin', 'Raw material bin', 2, 2, [['plank', 48], ['timber', 16], ['nail', 48]], 20, 16, 'You build a deep bin with a hinged lid, the sort a cartload of ore goes into.', 400, { takes: 'raw' }),
@@ -476,8 +501,14 @@ export interface PlacedFurniture {
   knack?: number;
   /** The wood it was built of, for the pieces a carpenter builds. */
   material?: string;
-  /** The colour it was dyed, for a banner and for a sail. */
+  /** The colour it was dyed, for a banner, a flag and a sail. */
   dye?: string;
+  /**
+   * When it was set down, in epoch seconds, for a piece with roses on it: the
+   * island's own moment for it (`placed.made_at`), so that every browser that
+   * sees one arch sees its roses grown as far.
+   */
+  setAt?: number;
   /**
    * The padlock fitted to it, by the number it shares with its key. See
    * `locks.ts`. Only means anything on a piece that holds things.
@@ -548,6 +579,8 @@ for (const f of FURNITURE) {
 describeWith({ bucketLitres: BUCKET_LITRES });
 // A tent's night measured against a bed's, off the two pieces.
 describeFrom('tent', { ofBed: (furnitureDef('tent').bed ?? 0) / (furnitureDef('bed').bed ?? 1) });
+// How the roses on an arch grow, off the rule that grows them.
+for (const id of ['rose_arch', 'stone_rose_arch']) describeFrom(id, { rule: ROSES_RULE });
 
 /**
  * What to call a piece standing on the ground.
@@ -794,6 +827,7 @@ export function furnitureState(f: PlacedFurniture): string {
     return `${ql} · ${litres.toFixed(0)} / ${liquidCapacity(f)} litres of ${what}${working}`;
   }
   if (def.hearth) return `${ql} · ${f.lit ? 'lit' : 'cold'}`;
+  if (def.roses) return `${ql} · ${roseSays(f.setAt, Date.now() / 1000)}`;
   if (def.hive) return `${ql} · ${furnitureUnits(f)} / ${furnitureCapacity(f)} of comb`;
   if (def.pond) return `${ql} · ${furnitureUnits(f)} / ${furnitureCapacity(f)} fish`;
   // A bin measured in kilograms says so; everything else counts things.
@@ -851,6 +885,8 @@ export const FURNITURE_ACTIONS: ActionDef[] = [
       if (!item || !isFurniture(item.id) || !g.inventory.remove(item.uid, 1)) return;
       const f = g.addFurniture(item.id, t.x, t.y, t.sx, t.sy, item.ql, [], item.extra, t.facing ?? 's');
       if (item.dye) f.dye = item.dye;
+      // Roses planted at its feet grow from now, on the wall clock (`roses.ts`).
+      if (furnitureDef(item.id).roses) f.setAt = Date.now() / 1000;
       // Everything the thing was keeps standing when the thing is standing.
       if (item.rare) f.rare = item.rare;
       if (item.maker) f.maker = item.maker;

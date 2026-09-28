@@ -35,6 +35,13 @@ export const TileType = {
    * shovel by anybody who cannot wait.
    */
   Stump: 22,
+  /**
+   * A flight of garden steps laid up a sloping tile: the stone or the wood in
+   * the data byte (`stepsTimber`, `stepsKind`), and which way it climbs read
+   * off the corners (`stepsFit`). Walked at any slope a flight is laid on,
+   * where the bare ground would be too steep to stand on.
+   */
+  Steps: 23,
 } as const;
 export type TileType = (typeof TileType)[keyof typeof TileType];
 
@@ -68,7 +75,7 @@ export const FLAT: ReadonlySet<number> = new Set<number>([
   TileType.Grass, TileType.Steppe, TileType.Tundra, TileType.Moss, TileType.Rock,
   TileType.Sand, TileType.Dirt, TileType.PackedDirt, TileType.Field,
   TileType.Marsh, TileType.Reed, TileType.Clay, TileType.Peat, TileType.Tar,
-  TileType.Kelp, TileType.Snow, TileType.Lawn,
+  TileType.Kelp, TileType.Snow, TileType.Lawn, TileType.Steps,
 ]);
 
 /**
@@ -199,6 +206,7 @@ export const DUSTINESS: Readonly<Record<number, number>> = {
   [TileType.Peat]: 0.45,
   [TileType.Cobblestone]: 0.3,
   [TileType.Slabs]: 0.25,
+  [TileType.Steps]: 0.25,
   [TileType.Grass]: 0.16,
   [TileType.Tree]: 0.16,
   [TileType.Bush]: 0.16,
@@ -430,6 +438,12 @@ export const TILE_DEFS: Record<TileType, TileDef> = {
    */
   [TileType.Lawn]: { name: 'Lawn', color: [146, 172, 153], speed: 1, forage: true, botanize: true, pavable: true, turnsToDirt: true, roll: 0.75 },
   [TileType.Slabs]: { name: 'Stone slabs', paved: true, color: [172, 170, 164], speed: 1.3, roll: 1 },
+  /*
+   * Laid, not grown, and not paving either: a flight is not a road, and a
+   * wheel will not take it (`Game.driveRule`, `walk_share`). The colour is
+   * what is left of it from far enough out that the treads are not drawn.
+   */
+  [TileType.Steps]: { name: 'Garden steps', color: [196, 190, 176], speed: 1, roll: 0.2 },
 };
 
 /**
@@ -461,6 +475,89 @@ export const SLAB_VARIANTS: Array<{ name: string; color: RGB; item: string; cour
 ];
 export const slabVariant = (data: number): number => Math.min(SLAB_VARIANTS.length - 1, data & 3);
 export const SLAB_BY_ITEM = new Map(SLAB_VARIANTS.map((v, i) => [v.item, i]));
+
+/* ---- garden steps --------------------------------------------------------- */
+
+/**
+ * The slopes a flight of garden steps is laid on, highest corner of the tile
+ * to lowest, and walked at. Ten is a metre of rise over the four of a tile:
+ * two broad steps. Eighty is eight metres of it, where bare ground stops
+ * being stood on at `MAX_STAND` and walked up a tile at a time at `MAX_STEP`
+ * of rise.
+ */
+export const STEPS_LEAST = 10;
+export const STEPS_MOST = 80;
+/**
+ * How far the two corners at each end of a flight may be out of level with
+ * each other: the ground has to rise one way across the tile, not twist.
+ */
+export const STEPS_TWIST = 4;
+/** What a flight of stone takes: its treads in slabs, its risers and cheeks in bricks of the same stone, bedded in mortar. */
+export const STEPS_SLABS = 3;
+export const STEPS_BRICKS = 6;
+export const STEPS_MORTAR = 2;
+/** And one of timber: planks of one wood, nailed. */
+export const STEPS_PLANKS = 10;
+export const STEPS_NAILS = 20;
+/** The data byte of a timber flight has this bit set, and the wood (an index of `TREE_DEFS`) under it. */
+export const STEPS_TIMBER = 0x80;
+export const stepsTimber = (data: number): boolean => (data & STEPS_TIMBER) !== 0;
+/** The stone (an index of `SLAB_VARIANTS`) or the wood (of `TREE_DEFS`) a flight is laid in. */
+export const stepsKind = (data: number): number => (stepsTimber(data)
+  ? Math.min(TREE_DEFS.length - 1, data & 31)
+  : Math.min(SLAB_VARIANTS.length - 1, data & 3));
+/** What a flight is called: "Marble steps", "Oak steps". */
+export const stepsName = (data: number): string => (stepsTimber(data)
+  ? `${TREE_DEFS[stepsKind(data)].name} steps`
+  : `${SLAB_VARIANTS[stepsKind(data)].name.replace(/ slabs$/, '')} steps`);
+/** The brick a stone flight's risers and cheeks are laid in, for the slab its treads are cut from. */
+export const stepsBrick = (slab: string): string => slab.replace(/_slab$/, '_brick');
+
+/**
+ * Which way a tile of ground climbs, and whether it is fit to take a flight.
+ *
+ * `c` is the four corners, north-west first and clockwise. The flight goes up
+ * toward the side (`up`, n e s w) whose two corners stand highest over the two
+ * opposite, first of n, e, s, w on a tie; `rise` is how far, end to end, as
+ * the drawing lays the treads; `twist` is how far out of level the two
+ * corners at either end of it are; and `slope` is the tile's own, highest
+ * corner to lowest, which is what the laying and the standing both ask about.
+ * The island reads the same four numbers off the same corners (`steps_fit`).
+ */
+export function stepsFit(c: readonly number[]): { up: 'n' | 'e' | 's' | 'w'; rise: number; twist: number; slope: number } {
+  const [nw, ne, se, sw] = c;
+  const sides = [
+    { up: 'n' as const, rise: (nw + ne - se - sw) / 2, twist: Math.max(Math.abs(nw - ne), Math.abs(sw - se)) },
+    { up: 'e' as const, rise: (ne + se - nw - sw) / 2, twist: Math.max(Math.abs(ne - se), Math.abs(nw - sw)) },
+    { up: 's' as const, rise: (se + sw - nw - ne) / 2, twist: Math.max(Math.abs(nw - ne), Math.abs(sw - se)) },
+    { up: 'w' as const, rise: (nw + sw - ne - se) / 2, twist: Math.max(Math.abs(ne - se), Math.abs(nw - sw)) },
+  ];
+  let best = sides[0];
+  for (const s of sides) if (s.rise > best.rise) best = s;
+  return { ...best, slope: Math.max(nw, ne, se, sw) - Math.min(nw, ne, se, sw) };
+}
+
+/**
+ * Why a flight will not go on ground with these four corners, or null. The
+ * same words on the island (`steps_ground_refusal`).
+ */
+export function stepsGroundRefusal(c: readonly number[]): string | null {
+  const f = stepsFit(c);
+  if (f.slope < STEPS_LEAST || f.slope > STEPS_MOST) {
+    return `Steps are laid on a slope of ${STEPS_LEAST} to ${STEPS_MOST}. This one is ${f.slope}.`;
+  }
+  if (f.twist > STEPS_TWIST) {
+    return `The two corners at each end of a flight have to be within ${STEPS_TWIST} of each other. These are ${f.twist} apart.`;
+  }
+  return null;
+}
+
+/**
+ * The steepest a tile may be for a body to stand on it: `cap`, which is its
+ * own and grows with its climbing, or on a flight of steps at least the
+ * steepest slope a flight is laid on. The island's `stand_cap`.
+ */
+export const standCap = (tile: number, cap: number): number => (tile === TileType.Steps ? Math.max(STEPS_MOST, cap) : cap);
 
 export interface TreeDef {
   name: string;

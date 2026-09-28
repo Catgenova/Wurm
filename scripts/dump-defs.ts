@@ -12,6 +12,8 @@
  */
 import { CATEGORY_DECAY, ITEM_DEFS } from '../src/game/items';
 import { BURYABLE, BUSH_DEFS, ROAD_TILES, ROCK_VARIANTS, TILE_DEFS, TREE_AGES, TREE_DEFS, TREE_ROOM_ONE, TREE_ROOM_TWO, TREE_SEEDS, TREE_SEED_BOTH, TREE_SEED_NONE, TREE_SEED_REACH, TREE_DAWN_UTC } from '../src/world/tiles';
+import { STEPS_BRICKS, STEPS_LEAST, STEPS_MORTAR, STEPS_MOST, STEPS_NAILS, STEPS_PLANKS, STEPS_SLABS, STEPS_TIMBER, STEPS_TWIST, TileType } from '../src/world/tiles';
+import { STEPS_BACK } from '../src/game/steps';
 import { SKILL_DEFS, isQuiet } from '../src/game/skills';
 import { MATERIALS } from '../src/game/materials';
 import { ACTIONS } from '../src/game/actions';
@@ -437,6 +439,8 @@ out.push(`create table if not exists bridge_bill (
 out.push(`alter table furniture_def add column if not exists bed real;`);
 /* Crate spots on a rack's deck: its footprint is what it carries. */
 out.push(`alter table furniture_def add column if not exists crates int;`);
+/* Climbing roses grow on it from the moment it is set down, which the ground read hands over for it. */
+out.push(`alter table furniture_def add column if not exists roses boolean not null default false;`);
 /* What a barrel of water becomes if you leave it alone. */
 out.push(`create table if not exists brew_def (
   id text primary key, name text not null, input text not null, count int not null,
@@ -1268,6 +1272,14 @@ for (const [fn, v] of [
   ['climb_learn_from', CLIMB_LEARN_FROM], ['climb_learn', CLIMB_LEARN], ['climb_learn_steep', CLIMB_LEARN_STEEP],
   /* The steepest tile a body can stand on, before climbing. */
   ['max_stand', MAX_STAND],
+  /*
+   * Garden steps: the slopes a flight is laid on and walked at, how far out
+   * of level either end of it may be, what one takes in stone and in timber,
+   * and the share of that which comes back whole when it is taken up.
+   */
+  ['steps_least', STEPS_LEAST], ['steps_most', STEPS_MOST], ['steps_twist', STEPS_TWIST],
+  ['steps_slabs', STEPS_SLABS], ['steps_bricks', STEPS_BRICKS], ['steps_mortar', STEPS_MORTAR],
+  ['steps_planks', STEPS_PLANKS], ['steps_nails', STEPS_NAILS], ['steps_back', STEPS_BACK],
   /* And how far under the waterline a rock face may still be worked. */
   ['mine_depth', MINE_DEPTH],
   ['dredge_depth', DREDGE_DEPTH],
@@ -1455,6 +1467,9 @@ for (const [fn, v] of [
  * it, so the two cannot disagree about which crate a plank comes out of.
  */
 out.push(`create or replace function craft_reach() returns int language sql immutable as $fn$ select ${q(CRAFT_REACH)}::int $fn$;`);
+/* The tile a flight of garden steps is, and the bit in its data byte that says it is timber. */
+out.push(`create or replace function steps_tile() returns int language sql immutable as $fn$ select ${q(TileType.Steps)}::int $fn$;`);
+out.push(`create or replace function steps_timber_bit() returns int language sql immutable as $fn$ select ${q(STEPS_TIMBER)}::int $fn$;`);
 /* How often a chip finds a line in the rock, and what a swing that misses teaches. */
 for (const [fn, v] of [
   ['chip_chance', CHIP_CHANCE], ['try_learn', TRY_LEARN],
@@ -1604,6 +1619,7 @@ for (const f of FURNITURE as unknown as A[]) {
   if (f.pond !== undefined) out.push(`update furniture_def set pond = ${q(f.pond)} where id = ${q(f.id)};`);
   if (f.trash !== undefined) out.push(`update furniture_def set trash = ${q(f.trash)} where id = ${q(f.id)};`);
   if (f.bed !== undefined) out.push(`update furniture_def set bed = ${q(f.bed)} where id = ${q(f.id)};`);
+  if (f.roses) out.push(`update furniture_def set roses = true where id = ${q(f.id)};`);
   if (f.crates !== undefined) out.push(`update furniture_def set crates = ${q(f.crates)} where id = ${q(f.id)};`);
   if (f.cart) out.push(`update furniture_def set cart = true where id = ${q(f.id)};`);
   const pace = f.pace as { skill: string; by: number; reach: number } | undefined;

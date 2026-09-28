@@ -80,7 +80,13 @@ import {
 } from '../../game/wounds';
 import { TURNS } from '../../render/view';
 import { ORE_DENSITY, seamShare } from '../../world/ore';
-import { BUSH_DEFS, groundRoll, ROCK_VARIANTS, SLAB_VARIANTS, TILE_DEFS, TileType, TREE_DAWN_UTC, TREE_DEFS } from '../../world/tiles';
+import {
+  BUSH_DEFS, groundRoll, ROCK_VARIANTS, SLAB_VARIANTS, STEPS_BRICKS, STEPS_LEAST, STEPS_MOST, STEPS_PLANKS, STEPS_SLABS, STEPS_TWIST, TILE_DEFS, TileType,
+  TREE_DAWN_UTC, TREE_DEFS,
+} from '../../world/tiles';
+import { STEPS_BACK, stepsBack, STONE_DIFFICULTY, STONE_STEPS_BILL, TIMBER_DIFFICULTY, TIMBER_STEPS_BILL } from '../../game/steps';
+import { ROSES_RULE } from '../../game/roses';
+import { DEVICE_COUNT } from '../../render/furniture';
 import { SEASON_DAYS, SEASONS, YEAR_DAYS } from '../../world/calendar';
 import { BLOOMS, BUSH_EVERGREEN, BUSH_FLOWER_FROM, evergreen, LEAF_DAYS, SHED_DAYS, TURN_DAYS } from '../../render/foliage';
 import { lifeSeasons } from '../../render/life';
@@ -514,7 +520,7 @@ export function helpText(): string {
     you can stand on from ${MAX_STAND}, both by ${CLIMB_PER_LEVEL} a level &mdash; ground that turns you back
     at the start is walkable once you have worked at it. It is earned on your own feet, by every step
     between tiles more than ${share(CLIMB_LEARN_FROM)} of ${MAX_STEP} up or down, and more for a steeper
-    one: not in a saddle, on a cart or a boat, on a bridge or on an upper floor.
+    one: not in a saddle, on a cart or a boat, on a bridge, on an upper floor or on or off a flight of garden steps.
     <b>Swimming</b> makes deep water less of a wade and costs less wind, and is earned by being out of
     your depth. Neither announces every scrap it picks up; both say so as they pass each whole point,
     and the Skills window (<kbd>K</kbd>) shows what each one is worth right now.</p>
@@ -1614,8 +1620,8 @@ export function helpText(): string {
     ${listed(DYES_EASIEST.map((d) => `<b>${d.name.toLowerCase()}</b> (${d.word}, from ${countOf(d.from, d.count)}, alchemy ${d.difficulty})`))}.
     One boil gives ${numberWord(made(`make_${DYES[0].id}`))} pots and hands the bucket back.</p>
     <p>One pot colours one thing. Cloth and leather take dye and metal does not, so that is cloth and
-    leather armour, cloth itself, sacks, satchels, backpacks, a saddle, a bridle, a <b>banner</b> and a
-    <b>sailing boat</b>'s sail. A dyed chest or leg piece is worn where it shows: your own figure walks
+    leather armour, cloth itself, sacks, satchels, backpacks, a saddle, a bridle, a <b>banner</b>, a
+    <b>flagpole</b>'s flag and a <b>sailing boat</b>'s sail. A dyed chest or leg piece is worn where it shows: your own figure walks
     about in it. A banner is cloth on a staff &mdash; ${bill('make_banner')} &mdash; planted
     anywhere, and it flies whatever colour you dyed it. Boil it out again in lye if you change your
     mind.</p>
@@ -2137,6 +2143,32 @@ export function helpText(): string {
     ${GAIN_AT[2]}, and something like <b>${numberWord(Math.round(1 / MIN_GAIN))}</b> for the last. Nobody finishes a skill in passing; the last
     point of one is a thing to go after on purpose, and the log shows it moving at the fourth place
     after the point while you do.</p>
+    <h3>Garden steps, rose arches and flags</h3>
+    <p><b>Garden steps</b> are a flight laid up a sloping tile of packed dirt, and a tile of them is walked
+    where the bare ground would be too steep to stand on. The tile's slope, its highest corner to its
+    lowest, has to be <b>${STEPS_LEAST} to ${STEPS_MOST}</b> (${metres(STEPS_LEAST)} to ${metres(STEPS_MOST)} m over the tile), and the
+    corners at each end of the flight within <b>${STEPS_TWIST}</b> of each other; it climbs toward the higher
+    side. <b>Lay stone steps</b> with a trowel, masonry ${STONE_DIFFICULTY}: ${STONE_STEPS_BILL}, in
+    ${listed(SLAB_VARIANTS.map((v) => v.name.replace(/ slabs$/, '').toLowerCase()))}. <b>Lay timber steps</b> with a mallet, carpentry
+    ${TIMBER_DIFFICULTY}: ${TIMBER_STEPS_BILL}, and the flight is of that wood. Carrying more than one stone
+    or wood, the menu asks which. On a settlement it is shaping the ground, which a guest may not do.</p>
+    <p>A tile of steps is stood on at any slope up to <b>${STEPS_MOST}</b>, where bare ground stops at
+    ${MAX_STAND} and ${CLIMB_PER_LEVEL} more a level of climbing, and a step onto one or off one is not held
+    to the ${MAX_STEP} between tile centres that a step over bare ground is: only the tile stepped onto has
+    to be one you can stand on. Animals walk them by the same rule, and no cart or wagon goes onto one.
+    <b>Take up the steps</b> with a pickaxe (paving) keeps ${share(STEPS_BACK)} of what went into them whole,
+    rounded down &mdash; ${numberWord(stepsBack(STEPS_SLABS))} of the ${numberWord(STEPS_SLABS)} slabs and ${numberWord(stepsBack(STEPS_BRICKS))} of the
+    ${numberWord(STEPS_BRICKS)} bricks, or ${numberWord(stepsBack(STEPS_PLANKS))} of the ${numberWord(STEPS_PLANKS)} planks &mdash; and leaves packed dirt.</p>
+    <p>A <b>rose arch</b> (${workedAt('make_rose_arch')}: ${bill('make_rose_arch')}) and a
+    <b>stone rose arch</b> (${workedAt('make_stone_rose_arch')}, with a trowel: ${bill('make_stone_rose_arch')})
+    are ${numberWord(furnitureDef('rose_arch').w)} subtiles across and ${numberWord(furnitureDef('rose_arch').h)} deep, set down like any
+    piece and walked through. ${ROSES_RULE} Pointing at one says how its roses stand and how long until
+    they change.</p>
+    <p>A <b>flagpole</b> (${workedAt('make_flagpole')}: ${bill('make_flagpole')}) flies its flag down
+    the wind: straight out at the wind's full force, hanging down the pole in a calm, and
+    rippling quicker the harder it blows. A <b>banner</b>'s cloth swings out down the same wind. Dye either
+    before it is set down and it flies that colour; standing on a settlement, it carries the settlement's
+    device, one of ${numberWord(DEVICE_COUNT)} chosen by the settlement's name.</p>
     <h3>Springs, ponds and streams</h3>
     <p>Water can stand above the sea. Dig a hollow, then right-click the bottom of it with a shovel and
     choose <b>Dig a spring</b>: water wells up and fills the hollow to the height of the lowest point

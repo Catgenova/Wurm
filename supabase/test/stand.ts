@@ -96,6 +96,18 @@ for (const [x, y, word] of [[31, 32, 'seventy'], [28, 32, 'fifty'], [31, 30, 'fl
   check(`a wild thing ${b ? 'would' : 'would not'} stand on the ${word}, on both sides`, b === i, `browser ${b}, island ${i}`);
 }
 
+// And the seventy with a flight of garden steps laid on it: stood on to `STEPS_MOST`, by anybody.
+game.skills.values.set('climbing', 0);
+psql(`delete from skill where world_id = ${W} and id = 'climbing' and uid = ${DANE};`);
+w.setTile(31, 32, TileType.Steps, 0);
+psql(`select land_set_tile(${W}, 31, 32, ${TileType.Steps}), land_set_data(${W}, 31, 32, 0);`);
+const [bs, is] = walk(30, 32, 31, 32);
+check(`at climbing nought the seventy laid with steps is ${bs ? 'walked' : 'refused'} on both sides`, bs && bs === is, `browser ${bs ? 'walks' : 'refuses'}, island ${is ? 'walks' : 'refuses'}`);
+const bsw = game.creatures.tileOk(game, 31, 32);
+const isw = psql(`select creature_tile_ok(${W}, 31, 32)`) === 't';
+check(`and a wild thing ${bsw ? 'would' : 'would not'} stand on it, on both sides`, bsw && bsw === isw, `browser ${bsw}, island ${isw}`);
+psql(`select land_set_tile(${W}, 31, 32, tile_id('Grass')), land_set_data(${W}, 31, 32, 0);`);
+
 for (const line of ok) console.log(line);
 for (const line of bad) console.log(line);
 console.log(bad.length === 0 ? `the slope you can stand on is the same slope on both sides (${ok.length} agreements)` : `THEY DISAGREE (${bad.length})`);

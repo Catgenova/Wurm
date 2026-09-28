@@ -1199,6 +1199,21 @@ export class UI {
           continue;
         }
       }
+      // A flight goes down in one stone or one wood: choose which, when more than one is carried.
+      if (def.id === 'lay_steps' || def.id === 'lay_timber_steps') {
+        const stacks = this.game.inventory.items.filter((it) => (def.id === 'lay_steps' ? SLAB_BY_ITEM.has(it.id) : it.id === 'plank') && !it.locked);
+        if (stacks.length > 1) {
+          entries.push({
+            label: def.label,
+            children: stacks.map((it) => {
+              const st: Target = { ...target, itemUid: it.uid };
+              const why = def.check?.(st, this.game) ?? null;
+              return { label: def.labelFor?.(st, this.game) ?? itemName(it), note: it.count > 1 ? `${itemName(it)} (${it.count})` : itemName(it), hint: why ?? undefined, disabled: !!why, onSelect: () => this.game.requestAction(def, st) };
+            }),
+          });
+          continue;
+        }
+      }
       // A spadeful of dirt, clay or sand lays down the ground it was: choose
       // which, when more than one is carried.
       if (def.id === 'drop_dirt') {

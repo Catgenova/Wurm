@@ -3,7 +3,9 @@ import { isSeam } from '../world/tiles';
 import type { Game } from '../game/game';
 import { itemDef } from '../game/items';
 import { bedrockAt } from '../world/ore';
-import { groundRoll, TILE_DEFS, TileType, dustiness } from '../world/tiles';
+import { groundRoll, TILE_DEFS, TileType, dustiness, standCap, stepsGroundRefusal, stepsTimber, STEPS_BRICKS, STEPS_MOST, STEPS_PLANKS, STEPS_SLABS } from '../world/tiles';
+import { STONE_STEPS_BILL, TIMBER_STEPS_BILL, stepsBack } from '../game/steps';
+import { numberWord } from '../game/words';
 import { SLOW_SLOPE } from '../game/player';
 
 /**
@@ -92,7 +94,8 @@ export function tileUses(g: Game, x: number, y: number): string[] {
     // And whether it can be stood on at all, which is the one thing about a
     // dug tile you otherwise find out by walking into it.
     const slope = w.slope(x, y);
-    const cap = g.standSlope();
+    // A flight of steps is stood on at any slope a flight is laid on.
+    const cap = standCap(type, g.standSlope());
     if (slope > cap) lines.push(`Slope ${slope}: too steep to stand on. You manage ${Math.floor(cap)}, and climbing raises it`);
     else if (slope > SLOW_SLOPE) lines.push(`Slope ${slope}: slow going, ${Math.round((100 * SLOW_SLOPE) / slope)}% pace across it`);
   }
@@ -118,6 +121,13 @@ export function tileUses(g: Game, x: number, y: number): string[] {
   // What can be laid over it or built on it. Saying a road will not take a
   // road, or that bare rock will not take one, is not worth a line.
   const paved = type === TileType.Cobblestone || type === TileType.Slabs;
+  if (type === TileType.Steps) {
+    lines.push(`A flight of ${w.tileName(x, y).toLowerCase()}: stood on and walked at any slope up to ${STEPS_MOST}, and no wheel takes it`);
+    lines.push(`Pickaxe: takes it up, keeping ${stepsTimber(w.getData(x, y)) ? `${numberWord(stepsBack(STEPS_PLANKS))} of its ${numberWord(STEPS_PLANKS)} planks` : `${numberWord(stepsBack(STEPS_SLABS))} of its ${numberWord(STEPS_SLABS)} slabs and ${numberWord(stepsBack(STEPS_BRICKS))} of its ${numberWord(STEPS_BRICKS)} bricks`}, and leaves packed dirt`);
+  } else if (type === TileType.PackedDirt) {
+    const why = stepsGroundRefusal(w.corners(x, y, [0, 0, 0, 0]));
+    lines.push(why ? `Garden steps: not here. ${why}` : `Takes garden steps: ${STONE_STEPS_BILL} with a trowel, or ${TIMBER_STEPS_BILL} with a mallet`);
+  }
   if (paved) lines.push('This is paving already. Break it up with a pickaxe and it goes back to dirt.');
   else if (def.pavable) lines.push('Takes paving: cobblestone or slabs, once it is packed hard');
   else if (!def.blocks && type !== TileType.Rock) lines.push('Will not take paving');

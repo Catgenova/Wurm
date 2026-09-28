@@ -34,6 +34,7 @@ import { TRAP_ACTIONS } from './traps';
 import { BRIDGE_ACTIONS } from './bridges';
 import { SPRING_ACTIONS } from './springs';
 import { FOUNDATION_ACTIONS } from './foundations';
+import { STEPS_ACTIONS } from './steps';
 import { NAMING_ACTIONS } from './naming';
 import { LANTERN_ACTIONS } from './lantern';
 import { FAITH_ACTIONS } from './faith';
@@ -2849,6 +2850,7 @@ export const ACTIONS: ActionDef[] = [
   ...BRIDGE_ACTIONS,
   ...SPRING_ACTIONS,
   ...FOUNDATION_ACTIONS,
+  ...STEPS_ACTIONS,
   ...FAITH_ACTIONS,
   ...BAUBLE_ACTIONS,
   ...SACRIFICE_ACTIONS,
@@ -2914,7 +2916,8 @@ export const ACTIONS: ActionDef[] = [
  */
 const SHAPES_GROUND = new Set(['dig', 'dredge', 'flatten', 'drop_dirt', 'drop_dirt_here', 'raise_rock',
   'mine', 'chip_corner', 'pack', 'cultivate', 'pave_cobble', 'pave_slabs', 'remove_paving',
-  'dig_spring', 'stop_spring', 'dig_pool', 'fill_pool']);
+  'dig_spring', 'stop_spring', 'dig_pool', 'fill_pool',
+  'lay_steps', 'lay_timber_steps', 'take_up_steps']);
 for (const def of ACTIONS) {
   if (!SHAPES_GROUND.has(def.id)) continue;
   const was = def.check;

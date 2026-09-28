@@ -3,6 +3,7 @@ import { materialOf } from '../game/materials';
 import type { Side } from '../game/building';
 import { HALF_H, HALF_W, HEIGHT_SCALE, UNITS_PER_TILE } from './iso';
 import { star } from './shine';
+import { ROSE_BUD, ROSE_FLOWER, ROSE_LEAFY } from '../game/roses';
 import { VIEWS } from './view';
 
 /**
@@ -118,9 +119,11 @@ const WOOD_PLAIN = '#b88c5a';
  * -- so it is looked up the way the game looks any material up, whatever its
  * case, and a piece in a wood it does not know is plain.
  */
-const woodOf = (material?: string): Paint => {
+const woodOf = (material?: string): Paint => paintOf(hex(woodHex(material)));
+/** The colour of a board of this wood, sawn and planed, as `#rrggbb`: plain oak for a wood nobody has named. */
+export const woodHex = (material?: string): string => {
   const id = materialOf(material)?.id ?? material?.toLowerCase() ?? '';
-  return paintOf(hex(WOOD_TONE[id] ?? WOOD_PLAIN));
+  return WOOD_TONE[id] ?? WOOD_PLAIN;
 };
 
 const IRON: Paint = { body: hex('#6b6873'), ink: hex('#34323b') };
@@ -1149,6 +1152,453 @@ function cloth(sc: Scene, top: V3[], bottom: V3[], p: Paint, deco?: PanelDeco): 
   });
 }
 
+/* ---- banners, flags and their cloth ------------------------------------------ */
+
+/** Where a banner's cloth hangs from: the crossbar's height, and how far in front of the staff. */
+const BANNER_HEAD = 22.1;
+const BANNER_Y = 1;
+/** A flag's head on its pole, how deep it is at the hoist and how long it flies. */
+const FLAG_TOP = 44;
+const FLAG_HOIST = 10;
+const FLAG_FLY = 17;
+
+/** A banner's staff: its crossed feet, the staff, the ball at its head and the crossbar. `feet` false draws the staff and the bar alone, from the foot of the cloth up. */
+function bannerStaff(sc: Scene, wood: Paint, feet: boolean): void {
+  if (feet) {
+    sc.box(-2.6, 2.6, -0.5, 0.5, 0, 0.8, wood);
+    sc.box(-0.5, 0.5, -2.6, -0.5, 0, 0.8, wood);
+    sc.box(-0.5, 0.5, 0.5, 2.6, 0, 0.8, wood);
+  }
+  sc.rod([0, 0, feet ? 0.8 : 9], [0, 0, 24.2], 0.42, wood);
+  sc.lathe(0, 0, [[24.2, 0.5], [24.7, 0.8], [25.4, 0.35], [25.8, 0]], BRASS, 12);
+  sc.rod([-4.5, 0, 22.4], [4.5, 0, 22.4], 0.3, wood);
+}
+
+/** A flagpole's pole, from its plinth, or -- `whole` false -- from the foot of the flag up, and the ball at its head. */
+function flagPole(sc: Scene, wood: Paint, whole: boolean): void {
+  sc.rod([0, 0, whole ? 3.2 : FLAG_TOP - FLAG_HOIST - 1.5], [0, 0, FLAG_TOP + 1.2], 0.44, wood);
+  sc.lathe(0, 0, [[FLAG_TOP + 1.2, 0.32], [FLAG_TOP + 1.6, 0.78], [FLAG_TOP + 2.3, 0.62], [FLAG_TOP + 2.7, 0]], BRASS, 12);
+}
+
+/**
+ * The wind where a piece stands, in the piece's own frame -- `x` across it
+ * and `y` toward its front, the way it blows, and `force` 0 to 1 -- with the
+ * drawing clock `t`, the colour its cloth is dyed and the settlement's device
+ * to carry on it, if it stands on one.
+ */
+export interface Air {
+  x: number;
+  y: number;
+  force: number;
+  t: number;
+  tint?: Tint;
+  device?: number;
+}
+/** Cloth with no weather on it: what a piece being set down is drawn with. */
+const STILL: Air = { x: 1, y: 0, force: 0, t: 0 };
+
+/**
+ * The settlements' devices: six figures a settlement's banners and flags
+ * carry, each a closed outline in a square two across, y down. Which one a
+ * settlement has is its name's (`deviceOf`), so it is the same for everybody.
+ */
+const DEVICES: Array<Array<[number, number]>> = [
+  // A fleur-de-lis.
+  [[0, -1], [0.22, -0.62], [0.2, -0.22], [0.38, -0.46], [0.66, -0.52], [0.84, -0.3], [0.78, -0.02], [0.5, 0.1], [0.3, 0.12],
+    [0.26, 0.26], [0.48, 0.26], [0.48, 0.42], [0.2, 0.42], [0.3, 1], [0, 0.72], [-0.3, 1], [-0.2, 0.42], [-0.48, 0.42], [-0.48, 0.26],
+    [-0.26, 0.26], [-0.3, 0.12], [-0.5, 0.1], [-0.78, -0.02], [-0.84, -0.3], [-0.66, -0.52], [-0.38, -0.46], [-0.2, -0.22], [-0.22, -0.62]],
+  // A five-pointed star.
+  Array.from({ length: 10 }, (_, i) => {
+    const a = -Math.PI / 2 + (i * Math.PI) / 5, r = i % 2 ? 0.4 : 0.98;
+    return [Math.cos(a) * r, Math.sin(a) * r + 0.06] as [number, number];
+  }),
+  // A cross.
+  [[-0.22, -0.9], [0.22, -0.9], [0.22, -0.28], [0.84, -0.28], [0.84, 0.16], [0.22, 0.16], [0.22, 0.9], [-0.22, 0.9], [-0.22, 0.16], [-0.84, 0.16], [-0.84, -0.28], [-0.22, -0.28]],
+  // A crescent.
+  [...Array.from({ length: 13 }, (_, i) => {
+    const a = Math.PI * 0.2 + (i / 12) * Math.PI * 1.6;
+    return [Math.cos(a) * 0.9, Math.sin(a) * 0.9] as [number, number];
+  }), ...Array.from({ length: 13 }, (_, i) => {
+    const a = Math.PI * 1.72 - (i / 12) * Math.PI * 1.44;
+    return [0.34 + Math.cos(a) * 0.66, Math.sin(a) * 0.66] as [number, number];
+  })],
+  // A chevron.
+  [[-0.9, 0.62], [0, -0.42], [0.9, 0.62], [0.9, 0.98], [0, -0.06], [-0.9, 0.98]],
+  // A tree.
+  [[0, -0.95], [0.5, -0.3], [0.28, -0.3], [0.7, 0.28], [0.14, 0.28], [0.14, 0.92], [-0.14, 0.92], [-0.14, 0.28], [-0.7, 0.28], [-0.28, -0.3], [-0.5, -0.3]],
+];
+/** How many devices there are for a settlement to carry. */
+export const DEVICE_COUNT = DEVICES.length;
+/** Which device a settlement carries on its banners and flags: one of the six, by its name, the same wherever it is drawn. */
+export function deviceOf(name: string): number {
+  let h = 2166136261;
+  for (let i = 0; i < name.length; i++) h = Math.imul(h ^ name.charCodeAt(i), 16777619);
+  return (h >>> 0) % DEVICES.length;
+}
+/** The device's colour on a cloth: pale gold on anything dark, and the cloth's own dark on anything pale. */
+const deviceInk = (cloth: RGB): RGB => (0.299 * cloth[0] + 0.587 * cloth[1] + 0.114 * cloth[2] < 150 ? hex('#f1d488') : mix(cloth, [52, 40, 60], 0.62));
+
+/**
+ * A sheet of cloth, drawn as it is this frame: `at(u, v)` is where the point
+ * `u` along it and `v` down it is, in the piece's frame. Its quads are laid
+ * back to front, each lit by which way it faces, the band `bands` of it in its
+ * darker shade, the device at `dev` (its middle in u and v, and its half size
+ * in each), and an ink line round the whole.
+ */
+function sheet(sc: Scene, NU: number, NV: number, at: (u: number, v: number) => V3, p: Paint, shade: Paint,
+  bands: Array<[number, number]>, dev: { k: number; u: number; v: number; su: number; sv: number } | null): { depth: number } {
+  const g = sc.g;
+  const pts: V3[][] = [];
+  for (let i = 0; i <= NU; i++) {
+    const row: V3[] = [];
+    for (let j = 0; j <= NV; j++) row.push(at(i / NU, j / NV));
+    pts.push(row);
+  }
+  const S = (v: V3): Pt => sc.P(v[0], v[1], v[2]);
+  const quads: Array<{ q: V3[]; k: number; d: number; band: boolean }> = [];
+  let depth = 0;
+  for (let i = 0; i < NU; i++) {
+    for (let j = 0; j < NV; j++) {
+      const q = [pts[i][j], pts[i + 1][j], pts[i + 1][j + 1], pts[i][j + 1]];
+      const e1 = [q[2][0] - q[0][0], q[2][1] - q[0][1], q[2][2] - q[0][2]], e2 = [q[3][0] - q[1][0], q[3][1] - q[1][1], q[3][2] - q[1][2]];
+      let n: V3 = [e1[1] * e2[2] - e1[2] * e2[1], e1[2] * e2[0] - e1[0] * e2[2], e1[0] * e2[1] - e1[1] * e2[0]];
+      if (!sc.faces(n[0], n[1], n[2])) n = [-n[0], -n[1], -n[2]];
+      const l = Math.hypot(n[0], n[1], n[2]) || 1;
+      const mx = (q[0][0] + q[2][0]) / 2, my = (q[0][1] + q[2][1]) / 2, mz = (q[0][2] + q[2][2]) / 2;
+      const d = sc.depth(mx, my, mz);
+      depth += d;
+      const vm = (j + 0.5) / NV;
+      quads.push({ q, k: sc.light(n[0] / l, n[1] / l, n[2] / l), d, band: bands.some(([a, b]) => vm >= a && vm <= b) });
+    }
+  }
+  quads.sort((a, b) => a.d - b.d);
+  // The cloth whole in its own colour first, so nothing behind it shows through the hairline seams between its quads.
+  const edge: Pt[] = [...pts.map((r) => S(r[0])), ...pts[NU].map(S), ...pts.slice().reverse().map((r) => S(r[NV])), ...pts[0].slice().reverse().map(S)];
+  sc.poly(edge);
+  g.fillStyle = rgb(p.body, 0.9);
+  g.fill();
+  for (const { q, k, band } of quads) {
+    sc.poly(q.map(S));
+    g.fillStyle = rgb(band ? shade.body : p.body, k);
+    g.fill();
+  }
+  // Where on the cloth a point of the square the device is drawn in falls.
+  if (dev) {
+    const bil = (u: number, v: number): Pt => {
+      const fu = Math.max(0, Math.min(NU - 1e-6, u * NU)), fv = Math.max(0, Math.min(NV - 1e-6, v * NV));
+      const i = Math.floor(fu), j = Math.floor(fv), a = fu - i, b = fv - j;
+      const p00 = pts[i][j], p10 = pts[i + 1][j], p01 = pts[i][j + 1], p11 = pts[i + 1][j + 1];
+      const m = (k: number): number => (p00[k] * (1 - a) + p10[k] * a) * (1 - b) + (p01[k] * (1 - a) + p11[k] * a) * b;
+      return sc.P(m(0), m(1), m(2));
+    };
+    const ink = deviceInk(p.body);
+    const shape = DEVICES[dev.k].map(([x, y]) => bil(dev.u + x * dev.su, dev.v + y * dev.sv));
+    sc.fillInk(shape, rgb(ink, 1), mix(ink, [40, 30, 34], 0.55), 0.55);
+  }
+  // The ink round it: along the head, down the far edge, back along the foot and up the near one.
+  sc.poly(edge);
+  g.strokeStyle = rgb(p.ink);
+  g.lineWidth = sc.ink;
+  g.lineJoin = 'round';
+  g.stroke();
+  return { depth: depth / (NU * NV) };
+}
+
+/** What a piece's cloth is made of: its dye, or undyed linen; and the darker shade for its hems. */
+const clothOf = (tint?: Tint): [Paint, Paint] => [
+  tint ? paintOf(hex(tint.colour), 0.55) : LINEN,
+  tint ? paintOf(hex(tint.shade), 0.55) : paintOf(hex('#d9ceb6')),
+];
+
+/**
+ * A banner's cloth, hung off the crossbar and cut in a swallowtail: in a
+ * calm it hangs in its folds, and the wind swings its foot out down the wind
+ * -- a hand's breadth in a light air and most of its own width in a gale --
+ * and sends ripples down it, quicker the harder it blows.
+ */
+function drawBannerCloth(g: CanvasRenderingContext2D, sx: number, sy: number, zoom: number, view: PieceView, air: Air): void {
+  const sc = new Scene(g, view, zoom);
+  const [p, hem] = clothOf(air.tint);
+  const f = Math.max(0, Math.min(1, air.force));
+  const wl = Math.hypot(air.x, air.y) || 1, wx = air.x / wl, wy = air.y / wl;
+  const coarse = zoom < 0.6;
+  // As many quads as the folds and the ripple need at this size, and no more.
+  const NU = coarse ? 3 : 7, NV = coarse ? 2 : zoom < 1.5 ? 4 : 6;
+  const t = air.t;
+  const at = (u: number, v: number): V3 => {
+    const x0 = -4.2 + 8.4 * u;
+    const foot = 9.6 + 2.8 * (1 - Math.abs(x0) / 4.2);
+    const z0 = BANNER_HEAD - (BANNER_HEAD - foot) * v;
+    // The folds it hangs in, and the swing and the ripple the wind puts in it, growing down the cloth.
+    const fold = 0.35 * Math.sin(u * 6 * 2.1 / 1.0) * (1 - 0.3 * v);
+    const swing = f * 4.8 * v ** 1.5 + 0.25 * v * Math.sin(t * 0.9 + u);
+    const ripple = (0.2 + 0.9 * f) * v * Math.sin((u * 1.4 + v * 0.6) * Math.PI * 2 - t * (1.2 + 3.2 * f));
+    return [x0 + wx * swing + 0.2 * ripple * wy, BANNER_Y + fold + wy * swing + ripple, z0 + swing * 0.18 * f];
+  };
+  g.save();
+  g.translate(sx, sy);
+  g.scale(zoom, zoom);
+  const { depth } = sheet(sc, NU, NV, at, p, hem, coarse ? [] : [[0.03, 0.13], [0.8, 0.92]],
+    coarse || air.device === undefined ? null : { k: air.device, u: 0.5, v: 0.46, su: 0.18, sv: 0.21 });
+  // Seen from behind, the staff and the bar are in front of it.
+  if (depth < sc.depth(0, 0, BANNER_HEAD)) {
+    bannerStaff(sc, woodOf(undefined), false);
+    sc.flush();
+  }
+  g.restore();
+}
+
+/**
+ * A flag on its pole, flying down the wind: straight out in a gale, drooping
+ * in a light air and hanging nearly down the pole in a flat calm, rippling in
+ * waves that run out to its fly quicker and deeper the harder it blows. Cut
+ * in a swallowtail at the fly.
+ */
+function drawFlag(g: CanvasRenderingContext2D, sx: number, sy: number, zoom: number, view: PieceView, air: Air): void {
+  const sc = new Scene(g, view, zoom);
+  const [p, hem] = clothOf(air.tint);
+  const f = Math.max(0, Math.min(1, air.force));
+  const wl = Math.hypot(air.x, air.y) || 1, wx = air.x / wl, wy = air.y / wl;
+  const nx = -wy, ny = wx;
+  const coarse = zoom < 0.6;
+  const NU = coarse ? 4 : zoom < 1.5 ? 8 : 11, NV = coarse ? 2 : zoom < 1.5 ? 3 : 4;
+  const t = air.t;
+  // How far it droops below level at the hoist and at the fly, in radians.
+  const droop = (1 - f) ** 1.4 * 1.25;
+  const at = (u0: number, v: number): V3 => {
+    // The swallowtail: the fly is cut back toward the middle of it.
+    const u = u0 * (1 - 0.2 * (1 - Math.abs(2 * v - 1)));
+    const z0 = FLAG_TOP - FLAG_HOIST * v;
+    // Along the flag, bending down as it goes, from the pole's edge.
+    let x = wx * 0.45, y = wy * 0.45, z = z0, steps = 8;
+    for (let k = 0; k < steps; k++) {
+      const s = ((k + 0.5) / steps) * u;
+      const dd = droop * (0.35 + 0.65 * s);
+      const len = (FLAG_FLY * u) / steps;
+      x += wx * Math.cos(dd) * len;
+      y += wy * Math.cos(dd) * len;
+      z -= Math.sin(dd) * len;
+    }
+    // The waves, from nothing at the hoist to their fullest at the fly.
+    const amp = (0.35 + 1.9 * f) * u ** 1.25;
+    const w = amp * Math.sin((u * 1.35 - t * (0.7 + 2.3 * f)) * Math.PI * 2 + v * 0.7);
+    return [x + nx * w, y + ny * w, z + 0.25 * amp * Math.cos((u * 1.35 - t * (0.7 + 2.3 * f)) * Math.PI * 2)];
+  };
+  g.save();
+  g.translate(sx, sy);
+  g.scale(zoom, zoom);
+  const { depth } = sheet(sc, NU, NV, at, p, hem, [], coarse || air.device === undefined ? null : { k: air.device, u: 0.36, v: 0.5, su: 0.14, sv: 0.3 });
+  // A flag flying away from you is behind its pole.
+  if (depth < 0) {
+    flagPole(sc, woodOf(undefined), false);
+    sc.flush();
+  }
+  g.restore();
+}
+
+/** What is drawn each frame over the bake of a piece with cloth on it. */
+const CLOTH: Record<string, (g: CanvasRenderingContext2D, sx: number, sy: number, zoom: number, view: PieceView, air: Air) => void> = {
+  banner: drawBannerCloth,
+  flagpole: drawFlag,
+};
+
+/* ---- the roses on an arch ------------------------------------------------------ */
+
+/** The arch of a timber rose arch: its posts' half span, their height, and how far the arch rises over them. */
+const ARCH_X = 17.4;
+const ARCH_H = 21.5;
+const ARCH_RISE = 8;
+/** The leaves of a climbing rose, lit, mid and deep; its canes; and what it flowers in, by variety: the petals, their shade and the bud. */
+const ROSE_LEAF: RGB[] = [hex('#a6d49a'), hex('#6aa66e'), hex('#3d7250')];
+const ROSE_CANE: Paint = paintOf(hex('#7a8a52'), 0.5);
+const ROSE_BLOOMS: Array<[RGB, RGB, RGB]> = [
+  [hex('#f4a3b8'), hex('#c8607c'), hex('#d4557a')],
+  [hex('#dd5566'), hex('#9b2b3c'), hex('#a8283e')],
+  [hex('#faf4ea'), hex('#d6c3ae'), hex('#f2e2c8')],
+  [hex('#f6d372'), hex('#c89f3c'), hex('#e3a634')],
+];
+
+/**
+ * The one number an arch's roses are baked by: their variety (the
+ * thousands), whether it is their season (a hundred), and how many days they
+ * have grown, in twentieths of a day to four -- so an arch is baked again once
+ * every seventy-two minutes while it grows, and never once it has.
+ */
+export function roseTrim(variety: number, days: number, blooms: boolean): number {
+  return (variety % ROSE_BLOOMS.length) * 1000 + (blooms ? 100 : 0) + Math.floor(Math.min(4, Math.max(0, days)) * 20);
+}
+const roseOfTrim = (trim: number): { variety: number; days: number; blooms: boolean } =>
+  ({ variety: Math.floor(trim / 1000) % ROSE_BLOOMS.length, blooms: trim % 1000 >= 100, days: (trim % 100) / 20 });
+
+/**
+ * The climbing roses on an arch, up each side from the foot to the crown:
+ * `side(q)` is where on the left side a share `q` of the way up is, the right
+ * the mirror of it, and `face` how far in front of and behind the frame the
+ * growth stands. The first day it is canes, climbing; the second the leaves
+ * fill in from the foot up; the third, in their season, the buds come; and
+ * then the flowers (`roses.ts`). Out of season a grown arch is in leaf.
+ */
+function climbingRoses(sc: Scene, side: (q: number) => V3, face: number, trim: number): void {
+  const { variety, days, blooms } = roseOfTrim(trim);
+  // How far up each side the leaves have come, and the canes ahead of them; then the buds, then the flowers.
+  const leafTo = days < ROSE_LEAFY ? 0 : Math.min(1, 0.25 + (0.75 * (days - ROSE_LEAFY)) / (ROSE_BUD - ROSE_LEAFY));
+  const caneTo = Math.min(1, 0.15 + (0.85 * days) / ROSE_LEAFY);
+  const buds = blooms && days >= ROSE_BUD ? Math.min(1, 0.3 + (0.7 * (days - ROSE_BUD)) / (ROSE_FLOWER - ROSE_BUD)) : 0;
+  const flowers = blooms && days >= ROSE_FLOWER;
+  const [petal, shade, bud] = ROSE_BLOOMS[variety];
+  const unit = Math.hypot(sc.v.ux, sc.v.vx);
+  /** A number in 0..1 for a place on the arch, the same every time it is baked. */
+  const jit = (i: number, k: number): number => {
+    const v = Math.sin(i * 12.9898 + k * 78.233) * 43758.5453;
+    return v - Math.floor(v);
+  };
+  /** A leaf: a pointed oval at (x, y) turned to `a`, `L` long. */
+  const leaf = (g: CanvasRenderingContext2D, x: number, y: number, a: number, L: number, c: RGB): void => {
+    g.save();
+    g.translate(x, y);
+    g.rotate(a);
+    g.beginPath();
+    g.moveTo(-L * 0.5, 0);
+    g.quadraticCurveTo(0, -L * 0.36, L * 0.5, 0);
+    g.quadraticCurveTo(0, L * 0.36, -L * 0.5, 0);
+    g.closePath();
+    g.fillStyle = rgb(c);
+    g.fill();
+    g.restore();
+  };
+  /** A rose, open: a ring of petals round a darker heart, lit from the right. */
+  const rose = (g: CanvasRenderingContext2D, x: number, y: number, B: number): void => {
+    for (let k = 0; k < 5; k++) {
+      const a = (k / 5) * TAU + 0.4;
+      g.beginPath();
+      g.arc(x + Math.cos(a) * B * 0.45, y + Math.sin(a) * B * 0.38, B * 0.55, 0, TAU);
+      g.fillStyle = rgb(petal, k === 1 ? 1.06 : 1);
+      g.fill();
+    }
+    g.beginPath();
+    g.arc(x, y, B * 0.98, 0, TAU);
+    g.strokeStyle = rgb(shade, 1, 0.45);
+    g.lineWidth = sc.ink * 0.5;
+    g.stroke();
+    g.beginPath();
+    g.arc(x + B * 0.05, y + B * 0.04, B * 0.32, 0.3, 5.4);
+    g.strokeStyle = rgb(shade, 1, 0.7);
+    g.lineWidth = sc.ink * 0.6;
+    g.stroke();
+    g.beginPath();
+    g.arc(x - B * 0.3, y - B * 0.32, B * 0.2, 0, TAU);
+    g.fillStyle = rgb(mix(petal, [255, 255, 255], 0.55), 1, 0.85);
+    g.fill();
+  };
+  const N = 13;
+  for (const m of [1, -1]) {
+    const at = (q: number): V3 => {
+      const [x, y, z] = side(q);
+      return [x * m, y, z];
+    };
+    for (const y of [face, -face]) {
+      const salt = (m > 0 ? 1 : 2) + (y > 0 ? 0 : 4);
+      // The canes, two to a face, as far up as they have got: under the leaves once there are leaves.
+      const steps = 14;
+      for (let c = 0; c < 2; c++) {
+        let prev: V3 | null = null;
+        for (let k = 0; k <= steps; k++) {
+          const q = (k / steps) * caneTo;
+          const [x, , z] = at(q);
+          const pt: V3 = [x + (c ? 0.9 : -0.9) * Math.sin(q * 9 + c + salt), y * (0.9 + 0.1 * c), z];
+          if (prev) sc.rod(prev, pt, 0.15, ROSE_CANE);
+          prev = pt;
+        }
+      }
+      // The leaves, in masses from the foot up: some big, some small, the highest of them still coming.
+      for (let i = 0; i < N; i++) {
+        const q = (i + 0.35 + 0.3 * jit(i, salt)) / N;
+        const grow = Math.min(1, (leafTo - q) * N * 0.7 + 1);
+        if (grow <= 0.2) continue;
+        const [x, , z] = at(q);
+        const c: V3 = [x + (jit(i, salt + 11) - 0.5) * 2.2, y + (jit(i, salt + 13) - 0.5) * 0.9, z + (jit(i, salt + 17) - 0.5) * 1.6];
+        const r = (1.9 + 1.3 * jit(i, salt + 19)) * grow;
+        const nBuds = buds > 0 ? Math.round(buds * (1 + 2 * jit(i, salt + 23))) : 0;
+        const nRoses = flowers ? (jit(i, salt + 29) < 0.28 ? 0 : jit(i, salt + 31) < 0.55 ? 1 : 2) : 0;
+        // And a sprig trailing down from it here and there, off the arch.
+        const trail = leafTo >= 1 && q > 0.55 && jit(i, salt + 37) < 0.45 ? 2 + 4 * jit(i, salt + 41) : 0;
+        const seed = i * 7 + salt;
+        sc.sprite(c, r, (px, py) => {
+          const g = sc.g;
+          const R = r * unit;
+          if (trail) {
+            // A strand hanging off the mass, leaves in pairs down it, the lowest the smallest.
+            const x0 = px + (jit(seed, 3) - 0.5) * R, y0 = py + R * 0.3, drop = trail * HEIGHT_SCALE;
+            const sway = (jit(seed, 4) - 0.5) * R * 0.8;
+            g.beginPath();
+            g.moveTo(x0, y0);
+            g.quadraticCurveTo(x0 + sway, y0 + drop * 0.6, x0 + sway * 0.6, y0 + drop);
+            g.strokeStyle = rgb(ROSE_LEAF[2], 1, 0.9);
+            g.lineWidth = sc.ink * 0.7;
+            g.stroke();
+            for (let k = 1; k <= 4; k++) {
+              const f = k / 4, tx = x0 + sway * (1.2 * f - 0.6 * f * f), ty = y0 + drop * f, L = R * (0.7 - 0.08 * k);
+              leaf(g, tx - L * 0.32, ty, 2.5, L, ROSE_LEAF[k % 2 ? 1 : 0]);
+              leaf(g, tx + L * 0.32, ty - L * 0.1, 0.6, L, ROSE_LEAF[k % 2 ? 0 : 1]);
+            }
+          }
+          // The mass: overlapping lobes, inked round the outside, lit on top, with leaves standing out of its edge.
+          const lobes: Array<[number, number, number]> = [[-0.58, 0.12, 0.52], [0.56, 0.08, 0.5], [0, -0.48, 0.58], [-0.34, 0.5, 0.44], [0.36, 0.44, 0.46], [0, 0.02, 0.64]];
+          g.beginPath();
+          for (const [lx, ly, lr] of lobes) {
+            g.moveTo(px + lx * R + lr * R, py + ly * R);
+            g.arc(px + lx * R, py + ly * R, lr * R, 0, TAU);
+          }
+          g.strokeStyle = rgb(ROSE_LEAF[2], 1, 0.9);
+          g.lineWidth = sc.ink * 1.6;
+          g.stroke();
+          g.fillStyle = rgb(ROSE_LEAF[1]);
+          g.fill();
+          for (let k = 0; k < 6; k++) {
+            const a = jit(seed, k + 50) * TAU;
+            leaf(g, px + Math.cos(a) * R * 0.85, py + Math.sin(a) * R * 0.7, a, R * 0.62, ROSE_LEAF[k % 3 === 0 ? 2 : 1]);
+          }
+          for (const [lx, ly, lr] of lobes.slice(0, 4)) {
+            g.beginPath();
+            g.arc(px + lx * R + lr * R * 0.18, py + ly * R - lr * R * 0.28, lr * R * 0.46, 0, TAU);
+            g.fillStyle = rgb(ROSE_LEAF[0], 1, 0.85);
+            g.fill();
+          }
+          // Buds, dark and tight; or the roses themselves, open.
+          for (let b = 0; b < nRoses; b++) {
+            const a = jit(seed, b + 60) * TAU;
+            rose(g, px + Math.cos(a) * R * 0.42, py + Math.sin(a) * R * 0.34 - R * 0.1, R * (0.42 + 0.1 * jit(seed, b + 70)));
+          }
+          for (let b = 0; b < nBuds && !nRoses; b++) {
+            // A bud: a closed teardrop in the rose's own deep colour, standing out of a green cup, inked like everything else.
+            const a = jit(seed, b + 80) * TAU;
+            const X = px + Math.cos(a) * R * 0.5, Y = py + Math.sin(a) * R * 0.4;
+            const bw = Math.max(1.2, R * 0.2), bh = Math.max(1.8, R * 0.32);
+            g.beginPath();
+            g.ellipse(X, Y + bh * 0.42, bw * 0.95, bh * 0.36, 0, 0, TAU);
+            g.fillStyle = rgb(ROSE_LEAF[2]);
+            g.fill();
+            g.beginPath();
+            g.moveTo(X, Y - bh);
+            g.quadraticCurveTo(X + bw * 1.25, Y - bh * 0.05, X, Y + bh * 0.45);
+            g.quadraticCurveTo(X - bw * 1.25, Y - bh * 0.05, X, Y - bh);
+            g.closePath();
+            g.fillStyle = rgb(bud);
+            g.fill();
+            g.strokeStyle = rgb(mix(bud, [40, 30, 34], 0.6), 1, 0.85);
+            g.lineWidth = sc.ink * 0.55;
+            g.stroke();
+            g.beginPath();
+            g.ellipse(X + bw * 0.28, Y - bh * 0.3, bw * 0.28, bh * 0.34, 0, 0, TAU);
+            g.fillStyle = rgb(petal, 1.04, 0.9);
+            g.fill();
+          }
+        }, r * 1.5);
+      }
+    }
+  }
+}
+
 /** A hull's sheer, `S` high amidships: rising to both ends, and most to the bow, `t` running from stern to stem. */
 const sheerOf = (S: number) => (t: number): number => S + 0.9 * (2 * t - 1) ** 2 + 1.2 * t ** 8;
 
@@ -1769,9 +2219,14 @@ const HOLES: Record<string, typeof skyHoles> = { altar: skyHoles };
  * pointer round the stone and not round the light. `night` is how dark it
  * is, 0 to 1.
  */
-export function drawFurnitureLive(ctx: CanvasRenderingContext2D, sx: number, sy: number, zoom: number, kind: string, view: PieceView, night = 0): void {
+export function drawFurnitureLive(ctx: CanvasRenderingContext2D, sx: number, sy: number, zoom: number, kind: string, view: PieceView, night = 0, air: Air = STILL): void {
   LIVE[kind]?.(ctx, sx, sy, zoom, view, performance.now() / 1000, night);
+  // And cloth, as the wind has it this frame.
+  CLOTH[kind]?.(ctx, sx, sy, zoom, view, air);
 }
+
+/** Whether a piece has cloth on it that moves in the wind, drawn each frame (`drawFurnitureLive`). */
+export const clothInWind = (kind: string): boolean => kind in CLOTH;
 
 /** Whether a piece takes the night back off itself (`furnitureHoles`). */
 export const glowsAtNight = (kind: string): boolean => kind in HOLES;
@@ -2657,27 +3112,100 @@ const MODELS: Record<string, Model> = {
     sc.rod([2.5, 1, z], [2.5, 1, z + 11.2], 0.26, PATINA);
     sc.lathe(2.5, 1, [[z + 11.2, 0.3], [z + 11.6, 0.55], [z + 12, 0.2]], PATINA, 10);
   },
-  banner: ({ sc, wood, tint }) => {
+  /*
+   * The staff of a banner is baked and its cloth is not: the cloth hangs off
+   * the crossbar and moves in the wind, and is drawn as it is each frame
+   * (`drawBannerCloth`). What is kept here for it is room, so the banner is
+   * as tall and as wide to the pointer as it is drawn.
+   */
+  banner: ({ sc, wood }) => {
     sc.shadows = [[-2.6, 2.6, -2.6, 2.6]];
-    const fabric = tint ? paintOf(hex(tint.colour), 0.55) : LINEN;
-    const hem = tint ? paintOf(hex(tint.shade), 0.55) : paintOf(hex('#d9ceb6'));
-    sc.box(-2.6, 2.6, -0.5, 0.5, 0, 0.8, wood);
-    sc.box(-0.5, 0.5, -2.6, -0.5, 0, 0.8, wood);
-    sc.box(-0.5, 0.5, 0.5, 2.6, 0, 0.8, wood);
-    sc.rod([0, 0, 0.8], [0, 0, 24.2], 0.42, wood);
-    sc.lathe(0, 0, [[24.2, 0.5], [24.7, 0.8], [25.4, 0.35], [25.8, 0]], BRASS, 12);
-    sc.rod([-4.5, 0, 22.4], [4.5, 0, 22.4], 0.3, wood);
-    // The cloth in folds, hung in front of the staff and cut in a swallowtail, a band of the darker shade at the head and the foot.
-    const n = 6, head = 22.1, foot = (x: number): number => 9.6 + 2.8 * (1 - Math.abs(x) / 4.2);
-    const top: V3[] = [], bottom: V3[] = [];
-    for (let i = 0; i <= n; i++) {
-      const x = -4.2 + (8.4 * i) / n, y = 1 + 0.35 * Math.sin(i * 2.1);
-      top.push([x, y, head]);
-      bottom.push([x, y, foot(x)]);
+    bannerStaff(sc, wood, true);
+    sc.room(-5.6, 5.6, -2.4, 6.4, 8.6, 22.6);
+  },
+  /*
+   * A flagpole: a squat plinth, the pole twice a banner's staff with a brass
+   * ball at its head, and the halyard run down it to a cleat. The flag is
+   * drawn each frame, flying down the wind (`drawFlag`).
+   */
+  flagpole: ({ sc, wood }) => {
+    sc.shadows = [[-2.4, 2.4, -2.4, 2.4]];
+    const dressed = grain(sc, wood, 2);
+    sc.box(-2.2, 2.2, -2.2, 2.2, 0, 1.3, wood, { front: dressed, back: dressed, left: dressed, right: dressed });
+    sc.box(-1.3, 1.3, -1.3, 1.3, 1.3, 2.5, wood);
+    sc.lathe(0, 0, [[2.5, 0.75], [3.2, 0.75]], BRASS, 12);
+    flagPole(sc, wood, true);
+    sc.rod([0.62, 0.34, FLAG_TOP - 0.3], [0.62, 0.34, 6.6], 0.07, ROPE);
+    sc.box(0.42, 0.66, 0.18, 0.92, 5.8, 7.2, IRON);
+    // Where the flag flies, for the pointer: round the head of the pole, whichever way the wind has it.
+    sc.room(-7, 7, -7, 7, FLAG_TOP - FLAG_HOIST - 6, FLAG_TOP);
+  },
+  /*
+   * The two rose arches, a tile across and a subtile deep, walked through the
+   * middle. The timber one is four posts, a trellis up each side and two
+   * arched rails over the top with slats across them; the stone one two
+   * piers under a ring of voussoirs with its keystone standing proud. The
+   * roses climb both from the foot of each side (`climbingRoses`).
+   */
+  rose_arch: ({ sc, wood, trim }) => {
+    sc.shadows = [[-18.6, 18.6, -3.8, 3.8]];
+    const X = ARCH_X, H = ARCH_H, R = ARCH_RISE, D = 2.8;
+    for (const x of [-X, X]) {
+      for (const y of [-D, D]) sc.box(x - 0.7, x + 0.7, y - 0.7, y + 0.7, 0, H + 0.4, wood);
+      // A trellis up the side: rails across between the posts, and two laths up it.
+      for (let k = 0; k < 6; k++) sc.rod([x, -D, 2.2 + k * 3.6], [x, D, 2.2 + k * 3.6], k === 0 || k === 5 ? 0.26 : 0.15, wood);
+      for (const y of [-D / 3, D / 3]) sc.rod([x, y, 1], [x, y, H], 0.15, wood);
     }
-    cloth(sc, top, bottom, fabric, (F, k) => {
-      for (const [v0, v1] of [[0.06, 0.12], [0.82, 0.88]]) sc.fillInk([F(0, v0), F(1, v0), F(1, v1), F(0, v1)], rgb(hem.body, k), hem.ink, 0.2);
-    });
+    const arc = (th: number): [number, number] => [X * Math.cos(th), H + R * Math.sin(th)];
+    const SEG = 12;
+    for (const y of [-D, D]) {
+      for (let k = 0; k < SEG; k++) {
+        const [x0, z0] = arc(Math.PI * (1 - k / SEG)), [x1, z1] = arc(Math.PI * (1 - (k + 1) / SEG));
+        sc.rod([x0, y, z0], [x1, y, z1], 0.55, wood);
+      }
+    }
+    for (let k = 0; k <= 10; k++) {
+      const [x, z] = arc(Math.PI * (1 - k / 10));
+      sc.rod([x, -D - 0.7, z + 0.55], [x, D + 0.7, z + 0.55], 0.28, wood);
+    }
+    climbingRoses(sc, (q) => {
+      if (q < 0.62) return [-X, 0, 1 + ((H - 1) * q) / 0.62];
+      const [x, z] = arc(Math.PI - (Math.PI / 2) * ((q - 0.62) / 0.38));
+      return [x, 0, z + 0.6];
+    }, D + 0.5, trim ?? roseTrim(0, 10, true));
+  },
+  stone_rose_arch: ({ sc, trim }) => {
+    sc.shadows = [[-20.2, 20.2, -3.8, 3.8]];
+    const dressed = bricks(sc, STONE, 1.7);
+    const P0 = 14.2, P1 = 19.6, D = 3, HP = 18.6;
+    for (const s of [-1, 1]) {
+      const [a, b] = s < 0 ? [-P1, -P0] : [P0, P1];
+      sc.box(a, b, -D, D, 0, HP, STONE, { front: dressed, back: dressed, left: dressed, right: dressed });
+      // The impost the arch springs from, a hand wider than the pier.
+      sc.box(a - 0.45, b + 0.45, -D - 0.45, D + 0.45, HP, HP + 1.3, STONE);
+    }
+    // The ring: eleven voussoirs from impost to impost, the middle one the keystone.
+    const z0 = HP + 1.3, ri = P0, ro = P0 + 3, rise = 9.6, riseO = rise + 3;
+    const inner = (th: number): [number, number] => [ri * Math.cos(th), z0 + rise * Math.sin(th)];
+    const outer = (th: number): [number, number] => [ro * Math.cos(th), z0 + riseO * Math.sin(th)];
+    const N = 11;
+    for (let k = 0; k < N; k++) {
+      const t0 = Math.PI * (1 - k / N), t1 = Math.PI * (1 - (k + 1) / N);
+      const key = k === (N - 1) / 2;
+      const d = key ? D + 0.35 : D, lift = key ? 0.8 : 0;
+      const [ix0, iz0] = inner(t0), [ix1, iz1] = inner(t1), [ox0, oz0] = outer(t0), [ox1, oz1] = outer(t1);
+      const tm = (t0 + t1) / 2;
+      // Each face only where it looks at you: the ring's two faces, its back, and under it where it turns toward you.
+      if (sc.sees(0, 1)) sc.panel([[ix0, d, iz0], [ix1, d, iz1], [ox1, d, oz1 + lift], [ox0, d, oz0 + lift]], STONE);
+      if (sc.sees(0, -1)) sc.panel([[ix0, -d, iz0], [ix1, -d, iz1], [ox1, -d, oz1 + lift], [ox0, -d, oz0 + lift]], STONE);
+      if (sc.faces(Math.cos(tm), 0, Math.sin(tm))) sc.panel([[ox0, -d, oz0 + lift], [ox1, -d, oz1 + lift], [ox1, d, oz1 + lift], [ox0, d, oz0 + lift]], STONE);
+      if (sc.faces(-Math.cos(tm), 0, -Math.sin(tm))) sc.panel([[ix0, -d, iz0], [ix1, -d, iz1], [ix1, d, iz1], [ix0, d, iz0]], STONE);
+    }
+    climbingRoses(sc, (q) => {
+      if (q < 0.6) return [-(P0 + P1) / 2, 0, 1 + ((HP - 1) * q) / 0.6];
+      const th = Math.PI - (Math.PI / 2) * ((q - 0.6) / 0.4);
+      return [((ri + ro) / 2) * Math.cos(th), 0, z0 + (rise + 1.5) * Math.sin(th) + 0.4];
+    }, D + 0.5, trim ?? roseTrim(0, 10, true));
   },
 
   /*
@@ -3745,7 +4273,7 @@ export function drawFurniture(ctx: CanvasRenderingContext2D, sx: number, sy: num
     if (layer === 'all' || layer === i) ctx.drawImage(c, sx - b.ox * k, sy - b.oy * k, b.canvas.width * k, b.canvas.height * k);
   }
   // And whatever on it moves, over the last of it, as it is this frame.
-  if (live && (layer === 'all' || layer === sheets.length - 1)) drawFurnitureLive(ctx, sx, sy, zoom, kind, view);
+  if (live && (layer === 'all' || layer === sheets.length - 1)) drawFurnitureLive(ctx, sx, sy, zoom, kind, view, 0, tint ? { ...STILL, tint } : STILL);
   // What it covers on the screen, from its floor contact: the box it is clicked by.
   return [b.bounds[0] * zoom, b.bounds[1] * zoom, b.bounds[2] * zoom, b.bounds[3] * zoom];
 }

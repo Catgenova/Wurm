@@ -39,6 +39,8 @@ import { FALLS, roofModel, type Fall, type RoofGable, type RoofModel, type RoofP
 import { COVER_PPT, covering } from './roofing';
 import { FLOOR_PPT, FLOOR_TILES, concrete, flooring, slabbing } from './flooring';
 import { LADDER, stairStyle } from './stairing';
+import { drawSteps, stepsFootAt } from './steps';
+import { seasonAt, type Season } from '../world/calendar';
 import { drawShine, shines } from './shine';
 import { ARCH, BAY, DOOR, DOUBLE, FENCE_GAP, WINDOW, type Masonry, adobe, brickwork, cobble, goldwork, logwork, marblework, planking, sandstone, silverwork, slatework, stonework, timbercraft } from './masonry';
 import { anvilCentre, type PlacedAnvil } from '../game/anvil';
@@ -52,7 +54,8 @@ import { kilnCentre, type PlacedKiln } from '../game/kiln';
 import { furnitureCentre, furnitureDef, type PlacedFurniture, facingOf as pieceFacing, furnitureFootprint } from '../game/furniture';
 import { UNSEEN, VISIBLE } from '../game/vision';
 import { DAWN, DUSK } from '../game/game';
-import { crewOrder, drawFurniture, drawFurnitureLive, furnitureHoles, furnitureSpan, FURNITURE_HEIGHT, glowsAtNight, headingView, pieceView, type Crew, type PieceView } from './furniture';
+import { clothInWind, crewOrder, deviceOf, drawFurniture, drawFurnitureLive, furnitureHoles, furnitureSpan, FURNITURE_HEIGHT, glowsAtNight, headingView, pieceView, roseTrim, type Air, type Crew, type PieceView } from './furniture';
+import { roseStage } from '../game/roses';
 import { dyeOf } from '../game/dyestuffs';
 import { sailTrim } from '../game/wind';
 import { FURNITURE_BY_ID, rackDeck, rackSpots } from '../game/furniture';
@@ -395,6 +398,9 @@ function hash4(a: number, b: number, c: number, d: number): number {
   return ((k ^ (k >>> 15)) >>> 0) / 4294967296;
 }
 
+/** Which way is out through a piece's front, and which way its width runs, in the world, by the side it faces. */
+const FRONT_OF: Record<Side, [number, number]> = { s: [0, 1], e: [1, 0], n: [0, -1], w: [-1, 0] };
+const ACROSS_OF: Record<Side, [number, number]> = { s: [1, 0], e: [0, -1], n: [-1, 0], w: [0, 1] };
 const rgb = (c: readonly [number, number, number], k: number, a = 1): string =>
   `rgba(${Math.min(255, c[0] * k) | 0},${Math.min(255, c[1] * k) | 0},${Math.min(255, c[2] * k) | 0},${a})`;
 /**
@@ -653,6 +659,18 @@ export class Renderer {
   private sunNow: [number, number, number] = [0, 0, 1];
   /** The sky this frame, which the haze over the distance is drawn in. */
   private sky: Sky = skyAt(0, 0);
+  /** The season this frame, for the pots on a flight of steps and the roses on an arch. */
+  private season: Season = 'spring';
+  /** How a face of a flight of steps is lit: the light walls are drawn in (`faceLight`). */
+  private readonly stepsLight = (ux: number, uy: number): number => this.faceLight(ux, uy);
+  /**
+   * Where a foot stands at a point of the ground: on the tread under it on a
+   * flight of steps, a riser higher at a time, and on the ground everywhere else.
+   */
+  private footAt(wx: number, wy: number): number {
+    const w = this.game.world;
+    return w.getTile(Math.floor(wx), Math.floor(wy)) === TileType.Steps ? stepsFootAt(w, wx, wy) : w.heightAt(wx, wy);
+  }
   /** The wind as the surface sees it, worked out once a frame rather than per tile. */
   private surf = { dirX: 1, dirY: 0, force: 0.5 };
   private drawnTiles = 0;
@@ -1465,6 +1483,8 @@ export class Renderer {
     const hour0 = this.game.hourOfDay();
     const sky = skyAt(this.game.darkness(), Math.max(0, 1 - Math.min(Math.abs(hour0 - DAWN), Math.abs(hour0 - DUSK)) / 2.6));
     this.sky = sky;
+    // The island's year, for what flowers and what does not (`seasonAt`): read off the wall clock once a frame.
+    this.season = seasonAt(Date.now() / 1000).season;
     const voidInk = css(unknownInk(sky));
     const back = ctx.createLinearGradient(0, 0, 0, H);
     back.addColorStop(0, css(sky.top));
@@ -1770,7 +1790,7 @@ export class Renderer {
          * beside the colour: one means there was nothing growing over this
          * tile and it can be passed over, two means there was.
          */
-        if (hemmed && !wet && !PAVED.has(t0)) {
+        if (hemmed && !wet && !PAVED.has(t0) && t0 !== TileType.Steps) {
           const seams = lit ? this.colors : this.memColors;
           const known = seams.flag(x, y);
           if (known !== 1) {
@@ -1779,6 +1799,10 @@ export class Renderer {
           }
         }
         if (paved && !wet && PAVED.has(t0)) this.paving(t0, x, y, world.viewData(x, y, lit), pts, paveRot);
+        // A flight of garden steps, built up the tile over its colour: see `steps.ts`.
+        if (!wet && t0 === TileType.Steps) {
+          drawSteps({ ctx, cam, world, zoom, season: this.season, light: this.stepsLight, dpr: this.canvas.dpr }, x, y);
+        }
         // And the metal in the stone, where there is any. Plain rock is plain.
         if (seamed && !wet && t0 === TileType.Rock) {
           const kind = world.rockFace(x, y);
@@ -1923,7 +1947,7 @@ export class Renderer {
             if (peer.uid && this.seated.has(peer.uid)) continue;
             const [px, py] = this.game.roster.drawnAt(peer);
             this.take('peer', x, y, cam.worldToScreenX(px, py),
-              cam.worldToScreenY(px, py, Math.max(world.heightAt(px, py), world.surfaceAt(Math.floor(px), Math.floor(py)) - 4) + peer.level * WALL_HEIGHT), null).peer = peer;
+              cam.worldToScreenY(px, py, Math.max(this.footAt(px, py), world.surfaceAt(Math.floor(px), Math.floor(py)) - 4) + peer.level * WALL_HEIGHT), null).peer = peer;
           }
         }
         if (this.game.creatures.list.size) {
@@ -1933,7 +1957,7 @@ export class Renderer {
             // One shut in a crate is drawn in the crate, by the crate.
             if (cr.mode === 'stored') continue;
             this.take('creature', x, y, cam.worldToScreenX(cr.x, cr.y),
-              cam.worldToScreenY(cr.x, cr.y, deckHere ?? Math.max(world.heightAt(cr.x, cr.y), world.surfaceAt(Math.floor(cr.x), Math.floor(cr.y)) - 4)), null).creature = cr;
+              cam.worldToScreenY(cr.x, cr.y, deckHere ?? Math.max(this.footAt(cr.x, cr.y), world.surfaceAt(Math.floor(cr.x), Math.floor(cr.y)) - 4)), null).creature = cr;
           }
         }
         if (this.game.foundations.size) this.drawFoundation(x, y, lit);
@@ -1945,7 +1969,7 @@ export class Renderer {
         // On the deck unless you are in a hull passing under it.
         const deck = this.game.afloat() ? null : this.game.laidOver(player.tileX, player.tileY);
         // Afloat in deep water, at the top of it: the sea's surface, or a pond's.
-        const ph = deck !== null ? deck : Math.max(world.heightAt(player.x, player.y), world.surfaceAt(player.tileX, player.tileY) - 4) + player.visualLevel * WALL_HEIGHT;
+        const ph = deck !== null ? deck : Math.max(this.footAt(player.x, player.y), world.surfaceAt(player.tileX, player.tileY) - 4) + player.visualLevel * WALL_HEIGHT;
         // A driver is drawn on the seat, which is a lift in screen pixels
         // rather than in world height: the cart is under them, not the ground.
         const drivenBy = this.game.driving();
@@ -2404,9 +2428,9 @@ export class Renderer {
           this.paint(ctx, zoom, hovering ? 'hover' : 'none', 0, ent.sx, ent.sy, (g, px, py) => {
             drawn = drawFurniture(g, px, py, zoom, piece.kind, !!piece.lit, dyeOf(piece) ?? undefined, this.pieceTrim(piece), view, piece.material, crew, crew && !hovering ? 0 : 'all', false);
           });
-          // What on it moves -- an altar's stars -- over it, and outside the
+          // What on it moves -- an altar's stars, a banner's cloth -- over it, and outside the
           // ring under the pointer: a ring round a bloom of light is a blot.
-          drawFurnitureLive(ctx, ent.sx, ent.sy, zoom, piece.kind, view, this.game.darkness());
+          drawFurnitureLive(ctx, ent.sx, ent.sy, zoom, piece.kind, view, this.game.darkness(), clothInWind(piece.kind) ? this.airOf(piece) : undefined);
           // Not indoors: a roof or a wall stands in front of it there, and the night cut away at its stars would be cut out of that.
           if (glowsAtNight(piece.kind) && !this.game.buildings.buildingAt(Math.floor(piece.x), Math.floor(piece.y))) {
             this.glows.push({ sx: ent.sx, sy: ent.sy, kind: piece.kind, view });
@@ -7822,6 +7846,11 @@ export class Renderer {
   }
 
   private pieceTrim(f: PlacedFurniture): number | undefined {
+    // An arch's roses: their variety, which is its place's, and how far they have grown (`roses.ts`).
+    if (FURNITURE_BY_ID.get(f.kind)?.roses) {
+      const r = roseStage(f.setAt, Date.now() / 1000);
+      return roseTrim(Math.floor(hash2(f.x * 4 + f.sx, f.y * 4 + f.sy, 71) * 4), r.days, r.blooms);
+    }
     if (rackSpots(f)) {
       let mask = 0;
       const deck = rackDeck(f);
@@ -7843,6 +7872,29 @@ export class Renderer {
    */
   private speechBubble(ctx: CanvasRenderingContext2D, zoom: number, sx: number, sy: number, text: string, at: number): void {
     drawSpeech(ctx, zoom, sx, sy, text, performance.now() / 1000 - at);
+  }
+
+  /**
+   * The weather on a piece's cloth this frame: the wind turned into the
+   * piece's own frame, which way it faces being which way its cloth hangs; the
+   * drawing clock; its dye; and the device of the settlement it stands on.
+   */
+  private airOf(f: PlacedFurniture): Air {
+    const s = this.surf;
+    const facing = pieceFacing(f);
+    const [fx, fy] = FRONT_OF[facing], [ax, ay] = ACROSS_OF[facing];
+    const deed = this.deedOver(f.x, f.y);
+    return {
+      x: s.dirX * ax + s.dirY * ay, y: s.dirX * fx + s.dirY * fy, force: s.force, t: this.time,
+      tint: dyeOf(f) ?? undefined, device: deed ? deviceOf(deed) : undefined,
+    };
+  }
+
+  /** The name of the settlement over a tile, yours or anybody's, or null. */
+  private deedOver(x: number, y: number): string | null {
+    const own = this.game.deed;
+    if (own && Math.abs(x - own.x) <= own.radius && Math.abs(y - own.y) <= own.radius) return own.name;
+    return this.game.deedAt(x, y)?.name ?? null;
   }
 
   private sailTrim(f: PlacedFurniture): number | undefined {

@@ -892,10 +892,35 @@ jobs:
           # so the same dug ground is put to both: a tile seventy steep and
           # one fifty, a walker at climbing nought and then fifty asking to
           # step off the flat into each, and a wild thing asked whether it
-          # would stand there.
+          # would stand there; and the seventy again with a flight of garden
+          # steps laid on it, which anybody stands on up to `steps_most`.
           npx esbuild supabase/test/stand.ts --bundle --platform=node --format=esm \
             --outfile=node_modules/.cache/stand.mjs --log-level=error
           node node_modules/.cache/stand.mjs
+      - name: A flight of garden steps is the same flight on both sides
+        run: |
+          # Laid, walked and taken up by the browser's rules in a solo world and
+          # by the island's on an island, so the same ground is put to both:
+          # a dozen shapes of tile and whether each takes a flight, the doors of
+          # laying one in stone and in timber a missing thing at a time, a
+          # flight laid and taken up with every roll passing, walking onto one
+          # at sixty-four, eighty and past it, a cart on the reins, a wild
+          # thing standing on it, the climbing a step teaches, and the names.
+          npx esbuild supabase/test/steps.ts --bundle --platform=node --format=esm \
+            --outfile=node_modules/.cache/steps.mjs --log-level=error
+          node node_modules/.cache/steps.mjs
+      - name: A flag flies its colour and an arch its roses, the same on both sides
+        run: |
+          # A piece set down on an island dropped its dye, so a banner dyed in
+          # the pack stood undyed and a sail went up white. So a dyed flagpole
+          # and banner are set down and picked up on both sides and read back
+          # off the ground read; and a rose arch's roses grow from when it was
+          # set down, which the island hands over for an arch and nothing
+          # else, which a night's sleep does not move, and which setting it
+          # down again starts over.
+          npx esbuild supabase/test/pieces.ts --bundle --platform=node --format=esm \
+            --outfile=node_modules/.cache/pieces.mjs --log-level=error
+          node node_modules/.cache/pieces.mjs
 
       - name: The crafting window offers a choice of wood
         run: |

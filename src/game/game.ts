@@ -1155,6 +1155,8 @@ export class Game {
       return 0;
     }
     if (!this.vehicleGround(x1, y1)) return null;
+    // A flight of garden steps is climbed, not driven: no wheel takes one.
+    if (this.world.getTile(x1, y1) === TileType.Steps) return null;
     // A door is for a person. Wheels want a double door, an archway or a gate.
     if (this.buildings.blocksVehicle(x0, y0, x1, y1)) return null;
     // And a staircase or a ladder going up from the tile is no road.
@@ -5992,6 +5994,9 @@ export class Game {
           rare: rarityStep(r.rare),
           // And its maker's mark, which is how much more it holds or how much faster it goes.
           mark: r.mark ?? undefined,
+          // Its colour, and for an arch the moment its roses were planted, which the island keeps for everybody.
+          dye: r.dye ?? undefined,
+          setAt: r.set ?? undefined,
           fuel: r.fuel ?? undefined, lit: r.lit ?? undefined, ash: r.ash ?? undefined,
           litres: r.litres ?? undefined, liquid: (r.liquid ?? undefined) as PlacedFurniture['liquid'],
           ferment: r.ferment ?? undefined,
@@ -7306,6 +7311,13 @@ export interface IslandPlaced {
   creature?: number | null;
   /** What its maker's perks put into it (`Mark`); null for most, and absent from older islands. */
   mark?: Mark | null;
+  /** The colour a banner, a flag or a sail was dyed; null undyed, and absent from older islands. */
+  dye?: string | null;
+  /**
+   * When it was set down, in epoch seconds, for a piece with roses on it
+   * (`furniture_def.roses`): what its roses grow from (`roses.ts`).
+   */
+  set?: number | null;
   /**
    * What is in it, for a piece of furniture near enough to reach into.
    *

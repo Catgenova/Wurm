@@ -1,5 +1,5 @@
 import type { Game } from '../game/game';
-import { TileType } from '../world/tiles';
+import { TileType, stepsTimber } from '../world/tiles';
 import { MATERIAL_BY_ID } from '../game/building';
 import { blow, chime, footfall, stroke, type Footing, type Stroke } from './kit';
 
@@ -74,6 +74,7 @@ export const FOOTINGS: Partial<Record<number, Footing>> = {
   [TileType.Rock]: 'stone',
   [TileType.Cobblestone]: 'stone',
   [TileType.Slabs]: 'stone',
+  [TileType.Steps]: 'stone',
   [TileType.Snow]: 'snow',
   [TileType.Marsh]: 'water',
 };
@@ -94,7 +95,10 @@ export function footingAt(g: Game, x: number, y: number, level: number): Footing
   const bridge = g.bridgeAt(tx, ty);
   if (bridge) return bridge.kind === 'stone' ? 'stone' : 'wood';
   if (g.world.hasWater(tx, ty) && g.world.heightAt(x, y) < g.world.surfaceAt(tx, ty)) return 'water';
-  return FOOTINGS[g.world.viewTile(tx, ty, true)] ?? 'soft';
+  const tile = g.world.viewTile(tx, ty, true);
+  // A flight of timber steps is boards underfoot, not stone.
+  if (tile === TileType.Steps && stepsTimber(g.world.getData(tx, ty))) return 'wood';
+  return FOOTINGS[tile] ?? 'soft';
 }
 
 /**
@@ -140,6 +144,7 @@ export const STROKE_BY_ID: Record<string, Stroke> = {
   take_ashes_oven: 'earth', take_ashes_fire: 'earth', take_ashes_smelter: 'earth', take_ashes_kiln: 'earth',
   // Stone, whether it is being cut or merely shifted.
   pave_cobble: 'stone', pave_slabs: 'stone', remove_paving: 'stone',
+  lay_steps: 'stone', take_up_steps: 'stone',
   raise_rock: 'stone', chip_corner: 'stone', strike_foundation: 'stone',
   place_smelter: 'stone', pick_up_smelter: 'stone', place_kiln: 'stone', pick_up_kiln: 'stone',
   place_anvil: 'stone', pick_up_anvil: 'stone',
@@ -154,6 +159,7 @@ export const STROKE_BY_ID: Record<string, Stroke> = {
   plan_bridge: 'wood', build_bridge: 'wood', demolish_bridge: 'wood',
   place_crate: 'wood', pick_up_crate: 'wood', place_post: 'wood', pick_up_post: 'wood',
   place_furniture: 'wood', turn_furniture: 'wood', pick_up_furniture: 'wood',
+  lay_timber_steps: 'wood',
   take_apart_campfire: 'wood', set_trap: 'wood', pick_up_trap: 'wood',
   // Metal on metal, which is the loudest thing anybody does here.
   smith: 'metal', strike_coins: 'metal', improve_item: 'metal', shoe_creature: 'metal', ring_bell: 'metal',

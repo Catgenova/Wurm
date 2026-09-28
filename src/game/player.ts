@@ -6,7 +6,7 @@ import { emptyNutrition, type Nutrient } from './nutrition';
 import { BELT_MAX } from './belt';
 import { UNITS_PER_TILE } from '../render/iso';
 import { findPath, type PathPoint } from '../world/pathfinding';
-import { groundRoll, ROAD_TILES, TILE_DEFS } from '../world/tiles';
+import { groundRoll, ROAD_TILES, standCap, TILE_DEFS, TileType } from '../world/tiles';
 import type { World } from '../world/world';
 import { cleanLook, DEFAULT_LOOK, type Look } from './look';
 
@@ -331,8 +331,9 @@ export class Player {
       const level = step(fx, fy, tx, ty);
       if (level === null) return false;
       // The ground's own step, taken on the ground: a floor is flat whatever
-      // the land under it does.
-      this.lastClimb = this.level === 0 && level === 0 ? Math.abs(world.centerHeight(tx, ty) - world.centerHeight(fx, fy)) : 0;
+      // the land under it does, and a flight of steps is no climb.
+      this.lastClimb = this.level === 0 && level === 0 && !onSteps(world, fx, fy, tx, ty)
+        ? Math.abs(world.centerHeight(tx, ty) - world.centerHeight(fx, fy)) : 0;
       this.level = level;
     }
     this.x = nx;
@@ -344,8 +345,14 @@ export class Player {
 /**
  * Terrain-only rule for a step between tiles: nothing steeper than `maxStep`,
  * which for the player grows with climbing and for everything else is MAX_STEP.
+ *
+ * A flight of garden steps carries whoever is on it from its foot to its head,
+ * so a step onto one or off one is not measured centre to centre: only the
+ * tile being stepped onto is asked whether it can be stood on (`standsOn`).
+ * The island asks the same in `walk_share`.
  */
 export function groundStep(world: World, x0: number, y0: number, x1: number, y1: number, maxStep = MAX_STEP): boolean {
+  if (world.getTile(x0, y0) === TileType.Steps || world.getTile(x1, y1) === TileType.Steps) return true;
   return Math.abs(world.centerHeight(x1, y1) - world.centerHeight(x0, y0)) <= maxStep;
 }
 
@@ -354,11 +361,16 @@ export function groundStep(world: World, x0: number, y0: number, x1: number, y1:
  * between its highest corner and its lowest, which for the player grows with
  * climbing and for everything else is MAX_STAND. A body already inside a tile
  * that has been dug too steep under it is never asked this; it is asked of
- * the tile being stepped into.
+ * the tile being stepped into. A flight of steps is stood on at any slope a
+ * flight is laid on (`standCap`).
  */
 export function standsOn(world: World, x: number, y: number, maxStand = MAX_STAND): boolean {
-  return world.slope(x, y) <= maxStand;
+  return world.slope(x, y) <= standCap(world.getTile(x, y), maxStand);
 }
+
+/** Whether a step between these two tiles is on or off a flight of steps, which teaches the feet nothing. */
+export const onSteps = (world: World, x0: number, y0: number, x1: number, y1: number): boolean =>
+  world.getTile(x0, y0) === TileType.Steps || world.getTile(x1, y1) === TileType.Steps;
 
 /** Something (a wall) that forbids stepping from one tile to another. */
 export type StepBlock = (x0: number, y0: number, x1: number, y1: number) => boolean;
