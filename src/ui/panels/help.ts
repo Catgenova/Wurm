@@ -80,7 +80,8 @@ import {
 } from '../../game/wounds';
 import { TURNS } from '../../render/view';
 import { ORE_DENSITY, seamShare } from '../../world/ore';
-import { groundRoll, ROCK_VARIANTS, SLAB_VARIANTS, TILE_DEFS, TileType, TREE_DEFS } from '../../world/tiles';
+import { groundRoll, ROCK_VARIANTS, SLAB_VARIANTS, TILE_DEFS, TileType, TREE_DAWN_UTC, TREE_DEFS } from '../../world/tiles';
+import { SEASON_DAYS, SEASONS, YEAR_DAYS } from '../../world/calendar';
 import { COUNTS } from '../beltmenu';
 import { DAMAGE_BREAKING } from '../itemcells';
 import type { UIWindow } from '../windows';
@@ -1365,6 +1366,9 @@ export function helpText(): string {
     ${share(1 - DAYLIT)} night</b> &mdash; ${spanWords(DAY_SECONDS * (1 - DAYLIT))} of real time dark in every day
     &mdash; and the light goes over the ${numberWord(2 * TWILIGHT)} game hours around sundown and comes back over the
     ${numberWord(2 * TWILIGHT)} around sunrise.</p>
+    <p>And it keeps a <b>year</b>: ${numberWord(SEASONS.length)} seasons, ${listed([...SEASONS])}, of
+    <b>${numberWord(SEASON_DAYS)} days</b> each, ${numberWord(YEAR_DAYS)} days in all. A day of the year is a real day,
+    turning at <b>${hudHour(TREE_DAWN_UTC)} UTC</b> with the woods. The same line says which season it is and which day of it.</p>
     <p>A <b>bed</b> or a <b>cot</b> is worth more than the corner it stands in. Choose <b>Make this your
     home</b> and it becomes the place you wake up &mdash; whatever happens to you, wherever it happens.
     Choose <b>Sleep until morning</b> after dark and you wake with your wind back and some of your hurt

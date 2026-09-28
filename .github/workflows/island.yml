@@ -1058,6 +1058,16 @@ jobs:
             --outfile=node_modules/.cache/dawn.mjs --log-level=error
           node node_modules/.cache/dawn.mjs
 
+      - name: The island's year is the same year on both sides
+        run: |
+          # Four seasons of seven days, turning with the woods. The browser
+          # works the season out for itself and so does the island; asked
+          # about the same moments, every six hours for a year and a second
+          # either side of each turn, they must say the same season and day.
+          npx esbuild supabase/test/year.ts --bundle --platform=node --format=esm \
+            --outfile=node_modules/.cache/year.mjs --log-level=error
+          node node_modules/.cache/year.mjs
+
       - name: A team stays in the traces until it is taken out
         run: |
           # "hitching wildermon to the wagon doesn't seem to be working". On an
