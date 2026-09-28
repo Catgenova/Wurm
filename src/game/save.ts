@@ -259,6 +259,10 @@ interface SaveData {
   crops?: Crop[];
   /** The crop last sown on each field, as `[x, y, crop]`. A save from before it has none. */
   sown?: Array<[number, number, string]>;
+  /** What grows in planters, each with its planter's id. A save from before planters grew anything has none. */
+  planted?: Crop[];
+  /** The field clock (`Game.fieldTime`). A save from before the year has none, and starts it at the game clock. */
+  fieldTime?: number;
   crate?: { x: number; y: number; items: Item[] } | null;
   /**
    * Everybody who has ever visited, and what they had when they left.
@@ -345,6 +349,8 @@ function meta(game: Game): SaveMeta {
     anvils: [...game.anvils.values()],
     crops: [...game.crops.values()],
     sown: [...game.sown].map(([k, id]): [number, number, string] => [keyX(k), keyY(k), id]),
+    planted: [...game.planted.values()],
+    fieldTime: game.fieldTime,
     guests: game.guestRecords(),
   };
 }
@@ -607,6 +613,8 @@ function finish(world: World, m: SaveMeta): Game {
     anvils: m.anvils,
     crops: m.crops,
     sown: m.sown,
+    planted: m.planted,
+    fieldTime: m.fieldTime,
     marks: m.marks,
     hoards: m.hoards,
     crate: m.crate ?? null,

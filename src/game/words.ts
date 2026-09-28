@@ -150,6 +150,23 @@ export function spanWords(seconds: number): string {
   return `an hour and ${minutes(past)}`;
 }
 
+/**
+ * A length of time to the minute, in figures: "3 hours and 12 minutes", "2
+ * days and 4 hours", "25 minutes", and never less than a minute. The island
+ * says it in the same words (`time_words`), which is why a crop's wait is said
+ * in these rather than in `spanWords`: the sowing line is written on both sides.
+ */
+export function timeWords(secs: number): string {
+  const m = Math.max(1, Math.round(secs / 60));
+  const days = Math.floor(m / 1440);
+  const hours = Math.floor((m % 1440) / 60);
+  const mins = m % 60;
+  const unit = (n: number, one: string): string => `${n} ${one}${n === 1 ? '' : 's'}`;
+  if (days) return hours ? `${unit(days, 'day')} and ${unit(hours, 'hour')}` : unit(days, 'day');
+  if (hours) return mins ? `${unit(hours, 'hour')} and ${unit(mins, 'minute')}` : unit(hours, 'hour');
+  return unit(mins, 'minute');
+}
+
 /** "a, b and c", for a list somebody reads rather than parses. */
 export const listed = (xs: readonly string[]): string =>
   xs.length < 2 ? (xs[0] ?? '') : `${xs.slice(0, -1).join(', ')} and ${xs[xs.length - 1]}`;

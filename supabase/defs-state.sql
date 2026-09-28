@@ -2580,7 +2580,7 @@ update item_def set description = 'Staves and hoops. Holds 80 litres of one liqu
 update item_def set description = 'Holds one wildermon. With a wildermon already following you, one more is tamed only into an empty crate in your pack. Set down, it shows who is inside; open it to have them follow you or work the deed. It does not rot.' where id = 'creature_crate';
 update item_def set description = 'A slanted stand to read from.' where id = 'lectern';
 update item_def set description = 'Pegs on a post, by the door.' where id = 'coat_rack';
-update item_def set description = 'A box of earth with something green in it.' where id = 'planter';
+update item_def set description = 'A box of earth one crop grows in, set down indoors or out: sown, tended and harvested like a field, from the same seeds to the same yields, at a quarter of the crop''s own pace in every season, winter too.' where id = 'planter';
 update item_def set description = 'Keeps the wood off the wet ground. Holds 40 things.' where id = 'firewood_rack';
 update item_def set drink = 0.4 where id = 'ale_bucket';
 update item_def set description = 'Thin, sour and honest. Drink it and the work goes easier for a good while.' where id = 'ale_bucket';
@@ -6159,3 +6159,13 @@ create or replace function ancient_plus() returns double precision language sql 
 create or replace function bauble_yield_times() returns double precision language sql immutable as $fn$ select 2::double precision $fn$;
 create or replace function mote_chance() returns double precision language sql immutable as $fn$ select 0.01::double precision $fn$;
 create or replace function nutrients() returns text[] language sql immutable as $fn$ select array['starch', 'flesh', 'fat', 'greens']::text[] $fn$;
+create or replace function seasons() returns text[] language sql immutable as $fn$ select array['spring', 'summer', 'autumn', 'winter']::text[] $fn$;
+create or replace function season_growth() returns double precision[] language sql immutable as $fn$ select array[1, 1.5, 0.5, 0]::double precision[] $fn$;
+create or replace function yearless_growth() returns double precision language sql immutable as $fn$ select 1::double precision $fn$;
+create or replace function planter_growth() returns double precision language sql immutable as $fn$ select 0.25::double precision $fn$;
+create or replace function year_from() returns double precision language sql immutable as $fn$ select 1790600400::double precision $fn$;
+create or replace function season_seconds() returns double precision language sql immutable as $fn$ select 604800::double precision $fn$;
+create or replace function year_seconds() returns double precision language sql immutable as $fn$ select 2419200::double precision $fn$;
+create or replace function year_growth() returns double precision language sql immutable as $fn$ select 1814400::double precision $fn$;
+create or replace function is_planter(p_sub text) returns boolean language sql immutable as $fn$ select coalesce(p_sub = any(array['planter']::text[]), false) $fn$;
+create or replace function planter_growing_said() returns text language sql immutable as $fn$ select 'Something is growing in it. Harvest it, or pull it up, first.' $fn$;

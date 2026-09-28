@@ -604,7 +604,7 @@ export class Hud {
     const standing = this.game.deedOfMineAt(p.tileX, p.tileY);
     const deed = standing ? `  ·  ${standing.name}` : '';
     const title = this.game.titleName();
-    this.say(this.posEl, `${p.tileX}, ${p.tileY}  ·  h ${h.toFixed(0)}  ·  ${this.game.clock()}  ·  ${seasonLine(Date.now() / 1000)}${p.swimming ? '  ·  swimming' : ''}${deed}${title ? `  ·  ${title}` : ''}`);
+    this.say(this.posEl, `${p.tileX}, ${p.tileY}  ·  h ${h.toFixed(0)}  ·  ${this.game.clock()}  ·  ${seasonLine(this.game.wallNow())}${p.swimming ? '  ·  swimming' : ''}${deed}${title ? `  ·  ${title}` : ''}`);
     // Rest and the knacks running off what you have eaten, when there are any.
     const rested = this.game.player.rested;
     const boons = this.game.activeBoons();

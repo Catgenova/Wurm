@@ -1,6 +1,7 @@
 import { itemDef } from './items';
 import { SPECIES } from './creatures';
 import { priceWords } from './money';
+import { timeWords } from './words';
 
 /**
  * While you were away.
@@ -37,17 +38,8 @@ export interface Away {
 /** The most sorts of thing one line names before it says how many more there were. */
 export const AWAY_NAMED = 6;
 
-/** "3 hours and 12 minutes", "2 days and 4 hours", "25 minutes". */
-export function awayFor(secs: number): string {
-  const m = Math.max(1, Math.round(secs / 60));
-  const days = Math.floor(m / 1440);
-  const hours = Math.floor((m % 1440) / 60);
-  const mins = m % 60;
-  const unit = (n: number, one: string): string => `${n} ${one}${n === 1 ? '' : 's'}`;
-  if (days) return hours ? `${unit(days, 'day')} and ${unit(hours, 'hour')}` : unit(days, 'day');
-  if (hours) return mins ? `${unit(hours, 'hour')} and ${unit(mins, 'minute')}` : unit(hours, 'hour');
-  return unit(mins, 'minute');
-}
+/** "3 hours and 12 minutes", "2 days and 4 hours", "25 minutes": `timeWords`, which moved to `words.ts` for a crop's wait to say itself in. */
+export const awayFor = timeWords;
 
 /** "a, b and c", naming at most `AWAY_NAMED` and counting the rest. */
 function listed(parts: string[]): string {

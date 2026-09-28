@@ -28,7 +28,8 @@ import {
 } from '../../game/creatures';
 import { DEED_UPGRADES } from '../../game/deed';
 import { DYES } from '../../game/dyestuffs';
-import { CROP_BY_SEED, cropYield, PATCH_TIME, RIPE, STAGE_NAMES } from '../../game/farming';
+import { CROP_BY_SEED, CROPS, cropYield, growthWords, PATCH_TIME, RIPE, STAGE_NAMES } from '../../game/farming';
+import { PLANTER_GROWTH, SEASON_GROWTH, YEARLESS_GROWTH } from '../../game/growth';
 import { CASTS, FAITH, FAVOUR_CEILING, favourCap, PRAYER_BASE, PRAYER_LIFT, PRAYER_PEAKS, PRAYER_REST, PRAYER_TAPER } from '../../game/faith';
 import { ANCIENT_EFFECTS, ANCIENT_PLUS, BAUBLE_HIGH, BAUBLE_KINDS, BAUBLE_LOW, BAUBLE_SHARE, BAUBLE_TIERS, baubleTimes, MAJOR_SKILLS, MINOR_SKILLS, REGRET_SHARE, YIELD_TIMES } from '../../game/baubles';
 import { MOTE_CHANCE } from '../../game/sacrifice';
@@ -102,6 +103,11 @@ import { LETTER_MAX } from '../../net/island';
 import { KEYS as NUMBER_KEYS } from './tile';
 import { HUNGRY_AT, HURT_AT } from './wildermon';
 
+/** The Farmer's perk that holds an effect, by name. */
+const farmerPerk = (key: string): string => perksOf('farmer').find((p) => key in p.fx)?.name ?? key;
+/** The Farmer's perks that work on a planter as on a field: whatever a sowing or a harvest reads, but for Crop Rotation, which a planter keys to itself. */
+const planterPerks = () => perksOf('farmer').filter((p) => !('rotate:plant_seed' in p.fx)
+  && Object.keys(p.fx).some((k) => /:(plant_seed|harvest_crop)$/.test(k) || k.startsWith('plus:')));
 /** How long a quiet browser is still counted as there: `idle_logout()` on the island. */
 const awayAfter = (): string => (IDLE_LOGOUT % 60 ? `${+(IDLE_LOGOUT / 60).toFixed(1)} minutes` : awayFor(IDLE_LOGOUT));
 
@@ -860,6 +866,19 @@ export function helpText(): string {
     seed a field; Tend a patch tends every crop in it not yet tended at the stage it is at; Harvest a patch
     harvests every ripe crop in it, each for what its own tending earned. A crop keeps the pace it was sown
     at, so a field a Farmer sowed faster grows faster whoever harvests it.</p>
+    <p>A crop in a field grows through the <b>year</b>: ${listed(SEASONS.map((s) => `${growthWords(SEASON_GROWTH[s])} in ${s}`))}.
+    In winter a crop in a field <b>keeps its stage and waits for spring</b>; nothing dies, and a field can still be
+    sown, tended and harvested, so it can be sown ready for the spring. A stage that runs into a winter finishes
+    after it, and before the first spring a field grew ${growthWords(YEARLESS_GROWTH)}. Hover over a field and it
+    says when the next stage comes in real time, and in winter how long it waits for spring.</p>
+    <p>A <b>planter</b> grows one crop <b>${growthWords(PLANTER_GROWTH)} in every season</b>, winter too, wherever it
+    stands, indoors or out: a stage of cotton, ${spanWords(CROPS.cotton.stageSeconds)} in a spring field, is
+    ${spanWords(CROPS.cotton.stageSeconds / PLANTER_GROWTH)} in a planter. Its menu sows it from the seeds you carry, tends
+    it and harvests it with the field's jobs, the same seeds, stages and yields, and <b>Pull it up</b> turns what grows
+    in it back into the soil. A Farmer's ${listed(planterPerks().map((p) => p.name))} all work on a planter, and
+    ${farmerPerk('rotate:plant_seed')} reads the planter's own last crop; ${listed(['sow_patch', 'tend_patch', 'harvest_patch'].map(farmerPerk))}
+    work fields only. A planter with something growing in it will not be picked up, and Bounty brings on the planters
+    standing on your settlement along with its fields.</p>
     <h3>Campfires and cooking</h3>
     <p>Right-click any dry, open spot and choose <b>Build campfire</b> to lay one from ${numberWord(FIRE_COST)} shafts; it
     fills a ${numberWord(FIRE_SUBTILES)} by ${numberWord(FIRE_SUBTILES)} block of the tile's spots. Feed it anything that burns &mdash; thatch, shafts,

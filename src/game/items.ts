@@ -455,7 +455,7 @@ export const ITEM_DEFS: Record<string, ItemDef> = {
   },
   lectern: { name: 'Lectern', category: 'misc', weight: 12, decay: 4, description: 'A slanted stand to read from.' },
   coat_rack: { name: 'Coat rack', category: 'misc', weight: 6, decay: 4, description: 'Pegs on a post, by the door.' },
-  planter: { name: 'Planter', category: 'misc', weight: 12, decay: 4, description: 'A box of earth with something green in it.' },
+  planter: { name: 'Planter', category: 'misc', weight: 12, decay: 4, description: 'A box of earth one crop grows in, set down indoors or out: sown, tended and harvested like a field, from the same seeds to the same yields, at {growth:share} of the crop\'s own pace in every season, winter too.' },
   firewood_rack: { name: 'Firewood rack', category: 'misc', weight: 14, decay: 4, description: 'Keeps the wood off the wet ground. Holds {capacity} things.' },
   ale_bucket: { name: 'Bucket of ale', category: 'food', weight: 6, decay: 2, drink: 0.4, charges: 5, description: 'Thin, sour and honest. Drink it and the work goes easier for a good while.', feeds: { starch: 0.12 } },
   cider_bucket: { name: 'Bucket of cider', category: 'food', weight: 6, decay: 2, drink: 0.45, charges: 5, description: 'Pressed apples gone dangerous. A trade comes easier after it.', feeds: { greens: 0.1 } },

@@ -55,6 +55,9 @@ import { DYES } from '../../game/dyestuffs';
 import { GREEN_ACTIONS, GREEN_DAYS, GREEN_SHADE, GREEN_SUN, GREEN_WET } from '../../game/greening';
 import { FURNITURE } from '../../game/furniture';
 import { BRIDGES } from '../../game/bridges';
+import { CROPS, growthWords } from '../../game/farming';
+import { PLANTER_GROWTH, SEASON_GROWTH } from '../../game/growth';
+import { SEASONS } from '../../world/calendar';
 import type { UIWindow } from '../windows';
 
 /**
@@ -796,6 +799,19 @@ export const NEWS: News[] = [
         `How much shows is its days over ${GREEN_DAYS} times a pace: ${GREEN_SUN} on tops and on south and east faces, ${+(GREEN_SUN + GREEN_SHADE).toFixed(2)} on north and west faces, which the sun never reaches, and up to ${GREEN_WET} more beside water.`,
         `${clear.label} with ${a(itemDef(clear.tool ?? '').name)}, a side of a wall at a time and every storey of it at once; ${scrub.label} with ${a(itemDef(scrub.tool ?? '').name)}, on paving, a foundation, a statue or an arch. Either starts it again from bare stone. On a settlement only its builders may; anywhere else anybody may. On an island the island keeps the clock, so everybody sees the same green.`,
         'A bridge on an island is drawn and walked by everybody now. The island kept them and never said so, so nobody saw one or could cross it.',
+      ];
+    },
+  },
+  {
+    n: 60,
+    day: '2026-09-28',
+    lines: () => {
+      const rotation = perksOf('farmer').find((p) => 'rotate:plant_seed' in p.fx)?.name ?? 'Crop Rotation';
+      return [
+        `A crop in a field grows with the year: ${listed(SEASONS.map((s) => `${growthWords(SEASON_GROWTH[s])} in ${s}`))}. In winter it keeps its stage and waits for spring; nothing dies, and a field can still be sown, tended and harvested.`,
+        `A planter grows one crop ${growthWords(PLANTER_GROWTH)} in every season, winter too, indoors or out: a stage of cotton takes ${spanWords(CROPS.cotton.stageSeconds / PLANTER_GROWTH)} in one. Sow, tend, harvest or pull it up from its menu, with the same seeds, stages and yields as a field; the Farmer's perks on a sowing or a harvest work on it, and ${rotation} reads the planter's own last crop. A planter with something growing in it will not be picked up, and an empty one is bare earth.`,
+        'Hovering over a field or a planter, and sowing one, says when the next stage comes in real time, and a field in winter how long it waits for spring.',
+        'Bounty brings on the crops on your own settlements, the planters standing on them included, and no longer those on everybody else\'s.',
       ];
     },
   },

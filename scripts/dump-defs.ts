@@ -115,6 +115,9 @@ import { spanWords } from '../src/game/words';
 import { DARK_HIT, DARK_SHOT, DARK_SWING, HEAVY_SKILLS, NIGHT_EYES_FROM, WORK_BACK, WORK_HAND, WORK_WIND, WORK_WIND_SPENT } from '../src/game/learn';
 import { ANCIENT_EFFECTS, ANCIENT_PLUS, BAUBLE_HIGH, BAUBLE_KINDS, BAUBLE_LOW, BAUBLE_SHARE, BAUBLE_TIERS, MAJOR_SKILLS, MINOR_SKILLS, REGRET_SHARE, YIELD_TIMES } from '../src/game/baubles';
 import { MOTE_CHANCE } from '../src/game/sacrifice';
+import { PLANTER_GROWTH, SEASON_GROWTH, SEASON_SECONDS, YEAR_GROWTH, YEAR_SECONDS, YEARLESS_GROWTH } from '../src/game/growth';
+import { SEASONS, YEAR_FROM } from '../src/world/calendar';
+import { PLANTER_GROWING } from '../src/game/furniture';
 
 const q = (v: unknown): string => {
   if (v === undefined || v === null) return 'null';
@@ -1754,4 +1757,23 @@ for (const [fn, v] of [
 }
 /* The four things a body wants (`src/game/nutrition.ts`), which a sacrifice fills to the top. */
 out.push(`create or replace function nutrients() returns text[] language sql immutable as $fn$ select array[${NUTRIENTS.map(q).join(', ')}]::text[] $fn$;`);
+/*
+ * Crops through the year (`src/game/growth.ts`): what share of its pace a
+ * field grows at in each season, in the order the seasons come; the whole of
+ * it before the first spring; a planter's share in every season; and the
+ * year's own lengths and its first dawn, which `field_clock` and
+ * `field_moment` count with. `seasons.ts` holds the two field clocks to each
+ * other bit for bit, so these are the browser's numbers or nothing.
+ */
+out.push(`create or replace function seasons() returns text[] language sql immutable as $fn$ select array[${SEASONS.map(q).join(', ')}]::text[] $fn$;`);
+out.push(`create or replace function season_growth() returns double precision[] language sql immutable as $fn$ select array[${SEASONS.map((s) => q(SEASON_GROWTH[s])).join(', ')}]::double precision[] $fn$;`);
+for (const [fn, v] of [
+  ['yearless_growth', YEARLESS_GROWTH], ['planter_growth', PLANTER_GROWTH],
+  ['year_from', YEAR_FROM], ['season_seconds', SEASON_SECONDS], ['year_seconds', YEAR_SECONDS], ['year_growth', YEAR_GROWTH],
+] as Array<[string, number]>) {
+  out.push(`create or replace function ${fn}() returns double precision language sql immutable as $fn$ select ${q(v)}::double precision $fn$;`);
+}
+/* The pieces a crop is sown in, and what one says to being picked up with a crop in it. */
+out.push(`create or replace function is_planter(p_sub text) returns boolean language sql immutable as $fn$ select coalesce(p_sub = any(array[${FURNITURE.filter((f) => f.planter).map((f) => q(f.id)).join(', ')}]::text[]), false) $fn$;`);
+out.push(`create or replace function planter_growing_said() returns text language sql immutable as $fn$ select ${q(PLANTER_GROWING)} $fn$;`);
 console.log(out.join('\n'));

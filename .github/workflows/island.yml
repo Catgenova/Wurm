@@ -1139,6 +1139,22 @@ jobs:
             --outfile=node_modules/.cache/green.mjs --log-level=error
           node node_modules/.cache/green.mjs
 
+      - name: Crops grow through the year, and planters grow them indoors, the same on both sides
+        run: |
+          # Asked for: "outdoor seasonal growths for crops, with planters that
+          # can be grown indoors regardless of season at a much slower rate."
+          # A field grows at its season's share of a crop's pace and not at
+          # all in winter; a planter at one share in every season. Both sides
+          # count a field's growth on a field clock worked out from the moment
+          # alone, and are held to each other bit for bit at thousands of
+          # moments round the turns; crops straddling the turns and whole
+          # winters settle to the same stage and stage start; a wait is said
+          # in the same words; and a planter is sown, tended, harvested and
+          # pulled up through the doors on both sides.
+          npx esbuild supabase/test/seasons.ts --bundle --platform=node --format=esm \
+            --outfile=node_modules/.cache/seasons.mjs --log-level=error
+          node node_modules/.cache/seasons.mjs
+
       - name: A team stays in the traces until it is taken out
         run: |
           # "hitching wildermon to the wagon doesn't seem to be working". On an

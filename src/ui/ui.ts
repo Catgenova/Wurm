@@ -45,9 +45,10 @@ import { COIN_METALS, DIE_WEAR, INGOT_LUMPS, MOULD_BY_ID, MOULD_BY_MAKES, isCast
 import { meltable } from '../game/melt';
 import { jobName, smelterAnchor, smelterState, type PlacedSmelter } from '../game/smelter';
 import { isGreenware, kilnAnchor, kilnState, type PlacedKiln } from '../game/kiln';
-import { furnitureAnchor, furnitureCapacity, furnitureDef, furnitureHeft, furnitureHolds, furnitureKg, furnitureName, furnitureState, furnitureUnits, isFurniture, rackDeck, rackSpots, type PlacedFurniture, turnedFacing } from '../game/furniture';
+import { furnitureAnchor, furnitureCapacity, furnitureDef, furnitureHeft, furnitureHolds, furnitureKg, furnitureName, furnitureState, furnitureUnits, isFurniture, isPlanter, rackDeck, rackSpots, type PlacedFurniture, turnedFacing } from '../game/furniture';
 import { DEED_ACTION_BY_ID, leaveQuestion, standingWord, upgradeProgress, upgradeReason } from '../game/deed';
-import { CROP_BY_SEED, cropDef, describeCrop, emptyFields, sownPace, type CropDef } from '../game/farming';
+import { CROP_BY_SEED, cropDef, describeCrop, emptyFields, growthWords, planterPace, sownPace, stageNote, type Crop, type CropDef } from '../game/farming';
+import { PLANTER_GROWTH } from '../game/growth';
 import { cornerReading, groundReading } from './tileinfo';
 import { deedWorkersAt, MAX_DEED_LEVEL, rankAtLeast, type Deed } from '../game/game';
 import { CRAFT_REACH, reachFor, recipeNeeds, recipeReason, recipeStatus, RECIPES, type CraftStock, type Recipe } from '../game/recipes';
@@ -713,6 +714,7 @@ export class UI {
       lines.push(furnitureState(fu));
       if (rackSpots(fu)) lines.push(this.rackLine(fu));
       if (furnitureHolds(fu)) lines.push('Stand next to it to put things away.');
+      if (isPlanter(fu)) lines.push(this.planterLine(fu));
       this.tooltip.show(sx, sy, lines);
       return;
     }
@@ -755,7 +757,7 @@ export class UI {
     } else {
       lines.push(w.tileName(pick.x, pick.y));
     }
-    if (growing) lines.push(describeCrop(growing, this.game.time, this.game.perk('bumper:harvest_crop', 0)));
+    if (growing) lines.push(this.cropLine(growing));
     lines.push(`${pick.x}, ${pick.y} · slope ${w.slope(pick.x, pick.y)}`);
     lines.push(cornerReading(this.game, pick.cx, pick.cy));
     const reading = groundReading(this.game, pick.x, pick.y);
@@ -1093,7 +1095,7 @@ export class UI {
     const sowDef = ACTION_BY_ID.get('plant_seed');
     if (sowDef && sowDef.applies(target, this.game) && !this.game.cropAt(pick.x, pick.y)) {
       // At the pace this sowing would grow at: a Farmer's Fast Growth and Crop Rotation.
-      sowMenu(sowDef, 'Sow', (crop) => `${crop.name}, ${Math.round(crop.stageSeconds * sownPace(this.game, pick.x, pick.y, crop.id))}s a stage`);
+      sowMenu(sowDef, 'Sow', (crop) => stageNote(crop.name, crop.stageSeconds * sownPace(this.game, pick.x, pick.y, crop.id), false, this.game.wallNow()));
     }
     const patchDef = ACTION_BY_ID.get('sow_patch');
     if (patchDef && patchDef.applies(target, this.game)) {
@@ -1511,6 +1513,60 @@ export class UI {
     return `${load.crates} of ${load.spots} spots · ${load.units} / ${load.capacity} things`;
   }
 
+  /** A crop as a look says it, in a field or a planter: its stage, when the next comes in real time, and what its tending earned you. */
+  private cropLine(c: Crop): string {
+    const g = this.game;
+    return describeCrop(c, g.cropPer(c), g.growNow(c), g.wallNow(), g.perk('bumper:harvest_crop', 0));
+  }
+
+  /** What a planter has in it, or that it is empty and grows at its rate in every season. */
+  private planterLine(f: PlacedFurniture): string {
+    const c = this.game.planted.get(f.id);
+    return c ? this.cropLine(c) : `Empty: sow any seed in it. It grows a crop ${growthWords(PLANTER_GROWTH)} in every season.`;
+  }
+
+  /**
+   * A planter's own jobs: what is in it, sowing it from the seeds you carry,
+   * and tending, harvesting or pulling up what grows there -- the field's
+   * jobs, aimed at the piece.
+   */
+  private planterEntries(f: PlacedFurniture): MenuItem[] {
+    const g = this.game;
+    const ft: Target = { kind: 'furniture', id: f.id };
+    const entries: MenuItem[] = [{ label: this.planterLine(f), disabled: true }];
+    const sow = ACTION_BY_ID.get('plant_seed');
+    if (sow && !g.planted.has(f.id)) {
+      const seeds = g.inventory.items.filter((it) => CROP_BY_SEED.has(it.id));
+      entries.push({
+        label: 'Sow',
+        disabled: !seeds.length,
+        hint: seeds.length ? undefined : 'You carry no seeds. Forage and botanize for them.',
+        children: seeds.length
+          ? seeds.map((it) => {
+              const crop = CROP_BY_SEED.get(it.id)!;
+              const st: Target = { kind: 'furniture', id: f.id, itemUid: it.uid };
+              const reason = sow.check?.(st, g) ?? null;
+              return {
+                label: it.count > 1 ? `${itemName(it)} (${it.count})` : itemName(it),
+                // A stage in real time: the crop's, at the pace this sowing would grow at, at a planter's share of it.
+                note: stageNote(crop.name, crop.stageSeconds * planterPace(g, f, crop.id), true, g.wallNow()),
+                hint: reason ?? undefined,
+                disabled: !!reason,
+                onSelect: () => g.requestAction(sow, st),
+              };
+            })
+          : undefined,
+      });
+    }
+    for (const id of ['tend_crop', 'harvest_crop', 'clear_field']) {
+      const def = ACTION_BY_ID.get(id);
+      if (!def || !def.applies(ft, g)) continue;
+      const reason = def.check?.(ft, g) ?? null;
+      entries.push({ label: def.labelFor?.(ft, g) ?? def.label, hint: reason ?? undefined, disabled: !!reason, onSelect: () => g.requestAction(def, ft) });
+    }
+    return entries;
+  }
+
   /**
    * A grave: opened and emptied by whoever lies under it, and by nobody else.
    * Picking it up is listed for the one reason it is refused, which says so
@@ -1613,6 +1669,8 @@ export class UI {
     const ft: Target = { kind: 'furniture', id: f.id };
     const def = furnitureDef(f.kind);
     const entries: MenuItem[] = [];
+    // A planter is sown, tended and harvested like a field.
+    if (def.planter) entries.push(...this.planterEntries(f));
     // The stone table: kneel at it, and spend what kneeling banks.
     if (def.altar) {
       const pray = ACTION_BY_ID.get('pray');

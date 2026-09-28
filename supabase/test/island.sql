@@ -3,6 +3,10 @@
 \pset format unaligned
 \set ON_ERROR_STOP on
 set client_min_messages = notice;
+-- Every field in here grows in spring, whatever day of the year the suite is run on: the stages
+-- below are counted off the clock at a crop's own pace, which a summer would hurry, an autumn
+-- slow and a winter stop. `seasons.ts` is where the year itself is measured. For this session only.
+set wurm.season = 'spring';
 -- A fixed seed, so a run that reads differently from the last one is a change
 -- in the rules rather than the luck of the draw. The rolls are still rolls:
 -- this only makes them the same rolls every time.

@@ -56,12 +56,13 @@ import { kilnCentre, type PlacedKiln } from '../game/kiln';
 import { furnitureCentre, furnitureDef, type PlacedFurniture, facingOf as pieceFacing, furnitureFootprint } from '../game/furniture';
 import { UNSEEN, VISIBLE } from '../game/vision';
 import { DAWN, DUSK } from '../game/game';
-import { clothInWind, crewOrder, deviceOf, drawFurniture, drawFurnitureLive, furnitureHoles, furnitureSpan, FURNITURE_HEIGHT, glowsAtNight, headingView, mossTrim, PIECE_STAGES, pieceView, roseTrim, type Air, type Crew, type PieceView } from './furniture';
+import { clothInWind, crewOrder, deviceOf, drawFurniture, drawFurnitureLive, furnitureHoles, furnitureSpan, FURNITURE_HEIGHT, glowsAtNight, headingView, mossTrim, PIECE_STAGES, pieceView, planterTrim, roseTrim, type Air, type Crew, type PieceView } from './furniture';
 import { roseStage } from '../game/roses';
+import { fieldRate } from '../game/growth';
 import { dyeOf } from '../game/dyestuffs';
 import { sailTrim } from '../game/wind';
-import { FURNITURE_BY_ID, rackDeck, rackSpots } from '../game/furniture';
-import { cropDef } from '../game/farming';
+import { FURNITURE_BY_ID, isPlanter, rackDeck, rackSpots } from '../game/furniture';
+import { cropDef, type CropLook } from '../game/farming';
 import { crateCentre, crateKindOfItem, subtileOf, SUBTILES } from '../game/crates';
 import { maxHealth, SPECIES, type Creature } from '../game/creatures';
 import { rarityOf } from '../game/items';
@@ -564,6 +565,9 @@ const clamp255 = (v: number): number => (v < 0 ? 0 : v > 255 ? 255 : v | 0);
  * diagonal at a time, with trees and the player slotted in at their depth.
  */
 
+/** The crops whose plants flower, which a butterfly will come to in a planter: the herbs and the fibre crops. */
+const FLOWERING_LOOKS: ReadonlySet<CropLook> = new Set<CropLook>(['herb', 'fibre']);
+
 export class Renderer {
   readonly camera = new Camera();
   time = 0;
@@ -721,6 +725,11 @@ export class Renderer {
   private readonly lifePieces = function* (this: Renderer): Iterable<{ kind: string; x: number; y: number; id: number; at: readonly [number, number] }> {
     for (const f of this.game.furniture.values()) {
       if (f.kind !== 'planter' && f.kind !== 'fish_pond') continue;
+      // A planter only while what grows in it is in flower: a herb or a fibre crop from its growing stage on.
+      if (f.kind === 'planter') {
+        const c = this.game.planted.get(f.id);
+        if (!c || c.stage < 2 || !FLOWERING_LOOKS.has(cropDef(c.id).look)) continue;
+      }
       yield { kind: f.kind, x: f.x, y: f.y, id: f.id, at: furnitureCentre(f) };
     }
   }.bind(this);
@@ -808,6 +817,8 @@ export class Renderer {
   private readonly gaits = new Gaits();
   /** How long the frame being drawn is, for anything worked out per second. */
   private frameDt = 1 / 60;
+  /** Whether the fields are waiting out a winter this frame: nothing in one grows, and it is drawn so. */
+  private dormant = false;
   /**
    * The tiles of the room the player is standing in, for the cutaway.
    *
@@ -1919,6 +1930,8 @@ export class Renderer {
     this.greenAt = greenNow();
     const season = seasonAt(this.greenAt).season;
     this.bloom = season === 'spring' || season === 'summer';
+    // Whether the fields are waiting out a winter, which they are drawn doing: asked once a frame, not once a tile.
+    this.dormant = this.game.crops.size > 0 && fieldRate(this.game.wallNow()) <= 0;
     this.roomTiles = this.myRoom();
     this.shades.clear();
     // Other people are walked along between one word about them and the next,
@@ -1943,7 +1956,7 @@ export class Renderer {
     const sky = skyAt(this.game.darkness(), Math.max(0, 1 - Math.min(Math.abs(hour0 - DAWN), Math.abs(hour0 - DUSK)) / 2.6));
     this.sky = sky;
     // The island's year, for what flowers and what does not (`seasonAt`): read off the wall clock once a frame.
-    this.season = seasonAt(Date.now() / 1000).season;
+    this.season = seasonAt(this.game.wallNow()).season;
     const voidInk = css(unknownInk(sky));
     const back = ctx.createLinearGradient(0, 0, 0, H);
     back.addColorStop(0, css(sky.top));
@@ -1992,7 +2005,7 @@ export class Renderer {
     this.markDust();
     // Wildflowers come and go with the season, and none grow inside a building.
     {
-      const season = flowerSeason(Date.now() / 1000);
+      const season = flowerSeason(this.game.wallNow());
       const built = this.game.buildings.list.size;
       if (season !== this.flowerSeasonNow || built !== this.flowerBuildings) {
         this.flowerSeasonNow = season;
@@ -2143,7 +2156,7 @@ export class Renderer {
     }
     // The day of the year the trees are dressed for, and what is out in it.
     // When it turns, yesterday's pictures of them go, and every copy made of them.
-    const year = yearAt(Date.now() / 1000);
+    const year = yearAt(this.game.wallNow());
     if (year.season !== this.year.season || year.day !== this.year.day) {
       forgetTrees();
       this.scaled.clear();
@@ -2353,7 +2366,7 @@ export class Renderer {
             const def = cropDef(crop.id);
             const avg = (c[0] + c[1] + c[2] + c[3]) / 4;
             this.take('crop', x, y, baseX, baseY + hh - avg * hs,
-              cropSprite(crop.id, Math.min(3, crop.stage), def.look, def.colors[0], def.colors[1]));
+              cropSprite(crop.id, Math.min(3, crop.stage), def.look, def.colors[0], def.colors[1], this.dormant));
           }
         }
         /*
@@ -8530,7 +8543,7 @@ export class Renderer {
   private pieceTrim(f: PlacedFurniture): number | undefined {
     // An arch's roses: their variety, which is its place's, and how far they have grown (`roses.ts`).
     if (FURNITURE_BY_ID.get(f.kind)?.roses) {
-      const r = roseStage(f.setAt, Date.now() / 1000);
+      const r = roseStage(f.setAt, this.game.wallNow());
       return roseTrim(Math.floor(hash2(f.x * 4 + f.sx, f.y * 4 + f.sy, 71) * 4), r.days, r.blooms);
     }
     // The moss on a piece that gathers it (`greening.ts`), a stage every two days, and which way it faces.
@@ -8538,6 +8551,11 @@ export class Renderer {
       const days = pieceGreen(this.game, f, this.greenAt) ?? 0;
       const g = greenShows(days, 0, this.wetness(f.x, f.y));
       return mossTrim(Math.round(g * PIECE_STAGES), pieceFacing(f));
+    }
+    // A planter is drawn with what grows in it, at the stage it is at.
+    if (isPlanter(f)) {
+      const c = this.game.planted.get(f.id);
+      return c ? planterTrim(c.id, c.stage) : 0;
     }
     if (rackSpots(f)) {
       let mask = 0;

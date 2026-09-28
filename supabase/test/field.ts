@@ -36,8 +36,8 @@ const slow = (): IslandGround => ({
   deeds: [],
   folk: [{ uid: 'u1', name: 'Hild', online: true }],
   crops: [
-    { x: 12, y: 12, id: 'cotton', stage: 1, ago: 30, tended: 0, tendedNow: false, ql: 40 },
-    { x: 13, y: 12, id: 'wheat', stage: 3, ago: 5, tended: 2, tendedNow: true, ql: 55 },
+    { x: 12, y: 12, id: 'cotton', stage: 1, grown: 30, ago: 30, tended: 0, tendedNow: false, ql: 40 },
+    { x: 13, y: 12, id: 'wheat', stage: 3, grown: 5, ago: 5, tended: 2, tendedNow: true, ql: 55 },
   ],
 });
 
@@ -49,11 +49,11 @@ check('a reconcile lays the crops in', game.crops.size === 2, `${game.crops.size
 const sown = game.cropAt(12, 12);
 check('with the stage the island gave them', sown?.stage === 1 && sown?.id === 'cotton',
   sown ? `${sown.id} at stage ${sown.stage}` : 'nothing at 12,12');
-// The island counts from a timestamp and this side counts in its own seconds,
-// so what crosses is how long the stage has been running.
-check('and counting from how long it has been in it',
-  !!sown && Math.abs(game.time - (sown.stageAt ?? 0) - 30) < 0.01,
-  sown ? `${(game.time - sown.stageAt).toFixed(2)}s into the stage, told 30` : 'no crop');
+// The island counts from a timestamp and this side counts on its own field
+// clock, so what crosses is how far into its stage the crop has grown.
+check('and counting from how far into it it has grown',
+  !!sown && Math.abs(game.fieldNow() - (sown.stageAt ?? 0) - 30) < 0.01,
+  sown ? `${(game.fieldNow() - sown.stageAt).toFixed(2)}s into the stage, told 30` : 'no crop');
 
 /*
  * The one that was reported: a second later, a fast read arrives carrying

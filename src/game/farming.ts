@@ -1,14 +1,23 @@
 import { TileType, TILE_DEFS } from '../world/tiles';
+import { seasonAt, YEAR_FROM } from '../world/calendar';
 import type { ActionDef, Target } from './actions';
 import type { Game } from './game';
-import { itemDef, itemName, type Item } from './items';
+import type { PlacedFurniture } from './furniture';
+import { describeFrom, itemDef, itemName, type Item } from './items';
 import { world } from './pace';
 import { ABUNDANCE } from './meditation';
+import { fieldClock, fieldMoment, fieldRate, fieldStops, fieldWakes, PLANTER_GROWTH } from './growth';
+import { capital, share, timeWords, times } from './words';
 
 /**
  * Farming: rake a field out of grass or dirt, sow a seed, tend it through
  * each stage of growth and harvest it. Tending is what makes a field worth
  * planting; skill is what makes the harvest good.
+ *
+ * A field grows through the year at its season's share of a crop's pace and
+ * not at all in winter; a planter grows one crop at `PLANTER_GROWTH` of its
+ * pace in every season, wherever it stands, and is sown, tended and harvested
+ * like a field by the same jobs aimed at the piece (`growth.ts`).
  */
 export type CropKind = 'vegetable' | 'starch' | 'spice' | 'fibre';
 /** Which set of shapes a crop is drawn with. */
@@ -78,7 +87,11 @@ export interface Crop {
   id: string;
   /** 0 sown, up to RIPE. */
   stage: number;
-  /** Game time the current stage began. */
+  /**
+   * When the current stage began, on the clock the crop grows on
+   * (`Game.growNow`): a field's growing seconds, which stand still in winter,
+   * or a planter's, which run at `PLANTER_GROWTH` of the plain clock.
+   */
   stageAt: number;
   /** Stages tended so far; each one lifts the harvest. */
   tended: number;
@@ -93,6 +106,8 @@ export interface Crop {
    * the trade down later takes nothing back from a field already growing.
    */
   pace?: number;
+  /** The planter it grows in, by the piece's id; a crop in a field has none. `x` and `y` are the planter's tile. */
+  planter?: number;
 }
 
 /** Tiles a field can be raked out of. */
@@ -115,22 +130,115 @@ export const cropStageName = (c: Crop): string => STAGE_NAMES[Math.min(RIPE, c.s
 /** Seconds one stage of this crop takes, at the pace it was sown at. */
 export const cropStageSeconds = (c: Crop): number => cropDef(c.id).stageSeconds * (c.pace ?? 1);
 
-/** Seconds until this crop moves on, or null once it is ripe. */
-export function cropTimeLeft(c: Crop, now: number): number | null {
-  if (cropReady(c)) return null;
-  return Math.max(0, cropStageSeconds(c) - (now - c.stageAt));
+/**
+ * How many stages a crop moves on, from where it is to a reading `now` of the
+ * clock it grows on, `per` growing seconds a stage: never past ripe and never
+ * back. One division and a floor, as the island's `crop_settled` has it,
+ * rather than a stage at a time, so the two come out alike to the last second.
+ */
+export const cropSteps = (c: { stage: number; stageAt: number }, per: number, now: number): number =>
+  Math.max(0, Math.min(RIPE - c.stage, Math.floor((now - c.stageAt) / per)));
+
+/**
+ * Bring a crop up to `now` on its own clock, and say whether it moved: each
+ * stage that has come due is added on at its own length, never restarted
+ * from now, and a new stage has not been tended.
+ */
+export function settleCrop(c: Crop, per: number, now: number): boolean {
+  const steps = cropSteps(c, per, now);
+  if (steps <= 0) return false;
+  c.stage += steps;
+  c.stageAt = c.stageAt + per * steps;
+  c.tendedNow = false;
+  return true;
 }
 
-/** Look on a field. `bumper` is the looker's own Bumper Crop, for what it would give them. */
-export function describeCrop(c: Crop, now: number, bumper = 0): string {
+/** Growing seconds still to go in the stage a crop is in: `per` a stage, `now` its clock's reading. */
+export const cropGrowthLeft = (c: Crop, per: number, now: number): number => Math.max(0, per - (now - c.stageAt));
+
+/**
+ * Real seconds until a crop moves on, from the moment `wall` (epoch seconds),
+ * or null once it is ripe: what is left of its stage, `per` growing seconds
+ * long with its clock reading `now`, at a planter's steady `PLANTER_GROWTH`,
+ * or over the year for a field -- whose winter adds its whole length to a
+ * stage that runs into one.
+ */
+export function cropTimeLeft(c: Crop, per: number, now: number, wall: number): number | null {
+  if (cropReady(c)) return null;
+  const left = cropGrowthLeft(c, per, now);
+  if (c.planter !== undefined) return left / PLANTER_GROWTH;
+  return left > 0 ? fieldMoment(fieldClock(wall) + left) - wall : 0;
+}
+
+/**
+ * When a crop comes to its `next` stage, as a line says it, from `left`
+ * growing seconds still to go and the moment `wall`: "sprouting in 5
+ * minutes"; for a field's stage that runs into a winter, "sprouting in 7
+ * days and 2 hours, after the winter"; and for a field in one, "waiting for
+ * spring, in 3 days and 4 hours, then sprouting 5 minutes after". A planter's
+ * never waits. The island's `crop_when` says the same, in the same words.
+ */
+export function cropWhen(next: string, left: number, planter: boolean, wall: number): string {
+  if (planter) return `${next} in ${timeWords(left / PLANTER_GROWTH)}`;
+  const wakes = fieldWakes(wall);
+  if (!Number.isFinite(wakes)) return `${next} when a field grows again`;
+  const end = fieldMoment(fieldClock(wall) + left);
+  if (wakes > wall) return `waiting for ${seasonAt(wakes).season}, in ${timeWords(wakes - wall)}, then ${next} ${timeWords(end - wakes)} after`;
+  const stops = fieldStops(wall);
+  return `${next} in ${timeWords(end - wall)}${end > stops ? `, after the ${seasonAt(stops).season}` : ''}`;
+}
+
+/**
+ * What a seed offered for sowing says about its stage, in real seconds at the
+ * moment `wall`: `per` growing seconds a stage (the crop's, at the pace this
+ * sowing would grow at), at a planter's share of it in any season, or at the
+ * field's share the season gives -- and none in a field's winter.
+ */
+export function stageNote(name: string, per: number, planter: boolean, wall: number): string {
+  if (planter) return `${name}, ${Math.round(per / PLANTER_GROWTH)}s a stage in any season`;
+  const rate = fieldRate(wall);
+  const season = seasonAt(wall).season;
+  if (rate <= 0) return `${name}, nothing until ${seasonAt(fieldWakes(wall)).season}: a field does not grow in ${season}`;
+  return `${name}, ${Math.round(per / rate)}s a stage${wall >= YEAR_FROM ? ` in ${season}` : ''}`;
+}
+
+/** A share of a crop's pace as a line says it: "at its own pace", "half again as fast", "at half its pace", "at a quarter of its pace", "not at all". */
+export function growthWords(r: number): string {
+  if (r <= 0) return 'not at all';
+  if (r === 1) return 'at its own pace';
+  if (r > 1) return `${times(r)} as fast`;
+  const part = share(r);
+  return part === 'half' ? 'at half its pace' : `at ${part} of its pace`;
+}
+
+/** What a sowing says: "You sow wheat. Sprouting in 5 minutes.", in a planter "You sow wheat in the planter. ...". The island's is `sown_said`. */
+export const sownSaid = (name: string, planter: boolean, when: string): string =>
+  `You sow ${name.toLowerCase()}${planter ? ' in the planter' : ''}. ${capital(when)}.`;
+
+/**
+ * Look on a crop, in a field or in a planter: its stage, when the next one
+ * comes, and what its tending has earned. `per` and `now` are its stage's
+ * length and its clock's reading (`Game.cropPer`, `Game.growNow`), `wall`
+ * the moment; `bumper` is the looker's own Bumper Crop, for what it would
+ * give them.
+ */
+export function describeCrop(c: Crop, per: number, now: number, wall: number, bumper = 0): string {
   const def = cropDef(c.id);
-  const left = cropTimeLeft(c, now);
-  const when = left === null ? 'ready to harvest' : left > 90 ? `${Math.ceil(left / 60)} minutes to the next stage` : `${Math.ceil(left)} seconds to the next stage`;
+  const when = cropReady(c) ? 'ready to harvest' : cropWhen(STAGE_NAMES[c.stage + 1], cropGrowthLeft(c, per, now), c.planter !== undefined, wall);
   const y = cropYield(c.tended, bumper);
   return `${def.name}, ${cropStageName(c)} · ${when} · tended ${c.tended} of ${RIPE} times, for ${y.produce} ${itemDef(def.produce).name.toLowerCase()} and ${y.seeds} seed${y.seeds > 1 ? 's' : ''}`;
 }
 
-const cropOf = (g: Game, t: Target): Crop | undefined => (t.kind === 'tile' ? g.cropAt(t.x, t.y) : undefined);
+// The planter says what it grows at, off the rule.
+describeFrom('planter', { growth: PLANTER_GROWTH });
+
+/** The planter a job is aimed at, when it is aimed at one. */
+const planterOf = (g: Game, t: Target): PlacedFurniture | undefined => (t.kind === 'furniture' ? g.planterPiece(t.id) : undefined);
+/** What a job is aimed at: the crop in a field, or the one in a planter. */
+const cropOf = (g: Game, t: Target): Crop | undefined =>
+  t.kind === 'tile' ? g.cropAt(t.x, t.y) : t.kind === 'furniture' ? g.planted.get(t.id) : undefined;
+/** Why a planter is out of reach, as the island says it (`fire_refusal`), or null. */
+const planterReach = (g: Game, f: PlacedFurniture): string | null => (g.besidePiece(f) ? null : 'Stand next to the planter.');
 
 /**
  * The tiles within `r` of (x, y), that tile included, row by row from the
@@ -169,24 +277,31 @@ export const ripeIn = (g: Game, x: number, y: number, r: number): Crop[] =>
   });
 
 /**
- * The pace a crop sown here now grows at, for whoever is sowing it: a
- * Farmer's Fast Growth, and Crop Rotation on a field whose last crop was
- * another one. A field never sown before has no last crop to differ from.
+ * The pace a crop sown now grows at, for whoever is sowing it, given what was
+ * last sown there: a Farmer's Fast Growth, and Crop Rotation where the last
+ * crop was another one. Ground never sown has no last crop to differ from.
  */
+const paceAfter = (g: Game, last: string | undefined, id: string): number =>
+  g.perk('grow:plant_seed', 1) * (last !== undefined && last !== id ? g.perk('rotate:plant_seed', 1) : 1);
+
+/** The pace a crop sown on this field now grows at (`paceAfter`, off the field's last crop). */
 export function sownPace(g: Game, x: number, y: number, id: string): number {
-  const last = g.lastSown(x, y);
-  return g.perk('grow:plant_seed', 1) * (last !== undefined && last !== id ? g.perk('rotate:plant_seed', 1) : 1);
+  return paceAfter(g, g.lastSown(x, y), id);
 }
 
+/** And in a planter: Crop Rotation reads the planter's own last crop, as a field's reads the field's. */
+export const planterPace = (g: Game, f: PlacedFurniture, id: string): number => paceAfter(g, f.sown, id);
+
 /**
- * Sow one field from a seed in the pack. A Farmer's Seed Saver keeps the seed
- * now and then; null when there was no seed left to spend.
+ * Sow one field, or a planter, from a seed in the pack. A Farmer's Seed Saver
+ * keeps the seed now and then; null when there was no seed left to spend.
  */
-function sowOne(g: Game, x: number, y: number, seed: Item, def: CropDef): 'sown' | 'kept' | null {
+function sowOne(g: Game, into: { x: number; y: number } | PlacedFurniture, seed: Item, def: CropDef): 'sown' | 'kept' | null {
   const kept = g.rand() < g.perk('keep:plant_seed', 0);
   const ql = seed.ql;
   if (!kept && !g.inventory.remove(seed.uid, 1)) return null;
-  g.plantCrop(x, y, def.id, ql, sownPace(g, x, y, def.id));
+  if ('kind' in into) g.sowPlanter(into, def.id, ql, planterPace(g, into, def.id));
+  else g.plantCrop(into.x, into.y, def.id, ql, sownPace(g, into.x, into.y, def.id));
   return kept ? 'kept' : 'sown';
 }
 
@@ -216,7 +331,7 @@ function reapOne(g: Game, c: Crop): { produce: Item; got: number; seeds: number;
   g.gather(def.seed, { count: y.seeds, ql });
   const grass = g.perk('fodder:harvest_crop', 0);
   if (grass > 0) g.inventory.add('mixed_grass', { count: grass, ql });
-  g.removeCrop(c.x, c.y);
+  g.uproot(c);
   return { produce, got, seeds: y.seeds, ql };
 }
 
@@ -254,24 +369,38 @@ export const FARM_ACTIONS: ActionDef[] = [
     skill: 'farming',
     hidden: true,
     ...SOW,
-    applies: (t, g) => t.kind === 'tile' && g.world.getTile(t.x, t.y) === TileType.Field,
+    // A tilled field, or a planter with nothing growing in it.
+    applies: (t, g) => (t.kind === 'tile' && g.world.getTile(t.x, t.y) === TileType.Field) || !!planterOf(g, t),
     check: (t, g) => {
-      if (t.kind !== 'tile') return 'Choose a field.';
-      if (g.world.getTile(t.x, t.y) !== TileType.Field) return 'Sow on a tilled field.';
-      if (g.cropAt(t.x, t.y)) return 'Something is already growing there.';
-      const seed = t.itemUid !== undefined ? g.inventory.get(t.itemUid) : undefined;
+      const box = planterOf(g, t);
+      if (box) {
+        const far = planterReach(g, box);
+        if (far) return far;
+        if (g.planted.has(box.id)) return 'Something is already growing there.';
+      } else {
+        if (t.kind !== 'tile') return 'Choose a field.';
+        if (g.world.getTile(t.x, t.y) !== TileType.Field) return 'Sow on a tilled field.';
+        if (g.cropAt(t.x, t.y)) return 'Something is already growing there.';
+      }
+      const uid = t.kind === 'tile' || t.kind === 'furniture' ? t.itemUid : undefined;
+      const seed = uid !== undefined ? g.inventory.get(uid) : undefined;
       if (!seed || !CROP_BY_SEED.has(seed.id)) return 'Choose a seed to sow.';
       return null;
     },
     perform: (t, g) => {
-      if (t.kind !== 'tile' || t.itemUid === undefined) return;
-      const seed = g.inventory.get(t.itemUid);
+      const box = planterOf(g, t);
+      const uid = t.kind === 'tile' || t.kind === 'furniture' ? t.itemUid : undefined;
+      if ((!box && t.kind !== 'tile') || uid === undefined) return;
+      if (box && g.planted.has(box.id)) return;
+      const seed = g.inventory.get(uid);
       const def = seed && CROP_BY_SEED.get(seed.id);
       if (!seed || !def) return;
-      const sown = sowOne(g, t.x, t.y, seed, def);
+      const sown = sowOne(g, box ?? { x: t.kind === 'tile' ? t.x : 0, y: t.kind === 'tile' ? t.y : 0 }, seed, def);
       if (!sown) return;
-      g.logMsg(`You sow ${def.name.toLowerCase()}. It should be ${STAGE_NAMES[1]} in a couple of minutes.`
-        + `${sown === 'kept' ? ' It cost you no seed.' : ''}`, 'event');
+      const c = box ? g.planted.get(box.id) : t.kind === 'tile' ? g.cropAt(t.x, t.y) : undefined;
+      // When it will be sprouting, in real time, from the season it was sown in.
+      const when = c ? cropWhen(STAGE_NAMES[1], g.cropPer(c), !!box, g.wallNow()) : `${STAGE_NAMES[1]} soon`;
+      g.logMsg(`${sownSaid(def.name, !!box, when)}${sown === 'kept' ? ' It cost you no seed.' : ''}`, 'event');
     },
   },
   {
@@ -282,6 +411,9 @@ export const FARM_ACTIONS: ActionDef[] = [
     ...TEND,
     applies: (t, g) => cropOf(g, t) !== undefined,
     check: (t, g) => {
+      const box = planterOf(g, t);
+      const far = box ? planterReach(g, box) : null;
+      if (far) return far;
       const c = cropOf(g, t);
       if (!c) return 'Nothing is growing there.';
       if (cropReady(c)) return 'It is ripe. Harvest it.';
@@ -305,6 +437,9 @@ export const FARM_ACTIONS: ActionDef[] = [
     ...HARVEST,
     applies: (t, g) => cropOf(g, t) !== undefined,
     check: (t, g) => {
+      const box = planterOf(g, t);
+      const far = box ? planterReach(g, box) : null;
+      if (far) return far;
       const c = cropOf(g, t);
       if (!c) return 'Nothing is growing there.';
       if (!cropReady(c)) return `It is only ${cropStageName(c)}. Let it grow.`;
@@ -316,20 +451,35 @@ export const FARM_ACTIONS: ActionDef[] = [
       const def = cropDef(c.id);
       const r = reapOne(g, c);
       g.logMsg(
-        `You harvest ${r.got} × ${itemName(r.produce).toLowerCase()} and ${r.seeds} ${itemDef(def.seed).name.toLowerCase()}. The field is ready to sow again. (QL ${r.ql.toFixed(1)})`,
+        `You harvest ${r.got} × ${itemName(r.produce).toLowerCase()} and ${r.seeds} ${itemDef(def.seed).name.toLowerCase()}. The ${c.planter !== undefined ? 'planter' : 'field'} is ready to sow again. (QL ${r.ql.toFixed(1)})`,
         'event',
       );
     },
   },
   {
+    // A field broken back up; and in a planter, what is growing turned back into the soil so the planter can be sown again or picked up.
     id: 'clear_field',
     label: 'Clear the field',
+    labelFor: (t, g) => (planterOf(g, t) ? 'Pull it up' : 'Clear the field'),
     verb: 'clearing the field',
     skill: 'farming',
     stamina: 0.03,
     baseTime: 3,
-    applies: (t, g) => t.kind === 'tile' && g.world.getTile(t.x, t.y) === TileType.Field,
+    applies: (t, g) => (t.kind === 'tile' && g.world.getTile(t.x, t.y) === TileType.Field) || (t.kind === 'furniture' && !!planterOf(g, t) && g.planted.has(t.id)),
+    check: (t, g) => {
+      const box = planterOf(g, t);
+      if (!box) return null;
+      return planterReach(g, box) ?? (g.planted.has(box.id) ? null : 'Nothing is growing there.');
+    },
     perform: (t, g) => {
+      const box = planterOf(g, t);
+      if (box) {
+        const c = g.planted.get(box.id);
+        if (!c) return;
+        g.uproot(c);
+        g.logMsg(`You turn the ${cropDef(c.id).name.toLowerCase()} back into the soil.`, 'event');
+        return;
+      }
       if (t.kind !== 'tile') return;
       const c = g.cropAt(t.x, t.y);
       if (c) g.removeCrop(t.x, t.y);
@@ -366,7 +516,7 @@ export const FARM_ACTIONS: ActionDef[] = [
       for (const [x, y] of emptyFields(g, t.x, t.y, g.perk('sow_patch', 0))) {
         const seed = g.inventory.get(t.itemUid);
         if (!seed) break;
-        const how = sowOne(g, x, y, seed, def);
+        const how = sowOne(g, { x, y }, seed, def);
         if (!how) break;
         sown += 1;
         if (how === 'kept') kept += 1;

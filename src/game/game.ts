@@ -23,10 +23,11 @@ import { anvilAnchor, anvilCovers, ANVIL_SUBTILES, type PlacedAnvil } from './an
 import { fireAnchor, fireCentre, fireCovers, FIRE_SUBTILES, type PlacedCampfire } from './campfire';
 import { smelterAnchor, smelterCentre, smelterCovers, SMELTER_H, SMELTER_W, type PlacedSmelter, type SmeltJob } from './smelter';
 import { kilnAnchor, kilnCovers, KILN_SUBTILES, type PlacedKiln } from './kiln';
-import { ACROSS_OF, DEED_PLACE, FURNITURE, ONE_ALTAR, deckSpot, furnitureAnchor, furnitureCapacity, furnitureCentre, furnitureCovers, furnitureDef, furnitureHeft, furnitureHolds, furnitureKg, furnitureRefuses, furnitureRoom, furnitureUnits, hiveRate, hiveRoom, HIVE_SWARMS, HIVE_WAX, POND_EVERY, rackDeck, rackSpots, teamOf, vehicleOf, type LiquidKind, type PlacedFurniture, furnitureName, LIQUID_NAME, isBoat, furnitureFootprint, type BoatDef } from './furniture';
+import { ACROSS_OF, DEED_PLACE, FURNITURE, ONE_ALTAR, deckSpot, isPlanter, furnitureAnchor, furnitureCapacity, furnitureCentre, furnitureCovers, furnitureDef, furnitureHeft, furnitureHolds, furnitureKg, furnitureRefuses, furnitureRoom, furnitureUnits, hiveRate, hiveRoom, HIVE_SWARMS, HIVE_WAX, POND_EVERY, rackDeck, rackSpots, teamOf, vehicleOf, type LiquidKind, type PlacedFurniture, furnitureName, LIQUID_NAME, isBoat, furnitureFootprint, type BoatDef } from './furniture';
 import { emptyCrate, occupiedRefusal, shutIn } from './creaturecrate';
 import { bury, crumble, graveAt, graveRefusal, graveSays, GRAVE_MARK } from './graves';
-import { cropStageSeconds, RIPE, type Crop } from './farming';
+import { cropStageSeconds, RIPE, settleCrop, type Crop } from './farming';
+import { fieldClock, fieldRate, PLANTER_GROWTH } from './growth';
 import { ageDef, bloodMul, CALL_WINDOW, Creatures, setLocalKept, FIGHT_BACK_GOES, HAUL_SKILL, isBaitFor, isShod, PLAYER_ATTACKER, PULL_DEFAULT, SHOE_PACE, SHOE_STEP, SPECIES, tackSpeed, type Creature, type CreatureJSON, type Stance } from './creatures';
 import { CRAFT_REACH, knackable, type CraftStock, type Station } from './recipes';
 import { Actor, type ActiveAction, type GuestSave } from './actor';
@@ -274,6 +275,10 @@ export interface GameInit {
   crops?: Crop[];
   /** The crop last sown on each field, as `[x, y, crop]`. */
   sown?: Array<[number, number, string]>;
+  /** What grows in planters, each with the id of its planter. */
+  planted?: Crop[];
+  /** The field clock, in growing seconds (`Game.fieldTime`). */
+  fieldTime?: number;
   marks?: Marker[];
   hoards?: Hoard[];
   player?: { x: number; y: number; name: string; stats: Player['stats']; level?: number; equipped?: Record<string, number | null>; rested?: number; boons?: Boon[]; knacks?: Record<string, number>; nutrition?: Record<Nutrient, number>;
@@ -794,6 +799,26 @@ export class Game {
   readonly crops = new Map<number, Crop>();
   /** The crop last sown on each field, by tile, for a Farmer's Crop Rotation. */
   readonly sown = new Map<number, string>();
+  /** What is growing in planters, by the id of the piece it grows in. A planter holds one crop. */
+  readonly planted = new Map<number, Crop>();
+  /**
+   * The field clock in the game you play by yourself: the growing seconds a
+   * field has had, run on at the season's share (`fieldRate`) of every game
+   * second, a night slept included. The game's own clock is not the wall
+   * clock -- it stops when the page is shut and leaps when you sleep -- so the
+   * field clock cannot be read off the year the way an island's is
+   * (`fieldNow`). Kept in the save; one that never held it starts it at the
+   * game clock, which is where every crop in it was stamped.
+   */
+  fieldTime = 0;
+  /** Seconds the island's wall clock is ahead of this machine's, as the last ground read that carried it said. */
+  wallSkew = 0;
+  /**
+   * The wall clock, in epoch seconds, when something other than this
+   * machine's is wanted: a test asking about a moment, or a picture of a
+   * season. Null reads this machine's, set right by the island's (`wallSkew`).
+   */
+  wallClock: (() => number) | null = null;
   /** Tiles a prospector has marked, and when the marks fade. */
   prospected: { tiles: Set<number>; until: number } | null = null;
   hooks: GameHooks = { prompt: async (_q, fallback) => fallback, confirm: async () => true };
@@ -1040,6 +1065,9 @@ export class Game {
       if (f.id >= this.nextFireId) this.nextFireId = f.id + 1;
     }
     for (const c of init.crops ?? []) this.crops.set(tileKey(c.x, c.y), c);
+    // A save from before the year has no field clock: it starts where the game clock stands, so nothing growing jumps.
+    this.fieldTime = init.fieldTime ?? this.time;
+    for (const c of init.planted ?? []) if (c.planter !== undefined) this.planted.set(c.planter, c);
     for (const [x, y, id] of init.sown ?? []) this.sown.set(tileKey(x, y), id);
     for (const k of init.kilns ?? []) {
       this.kilns.set(k.id, k);
@@ -1334,14 +1362,18 @@ export class Game {
     return tiles.length;
   }
 
-  /** Bring every crop on the settlement on one stage, and say how many. */
+  /**
+   * Bring every crop on the settlement on one stage, and say how many: the
+   * fields, and the planters standing on it. Each begins its new stage now,
+   * on the clock it grows on.
+   */
   hastenCrops(): number {
     let n = 0;
-    for (const crop of this.crops.values()) {
+    for (const crop of [...this.crops.values(), ...this.planted.values()]) {
       if (!this.onDeed(crop.x, crop.y)) continue;
       if (crop.stage >= RIPE) continue;
       crop.stage += 1;
-      crop.stageAt = this.time;
+      crop.stageAt = this.growNow(crop);
       crop.tendedNow = false;
       this.events.emit('world', crop.x, crop.y);
       n++;
@@ -2298,6 +2330,8 @@ export class Game {
     const skipped = !this.islandClock;
     if (skipped) {
       this.time += seconds;
+      // A night in the fields at the season's share, as every waking second is (`update`).
+      this.fieldTime += seconds * fieldRate(this.wallNow());
       // Everything that works by itself carries on working while you are under.
       if (this.campfires.size) this.burnFires(seconds);
       if (this.smelters.size) this.runSmelters(seconds);
@@ -2305,7 +2339,7 @@ export class Game {
       if (this.furniture.size) this.runPlaceables(seconds);
       if (this.posts.size) this.runPosts(seconds);
       if (this.traps.size) this.runTraps(seconds);
-      if (this.crops.size) this.growCrops();
+      if (this.crops.size || this.planted.size) this.growCrops();
       if (this.ground.size) this.applyDecay(seconds);
     }
     const s = this.player.stats;
@@ -2669,6 +2703,8 @@ export class Game {
 
   update(dt: number): void {
     this.time += dt;
+    // The fields' clock runs at the share of it the season gives them; on an island it is read off the year instead (`fieldNow`).
+    if (!this.islandClock) this.fieldTime += dt * fieldRate(this.wallNow());
     // A slice of the woods, which keep a real day rather than the world's own.
     this.growTrees(Date.now() / 1000);
     // The fog is the one thing that stays on the machine it belongs to, so it
@@ -2934,7 +2970,7 @@ export class Game {
     if (this.furniture.size) this.runPlaceables(dt);
     if (this.posts.size) this.runPosts(dt);
     if (this.traps.size) this.runTraps(dt);
-    if (this.crops.size) this.growCrops();
+    if (this.crops.size || this.planted.size) this.growCrops();
     this.creatures.update(dt, this);
     // Ground dug or filled this turn under or round a spring's water: settle it again, once.
     this.springs.update(Date.now());
@@ -6053,6 +6089,8 @@ export class Game {
           facing: (r.facing ?? 's') as Side,
           lock: r.lock ?? undefined,
           creature: r.creature ?? undefined,
+          // A planter's last crop, which Crop Rotation reads as it reads a field's.
+          ...(typeof r.state?.sown === 'string' ? { sown: r.state.sown } : {}),
           /*
            * The reins and the shafts, which the island has always sent and
            * this dropped: somebody who took the reins on an island walked
@@ -6256,12 +6294,41 @@ export class Game {
     // The level is the island's when you are on one: taking it is an ask
     // like any other, and this is the answer coming back.
     if (ground.level !== undefined) this.level = ground.level;
+    /*
+     * The island's wall clock, which the year is read off: a field's clock is
+     * the year's integral to the second, so this machine's being a few
+     * seconds out would move a stage that crosses a season's turn.
+     */
+    if (ground.now !== undefined && Number.isFinite(ground.now)) this.wallSkew = ground.now - Date.now() / 1000;
+    /*
+     * Where each crop is, on the clock it grows on: `grown` is how far into
+     * its stage it has grown, in growing seconds, which a field's winter does
+     * not add to -- so it goes onto this side's reading of the same clock and
+     * the stage comes due here when it comes due there. An island from before
+     * the year said only `ago`, wall seconds, which was the same thing then.
+     */
+    const into = (c: { grown?: number; ago?: number }): number =>
+      c.grown !== undefined && Number.isFinite(c.grown) ? c.grown : c.ago !== undefined && Number.isFinite(c.ago) ? c.ago : 0;
     if (ground.crops !== undefined) {
       this.crops.clear();
+      const field = this.fieldNow();
       for (const c of ground.crops) {
         this.crops.set(tileKey(c.x, c.y), {
           x: c.x, y: c.y, id: c.id, stage: c.stage,
-          stageAt: this.time - (Number.isFinite(c.ago) ? c.ago : 0),
+          stageAt: field - into(c),
+          tended: c.tended, tendedNow: c.tendedNow, ql: c.ql,
+          ...(c.pace !== undefined && c.pace !== 1 ? { pace: c.pace } : {}),
+        });
+      }
+    }
+    // And what grows in the planters, on theirs; on the slow half beside the fields.
+    if (ground.planted !== undefined) {
+      this.planted.clear();
+      const box = this.planterNow();
+      for (const c of ground.planted) {
+        this.planted.set(c.planter, {
+          x: c.x, y: c.y, id: c.id, stage: c.stage, planter: c.planter,
+          stageAt: box - into(c),
           tended: c.tended, tendedNow: c.tendedNow, ql: c.ql,
           ...(c.pace !== undefined && c.pace !== 1 ? { pace: c.pace } : {}),
         });
@@ -6497,6 +6564,8 @@ export class Game {
     const f = this.furniture.get(id);
     if (f) this.placed.furniture.remove(f);
     this.furniture.delete(id);
+    // A planter goes with whatever was in it, though nothing lifts one that has anything in it.
+    this.planted.delete(id);
     this.events.emit('crate');
   }
 
@@ -6846,12 +6915,76 @@ export class Game {
   }
 
   plantCrop(x: number, y: number, id: string, seedQl: number, pace = 1): Crop {
-    const c: Crop = { x, y, id, stage: 0, stageAt: this.time, tended: 0, tendedNow: false, ql: seedQl };
+    const c: Crop = { x, y, id, stage: 0, stageAt: this.fieldNow(), tended: 0, tendedNow: false, ql: seedQl };
     if (pace !== 1) c.pace = pace;
     this.crops.set(tileKey(x, y), c);
     this.sown.set(tileKey(x, y), id);
     this.events.emit('world', x, y);
     return c;
+  }
+
+  /** Sow a planter: its crop begins on the planter's clock, and the planter remembers what it was sown with. */
+  sowPlanter(f: PlacedFurniture, id: string, seedQl: number, pace = 1): Crop {
+    const c: Crop = { x: f.x, y: f.y, id, stage: 0, stageAt: this.planterNow(), tended: 0, tendedNow: false, ql: seedQl, planter: f.id };
+    if (pace !== 1) c.pace = pace;
+    this.planted.set(f.id, c);
+    f.sown = id;
+    this.events.emit('world', f.x, f.y);
+    return c;
+  }
+
+  /** A crop gone from where it grew, harvested or turned back in: out of its field, or out of its planter. */
+  uproot(c: Crop): void {
+    if (c.planter !== undefined) {
+      this.planted.delete(c.planter);
+      this.events.emit('world', c.x, c.y);
+    } else this.removeCrop(c.x, c.y);
+  }
+
+  /** The planter a piece's id names, or nothing when it names anything else. */
+  planterPiece(id: number): PlacedFurniture | undefined {
+    const f = this.furniture.get(id);
+    return f && isPlanter(f) ? f : undefined;
+  }
+
+  /** Whether a piece is near enough to work at: its middle within `STORE_REACH` of you, as the island measures it (`placed_in_reach`). */
+  besidePiece(f: PlacedFurniture): boolean {
+    const [cx, cy] = furnitureCentre(f);
+    return Math.hypot(cx - this.player.x, cy - this.player.y) <= STORE_REACH;
+  }
+
+  /**
+   * The wall clock, in epoch seconds: what the year is read off. The island's
+   * when there is one (this machine's put right by `wallSkew`), this
+   * machine's otherwise, and whatever `wallClock` says when it says anything.
+   */
+  wallNow(): number {
+    return this.wallClock ? this.wallClock() : Date.now() / 1000 + this.wallSkew;
+  }
+
+  /** The field clock now: on an island, read off the year (`fieldClock`); by yourself, the one kept in the save. */
+  fieldNow(): number {
+    return this.islandClock ? fieldClock(this.wallNow()) : this.fieldTime;
+  }
+
+  /** A planter's clock now: `PLANTER_GROWTH` of the plain one -- the wall clock on an island, the game's own by yourself. */
+  planterNow(): number {
+    return PLANTER_GROWTH * (this.islandClock ? this.wallNow() : this.time);
+  }
+
+  /** The clock a crop grows on, read now. */
+  growNow(c: { planter?: number }): number {
+    return c.planter !== undefined ? this.planterNow() : this.fieldNow();
+  }
+
+  /**
+   * Growing seconds one stage of a crop takes: the crop's own, at the pace it
+   * was sown at, and shortened by the gardener's path for everything in the
+   * ground of whoever walks it.
+   */
+  cropPer(c: Crop): number {
+    const green = this.walks('love', 1) && this.deed && this.onDeed(c.x, c.y) ? GREEN_THUMB : 1;
+    return cropStageSeconds(c) * green;
   }
 
   /** The crop last sown on a field, which a Farmer's Crop Rotation asks after; none on a field never sown. */
@@ -6869,22 +7002,19 @@ export class Game {
     this.events.emit('world', x, y);
   }
 
-  /** Move every crop on to its next stage once its time is up. */
+  /**
+   * Move every crop on to its next stage once its time is up, on the clock it
+   * grows on: a field's, which the season sets the pace of and a winter
+   * stops, and a planter's, which runs the same in every season.
+   */
   private growCrops(): void {
+    const field = this.fieldNow();
+    const box = this.planterNow();
     for (const c of this.crops.values()) {
-      if (c.stage >= RIPE) continue;
-      // The gardener's path hurries everything that is in your own ground.
-      const green = this.walks('love', 1) && this.deed && this.onDeed(c.x, c.y) ? GREEN_THUMB : 1;
-      // And the pace it was sown at: a Farmer's Fast Growth and Crop Rotation.
-      const per = cropStageSeconds(c) * green;
-      let moved = false;
-      while (c.stage < RIPE && this.time - c.stageAt >= per) {
-        c.stage += 1;
-        c.stageAt += per;
-        c.tendedNow = false;
-        moved = true;
-      }
-      if (moved) this.events.emit('world', c.x, c.y);
+      if (c.stage < RIPE && settleCrop(c, this.cropPer(c), field)) this.events.emit('world', c.x, c.y);
+    }
+    for (const c of this.planted.values()) {
+      if (c.stage < RIPE && settleCrop(c, this.cropPer(c), box)) this.events.emit('world', c.x, c.y);
     }
   }
 
@@ -7437,7 +7567,8 @@ export interface IslandPlaced {
   bait: string | null;
   bait_ql: number | null;
   caught: number | null;
-  state: { jobs?: unknown[]; output?: unknown[] } | null;
+  /** A furnace's queue and what it has made; a planter's last crop (`sown`), for a Farmer's Crop Rotation. */
+  state: { jobs?: unknown[]; output?: unknown[]; sown?: string } | null;
   mine: boolean;
   /** The padlock fitted to it, by the number it shares with its key. */
   lock?: number | null;
@@ -7545,12 +7676,18 @@ export interface IslandGround {
   /**
    * What is growing, and how far along.
    *
-   * `ago` is seconds since the stage it is in began rather than the hour it
-   * began at: the island keeps `stage_at` as a timestamp and this browser
-   * counts in its own world seconds, and the one thing the two agree on
-   * without any arrangement is how long a second is.
+   * `grown` is how far into the stage it is in, in growing seconds on the
+   * clock it grows on, rather than the hour the stage began: the island keeps
+   * `stage_at` as a timestamp and this browser counts on its own field clock,
+   * and a winter between the two readings would put a stage start read as an
+   * hour somewhere a field clock never stood. `ago` is the wall seconds since
+   * it began, which is all an island from before the year sent.
    */
-  crops?: Array<{ x: number; y: number; id: string; stage: number; ago: number; tended: number; tendedNow: boolean; ql: number; pace?: number }>;
+  crops?: Array<{ x: number; y: number; id: string; stage: number; ago?: number; grown?: number; tended: number; tendedNow: boolean; ql: number; pace?: number }>;
+  /** What grows in the planters within reach, by the planter's id and tile, on the slow half beside `crops`. */
+  planted?: Array<{ planter: number; x: number; y: number; id: string; stage: number; ago?: number; grown?: number; tended: number; tendedNow: boolean; ql: number; pace?: number }>;
+  /** The island's wall clock as it answered, in epoch seconds: what `wallSkew` is set by. */
+  now?: number;
   /**
    * The felling notches near you and how long ago the woods last turned
    * over, both on the slow half. Look reads them: "2 of 3 strokes in it", and

@@ -1,4 +1,6 @@
 import { FACINGS, FURNITURE, furnitureDef } from '../game/furniture';
+import { CROP_LIST, CROP_STAGES, type CropDef } from '../game/farming';
+import { cropPlant } from './crops';
 import { materialOf } from '../game/materials';
 import type { Side } from '../game/building';
 import { HALF_H, HALF_W, HEIGHT_SCALE, UNITS_PER_TILE } from './iso';
@@ -987,8 +989,12 @@ function crate(sc: Scene, P: Paint, x0: number, x1: number, y0: number, y1: numb
   });
 }
 
-/** A flower bed's worth of planting, drawn flat at a point: leaves in two greens, and what is in flower over them. */
-function plant(g: CanvasRenderingContext2D, x: number, y: number, kind: number, s: number): void {
+/**
+ * A flower bed's worth of planting, drawn flat at a point: leaves in two
+ * greens, and what is in flower over them. What a planter stood in before it
+ * grew crops; kept for any piece that wants flowers on it.
+ */
+export function plant(g: CanvasRenderingContext2D, x: number, y: number, kind: number, s: number): void {
   const LEAF = ['#5f9a58', '#7cb86a', '#4f8a5a'];
   const BLOOM = ['#a98fd6', '#f0a24a', '#f2d65e', '#e98a9a', '#f4f1e6'][kind % 5];
   const spiky = kind % 5 === 0;
@@ -2940,7 +2946,7 @@ const MODELS: Record<string, Model> = {
    * desk that slants down to whoever is reading, a lip along its low edge and
    * a book open on it. A coat rack is a turned pole on four splayed feet with
    * a peg each way near the top, a cloak on one and a hat on another. A
-   * planter is a boarded trough of earth on feet, in flower.
+   * planter is a boarded trough of earth on feet, and whatever grows in it.
    */
   lectern: ({ sc, wood }) => {
     sc.shadows = [[-3.4, 3.4, -3.4, 3.4]];
@@ -2992,7 +2998,15 @@ const MODELS: Record<string, Model> = {
     // A hat on the left one.
     sc.lathe(-3, 0, [[15.2, 2], [15.45, 2], [15.45, 1.15], [16.9, 1], [17.2, 0.6]], FELT, 16);
   },
-  planter: ({ sc, wood, hw, hd }) => {
+  /*
+   * Empty, it is bare earth, raked: it reads at a glance as a box waiting for
+   * a seed. The flowers it used to stand in were a decoration from before a
+   * planter grew anything, and a box of them would pass for one in use.
+   * Sown, a drill runs down its middle with the seed in it; after that a row
+   * of the crop grows along it at its stage, the field's own plants at the
+   * box's size (`cropPlant`).
+   */
+  planter: ({ sc, wood, hw, hd, trim }) => {
     const x = hw - 0.8, y = hd - 1, h = 4.4, t = 0.6;
     const side = boardsOn(sc, wood, 3, false);
     for (const px of [-x + 0.6, x - 0.6]) for (const py of [-y + 0.6, y - 0.6]) sc.box(px - 0.5, px + 0.5, py - 0.5, py + 0.5, 0, 0.6, wood);
@@ -3001,12 +3015,35 @@ const MODELS: Record<string, Model> = {
     sc.box(-x, -x + t, -y + t, y - t, 0.6, h, wood, { left: side, right: side });
     sc.box(x - t, x, -y + t, y - t, 0.6, h, wood, { left: side, right: side });
     const soil = h - 0.7;
+    const holds = planterHolds(trim);
     sc.box(-x + t, x - t, -y + t, y - t, 0.6, soil, paintOf(hex('#5b4636')), {
-      top: (F, w, hh) => { for (let i = 0; i < 16; i++) { const [px, py] = F(((i * 0.41) % 1) * w, ((i * 0.67) % 1) * hh); sc.g.fillStyle = i % 2 ? 'rgba(40, 28, 20, 0.5)' : 'rgba(130, 100, 70, 0.45)'; sc.g.beginPath(); sc.g.arc(px, py, 0.35, 0, TAU); sc.g.fill(); } },
+      top: (F, w, hh) => {
+        // Crumbs of darker and paler earth, and the marks of a rake along it.
+        for (let i = 0; i < 16; i++) { const [px, py] = F(((i * 0.41) % 1) * w, ((i * 0.67) % 1) * hh); sc.g.fillStyle = i % 2 ? 'rgba(40, 28, 20, 0.5)' : 'rgba(130, 100, 70, 0.45)'; sc.g.beginPath(); sc.g.arc(px, py, 0.35, 0, TAU); sc.g.fill(); }
+        sc.g.strokeStyle = 'rgba(40, 28, 20, 0.28)';
+        sc.g.lineWidth = sc.ink * 0.6;
+        for (const k of [0.3, 0.7]) {
+          const [a, b] = [F(0.4, k * hh), F(w - 0.4, k * hh)];
+          sc.g.beginPath(); sc.g.moveTo(a[0], a[1]); sc.g.lineTo(b[0], b[1]); sc.g.stroke();
+        }
+        if (holds?.stage !== 0) return;
+        // Sown: a drill down the middle, and the seed in it.
+        const [a, b] = [F(0.6, hh / 2), F(w - 0.6, hh / 2)];
+        sc.g.strokeStyle = 'rgba(34, 22, 14, 0.6)';
+        sc.g.lineWidth = sc.ink * 1.1;
+        sc.g.beginPath(); sc.g.moveTo(a[0], a[1]); sc.g.lineTo(b[0], b[1]); sc.g.stroke();
+        sc.g.fillStyle = 'rgba(214, 190, 140, 0.9)';
+        for (let i = 0; i < 9; i++) { const [px, py] = F(1 + ((w - 2) * i) / 8, hh / 2 + ((i * 37) % 3 - 1) * 0.12); sc.g.beginPath(); sc.g.arc(px, py, 0.28, 0, TAU); sc.g.fill(); }
+      },
     });
-    [[-6.6, 0.4], [-3.3, -0.6], [0, 0.5], [3.3, -0.5], [6.6, 0.3]].forEach(([px, py], i) => {
-      sc.sprite([px, py, soil], 1.4, (sx, sy) => plant(sc.g, sx, sy, i, 0.9), 4);
-    });
+    if (!holds || holds.stage === 0) return;
+    const [leaf, fruit] = holds.crop.colors;
+    const n = 5;
+    for (let i = 0; i < n; i++) {
+      const px = -x + t + 1.5 + (i * (2 * (x - t) - 3)) / (n - 1);
+      const py = (((i * 37) % 5) - 2) * 0.16;
+      sc.sprite([px, py, soil], 1.4, (sx, sy) => cropPlant(sc.g, sx, sy, holds.crop.look, holds.stage, leaf, fruit, i * 0.9, PLANTER_PLANT), 3 + holds.stage * 2.2);
+    }
   },
   firewood_rack: ({ sc, wood, hw, hd }) => {
     const x = hw - 0.9, y = hd - 1.6, H = 8.6;
@@ -4233,6 +4270,26 @@ const MODELS: Record<string, Model> = {
     sc.box(-2.5, 2.5, y - t, y + t, bar, bar + 0.9, wood, { front: grain(sc, wood, 1) });
     sc.box(-t, t, y - t, y + t, bar + 0.9, bar + 3.4, wood);
   },
+};
+
+/* ---- what a planter holds --------------------------------------------------------- */
+
+/** How big a crop's plant is drawn in a planter, against one in a field. */
+const PLANTER_PLANT = 0.85;
+
+/**
+ * What a planter is drawn holding, as the one number its bake is kept under
+ * (the piece's `trim`): nought for bare earth, and otherwise which crop and
+ * at what stage. The model reads it back with `planterHolds`.
+ */
+export const planterTrim = (cropId: string, stage: number): number => {
+  const i = CROP_LIST.findIndex((c) => c.id === cropId);
+  return i < 0 ? 0 : 1 + i * CROP_STAGES + Math.max(0, Math.min(CROP_STAGES - 1, stage));
+};
+const planterHolds = (trim: number | undefined): { crop: CropDef; stage: number } | null => {
+  if (!trim || trim < 1 || !Number.isInteger(trim)) return null;
+  const crop = CROP_LIST[Math.floor((trim - 1) / CROP_STAGES)];
+  return crop ? { crop, stage: (trim - 1) % CROP_STAGES } : null;
 };
 
 /* ---- sizes, for the renderer ------------------------------------------------ */

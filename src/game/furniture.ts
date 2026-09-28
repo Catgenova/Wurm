@@ -156,6 +156,12 @@ export interface FurnitureDef {
    * other (`rpc_ground`, `furniture_def.roses`).
    */
   roses?: boolean;
+  /**
+   * A box of earth that one crop is sown in, tended and harvested like a
+   * field, growing at `PLANTER_GROWTH` of its pace in every season wherever
+   * it stands (`farming.ts`). The island's `is_planter` names the same pieces.
+   */
+  planter?: boolean;
 }
 
 /**
@@ -285,7 +291,7 @@ export const FURNITURE: FurnitureDef[] = [
     'You nail up a creature crate. It holds one wildermon.'),
   piece('lectern', 'Lectern', 1, 1, [['plank', 16], ['shaft', 2], ['nail', 16]], 16, 9, 'You nail up a lectern with a good slant on it.'),
   piece('coat_rack', 'Coat rack', 1, 1, [['plank', 4], ['shaft', 4], ['nail', 12]], 10, 6, 'You nail up a rack of pegs for the door.'),
-  piece('planter', 'Planter', 2, 1, [['plank', 24], ['nail', 20]], 10, 7, 'You nail up a planter and fill it with earth.'),
+  piece('planter', 'Planter', 2, 1, [['plank', 24], ['nail', 20]], 10, 7, 'You nail up a planter and fill it with earth.', undefined, { planter: true }),
   piece('firewood_rack', 'Firewood rack', 2, 1, [['plank', 8], ['shaft', 6], ['nail', 20]], 12, 8, 'You nail up a rack to keep firewood off the wet.', 40),
   /*
    * The biggest thing a carpenter builds, and the only one whose footprint is
@@ -543,7 +549,22 @@ export interface PlacedFurniture {
    * real seconds: when it was set down or last scrubbed. See `greening.ts`.
    */
   greenSince?: number;
+  /**
+   * For a planter: the crop it was last sown with, which a Farmer's Crop
+   * Rotation asks after as it does of a field's. What is growing in it now is
+   * `Game.planted`, by the piece's id. Picked up, a planter forgets it, as a
+   * field broken up does; on an island it is `state.sown` on the placed row.
+   */
+  sown?: string;
 }
+
+/** Whether a piece is a planter: a box of earth a crop is sown in (`FurnitureDef.planter`). */
+export const isPlanter = (f: { kind: string }): boolean => !!furnitureDef(f.kind).planter;
+/**
+ * Why a planter will not be picked up while something grows in it. The
+ * island says the same (`planter_growing_said`, off this).
+ */
+export const PLANTER_GROWING = 'Something is growing in it. Harvest it, or pull it up, first.';
 
 /** The two liquids worth keeping a barrel for. */
 export type LiquidKind = 'water' | 'lye' | 'milk' | 'ale' | 'cider' | 'mead' | 'wine' | 'juice' | 'spirit';
@@ -966,6 +987,8 @@ export const FURNITURE_ACTIONS: ActionDef[] = [
       const shut = g.lockRefusal(f);
       if (shut) return shut;
       if (f.items.length) return 'Empty it first.';
+      // A crop is not carried about in a box of earth: it is harvested, or turned back into the soil.
+      if (g.planted.has(f.id)) return PLANTER_GROWING;
       // A rack holds nothing of its own, so `items` is empty however loaded it
       // is: what stands on it are eight crates of somebody else's, and lifting
       // the rack out from under them would leave them standing in the air.
@@ -985,6 +1008,7 @@ export const FURNITURE_ACTIONS: ActionDef[] = [
       const f = pieceOf(g, t);
       if (!f || f.items.length || f.lit || litresIn(f) > 0 || f.hitched || f.driven || teamOf(f).length || ridersOf(f).length) return;
       if (rackSpots(f) && g.cratesOn(f).length) return;
+      if (g.planted.has(f.id)) return;
       g.removeFurniture(f.id);
       const back = g.inventory.add(f.kind, { ql: f.ql, extra: f.material });
       if (f.dye) back.dye = f.dye;

@@ -7,6 +7,7 @@ import { BUSH_DEFS, TREE_AGES, TREE_DEFS } from '../world/tiles';
 import { drawWildermon, drawWildermonPortrait, modelled, wildermonTop } from './wildermon';
 import { bushYear, leafageOf, newLeaf, type Bloom } from './foliage';
 import type { Season } from '../world/calendar';
+import { cropPlant } from './crops';
 
 /** A pre-rendered sprite. Sizes are in zoom-1 pixels; the canvas is drawn at SPRITE_SCALE for crispness. */
 export interface Sprite {
@@ -1648,16 +1649,30 @@ export function crateSprite(kind: 'log' | 'plank' = 'plank'): Sprite {
   return spr;
 }
 
+/** A crop's colours gone over for a winter it is waiting out: dull, and a little frosted. */
+const DORMANT_LEAF = '#8c8a62';
+const DORMANT_FRUIT = '#a99a78';
+const frosted = (c: string, into: string, k: number): string => {
+  const a = parseInt(c.slice(1), 16), b = parseInt(into.slice(1), 16);
+  const ch = (v: number, sh: number): number => (v >> sh) & 255;
+  const mix = (sh: number): number => Math.round(ch(a, sh) + (ch(b, sh) - ch(a, sh)) * k);
+  return `#${((1 << 24) | (mix(16) << 16) | (mix(8) << 8) | mix(0)).toString(16).slice(1)}`;
+};
+
 /**
  * A crop growing on a tilled field. Each of the four stages gets its own
- * model, and each family of crop its own shape: roots keep their heads down
- * and swell late, leaves spread, grain runs up into ears, herbs stay low and
- * bushy, and fibre opens into bolls. Ripe plants carry their produce.
+ * model, and each family of crop its own shape (`cropPlant`), nine plants to
+ * the tile. `dormant` is a field waiting out a winter, which grows nothing:
+ * its green gone dull and a rime on the furrows.
  */
-export function cropSprite(cropId: string, stage: number, look: string, leaf: string, fruit: string): Sprite {
-  const key = `${SPRITE_SCALE}|crop:${cropId}:${stage}`;
+export function cropSprite(cropId: string, stage: number, look: string, leaf: string, fruit: string, dormant = false): Sprite {
+  const key = `${SPRITE_SCALE}|crop:${cropId}:${stage}${dormant ? ':dormant' : ''}`;
   let spr = cache.get(key);
   if (spr) return spr;
+  if (dormant) {
+    leaf = frosted(leaf, DORMANT_LEAF, 0.6);
+    fruit = frosted(fruit, DORMANT_FRUIT, 0.45);
+  }
   const rng = mulberry32(hashString(cropId) + stage * 7919);
   // How far out of the tile centre anything drawn on the field may reach, as a
   // share of the tile. A hair inside the half-tile, so nothing touches the edge.
@@ -1687,6 +1702,17 @@ export function cropSprite(cropId: string, stage: number, look: string, leaf: st
       ctx.moveTo(ax, ay);
       ctx.lineTo(bx, by);
       ctx.stroke();
+      // A winter's rime along the middle of the ridge of each furrow.
+      if (dormant) {
+        ctx.strokeStyle = 'rgba(236,240,244,0.45)';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(ax + (bx - ax) * 0.2, ay + (by - ay) * 0.2 - 1.2);
+        ctx.lineTo(ax + (bx - ax) * 0.8, ay + (by - ay) * 0.8 - 1.2);
+        ctx.stroke();
+        ctx.strokeStyle = 'rgba(70,50,32,0.45)';
+        ctx.lineWidth = 2;
+      }
     }
     if (stage === 0) {
       // Sown: only the seed and the disturbed earth show.
@@ -1700,84 +1726,12 @@ export function cropSprite(cropId: string, stage: number, look: string, leaf: st
       cache.set(key, spr!);
       return;
     }
-    const grown = stage / 3;
     const plants: Array<[number, number]> = [];
     for (let u = -1; u <= 1; u++) for (let v = -1; v <= 1; v++) plants.push([u * 0.26 + (rng() - 0.5) * 0.08, v * 0.26 + (rng() - 0.5) * 0.08]);
     plants.sort((a, b) => a[0] + a[1] - (b[0] + b[1]));
     for (const [u, v] of plants) {
       const [px, py] = iso(u, v);
-      const h = (look === 'grain' ? 10 : look === 'leaf' ? 6 : 5) * (0.45 + grown * 0.85);
-      const w = (look === 'leaf' ? 7 : 4.5) * (0.5 + grown * 0.7);
-      ctx.strokeStyle = leaf;
-      ctx.fillStyle = leaf;
-      if (look === 'grain') {
-        // A stalk with an ear on top once it is up.
-        ctx.lineWidth = 1.3;
-        ctx.beginPath();
-        ctx.moveTo(px, py);
-        ctx.quadraticCurveTo(px + 1, py - h * 0.6, px + 1.6, py - h);
-        ctx.stroke();
-        if (stage >= 2) {
-          ctx.fillStyle = stage === 3 ? fruit : leaf;
-          ctx.beginPath();
-          ctx.ellipse(px + 1.8, py - h - 1.6, 1.7, 3.4 * (stage === 3 ? 1.15 : 0.8), 0.2, 0, TAU);
-          ctx.fill();
-        }
-      } else if (look === 'leaf') {
-        // A rosette of broad leaves, closing into a head when ripe.
-        const blades = 5;
-        for (let i = 0; i < blades; i++) {
-          const a = (i / blades) * TAU + u;
-          ctx.beginPath();
-          ctx.ellipse(px + Math.cos(a) * w * 0.35, py - h * 0.35 + Math.sin(a) * w * 0.18, w * 0.5, h * 0.32, a * 0.3, 0, TAU);
-          ctx.fill();
-        }
-        if (stage === 3) {
-          ctx.fillStyle = fruit;
-          ctx.beginPath();
-          ctx.ellipse(px, py - h * 0.55, w * 0.42, h * 0.42, 0, 0, TAU);
-          ctx.fill();
-        }
-      } else if (look === 'fibre') {
-        ctx.lineWidth = 1.2;
-        for (const d of [-1, 0, 1]) {
-          ctx.beginPath();
-          ctx.moveTo(px, py);
-          ctx.quadraticCurveTo(px + d * 2, py - h * 0.6, px + d * 3.4, py - h);
-          ctx.stroke();
-        }
-        if (stage === 3) {
-          ctx.fillStyle = fruit;
-          for (const d of [-1, 1]) {
-            ctx.beginPath();
-            ctx.arc(px + d * 3.2, py - h - 0.5, 2.2, 0, TAU);
-            ctx.fill();
-          }
-        }
-      } else {
-        // Roots and herbs: a low tuft, with the crop showing at the soil when ripe.
-        ctx.lineWidth = 1.4;
-        for (const d of [-1.2, 0, 1.2]) {
-          ctx.beginPath();
-          ctx.moveTo(px, py);
-          ctx.quadraticCurveTo(px + d * 1.6, py - h * 0.7, px + d * 2.6, py - h);
-          ctx.stroke();
-        }
-        if (stage === 3) {
-          ctx.fillStyle = fruit;
-          if (look === 'root') {
-            ctx.beginPath();
-            ctx.ellipse(px, py + 0.6, 3.2, 2.1, 0, 0, TAU);
-            ctx.fill();
-          } else {
-            for (const d of [-1, 1]) {
-              ctx.beginPath();
-              ctx.arc(px + d * 2.2, py - h * 0.75, 1.5, 0, TAU);
-              ctx.fill();
-            }
-          }
-        }
-      }
+      cropPlant(ctx, px, py, look, stage, leaf, fruit, u);
     }
   });
   cache.set(key, spr);
