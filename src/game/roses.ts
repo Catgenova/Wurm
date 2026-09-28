@@ -12,16 +12,17 @@
  * Picking an arch up and setting it down again is planting its roses again.
  */
 import { seasonAt, type Season } from '../world/calendar';
+import { DAY_SECONDS } from './pace';
 import { numberWord, spanWords } from './words';
 
-/** Days after it is set down that an arch's roses are in leaf, in bud and in flower. */
+/** Days of the island's year after it is set down that an arch's roses are in leaf, in bud and in flower. */
 export const ROSE_LEAFY = 1;
 export const ROSE_BUD = 2;
 export const ROSE_FLOWER = 3;
 /** The seasons roses bud and flower in; the rest of the year a grown arch is in leaf. */
 export const ROSE_SEASONS: readonly Season[] = ['spring', 'summer'];
 
-const DAY = 24 * 60 * 60;
+const DAY = DAY_SECONDS;
 
 export type RoseStage = 'bare' | 'leafy' | 'bud' | 'flower';
 

@@ -100,3 +100,10 @@ export const world = (seconds: number): number => seconds * WORLD_PACE;
  * have been exactly wrong.
  */
 export const worldRate = (perSecond: number): number => perSecond / WORLD_PACE;
+
+/**
+ * One of the island's days and nights, in seconds: the clock beside your
+ * position goes round once in it (`hourOfDay`), and the island's year counts
+ * its days in it (`../world/calendar`).
+ */
+export const DAY_SECONDS = world(1440);

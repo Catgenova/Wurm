@@ -2,20 +2,21 @@
  * What a crown wears through the island's year.
  *
  * Asked for with the year itself (`../world/calendar`): "add seasonal models
- * for trees". Four seasons of a week each, the same for everybody, read off
- * the wall clock -- the same clock the hud names the season by -- and turning
- * with the woods at dawn, so a tree's look changes once a day and not a
+ * for trees". Four seasons of `SEASON_DAYS` days each, the same for
+ * everybody, read off the wall clock -- the same clock the hud names the
+ * season by. A season's look goes in `LOOK_STEPS` steps, each a share of its
+ * days (`lookStep`), so a tree's look changes a few times a season and not a
  * moment otherwise.
  *
  * - **Spring.** Leaf comes out fresh, lighter and yellower than summer's:
- *   thin on the first day, thicker on the second, full from the third. Every
- *   tree that bears fruit is in flower the whole week -- white, pale pink or
- *   deep pink by its kind, the cherry the pinkest -- over the new leaf.
+ *   thin at the first step, thicker at the second, full from the third. Every
+ *   tree that bears fruit is in flower the whole spring -- white, pale pink
+ *   or deep pink by its kind, the cherry the pinkest -- over the new leaf.
  * - **Summer.** The look the island has always had: the canopies in
  *   `TREE_DEFS` are summer's.
  * - **Autumn.** Each broadleaf turns a colour of its own: patches of it in
- *   the green on the first two days, the whole crown from the third to the
- *   fifth, and on the last two the crown thinning as the leaves come down.
+ *   the green at the first two steps, the whole crown from the third to the
+ *   fifth, and at the last two the crown thinning as the leaves come down.
  * - **Winter.** The broadleaves stand bare, trunk, limbs and twigs grown into
  *   the shape their crown had, so a winter wood still reads kind by kind. The
  *   four that keep their leaves (`EVERGREEN`) keep them, a shade darker and
@@ -26,7 +27,7 @@
  *
  * Only drawn. No rule asks what a tree looks like, and nothing here is kept.
  */
-import { seasonAt, type Season } from '../world/calendar';
+import { SEASON_DAYS, seasonAt, type Season } from '../world/calendar';
 import { TREE_AGES, TREE_DEFS } from '../world/tiles';
 
 /** The kinds that keep their leaves all year, by name. Every other kind is bare in winter. */
@@ -145,24 +146,37 @@ export interface Leafage {
   bloom: Bloom | null;
   /**
    * What has come down and lies under it: how many, in which colours, and
-   * whether they are leaves or petals. Petals gather through the week of
-   * flower; leaves on the two days the crown is thinning.
+   * whether they are leaves or petals. Petals gather through the spring it is
+   * in flower; leaves at the two steps the crown is thinning.
    */
   litter: { tones: readonly [string, string, string]; n: number; leaf: boolean } | null;
 }
 
 const SUMMER: Leafage = { key: '', palette: null, turning: null, full: 1, bloom: null, litter: null };
 
-/** How full a crown is on each day of spring as the leaf comes out, and of autumn as it comes down. */
+/**
+ * The steps a season's look goes in, whatever its length: every table below
+ * has one entry a step, and a day of the season is drawn at the step its
+ * share of the season falls in.
+ */
+export const LOOK_STEPS = 7;
+/** The step of its season's look a day of the season (1 to `SEASON_DAYS`) is drawn at, from 0 to `LOOK_STEPS - 1`. */
+export const lookStep = (day: number): number =>
+  Math.max(0, Math.min(LOOK_STEPS - 1, Math.floor(((day - 1) * LOOK_STEPS) / SEASON_DAYS)));
+/** How many days of a season are drawn at a step that passes `test`. */
+const daysAt = (test: (step: number) => boolean): number =>
+  Array.from({ length: SEASON_DAYS }, (_, d) => lookStep(d + 1)).filter(test).length;
+
+/** How full a crown is at each step of spring as the leaf comes out, and of autumn as it comes down. */
 export const LEAFING = [0.42, 0.74, 1, 1, 1, 1, 1] as const;
 export const SHEDDING = [1, 1, 1, 1, 1, 0.64, 0.34] as const;
-/** How much of a broadleaf's crown has turned on each day of autumn. */
+/** How much of a broadleaf's crown has turned at each step of autumn. */
 export const TURNING = [0.3, 0.62, 1, 1, 1, 1, 1] as const;
 /** How many days of spring the leaf takes to come out, of autumn the colour takes to come on, and of autumn the leaves take to come down. */
-export const LEAF_DAYS = LEAFING.filter((v) => v < 1).length;
-export const TURN_DAYS = TURNING.filter((v) => v < 1).length;
-export const SHED_DAYS = SHEDDING.filter((v) => v < 1).length;
-/** Petals lying under a tree in flower on each day of spring, and leaves under one on each day of autumn. */
+export const LEAF_DAYS = daysAt((i) => LEAFING[i] < 1);
+export const TURN_DAYS = daysAt((i) => TURNING[i] < 1);
+export const SHED_DAYS = daysAt((i) => SHEDDING[i] < 1);
+/** Petals lying under a tree in flower at each step of spring, and leaves under one at each step of autumn. */
 export const PETALS_DOWN = [5, 7, 9, 11, 13, 15, 17] as const;
 export const LEAVES_DOWN = [0, 0, 0, 0, 3, 14, 24] as const;
 
@@ -216,10 +230,11 @@ export function yearAt(now: number): { season: Season; day: number } {
  */
 export function leafageOf(species: number, variant: number, season: Season, day: number): Leafage {
   // Asked of every tree drawn, every frame; worked out once a look.
-  const k = ((species * 8 + variant) * 4 + SEASON_AT[season]) * 8 + day;
+  const i = lookStep(day);
+  const k = ((species * 8 + variant) * 4 + SEASON_AT[season]) * LOOK_STEPS + i;
   let had = LOOKS.get(k);
   if (!had) {
-    had = lookOf(species, variant, season, day);
+    had = lookOf(species, variant, season, i);
     LOOKS.set(k, had);
   }
   return had;
@@ -227,11 +242,11 @@ export function leafageOf(species: number, variant: number, season: Season, day:
 const LOOKS = new Map<number, Leafage>();
 const SEASON_AT: Record<Season, number> = { spring: 0, summer: 1, autumn: 2, winter: 3 };
 
-function lookOf(species: number, variant: number, season: Season, day: number): Leafage {
+/** The look at step `i` of a season (`lookStep`). */
+function lookOf(species: number, variant: number, season: Season, i: number): Leafage {
   const def = TREE_DEFS[species];
   const age = TREE_AGES[variant] ?? TREE_AGES[0];
   if (!def || !age.alive || season === 'summer') return SUMMER;
-  const i = Math.max(0, Math.min(6, day - 1));
   if (evergreen(species)) {
     // An evergreen that fruits still flowers: over the leaf it kept.
     const bloom = season === 'spring' && blooms(species, variant) ? bloomOf(species) : null;
@@ -259,7 +274,8 @@ function lookOf(species: number, variant: number, season: Season, day: number): 
 
 /**
  * How much of a broadleaf's crown is coming down today, 0 to 1: what the
- * leaves falling round it are measured by. Only the last two days of autumn.
+ * leaves falling round it are measured by. Only the last `SHED_DAYS` days of
+ * autumn.
  */
 export function shedding(species: number, variant: number, season: Season, day: number): number {
   const age = TREE_AGES[variant] ?? TREE_AGES[0];
@@ -269,9 +285,9 @@ export function shedding(species: number, variant: number, season: Season, day: 
 
 /** How much of a broadleaf's crown is coming down on a day of the year, whatever the tree. */
 export const shedOn = (season: Season, day: number): number =>
-  season === 'autumn' ? 1 - SHEDDING[Math.max(0, Math.min(6, day - 1))] : 0;
-/** The most there ever is: the last day of autumn. */
-export const SHED_MOST = 1 - SHEDDING[6];
+  season === 'autumn' ? 1 - SHEDDING[lookStep(day)] : 0;
+/** The most there ever is: the last days of autumn. */
+export const SHED_MOST = 1 - SHEDDING[LOOK_STEPS - 1];
 
 /* ---- Bushes ------------------------------------------------------------------ */
 
@@ -279,7 +295,7 @@ export const SHED_MOST = 1 - SHEDDING[6];
  * The bushes go through the year by the same rules, where it costs nothing:
  * the rose and the thorn are bare in winter and turn in autumn, and lavender
  * keeps its leaves. What is in flower when: the thorn white through spring,
- * as a hawthorn is; roses and lavender from the fourth day of spring to the
+ * as a hawthorn is; roses and lavender from the fourth step of spring to the
  * end of summer; nothing in autumn, when the rose has hips on it and the
  * thorn its haws, and nothing in winter.
  */
@@ -292,8 +308,10 @@ const BUSH_AUTUMN: Readonly<Record<string, readonly [string, string]>> = {
 const BUSH_BLOSSOM: Readonly<Record<string, string>> = { 'Thorn bush': '#f3efe6' };
 /** And what hangs on it in autumn. */
 const BUSH_FRUIT: Readonly<Record<string, string>> = { 'Rose bush': '#c0584a', 'Thorn bush': '#9a3c42' };
-/** The day of spring roses and lavender come into flower. */
-export const BUSH_FLOWER_FROM = 4;
+/** The step of spring roses and lavender come into flower at, from nought (`lookStep`). */
+const BUSH_FLOWER_STEP = 3;
+/** And the day of spring that is: the first day drawn at that step. */
+export const BUSH_FLOWER_FROM = 1 + daysAt((i) => i < BUSH_FLOWER_STEP);
 
 export interface BushYear {
   key: string;
@@ -309,22 +327,23 @@ const BUSH_LOOKS = new Map<number, BushYear>();
 
 /** What a bush of this kind wears on a day of the year. */
 export function bushYear(def: { name: string; foliage: readonly [string, string]; flowers?: string }, index: number, season: Season, day: number): BushYear {
-  const k = (index * 4 + SEASON_AT[season]) * 8 + day;
+  const i = lookStep(day);
+  const k = (index * 4 + SEASON_AT[season]) * LOOK_STEPS + i;
   let had = BUSH_LOOKS.get(k);
   if (!had) {
-    had = bushLook(def, season, day);
+    had = bushLook(def, season, i);
     BUSH_LOOKS.set(k, had);
   }
   return had;
 }
 
-function bushLook(def: { name: string; foliage: readonly [string, string]; flowers?: string }, season: Season, day: number): BushYear {
-  const i = Math.max(0, Math.min(6, day - 1));
+/** The look at step `i` of a season (`lookStep`). */
+function bushLook(def: { name: string; foliage: readonly [string, string]; flowers?: string }, season: Season, i: number): BushYear {
   const keeps = BUSH_EVERGREEN.has(def.name);
   const own = def.flowers ?? null;
   if (season === 'summer') return { key: '', foliage: def.foliage, full: 1, flowers: own };
   if (season === 'spring') {
-    const flowers = BUSH_BLOSSOM[def.name] ?? (day >= BUSH_FLOWER_FROM ? own : null);
+    const flowers = BUSH_BLOSSOM[def.name] ?? (i >= BUSH_FLOWER_STEP ? own : null);
     if (keeps) return { key: `s${flowers ? 1 : 0}`, foliage: def.foliage, full: 1, flowers };
     const leaf = fresh([def.foliage[0], def.foliage[0], def.foliage[1]]);
     return { key: `s${i}`, foliage: [leaf[0], leaf[2]], full: LEAFING[i], flowers };

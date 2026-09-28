@@ -1,6 +1,6 @@
 import { MATERIAL_BY_ID } from '../../game/building';
 import { TILE_DEFS, TileType, TREE_AGES, TREE_DAWN_UTC, TREE_DEFS } from '../../world/tiles';
-import { SEASON_DAYS } from '../../world/calendar';
+import { SEASON_DAYS, seasonLine, YEAR_DAYS, YEAR_FROM } from '../../world/calendar';
 import { BLOOMS, BUSH_FLOWER_FROM, evergreen, LEAF_DAYS, SHED_DAYS, TURN_DAYS } from '../../render/foliage';
 import { lifeSeasons } from '../../render/life';
 import { furnitureDef, liquidCapacity, POND_EVERY, type PlacedFurniture } from '../../game/furniture';
@@ -25,7 +25,7 @@ import { TINCTURE_NAMES } from '../../game/remedies';
 import { FED_SAID, MOTE_CHANCE } from '../../game/sacrifice';
 import { GRAVE_KEEPS, GRAVE_REACH } from '../../game/graves';
 import { RESTORE_HARM, RESTORE_HARM_SPREAD } from '../../game/archaeology';
-import { DAMAGE_MAX } from '../../game/game';
+import { DAMAGE_MAX, DAY_SECONDS } from '../../game/game';
 import { UI_SIZE_MAX, UI_SIZE_MIN } from '../screen';
 import { defaultKey } from '../../game/keybinds';
 import { guidePages } from '../../game/guide';
@@ -48,7 +48,7 @@ import {
   WEAR_TRAIL, WEARS,
 } from '../../world/tiles';
 import { STEPS_BACK, stepsBack, STONE_STEPS_BILL, TIMBER_STEPS_BILL } from '../../game/steps';
-import { ROSES_RULE } from '../../game/roses';
+import { ROSE_BUD, ROSE_FLOWER, ROSE_LEAFY, ROSES_RULE } from '../../game/roses';
 import { DEVICE_COUNT } from '../../render/furniture';
 import { FLOWER_MOST, FLOWER_SEASONS } from '../../world/flowers';
 import { DYES } from '../../game/dyestuffs';
@@ -56,7 +56,7 @@ import { GREEN_ACTIONS, GREEN_DAYS, GREEN_SHADE, GREEN_SUN, GREEN_WET } from '..
 import { FURNITURE, WELL_TRICKLE, WELL_TRICKLE_QL } from '../../game/furniture';
 import { BRIDGES } from '../../game/bridges';
 import { CROPS, growthWords } from '../../game/farming';
-import { PLANTER_GROWTH, SEASON_GROWTH } from '../../game/growth';
+import { PLANTER_GROWTH, SEASON_GROWTH, SEASON_SECONDS, YEAR_SECONDS } from '../../game/growth';
 import { SEASONS } from '../../world/calendar';
 import { STONES_DEPTH, STONES_SLABS, yearSays } from '../../game/watergarden';
 import { WATER_PLANT_BY_ID, WATER_PLANT_DEEPEST, WATER_PLANT_SHALLOWEST, WATER_ROOTING, type WaterPlantDef } from '../../world/waterplants';
@@ -831,6 +831,14 @@ export const NEWS: News[] = [
         `Botanizing at the water's edge turns up ${itemDef(lily.from).name.toLowerCase()}s and ${itemDef(lotus.from).name.toLowerCase()}. Plant them in still water ${metres(WATER_PLANT_SHALLOWEST)} to ${metres(WATER_PLANT_DEEPEST)} m deep; they root in ${spanWords(WATER_ROOTING)} and keep the island's year: a water lily ${yearSays(lily)}, a lotus ${yearSays(lotus)}. Water lily flowers boil into ${dyeWord(lily.flower)} dye and lotus flowers into ${dyeWord(lotus.flower)}; a seed head gives ${numberWord(lotus.seedCount ?? 0)} lotus seeds to eat or plant.`,
       ];
     },
+  },
+  {
+    n: 62,
+    day: '2026-09-28',
+    lines: () => [
+      `A day of the island's year is as long as a day and night of the clock, ${spanWords(DAY_SECONDS)} of real time, where it was a whole real day: a season is ${numberWord(SEASON_DAYS)} of them, ${spanWords(SEASON_SECONDS)}, and a year ${numberWord(YEAR_DAYS)}, ${spanWords(YEAR_SECONDS)}. The line beside your position counts them: "${seasonLine(YEAR_FROM + DAY_SECONDS)}".`,
+      `Everything that keeps the year keeps it in those days. The woods come into leaf over the first ${numberWord(LEAF_DAYS)} days of spring, turn over the first ${numberWord(TURN_DAYS)} of autumn and drop their leaves over the last ${numberWord(SHED_DAYS)}; roses and lavender flower from day ${BUSH_FLOWER_FROM} of spring. An arch's roses are in leaf ${numberWord(ROSE_LEAFY)} day after it is set down, in bud ${numberWord(ROSE_BUD)} and in flower ${numberWord(ROSE_FLOWER)}; a water plant roots in ${spanWords(WATER_ROOTING)}; and a crop in a field grows ${listed(SEASONS.map((s) => `${growthWords(SEASON_GROWTH[s])} in ${s}`))}: ${spanWords(SEASON_SECONDS)} of each.`,
+    ],
   },
 ];
 

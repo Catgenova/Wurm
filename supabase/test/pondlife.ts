@@ -8,9 +8,9 @@
  * Measured here:
  *
  *   * the year: `seasonBegan` and `waterPlantState` against the island's
- *     `season_began` and `water_plant_state`, at moments every few hours for
- *     two years and a second either side of every season's turn, for plants
- *     rooting and rooted, picked and not;
+ *     `season_began` and `water_plant_state`, at moments every five hours of
+ *     the island's clock for two years and a second either side of every
+ *     season's turn, for plants rooting and rooted, picked and not;
  *   * the ground: one scene -- a shore shelving into deep sea, a pond on the
  *     slope above it and the stream it spills down to the sea, and tiles of
  *     things that stand, are sown or are laid -- built on both sides, and every
@@ -40,6 +40,7 @@ import { WELL_HOLDS } from '../../src/game/furniture';
 import { sourceFor } from '../../src/game/placeables';
 import { TileType, stonesData } from '../../src/world/tiles';
 import { SEASONS, SEASON_DAYS, YEAR_DAYS, YEAR_FROM } from '../../src/world/calendar';
+import { DAY_SECONDS } from '../../src/game/pace';
 import {
   WATER_PLANTS, WATER_PLANT_BY_ID, WATER_ROOTING, seasonBegan, stateLine, waterPlantState,
 } from '../../src/world/waterplants';
@@ -66,14 +67,17 @@ const say = (ok: boolean, line: string): void => {
 
 const HOUR = 3600;
 const DAY = 24 * HOUR;
+/** A day of the island's year, a day and night of its clock, and an hour of that clock. */
+const YEAR_DAY = DAY_SECONDS;
+const CLOCK_HOUR = YEAR_DAY / 24;
 
 /* ---- The year ------------------------------------------------------------------------------------ */
 
 {
-  // Every five hours for two years from a year before the first spring, and a second either side of every turn.
+  // Every five hours of the clock for two years from a year before the first spring, and a second either side of every turn.
   const moments: number[] = [];
-  for (let t = YEAR_FROM - YEAR_DAYS * DAY; t <= YEAR_FROM + YEAR_DAYS * DAY; t += 5 * HOUR) moments.push(t);
-  for (let d = -YEAR_DAYS; d <= 2 * YEAR_DAYS; d += SEASON_DAYS) moments.push(YEAR_FROM + d * DAY - 1, YEAR_FROM + d * DAY, YEAR_FROM + d * DAY + 1);
+  for (let t = YEAR_FROM - YEAR_DAYS * YEAR_DAY; t <= YEAR_FROM + YEAR_DAYS * YEAR_DAY; t += 5 * CLOCK_HOUR) moments.push(t);
+  for (let d = -YEAR_DAYS; d <= 2 * YEAR_DAYS; d += SEASON_DAYS) moments.push(YEAR_FROM + d * YEAR_DAY - 1, YEAR_FROM + d * YEAR_DAY, YEAR_FROM + d * YEAR_DAY + 1);
   const island = psql(`select string_agg(extract(epoch from season_began(to_timestamp(t)))::bigint::text, ',' order by i)
     from unnest(array[${moments.join(',')}]::double precision[]) with ordinality m(t, i)`).split(',').map(Number);
   let same = 0;
@@ -91,11 +95,11 @@ const DAY = 24 * HOUR;
    */
   const cases: Array<[string, number, number | null, number]> = [];
   for (let d = 0; d <= YEAR_DAYS + SEASON_DAYS; d += SEASON_DAYS) {
-    const turn = YEAR_FROM + d * DAY;
+    const turn = YEAR_FROM + d * YEAR_DAY;
     for (const def of WATER_PLANTS) {
-      for (const planted of [turn - 3 * DAY, turn - WATER_ROOTING, turn - WATER_ROOTING + 1, turn - HOUR]) {
-        for (const picked of [null, turn - 2 * DAY, turn - 1, turn, turn + HOUR]) {
-          for (const now of [turn - 1, turn, turn + 1, turn + 2 * HOUR, planted + WATER_ROOTING - 1, planted + WATER_ROOTING, turn + 4 * DAY]) {
+      for (const planted of [turn - 3 * YEAR_DAY, turn - WATER_ROOTING, turn - WATER_ROOTING + 1, turn - CLOCK_HOUR]) {
+        for (const picked of [null, turn - 2 * YEAR_DAY, turn - 1, turn, turn + CLOCK_HOUR]) {
+          for (const now of [turn - 1, turn, turn + 1, turn + 2 * CLOCK_HOUR, planted + WATER_ROOTING - 1, planted + WATER_ROOTING, turn + 4 * YEAR_DAY]) {
             if (picked !== null && (picked < planted || picked > now)) continue;
             cases.push([def.id, planted, picked, now]);
           }
@@ -119,8 +123,8 @@ const DAY = 24 * HOUR;
   say(agree === cases.length, `a water plant is in the same state on both sides in ${agree} of ${cases.length} cases, ${seen.size} states between them${differ ? ` -- first difference ${differ}` : ''}`);
   // And the year as the plants live it, read off the browser's rule: what each does in each season once rooted.
   const year = WATER_PLANTS.map((def) => `${def.id}: ${SEASONS.map((s, k) => {
-    const t = YEAR_FROM + (k * SEASON_DAYS + 3) * DAY;
-    const st = waterPlantState(def, t - 2 * DAY, null, t);
+    const t = YEAR_FROM + (k * SEASON_DAYS + 3) * YEAR_DAY;
+    const st = waterPlantState(def, t - 2 * YEAR_DAY, null, t);
     return `${s} ${st.leaves ? 'leaves' : 'root'}${st.bears ? ` ${st.bears}` : ''}`;
   }).join(', ')}`).join(' | ');
   say(year === 'lily: spring leaves flower, summer leaves flower, autumn leaves, winter root | lotus: spring leaves, summer leaves flower, autumn leaves seed, winter root',
@@ -395,25 +399,26 @@ rollback;`);
 
 /*
  * The season is pinned for each run -- on the island `season_at` says it and
- * `season_began` says it began three days ago; in the browser the clock is
- * three days into it -- so what is asked does not depend on the day this runs.
- * Four plants: a lily planted two days ago and never picked; a lily planted
- * two hours ago; a lotus picked an hour ago; a lotus picked before the season
- * began.
+ * `season_began` says it began three days and five hours of the clock ago; in
+ * the browser the clock is as far into it -- so what is asked does not depend
+ * on the day this runs. Four plants: a lily planted two days ago and never
+ * picked; a lily planted half its rooting ago; a lotus picked an hour of the
+ * clock ago; a lotus picked before the season began.
  */
+const INTO_SEASON = 3 * YEAR_DAY + 5 * CLOCK_HOUR;
 const POND_TILES: Array<[number, number]> = [[16, 48], [17, 47], [18, 49], [19, 48]];
 const PLANTS: Array<{ at: [number, number]; kind: 'lily' | 'lotus'; planted: number; picked: number | null }> = [
-  { at: POND_TILES[0], kind: 'lily', planted: 2 * DAY, picked: null },
-  { at: POND_TILES[1], kind: 'lily', planted: 2 * HOUR, picked: null },
-  { at: POND_TILES[2], kind: 'lotus', planted: 2 * DAY, picked: HOUR },
-  { at: POND_TILES[3], kind: 'lotus', planted: 5 * DAY, picked: 4 * DAY },
+  { at: POND_TILES[0], kind: 'lily', planted: 2 * YEAR_DAY, picked: null },
+  { at: POND_TILES[1], kind: 'lily', planted: WATER_ROOTING / 2, picked: null },
+  { at: POND_TILES[2], kind: 'lotus', planted: 2 * YEAR_DAY, picked: CLOCK_HOUR },
+  { at: POND_TILES[3], kind: 'lotus', planted: 5 * YEAR_DAY, picked: 4 * YEAR_DAY },
 ];
 for (const [k, season] of SEASONS.entries()) {
   const island = psql(`
 begin;
 create temp table said (k text, v text);
 create or replace function season_at(p_at timestamptz default now()) returns text language sql stable as $$ select '${season}'::text $$;
-create or replace function season_began(p_at timestamptz default now()) returns timestamptz language sql stable as $$ select now() - interval '3 days' $$;
+create or replace function season_began(p_at timestamptz default now()) returns timestamptz language sql stable as $$ select now() - interval '${INTO_SEASON} seconds' $$;
 create or replace function product_ql(p_skill double precision, p_tool_ql double precision default 0)
   returns double precision language sql as 'select 40::double precision';
 do $b$
@@ -440,8 +445,8 @@ select string_agg(k || '=' || coalesce(v, 'null'), E'\\n' order by k) from said;
 rollback;`);
   const said = new Map(island.split('\n').map((l) => [l.slice(0, l.indexOf('=')), l.slice(l.indexOf('=') + 1)]));
 
-  // Three days into the season, on the browser's clock.
-  const T = YEAR_FROM + (k * SEASON_DAYS + 3) * DAY + 5 * HOUR;
+  // As far into the season as the island has it, on the browser's clock.
+  const T = YEAR_FROM + k * SEASON_DAYS * YEAR_DAY + INTO_SEASON;
   const realNow = Date.now;
   Date.now = () => T * 1000;
   try {

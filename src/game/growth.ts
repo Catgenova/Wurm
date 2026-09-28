@@ -32,6 +32,7 @@
  * Data in, numbers out; nothing here reads the time for itself.
  */
 import { SEASONS, SEASON_DAYS, YEAR_FROM, seasonAt, type Season } from '../world/calendar';
+import { DAY_SECONDS } from './pace';
 
 /** A field's growth in spring, as a share of the crop's own pace. */
 export const SPRING_GROWTH = 1;
@@ -51,9 +52,8 @@ export const SEASON_GROWTH: Record<Season, number> = {
   spring: SPRING_GROWTH, summer: SUMMER_GROWTH, autumn: AUTUMN_GROWTH, winter: WINTER_GROWTH,
 };
 
-const DAY = 24 * 60 * 60;
-/** Seconds in a season. */
-export const SEASON_SECONDS = SEASON_DAYS * DAY;
+/** Seconds in a season: its days, each one of the island's days and nights. */
+export const SEASON_SECONDS = SEASON_DAYS * DAY_SECONDS;
 /** Seconds in a year. */
 export const YEAR_SECONDS = SEASONS.length * SEASON_SECONDS;
 /** The growing seconds a field has in a whole year, added up season by season in the order they come. */

@@ -13,10 +13,13 @@
  * next season comes round. In the seasons its leaves are down there is only
  * the root, under the water, and it comes up again with them.
  */
-import { SEASON_DAYS, SEASONS, YEAR_DAYS, YEAR_FROM, seasonAt, type Season } from './calendar';
+import { DAY_SECONDS } from '../game/pace';
+import { SEASONS, seasonAt, seasonBegan, type Season } from './calendar';
 
-/** How long a water plant takes to root, in seconds of the wall clock: it flowers or sets seed only once this has passed. */
-export const WATER_ROOTING = 24 * 60 * 60;
+export { seasonBegan };
+
+/** How long a water plant takes to root, in seconds of the wall clock: a day of the island's year. It flowers or sets seed only once this has passed. */
+export const WATER_ROOTING = DAY_SECONDS;
 /** The shallowest and the deepest still water a water plant takes root in, at the middle of the tile, in height units. */
 export const WATER_PLANT_SHALLOWEST = 2;
 export const WATER_PLANT_DEEPEST = 20;
@@ -71,15 +74,6 @@ export interface WaterPlant {
   kind: WaterPlantKind;
   at: number;
   picked: number | null;
-}
-
-const DAY = 24 * 60 * 60;
-
-/** The first dawn of the season `now` falls in, in epoch seconds: when the last season turned. */
-export function seasonBegan(now: number): number {
-  const days = Math.floor((now - YEAR_FROM) / DAY);
-  const inYear = ((days % YEAR_DAYS) + YEAR_DAYS) % YEAR_DAYS;
-  return YEAR_FROM + (days - (inYear % SEASON_DAYS)) * DAY;
 }
 
 /** The season after this one. */

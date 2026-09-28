@@ -838,8 +838,8 @@ function bareWood(ctx: CanvasRenderingContext2D, mass: Mass, cx: number, cy: num
 }
 
 /**
- * What has come down under a tree and lies there: petals through its week of
- * flower, leaves on the days its crown is thinning. Scattered close round the
+ * What has come down under a tree and lies there: petals through its spring
+ * in flower, leaves on the days its crown is thinning. Scattered close round the
  * foot, thickest near the trunk, flat on the ground -- and kept inside the
  * tree's own tile even on the biggest tree, so the ground drawn in front of
  * it never cuts the edge of it off. In the tree's own picture, so it costs
@@ -861,8 +861,8 @@ function litter(ctx: CanvasRenderingContext2D, bx: number, by: number, reach: nu
 }
 
 /**
- * Throw away every tree picture: the day has turned, and yesterday's looks
- * will not be wanted again for a year. A tree canvas is a quarter of a
+ * Throw away every tree picture: the look of the season has turned
+ * (`lookStep`), and the last one will not be wanted again for a year. A tree canvas is a quarter of a
  * megabyte or more at the finer steps, and a wood holds a hundred of them.
  */
 export function forgetTrees(): void {

@@ -110,7 +110,7 @@ import { drawFace, EDGES, ROCK_MOSS, topEdges, type Face } from './outcrops';
 import { forgetTrees, grownAt, spriteScaleFor, bushSprite, crateSprite, cropSprite, drawAnvil, drawCampfire, drawCreature, drawKiln, drawPlayer, drawSmelter, facingOf, pileSprite, tokenSprite, treeSprite, type Sprite, drawWorkPost, drawTrap, drawDeck, stumpSprite, type DeckShape } from './sprites';
 import { wildermonTop } from './wildermon';
 import { SmallLife, type Mote } from './life';
-import { yearAt } from './foliage';
+import { lookStep, yearAt } from './foliage';
 import { FIGURE_TOP } from './figure';
 
 /** Result of picking a screen point: the tile, the approximate world position and the nearest corner. */
@@ -2201,9 +2201,9 @@ export class Renderer {
       }, water);
     }
     // The day of the year the trees are dressed for, and what is out in it.
-    // When it turns, yesterday's pictures of them go, and every copy made of them.
+    // When their look turns (`lookStep`), the last look's pictures of them go, and every copy made of them.
     const year = yearAt(this.game.wallNow());
-    if (year.season !== this.year.season || year.day !== this.year.day) {
+    if (year.season !== this.year.season || lookStep(year.day) !== lookStep(this.year.day)) {
       forgetTrees();
       this.scaled.clear();
       this.scaledSizes.clear();

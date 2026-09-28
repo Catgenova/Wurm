@@ -271,7 +271,7 @@ export interface LifeFrame {
   clock: number;
   hour: number;
   dark: number;
-  /** The season and its day, 1 to 7 (`seasonAt`). */
+  /** The season and its day, 1 to `SEASON_DAYS` (`seasonAt`). */
   season: Season;
   day: number;
   /** The wind in the world: which way it blows, as a unit step, and how hard. */

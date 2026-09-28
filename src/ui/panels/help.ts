@@ -29,7 +29,7 @@ import {
 import { DEED_UPGRADES } from '../../game/deed';
 import { DYE_BY_ID, DYES } from '../../game/dyestuffs';
 import { CROP_BY_SEED, CROPS, cropYield, growthWords, PATCH_TIME, RIPE, STAGE_NAMES } from '../../game/farming';
-import { PLANTER_GROWTH, SEASON_GROWTH, YEARLESS_GROWTH } from '../../game/growth';
+import { PLANTER_GROWTH, SEASON_GROWTH, SEASON_SECONDS, YEAR_SECONDS, YEARLESS_GROWTH } from '../../game/growth';
 import { CASTS, FAITH, FAVOUR_CEILING, favourCap, PRAYER_BASE, PRAYER_LIFT, PRAYER_PEAKS, PRAYER_REST, PRAYER_TAPER } from '../../game/faith';
 import { ANCIENT_EFFECTS, ANCIENT_PLUS, BAUBLE_HIGH, BAUBLE_KINDS, BAUBLE_LOW, BAUBLE_SHARE, BAUBLE_TIERS, baubleTimes, MAJOR_SKILLS, MINOR_SKILLS, REGRET_SHARE, YIELD_TIMES } from '../../game/baubles';
 import { MOTE_CHANCE } from '../../game/sacrifice';
@@ -92,7 +92,7 @@ import { STEPS_BACK, stepsBack, STONE_DIFFICULTY, STONE_STEPS_BILL, TIMBER_DIFFI
 import { ROSES_RULE } from '../../game/roses';
 import { DEVICE_COUNT } from '../../render/furniture';
 import { FLOWER_MOST, FLOWER_SEASONS } from '../../world/flowers';
-import { SEASON_DAYS, SEASONS, YEAR_DAYS } from '../../world/calendar';
+import { SEASON_DAYS, SEASONS, YEAR_DAYS, YEAR_FROM } from '../../world/calendar';
 import { BLOOMS, BUSH_EVERGREEN, BUSH_FLOWER_FROM, evergreen, LEAF_DAYS, SHED_DAYS, TURN_DAYS } from '../../render/foliage';
 import { lifeSeasons } from '../../render/life';
 import { COUNTS } from '../beltmenu';
@@ -1479,8 +1479,12 @@ export function helpText(): string {
     &mdash; and the light goes over the ${numberWord(2 * TWILIGHT)} game hours around sundown and comes back over the
     ${numberWord(2 * TWILIGHT)} around sunrise.</p>
     <p>And it keeps a <b>year</b>: ${numberWord(SEASONS.length)} seasons, ${listed([...SEASONS])}, of
-    <b>${numberWord(SEASON_DAYS)} days</b> each, ${numberWord(YEAR_DAYS)} days in all. A day of the year is a real day,
-    turning at <b>${hudHour(TREE_DAWN_UTC)} UTC</b> with the woods. The same line says which season it is and which day of it.</p>
+    <b>${numberWord(SEASON_DAYS)} days</b> each, ${numberWord(YEAR_DAYS)} days in all. A day of the year is as long as a day and
+    night of the clock, <b>${spanWords(DAY_SECONDS)}</b> of real time, so a season lasts <b>${spanWords(SEASON_SECONDS)}</b> and a
+    year ${spanWords(YEAR_SECONDS)}. The days are counted from the first dawn of the first spring, <b>${hudHour(TREE_DAWN_UTC)} UTC</b>
+    on ${new Date(YEAR_FROM * 1000).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC' })},
+    the same on every island, rather than from the clock's midnight, which a night slept through moves on. The same line says
+    which season it is and which day of it.</p>
     <p>The woods keep the year. ${capital(listed(TREE_DEFS.filter((_, i) => evergreen(i)).map((t) => t.name.toLowerCase())))} keep
     their leaves all year, a shade darker in winter. Every other tree comes into leaf over the first
     <b>${numberWord(LEAF_DAYS)} days of spring</b>, is in full leaf through summer, turns its own autumn colour over the

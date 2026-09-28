@@ -29,7 +29,8 @@
 import { execFileSync } from 'node:child_process';
 import { Game } from '../../src/game/game';
 import { bloomOf, FLOWER_FROM, FLOWER_MOST, FLOWER_OCTAVES, FLOWER_STEP, flowerDrift } from '../../src/world/flowers';
-import { SEASONS, seasonAt, yearOf, YEAR_DAYS, YEAR_FROM } from '../../src/world/calendar';
+import { SEASON_DAYS, SEASONS, seasonAt, yearOf, YEAR_DAYS, YEAR_FROM } from '../../src/world/calendar';
+import { DAY_SECONDS } from '../../src/game/pace';
 import { FLOWERS_PICKED, lastDawn, MOWN_TODAY, TileType } from '../../src/world/tiles';
 import { flowerRefusal, flowersHere, groundSays, pickedSays } from '../../src/game/wildflowers';
 import { ACTIONS } from '../../src/game/actions';
@@ -140,9 +141,10 @@ check('and every season makes the same of it: the same clumps, and none in autum
 /* ---- the year -------------------------------------------------------------- */
 
 {
-  const DAY = 86400;
+  // A day of the year is a day and night of the island's clock.
+  const DAY = DAY_SECONDS;
   const moments: number[] = [];
-  for (let d = -2 * YEAR_DAYS; d <= 3 * YEAR_DAYS; d++) moments.push(YEAR_FROM + d * DAY - 1, YEAR_FROM + d * DAY, YEAR_FROM + d * DAY + 43200);
+  for (let d = -2 * YEAR_DAYS; d <= 3 * YEAR_DAYS; d++) moments.push(YEAR_FROM + d * DAY - 1, YEAR_FROM + d * DAY, YEAR_FROM + d * DAY + DAY / 2);
   const island = psql(`select string_agg(year_of(to_timestamp(t))::text, ',' order by i)
     from unnest(array[${moments.join(',')}]::double precision[]) with ordinality as m(t, i);`).split(',').map(Number);
   const wrong = moments.filter((t, i) => yearOf(t) !== island[i]);
@@ -162,6 +164,8 @@ const W = `(select id from world where name = 'Faraway')`;
 const IVAR = `(select uid from player where world_id = ${W} and name = 'Ivar')`;
 const SEED = Number(psql(`select seed from world where name = 'Faraway'`));
 const now = Date.now() / 1000;
+/** A day of the island's year: a day and night of its clock. */
+const YEAR_DAY = DAY_SECONDS;
 // The deepest tile of the drift in the rows the test may use.
 let best = { x: 20, y: 44, d: -1 };
 for (let y = 42; y < 58; y++) for (let x = 6; x < 58; x++) {
@@ -179,10 +183,10 @@ const target = (x: number, y: number): string => `'{"kind":"tile","x":${x},"y":$
  * Picking on both sides at a season: the season it is now, or one pinned for
  * the length of a transaction that is rolled back -- `season_at` redefined in
  * it on the island, the clock stood still at a moment of that season in the
- * browser -- so the whole of picking is asked whatever week the suite runs in.
+ * browser -- so the whole of picking is asked whatever season the suite runs in.
  */
 const pickAt = (pinned: 'summer' | 'spring' | null): void => {
-  const at = pinned === null ? now : YEAR_FROM + (yearOf(now) * YEAR_DAYS + SEASONS.indexOf(pinned) * 7 + 2) * 86400 + 3600;
+  const at = pinned === null ? now : YEAR_FROM + (yearOf(now) * YEAR_DAYS + SEASONS.indexOf(pinned) * SEASON_DAYS + 2) * YEAR_DAY + YEAR_DAY / 2;
   const inSeason = seasonAt(at).season;
   const islandSays = psql(`
 begin;
@@ -254,10 +258,11 @@ pickAt('summer');
  * new year clears them and tells everybody.
  */
 const DAYROW = 60;
+/** A day of the woods, which turn once a day at the same hour (`lastDawn`). */
 const DAY = 86400;
 const turn = (newYear: boolean): { island: string; browser: string; told: string } => {
   // The island turns on its own clock: the last turn a second ago in the same
-  // year, or a year of days ago in the one before.
+  // year, or a year ago in the one before.
   const out = psql(`
 begin;
 update player set away = true where world_id = ${W};
@@ -266,23 +271,24 @@ select land_set_tile(${W}, x, ${DAYROW}, tile_id('Grass')) from generate_series(
 select land_set_data(${W}, 10, ${DAYROW}, ${FLOWERS_PICKED});
 select land_set_data(${W}, 11, ${DAYROW}, ${FLOWERS_PICKED | MOWN_TODAY});
 select land_set_data(${W}, 12, ${DAYROW}, ${MOWN_TODAY});
-update world set trees_at = now() - ${newYear ? `interval '${YEAR_DAYS} days'` : `interval '1 second'`} where id = ${W};
+update world set trees_at = now() - ${newYear ? `interval '${YEAR_DAYS * YEAR_DAY} seconds'` : `interval '1 second'`} where id = ${W};
 select tree_day(${W});
 select 'DAY|' || string_agg(land_tile(${W}, x, ${DAYROW}) || ':' || land_data(${W}, x, ${DAYROW}), ' ' order by x) from generate_series(10, 12) x;
 select 'TOLD|' || count(*) from tile_change where world_id = ${W} and y = ${DAYROW} and x = 10;
 rollback;`);
   const get = (k: string): string => out.split('\n').find((l) => l.startsWith(`${k}|`))?.slice(k.length + 1) ?? 'MISSING';
-  // The browser's turn waits for a dawn, so it is handed its moments: an
-  // afternoon of this year with the last turn two days before it, or the
-  // first afternoon of this year with the last turn the day before, which
-  // was the year before.
+  // The browser's turn waits for the woods' dawn, so it is handed its
+  // moments: an afternoon of this year with the last turn two days before it,
+  // or the first afternoon of this year with the last turn the day before,
+  // which was the year before. A year begins at the woods' dawn, being a whole
+  // number of the woods' days long.
   const g = Game.create(SEED);
   const gw = g.world;
   for (let x = 10; x <= 12; x++) gw.setTile(x, DAYROW, TileType.Grass, 0);
   gw.setTile(10, DAYROW, TileType.Grass, FLOWERS_PICKED);
   gw.setTile(11, DAYROW, TileType.Grass, FLOWERS_PICKED | MOWN_TODAY);
   gw.setTile(12, DAYROW, TileType.Grass, MOWN_TODAY);
-  const yearStart = YEAR_FROM + yearOf(now) * YEAR_DAYS * DAY;
+  const yearStart = YEAR_FROM + yearOf(now) * YEAR_DAYS * YEAR_DAY;
   const at = newYear ? yearStart + 3600 * 5 : yearStart + 3 * DAY + 3600 * 5;
   g.treesAt = at - (newYear ? DAY : 2 * DAY);
   for (let k = 0; k < 100000 && g.treesAt < lastDawn(at); k++) g.growTrees(at);

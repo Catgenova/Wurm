@@ -118,7 +118,7 @@ import { DARK_HIT, DARK_SHOT, DARK_SWING, HEAVY_SKILLS, NIGHT_EYES_FROM, WORK_BA
 import { ANCIENT_EFFECTS, ANCIENT_PLUS, BAUBLE_HIGH, BAUBLE_KINDS, BAUBLE_LOW, BAUBLE_SHARE, BAUBLE_TIERS, MAJOR_SKILLS, MINOR_SKILLS, REGRET_SHARE, YIELD_TIMES } from '../src/game/baubles';
 import { MOTE_CHANCE } from '../src/game/sacrifice';
 import { PLANTER_GROWTH, SEASON_GROWTH, SEASON_SECONDS, YEAR_GROWTH, YEAR_SECONDS, YEARLESS_GROWTH } from '../src/game/growth';
-import { SEASONS, YEAR_FROM } from '../src/world/calendar';
+import { SEASON_DAYS, SEASONS, YEAR_DAYS, YEAR_FROM } from '../src/world/calendar';
 import { PLANTER_GROWING } from '../src/game/furniture';
 
 const q = (v: unknown): string => {
@@ -1799,6 +1799,9 @@ out.push(`create or replace function nutrients() returns text[] language sql imm
  * other bit for bit, so these are the browser's numbers or nothing.
  */
 out.push(`create or replace function seasons() returns text[] language sql immutable as $fn$ select array[${SEASONS.map(q).join(', ')}]::text[] $fn$;`);
+/* The year's days (`src/world/calendar.ts`): so many to a season and to a year, each one `day_seconds()` long, which `year_day` and the seasons count in. */
+out.push(`create or replace function season_days() returns int language sql immutable as $fn$ select ${q(SEASON_DAYS)}::int $fn$;`);
+out.push(`create or replace function year_days() returns int language sql immutable as $fn$ select ${q(YEAR_DAYS)}::int $fn$;`);
 out.push(`create or replace function season_growth() returns double precision[] language sql immutable as $fn$ select array[${SEASONS.map((s) => q(SEASON_GROWTH[s])).join(', ')}]::double precision[] $fn$;`);
 for (const [fn, v] of [
   ['yearless_growth', YEARLESS_GROWTH], ['planter_growth', PLANTER_GROWTH],

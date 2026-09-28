@@ -27,6 +27,8 @@ import { FURNITURE_BY_ID } from '../../src/game/furniture';
 import { RECIPE_BY_ID } from '../../src/game/recipes';
 import { DYEABLE_ITEMS } from '../../src/game/dyes';
 import { ROSE_BUD, ROSE_FLOWER, ROSE_LEAFY, roseStage } from '../../src/game/roses';
+import { DAY_SECONDS } from '../../src/game/pace';
+import { SEASON_DAYS, SEASONS, YEAR_FROM } from '../../src/world/calendar';
 
 const psql = (sql: string): string =>
   execFileSync('psql', ['-v', 'ON_ERROR_STOP=1', '-X', '-q', '-t', '-A', '-f', '-'], {
@@ -52,7 +54,8 @@ const said = (lines: string, tag: string): string =>
 
 const PIECES = ['flagpole', 'rose_arch', 'stone_rose_arch'];
 const X = 50, Y = 20;
-const DAY = 86400;
+/** A day of the island's year, which an arch's roses count in: a day and night of its clock. */
+const DAY = DAY_SECONDS;
 
 /* ---- the pieces themselves ------------------------------------------------ */
 
@@ -106,7 +109,7 @@ begin
   v_row := (select e from jsonb_array_elements(rpc_ground(w, 40, false)->'placed') e where (e->>'id')::bigint = v_id);
   insert into said values ('ARCH_ROW|' || v_row::text);
   -- Two and a half days ago, as far as its roses know.
-  update placed set made_at = now() - interval '2.5 days' where id = v_id;
+  update placed set made_at = now() - interval '${2.5 * DAY} seconds' where id = v_id;
   perform sleep_forward(w, u, 36000);
   v_row := (select e from jsonb_array_elements(rpc_ground(w, 40, false)->'placed') e where (e->>'id')::bigint = v_id);
   insert into said values ('ARCH_OLD|' || (v_row->>'set') || ' ' || extract(epoch from now()));
@@ -175,11 +178,11 @@ check('picked up and set down again, its roses are planted again, and it is stil
 const b = place('rose_arch', undefined, 'Oak');
 const browserSet = Number(b.set.split(' set ')[1]);
 check('and the browser plants the roses on an arch it sets down at the moment it does', Math.abs(browserSet - Date.now() / 1000) < 5, b.set);
-// And the stages turn where the rule says they do.
-const at = Date.UTC(2026, 9, 1, 15) / 1000;
+// And the stages turn where the rule says they do: halfway through the eleventh day of the first spring, and of the first autumn.
+const at = YEAR_FROM + (SEASONS.indexOf('spring') * SEASON_DAYS + 10.5) * DAY;
 check(`in spring: bare, in leaf at ${ROSE_LEAFY} day, in bud at ${ROSE_BUD}, in flower at ${ROSE_FLOWER}`,
   [0.5, ROSE_LEAFY + 0.01, ROSE_BUD + 0.01, ROSE_FLOWER + 0.01].map((d) => roseStage(at - d * DAY, at).stage).join(',') === 'bare,leafy,bud,flower');
-const autumn = Date.UTC(2026, 9, 14, 15) / 1000;
+const autumn = YEAR_FROM + (SEASONS.indexOf('autumn') * SEASON_DAYS + 10.5) * DAY;
 check('in autumn a grown arch is in leaf', roseStage(autumn - 5 * DAY, autumn).stage === 'leafy');
 
 for (const line of ok) console.log(line);

@@ -10,7 +10,7 @@
  * worked. The browser and the island each work all of it out for themselves,
  * so this puts them to the same questions and holds them to each other:
  *
- *   * the field clock and its inverse at thousands of moments -- every six
+ *   * the field clock and its inverse at thousands of moments -- every two
  *     hours from before the first spring to three years on, a second and a
  *     microsecond either side of every season's turn, deep in winters, and
  *     two thousand moments at random -- to the last bit;
@@ -39,6 +39,7 @@ import { PLANTER_GROWING } from '../../src/game/furniture';
 import { perksOf } from '../../src/game/perks';
 import { packLand, packWorld, unpack } from '../../src/game/save';
 import { SEASONS, YEAR_FROM, seasonAt, type Season } from '../../src/world/calendar';
+import { DAY_SECONDS } from '../../src/game/pace';
 
 const psql = (sql: string): string =>
   execFileSync('psql', ['-v', 'ON_ERROR_STOP=1', '-X', '-q', '-t', '-A', '-f', '-'], {
@@ -62,6 +63,8 @@ const check = (what: string, passed: boolean, detail = ''): void => {
 
 const HOUR = 3600;
 const DAY = 24 * HOUR;
+/** A day of the island's year: a day and night of its clock, thirty to a season. */
+const YEAR_DAY = DAY_SECONDS;
 const q = (s: string): string => `'${s.replace(/'/g, "''")}'`;
 /** Rolls that are the same rolls every run. */
 let state = 0x5eed1e5;
@@ -97,8 +100,8 @@ const storedUs = (t: number): number => rint((t - PG_EPOCH) * 1e6) + PG_EPOCH * 
 /* ---- the field clock, to the last bit ------------------------------------------------------ */
 
 const moments: number[] = [];
-// Every six hours from two months before the first spring to three years after it.
-for (let t = YEAR_FROM - 60 * DAY; t <= YEAR_FROM + 3 * YEAR_SECONDS; t += 6 * HOUR) moments.push(usOf(t));
+// Every two hours from two months before the first spring to three years after it.
+for (let t = YEAR_FROM - 60 * DAY; t <= YEAR_FROM + 3 * YEAR_SECONDS; t += 2 * HOUR) moments.push(usOf(t));
 // A second and a microsecond either side of every turn of the first three years, and the turn itself.
 for (let k = 0; k <= 12; k++) {
   const turn = YEAR_FROM + k * SEASON_SECONDS;
@@ -147,7 +150,7 @@ const islandMoment = clockOut[1].split(',').map(num);
 
 // What the clock is for: the rates it runs at, a winter it stands still through, and an inverse that is the earliest moment.
 {
-  const at = (season: Season, day: number, y = 0): number => YEAR_FROM + y * YEAR_SECONDS + (SEASONS.indexOf(season) * 7 + day) * DAY;
+  const at = (season: Season, day: number, y = 0): number => YEAR_FROM + y * YEAR_SECONDS + SEASONS.indexOf(season) * SEASON_SECONDS + day * YEAR_DAY;
   const rates = SEASONS.map((s) => (fieldClock(at(s, 3) + HOUR) - fieldClock(at(s, 3))) / HOUR);
   check(`a field grows ${SEASONS.map((s) => `${SEASON_GROWTH[s]} of a crop's pace in ${s}`).join(', ')}`,
     SEASONS.every((s, i) => Math.abs(rates[i] - SEASON_GROWTH[s]) < 1e-9 && fieldRate(at(s, 3)) === SEASON_GROWTH[s]), rates.join(', '));
@@ -259,15 +262,15 @@ select sown_said('Wheat', false, 'waiting for spring, in 2 days, then sprouting 
   });
   check(`when the next stage comes is said in the same words on both sides, ${saids.length} times over`,
     same === saids.length && kinds.size === 4, differ.join('; ') || `${same} of ${saids.length}: ${[...kinds].join(', ')}`);
-  const winter = YEAR_FROM + 3 * SEASON_SECONDS + 2 * DAY;
+  // Two days into a winter of thirty, each a day and night of the clock: twenty-eight of them to wait, a day and four hours.
+  const winter = YEAR_FROM + 3 * SEASON_SECONDS + 2 * YEAR_DAY;
   const lateAutumn = YEAR_FROM + 3 * SEASON_SECONDS - HOUR;
   check('a field in winter says it waits for spring and how long that is, and when the stage then comes',
-    cropWhen('sprouting', CROPS.wheat.stageSeconds, false, winter) === `waiting for spring, in 5 days, then sprouting 5 minutes after`,
+    cropWhen('sprouting', CROPS.wheat.stageSeconds, false, winter) === `waiting for spring, in 1 day and 4 hours, then sprouting 5 minutes after`,
     cropWhen('sprouting', CROPS.wheat.stageSeconds, false, winter));
   check('and a stage that runs into a winter says when it will come, and that the winter is in it',
-    cropWhen('ripe', 2 * HOUR, false, lateAutumn).endsWith(', after the winter')
-      // An hour of autumn at half pace, the winter, and the hour and a half left at spring's.
-      && cropWhen('ripe', 2 * HOUR, false, lateAutumn).startsWith('ripe in 7 days and 2 hours'),
+    // An hour of autumn at half pace, the winter's thirty hours, and the hour and a half left at spring's.
+    cropWhen('ripe', 2 * HOUR, false, lateAutumn) === 'ripe in 1 day and 8 hours, after the winter',
     cropWhen('ripe', 2 * HOUR, false, lateAutumn));
   check('and a planter never waits: the same wait in every season',
     SEASONS.every((s) => cropWhen('sprouting', CROPS.wheat.stageSeconds, true, YEAR_FROM + (SEASONS.indexOf(s) + 0.5) * SEASON_SECONDS)
@@ -599,7 +602,7 @@ check('and Bounty brings on the same: the field and the planter on the settlemen
 {
   const per = CROPS.cotton.stageSeconds;
   const span = per / PLANTER_GROWTH + 1;
-  const sown = SEASONS.map((s) => usOf(YEAR_FROM + YEAR_SECONDS + SEASONS.indexOf(s) * SEASON_SECONDS + 2 * DAY));
+  const sown = SEASONS.map((s) => usOf(YEAR_FROM + YEAR_SECONDS + SEASONS.indexOf(s) * SEASON_SECONDS + 2 * YEAR_DAY));
   const theirs = psql(`
 select string_agg((crop_settled(0, timestamptz 'epoch' + a * interval '1 microsecond', ${per}, true,
                                 timestamptz 'epoch' + (a + ${Math.round(span * 1e6)}) * interval '1 microsecond')).o_steps
@@ -670,7 +673,8 @@ select string_agg((crop_settled(0, timestamptz 'epoch' + a * interval '1 microse
 {
   const g = Game.create(1618);
   g.islandClock = () => 0;
-  const islandNow = YEAR_FROM + 3 * SEASON_SECONDS + 2 * DAY + 0.25;
+  // In a winter, where the field clock stands still while this is asked.
+  const islandNow = YEAR_FROM + 3 * SEASON_SECONDS + 2 * YEAR_DAY + 0.25;
   g.sawGround({
     placed: [], crates: [], now: islandNow,
     crops: [{ x: 5, y: 5, id: 'wheat', stage: 1, grown: 30, ago: 99999, tended: 1, tendedNow: false, ql: 40 }],
