@@ -12,6 +12,7 @@ create table if not exists tile_def (
   turns_to_dirt boolean not null default false, collect boolean not null default false
 );
 alter table tile_def add column if not exists paved boolean not null default false;
+alter table tile_def add column if not exists collect_yield text;
 alter table tile_def add column if not exists road boolean not null default false;
 create table if not exists skill_def (
   id text primary key, name text not null, start real not null, parent text
@@ -589,6 +590,8 @@ insert into item_def values ('water_bucket', 'Bucket of water', 'tool', 6, false
 insert into item_def values ('lye_bucket', 'Bucket of lye', 'tool', 6, false, 10, null);
 insert into item_def values ('dirt', 'Dirt', 'material', 20, true, null, null);
 update item_def set raw = true where id = 'dirt';
+insert into item_def values ('moss', 'Moss', 'material', 2, true, null, null);
+update item_def set raw = true where id = 'moss';
 insert into item_def values ('sand', 'Sand', 'material', 20, true, null, null);
 update item_def set raw = true where id = 'sand';
 insert into item_def values ('glass', 'Glass pane', 'material', 2, true, 0, null);
@@ -965,7 +968,7 @@ insert into item_def values ('pewter_ingot', 'Pewter ingot', 'material', 2.5, tr
 insert into item_def values ('electrum_ingot', 'Electrum ingot', 'material', 2.5, true, 1, null);
 insert into item_def values ('steel_ingot', 'Steel ingot', 'material', 2.5, true, 1, null);
 insert into tile_def values (0, 'Grass', 1, false, 'dirt', false, true, true, true, true, false);
-insert into tile_def values (1, 'Dirt', 1, false, 'dirt', false, false, false, true, false, false);
+insert into tile_def values (1, 'Dirt', 1, false, 'dirt', false, false, false, true, false, true);
 insert into tile_def values (2, 'Packed dirt', 1.05, false, null, false, false, false, true, false, false);
 update tile_def set road = true where id = 2;
 insert into tile_def values (3, 'Sand', 0.9, false, 'sand', false, false, false, true, false, true);
@@ -976,7 +979,8 @@ insert into tile_def values (7, 'Marsh', 0.6, false, 'dirt', false, true, true, 
 insert into tile_def values (8, 'Clay', 0.9, false, 'clay', false, false, false, false, false, true);
 insert into tile_def values (9, 'Peat', 0.8, false, 'peat', false, false, false, false, false, true);
 insert into tile_def values (10, 'Tar', 0.5, false, 'tar', false, false, false, false, false, true);
-insert into tile_def values (11, 'Moss', 1, false, 'dirt', false, true, true, true, true, false);
+insert into tile_def values (11, 'Moss', 1, false, 'dirt', false, true, true, true, true, true);
+update tile_def set collect_yield = 'moss' where id = 11;
 insert into tile_def values (12, 'Snow', 0.8, false, null, true, false, false, false, false, false);
 insert into tile_def values (14, 'Cobblestone', 1.25, false, null, false, false, false, false, false, false);
 update tile_def set paved = true where id = 14;
@@ -1117,6 +1121,7 @@ insert into material_def (id, name, difficulty, weight, wear, decay, edge, soak,
 delete from action_def;
 insert into action_def (id, label, verb, skill, tool, corner, range, stamina, base_time, difficulty, instant, repeatable) values ('examine', 'Examine', 'examining', null, null, false, null, 0, 0, null, true, false);
 insert into action_def (id, label, verb, skill, tool, corner, range, stamina, base_time, difficulty, instant, repeatable) values ('collect', 'Collect', 'filling a shovel', 'digging', 'shovel', false, 0, 0.05, 7, 6, false, false);
+insert into action_def (id, label, verb, skill, tool, corner, range, stamina, base_time, difficulty, instant, repeatable) values ('plant_moss', 'Plant moss', 'planting moss', 'farming', null, false, null, 0.03, 5, null, false, false);
 insert into action_def (id, label, verb, skill, tool, corner, range, stamina, base_time, difficulty, instant, repeatable) values ('dig_worms', 'Turn it over for worms', 'turning the dirt over', 'digging', 'shovel', false, null, 0.04, 6, null, false, true);
 insert into action_def (id, label, verb, skill, tool, corner, range, stamina, base_time, difficulty, instant, repeatable) values ('dig', 'Dig', 'digging', 'digging', 'shovel', true, null, 0.05, 6, 8, false, false);
 insert into action_def (id, label, verb, skill, tool, corner, range, stamina, base_time, difficulty, instant, repeatable) values ('dig_tile', 'Dig out the tile', 'digging out the tile', 'digging', 'shovel', false, null, 0.12, 16, 8, false, false);
@@ -2318,6 +2323,7 @@ update item_def set description = 'A wooden bucket. Fill it at any shore; ashes 
 update item_def set description = 'Water enough to leach ashes into lye.' where id = 'water_bucket';
 update item_def set description = 'Ash water, and it will take the hair off a hide. One bucket tans one skin.' where id = 'lye_bucket';
 update item_def set description = 'A pile of dirt. Drop it to raise the ground.' where id = 'dirt';
+update item_def set description = 'A shovelful of living moss off the top of a moss tile. Plant 10 of it on a tile of dirt and the tile is moss.' where id = 'moss';
 update item_def set description = 'A pane of green glass, run flat off a smelter hearth and cut square. It goes into a window: a window without one is a hole with a shutter.' where id = 'glass';
 update item_def set description = 'Raked out of a fire once it has burnt through. Water leaches lye out of it.' where id = 'ash';
 update item_def set description = 'Chunks of rock. Builds cobblestone walls or becomes bricks.' where id = 'rock_shards';
@@ -2763,6 +2769,7 @@ create or replace function tincture_skills() returns text[] language sql immutab
 create or replace function glazeable(p_def text) returns boolean language sql immutable as $fn$ select p_def = any(array['clay_pot', 'clay_bowl', 'clay_jar', 'amphora']::text[]) $fn$;
 create or replace function tincture_bonus() returns double precision language sql immutable as $fn$ select 0.1::double precision $fn$;
 create or replace function tincture_seconds() returns double precision language sql immutable as $fn$ select 3000::double precision $fn$;
+create or replace function moss_plant() returns int language sql immutable as $fn$ select 10::int $fn$;
 insert into title_def values ('digging:50', 'digging', 50, 'Digger');
 insert into title_def values ('digging:70', 'digging', 70, 'Excavator');
 insert into title_def values ('digging:90', 'digging', 90, 'Master Excavator');

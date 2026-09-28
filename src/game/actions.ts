@@ -706,6 +706,13 @@ export const patchWith = (id: string): 'cloth' | 'leather' | null => {
 
 /** Damage a Mender's repair kit takes off a thing, and none of its quality. The island's `kit_mend`. */
 export const KIT_MEND = 50;
+/**
+ * Moss planted on a tile of dirt to turn it to moss: this many, pressed in
+ * at once. Asked for: "Moss can be planted in 10qty on a dirt tile to change
+ * it to moss." The island's `moss_plant`.
+ */
+export const MOSS_PLANT = 10;
+describeFrom('moss', { moss: { plant: MOSS_PLANT } });
 describeFrom('repair_kit', { mend: KIT_MEND });
 /** Whether a thing could take a seal: anything but the sealant itself, and nothing sealed already. */
 const sealable = (item: Item): boolean => item.id !== 'sealant' && item.mark?.seal === undefined;
@@ -790,9 +797,12 @@ export const ACTIONS: ActionDef[] = [
     },
   },
   {
-    // Sand, clay, peat and tar lie in beds. You fill a shovel off the top of
-    // one without cutting the ground about, which is what digging a corner
-    // does: stand on the tile, and the tile is as it was when you walk off it.
+    // Sand, clay, peat and tar lie in beds, and dirt and moss lie on top of
+    // the ground as they do. You fill a shovel off the top of one without
+    // cutting the ground about, which is what digging a corner does: stand on
+    // the tile, and the tile is as it was when you walk off it. What it gives
+    // is the tile's `collectYield` where it has one (moss off a moss tile,
+    // though digging it gives dirt), and what digging gives otherwise.
     id: 'collect',
     label: 'Collect',
     labelFor: (t, g) => `Collect ${TILE_DEFS[tile(t, g)].name.toLowerCase()}`,
@@ -818,7 +828,7 @@ export const ACTIONS: ActionDef[] = [
     perform: (t, g) => {
       if (t.kind !== 'tile') return;
       const def = TILE_DEFS[g.world.getTile(t.x, t.y)];
-      const yieldId = def.digYield;
+      const yieldId = def.collectYield ?? def.digYield;
       if (!def.collect || !yieldId) return;
       if (!g.skillCheck('digging', 6, g.toolQl('shovel'))) {
         g.missed();
@@ -827,6 +837,32 @@ export const ACTIONS: ActionDef[] = [
       }
       const item = g.gather(yieldId, { ql: g.productQl('digging', g.toolQl('shovel')) });
       g.logMsg(`You fill a shovel with ${itemDef(yieldId).name.toLowerCase()} off the top of the bed. (QL ${item.ql.toFixed(1)})`, 'event');
+    },
+  },
+  {
+    // Moss pressed into bare dirt, `MOSS_PLANT` of it at once, turns the tile
+    // to moss: the same on both sides (the island's `perform_farm`).
+    id: 'plant_moss',
+    label: 'Plant moss',
+    verb: 'planting moss',
+    skill: 'farming',
+    stamina: 0.03,
+    baseTime: 5,
+    applies: (t, g) => t.kind === 'tile' && g.world.getTile(t.x, t.y) === TileType.Dirt && g.inventory.count('moss') > 0,
+    check: (t, g) => {
+      if (t.kind !== 'tile') return null;
+      if (g.world.getTile(t.x, t.y) !== TileType.Dirt) return 'Moss is planted on a tile of dirt.';
+      if (g.world.hasWater(t.x, t.y)) return 'You cannot plant moss underwater.';
+      const have = g.inventory.count('moss');
+      if (have < MOSS_PLANT) return `It takes ${MOSS_PLANT} moss to plant a tile; you have ${have}.`;
+      return null;
+    },
+    perform: (t, g) => {
+      if (t.kind !== 'tile') return;
+      if (g.world.getTile(t.x, t.y) !== TileType.Dirt || g.inventory.count('moss') < MOSS_PLANT) return;
+      g.inventory.consume('moss', MOSS_PLANT);
+      g.world.setTile(t.x, t.y, TileType.Moss);
+      g.logMsg(`You plant ${MOSS_PLANT} moss and the dirt is moss now.`, 'event');
     },
   },
   {
@@ -2917,7 +2953,7 @@ export const ACTIONS: ActionDef[] = [
 const SHAPES_GROUND = new Set(['dig', 'dredge', 'flatten', 'drop_dirt', 'drop_dirt_here', 'raise_rock',
   'mine', 'chip_corner', 'pack', 'cultivate', 'pave_cobble', 'pave_slabs', 'remove_paving',
   'dig_spring', 'stop_spring', 'dig_pool', 'fill_pool',
-  'lay_steps', 'lay_timber_steps', 'take_up_steps']);
+  'lay_steps', 'lay_timber_steps', 'take_up_steps', 'plant_moss']);
 for (const def of ACTIONS) {
   if (!SHAPES_GROUND.has(def.id)) continue;
   const was = def.check;

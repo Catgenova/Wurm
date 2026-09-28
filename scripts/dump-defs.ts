@@ -88,7 +88,7 @@ import { DAWN, DUSK, DAY_SECONDS, CARRY_BASE, CARRY_PER_STRENGTH, CARRY_STOP } f
 import { CARRY_CRAWL } from '../src/game/player';
 import { RELICS, DIGGABLE } from '../src/game/archaeology';
 import { isSeam } from '../src/world/tiles';
-import { CHIP_CHANCE, KIT_MEND, TRY_LEARN } from '../src/game/actions';
+import { CHIP_CHANCE, KIT_MEND, MOSS_PLANT, TRY_LEARN } from '../src/game/actions';
 import { BRAZIER_BURN_AT_HUNDRED, BRAZIER_BURN_AT_ONE, BRAZIER_CAPACITY } from '../src/game/placeables';
 import { CARE_BONUS, CARE_HOURS, GRAZE_FILL, GRAZE_HUNGRY, PER_REGION, WILD_TARGET } from '../src/game/creatures';
 import {
@@ -137,6 +137,8 @@ out.push(`create table if not exists tile_def (
 );`);
 /* Laid stone: a shod mount goes quicker on it. */
 out.push(`alter table tile_def add column if not exists paved boolean not null default false;`);
+/* What Collect fills a shovel with, where it is not what digging gives: moss off a moss tile. */
+out.push(`alter table tile_def add column if not exists collect_yield text;`);
 // A made road -- packed, cobbled or slabbed -- which a Terraformer's Road Legs walk faster.
 out.push(`alter table tile_def add column if not exists road boolean not null default false;`);
 out.push(`create table if not exists skill_def (
@@ -927,6 +929,7 @@ for (const [id, d] of Object.entries(ITEM_DEFS)) {
 for (const [id, d] of Object.entries(TILE_DEFS)) {
   out.push(`insert into tile_def values (${q(Number(id))}, ${q(d.name)}, ${q(d.speed)}, ${q(!!d.blocks)}, ${q(d.digYield)}, ${q(!!d.mineable)}, ${q(!!d.forage)}, ${q(!!d.botanize)}, ${q(!!d.pavable)}, ${q(!!d.turnsToDirt)}, ${q(!!d.collect)});`);
   if (d.paved) out.push(`update tile_def set paved = true where id = ${q(Number(id))};`);
+  if (d.collectYield) out.push(`update tile_def set collect_yield = ${q(d.collectYield)} where id = ${q(Number(id))};`);
   if (ROAD_TILES.includes(Number(id))) out.push(`update tile_def set road = true where id = ${q(Number(id))};`);
 }
 for (const d of SKILL_DEFS) {
@@ -1112,6 +1115,8 @@ out.push(`create or replace function tincture_skills() returns text[] language s
 out.push(`create or replace function glazeable(p_def text) returns boolean language sql immutable as $fn$ select p_def = any(array[${[...GLAZEABLE].map(q).join(', ')}]::text[]) $fn$;`);
 out.push(`create or replace function tincture_bonus() returns double precision language sql immutable as $fn$ select ${q(TINCTURE_BONUS)}::double precision $fn$;`);
 out.push(`create or replace function tincture_seconds() returns double precision language sql immutable as $fn$ select ${q(TINCTURE_SECONDS)}::double precision $fn$;`);
+/* Moss planted on a tile of dirt to turn it to moss (`MOSS_PLANT`). */
+out.push(`create or replace function moss_plant() returns int language sql immutable as $fn$ select ${q(MOSS_PLANT)}::int $fn$;`);
 for (const t of TITLES) out.push(`insert into title_def values (${q(t.id)}, ${q(t.skill)}, ${q(t.at)}, ${q(t.name)});`);
 for (const [skill, family] of FAMILY_OF) out.push(`insert into knack_kin values (${q(skill)}, ${q(family)});`);
 for (const [cat, per] of Object.entries(CATEGORY_DECAY)) out.push(`insert into category_decay values (${q(cat)}, ${q(per)});`);

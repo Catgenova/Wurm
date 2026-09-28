@@ -193,6 +193,7 @@ export const ITEM_DEFS: Record<string, ItemDef> = {
   water_bucket: { name: 'Bucket of water', category: 'tool', weight: 6, decay: 8, description: 'Water enough to leach ashes into lye.' },
   lye_bucket: { name: 'Bucket of lye', category: 'tool', weight: 6, decay: 10, description: 'Ash water, and it will take the hair off a hide. One bucket tans one skin.' },
   dirt: { name: 'Dirt', category: 'material', weight: 20, stackable: true, raw: true, description: 'A pile of dirt. Drop it to raise the ground.' },
+  moss: { name: 'Moss', category: 'material', weight: 2, stackable: true, raw: true, description: 'A shovelful of living moss off the top of a moss tile. Plant {moss.plant} of it on a tile of dirt and the tile is moss.' },
   sand: { name: 'Sand', category: 'material', weight: 20, stackable: true, raw: true },
   glass: { name: 'Glass pane', category: 'material', weight: 2, stackable: true, decay: 0,
     description: 'A pane of green glass, run flat off a smelter hearth and cut square. It goes into a window: a window without one is a hole with a shutter.' },
@@ -981,7 +982,7 @@ export const unrestored = (item: { id: string }): boolean => UNRESTORED.has(item
 export const NOT_RESTORED = 'It has not been restored, and nothing repairs it until it is. If it breaks first, it is gone.';
 
 /** What is counted by the lot rather than one by one: four cloth, not four cloths. */
-const BY_THE_LOT = new Set(['cloth', 'wool', 'leather', 'mortar', 'yarn', 'wax', 'sand', 'clay', 'dirt', 'thatch', 'peat', 'tar', 'coal', 'concrete', 'cotton', 'wemp', 'mixed_grass', 'sinew', 'honey', 'flour', 'cornmeal', 'dough', 'wheat', 'corn', 'thyme', 'basil', 'mint', 'sage', 'rosemary', 'lavender']);
+const BY_THE_LOT = new Set(['cloth', 'wool', 'leather', 'mortar', 'yarn', 'wax', 'sand', 'clay', 'dirt', 'moss', 'thatch', 'peat', 'tar', 'coal', 'concrete', 'cotton', 'wemp', 'mixed_grass', 'sinew', 'honey', 'flour', 'cornmeal', 'dough', 'wheat', 'corn', 'thyme', 'basil', 'mint', 'sage', 'rosemary', 'lavender']);
 
 /**
  * So many of a thing, as it is said: "twelve planks", "four cloth", "a

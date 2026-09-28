@@ -1593,6 +1593,17 @@ jobs:
             --outfile=node_modules/.cache/baubles.mjs --log-level=error
           node node_modules/.cache/baubles.mjs
 
+      - name: Dirt and moss are collected, and moss planted on dirt, the same on both sides
+        run: |
+          # Asked for: collect dirt and collect moss on their tiles, as clay and
+          # sand are collected, and ten moss planted on a dirt tile to turn it
+          # to moss. Both sides offer and refuse the same, give dirt off dirt
+          # and moss off moss (digging moss still gives dirt), and turn the dirt
+          # to moss for the same moss.
+          npx esbuild supabase/test/moss.ts --bundle --platform=node --format=esm \
+            --outfile=node_modules/.cache/moss.mjs --log-level=error
+          node node_modules/.cache/moss.mjs
+
       - name: A find nobody has restored takes no repair
         run: |
           # Asked for: an artifact that has not been restored cannot be repaired,

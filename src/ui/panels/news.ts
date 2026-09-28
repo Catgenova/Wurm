@@ -9,7 +9,7 @@ import { INGOT_LUMPS, INGOT_WEIGHT, MOULD_BY_ID } from '../../game/metal';
 import { meltLumps } from '../../game/melt';
 import { ORDER_LIFE } from '../../game/orders';
 import { POST_LIFE_MIN } from '../../game/posts';
-import { GLAZE_ASH, KIT_MEND } from '../../game/actions';
+import { GLAZE_ASH, KIT_MEND, MOSS_PLANT } from '../../game/actions';
 import { CIRCLET_SHARE, CIRCLET_STONES, GEMS } from '../../game/gems';
 import { RECIPE_BY_ID, RECIPES, TRADE_BOOK_AT } from '../../game/recipes';
 import { BOARD_TOP } from '../../game/boards';
@@ -754,6 +754,14 @@ export const NEWS: News[] = [
         `A flagpole (tailoring: ${bill('flagpole')}) flies its flag down the wind, straight out at its full force and hanging in a calm, and a banner's cloth swings down the same wind. Either takes dye, and on a settlement carries its device, one of ${numberWord(DEVICE_COUNT)} chosen by the settlement's name. A banner or a sail set down on the island keeps its dye now; it used to come out undyed.`,
       ];
     },
+  },
+  {
+    n: 57,
+    day: '2026-09-28',
+    lines: () => [
+      `Collect works on dirt and on moss now, as it does on sand and clay: stand on the tile with a shovel and choose Collect dirt or Collect moss, and you fill a shovel off the top of it while the tile keeps its type and its height. Digging a moss tile still gives dirt.`,
+      `Plant moss on a tile of dirt with ${MOSS_PLANT} moss in your pack and the tile turns to moss.`,
+    ],
   },
 ];
 

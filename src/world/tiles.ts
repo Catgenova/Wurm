@@ -272,6 +272,11 @@ export interface TileDef {
    * shovel, and the tile is exactly as it was afterwards.
    */
   collect?: boolean;
+  /**
+   * What Collect fills the shovel with, where it is not what digging gives:
+   * a moss tile's top is moss, and the ground under it is still dirt.
+   */
+  collectYield?: string;
 }
 
 export const TILE_DEFS: Record<TileType, TileDef> = {
@@ -299,7 +304,7 @@ export const TILE_DEFS: Record<TileType, TileDef> = {
    * earth somebody walked flat and dusty -- and a ploughed field the darkest,
    * because turned soil is wet soil.
    */
-  [TileType.Dirt]: { name: 'Dirt', color: [186, 155, 135], speed: 1, digYield: 'dirt', pavable: true, roll: 0.7 },
+  [TileType.Dirt]: { name: 'Dirt', color: [186, 155, 135], speed: 1, digYield: 'dirt', pavable: true, collect: true, roll: 0.7 },
   /*
    * Greyer and dustier than the dirt it was made from, not just lighter.
    * Both of them were the same brown at two brightnesses and a road beside a
@@ -401,7 +406,7 @@ export const TILE_DEFS: Record<TileType, TileDef> = {
    * in, so nearly all of that is grass too. Grass is the only thing it ever
    * has to be told from.
    */
-  [TileType.Moss]: { name: 'Moss', color: [84, 162, 130], speed: 1, digYield: 'dirt', forage: true, botanize: true, pavable: true, turnsToDirt: true, roll: 0.65 },
+  [TileType.Moss]: { name: 'Moss', color: [84, 162, 130], speed: 1, digYield: 'dirt', forage: true, botanize: true, pavable: true, turnsToDirt: true, collect: true, collectYield: 'moss', roll: 0.65 },
   [TileType.Snow]: { name: 'Snow', color: [236, 240, 245], speed: 0.8, mineable: true, roll: 0.35 },
   [TileType.Cobblestone]: { name: 'Cobblestone', paved: true, color: [126, 122, 116], speed: 1.25, roll: 1 },
   [TileType.Field]: { name: 'Field', color: [158, 122, 104], speed: 0.9, digYield: 'dirt', turnsToDirt: true, roll: 0.5 },

@@ -1,5 +1,5 @@
 import {
-  CHIP_CHANCE, CLEARED_TO, FRUIT_MATURE, FRUIT_OLD, GLAZE_ASH, KIT_MEND, MINE_COLLAPSE, MINE_DEPTH, PROSPECT_REACH, PROSPECT_STEP,
+  CHIP_CHANCE, CLEARED_TO, FRUIT_MATURE, FRUIT_OLD, GLAZE_ASH, KIT_MEND, MINE_COLLAPSE, MINE_DEPTH, MOSS_PLANT, PROSPECT_REACH, PROSPECT_STEP,
   REPAIR_FLOOR, repairGo, RESIN_TREE,
 } from '../../game/actions';
 import { CIRCLET_SHARE, CIRCLET_STONES, GEM_ODDS, GEMS, JEWEL_BONUS, tradeName } from '../../game/gems';
@@ -2093,12 +2093,15 @@ export function helpText(): string {
     back carries ${numberWord(Math.floor((CARRY_BASE + CHAR_START * CARRY_PER_STRENGTH) / itemDef('dirt').weight))} before it starts to drag, and moving a bank is a great many walks. Dropping dirt and the packing-in half
     of flattening will take a spadeful out of any <b>crate, cart or bin within reach</b> when you are
     carrying none yourself: park the cart where the work is and it feeds itself.</p>
-    <p><b>Beds of sand, clay, peat and tar</b> are not dug like that unless you want them dug. Stand on
+    <p><b>${capital(listed(Object.values(TILE_DEFS).filter((d) => d.collect).map((d) => d.name.toLowerCase())))}</b> are not dug like that unless you want them dug. Stand on
     one and choose <b>Collect</b> &mdash; the entry names what is underfoot, <i>Collect clay</i>,
-    <i>Collect tar</i> &mdash; and you fill a shovel off the top of it: the tile keeps its type, its
+    <i>Collect moss</i> &mdash; and you fill a shovel off the top of it: the tile keeps its type, its
     corners keep their height and their soil, and the bed is there the next time you come back. It takes
     a moment longer than cutting a corner away, which is the whole of the difference. Digging the corner
     still does what it always did, for when you actually want the ground lower.</p>
+    <p>A moss tile gives <b>moss</b> to Collect, though digging its corner gives dirt. <b>Plant moss</b> on a tile of
+    <b>dirt</b> that is not under water takes <b>${MOSS_PLANT} moss</b> from your pack and turns the tile to moss; it is
+    farm work, and on a settlement it is one of the jobs the border speaks for.</p>
     <p><b>Packing</b> is what makes a floor of the ground. A shovel treads <b>grass, dirt, lawn, steppe,
     tundra or moss</b> down into <b>packed dirt</b>: on sod it cuts the turf away first. Packed dirt is
     what a building wants under it, and it is the only thing <b>paving</b> will go on &mdash; both
