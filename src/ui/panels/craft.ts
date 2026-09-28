@@ -1,8 +1,8 @@
 import { ACTION_BY_ID } from '../../game/actions';
 import type { Game } from '../../game/game';
 import { itemDef } from '../../game/items';
-import { CRAFT_REACH, DEED_ONLY, RECIPE_CATEGORIES, RECIPES, materialChoices, prospect, reachFor, recipeStatus, stationName, type CraftStock, type Recipe, type RecipeStatus } from '../../game/recipes';
-import { ONE_ALTAR } from '../../game/furniture';
+import { CRAFT_REACH, DEED_ONLY, RECIPE_CATEGORIES, RECIPES, materialChoices, prospect, reachFor, recipeReason, recipeStatus, stationName, type CraftStock, type Recipe, type RecipeStatus } from '../../game/recipes';
+import { isFurniture, ONE_ALTAR } from '../../game/furniture';
 import { SKILL_DEFS } from '../../game/skills';
 import type { UIWindow } from '../windows';
 import { Repaint } from '../repaint';
@@ -221,8 +221,22 @@ export class CraftPanel {
     if (r.station) {
       const station = document.createElement('span');
       station.className = st.station ? 'have' : 'lack';
-      station.textContent = stationName(r.station);
-      station.title = st.station ? 'You are standing at one' : 'Not within reach of one';
+      /*
+       * What to do about it, in the row and not only on hover. A spindle or a
+       * loom is a piece that stands on the ground and is worked standing at it;
+       * one in the pack does not count. Reported by a player with a spindle in
+       * their pack and twenty-one cotton, asking what they were doing wrong:
+       * the row said "spindle" in red, and "Not within reach of one" to anybody
+       * who hovered, which on a phone is nobody.
+       */
+      const name = stationName(r.station);
+      const carried = !st.station && isFurniture(r.station) && this.game.inventory.has(r.station);
+      station.textContent = st.station ? name : carried ? `${name}: set yours down` : `${name}: stand at one`;
+      station.title = st.station
+        ? 'You are standing at one'
+        : carried
+          ? `Yours is in your pack. Right-click the ground beside you, choose Set furniture down and your ${name}, and stand beside it.`
+          : `Stand beside a ${name} that is on the ground.`;
       parts.push(station);
     }
     // Where it may be built at all: an altar goes up on a settlement of yours or nowhere.
@@ -301,6 +315,8 @@ export class CraftPanel {
     craft.className = 'tb-btn tb-small';
     craft.textContent = 'Craft';
     craft.disabled = !st.ready;
+    // Greyed, it says why in the island's own words.
+    if (!st.ready) craft.title = recipeReason(r, this.game, undefined, stock) ?? '';
     craft.addEventListener('click', () => this.craft(r, 1));
     buttons.append(craft);
     if (st.max > 1) {

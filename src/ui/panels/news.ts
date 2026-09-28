@@ -704,6 +704,13 @@ export const NEWS: News[] = [
       'A poured slab stays packed ground to build or pave on when a corner it shares is dug or mined. Foundations already set out or poured stay as they are.',
     ],
   },
+  {
+    n: 53,
+    day: '2026-09-28',
+    lines: () => [
+      'Yarn is spun and cloth woven standing at a spindle or a loom set down on the ground; one in your pack does not count. The crafting window now says so in the row: "spindle: set yours down" when you carry one, "stand at one" when you do not. Right-click the ground, choose Set furniture down and pick it.',
+    ],
+  },
 ];
 
 /** The highest entry this browser has shown. */
