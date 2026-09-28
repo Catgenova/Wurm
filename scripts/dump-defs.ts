@@ -53,7 +53,7 @@ import { MATERIALS as IMPROVE_MATERIALS, improvable, canImprove } from '../src/g
 import { NUTRIENTS } from '../src/game/nutrition';
 import { BOON_SKILLS, BOON_SECONDS, BOON_BONUS, TINCTURE_BONUS, TINCTURE_SECONDS, TINCTURE_SKILLS } from '../src/game/boons';
 import { HIVE_BASE, HIVE_PER_QL, HIVE_SWARMS, HIVE_WAX, POND_EVERY } from '../src/game/furniture';
-import { GRASS_PER_CUT, REED_CUT, REED_EXTRA_AT } from '../src/game/actions';
+import { GRASS_PER_CUT, MOSS_PER_CUT, REED_CUT, REED_EXTRA_AT } from '../src/game/actions';
 import { CROWD_HIDES, DEEDS_JOINED, PLANTABLE } from '../src/game/game';
 import { RARITIES, RARITY_LIFT, RARITY_ODDS, RARITY_WORD } from '../src/game/items';
 import { DYES } from '../src/game/dyestuffs';
@@ -137,8 +137,8 @@ out.push(`create table if not exists tile_def (
 );`);
 /* Laid stone: a shod mount goes quicker on it. */
 out.push(`alter table tile_def add column if not exists paved boolean not null default false;`);
-/* What Collect fills a shovel with, where it is not what digging gives: moss off a moss tile. */
-out.push(`alter table tile_def add column if not exists collect_yield text;`);
+/* A bed of sand, clay, peat or tar: the ground itself, which the soil on its corners never strips to rock. */
+out.push(`alter table tile_def add column if not exists bed boolean not null default false;`);
 // A made road -- packed, cobbled or slabbed -- which a Terraformer's Road Legs walk faster.
 out.push(`alter table tile_def add column if not exists road boolean not null default false;`);
 out.push(`create table if not exists skill_def (
@@ -929,7 +929,7 @@ for (const [id, d] of Object.entries(ITEM_DEFS)) {
 for (const [id, d] of Object.entries(TILE_DEFS)) {
   out.push(`insert into tile_def values (${q(Number(id))}, ${q(d.name)}, ${q(d.speed)}, ${q(!!d.blocks)}, ${q(d.digYield)}, ${q(!!d.mineable)}, ${q(!!d.forage)}, ${q(!!d.botanize)}, ${q(!!d.pavable)}, ${q(!!d.turnsToDirt)}, ${q(!!d.collect)});`);
   if (d.paved) out.push(`update tile_def set paved = true where id = ${q(Number(id))};`);
-  if (d.collectYield) out.push(`update tile_def set collect_yield = ${q(d.collectYield)} where id = ${q(Number(id))};`);
+  if (d.bed) out.push(`update tile_def set bed = true where id = ${q(Number(id))};`);
   if (ROAD_TILES.includes(Number(id))) out.push(`update tile_def set road = true where id = ${q(Number(id))};`);
 }
 for (const d of SKILL_DEFS) {
@@ -1314,8 +1314,8 @@ for (const [fn, v] of [
   ['care_bonus', CARE_BONUS], ['care_hours', CARE_HOURS],
   /* A look over the ground: how often it is empty by chance, how hard it is, and how many points of skill a pass is. */
   ['forage_empty', EMPTY_CHANCE], ['find_check', FIND_CHECK], ['per_roll', PER_ROLL],
-  /* What a cut of grass or reeds gives, and the foraging at which a third reed is certain. */
-  ['grass_per_cut', GRASS_PER_CUT], ['reed_cut', REED_CUT], ['reed_extra_at', REED_EXTRA_AT],
+  /* What a cut of grass, moss or reeds gives, and the foraging at which a third reed is certain. */
+  ['grass_per_cut', GRASS_PER_CUT], ['moss_per_cut', MOSS_PER_CUT], ['reed_cut', REED_CUT], ['reed_extra_at', REED_EXTRA_AT],
   /* How hard a dressing is to put on well. */
   ['dress_check', DRESS_CHECK],
   /* How a hive fills: comb a second at the roughest and for its quality, swarms to a hive, and the share that is wax. */

@@ -1,24 +1,31 @@
 /**
- * Collect dirt and collect moss, and moss planted on dirt, the same on both sides.
+ * Collect dirt, moss cut as grass is, and moss planted on dirt, the same on both sides.
  *
  * Asked for: "Add a collect dirt and collect moss option for each respective
  * tile, that operates like collect clay/sand. Moss can be planted in 10qty on
- * a dirt tile to change it to moss." So:
+ * a dirt tile to change it to moss." And then: "Nix collect moss, make that
+ * cuttable like grass into mixed grass, but yielding moss." So:
  *
- *   * Collect is offered on dirt and on moss as it is on sand and clay, and
- *     fills a shovel off the top of the tile without changing it: dirt off
- *     dirt, moss off moss (though digging a moss tile still gives dirt), and
- *     nothing off grass, which is refused in the same words on both sides;
+ *   * Collect is offered on dirt as it is on sand and clay, and fills a shovel
+ *     off the top of the tile without changing it; a moss tile and a grass
+ *     tile have no bed to collect off, refused in the same words both sides;
+ *   * Cut moss, on a moss tile, gives `MOSS_PER_CUT` moss and leaves the tile
+ *     moss, and the tile cannot be cut again until it has grown back, as with
+ *     Cut grass, in the same words both sides;
  *   * Plant moss takes `MOSS_PLANT` moss from the pack and turns a tile of
  *     dirt to moss, refused in the same words when there is too little moss,
  *     when the tile is not dirt and when it is under water;
+ *   * a tile of dirt dug to its last spadeful shows the rock under it on both
+ *     sides, as it did before dirt could be collected from, while a bed of
+ *     sand stays sand;
  *   * and the tiles the island reads say the same as the browser's.
  *
  * Runs against the database the suite leaves behind, and puts it back.
  */
 import { execFileSync } from 'node:child_process';
 import { Game } from '../../src/game/game';
-import { ACTION_BY_ID, MOSS_PLANT, type Target } from '../../src/game/actions';
+import { ACTION_BY_ID, MOSS_PER_CUT, MOSS_PLANT, type Target } from '../../src/game/actions';
+import { numberWord } from '../../src/game/words';
 import { TILE_DEFS, TileType } from '../../src/world/tiles';
 
 const psql = (sql: string): string =>
@@ -45,6 +52,9 @@ const DIRT = [3, 3] as const;
 const MOSS = [5, 3] as const;
 const GRASS = [7, 3] as const;
 const WET = [9, 3] as const;
+/** A tile of dirt and a bed of sand, each with no soil left on any corner. */
+const BARE_DIRT = [3, 5] as const;
+const BARE_SAND = [7, 5] as const;
 const LEVEL = 40;
 const SUNK = -5;
 
@@ -55,6 +65,9 @@ const stand = (at: readonly [number, number]): string =>
 const count = (def: string): string =>
   `(select coalesce(sum(i.count), 0) from item i where i.world_id = w and i.holder = 'player' and i.holder_uid = u and i.def = '${def}')`;
 const refused = (a: string, at: readonly [number, number]): string => `coalesce(act_refusal(w, u, '${a}', ${tileT(at)}), 'ALLOWED')`;
+/** The last thing said to that person that begins so: a skill gained is said after the work. */
+const lastSaid = (start: string): string =>
+  `coalesce((select e.text from event e where e.world_id = w and e.uid = u and e.text like '${start}%' order by e.n desc limit 1), 'unsaid')`;
 
 const out = psql(`
 begin;
@@ -70,6 +83,7 @@ begin
   select p.uid into u from player p where p.world_id = w order by p.uid limit 1;
   delete from deed where world_id = w;
   delete from item where world_id = w and holder = 'player' and holder_uid = u;
+  delete from foraged where world_id = w;
   update player set act = null, act_queue = '[]', stats = '{"health":1,"stamina":1,"hunger":1,"thirst":1}'::jsonb
     where world_id = w and uid = u;
   for x in 0..12 loop for y in 0..6 loop perform land_set_height(w, x, y, ${LEVEL}); end loop; end loop;
@@ -80,25 +94,46 @@ begin
   for x in ${WET[0]}..${WET[0] + 1} loop for y in ${WET[1]}..${WET[1] + 1} loop perform land_set_height(w, x, y, ${SUNK}); end loop; end loop;
   perform give(w, u, 'shovel', 1, 50);
 
-  insert into said values ('DEFS', (select string_agg(name || ':' || collect || ':' || coalesce(collect_yield, '-') || ':' || coalesce(dig_yield, '-'), ',' order by id)
+  insert into said values ('DEFS', (select string_agg(name || ':' || collect || ':' || bed || ':' || coalesce(dig_yield, '-'), ',' order by id)
     from tile_def where name in ('Dirt', 'Moss', 'Grass', 'Sand', 'Clay')));
+  insert into said values ('COLUMN', (select count(*)::text from information_schema.columns
+    where table_name = 'tile_def' and column_name = 'collect_yield'));
 
-  /* Collect: dirt off dirt, moss off moss, the tile as it was; grass refused. */
+  /* Dug bare: dirt shows the rock, a bed of sand stays sand. */
+  perform land_set_tile(w, ${BARE_DIRT[0]}, ${BARE_DIRT[1]}, tile_id('Dirt'));
+  perform land_set_tile(w, ${BARE_SAND[0]}, ${BARE_SAND[1]}, tile_id('Sand'));
+  for x in 0..1 loop for y in 0..1 loop
+    perform land_set_dirt(w, ${BARE_DIRT[0]} + x, ${BARE_DIRT[1]} + y, 0);
+    perform land_set_dirt(w, ${BARE_SAND[0]} + x, ${BARE_SAND[1]} + y, 0);
+  end loop; end loop;
+  perform reconcile(w, ${BARE_DIRT[0]}, ${BARE_DIRT[1]});
+  perform reconcile(w, ${BARE_SAND[0]}, ${BARE_SAND[1]});
+  insert into said values ('BARED', land_tile(w, ${BARE_DIRT[0]}, ${BARE_DIRT[1]}) || '|' || land_tile(w, ${BARE_SAND[0]}, ${BARE_SAND[1]}));
+
+  /* Collect: dirt off dirt, the tile as it was; moss and grass refused. */
   ${stand(DIRT)}
   insert into said values ('DIRT_REF', ${refused('collect', DIRT)});
   perform perform_gather(w, u, 'collect', ${tileT(DIRT)});
-  insert into said values ('DIRT', ${count('dirt')} || '|' || ${count('moss')} || '|' || land_tile(w, ${DIRT[0]}, ${DIRT[1]}));
+  insert into said values ('DIRT', ${count('dirt')} || '|' || land_tile(w, ${DIRT[0]}, ${DIRT[1]}));
   ${stand(MOSS)}
   insert into said values ('MOSS_REF', ${refused('collect', MOSS)});
-  perform perform_gather(w, u, 'collect', ${tileT(MOSS)});
-  insert into said values ('MOSS', ${count('dirt')} || '|' || ${count('moss')} || '|' || land_tile(w, ${MOSS[0]}, ${MOSS[1]}));
   ${stand(GRASS)}
   insert into said values ('GRASS_REF', ${refused('collect', GRASS)});
+
+  /* Cut moss: moss off moss, the tile as it was, then short; nothing to cut on grass. */
+  ${stand(MOSS)}
+  insert into said values ('CUT_REF', ${refused('cut_moss', MOSS)});
+  perform perform_ground(w, u, 'cut_moss', ${tileT(MOSS)});
+  insert into said values ('CUT', ${count('moss')} || '|' || ${count('mixed_grass')} || '|' || land_tile(w, ${MOSS[0]}, ${MOSS[1]}));
+  insert into said values ('CUT_SAID', ${lastSaid('You cut')});
+  insert into said values ('SHORT', ${refused('cut_moss', MOSS)});
+  ${stand(GRASS)}
+  insert into said values ('NO_MOSS', ${refused('cut_moss', GRASS)});
 
   /* Plant moss: too little of it, the wrong ground, under water, and then done. */
   ${stand(DIRT)}
   insert into said values ('FEW', ${refused('plant_moss', DIRT)});
-  perform give(w, u, 'moss', ${MOSS_PLANT} - 1, 50);
+  perform give(w, u, 'moss', ${MOSS_PLANT - MOSS_PER_CUT}, 50);
   ${stand(GRASS)}
   insert into said values ('NOT_DIRT', ${refused('plant_moss', GRASS)});
   ${stand(WET)}
@@ -107,7 +142,7 @@ begin
   insert into said values ('PLANT_REF', ${refused('plant_moss', DIRT)});
   perform perform_farm(w, u, 'plant_moss', ${tileT(DIRT)});
   insert into said values ('PLANTED', land_tile(w, ${DIRT[0]}, ${DIRT[1]}) || '|' || ${count('moss')});
-  insert into said values ('SAID', coalesce((select e.text from event e where e.world_id = w and e.uid = u order by e.n desc limit 1), 'unsaid'));
+  insert into said values ('SAID', ${lastSaid('You plant')});
 end $$;
 select k || E'\\t' || coalesce(v, 'null') from said;
 rollback;
@@ -121,18 +156,31 @@ const say = (k: string): string => said.get(k) ?? '(nothing)';
 
 const browserDefs = [TileType.Grass, TileType.Sand, TileType.Dirt, TileType.Clay, TileType.Moss]
   .sort((a, b) => a - b)
-  .map((id) => { const d = TILE_DEFS[id]; return `${d.name}:${d.collect ? 'true' : 'false'}:${d.collectYield ?? '-'}:${d.digYield ?? '-'}`; });
-check('the island reads the same tiles as the browser: what can be collected, what it gives, what digging gives',
+  .map((id) => { const d = TILE_DEFS[id]; return `${d.name}:${d.collect ? 'true' : 'false'}:${d.bed ? 'true' : 'false'}:${d.digYield ?? '-'}`; });
+check('the island reads the same tiles as the browser: what can be collected, which are beds, and what digging gives',
   say('DEFS') === browserDefs.join(','), `${say('DEFS')} against ${browserDefs.join(',')}`);
+check('and the island keeps no column for what Collect gives apart from digging', say('COLUMN') === '0', say('COLUMN'));
 
-const [dirt1, moss1, dirtTile] = say('DIRT').split('|');
+const [baredDirt, baredSand] = say('BARED').split('|');
+check('on the island a tile of dirt dug bare shows the rock, and a bed of sand dug bare stays sand',
+  Number(baredDirt) === TileType.Rock && Number(baredSand) === TileType.Sand, say('BARED'));
+
+const [dirt1, dirtTile] = say('DIRT').split('|');
 check('Collect on dirt fills a shovel with dirt on the island, and the tile stays dirt',
-  say('DIRT_REF') === 'ALLOWED' && dirt1 === '1' && moss1 === '0' && Number(dirtTile) === TileType.Dirt, `${say('DIRT_REF')} / ${say('DIRT')}`);
-const [dirt2, moss2, mossTile] = say('MOSS').split('|');
-check('Collect on moss fills it with moss, not dirt, and the tile stays moss',
-  say('MOSS_REF') === 'ALLOWED' && dirt2 === '1' && moss2 === '1' && Number(mossTile) === TileType.Moss, `${say('MOSS_REF')} / ${say('MOSS')}`);
-check('grass has no bed to collect off', say('GRASS_REF') === 'There is no bed of anything here.', say('GRASS_REF'));
-check(`Plant moss with one moss is refused for want of ${MOSS_PLANT}`, say('FEW') === `It takes ${MOSS_PLANT} moss to plant a tile; you have 1.`, say('FEW'));
+  say('DIRT_REF') === 'ALLOWED' && dirt1 === '1' && Number(dirtTile) === TileType.Dirt, `${say('DIRT_REF')} / ${say('DIRT')}`);
+check('moss has no bed to collect off', say('MOSS_REF') === 'There is no bed of anything here.', say('MOSS_REF'));
+check('nor has grass', say('GRASS_REF') === 'There is no bed of anything here.', say('GRASS_REF'));
+
+const [moss1, grass1, mossTile] = say('CUT').split('|');
+check(`Cut moss gives ${MOSS_PER_CUT} moss on the island, no mixed grass, and the tile stays moss`,
+  say('CUT_REF') === 'ALLOWED' && moss1 === String(MOSS_PER_CUT) && grass1 === '0' && Number(mossTile) === TileType.Moss,
+  `${say('CUT_REF')} / ${say('CUT')}`);
+check('and says so', say('CUT_SAID') === `You cut ${numberWord(MOSS_PER_CUT)} clumps of moss.`, say('CUT_SAID'));
+check('cut once, the tile is short until it grows back', say('SHORT') === 'The moss here is still short.', say('SHORT'));
+check('and there is no moss to cut on grass', say('NO_MOSS') === 'There is no moss here to cut.', say('NO_MOSS'));
+
+check(`Plant moss with ${MOSS_PER_CUT} moss is refused for want of ${MOSS_PLANT}`,
+  say('FEW') === `It takes ${MOSS_PLANT} moss to plant a tile; you have ${MOSS_PER_CUT}.`, say('FEW'));
 check('and on grass, for it is not dirt', say('NOT_DIRT') === 'Moss is planted on a tile of dirt.', say('NOT_DIRT'));
 check('and under water', say('WET') === 'You cannot plant moss underwater.', say('WET'));
 const [plantedTile, left] = say('PLANTED').split('|');
@@ -152,34 +200,53 @@ w.setTile(GRASS[0], GRASS[1], TileType.Grass);
 w.setTile(WET[0], WET[1], TileType.Dirt);
 for (let x = WET[0]; x <= WET[0] + 1; x++) for (let y = WET[1]; y <= WET[1] + 1; y++) w.setHeight(x, y, SUNK);
 game.inventory.add('shovel', { ql: 50 });
+w.setTile(BARE_DIRT[0], BARE_DIRT[1], TileType.Dirt);
+w.setTile(BARE_SAND[0], BARE_SAND[1], TileType.Sand);
+for (let x = 0; x <= 1; x++) for (let y = 0; y <= 1; y++) {
+  w.setDirt(BARE_DIRT[0] + x, BARE_DIRT[1] + y, 0);
+  w.setDirt(BARE_SAND[0] + x, BARE_SAND[1] + y, 0);
+}
+w.reconcile(BARE_DIRT[0], BARE_DIRT[1]);
+w.reconcile(BARE_SAND[0], BARE_SAND[1]);
+check('and in the browser the same',
+  w.getTile(BARE_DIRT[0], BARE_DIRT[1]) === TileType.Rock && w.getTile(BARE_SAND[0], BARE_SAND[1]) === TileType.Sand,
+  `${w.getTile(BARE_DIRT[0], BARE_DIRT[1])}|${w.getTile(BARE_SAND[0], BARE_SAND[1])}`);
 const at = (p: readonly [number, number]): Target => ({ kind: 'tile', x: p[0], y: p[1], cx: p[0], cy: p[1] });
 const collect = ACTION_BY_ID.get('collect')!;
+const cut = ACTION_BY_ID.get('cut_moss')!;
 const plant = ACTION_BY_ID.get('plant_moss')!;
 
-check('Collect is offered on dirt and moss in the browser, as Collect dirt and Collect moss',
-  collect.applies(at(DIRT), game) && collect.applies(at(MOSS), game)
-    && collect.labelFor?.(at(DIRT), game) === 'Collect dirt' && collect.labelFor?.(at(MOSS), game) === 'Collect moss');
-check('and not on grass', !collect.applies(at(GRASS), game));
+check('Collect is offered on dirt in the browser, as Collect dirt, and not on moss or grass',
+  collect.applies(at(DIRT), game) && collect.labelFor?.(at(DIRT), game) === 'Collect dirt'
+    && !collect.applies(at(MOSS), game) && !collect.applies(at(GRASS), game));
 collect.perform(at(DIRT), game);
-collect.perform(at(MOSS), game);
-check('the browser collects one dirt off dirt and one moss off moss, the tiles as they were',
-  game.inventory.count('dirt') === 1 && game.inventory.count('moss') === 1
-    && w.getTile(DIRT[0], DIRT[1]) === TileType.Dirt && w.getTile(MOSS[0], MOSS[1]) === TileType.Moss);
+check('the browser collects one dirt off dirt, the tile as it was',
+  game.inventory.count('dirt') === 1 && w.getTile(DIRT[0], DIRT[1]) === TileType.Dirt);
+check('Cut moss is offered on moss in the browser, and not on grass or dirt',
+  cut.applies(at(MOSS), game) && cut.label === 'Cut moss' && !cut.applies(at(GRASS), game) && !cut.applies(at(DIRT), game));
+check('and allowed on moss not cut lately', (cut.check?.(at(MOSS), game) ?? null) === null);
+const seen = game.log.length;
+cut.perform(at(MOSS), game);
+check(`the browser cuts ${MOSS_PER_CUT} moss off moss and no mixed grass, the tile as it was`,
+  game.inventory.count('moss') === MOSS_PER_CUT && game.inventory.count('mixed_grass') === 0 && w.getTile(MOSS[0], MOSS[1]) === TileType.Moss);
+check('and says so in the island\'s words', game.log.slice(seen).some((l) => l.text === say('CUT_SAID')),
+  game.log.slice(seen).map((l) => l.text).join(' | '));
+check('and refuses a second cut in the island\'s words', cut.check?.(at(MOSS), game) === say('SHORT'), String(cut.check?.(at(MOSS), game)));
 check('Plant moss is offered on dirt to somebody carrying moss, and not on grass',
   plant.applies(at(DIRT), game) && !plant.applies(at(GRASS), game));
 check('and refused in the island\'s words for want of moss', plant.check?.(at(DIRT), game) === say('FEW'), String(plant.check?.(at(DIRT), game)));
-game.inventory.add('moss', { ql: 50, count: MOSS_PLANT - 1 });
+game.inventory.add('moss', { ql: 50, count: MOSS_PLANT - MOSS_PER_CUT });
 check('in the island\'s words on ground that is not dirt, and under water',
   plant.check?.(at(GRASS), game) === say('NOT_DIRT') && plant.check?.(at(WET), game) === say('WET'));
 check('and allowed with enough on dry dirt', (plant.check?.(at(DIRT), game) ?? null) === null);
 plant.perform(at(DIRT), game);
 check(`the browser turns the dirt to moss and uses up ${MOSS_PLANT} moss`,
   w.getTile(DIRT[0], DIRT[1]) === TileType.Moss && game.inventory.count('moss') === 0);
-check('and digging a moss tile still gives dirt', TILE_DEFS[TileType.Moss].digYield === 'dirt' && TILE_DEFS[TileType.Moss].collectYield === 'moss');
+check('and digging a moss tile still gives dirt', TILE_DEFS[TileType.Moss].digYield === 'dirt');
 
 for (const line of [...ok, ...bad]) console.log(line);
 if (bad.length) {
   console.error(`${bad.length} of ${ok.length + bad.length} are not what they should be`);
   process.exit(1);
 }
-console.log(`dirt and moss collected, and moss planted — ${ok.length} of ${ok.length}`);
+console.log(`dirt collected, moss cut, and moss planted — ${ok.length} of ${ok.length}`);

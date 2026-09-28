@@ -457,6 +457,12 @@ export const MINE_COLLAPSE = 1 / 30;
 
 /** Bundles of mixed grass a cut gives. */
 export const GRASS_PER_CUT = 2;
+/**
+ * Moss a cut of a moss tile gives: as many as a cut of grass gives bundles.
+ * Asked for: "make that cuttable like grass into mixed grass, but yielding
+ * moss." The island's `moss_per_cut`.
+ */
+export const MOSS_PER_CUT = GRASS_PER_CUT;
 /** Reeds a cut gives, and the foraging at which a third is certain (a third one in this many points of it). */
 export const REED_CUT = 2;
 export const REED_EXTRA_AT = 140;
@@ -712,7 +718,7 @@ export const KIT_MEND = 50;
  * it to moss." The island's `moss_plant`.
  */
 export const MOSS_PLANT = 10;
-describeFrom('moss', { moss: { plant: MOSS_PLANT } });
+describeFrom('moss', { moss: { cut: MOSS_PER_CUT, plant: MOSS_PLANT } });
 describeFrom('repair_kit', { mend: KIT_MEND });
 /** Whether a thing could take a seal: anything but the sealant itself, and nothing sealed already. */
 const sealable = (item: Item): boolean => item.id !== 'sealant' && item.mark?.seal === undefined;
@@ -797,12 +803,10 @@ export const ACTIONS: ActionDef[] = [
     },
   },
   {
-    // Sand, clay, peat and tar lie in beds, and dirt and moss lie on top of
-    // the ground as they do. You fill a shovel off the top of one without
-    // cutting the ground about, which is what digging a corner does: stand on
-    // the tile, and the tile is as it was when you walk off it. What it gives
-    // is the tile's `collectYield` where it has one (moss off a moss tile,
-    // though digging it gives dirt), and what digging gives otherwise.
+    // Sand, clay, peat and tar lie in beds, and dirt lies on top of the
+    // ground as they do. You fill a shovel off the top of one without cutting
+    // the ground about, which is what digging a corner does: stand on the
+    // tile, and the tile is as it was when you walk off it.
     id: 'collect',
     label: 'Collect',
     labelFor: (t, g) => `Collect ${TILE_DEFS[tile(t, g)].name.toLowerCase()}`,
@@ -828,7 +832,7 @@ export const ACTIONS: ActionDef[] = [
     perform: (t, g) => {
       if (t.kind !== 'tile') return;
       const def = TILE_DEFS[g.world.getTile(t.x, t.y)];
-      const yieldId = def.collectYield ?? def.digYield;
+      const yieldId = def.digYield;
       if (!def.collect || !yieldId) return;
       if (!g.skillCheck('digging', 6, g.toolQl('shovel'))) {
         g.missed();
@@ -2851,6 +2855,25 @@ export const ACTIONS: ActionDef[] = [
         return;
       }
       g.logMsg(`You cut ${numberWord(cut)} bundles of mixed grass.`, 'event');
+    },
+  },
+  {
+    // A moss tile is cut as grass is and gives moss, the tile staying moss;
+    // cut, it is short until it has grown back like grass. The island's
+    // `ground_refusal` and `perform_ground`.
+    id: 'cut_moss',
+    label: 'Cut moss',
+    verb: 'cutting moss',
+    skill: 'foraging',
+    stamina: 0.02,
+    baseTime: 3,
+    applies: (t, g) => tile(t, g) === TileType.Moss,
+    check: (t, g) => (t.kind === 'tile' && g.isForaged(t.x, t.y, 'moss') ? 'The moss here is still short.' : null),
+    perform: (t, g) => {
+      if (t.kind !== 'tile') return;
+      g.markForaged(t.x, t.y, 'moss');
+      g.gather('moss', { count: MOSS_PER_CUT, ql: g.productQl('foraging') });
+      g.logMsg(`You cut ${numberWord(MOSS_PER_CUT)} clumps of moss.`, 'event');
     },
   },
   {

@@ -488,7 +488,7 @@ jobs:
           # words. The craft material bin is its opposite number off the same
           # bill, and takes exactly what the other refuses -- so the pair of
           # them partitions the materials: nothing goes in both, every material
-          # goes in one, and the split is forty-one raw to eighty worked on
+          # goes in one, and the split is forty-two raw to a hundred worked on
           # both sides. It is measured in kilograms rather than counted, which
           # the island agrees to the unit: 250,000 nails, 1,250 planks or 416
           # timbers in the same bin.
@@ -1593,13 +1593,16 @@ jobs:
             --outfile=node_modules/.cache/baubles.mjs --log-level=error
           node node_modules/.cache/baubles.mjs
 
-      - name: Dirt and moss are collected, and moss planted on dirt, the same on both sides
+      - name: Dirt is collected, moss cut and moss planted on dirt, the same on both sides
         run: |
-          # Asked for: collect dirt and collect moss on their tiles, as clay and
-          # sand are collected, and ten moss planted on a dirt tile to turn it
-          # to moss. Both sides offer and refuse the same, give dirt off dirt
-          # and moss off moss (digging moss still gives dirt), and turn the dirt
-          # to moss for the same moss.
+          # Asked for: collect dirt on its tile, as clay and sand are collected;
+          # moss cut off a moss tile as grass is cut, giving moss; and ten moss
+          # planted on a dirt tile to turn it to moss. Both sides offer and
+          # refuse the same, give dirt off dirt and moss off moss (digging moss
+          # still gives dirt), keep a cut tile short until it grows back, and
+          # turn the dirt to moss for the same moss. And a tile of dirt dug
+          # bare still shows the rock on both sides, where a bed of sand stays
+          # sand: dirt is collected from, but it is not a bed.
           npx esbuild supabase/test/moss.ts --bundle --platform=node --format=esm \
             --outfile=node_modules/.cache/moss.mjs --log-level=error
           node node_modules/.cache/moss.mjs

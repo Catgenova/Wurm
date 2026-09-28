@@ -9,7 +9,7 @@ import { INGOT_LUMPS, INGOT_WEIGHT, MOULD_BY_ID } from '../../game/metal';
 import { meltLumps } from '../../game/melt';
 import { ORDER_LIFE } from '../../game/orders';
 import { POST_LIFE_MIN } from '../../game/posts';
-import { GLAZE_ASH, KIT_MEND, MOSS_PLANT } from '../../game/actions';
+import { GLAZE_ASH, KIT_MEND, MOSS_PER_CUT, MOSS_PLANT } from '../../game/actions';
 import { CIRCLET_SHARE, CIRCLET_STONES, GEMS } from '../../game/gems';
 import { RECIPE_BY_ID, RECIPES, TRADE_BOOK_AT } from '../../game/recipes';
 import { BOARD_TOP } from '../../game/boards';
@@ -759,8 +759,8 @@ export const NEWS: News[] = [
     n: 57,
     day: '2026-09-28',
     lines: () => [
-      `Collect works on dirt and on moss now, as it does on sand and clay: stand on the tile with a shovel and choose Collect dirt or Collect moss, and you fill a shovel off the top of it while the tile keeps its type and its height. Digging a moss tile still gives dirt.`,
-      `Plant moss on a tile of dirt with ${MOSS_PLANT} moss in your pack and the tile turns to moss.`,
+      `Collect works on dirt now, as it does on sand and clay: stand on a tile of dirt with a shovel and choose Collect dirt, and you fill a shovel off the top of it while the tile keeps its type and its height.`,
+      `Cut moss on a moss tile gives ${numberWord(MOSS_PER_CUT)} moss, as Cut grass gives mixed grass, and the tile stays moss. Plant moss on a tile of dirt with ${MOSS_PLANT} moss in your pack and the tile turns to moss.`,
     ],
   },
 ];

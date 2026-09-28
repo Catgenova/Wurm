@@ -268,15 +268,18 @@ export interface TileDef {
   turnsToDirt?: boolean;
   /**
    * A bed of something that can be taken off the top without cutting the
-   * ground about: sand, clay, peat, tar. You stand on the tile and fill a
-   * shovel, and the tile is exactly as it was afterwards.
+   * ground about: sand, clay, peat, tar, dirt. You stand on the tile and fill
+   * a shovel, and the tile is exactly as it was afterwards.
    */
   collect?: boolean;
   /**
-   * What Collect fills the shovel with, where it is not what digging gives:
-   * a moss tile's top is moss, and the ground under it is still dirt.
+   * The face is the ground itself, not soil lying on rock: a bed of sand,
+   * clay, peat or tar. The soil on its corners does not decide it, so digging
+   * it out never strips it to rock and dirt put back never makes it dirt
+   * (`World.reconcile`, the island's `reconcile`). Dirt is collected from as a
+   * bed is, but it is the soil, and dug bare it shows the rock under it.
    */
-  collectYield?: string;
+  bed?: boolean;
 }
 
 export const TILE_DEFS: Record<TileType, TileDef> = {
@@ -325,7 +328,7 @@ export const TILE_DEFS: Record<TileType, TileDef> = {
    * of what makes a beach read as a beach rather than as a cream stripe
    * between a field and the water.
    */
-  [TileType.Sand]: { name: 'Sand', color: [228, 219, 195], speed: 0.9, digYield: 'sand', pavable: true, collect: true, roll: 0.45 },
+  [TileType.Sand]: { name: 'Sand', color: [228, 219, 195], speed: 0.9, digYield: 'sand', pavable: true, collect: true, bed: true, roll: 0.45 },
   [TileType.Rock]: { name: 'Rock', color: [168, 166, 178], speed: 0.9, mineable: true, roll: 0.85 },
   /*
    * Dry grass, pale and clean, rather than the mustard it was. 156, 150, 84
@@ -379,16 +382,16 @@ export const TILE_DEFS: Record<TileType, TileDef> = {
    */
   [TileType.Marsh]: { name: 'Marsh', color: [108, 147, 128], speed: 0.6, digYield: 'dirt', forage: true, botanize: true, turnsToDirt: true, roll: 0.3 },
   /* A pan of wet clay in the middle of it: buff, and greyer than any dirt. */
-  [TileType.Clay]: { name: 'Clay', color: [176, 162, 152], speed: 0.9, digYield: 'clay', collect: true, roll: 0.45 },
+  [TileType.Clay]: { name: 'Clay', color: [176, 162, 152], speed: 0.9, digYield: 'clay', collect: true, bed: true, roll: 0.45 },
   /* Cut peat. The darkest earth there is, which is not the same as black. */
-  [TileType.Peat]: { name: 'Peat', color: [112, 92, 76], speed: 0.8, digYield: 'peat', collect: true, roll: 0.4 },
+  [TileType.Peat]: { name: 'Peat', color: [112, 92, 76], speed: 0.8, digYield: 'peat', collect: true, bed: true, roll: 0.4 },
   /*
    * And a tar seep, which is the one thing on the island that really is
    * black. It keeps that -- a bog wants something in it you would not tread
    * in -- but not the flat 36, 32, 32 it was: a hole with no light in it at
    * all reads as a gap in the picture rather than as a thing lying in a bog.
    */
-  [TileType.Tar]: { name: 'Tar', color: [58, 54, 58], speed: 0.5, digYield: 'tar', collect: true, roll: 0.25 },
+  [TileType.Tar]: { name: 'Tar', color: [58, 54, 58], speed: 0.5, digYield: 'tar', collect: true, bed: true, roll: 0.25 },
   /*
    * The damp shaded floor of a wood: the field's own green gone deeper and
    * cooler, which is what ground that never dries out looks like.
@@ -406,7 +409,7 @@ export const TILE_DEFS: Record<TileType, TileDef> = {
    * in, so nearly all of that is grass too. Grass is the only thing it ever
    * has to be told from.
    */
-  [TileType.Moss]: { name: 'Moss', color: [84, 162, 130], speed: 1, digYield: 'dirt', forage: true, botanize: true, pavable: true, turnsToDirt: true, collect: true, collectYield: 'moss', roll: 0.65 },
+  [TileType.Moss]: { name: 'Moss', color: [84, 162, 130], speed: 1, digYield: 'dirt', forage: true, botanize: true, pavable: true, turnsToDirt: true, roll: 0.65 },
   [TileType.Snow]: { name: 'Snow', color: [236, 240, 245], speed: 0.8, mineable: true, roll: 0.35 },
   [TileType.Cobblestone]: { name: 'Cobblestone', paved: true, color: [126, 122, 116], speed: 1.25, roll: 1 },
   [TileType.Field]: { name: 'Field', color: [158, 122, 104], speed: 0.9, digYield: 'dirt', turnsToDirt: true, roll: 0.5 },

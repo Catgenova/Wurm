@@ -450,14 +450,15 @@ export class World {
    * clay was gone for good. Reported from the island as dropping dirt turning
    * sand and clay into dirt, which is the second half of it.
    *
-   * A bed is the ground itself rather than soil lying on rock — `collect` says
-   * so, and says it in the same words the shovel reads: "the tile is exactly as
-   * it was afterwards". So nothing here has any business touching it.
+   * A bed is the ground itself rather than soil lying on rock, and `bed` says
+   * so. So nothing here has any business touching it. (It was `collect`, the
+   * shovel's own flag, until dirt could be collected from too: dirt is the
+   * soil, and dug bare it shows the rock like any other.)
    */
   reconcile(x: number, y: number): void {
     if (!this.inBounds(x, y)) return;
     const t = this.getTile(x, y);
-    if (TILE_DEFS[t as TileType]?.collect) return;
+    if (TILE_DEFS[t as TileType]?.bed) return;
     const bare = this.allBare(x, y);
     if (bare && t !== TileType.Rock && t !== TileType.Snow) {
       this.setTile(x, y, TileType.Rock, this.rockKind(x, y));

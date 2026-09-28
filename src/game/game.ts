@@ -401,7 +401,7 @@ const FORAGE_COOLDOWN = world(180);
  * The things a single tile can be worked over for, each with its own
  * cooldown: picking berries does not stop you cutting the grass.
  */
-const FORAGE_KINDS = ['forage', 'botanize', 'grass', 'reed', 'dig'];
+const FORAGE_KINDS = ['forage', 'botanize', 'grass', 'reed', 'dig', 'moss'];
 /** How long ore stays lit after prospecting. */
 const PROSPECT_MARK_TIME = 120;
 const MAX_LOG = 400;

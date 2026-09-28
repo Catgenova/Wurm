@@ -193,7 +193,7 @@ export const ITEM_DEFS: Record<string, ItemDef> = {
   water_bucket: { name: 'Bucket of water', category: 'tool', weight: 6, decay: 8, description: 'Water enough to leach ashes into lye.' },
   lye_bucket: { name: 'Bucket of lye', category: 'tool', weight: 6, decay: 10, description: 'Ash water, and it will take the hair off a hide. One bucket tans one skin.' },
   dirt: { name: 'Dirt', category: 'material', weight: 20, stackable: true, raw: true, description: 'A pile of dirt. Drop it to raise the ground.' },
-  moss: { name: 'Moss', category: 'material', weight: 2, stackable: true, raw: true, description: 'A shovelful of living moss off the top of a moss tile. Plant {moss.plant} of it on a tile of dirt and the tile is moss.' },
+  moss: { name: 'Moss', category: 'material', weight: 0.5, stackable: true, raw: true, description: 'A clump of living moss. Cutting a moss tile gives {moss.cut:w}; plant {moss.plant} of it on a tile of dirt and the tile is moss.' },
   sand: { name: 'Sand', category: 'material', weight: 20, stackable: true, raw: true },
   glass: { name: 'Glass pane', category: 'material', weight: 2, stackable: true, decay: 0,
     description: 'A pane of green glass, run flat off a smelter hearth and cut square. It goes into a window: a window without one is a hole with a shutter.' },

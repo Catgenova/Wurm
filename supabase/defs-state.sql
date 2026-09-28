@@ -12,7 +12,7 @@ create table if not exists tile_def (
   turns_to_dirt boolean not null default false, collect boolean not null default false
 );
 alter table tile_def add column if not exists paved boolean not null default false;
-alter table tile_def add column if not exists collect_yield text;
+alter table tile_def add column if not exists bed boolean not null default false;
 alter table tile_def add column if not exists road boolean not null default false;
 create table if not exists skill_def (
   id text primary key, name text not null, start real not null, parent text
@@ -590,7 +590,7 @@ insert into item_def values ('water_bucket', 'Bucket of water', 'tool', 6, false
 insert into item_def values ('lye_bucket', 'Bucket of lye', 'tool', 6, false, 10, null);
 insert into item_def values ('dirt', 'Dirt', 'material', 20, true, null, null);
 update item_def set raw = true where id = 'dirt';
-insert into item_def values ('moss', 'Moss', 'material', 2, true, null, null);
+insert into item_def values ('moss', 'Moss', 'material', 0.5, true, null, null);
 update item_def set raw = true where id = 'moss';
 insert into item_def values ('sand', 'Sand', 'material', 20, true, null, null);
 update item_def set raw = true where id = 'sand';
@@ -972,15 +972,18 @@ insert into tile_def values (1, 'Dirt', 1, false, 'dirt', false, false, false, t
 insert into tile_def values (2, 'Packed dirt', 1.05, false, null, false, false, false, true, false, false);
 update tile_def set road = true where id = 2;
 insert into tile_def values (3, 'Sand', 0.9, false, 'sand', false, false, false, true, false, true);
+update tile_def set bed = true where id = 3;
 insert into tile_def values (4, 'Rock', 0.9, false, null, true, false, false, false, false, false);
 insert into tile_def values (5, 'Steppe', 1, false, 'dirt', false, true, true, true, true, false);
 insert into tile_def values (6, 'Tundra', 0.95, false, 'dirt', false, true, true, true, true, false);
 insert into tile_def values (7, 'Marsh', 0.6, false, 'dirt', false, true, true, false, true, false);
 insert into tile_def values (8, 'Clay', 0.9, false, 'clay', false, false, false, false, false, true);
+update tile_def set bed = true where id = 8;
 insert into tile_def values (9, 'Peat', 0.8, false, 'peat', false, false, false, false, false, true);
+update tile_def set bed = true where id = 9;
 insert into tile_def values (10, 'Tar', 0.5, false, 'tar', false, false, false, false, false, true);
-insert into tile_def values (11, 'Moss', 1, false, 'dirt', false, true, true, true, true, true);
-update tile_def set collect_yield = 'moss' where id = 11;
+update tile_def set bed = true where id = 10;
+insert into tile_def values (11, 'Moss', 1, false, 'dirt', false, true, true, true, true, false);
 insert into tile_def values (12, 'Snow', 0.8, false, null, true, false, false, false, false, false);
 insert into tile_def values (14, 'Cobblestone', 1.25, false, null, false, false, false, false, false, false);
 update tile_def set paved = true where id = 14;
@@ -1178,6 +1181,7 @@ insert into action_def (id, label, verb, skill, tool, corner, range, stamina, ba
 insert into action_def (id, label, verb, skill, tool, corner, range, stamina, base_time, difficulty, instant, repeatable) values ('rename_deed', 'Rename settlement', 'renaming', null, null, false, null, 0, 0, null, true, false);
 insert into action_def (id, label, verb, skill, tool, corner, range, stamina, base_time, difficulty, instant, repeatable) values ('disband_deed', 'Disband settlement', 'disbanding', null, null, false, null, 0, 0, null, true, false);
 insert into action_def (id, label, verb, skill, tool, corner, range, stamina, base_time, difficulty, instant, repeatable) values ('cut_grass', 'Cut grass', 'cutting grass', 'foraging', null, false, null, 0.02, 3, null, false, false);
+insert into action_def (id, label, verb, skill, tool, corner, range, stamina, base_time, difficulty, instant, repeatable) values ('cut_moss', 'Cut moss', 'cutting moss', 'foraging', null, false, null, 0.02, 3, null, false, false);
 insert into action_def (id, label, verb, skill, tool, corner, range, stamina, base_time, difficulty, instant, repeatable) values ('cut_reeds', 'Cut reeds', 'cutting reeds', 'foraging', 'carving_knife', false, null, 0.03, 4, null, false, false);
 insert into action_def (id, label, verb, skill, tool, corner, range, stamina, base_time, difficulty, instant, repeatable) values ('plan_building', 'Plan building', 'planning a building', null, null, false, null, 0.02, 3, null, false, false);
 insert into action_def (id, label, verb, skill, tool, corner, range, stamina, base_time, difficulty, instant, repeatable) values ('add_to_building', 'Add to building', 'extending the plan', null, null, false, null, 0.02, 2, null, false, false);
@@ -2323,7 +2327,7 @@ update item_def set description = 'A wooden bucket. Fill it at any shore; ashes 
 update item_def set description = 'Water enough to leach ashes into lye.' where id = 'water_bucket';
 update item_def set description = 'Ash water, and it will take the hair off a hide. One bucket tans one skin.' where id = 'lye_bucket';
 update item_def set description = 'A pile of dirt. Drop it to raise the ground.' where id = 'dirt';
-update item_def set description = 'A shovelful of living moss off the top of a moss tile. Plant 10 of it on a tile of dirt and the tile is moss.' where id = 'moss';
+update item_def set description = 'A clump of living moss. Cutting a moss tile gives two; plant 10 of it on a tile of dirt and the tile is moss.' where id = 'moss';
 update item_def set description = 'A pane of green glass, run flat off a smelter hearth and cut square. It goes into a window: a window without one is a hole with a shutter.' where id = 'glass';
 update item_def set description = 'Raked out of a fire once it has burnt through. Water leaches lye out of it.' where id = 'ash';
 update item_def set description = 'Chunks of rock. Builds cobblestone walls or becomes bricks.' where id = 'rock_shards';
@@ -3988,6 +3992,7 @@ create or replace function forage_empty() returns double precision language sql 
 create or replace function find_check() returns double precision language sql immutable as $fn$ select 5::double precision $fn$;
 create or replace function per_roll() returns double precision language sql immutable as $fn$ select 20::double precision $fn$;
 create or replace function grass_per_cut() returns double precision language sql immutable as $fn$ select 2::double precision $fn$;
+create or replace function moss_per_cut() returns double precision language sql immutable as $fn$ select 2::double precision $fn$;
 create or replace function reed_cut() returns double precision language sql immutable as $fn$ select 2::double precision $fn$;
 create or replace function reed_extra_at() returns double precision language sql immutable as $fn$ select 140::double precision $fn$;
 create or replace function dress_check() returns double precision language sql immutable as $fn$ select 10::double precision $fn$;
