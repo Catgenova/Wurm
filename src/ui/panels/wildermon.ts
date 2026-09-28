@@ -6,10 +6,26 @@ import { TIER_LEVEL } from '../../game/husbandry';
 
 import type { Game } from '../../game/game';
 import { itemDef, rarityOf } from '../../game/items';
+import { furnitureDef } from '../../game/furniture';
 import type { MenuItem } from '../contextmenu';
 import type { UIWindow } from '../windows';
 
-const GROUPS: Array<[Creature['mode'], string]> = [
+/**
+ * Where a wildermon is, as the list groups it: under a rider or in a
+ * vehicle's traces first, whatever it was doing before, and only otherwise
+ * by what it was told to do.
+ *
+ * Reported: two seavics hitched to one wagon were listed apart, one under
+ * "Travelling with you" and one under "Working the deed", because the list
+ * went by the order each had been given before it was hitched. In the traces
+ * it does neither -- it goes where the wagon is taken (`Creatures.update`) --
+ * and goes back to its order when it is taken out.
+ */
+type Place = Creature['mode'] | 'saddle' | 'traces';
+const placeOf = (c: Creature): Place => (c.ridden ? 'saddle' : c.hitchedTo !== null ? 'traces' : c.mode);
+const GROUPS: Array<[Place, string]> = [
+  ['saddle', 'Under the saddle'],
+  ['traces', 'In the traces'],
   ['active', 'Travelling with you'],
   ['deed', 'Working the deed'],
   ['stored', 'In creature crates'],
@@ -134,7 +150,7 @@ export class WildermonPanel {
     const traits = c.traits.map((id) => traitOf(id)?.name ?? '').join(' ');
     const age = ageOf(c, this.game.time);
     const job = def.gathers ? GATHER_VERB[def.gathers] : '';
-    return `${c.name} ${def.name} ${c.mode} ${c.stance} ${job} ${SEX_NAMES[c.sex]} ${age} ${traits}`.toLowerCase().includes(this.query);
+    return `${c.name} ${def.name} ${c.mode} ${placeOf(c)} ${c.stance} ${job} ${SEX_NAMES[c.sex]} ${age} ${traits}`.toLowerCase().includes(this.query);
   }
 
   /** The best tier any of its traits reached, for ordering by breeding. */
@@ -227,7 +243,7 @@ export class WildermonPanel {
       for (const c of this.ordered(shown)) take(c);
     } else
     for (const [mode, title] of GROUPS) {
-      const group = shown.filter((c) => c.mode === mode);
+      const group = shown.filter((c) => placeOf(c) === mode);
       if (!group.length) continue;
       want.push(this.heading(mode, `${title} (${group.length})`));
       for (const c of this.ordered(group)) take(c);
@@ -430,13 +446,18 @@ export class WildermonPanel {
       worthBox.hidden = !w;
 
       const parts: string[] = [];
-      if (c.ridden) parts.push('Under the saddle');
-      else if (c.hitchedTo !== null) parts.push('In the traces');
+      // Which vehicle, since a herd can be spread over more than one.
+      const vehicle = this.game.vehicleOfCreature(c);
+      const place = placeOf(c);
+      if (place === 'saddle') parts.push('Under the saddle');
+      else if (place === 'traces') parts.push(vehicle ? `In the traces of the ${furnitureDef(vehicle.kind).name.toLowerCase()}` : 'In the traces');
       else if (c.tacked) parts.push('Saddled and bridled');
       if (isShod(this.game.time, c)) parts.push(`Shod, for ${Math.max(1, Math.ceil((SHOE_DAYS * DAY_SECONDS - (this.game.time - c.shodAt)) / DAY_SECONDS))} more day${Math.ceil((SHOE_DAYS * DAY_SECONDS - (this.game.time - c.shodAt)) / DAY_SECONDS) === 1 ? '' : 's'}`);
       if (c.due > 0) parts.push(`In young, due in ${clockLeft(Math.max(0, c.due - this.game.time))}`);
-      if (c.mode === 'active') parts.push(`Stance: ${STANCE_NAMES[c.stance]}`);
-      if (c.mode === 'deed') {
+      // A stance and a round of work are for one that is following you or
+      // working, not one in the traces or under a rider.
+      if (place === 'active') parts.push(`Stance: ${STANCE_NAMES[c.stance]}`);
+      if (place === 'deed') {
         const verb = def.gathers ? GATHER_VERB[def.gathers] : 'working';
         parts.push(c.carrying ? `Carrying ${itemDef(c.carrying.id).name.toLowerCase()} to the crate` : c.state === 'forage' ? `${verb[0].toUpperCase()}${verb.slice(1)}` : c.state === 'toForage' ? `Heading out to ${def.gathers ?? 'work'}` : 'Looking for work');
       }
