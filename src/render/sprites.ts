@@ -1,9 +1,11 @@
-import { mulberry32 } from '../world/noise';
+import { hash2, mulberry32 } from '../world/noise';
 import type { Look } from '../game/look';
 import { emotePose } from '../game/emotes';
 import { drawBust, drawFigure, shineOver, type FigurePose } from './figure';
 import { BUSH_DEFS, TREE_AGES, TREE_DEFS } from '../world/tiles';
 import { drawWildermon, drawWildermonPortrait, modelled, wildermonTop } from './wildermon';
+import { bushYear, leafageOf, newLeaf, type Bloom } from './foliage';
+import type { Season } from '../world/calendar';
 
 /** A pre-rendered sprite. Sizes are in zoom-1 pixels; the canvas is drawn at SPRITE_SCALE for crispness. */
 export interface Sprite {
@@ -488,8 +490,392 @@ function fruiting(ctx: CanvasRenderingContext2D, cx: number, cy: number, rx: num
   }
 }
 
-export function treeSprite(species: number, variant: number): Sprite {
-  const key = `${SPRITE_SCALE}|tree:${species}:${variant}`;
+/**
+ * How big the tree or bush on a tile is drawn, as a share of its sprite.
+ *
+ * Every tree of a species and an age shares one baked sprite, so without this
+ * a wood is one tree printed a hundred times and every crown in it tops out
+ * on the same line. The roll is shaped rather than flat -- one in nine is
+ * half again as big or better, one in four is half size or less, and the rest
+ * fill the middle -- which is what puts a top and a floor on a canopy. Off
+ * the tile alone, so anything that needs to know how tall a crown stands
+ * (what flies round it, what falls out of it) gets the same answer as the
+ * drawing.
+ */
+export function grownAt(x: number, y: number): number {
+  const r = hash2(Math.round(x), Math.round(y), 7717);
+  return r > 0.89 ? 1.42 + 0.5 * (r - 0.89) / 0.11
+    : r < 0.26 ? 0.46 + 0.28 * (r / 0.26)
+      : 0.8 + 0.5 * ((r - 0.26) / 0.63);
+}
+
+/** Whether a point given in the sprite's own units is inside the path last laid down. */
+function inside(ctx: CanvasRenderingContext2D, x: number, y: number): boolean {
+  const m = ctx.getTransform();
+  return ctx.isPointInPath(m.a * x + m.c * y + m.e, m.b * x + m.d * y + m.f);
+}
+
+/** A place inside a crown: where it is, which way it faces out from the middle, and whether it is at the edge. */
+type Spot = [x: number, y: number, dx: number, dy: number, rim: boolean];
+
+/**
+ * Places scattered through a crown on a jittered grid `step` apart, found by
+ * asking the crown's own outline -- a crown of plates is only plates, and a
+ * place in the air between two of them is not in the crown.
+ */
+function spotsIn(ctx: CanvasRenderingContext2D, mass: Mass, cx: number, cy: number, rx: number, ry: number,
+  seed: number, step: number): Spot[] {
+  ctx.beginPath();
+  mass(0, 0);
+  const pts: Spot[] = [];
+  let k = 0;
+  for (let gy = cy - ry * 1.3; gy <= cy + ry * 1.3; gy += step * 0.8) {
+    for (let gx = cx - rx * 1.3; gx <= cx + rx * 1.3; gx += step) {
+      k++;
+      const x = gx + (wob(seed, 400 + k) - 0.5) * step * 0.8;
+      const y = gy + (wob(seed, 700 + k) - 0.5) * step * 0.7;
+      if (!inside(ctx, x, y)) continue;
+      const l = Math.hypot((x - cx) / rx, (y - cy) / ry) || 1;
+      const dx = (x - cx) / rx / l;
+      const dy = (y - cy) / ry / l;
+      pts.push([x, y, dx, dy, !inside(ctx, x + dx * step * 1.1, y + dy * step * 0.9)]);
+    }
+  }
+  return pts;
+}
+
+/** Which way a place faces the light, -1 away to 1 square on. */
+const litness = (dx: number, dy: number): number => (dx * LIT.x + dy * LIT.y) / Math.hypot(LIT.x, LIT.y);
+
+/**
+ * Patches over about `share` of a crown: many and small, so two materials
+ * are mixed through it rather than parted down a line. Picked from more
+ * places than are wanted, scored by where the material belongs (`score`),
+ * with a roll of its own each, so they lean where they should without lining
+ * up, and never piled on one another.
+ */
+function patchesOf(spots: Spot[], share: number, rx: number, ry: number, seed: number, salt: number,
+  score: (s: Spot) => number, grain = 18): Array<[number, number, number]> {
+  const n = Math.round(4 + share * grain);
+  const r = Math.sqrt(share / (n * 0.8)) * (rx + ry) * 0.5;
+  const scored = spots.map((p, i) => ({ p, s: score(p) + (wob(seed, salt + i) - 0.5) * 1.8 })).sort((a, b) => b.s - a.s);
+  const out: Array<[number, number, number]> = [];
+  for (let i = 0; i < scored.length && out.length < n; i++) {
+    const [x, y] = scored[i].p;
+    if (out.some(([px, py, pr]) => Math.hypot(px - x, py - y) < (pr + r) * 0.7)) continue;
+    out.push([x, y, r * (0.7 + 0.6 * wob(seed, salt + 200 + i))]);
+  }
+  return out;
+}
+
+/** The patches as one path, for a clip. */
+function patchPath(ctx: CanvasRenderingContext2D, patches: Array<[number, number, number]>, seed: number): void {
+  ctx.beginPath();
+  patches.forEach(([x, y, pr], i) => lobed(ctx, x, y, pr * 1.15, pr * 0.9, seed + 13 + i, 4, 0.2));
+}
+
+/**
+ * A crown in flower (`./foliage`).
+ *
+ * Laid with the crown's own light, in two materials: whichever of flower and
+ * leaf there is more of goes on as the crown, and the other in patches over
+ * it -- leaf toward the shaded heart of a crown that is mostly flower, the
+ * way a cherry shows green under its blossom; flower out on the lit side of
+ * one that is mostly leaf, the way a lemon carries its flowers at the tips.
+ * Both are the same `lightOn` over the same mass with the same seed, so the
+ * flower is lit and shaded exactly where the leaf was and the crown keeps its
+ * form. Painted as three pinks over a green instead, it came out as a pink
+ * decal on a tree.
+ *
+ * Then the two things that make it flower rather than a pink tree: the upper
+ * edge broken into small puffs of bloom standing proud of the outline, and
+ * single flowers picked out in the palest tone across the lit side, each with
+ * its eye where the kind has one that shows. Every place is off the seed, so
+ * every cherry of an age is the same cherry.
+ */
+function flowering(ctx: CanvasRenderingContext2D, mass: Mass, canopy: readonly [string, string, string],
+  bloom: Bloom, cx: number, cy: number, rx: number, ry: number, seed: number, thin: number): void {
+  const cover = bloom.cover * thin;
+  const flowerFirst = cover >= 0.5;
+  /*
+   * The leaf that shows among flower is the year's new leaf, a fresh green on
+   * every kind (`newLeaf`), and lifted a step: laid in the crown's deepest
+   * tone it came out as holes burnt in the blossom.
+   */
+  const fresh = newLeaf(canopy);
+  const leaf: readonly [string, string, string] = [shade(fresh[0], 0.1), fresh[0], fresh[1]];
+  lightOn(ctx, mass, flowerFirst ? bloom.tones : leaf, cx, cy, rx, ry, seed);
+  const step = Math.max(1.3, Math.min(3, (rx + ry) / 9));
+  const pts = spotsIn(ctx, mass, cx, cy, rx, ry, seed, step);
+  if (!pts.length) return;
+  const share = flowerFirst ? 1 - cover : cover;
+  const patches = patchesOf(pts, share, rx, ry, seed, 900, flowerFirst
+    ? (p) => -0.5 * litness(p[2], p[3]) - (p[4] ? 0.9 : 0)
+    : (p) => 0.6 * litness(p[2], p[3]) + (p[4] ? 0.3 : 0));
+  ctx.save();
+  patchPath(ctx, patches, seed);
+  ctx.clip();
+  lightOn(ctx, mass, flowerFirst ? leaf : bloom.tones, cx, cy, rx, ry, seed);
+  ctx.restore();
+  const inPatch = (x: number, y: number): boolean => patches.some(([px, py, pr]) => Math.hypot((x - px) / 1.15, (y - py) / 0.9) < pr);
+  const flowerAt = (x: number, y: number): boolean => flowerFirst !== inPatch(x, y);
+  /*
+   * The froth: puffs of bloom along the upper edge, set a little out past it
+   * so the outline goes soft and lumpy with flower. Only round the top and
+   * the sides: the underside of a crown in flower is its shadow, and a frill
+   * along the bottom read as a lace hem.
+   */
+  const puff = step * 0.62;
+  pts.forEach(([x, y, dx, dy, rim], i) => {
+    if (!rim || dy > 0.35 || !flowerAt(x, y) || wob(seed, 1300 + i) > 0.35 + cover * 0.6) return;
+    ctx.fillStyle = litness(dx, dy) > 0.25 ? bloom.tones[0] : bloom.tones[1];
+    ctx.beginPath();
+    lobed(ctx, x + dx * puff * 0.55, y + dy * puff * 0.45, puff, puff * 0.86, seed + 31 + i, 3, 0.18);
+    ctx.fill();
+  });
+  /*
+   * And the flowers themselves, one here and there across the lit side and
+   * fewer into the shade: a pale dot and, where the kind has one that shows,
+   * its eye. Out of scale on purpose -- a flower drawn true to the tree is
+   * under a pixel -- and few enough that they are flowers and not a texture.
+   */
+  const dot = Math.max(0.5, step * 0.26);
+  pts.forEach(([x, y, dx, dy, rim], i) => {
+    if (rim || !flowerAt(x, y)) return;
+    const face = litness(dx, dy);
+    if (wob(seed, 1500 + i) > 0.28 + 0.3 * face) return;
+    const fx = x + (wob(seed, 1700 + i) - 0.5) * step * 0.5;
+    const fy = y + (wob(seed, 1900 + i) - 0.5) * step * 0.4;
+    ctx.fillStyle = face > -0.2 ? bloom.tones[0] : bloom.tones[1];
+    ctx.beginPath();
+    ctx.arc(fx, fy, dot, 0, TAU);
+    ctx.fill();
+    if (bloom.eye && face > 0) {
+      ctx.fillStyle = bloom.eye;
+      ctx.beginPath();
+      ctx.arc(fx, fy, dot * 0.38, 0, TAU);
+      ctx.fill();
+    }
+  });
+}
+
+/**
+ * Autumn coming on: the colour a crown turns, in patches over its green for
+ * `share` of it. It comes from the outside in and from the light -- the lit
+ * edge of a crown turns first -- so the first days show a rim of colour on a
+ * green tree rather than spots on a clown.
+ */
+function mottled(ctx: CanvasRenderingContext2D, mass: Mass, canopy: readonly [string, string, string],
+  turned: readonly [string, string, string], share: number, cx: number, cy: number, rx: number, ry: number, seed: number): void {
+  const first = share >= 0.5;
+  lightOn(ctx, mass, first ? turned : canopy, cx, cy, rx, ry, seed);
+  const step = Math.max(1.3, Math.min(3, (rx + ry) / 9));
+  const pts = spotsIn(ctx, mass, cx, cy, rx, ry, seed, step);
+  if (!pts.length) return;
+  // Fewer and broader than flowers: a crown turns by the branch, not by the leaf.
+  const patches = patchesOf(pts, first ? 1 - share : share, rx, ry, seed, 2500, first
+    ? (p) => -0.5 * litness(p[2], p[3]) - (p[4] ? 0.8 : 0)
+    : (p) => 0.5 * litness(p[2], p[3]) + (p[4] ? 0.8 : 0), 5);
+  ctx.save();
+  patchPath(ctx, patches, seed + 5);
+  ctx.clip();
+  lightOn(ctx, mass, first ? canopy : turned, cx, cy, rx, ry, seed);
+  ctx.restore();
+}
+
+/**
+ * Bare wood where a crown is: the limbs and twigs a broadleaf stands in when
+ * its leaves are down, grown out of the top of the trunk into the crown's
+ * own outline.
+ *
+ * Grown rather than drawn. Places are scattered through the crown, and the
+ * wood grows out of the fork a step at a time toward whichever of them are
+ * nearest each tip, forking where two pull different ways, until there is
+ * wood at every one. So a parasol comes out flat and wide on a short trunk, a
+ * column upright and narrow, a bulb a round head of twigs on a long clean
+ * stem, a shelf in tiers, a fan all to one side, a plate high and flat -- the
+ * habit is the crown's outline, which is already each kind's own, and a
+ * winter wood still reads kind by kind. Every piece of wood is as thick as
+ * what grows out of it, so limbs taper to twigs; a faint wash through the
+ * outline stands for the twigs too fine to draw, which is how a bare crown
+ * looks from any way off.
+ */
+function bareWood(ctx: CanvasRenderingContext2D, mass: Mass, cx: number, cy: number, rx: number, ry: number,
+  seed: number, from: readonly [number, number], bark: string, width: number, faint: number): void {
+  const step = Math.max(1.4, Math.min(3.4, (rx + ry) / 7.5));
+  ctx.beginPath();
+  mass(0, 0);
+  const tx: number[] = [];
+  const ty: number[] = [];
+  let k = 0;
+  for (let gy = cy - ry * 1.3; gy <= cy + ry * 1.3; gy += step * 1.15) {
+    for (let gx = cx - rx * 1.3; gx <= cx + rx * 1.3; gx += step * 1.3) {
+      k++;
+      const x = gx + (wob(seed, 2100 + k) - 0.5) * step;
+      const y = gy + (wob(seed, 2300 + k) - 0.5) * step * 0.9;
+      if (inside(ctx, x, y)) {
+        tx.push(x);
+        ty.push(y);
+      }
+    }
+  }
+  if (!tx.length) return;
+  // The haze of fine twigs through the whole outline.
+  ctx.globalAlpha = faint;
+  ctx.fillStyle = bark;
+  ctx.fill();
+  ctx.globalAlpha = 1;
+  const nx: number[] = [from[0]];
+  const ny: number[] = [from[1]];
+  const up: number[] = [-1];
+  const seg = step * 0.85;
+  const kill = step * 1.05;
+  const alive = new Uint8Array(tx.length).fill(1);
+  let left = tx.length;
+  for (let it = 0; it < 70 && left > 0; it++) {
+    const n = nx.length;
+    const ax = new Float64Array(n);
+    const ay = new Float64Array(n);
+    const near = new Int32Array(n).fill(-1);
+    const cnt = new Uint16Array(n);
+    for (let j = 0; j < tx.length; j++) {
+      if (!alive[j]) continue;
+      let best = 0;
+      let bd = Infinity;
+      for (let i = 0; i < n; i++) {
+        const d = (nx[i] - tx[j]) ** 2 + (ny[i] - ty[j]) ** 2;
+        if (d < bd) {
+          bd = d;
+          best = i;
+        }
+      }
+      const d = Math.sqrt(bd) || 1;
+      ax[best] += (tx[j] - nx[best]) / d;
+      ay[best] += (ty[j] - ny[best]) / d;
+      if (near[best] < 0) near[best] = j;
+      cnt[best]++;
+    }
+    const was = nx.length;
+    for (let i = 0; i < n; i++) {
+      if (!cnt[i]) continue;
+      let dx = ax[i] / cnt[i];
+      // Wood leans up as it grows out, a little in every step.
+      let dy = ay[i] / cnt[i] - 0.22;
+      // Two places pulling opposite ways cancel out; follow one of them instead.
+      if (Math.hypot(dx, dy) < 0.25) {
+        dx = tx[near[i]] - nx[i];
+        dy = ty[near[i]] - ny[i];
+      }
+      const l = Math.hypot(dx, dy) || 1;
+      const x = nx[i] + (dx / l) * seg;
+      const y = ny[i] + (dy / l) * seg;
+      let dup = false;
+      for (let q = was; q < nx.length && !dup; q++) dup = (nx[q] - x) ** 2 + (ny[q] - y) ** 2 < seg * seg * 0.1;
+      if (dup) continue;
+      nx.push(x);
+      ny.push(y);
+      up.push(i);
+    }
+    if (nx.length === was) break;
+    for (let j = 0; j < tx.length; j++) {
+      if (!alive[j]) continue;
+      for (let i = was; i < nx.length; i++) {
+        if ((nx[i] - tx[j]) ** 2 + (ny[i] - ty[j]) ** 2 < kill * kill) {
+          alive[j] = 0;
+          left--;
+          break;
+        }
+      }
+    }
+  }
+  // How much grows out of each piece of wood: the tips beyond it.
+  const tips = new Float64Array(nx.length);
+  const kids = new Uint16Array(nx.length);
+  for (let i = 1; i < nx.length; i++) kids[up[i]]++;
+  for (let i = nx.length - 1; i > 0; i--) {
+    if (!kids[i]) tips[i] += 1;
+    tips[up[i]] += tips[i];
+  }
+  const all = tips[0] || 1;
+  // In five weights, so the whole of it is five strokes.
+  ctx.strokeStyle = bark;
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+  const twig = Math.max(0.35, width * 0.1);
+  for (let band = 4; band >= 0; band--) {
+    ctx.beginPath();
+    let any = false;
+    for (let i = 1; i < nx.length; i++) {
+      const w = twig + (width - twig) * Math.sqrt(tips[i] / all);
+      const b = Math.min(4, Math.floor(((w - twig) / Math.max(0.01, width - twig)) * 5));
+      if (b !== band) continue;
+      const p = up[i];
+      ctx.moveTo(nx[p], ny[p]);
+      ctx.lineTo(nx[i], ny[i]);
+      any = true;
+    }
+    if (!any) continue;
+    ctx.lineWidth = twig + ((width - twig) * (band + 0.5)) / 5;
+    ctx.stroke();
+  }
+  // And the finest twigs off every tip, up and out.
+  ctx.lineWidth = twig * 0.8;
+  ctx.beginPath();
+  for (let i = 1; i < nx.length; i++) {
+    if (kids[i]) continue;
+    const p = up[i];
+    const a = Math.atan2(ny[i] - ny[p], nx[i] - nx[p]);
+    for (const side of [-1, 1]) {
+      const b = a + side * (0.5 + 0.4 * wob(seed, 2600 + i * 2 + side)) - 0.2;
+      const l = step * (0.45 + 0.35 * wob(seed, 2700 + i + side));
+      ctx.moveTo(nx[i], ny[i]);
+      ctx.lineTo(nx[i] + Math.cos(b) * l, ny[i] + Math.sin(b) * l);
+    }
+  }
+  ctx.stroke();
+}
+
+/**
+ * What has come down under a tree and lies there: petals through its week of
+ * flower, leaves on the days its crown is thinning. Scattered close round the
+ * foot, thickest near the trunk, flat on the ground -- and kept inside the
+ * tree's own tile even on the biggest tree, so the ground drawn in front of
+ * it never cuts the edge of it off. In the tree's own picture, so it costs
+ * nothing to draw.
+ */
+function litter(ctx: CanvasRenderingContext2D, bx: number, by: number, reach: number, seed: number,
+  tones: readonly [string, string, string], n: number, leaf: boolean): void {
+  const rx = Math.min(16, reach);
+  const ry = rx * 0.48;
+  for (let i = 0; i < n; i++) {
+    const a = wob(seed, 3300 + i) * TAU;
+    const d = 0.25 + 0.75 * Math.sqrt(wob(seed, 3400 + i));
+    const len = (leaf ? 1.9 : 1.45) * (0.8 + 0.5 * wob(seed, 3500 + i));
+    ctx.fillStyle = leaf ? tones[i % 3] : tones[i % 3 === 0 ? 0 : 1];
+    ctx.beginPath();
+    ctx.ellipse(bx + Math.cos(a) * rx * d, by + Math.sin(a) * ry * d, len, len * 0.46, (wob(seed, 3600 + i) - 0.5) * 1.2, 0, TAU);
+    ctx.fill();
+  }
+}
+
+/**
+ * Throw away every tree picture: the day has turned, and yesterday's looks
+ * will not be wanted again for a year. A tree canvas is a quarter of a
+ * megabyte or more at the finer steps, and a wood holds a hundred of them.
+ */
+export function forgetTrees(): void {
+  for (const k of cache.keys()) if (k.includes('|tree:') || k.includes('|bush:')) cache.delete(k);
+}
+
+/**
+ * A tree of a species at a stage, as it is on a day of the island's year
+ * (`./foliage`): summer's look unless a season and its day are given. Kept
+ * under the look it has, so a day's wood is drawn once and every tree whose
+ * look the season does not touch is the one picture all year.
+ */
+export function treeSprite(species: number, variant: number, season: Season = 'summer', day = 1): Sprite {
+  const look = leafageOf(species, variant, season, day);
+  const key = `${SPRITE_SCALE}|tree:${species}:${variant}${look.key ? `:${look.key}` : ''}`;
   let spr = cache.get(key);
   if (spr) return spr;
   const def = TREE_DEFS[species];
@@ -497,8 +883,14 @@ export function treeSprite(species: number, variant: number): Sprite {
   // here without anybody remembering to. A value off the table draws as young.
   const age = TREE_AGES[variant] ?? TREE_AGES[0];
   const size = def.size * age.size;
-  // A worn crown has gone a third of the way to dead leaf.
-  const canopy = (age.look === 'worn' ? def.canopy.map((c) => dulled(c, 0.34)) : def.canopy) as [string, string, string];
+  const flower = look.bloom;
+  // A worn crown has gone a third of the way to dead leaf, whatever the season has made of it.
+  const worn = (p: readonly [string, string, string]): [string, string, string] =>
+    (age.look === 'worn' ? p.map((c) => dulled(c, 0.34)) : [...p]) as [string, string, string];
+  const canopy = worn(look.palette ?? def.canopy);
+  const turned = look.turning ? worn(look.turning.palette) : null;
+  // The wood of the crown when it shows: the trunk's own colour, a shade down.
+  const bark = shade(age.look === 'worn' ? dulled(def.trunk, 0.2) : def.trunk, -0.12);
   // One seed per species, so every oak on the island is the same oak and no
   // two species wear the same wobble.
   const seed = species * 7.13 + 1.7;
@@ -526,6 +918,7 @@ export function treeSprite(species: number, variant: number): Sprite {
   spr = makeSprite(BW, BH, BAX, BAY, (ctx) => {
     const bx = BAX;
     const by = BAY;
+    if (look.litter) litter(ctx, bx, by, 8 + 12 * size, seed + 3, look.litter.tones, look.litter.n, look.litter.leaf);
     if (age.look === 'bare') {
       /*
        * Dead wood standing up -- and, until every species was drawn at every
@@ -562,6 +955,31 @@ export function treeSprite(species: number, variant: number): Sprite {
       }
       return;
     }
+    const grown = age.look !== 'worn';
+    /*
+     * A crown laid on, as the day has it: in leaf as it always was; turning,
+     * in patches of its autumn colour; in flower; thin, with bare wood showing
+     * through where the leaf is not yet out or already down; or bare. `from`
+     * is where the trunk tops out, which is where its wood grows from, and
+     * `girth` how thick the wood is there. A worn crown has gone thin, and
+     * flowers thin with it.
+     */
+    const crown = (mass: Mass, cx: number, cy: number, rx: number, ry: number, from: readonly [number, number],
+      girth: number, s = seed): void => {
+      const keep = flower ? Math.max(look.full, flower.cover * (grown ? 1 : 0.62)) : look.full;
+      if (keep < 1) bareWood(ctx, mass, cx, cy, rx, ry, s, from, bark, girth, keep > 0 ? 0.08 : 0.14);
+      if (keep <= 0) return;
+      if (keep < 1) {
+        const spots = spotsIn(ctx, mass, cx, cy, rx, ry, s, Math.max(1.3, Math.min(3, (rx + ry) / 9)));
+        ctx.save();
+        patchPath(ctx, patchesOf(spots, keep, rx, ry, s, 3100, (p) => (p[4] ? -0.4 : 0.2)), s + 7);
+        ctx.clip();
+      }
+      if (flower) flowering(ctx, mass, canopy, flower, cx, cy, rx, ry, s, grown ? 1 : 0.62);
+      else if (turned && look.turning) mottled(ctx, mass, canopy, turned, look.turning.share, cx, cy, rx, ry, s);
+      else lightOn(ctx, mass, canopy, cx, cy, rx, ry, s);
+      if (keep < 1) ctx.restore();
+    };
     if (age.look === 'clipped') {
       // A sapling pruned back: low, wide and flat across the top for good.
       const rx = 26 * size;
@@ -569,12 +987,12 @@ export function treeSprite(species: number, variant: number): Sprite {
       const cy = by - 10 * size - ry;
       contact(ctx, bx, by, rx * 0.8);
       stem(ctx, bx, by, 4.4 * size, 12 * size, 0, def.trunk);
-      lightOn(ctx, (dx, dy) => lobed(ctx, bx + dx, cy + dy, rx, ry, seed, lobes, rough * 0.7, 0, bitten),
-        canopy, bx, cy, rx, ry, seed);
+      crown((dx, dy) => lobed(ctx, bx + dx, cy + dy, rx, ry, seed, lobes, rough * 0.7, 0, bitten), bx, cy, rx, ry,
+        [bx, by - 12 * size], 2.6 * size);
       return;
     }
-    const grown = age.look !== 'worn';
-    const fruit = def.fruit && age.bears ? FRUIT_COLOUR[def.fruit] ?? '#c8675c' : null;
+    // Flower and fruit are not on a tree at once, and nothing hangs on bare wood: fruit is summer's and autumn's.
+    const fruit = def.fruit && age.bears && !flower && look.full >= 1 ? FRUIT_COLOUR[def.fruit] ?? '#c8675c' : null;
 
     if (def.shape === 'spire') {
       /*
@@ -703,6 +1121,7 @@ export function treeSprite(species: number, variant: number): Sprite {
       underCrown(ctx, bx, by, 6.5 * size, th, tilt * 2.5 * size, def.trunk, ry * 1.5);
       // The fronds first, so the crown sits on top of where they leave it.
       ctx.lineCap = 'round';
+      const withy = age.look === 'worn' ? dulled('#bfb27a', 0.3) : '#bfb27a';
       for (let k = 0; k <= 15; k++) {
         const t = k / 15;
         // Not on a comb: a fall starts where it starts, and two of them
@@ -717,18 +1136,37 @@ export function treeSprite(species: number, variant: number): Sprite {
         // thick where it leaves the crown and come to nothing at its end. A
         // line of even width all the way down is a stick, and a willow of
         // sticks is a mop.
+        const from = cy + ry * (0.05 + 0.3 * wob(seed, k + 55));
+        /*
+         * With the leaf down a frond is a withy: a bare whip hanging from the
+         * crown, straw-coloured, and two of them for every frond, which is the
+         * curtain a willow is in winter. Coming out or going over, some of
+         * them are leafed and some are not.
+         */
+        if (wob(seed, k + 80) >= look.full) {
+          ctx.strokeStyle = withy;
+          ctx.lineWidth = Math.max(0.45, 0.7 * size);
+          ctx.beginPath();
+          for (const lag of [0, 1]) {
+            const wx = x + lag * (wob(seed, k + 90) - 0.5) * rx * 0.3;
+            const wf = fall * (1 - lag * 0.18 * wob(seed, k + 95));
+            ctx.moveTo(wx, from);
+            ctx.quadraticCurveTo(wx + sway * 0.6, cy + wf * 0.55, wx + sway * 1.3, cy + wf);
+          }
+          ctx.stroke();
+          continue;
+        }
         ctx.fillStyle = t < 0.42 ? canopy[0] : canopy[2];
         const wTop = Math.max(0.8, 2.2 * size);
         ctx.beginPath();
-        const from = cy + ry * (0.05 + 0.3 * wob(seed, k + 55));
         ctx.moveTo(x - wTop / 2, from);
         ctx.quadraticCurveTo(x + sway - wTop * 0.3, cy + fall * 0.55, x + sway * 1.5, cy + fall);
         ctx.quadraticCurveTo(x + sway + wTop * 0.5, cy + fall * 0.5, x + wTop / 2, from);
         ctx.closePath();
         ctx.fill();
       }
-      lightOn(ctx, (dx, dy) => lobed(ctx, bx + dx, cy + dy, rx, ry, seed, lobes, rough * 1.25, 0.3, bitten),
-        canopy, bx, cy, rx, ry, seed);
+      crown((dx, dy) => lobed(ctx, bx + dx, cy + dy, rx, ry, seed, lobes, rough * 1.25, 0.3, bitten), bx, cy, rx, ry,
+        [bx + tilt * 2.5 * size, by - th], 6.5 * size * girth * 0.6);
       if (!grown) branches(ctx, bx, cy - ry, size * 0.8, dulled(def.trunk, 0.3), 3);
       if (fruit) fruiting(ctx, bx, cy, rx, ry, seed, fruit);
       return;
@@ -764,8 +1202,8 @@ export function treeSprite(species: number, variant: number): Sprite {
           lobed(ctx, px + dx, py + dy, prx, pry, seed + i, lobes, rough * 0.8);
         }
       };
-      lightOn(ctx, stack, canopy, bx, by - th - (plates - 1) * step * 0.5, 20 * size,
-        (plates * step * 0.5 + 5 * size), seed);
+      crown(stack, bx, by - th - (plates - 1) * step * 0.5, 20 * size, (plates * step * 0.5 + 5 * size),
+        [bx + tilt * 2.5 * size, by - th + 2 * size], 5.4 * size * girth * 0.6);
       if (!grown) branches(ctx, bx, by - th - plates * 10 * size, size * 0.7, dulled(def.trunk, 0.3), 2);
       if (fruit) fruiting(ctx, bx, by - th, 21 * size, 5 * size, seed, fruit);
       return;
@@ -789,11 +1227,11 @@ export function treeSprite(species: number, variant: number): Sprite {
       stem(ctx, bx, by, 4.6 * size * girth, th, lean, def.trunk);
       fork(ctx, bx + lean, by - th, rx * 1.05, 11 * size, seed, def.trunk, 4);
       const split = wob(seed, 84) > 0.5;
-      lightOn(ctx, (dx, dy) => {
+      crown((dx, dy) => {
         lobed(ctx, hx + dx, cy + dy, rx * (split ? 0.78 : 1), ry * (split ? 0.86 : 1), seed, lobes, rough, 0.1, bitten);
         // Half of them carry the head in two pieces with sky between.
         if (split) lobed(ctx, hx - tilt * rx * 0.95 + dx, cy + ry * 0.5 + dy, rx * 0.5, ry * 0.42, seed + 7.7, 3, 0.2);
-      }, canopy, hx, cy, rx, ry, seed);
+      }, hx, cy, rx, ry, [bx + lean, by - th], 4.6 * size * girth * 0.65);
       if (fruit) fruiting(ctx, hx, cy, rx, ry, seed, fruit);
       return;
     }
@@ -818,11 +1256,11 @@ export function treeSprite(species: number, variant: number): Sprite {
       if (waisted > 0.66) {
         // Two masses with a waist of bare stem between them.
         const ly = cy + ry * 1.5;
-        lightOn(ctx, (dx, dy) => lobed(ctx, cx + dx, ly + dy, rx * 0.86, ry * 0.8, seed + 5.5, 6, 0.17),
-          canopy, cx, ly, rx * 0.86, ry * 0.8, seed + 5.5);
+        crown((dx, dy) => lobed(ctx, cx + dx, ly + dy, rx * 0.86, ry * 0.8, seed + 5.5, 6, 0.17), cx, ly, rx * 0.86, ry * 0.8,
+          [bx + lean * 0.3, ly + ry * 0.7], 5 * size * 0.6, seed + 5.5);
       }
-      lightOn(ctx, (dx, dy) => lobed(ctx, cx + dx, cy + dy, rx, ry, seed, lobes, rough,
-        waisted < 0.33 ? 0.45 : 0, bitten), canopy, cx, cy, rx, ry, seed);
+      crown((dx, dy) => lobed(ctx, cx + dx, cy + dy, rx, ry, seed, lobes, rough, waisted < 0.33 ? 0.45 : 0, bitten), cx, cy, rx, ry,
+        [bx + lean * 0.6, cy + ry * 0.8], 5 * size * 0.6);
       if (!grown) branches(ctx, cx, cy + ry * 0.5, size * 0.6, dulled(def.trunk, 0.3), 2);
       if (fruit) fruiting(ctx, cx, cy + ry * 0.3, rx, ry * 0.5, seed, fruit);
       return;
@@ -845,8 +1283,8 @@ export function treeSprite(species: number, variant: number): Sprite {
       stem(ctx, bx, by, 6 * size * girth, th, lean, def.trunk);
       fork(ctx, bx + lean, by - th, rx * 0.46, 15 * size, seed, def.trunk, 3);
       const nick = bite > 0 ? 0.02 : 0.48;
-      lightOn(ctx, (dx, dy) => lobed(ctx, cx + dx, cy + dy, rx, ry, seed, lobes, rough, 0, nick),
-        canopy, cx, cy, rx, ry, seed);
+      crown((dx, dy) => lobed(ctx, cx + dx, cy + dy, rx, ry, seed, lobes, rough, 0, nick), cx, cy, rx, ry,
+        [bx + lean, by - th], 6 * size * girth * 0.6);
       if (!grown) branches(ctx, cx, cy, size * 0.8, dulled(def.trunk, 0.3), 3);
       if (fruit) fruiting(ctx, cx, cy, rx, ry, seed, fruit);
       return;
@@ -893,13 +1331,13 @@ export function treeSprite(species: number, variant: number): Sprite {
         }
         ctx.restore();
       };
-      lightOn(ctx, mass, canopy, cx, cy, rx, ry, seed);
+      crown(mass, cx, cy, rx, ry, [bx + lean, by - th], 6 * size * girth * 0.6);
       // A small counterweight low on the other side, so the tree is off
       // balance rather than simply pointing.
       const kx = bx + lean - out * rx * 0.55;
       const ky = cy + ry * 0.52;
-      lightOn(ctx, (dx, dy) => lobed(ctx, kx + dx, ky + dy, rx * 0.5, ry * 0.3, seed + 9.2, 3, 0.24),
-        canopy, kx, ky, rx * 0.5, ry * 0.3, seed + 9.2);
+      crown((dx, dy) => lobed(ctx, kx + dx, ky + dy, rx * 0.5, ry * 0.3, seed + 9.2, 3, 0.24), kx, ky, rx * 0.5, ry * 0.3,
+        [bx + lean, by - th], 6 * size * girth * 0.3, seed + 9.2);
       if (!grown) branches(ctx, bx + lean, cy + ry * 0.3, size * 0.8, dulled(def.trunk, 0.3), 3);
       if (fruit) fruiting(ctx, cx, cy, rx, ry, seed, fruit);
       return;
@@ -943,13 +1381,13 @@ export function treeSprite(species: number, variant: number): Sprite {
       rx * (i ? 0.66 : 1),
       (7.5 - i * 1.3) * size,
     ];
-    const crown: Mass = (dx, dy) => {
+    const decked: Mass = (dx, dy) => {
       for (let i = 0; i < decks; i++) {
         const [px, py, prx, pry] = plateAt(i);
         lobed(ctx, px + dx, py + dy, prx, pry, seed + i * 2.4, lobes, rough, 0.34, i === 0 ? bitten : 0);
       }
     };
-    lightOn(ctx, crown, canopy, cx, cy - (decks - 1) * 5 * size, rx, (decks * 5 + 6) * size, seed);
+    crown(decked, cx, cy - (decks - 1) * 5 * size, rx, (decks * 5 + 6) * size, [bx + lean, by - th], 7 * size * girth * 0.6);
     if (!grown) branches(ctx, cx, cy - 4 * size, size * 0.85, dulled(def.trunk, 0.3), 3);
     if (fruit) fruiting(ctx, cx, cy, rx, 7 * size, seed, fruit);
   });
@@ -1000,11 +1438,16 @@ export function stumpSprite(species: number): Sprite {
   return spr;
 }
 
-export function bushSprite(species: number): Sprite {
-  const key = `${SPRITE_SCALE}|bush:${species}`;
+/**
+ * A bush, as it is on a day of the island's year (`./foliage`, `bushYear`):
+ * in leaf or bare, in flower or in fruit or neither.
+ */
+export function bushSprite(species: number, season: Season = 'summer', day = 1): Sprite {
+  const def = BUSH_DEFS[species];
+  const look = bushYear(def, species, season, day);
+  const key = `${SPRITE_SCALE}|bush:${species}${look.key ? `:${look.key}` : ''}`;
   let spr = cache.get(key);
   if (spr) return spr;
-  const def = BUSH_DEFS[species];
   spr = makeSprite(48, 40, 24, 36, (ctx) => {
     const bx = 24;
     const by = 36;
@@ -1012,17 +1455,29 @@ export function bushSprite(species: number): Sprite {
     // hand's height: a bush that is drawn by different rules reads as a
     // different game's art sitting in this one.
     const seed = species * 5.9 + 3.3;
-    const pal: [string, string, string] = [shade(def.foliage[0], 0.2), def.foliage[0], def.foliage[1]];
-    contact(ctx, bx, by, 12);
-    lightOn(ctx, (dx, dy) => {
+    const mass: Mass = (dx, dy) => {
       lobed(ctx, bx + dx, by - 9 + dy, 11, 8, seed, 3, 0.15);
       lobed(ctx, bx - 4 + dx, by - 13 + dy, 6.5, 5.5, seed + 2.2, 3, 0.18);
-    }, pal, bx, by - 9.5, 11, 8, seed);
-    if (def.flowers) {
+    };
+    contact(ctx, bx, by, 12);
+    // With its leaves down, or coming or going, its twigs show: grown up out of the ground into its own shape, as a tree's are.
+    if (look.full < 1) bareWood(ctx, mass, bx, by - 9.5, 11, 8, seed, [bx, by - 1], '#6f5a4c', 1.5, look.full > 0 ? 0.08 : 0.16);
+    if (look.foliage) {
+      const pal: [string, string, string] = [shade(look.foliage[0], 0.2), look.foliage[0], look.foliage[1]];
+      if (look.full < 1) {
+        const spots = spotsIn(ctx, mass, bx, by - 9.5, 11, 8, seed, 1.6);
+        ctx.save();
+        patchPath(ctx, patchesOf(spots, look.full, 11, 8, seed, 3100, (p) => (p[4] ? -0.4 : 0.2)), seed + 7);
+        ctx.clip();
+      }
+      lightOn(ctx, mass, pal, bx, by - 9.5, 11, 8, seed);
+      if (look.full < 1) ctx.restore();
+    }
+    if (look.flowers) {
       for (let i = 0; i < 7; i++) {
         const a = (i / 7) * TAU + seed;
         const d = 5 + wob(seed, i) * 4.5;
-        ctx.fillStyle = i % 3 === 0 ? shade(def.flowers, -0.22) : def.flowers;
+        ctx.fillStyle = i % 3 === 0 ? shade(look.flowers, -0.22) : look.flowers;
         ctx.beginPath();
         ctx.arc(bx + Math.cos(a) * d, by - 9.5 + Math.sin(a) * d * 0.72, 1.5, 0, TAU);
         ctx.fill();

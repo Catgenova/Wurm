@@ -92,8 +92,10 @@ import { CROWD, DROWNS, hemOf, ruffle, strew, strewLook, WADES, WADE_DEPTH } fro
 import { seam } from './seam';
 import { SWAY_MAX, swayAt } from './sway';
 import { ColourPages } from './pages';
-import { spriteScaleFor, bushSprite, crateSprite, cropSprite, drawAnvil, drawCampfire, drawCreature, drawKiln, drawPlayer, drawSmelter, facingOf, pileSprite, tokenSprite, treeSprite, type Sprite, drawWorkPost, drawTrap, drawDeck, stumpSprite } from './sprites';
+import { forgetTrees, grownAt, spriteScaleFor, bushSprite, crateSprite, cropSprite, drawAnvil, drawCampfire, drawCreature, drawKiln, drawPlayer, drawSmelter, facingOf, pileSprite, tokenSprite, treeSprite, type Sprite, drawWorkPost, drawTrap, drawDeck, stumpSprite } from './sprites';
 import { wildermonTop } from './wildermon';
+import { SmallLife, type Mote } from './life';
+import { yearAt } from './foliage';
 import { FIGURE_TOP } from './figure';
 
 /** Result of picking a screen point: the tile, the approximate world position and the nearest corner. */
@@ -145,7 +147,7 @@ export interface Pick {
 }
 
 interface Entity {
-  kind: 'tree' | 'bush' | 'stump' | 'player' | 'peer' | 'pile' | 'token' | 'crate' | 'creature' | 'campfire' | 'crop' | 'smelter' | 'kiln' | 'furniture' | 'hull' | 'anvil' | 'post' | 'trap' | 'deck';
+  kind: 'tree' | 'bush' | 'stump' | 'player' | 'peer' | 'pile' | 'token' | 'crate' | 'creature' | 'campfire' | 'crop' | 'smelter' | 'kiln' | 'furniture' | 'hull' | 'anvil' | 'post' | 'trap' | 'deck' | 'life';
   x: number;
   y: number;
   sx: number;
@@ -184,6 +186,8 @@ interface Entity {
   view?: PieceView;
   /** For a hull drawn in layers round the people on her (`takeAboard`): which layer this is. */
   layer?: number;
+  /** Something small aloft over this line of the ground: a butterfly, a dragonfly, a petal or a leaf (`./life`). */
+  mote?: Mote;
 }
 
 /**
@@ -562,6 +566,7 @@ export class Renderer {
     e.rare = undefined;
     e.view = undefined;
     e.layer = undefined;
+    e.mote = undefined;
     this.ents.push(e);
     return e;
   }
@@ -592,6 +597,33 @@ export class Renderer {
   readonly springWater = new SpringWater();
   /** Which curtain each side of each pool's tiles is part of, worked out once a frame for all the tiles that ask (`runOf`). */
   private readonly poolRuns = new Map<number, Run | null>();
+  /**
+   * Butterflies, dragonflies, fireflies, and what comes down out of the trees
+   * (`./life`): worked out once a frame from what is in view and the clock,
+   * sorted in with what stands on each line of the ground, and free while
+   * zoomed out past `LIFE_FROM`.
+   */
+  readonly life = new SmallLife();
+  /** The season and its day, for the trees' look (`./foliage`): read once a frame off the wall clock, as the hud reads it. */
+  private year = yearAt(Date.now() / 1000);
+  /** What the small life asks of the island, made once rather than every frame. */
+  private readonly lifeVisible = (x: number, y: number): boolean => this.game.vision.state(x, y) === VISIBLE;
+  private readonly lifeCovered = (x: number, y: number): boolean => {
+    const g = this.game;
+    if (g.foundations.size) {
+      const slab = g.slabAt(x, y);
+      if (slab && !slab.pool) return true;
+    }
+    return g.buildings.list.size > 0 && g.buildings.buildingAt(x, y) !== undefined;
+  };
+  private readonly lifeIndoors = (x: number, y: number): boolean =>
+    this.game.buildings.list.size > 0 && this.game.buildings.buildingAt(x, y) !== undefined;
+  private readonly lifePieces = function* (this: Renderer): Iterable<{ kind: string; x: number; y: number; id: number; at: readonly [number, number] }> {
+    for (const f of this.game.furniture.values()) {
+      if (f.kind !== 'planter' && f.kind !== 'fish_pond') continue;
+      yield { kind: f.kind, x: f.x, y: f.y, id: f.id, at: furnitureCentre(f) };
+    }
+  }.bind(this);
   /** Every pond's water drawn this frame, so a wake crossing a pond is kept on it; null while nothing is leaving a wake. */
   private pondPath: Path2D | null = null;
   /** The ponds with water on the tile being drawn: the level each stands at, and which of the tile's corners it covers, one bit each. */
@@ -709,6 +741,8 @@ export class Renderer {
     game.world.onChange((x, y) => this.invalidate(x, y));
     // Ground dug under or beside a stream moves the line it runs along.
     game.world.onChange((x, y) => this.springWater.touched(x, y));
+    // And what is near a tree or near water, for the fireflies.
+    game.world.onChange(() => this.life.touched());
     // Damage and skill both go up over the thing they happened to. Damage adds
     // up per target, skill per skill, so a flurry of either reads as one
     // running number rather than a stack of them.
@@ -1609,6 +1643,23 @@ export class Renderer {
         slab: this.game.foundations.size ? this.slabOver : undefined,
       }, water);
     }
+    // The day of the year the trees are dressed for, and what is out in it.
+    // When it turns, yesterday's pictures of them go, and every copy made of them.
+    const year = yearAt(Date.now() / 1000);
+    if (year.season !== this.year.season || year.day !== this.year.day) {
+      forgetTrees();
+      this.scaled.clear();
+      this.scaledSizes.clear();
+    }
+    this.year = year;
+    this.life.frame({
+      world, cam, view: V, dLo, dHi, eMin, eMax, width: W, height: H,
+      // The island's clock where there is one, so every player sees the same butterfly in the same place.
+      clock: this.game.islandClock ? this.game.islandClock() : this.game.time,
+      hour: hour0, dark: this.game.darkness(), season: this.year.season, day: this.year.day,
+      windX: this.surf.dirX, windY: this.surf.dirY, force: this.surf.force,
+      visible: this.lifeVisible, covered: this.lifeCovered, indoors: this.lifeIndoors, pieces: this.lifePieces,
+    }, zoom);
 
     for (let d = dLo; d <= dHi; d++) {
       this.ents.length = 0;
@@ -1749,7 +1800,7 @@ export class Renderer {
           // no creatures, no piles, no detail, and a cold wash over the lot.
           if (t === TileType.Tree || t === TileType.Bush || t === TileType.Stump) {
             const data = world.viewData(x, y, false);
-            const spr = t === TileType.Tree ? treeSprite(treeSpecies(data), treeVariant(data)) : t === TileType.Bush ? bushSprite(bushSpecies(data)) : stumpSprite(treeSpecies(data));
+            const spr = t === TileType.Tree ? treeSprite(treeSpecies(data), treeVariant(data), this.year.season, this.year.day) : t === TileType.Bush ? bushSprite(bushSpecies(data), this.year.season, this.year.day) : stumpSprite(treeSpecies(data));
             const avg = (c[0] + c[1] + c[2] + c[3]) / 4;
             this.take(t === TileType.Tree ? 'tree' : t === TileType.Bush ? 'bush' : 'stump', x, y, baseX, baseY + hh - avg * hs, spr);
           }
@@ -1763,7 +1814,7 @@ export class Renderer {
         }
         if (t === TileType.Tree || t === TileType.Bush || t === TileType.Stump) {
           const data = world.getData(x, y);
-          const spr = t === TileType.Tree ? treeSprite(treeSpecies(data), treeVariant(data)) : t === TileType.Bush ? bushSprite(bushSpecies(data)) : stumpSprite(treeSpecies(data));
+          const spr = t === TileType.Tree ? treeSprite(treeSpecies(data), treeVariant(data), this.year.season, this.year.day) : t === TileType.Bush ? bushSprite(bushSpecies(data), this.year.season, this.year.day) : stumpSprite(treeSpecies(data));
           const avg = (c[0] + c[1] + c[2] + c[3]) / 4;
           this.take(t === TileType.Tree ? 'tree' : t === TileType.Bush ? 'bush' : 'stump', x, y, baseX, baseY + hh - avg * hs, spr);
         }
@@ -1918,10 +1969,14 @@ export class Renderer {
       }
       // The light on this line's ponds, and the streams, falls and springs whose water lies on it, over the ground and under what stands on it.
       if (water) this.springWater.row(ctx, d);
+      // Petals and leaves lying on this line's ground and floating on its water.
+      this.life.ground(ctx, d);
       // The roofs of the buildings whose last walls this line drew, before
       // anything standing in front of them.
       const roofs = this.roofQueue.get(d);
       if (roofs) for (const bb of roofs) this.drawPitchedRoof(bb);
+      // And whatever small thing is in the air over it, sorted in with everything standing on it.
+      for (const m of this.life.aloft(d)) this.take('life', m.tx, m.ty, m.sx, m.sy, null).mote = m;
       if (this.ents.length) this.drawEntities(ctx, zoom);
     }
     // The surface and then what crossed it, both clipped to the water, so
@@ -2139,6 +2194,10 @@ export class Renderer {
     const player = this.game.player;
     this.playerFacing = this.facingOnScreen(player.dirX, player.dirY, this.playerFacing);
     for (const ent of ents) {
+      if (ent.kind === 'life') {
+        if (ent.mote) this.life.draw(ctx, ent.mote);
+        continue;
+      }
       // Being hit beats being pointed at: a blow should read as a blow even
       // while the cursor is sitting on the thing taking it.
       const hovering = this.isHovered(ent);
@@ -2455,13 +2514,7 @@ export class Renderer {
        * as big or better, one in four is half size or less, and the rest
        * fill the middle. That is what puts a top and a floor on a canopy.
        */
-      let grew = 1;
-      if (ent.kind === 'tree' || ent.kind === 'bush') {
-        const r = hash2(Math.round(ent.x), Math.round(ent.y), 7717);
-        grew = r > 0.89 ? 1.42 + 0.5 * (r - 0.89) / 0.11
-          : r < 0.26 ? 0.46 + 0.28 * (r / 0.26)
-            : 0.8 + 0.5 * ((r - 0.26) / 0.63);
-      }
+      const grew = ent.kind === 'tree' || ent.kind === 'bush' ? grownAt(ent.x, ent.y) : 1;
       const dw = spr.w * zoom * grew;
       const dh = spr.h * zoom * grew;
       const left = ent.sx - spr.ax * zoom * grew;
@@ -7664,6 +7717,8 @@ export class Renderer {
         ctx.globalCompositeOperation = 'source-over';
       }
     }
+    // The fireflies, which are lights: over the night, not under it.
+    this.life.glow(ctx);
 
     // The chosen tile, marked whether or not the cursor is anywhere near it.
     const chosen = this.selected;

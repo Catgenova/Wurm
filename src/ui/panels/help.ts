@@ -80,8 +80,10 @@ import {
 } from '../../game/wounds';
 import { TURNS } from '../../render/view';
 import { ORE_DENSITY, seamShare } from '../../world/ore';
-import { groundRoll, ROCK_VARIANTS, SLAB_VARIANTS, TILE_DEFS, TileType, TREE_DAWN_UTC, TREE_DEFS } from '../../world/tiles';
+import { BUSH_DEFS, groundRoll, ROCK_VARIANTS, SLAB_VARIANTS, TILE_DEFS, TileType, TREE_DAWN_UTC, TREE_DEFS } from '../../world/tiles';
 import { SEASON_DAYS, SEASONS, YEAR_DAYS } from '../../world/calendar';
+import { BLOOMS, BUSH_EVERGREEN, BUSH_FLOWER_FROM, evergreen, LEAF_DAYS, SHED_DAYS, TURN_DAYS } from '../../render/foliage';
+import { lifeSeasons } from '../../render/life';
 import { COUNTS } from '../beltmenu';
 import { DAMAGE_BREAKING } from '../itemcells';
 import type { UIWindow } from '../windows';
@@ -308,6 +310,10 @@ const BOON_QL = 70;
 const CIDER = BREW_BY_ID.get('cider') ?? BREWS[0];
 /** The trees that bear. */
 const FRUIT_TREES = TREE_DEFS.filter((t) => t.fruit);
+/** Which of them flower in which colour, the colour first: "deep pink on cherry, peach and pomegranate". */
+const FLOWER_KINDS: Array<[string, string[]]> = (['deep pink', 'pale pink', 'white'] as const).map((family) => [
+  family, FRUIT_TREES.filter((t) => BLOOMS[t.fruit ?? '']?.family === family).map((t) => t.name.toLowerCase()),
+]);
 /** How long a helping's knack holds, from the least filling at its worst to the most at its best. */
 const DISH_TIMES = BOON_FOODS.flatMap((id) => [boonTime(id, 1), boonTime(id, TOP_QL)]);
 const DISH_SHORTEST = Math.min(...DISH_TIMES);
@@ -782,7 +788,8 @@ export function helpText(): string {
     <b>pear</b> and <b>quince</b> on the Crescent, <b>pomegranate</b> and <b>apricot</b> on the Northwest
     Steppe, <b>plum</b> in the lowland of the Northeast Tundra, <b>lemon</b> on Volcano Isle, <b>peach</b>
     on Middle Isle and <b>fig</b> on West Skerry. An island of your own has no chart and grows them all.
-    You can tell a fruit tree across a field by what is hanging in it. Take a <b>sprout</b> off one
+    You can tell a fruit tree across a field by what is hanging in it, and in spring by its flower:
+    ${FLOWER_KINDS.map(([family, kinds]) => `${family} on ${listed(kinds)}`).join('; ')}. Take a <b>sprout</b> off one
     with forestry and plant it, and you have the beginnings of an orchard, wherever the sprout came
     from. A <b>plucka</b> set to work on a deed picks what the bearing trees have on them and carries
     it to the crate.</p>
@@ -1369,6 +1376,18 @@ export function helpText(): string {
     <p>And it keeps a <b>year</b>: ${numberWord(SEASONS.length)} seasons, ${listed([...SEASONS])}, of
     <b>${numberWord(SEASON_DAYS)} days</b> each, ${numberWord(YEAR_DAYS)} days in all. A day of the year is a real day,
     turning at <b>${hudHour(TREE_DAWN_UTC)} UTC</b> with the woods. The same line says which season it is and which day of it.</p>
+    <p>The woods keep the year. ${capital(listed(TREE_DEFS.filter((_, i) => evergreen(i)).map((t) => t.name.toLowerCase())))} keep
+    their leaves all year, a shade darker in winter. Every other tree comes into leaf over the first
+    <b>${numberWord(LEAF_DAYS)} days of spring</b>, is in full leaf through summer, turns its own autumn colour over the
+    first ${numberWord(TURN_DAYS)} days of autumn, drops its leaves over the last ${numberWord(SHED_DAYS)}, and stands <b>bare through winter</b>.
+    Every tree old enough to fruit is <b>in flower for all ${numberWord(SEASON_DAYS)} days of spring</b>, and fruits as before.
+    ${capital(listed(BUSH_DEFS.filter((b) => !BUSH_EVERGREEN.has(b.name)).map((b) => b.name.toLowerCase().replace(' bush', 's'))))} go bare in winter
+    too and ${listed(BUSH_DEFS.filter((b) => BUSH_EVERGREEN.has(b.name)).map((b) => b.name.toLowerCase().replace(' bush', '')))} keeps its leaves;
+    roses and lavender flower from day ${BUSH_FLOWER_FROM} of spring to the end of summer, the thorn through spring.
+    None of it changes what a tree or a bush gives: that is only the look of the thing.</p>
+    <p>And there is small life about, only to look at: <b>butterflies</b> at whatever is in flower by day,
+    <b>dragonflies</b> over ponds, pools and streams from morning to dusk, <b>fireflies</b> over the grass by
+    trees and water at night: ${lifeSeasons()}.</p>
     <p>A <b>bed</b> or a <b>cot</b> is worth more than the corner it stands in. Choose <b>Make this your
     home</b> and it becomes the place you wake up &mdash; whatever happens to you, wherever it happens.
     Choose <b>Sleep until morning</b> after dark and you wake with your wind back and some of your hurt

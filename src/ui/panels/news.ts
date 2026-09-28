@@ -1,5 +1,8 @@
 import { MATERIAL_BY_ID } from '../../game/building';
-import { TREE_AGES, TREE_DAWN_UTC } from '../../world/tiles';
+import { TREE_AGES, TREE_DAWN_UTC, TREE_DEFS } from '../../world/tiles';
+import { SEASON_DAYS } from '../../world/calendar';
+import { BLOOMS, BUSH_FLOWER_FROM, evergreen, LEAF_DAYS, SHED_DAYS, TURN_DAYS } from '../../render/foliage';
+import { lifeSeasons } from '../../render/life';
 import { furnitureDef, liquidCapacity, POND_EVERY, type PlacedFurniture } from '../../game/furniture';
 import { billWords, type Item } from '../../game/items';
 import { INGOT_LUMPS, INGOT_WEIGHT, MOULD_BY_ID } from '../../game/metal';
@@ -720,6 +723,20 @@ export const NEWS: News[] = [
       `Nothing repairs a fragment or a tarnished bauble until it is restored: not Repair, not a repair kit, not Mend, not a worker mending the stores. Its damage only goes up, and one that reaches ${DAMAGE_MAX} before it is restored breaks and is gone.`,
       `Restore is tried at any damage short of that now, rather than refusing a badly damaged piece and sending you to repair it first. A failure puts ${RESTORE_HARM} to ${RESTORE_HARM + RESTORE_HARM_SPREAD} more damage on every piece.`,
     ],
+  },
+  {
+    n: 55,
+    day: '2026-09-28',
+    lines: () => {
+      const keep = TREE_DEFS.filter((_, i) => evergreen(i)).map((t) => t.name.toLowerCase());
+      const bloom = (['deep pink', 'pale pink', 'white'] as const).map((family) =>
+        `${family} on ${listed(TREE_DEFS.filter((t) => BLOOMS[t.fruit ?? '']?.family === family).map((t) => t.name.toLowerCase()))}`);
+      return [
+        `The woods follow the island's year. ${capital(listed(keep))} keep their leaves; every other tree comes into leaf over the first ${numberWord(LEAF_DAYS)} days of spring, turns its own colour over the first ${numberWord(TURN_DAYS)} days of autumn, drops its leaves over the last ${numberWord(SHED_DAYS)}, and stands bare through winter. Roses and thorns do the same and lavender keeps its leaves.`,
+        `Every tree old enough to fruit is in flower for all ${numberWord(SEASON_DAYS)} days of spring (${bloom.join('; ')}), and drops its petals on the wind and on any water under it. Roses and lavender flower from day ${BUSH_FLOWER_FROM} of spring to the end of summer. The look only: trees and bushes give what they gave.`,
+        `Butterflies come out at whatever is in flower by day, dragonflies over ponds, pools and streams from morning to dusk, and fireflies over the grass by trees and water at night: ${lifeSeasons()}. Only to look at.`,
+      ];
+    },
   },
 ];
 
