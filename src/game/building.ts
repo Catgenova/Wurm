@@ -253,6 +253,12 @@ export interface Wall extends Bill {
    * of twelve colours; paint is the first thing a builder gets to choose.
    */
   dye?: string;
+  /**
+   * When the ivy on it began, in real seconds: when it was finished, laid again
+   * in another stone or last cleared. See `greening.ts`; absent is when
+   * greening came to the island (`Game.greenFrom`).
+   */
+  greenSince?: number;
 }
 
 /**

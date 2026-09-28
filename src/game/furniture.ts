@@ -113,6 +113,11 @@ export interface FurnitureDef {
   bell?: boolean;
   /** On the map from the day it is set up. */
   landmark?: boolean;
+  /**
+   * Stone that stands out of doors and greens over with moss from the day it
+   * is set down (`greening.ts`), until somebody scrubs it with a brush.
+   */
+  mossy?: boolean;
   /** What the piece is of, when it is not the wood it was built from. */
   material?: 'wood' | 'metal';
   /**
@@ -298,7 +303,7 @@ export const FURNITURE: FurnitureDef[] = [
     'You frame the rack, deck it over and set the runners. It will take {crates:w} crates.',
     undefined, { crates: 8 }),
   piece('bell', 'Bell', 1, 1, [['bell_casting', 1], ['timber', 8], ['thick_rope', 1], ['nail', 16]], 22, 18, 'You hang the bell in its frame and knot the rope to the tongue. Rung on your settlement, every wildermon of the deed comes and every citizen hears where it hangs.', undefined, { bell: true, material: 'metal' }),
-  piece('statue', 'Statue', 1, 1, [['statue_casting', 1], ['stone_slab', 1]], 24, 20, 'You set the casting on its slab and it stands, and will go on standing. It is on the map from here on.', undefined, { landmark: true, material: 'metal', skill: 'masonry', tool: 'trowel' }),
+  piece('statue', 'Statue', 1, 1, [['statue_casting', 1], ['stone_slab', 1]], 24, 20, 'You set the casting on its slab and it stands, and will go on standing. It is on the map from here on.', undefined, { landmark: true, material: 'metal', skill: 'masonry', tool: 'trowel', mossy: true }),
   piece('hive', 'Hive', 2, 1, [['plank', 24], ['shaft', 2], ['cloth', 4], ['nail', 24]], 18, 13, 'You nail up a hive of shallow boxes and turn the mouth of it south. Now it wants a swarm.', undefined, { hive: 40 }),
   // A Fisher's pond: dug and puddled with clay, a ring of stones round it and reeds at the edge. It stocks itself.
   piece('fish_pond', 'Fish pond', 2, 2, [['clay', 20], ['rock_shards', 12], ['reed', 8]], 20, 20, 'You dig the pond out, puddle the floor of it with clay, set stones round the rim and plant the reeds at its edge.', undefined, { pond: 10, skill: 'fishing', tool: 'shovel', perk: 'fish_pond', deed: true }),
@@ -533,6 +538,11 @@ export interface PlacedFurniture {
    * (`Actor.who`). See `graves.ts`.
    */
   grave?: { who?: string; name: string; crumbles: number; units?: number };
+  /**
+   * When the moss on a piece that gathers it (`FurnitureDef.mossy`) began, in
+   * real seconds: when it was set down or last scrubbed. See `greening.ts`.
+   */
+  greenSince?: number;
 }
 
 /** The two liquids worth keeping a barrel for. */

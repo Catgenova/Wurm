@@ -25,6 +25,7 @@ import {
 import type { PlacedCrate } from './crates';
 import { pickDye } from './dyes';
 import type { Game } from './game';
+import { greenNow } from './greening';
 import { itemDef, spendOut, type Item } from './items';
 
 type TileTarget = Extract<Target, { kind: 'tile' }>;
@@ -378,6 +379,8 @@ export const BUILD_ACTIONS: ActionDef[] = [
       g.gainSkill(mat.skill, 0.4);
       g.events.emit('world', t.x, t.y);
       if (isDone(wall)) {
+        // Finished, and bare: the ivy starts from here (`greening.ts`).
+        wall.greenSince = greenNow();
         const what = WALL_TYPE_BY_ID.get(wall.type)?.low ? WALL_TYPE_BY_ID.get(wall.type)?.name.toLowerCase() : 'wall';
         g.logMsg(`You finish the ${mat.name.toLowerCase()} ${what}.`, 'event');
         return false;
@@ -490,6 +493,8 @@ export const BUILD_ACTIONS: ActionDef[] = [
       for (const [id, n] of fitted) wall.total[id] = (wall.total[id] ?? 0) + n;
       wall.needed = Object.fromEntries(Object.keys(wall.total).map((id) => [id, 0]));
       delete wall.dye;
+      // New stone, and bare: whatever grew on the old went with it.
+      wall.greenSince = greenNow();
       g.gainSkill('masonry', 1);
       g.logMsg(`You take the ${was.name.toLowerCase()} out of the wall on the ${SIDE_NAMES[t.side]} side and lay it again in ${mat.name.toLowerCase()}`
         + `${back > 0 ? `, and save ${back} ${materialName(stone, back)}` : ''}.`, 'event');

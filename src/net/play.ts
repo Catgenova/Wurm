@@ -308,6 +308,7 @@ export async function startIsland(params: URLSearchParams, tell: Telling): Promi
   // Whose uid this is, so the seat and the shafts that are ours can be told
   // from somebody else's.
   island.hooks.built = (ground) => game.sawGround(ground, island, island.uid || null);
+  island.hooks.paved = (x, y, on) => game.sawPaving(x, y, on);
   island.hooks.springs = (near, chains) => game.springs.sawIsland(near, chains);
   island.hooks.knownSprings = () => Object.fromEntries([...game.springs.list.values()].map((s) => [String(s.id), s.ver]));
   // Where the island put the body, which is only ever somewhere we did not put

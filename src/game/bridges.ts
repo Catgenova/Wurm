@@ -1,6 +1,7 @@
 import type { ActionDef, Target } from './actions';
 import { isDone, progressOf, type Bill } from './building';
 import type { Game } from './game';
+import { greenNow } from './greening';
 import { itemDef } from './items';
 import { fill } from './words';
 
@@ -104,6 +105,11 @@ export interface Bridge {
   material?: string;
   /** One entry per tile of deck between the ends, in order. */
   spans: BridgeSpan[];
+  /**
+   * When the moss on a stone arch began, in real seconds: when its last span
+   * was decked or it was last scrubbed. See `greening.ts`.
+   */
+  greenSince?: number;
 }
 
 export const bridgeDef = (b: Bridge): BridgeDef => BRIDGES[b.kind] ?? BRIDGES.rope;
@@ -248,6 +254,8 @@ export const BRIDGE_ACTIONS: ActionDef[] = [
         const left = b.spans.filter((x) => !isDone(x)).length;
         if (left) g.logMsg(`That span is decked. ${left} still open.`, 'event');
         else {
+          // Open, and bare: the moss on a stone arch starts from here (`greening.ts`).
+          b.greenSince = greenNow();
           g.note('bridged');
           g.logMsg(`The last span is decked and the ${bridgeName(b).toLowerCase()} is open. ${def.carts ? 'A cart will cross it.' : 'Foot traffic only; nothing with a wheel.'}`, 'system');
         }

@@ -219,6 +219,9 @@ interface SaveData {
   time: number;
   /** When the woods were last turned over, in real seconds. */
   treesAt?: number;
+  /** When greening came in, and each tile paved since, as [x, y, when it was paved or scrubbed]. See `greening.ts`. */
+  greenFrom?: number;
+  pavingSince?: Array<[number, number, number]>;
   /**
    * Which layout the tree bytes were written under, and the felling notches
    * as [x, y, cuts]. A save from before `TREE_DATA_LAYOUT` was 2 kept the
@@ -303,6 +306,11 @@ function meta(game: Game): SaveMeta {
     skills: game.skills.toJSON(),
     time: game.time,
     treesAt: game.treesAt,
+    greenFrom: game.greenFrom,
+    pavingSince: [...game.pavingSince].map(([at, since]) => {
+      const [x, y] = at.split(',').map(Number);
+      return [x, y, since] as [number, number, number];
+    }),
     trees: TREE_DATA_LAYOUT,
     notches: [...w.notches].map(([at, cuts]) => {
       const [x, y] = at.split(',').map(Number);
@@ -567,6 +575,8 @@ function finish(world: World, m: SaveMeta): Game {
     seed: m.seed,
     world,
     treesAt: m.treesAt,
+    greenFrom: m.greenFrom,
+    pavingSince: m.pavingSince,
     spawn: m.spawn,
     player: m.player,
     inventory: m.inventory,

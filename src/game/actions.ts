@@ -36,6 +36,7 @@ import { BRIDGE_ACTIONS } from './bridges';
 import { SPRING_ACTIONS } from './springs';
 import { FOUNDATION_ACTIONS } from './foundations';
 import { STEPS_ACTIONS } from './steps';
+import { GREEN_ACTIONS, greenNow } from './greening';
 import { NAMING_ACTIONS } from './naming';
 import { LANTERN_ACTIONS } from './lantern';
 import { FAITH_ACTIONS } from './faith';
@@ -2033,6 +2034,8 @@ export const ACTIONS: ActionDef[] = [
       if (t.kind !== 'tile') return;
       if (!g.inventory.consume('stone_brick')) return;
       g.world.setTile(t.x, t.y, TileType.Cobblestone);
+      // Laid, and bare: the moss starts from here (`greening.ts`).
+      g.pavingSince.set(`${t.x},${t.y}`, greenNow());
       g.logMsg('You lay the cobblestones.', 'event');
     },
   },
@@ -2069,6 +2072,7 @@ export const ACTIONS: ActionDef[] = [
       }
       if (!g.inventory.remove(slab.uid, 1)) return;
       g.world.setTile(t.x, t.y, TileType.Slabs, kind);
+      g.pavingSince.set(`${t.x},${t.y}`, greenNow());
       g.logMsg(`You bed the ${itemDef(slab.id).name.toLowerCase()} down flat and true.`, 'event');
     },
   },
@@ -2088,6 +2092,7 @@ export const ACTIONS: ActionDef[] = [
       const wasSlab = g.world.getTile(t.x, t.y) === TileType.Slabs;
       const kind = wasSlab ? SLAB_VARIANTS[slabVariant(g.world.getData(t.x, t.y))] : null;
       g.world.setTile(t.x, t.y, TileType.Dirt);
+      g.pavingSince.delete(`${t.x},${t.y}`);
       if (kind && g.rand() < 0.6) {
         const back = g.gather(kind.item, { ql: g.productQl('paving') });
         g.logMsg(`You lever the ${kind.name.toLowerCase().replace(/s$/, '')} up whole. (QL ${back.ql.toFixed(1)})`, 'event');
@@ -2943,6 +2948,7 @@ export const ACTIONS: ActionDef[] = [
   ...BREWING_ACTIONS,
   ...DEED_ACTIONS,
   ...FARM_ACTIONS,
+  ...GREEN_ACTIONS,
   {
     id: 'drop_dirt_here',
     label: 'Drop (raises the ground)',

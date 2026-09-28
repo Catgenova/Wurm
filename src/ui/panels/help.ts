@@ -12,7 +12,8 @@ import { TINCTURE_NAMES } from '../../game/remedies';
 import { BREW_BY_ID, BREWS } from '../../game/brewing';
 import { BRIDGES, CLEARANCE, END_SLOP } from '../../game/bridges';
 import { HOARD_LUMPS, HOARD_MORE } from '../../game/butcher';
-import { INDOORS_DECAY, MAX_LEVELS, SIDE_NAMES, wallBill, WALL_TYPE_BY_ID } from '../../game/building';
+import { INDOORS_DECAY, MATERIALS as WALL_MATERIALS, MAX_LEVELS, SIDE_NAMES, wallBill, WALL_TYPE_BY_ID } from '../../game/building';
+import { GREEN_ACTIONS, GREEN_DAY, GREEN_DAYS, GREEN_SHADE, GREEN_SUN, GREEN_WET, GREEN_WET_REACH } from '../../game/greening';
 import { FIRE_COST, FIRE_SUBTILES } from '../../game/campfire';
 import {
   CHANNELS, CLASS_AT, CLASS_CHANGE_COST, CLASS_COLUMNS, CLASS_NODES, CLASSES, channelSays, NODES_PER_TRADE, PERK_CLASSES, PERK_TIER_AT,
@@ -204,6 +205,12 @@ const metres = (units: number): string => (units / 10).toFixed(1);
 const RARE_STEPS = RARITIES.map((_, i) => i).slice(1);
 /** How long a go at a book is, as the action has it. */
 const STUDY_TIME = ARCHAEOLOGY_ACTION_BY_ID.get('study_book')?.baseTime ?? 0;
+
+/** Stone that ages: the two clearings, and the day a thing at a pace is covered on. */
+const [CLEAR_IVY, SCRUB_MOSS] = GREEN_ACTIONS;
+const coveredBy = (pace: number): number => Math.ceil(GREEN_DAYS / pace);
+/** A name as the middle of a sentence has it, with its article: "a statue". */
+const aOrAn = (name: string): string => `${article(name)} ${name.toLowerCase()}`;
 /** The dyes, easiest first. */
 const DYES_EASIEST = [...DYES].sort((a, b) => a.difficulty - b.difficulty);
 
@@ -1068,6 +1075,29 @@ export function helpText(): string {
     <p>A planned bridge is built a span at a time, exactly as a wall is: stand by the open part and feed
     it what it wants, one unit a go. Until the last span is decked nothing crosses. Pulling one down
     again gives you half of what went into it. A boat passes underneath.</p>
+    <h3>Ivy and moss on old stone</h3>
+    <p>Stone greens over as it stands. <b>Ivy</b> climbs every finished wall, fence and half wall of
+    ${listed(WALL_MATERIALS.filter((m) => m.kind === 'stone').map((m) => m.name.toLowerCase()))}, up from its foot and down from its
+    top where nothing stands on it, and keeps clear of doorways, arches, windows and gates. <b>Moss</b> gathers in the
+    joints of paving (${listed(Object.values(TILE_DEFS).filter((d) => d.paved).map((d) => d.name.toLowerCase()))}), on a poured foundation, on
+    ${listed(FURNITURE.filter((f) => f.mossy).map((f) => aOrAn(f.name)))} and on ${aOrAn(BRIDGES.stone.name)}. Each is bare on the day it is
+    built, laid, set down or poured and greens a day at a time for <b>${GREEN_DAYS} days</b> &mdash; a day is
+    ${GREEN_DAY / HOUR} hours of real time &mdash; and grows no more after that. Whatever was already standing when this came in
+    started from bare stone that day. On an island the island keeps the clock, so everybody sees the same
+    green on the same wall.</p>
+    <p>How much of it shows is its days over ${GREEN_DAYS}, times a pace: <b>${GREEN_SUN}</b> for the top of anything
+    and for a south or an east face, which the sun in the south-east is on; <b>${+(GREEN_SUN + GREEN_SHADE).toFixed(2)}</b> for a north
+    or a west face, which it never reaches; and <b>${GREEN_WET}</b> more on a tile of water, ${percent(1 / GREEN_WET_REACH)} of that
+    less for every tile further off, and none ${numberWord(GREEN_WET_REACH)} tiles away. So at the end a south or an east
+    face shows ${percent(GREEN_SUN)} of its green, a north or a west face is covered after ${numberWord(coveredBy(GREEN_SUN + GREEN_SHADE))} days,
+    and one looking out over water after ${numberWord(coveredBy(GREEN_SUN + GREEN_SHADE + GREEN_WET))}.</p>
+    <p><b>${CLEAR_IVY.label}</b> with ${aOrAn(itemDef(CLEAR_IVY.tool ?? '').name)}: right-click a wall and choose the side, and every storey
+    of the wall on that side comes clean at once. <b>${SCRUB_MOSS.label}</b> with ${aOrAn(itemDef(SCRUB_MOSS.tool ?? '').name)}: right-click
+    the paving or the foundation (both, where one tile has both), the statue or the arch. Either takes
+    ${spanWords(goSeconds(CLEAR_IVY.baseTime))} a go with a tool of no quality, less with a better one, and ${percent(CLEAR_IVY.stamina)} of your
+    stamina, and leaves bare stone that starts greening again from then. Nothing is cleared that has not
+    grown a day yet. On a settlement only its builders may do it, and a guest may not; anywhere else,
+    anybody may.</p>
     <h3>Boats</h3>
     <p>${NumberWord(BOATS.length)} hulls, all of them a carpenter's work. A <b>rowing boat</b> is ${bill('make_rowing_boat', true)};
     she carries <b>${ROWER.capacity} things</b>, wants <b>${numberWord(ROWER.boat?.draught ?? 0)} deep</b> of water under her and is rowed, so your

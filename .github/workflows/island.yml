@@ -488,7 +488,7 @@ jobs:
           # words. The craft material bin is its opposite number off the same
           # bill, and takes exactly what the other refuses -- so the pair of
           # them partitions the materials: nothing goes in both, every material
-          # goes in one, and the split is forty-two raw to a hundred worked on
+          # goes in one, and the split is forty-three raw to a hundred worked on
           # both sides. It is measured in kilograms rather than counted, which
           # the island agrees to the unit: 250,000 nails, 1,250 planks or 416
           # timbers in the same bin.
@@ -1121,6 +1121,23 @@ jobs:
           npx esbuild supabase/test/flowers.ts --bundle --platform=node --format=esm \
             --outfile=node_modules/.cache/flowers.mjs --log-level=error
           node node_modules/.cache/flowers.mjs
+
+      - name: Stone greens on the same clock on both sides, and clears the same
+        run: |
+          # Asked for off a picture of a grey castle: ivy up the walls and moss
+          # on the paving, the statues, the slabs and the stone bridges, bare
+          # the day they are built and as green as they get a fortnight on.
+          # The island keeps when each began and carries it with the thing;
+          # the browser works the days out and draws them. This puts the same
+          # moments to both clocks, a day's edge to the quarter second either
+          # side, checks what starts one on each side, feeds a real ground
+          # read to a browser and holds every thing's days to the island's,
+          # and asks Clear the ivy and Scrub the moss of three people on and
+          # off a settlement: the same refusals, the same words when done,
+          # and the same bare stone after.
+          npx esbuild supabase/test/green.ts --bundle --platform=node --format=esm \
+            --outfile=node_modules/.cache/green.mjs --log-level=error
+          node node_modules/.cache/green.mjs
 
       - name: A team stays in the traces until it is taken out
         run: |

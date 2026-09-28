@@ -179,6 +179,8 @@ export const STROKE_BY_ID: Record<string, Stroke> = {
   tack_creature: 'cloth', untack_creature: 'cloth', hitch_creature: 'cloth',
   groom: 'cloth', make_brush: 'cloth', patch_item: 'cloth', apply_salve: 'cloth', mend_kit: 'cloth', seal_item: 'cloth',
   crate_take_all: 'cloth', smelter_take_all: 'cloth', kiln_take_all: 'cloth', furniture_take_all: 'cloth',
+  // Leaves torn off a wall, and a brush over stone, as a groom's brush over a coat sounds.
+  clear_ivy: 'cloth', scrub_moss: 'cloth',
 };
 
 const BY_SKILL: Record<string, Stroke> = {

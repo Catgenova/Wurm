@@ -782,6 +782,8 @@ out.push(`create table if not exists furniture_def (
 /* A bell is rung; a landmark is on the map from the day it is set up. */
 out.push(`alter table furniture_def add column if not exists bell boolean not null default false;`);
 out.push(`alter table furniture_def add column if not exists landmark boolean not null default false;`);
+/* Stone that greens over out of doors from the day it is set down (`greening.ts`): a statue. */
+out.push(`alter table furniture_def add column if not exists mossy boolean not null default false;`);
 out.push(`create table if not exists recipe_input (
   recipe text not null references recipe on delete cascade,
   ord int not null, item text not null, count int not null default 1,
@@ -1643,6 +1645,7 @@ for (const f of FURNITURE as unknown as A[]) {
   if (f.post) out.push(`update furniture_def set post = true where id = ${q(f.id)};`);
   if (f.bell) out.push(`update furniture_def set bell = true where id = ${q(f.id)};`);
   if (f.landmark) out.push(`update furniture_def set landmark = true where id = ${q(f.id)};`);
+  if (f.mossy) out.push(`update furniture_def set mossy = true where id = ${q(f.id)};`);
   if (f.hive !== undefined) out.push(`update furniture_def set hive = ${q(f.hive)} where id = ${q(f.id)};`);
   if (f.pond !== undefined) out.push(`update furniture_def set pond = ${q(f.pond)} where id = ${q(f.id)};`);
   if (f.trash !== undefined) out.push(`update furniture_def set trash = ${q(f.trash)} where id = ${q(f.id)};`);

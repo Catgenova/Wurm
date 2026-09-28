@@ -2,6 +2,7 @@ import type { ActionDef, Target } from './actions';
 import { isDone, progressOf, type Bill } from './building';
 import { TileType } from '../world/tiles';
 import { POOL_DEPTH, POOL_LIP, poolFloor, poolLevel } from '../world/springs';
+import { greenNow } from './greening';
 
 /**
  * Foundations.
@@ -71,6 +72,8 @@ export interface Foundation extends Bill {
   madeBy?: string;
   /** A pool dug in it: water \`POOL_LIP\` under its top over a floor \`POOL_DEPTH\` under it. */
   pool?: boolean;
+  /** When the moss on it began, in real seconds: when it was poured or last scrubbed. See `greening.ts`. */
+  greenSince?: number;
 }
 
 /**
@@ -177,6 +180,8 @@ export const FOUNDATION_ACTIONS: ActionDef[] = [
        * only what the top of the tile is surfaced with.
        */
       g.world.setTile(f.x, f.y, TileType.PackedDirt);
+      // Poured, and bare: the moss starts from here (`greening.ts`).
+      f.greenSince = greenNow();
       // A slab is a wall to water, and one poured over a spring stops it.
       g.poolsChanged(f.x, f.y);
       g.note('poured_foundation');

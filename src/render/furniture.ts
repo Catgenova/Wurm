@@ -1,10 +1,11 @@
-import { FURNITURE, furnitureDef } from '../game/furniture';
+import { FACINGS, FURNITURE, furnitureDef } from '../game/furniture';
 import { materialOf } from '../game/materials';
 import type { Side } from '../game/building';
 import { HALF_H, HALF_W, HEIGHT_SCALE, UNITS_PER_TILE } from './iso';
 import { star } from './shine';
 import { ROSE_BUD, ROSE_FLOWER, ROSE_LEAFY } from '../game/roses';
 import { VIEWS } from './view';
+import { MOSS, hashOf } from './ivy';
 
 /**
  * Furniture, built rather than drawn.
@@ -2241,6 +2242,98 @@ export function furnitureHoles(sx: number, sy: number, zoom: number, kind: strin
   return HOLES[kind]?.(sx, sy, zoom, view, performance.now() / 1000) ?? [];
 }
 
+/* ---- moss on stone that stands out of doors (`greening.ts`) -------------------- */
+
+/** How many stages a piece's moss is baked at: one every two days of a fortnight. */
+export const PIECE_STAGES = 7;
+/** A piece's moss as its `trim`: how far on it is, and which way the piece faces, so its shady side takes more. */
+export const mossTrim = (stage: number, facing: Side): number =>
+  Math.max(0, Math.min(PIECE_STAGES, stage)) + 8 * Math.max(0, FACINGS.indexOf(facing));
+
+/** What a model is told of its moss: how far on, nought to one, and how shady a face turned along (nx, ny) of it is. */
+interface Mossed { k: number; shade: (nx: number, ny: number) => number; seed: number }
+
+/** The moss a trim carries, or null for none. */
+function mossOf(trim: number | undefined): Mossed | null {
+  if (!trim) return null;
+  const stage = trim % 8;
+  if (!stage) return null;
+  const facing = FACINGS[Math.floor(trim / 8)] ?? 's';
+  const [fx, fy] = FRONT[facing], [ax, ay] = ACROSS[facing];
+  return {
+    k: stage / PIECE_STAGES,
+    seed: stage,
+    // A face of the piece turned along (nx, ny) in its own frame, turned into the world, against the sun in the south-east.
+    shade: (nx, ny) => 0.5 - 0.5 * ((nx * ax + ny * fx) + (nx * ay + ny * fy)) * Math.SQRT1_2,
+  };
+}
+
+/**
+ * A cushion of moss on a face at (s, t) of it, `r` units across: its dark
+ * underside, its body and a fleck of light up and to the left, flattened on a
+ * top the way anything lying on one is, and no line round it -- moss is in
+ * the stone rather than on it.
+ */
+function cushionAt(sc: Scene, F: FaceAt, s: number, t: number, r: number, top: boolean): void {
+  const g = sc.g;
+  const [x, y] = F(s, t);
+  const [xa, ya] = F(s + 1, t), [xb, yb] = F(s, t + 1);
+  const px = r * Math.max(Math.hypot(xa - x, ya - y), Math.hypot(xb - x, yb - y));
+  const rx = Math.max(0.6, px), ry = rx * (top ? 0.56 : 0.86);
+  const blob = (k: number, dx: number, dy: number, fill: string): void => {
+    g.beginPath();
+    g.ellipse(x + dx * rx, y + dy * ry, rx * k, ry * k, 0, 0, TAU);
+    g.fillStyle = fill;
+    g.fill();
+  };
+  blob(1.12, 0.06, 0.28, MOSS.dark);
+  blob(1, 0, 0.08, MOSS.under);
+  blob(0.82, -0.08, -0.08, MOSS.fill);
+  if (rx > 1.2) blob(0.4, -0.3, -0.34, MOSS.lit);
+}
+
+/**
+ * Moss on an upright face `w` by `h` units: a fringe of cushions along its
+ * foot, one against the next, and a few along its top edge where the rain
+ * sits, more of both and bigger on a face turned from the sun. Laid over
+ * whatever the face already carries.
+ */
+const mossSide = (sc: Scene, m: Mossed, nx: number, ny: number, salt: number, foot = true) => (F: FaceAt, w: number, h: number): void => {
+  const amount = Math.min(1, m.k * (0.35 + 0.9 * m.shade(nx, ny)));
+  if (amount <= 0.05) return;
+  const step = 0.75;
+  for (let i = 0, s = 0.3; s < w - 0.3; i++, s += step * (0.8 + 0.4 * hashOf(salt, i, 1, 3))) {
+    const q = hashOf(salt, i, 2, 3);
+    if (foot && q < amount) cushionAt(sc, F, s, 0.15 + 0.35 * hashOf(salt, i, 3, 3) * amount, 0.42 + 0.4 * amount * hashOf(salt, i, 4, 3), false);
+    if (hashOf(salt, i, 5, 3) < amount * 0.4) cushionAt(sc, F, s, h - 0.25, 0.35 + 0.3 * amount, false);
+  }
+};
+
+/**
+ * Moss on a top `w` by `h` units: cushions along its edges, one running into
+ * the next, spreading in from them as it ages -- thickest on the edges turned
+ * from the sun, where the stone stays damp longest.
+ */
+const mossTop = (sc: Scene, m: Mossed, salt: number) => (F: FaceAt, w: number, h: number): void => {
+  // The four edges of the top, as the face it tops and where along it: back (-y), front (+y), left (-x), right (+x).
+  const edges: Array<[number, number, (u: number, d: number) => [number, number], number]> = [
+    [0, -1, (u, d) => [u, d], w], [0, 1, (u, d) => [u, h - d], w],
+    [-1, 0, (u, d) => [d, u], h], [1, 0, (u, d) => [w - d, u], h],
+  ];
+  edges.forEach(([nx, ny, at, len], e) => {
+    const amount = Math.min(1, m.k * (0.3 + 0.95 * m.shade(nx, ny)));
+    for (let i = 0, u = 0.35; u < len - 0.35; i++, u += 0.7 * (0.8 + 0.4 * hashOf(salt, e, i, 7))) {
+      if (hashOf(salt, e, i, 8) > amount) continue;
+      const [s, t] = at(u, 0.3 + 0.5 * amount * hashOf(salt, e, i, 9));
+      cushionAt(sc, F, s, t, 0.4 + 0.45 * amount * hashOf(salt, e, i, 10), true);
+    }
+  });
+};
+
+/** Two decorations one after the other, the first what the face already had. */
+const both = (a: ((F: FaceAt, w: number, h: number) => void) | null | undefined, b: ((F: FaceAt, w: number, h: number) => void) | null | undefined) =>
+  (F: FaceAt, w: number, h: number): void => { a?.(F, w, h); b?.(F, w, h); };
+
 /* ---- the pieces --------------------------------------------------------------- */
 
 /** What a piece is drawn with, besides its frame: its wood, whether it is alight, its dye and its one number. */
@@ -3094,16 +3187,23 @@ const MODELS: Record<string, Model> = {
     sc.lathe(0, 0, [[7.8, 0.3], [8, 0.55], [8.4, 0.55], [8.6, 0.3]], IRON, 10);
     sc.rod([0, 0, 7.8], [0, 0.8, 3.4], 0.16, ROPE);
   },
-  statue: ({ sc }) => {
+  statue: ({ sc, trim }) => {
     sc.shadows = [[-4.4, 4.4, -4.4, 4.4]];
     const PATINA = paintOf(hex('#88ae9f'), 0.62);
     const dressed = bricks(sc, STONE, 1.8);
-    sc.box(-4.4, 4.4, -4.4, 4.4, 0, 0.8, STONE);
+    // The moss it has gathered since it was set down (`greening.ts`): on its ledges, up its foot, on the figure's head.
+    const m = mossOf(trim);
+    const plate = (F: FaceAt, w: number, h: number): void => { rectOn(sc, F, 0.9, 0.8, w - 0.9, h - 0.8, rgb(STONE.body, 0.95), STONE.ink, 0.6); sc.g.strokeStyle = rgb(STONE.ink, 1, 0.5); sc.g.lineWidth = sc.ink * 0.6; for (const t of [h * 0.45, h * 0.62]) { const [a, b] = [F(1.6, t), F(w - 1.6, t)]; sc.g.beginPath(); sc.g.moveTo(a[0], a[1]); sc.g.lineTo(b[0], b[1]); sc.g.stroke(); } };
+    sc.box(-4.4, 4.4, -4.4, 4.4, 0, 0.8, STONE, m ? {
+      top: mossTop(sc, m, 11), front: mossSide(sc, m, 0, 1, 12), back: mossSide(sc, m, 0, -1, 13), left: mossSide(sc, m, -1, 0, 14), right: mossSide(sc, m, 1, 0, 15),
+    } : undefined);
     sc.box(-3.6, 3.6, -3.6, 3.6, 0.8, 4.4, STONE, {
-      front: (F, w, h) => { rectOn(sc, F, 0.9, 0.8, w - 0.9, h - 0.8, rgb(STONE.body, 0.95), STONE.ink, 0.6); sc.g.strokeStyle = rgb(STONE.ink, 1, 0.5); sc.g.lineWidth = sc.ink * 0.6; for (const t of [h * 0.45, h * 0.62]) { const [a, b] = [F(1.6, t), F(w - 1.6, t)]; sc.g.beginPath(); sc.g.moveTo(a[0], a[1]); sc.g.lineTo(b[0], b[1]); sc.g.stroke(); } },
-      back: dressed, left: dressed, right: dressed,
+      front: both(plate, m && mossSide(sc, m, 0, 1, 21)),
+      back: both(dressed, m && mossSide(sc, m, 0, -1, 22)),
+      left: both(dressed, m && mossSide(sc, m, -1, 0, 23)),
+      right: both(dressed, m && mossSide(sc, m, 1, 0, 24)),
     });
-    sc.box(-4, 4, -4, 4, 4.4, 5.1, STONE);
+    sc.box(-4, 4, -4, 4, 4.4, 5.1, STONE, m ? { top: mossTop(sc, m, 31) } : undefined);
     const z = 5.1;
     sc.lathe(0, 0, [[z, 2.1], [z + 0.6, 2], [z + 4.2, 1.45], [z + 6.2, 1.2], [z + 6.9, 1.55], [z + 7.5, 1.3], [z + 7.9, 0.5]], PATINA, 16, { staves: 9 });
     sc.lathe(0, 0.15, [[z + 7.9, 0.5], [z + 8.2, 0.85], [z + 9, 0.9], [z + 9.5, 0.7], [z + 9.8, 0.2]], PATINA, 12);
@@ -3111,6 +3211,21 @@ const MODELS: Record<string, Model> = {
     sc.rod([-1.35, 0.2, z + 7], [-1.1, 1.3, z + 4.9], 0.42, PATINA);
     sc.rod([2.5, 1, z], [2.5, 1, z + 11.2], 0.26, PATINA);
     sc.lathe(2.5, 1, [[z + 11.2, 0.3], [z + 11.6, 0.55], [z + 12, 0.2]], PATINA, 10);
+    // And a cushion on the head and on each shoulder once it is well on, where the rain sits longest.
+    if (m && m.k > 0.4) {
+      // Sorted as sitting on top of what they are on, so the figure goes first.
+      const spots: V3[] = [[0, 0.15, z + 9.85], [-1.25, 0.2, z + 8], [1.25, 0.2, z + 8]];
+      spots.slice(0, m.k > 0.7 ? 3 : 1).forEach((at, i) => sc.sprite(at, 0.7, (x, y) => {
+        const r = (0.55 + 0.35 * m.k) * (i ? 0.8 : 1) * Math.hypot(sc.v.ux, sc.v.vx);
+        const g = sc.g;
+        for (const [k, dx, dy, fill] of [[1.12, 0.06, 0.2, MOSS.dark], [1, 0, 0, MOSS.under], [0.8, -0.1, -0.12, MOSS.fill], [0.38, -0.3, -0.3, MOSS.lit]] as Array<[number, number, number, string]>) {
+          g.beginPath();
+          g.ellipse(x + dx * r, y - r * 0.3 + dy * r, r * k, r * k * 0.62, 0, 0, TAU);
+          g.fillStyle = fill;
+          g.fill();
+        }
+      }));
+    }
   },
   /*
    * The staff of a banner is baked and its cloth is not: the cloth hangs off

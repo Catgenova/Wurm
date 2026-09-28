@@ -43,6 +43,8 @@ import { drawSteps, stepsFootAt } from './steps';
 import { seasonAt, type Season } from '../world/calendar';
 import { drawShine, shines } from './shine';
 import { ARCH, BAY, DOOR, DOUBLE, FENCE_GAP, WINDOW, type Masonry, adobe, brickwork, cobble, goldwork, logwork, marblework, planking, sandstone, silverwork, slatework, stonework, timbercraft } from './masonry';
+import { CAP_D, CAP_W, capMoss, hashOf, ivyLayout, mossStrip, PAVE_STAGES, pavingMoss, PPM, slabTopMoss, strandPic, vigour, type Keep } from './ivy';
+import { bridgeGreen, greenNow, greenShows, GREEN_WET_REACH, mossyPiece, pavingGreen, pieceGreen, slabGreen, wallGreen, wetFrom } from '../game/greening';
 import { anvilCentre, type PlacedAnvil } from '../game/anvil';
 import { postCentre, postLeft, postLife, type PlacedPost } from '../game/posts';
 import { trapCentre, type PlacedTrap } from '../game/traps';
@@ -54,7 +56,7 @@ import { kilnCentre, type PlacedKiln } from '../game/kiln';
 import { furnitureCentre, furnitureDef, type PlacedFurniture, facingOf as pieceFacing, furnitureFootprint } from '../game/furniture';
 import { UNSEEN, VISIBLE } from '../game/vision';
 import { DAWN, DUSK } from '../game/game';
-import { clothInWind, crewOrder, deviceOf, drawFurniture, drawFurnitureLive, furnitureHoles, furnitureSpan, FURNITURE_HEIGHT, glowsAtNight, headingView, pieceView, roseTrim, type Air, type Crew, type PieceView } from './furniture';
+import { clothInWind, crewOrder, deviceOf, drawFurniture, drawFurnitureLive, furnitureHoles, furnitureSpan, FURNITURE_HEIGHT, glowsAtNight, headingView, mossTrim, PIECE_STAGES, pieceView, roseTrim, type Air, type Crew, type PieceView } from './furniture';
 import { roseStage } from '../game/roses';
 import { dyeOf } from '../game/dyestuffs';
 import { sailTrim } from '../game/wind';
@@ -99,7 +101,7 @@ import { trailMask, trailShape, type TrailShape } from './trails';
 import { clumpOf, FLOWER_COLOURS, flowerSprite, swayFrame, tileColour } from './flowers';
 import { flowerSeason, flowersOn } from '../world/flowers';
 import { drawFace, EDGES, ROCK_MOSS, topEdges, type Face } from './outcrops';
-import { forgetTrees, grownAt, spriteScaleFor, bushSprite, crateSprite, cropSprite, drawAnvil, drawCampfire, drawCreature, drawKiln, drawPlayer, drawSmelter, facingOf, pileSprite, tokenSprite, treeSprite, type Sprite, drawWorkPost, drawTrap, drawDeck, stumpSprite } from './sprites';
+import { forgetTrees, grownAt, spriteScaleFor, bushSprite, crateSprite, cropSprite, drawAnvil, drawCampfire, drawCreature, drawKiln, drawPlayer, drawSmelter, facingOf, pileSprite, tokenSprite, treeSprite, type Sprite, drawWorkPost, drawTrap, drawDeck, stumpSprite, type DeckShape } from './sprites';
 import { wildermonTop } from './wildermon';
 import { SmallLife, type Mote } from './life';
 import { yearAt } from './foliage';
@@ -170,7 +172,7 @@ interface Entity {
   anvil?: PlacedAnvil;
   post?: PlacedPost;
   trap?: PlacedTrap;
-  deck?: { kind: string; done: boolean; drop: number; id: number };
+  deck?: { kind: string; done: boolean; drop: number; id: number; shape?: DeckShape; green?: number };
   /** 1 rare, 2 supreme, 3 fantastic, for the shine over it; absent for the ordinary run of things. */
   rare?: number;
   /**
@@ -1755,7 +1757,7 @@ export class Renderer {
    * stone's -- see `slabbing`. Every picture comes off the tile's own
    * coordinates, so a road holds still while you walk down it.
    */
-  private paving(t: TileType, x: number, y: number, data: number, pts: Float64Array, rot: number): void {
+  private paving(t: TileType, x: number, y: number, data: number, pts: Float64Array, rot: number, lit = true): void {
     if (t === TileType.Cobblestone) {
       /*
        * A road is a picture, not a pattern. It was six by six rectangles with
@@ -1768,14 +1770,34 @@ export class Renderer {
       const cob = cobble();
       const q = cob.paveN;
       const road = cob.pave();
-      this.laidOver(road[(((y % q) + q) % q) * q + (((x % q) + q) % q)], pts, rot, 'overlay');
+      const i = (((y % q) + q) % q) * q + (((x % q) + q) % q);
+      this.laidOver(road[i], pts, rot, 'overlay');
+      if (lit) this.pavingMoss(road, q, i, x, y, pts, rot);
       return;
     }
     // Slabs, laid as their stone splits and in the size it comes off the block in.
     const v = slabVariant(data);
     const tiles = slabbing(v, SLAB_VARIANTS[v].courses);
     const q = FLOOR_TILES;
-    this.laidOver(tiles[(((y % q) + q) % q) * q + (((x % q) + q) % q)], pts, rot, 'overlay');
+    const i = (((y % q) + q) % q) * q + (((x % q) + q) % q);
+    this.laidOver(tiles[i], pts, rot, 'overlay');
+    if (lit) this.pavingMoss(tiles, q, i, x, y, pts, rot);
+  }
+
+  /**
+   * The moss in a paved tile's joints (`greening.ts`): as far on as the days
+   * since it was laid or scrubbed have brought it, a little further by water,
+   * and a stage either way tile to tile so a road greens in patches rather
+   * than all at one pace. Laid over the paving picture of the same index, in
+   * its own colour rather than in the ground's light and shade.
+   */
+  private pavingMoss(pics: HTMLCanvasElement[], q: number, i: number, x: number, y: number, pts: Float64Array, rot: number): void {
+    const days = pavingGreen(this.game, x, y, this.greenAt);
+    if (!days) return;
+    const g = greenShows(days, 0, this.wetness(x, y));
+    const stage = Math.max(0, Math.min(PAVE_STAGES, Math.round(g * PAVE_STAGES + (hashOf(x, y, 0, 5) - 0.5) * 1.6)));
+    const moss = pavingMoss(pics, q, stage);
+    if (moss) this.laidOver(moss[i], pts, rot, 'source-over');
   }
 
   /**
@@ -1885,10 +1907,18 @@ export class Renderer {
     ctx.fill();
   }
 
+  /** The wall clock, in real seconds, for what greens (`greening.ts`): read once a frame. */
+  private greenAt = 0;
+  /** Whether the ivy is in flower: in spring and summer (`seasonAt`). */
+  private bloom = false;
+
   render(dt: number): void {
     this.time += dt;
     this.frameDt = dt;
     this.poolRuns.clear();
+    this.greenAt = greenNow();
+    const season = seasonAt(this.greenAt).season;
+    this.bloom = season === 'spring' || season === 'summer';
     this.roomTiles = this.myRoom();
     this.shades.clear();
     // Other people are walked along between one word about them and the next,
@@ -2260,7 +2290,7 @@ export class Renderer {
         }
         // And a face of steep ground dressed as the rock in the pictures is: see `dressFace`.
         if (lit) this.dressFace(ctx, x, y, pts, zoom, sea, pond);
-        if (paved && !wet && PAVED.has(t0)) this.paving(t0, x, y, world.viewData(x, y, lit), pts, paveRot);
+        if (paved && !wet && PAVED.has(t0)) this.paving(t0, x, y, world.viewData(x, y, lit), pts, paveRot, lit);
         // A flight of garden steps, built up the tile over its colour: see `steps.ts`.
         if (!wet && t0 === TileType.Steps) {
           drawSteps({ ctx, cam, world, zoom, season: this.season, light: this.stepsLight, dpr: this.canvas.dpr }, x, y);
@@ -2336,8 +2366,15 @@ export class Renderer {
             const span = bridge.spans.find((sp) => sp.x === x && sp.y === y);
             const wx = x + 0.5;
             const wy = y + 0.5;
-            this.take('deck', x, y, cam.worldToScreenX(wx, wy), cam.worldToScreenY(wx, wy, bridge.height), null).deck =
-              { kind: bridge.kind, done: !!span && Object.values(span.needed).every((n) => n <= 0), drop: bridge.height - world.centerHeight(x, y), id: bridge.id };
+            const dx = cam.worldToScreenX(wx, wy), dy = cam.worldToScreenY(wx, wy, bridge.height);
+            // The tile it spans, corner by corner at the deck's height, so it is that tile at every turn of the view.
+            const q = ([[x, y], [x + 1, y], [x + 1, y + 1], [x, y + 1]] as Array<[number, number]>)
+              .map(([a, b]): [number, number] => [(cam.worldToScreenX(a, b) - dx) / zoom, (cam.worldToScreenY(a, b, bridge.height) - dy) / zoom]);
+            this.take('deck', x, y, dx, dy, null).deck =
+              { kind: bridge.kind, done: !!span && Object.values(span.needed).every((n) => n <= 0), drop: bridge.height - world.centerHeight(x, y), id: bridge.id,
+                shape: { q, along: bridge.ay === bridge.by ? 'x' : 'y' },
+                // How far the moss on a stone arch has got (`greening.ts`): over water, always by it.
+                green: greenShows(bridgeGreen(this.game, bridge, this.greenAt) ?? 0, 0, this.wetness(x, y)) };
           }
         }
         /*
@@ -2974,7 +3011,7 @@ export class Renderer {
       }
       if (ent.kind === 'deck' && ent.deck) {
         const deck = ent.deck;
-        this.paint(ctx, zoom, hovering ? 'hover' : 'none', 0, ent.sx, ent.sy, (g, px, py) => drawDeck(g, px, py, zoom, deck.kind, deck.done, deck.drop));
+        this.paint(ctx, zoom, hovering ? 'hover' : 'none', 0, ent.sx, ent.sy, (g, px, py) => drawDeck(g, px, py, zoom, deck.kind, deck.done, deck.drop, deck.shape, deck.green, ent.x * 31 + ent.y * 17));
         this.deckHits.push({ x: ent.x, y: ent.y, left: ent.sx - 40 * zoom, top: ent.sy - 22 * zoom, w: 80 * zoom, h: 44 * zoom, bridge: deck.id });
         continue;
       }
@@ -4715,6 +4752,14 @@ export class Renderer {
     // The faces, nearest last so the one across the view lies over the one
     // running into it, as a wall's two faces do.
     const zoom = cam.zoom;
+    /*
+     * How far on the moss is (`greening.ts`): the days since it was poured or
+     * scrubbed, a little further by water, as paving's is. On ground in sight
+     * only, and not when the view is too far out to see a cushion.
+     */
+    const days = lit && zoom >= 0.6 ? slabGreen(this.game, f, this.greenAt) ?? 0 : 0;
+    const wet = days > 0 ? this.wetness(x, y) : 0;
+    const grown = greenShows(days, 0, wet);
     for (let i = 0; i < 4; i++) {
       const j = (i + 1) % 4;
       const [nx, ny] = out[i];
@@ -4775,6 +4820,37 @@ export class Renderer {
         }
         ctx.restore();
       }
+      /*
+       * The moss on this face: cushions climbing from its foot along the
+       * ground line, and a row along its top edge with the damp run down from
+       * under it, more on a face turned from the sun in the south-east.
+       */
+      if (grown > 0) {
+        // A north or a west face is the shady one, as a wall's is (`greenShows`).
+        const st = Math.round(greenShows(days, nx + ny < 0 ? 1 : 0, wet) * PAVE_STAGES);
+        const v = Math.floor(hashOf(x, y, i, 71) * 3);
+        const lip = mossStrip('lip', v, st), foot = mossStrip('foot', (v + 1) % 3, st);
+        if (lip || foot) {
+          // Picture px to the screen: along the face, and straight down it at a metre to the metre.
+          const up = (10 * HEIGHT_SCALE * zoom) / PPM;
+          ctx.save();
+          face();
+          ctx.clip();
+          if (lip) {
+            ctx.save();
+            ctx.transform((px(j) - px(i)) / (4 * PPM), (py(j, f.top) - py(i, f.top)) / (4 * PPM), 0, up, px(i), py(i, f.top));
+            ctx.drawImage(lip, 0, 0);
+            ctx.restore();
+          }
+          if (foot) {
+            ctx.save();
+            ctx.transform((px(j) - px(i)) / (4 * PPM), (py(j, c[j]) - py(i, c[i])) / (4 * PPM), 0, up, px(i), py(i, c[i]) - foot.height * up);
+            ctx.drawImage(foot, 0, 0);
+            ctx.restore();
+          }
+          ctx.restore();
+        }
+      }
       face();
       ctx.strokeStyle = rgb(CONCRETE_TRIM, 0.85);
       ctx.lineWidth = 1;
@@ -4809,8 +4885,13 @@ export class Renderer {
     ctx.stroke();
     // A floor's corners are already in the tile's own order, so nothing turns.
     if (cam.zoom >= 0.75) {
-      if (paved) this.paving(t, x, y, data, quad, 0);
-      else this.laidOver(concrete(), quad, 0, 'overlay');
+      if (paved) this.paving(t, x, y, data, quad, 0, lit);
+      else {
+        this.laidOver(concrete(), quad, 0, 'overlay');
+        // And moss in the margin tooled round a bare top.
+        const top = grown > 0 ? slabTopMoss(Math.round(grown * PAVE_STAGES)) : null;
+        if (top) this.laidOver(top, quad, 0, 'source-over');
+      }
     }
     if (f.pool) {
       const water = this.springWater;
@@ -6016,6 +6097,8 @@ export class Renderer {
         endGrain(lw.ends);
         if (cob.soft && e0) roll(T0, endLit);
         if (cob.soft && e1) roll(T1, endLit);
+        // And the ivy it has grown since it was built (`greening.ts`), over everything.
+        this.wallIvy(wall, px, py, tall, nx * toward, ny * toward, false, indoors);
         ctx.globalAlpha = 1;
         return;
       }
@@ -6321,6 +6404,8 @@ export class Renderer {
         if (doored) blit(cob.doorIvy[v], 0, 1);
         if (gated) blit(cob.gateIvy[v], 0, 1);
       }
+      // And the ivy it has grown since it was built (`greening.ts`): after the painted ivy, and unlit, as that is.
+      this.wallIvy(wall, px, py, tall, nx * toward, ny * toward, roofed, indoors);
       if (bayed && !indoors) this.paintedBay(cob, { px, py, quad }, zoom, this.lampBehind(wall, border));
       if (!cut) this.wallOpenings(wall, mat, lit, { px, py, quad }, zoom, border);
       ctx.globalAlpha = 1;
@@ -6375,7 +6460,131 @@ export class Renderer {
       ctx.stroke();
     }
     this.wallOpenings(wall, mat, lit, { px, py, quad }, zoom, border);
+    // A painted wall of stone grows ivy as a bare one does (`greening.ts`).
+    {
+      const up = this.game.buildings.wallOnBorder(wall.level + 1, border);
+      const seenX = border.dir === 'h' ? border.x : (toward > 0 ? border.x - 1 : border.x);
+      const seenY = border.dir === 'h' ? (toward > 0 ? border.y : border.y - 1) : border.y;
+      this.wallIvy(wall, px, py, tall, nx * toward, ny * toward, !!up && isDone(up), !!this.game.buildings.buildingAt(seenX, seenY));
+    }
     ctx.globalAlpha = 1;
+  }
+
+  /**
+   * The ivy a wall has grown (`greening.ts`), on the face the camera is on.
+   *
+   * Laid out by `ivyLayout` off where the face is and which side of its wall,
+   * so each face grows its own and grows the same ones as it ages: trails off
+   * the head of a wall nothing stands on, clumps and stems from the foot of
+   * one on the ground, clear of its openings. How far it has got is the days
+   * since the wall was finished or cleared, more on a face turned from the sun
+   * -- the light comes from the south-east -- and on one by water. Out of
+   * doors only; the inside of a room grows nothing.
+   *
+   * `ox`, `oy` is which way the face looks, in the world.
+   */
+  private wallIvy(wall: Wall, px: (t: number, k: number, s?: number) => number, py: (t: number, k: number, s?: number) => number,
+    tall: number, ox: number, oy: number, roofed: boolean, indoors: boolean): void {
+    // Too far out to see a leaf, it is not drawn at all: shapes and colours only.
+    if (this.camera.zoom < 0.6) return;
+    const days = wallGreen(this.game, wall, this.greenAt);
+    if (!days) return;
+    /*
+     * Moss along its coping first, where nothing stands on it, so the clumps
+     * of any trail over the top lie over the moss: seen from indoors as well,
+     * since a top is a top from either side.
+     */
+    if (!roofed) {
+      const g = greenShows(days, 0, this.wetness(wall.x, wall.y));
+      const cm = capMoss(Math.floor(hashOf(wall.x, wall.y, wall.level, wall.dir === 'h' ? 3 : 4) * 3), Math.round(g * PAVE_STAGES));
+      if (cm) {
+        const ctx = this.canvas.ctx;
+        const x0 = px(0, 1, 1), y0 = py(0, 1, 1);
+        ctx.save();
+        ctx.transform((px(1, 1, 1) - x0) / CAP_W, (py(1, 1, 1) - y0) / CAP_W, (px(0, 1, -1) - x0) / CAP_D, (py(0, 1, -1) - y0) / CAP_D, x0, y0);
+        ctx.drawImage(cm, 0, 0);
+        ctx.restore();
+      }
+    }
+    if (indoors) return;
+    const kind = WALL_TYPE_BY_ID.get(wall.type);
+    // Turned from the sun, which stands in the south-east: a north or a west face is the shady one (`greenShows`).
+    const shade = ox + oy < 0 ? 1 : 0;
+    const tx = wall.dir === 'h' ? wall.x : wall.x - (ox < 0 ? 1 : 0);
+    const ty = wall.dir === 'h' ? wall.y - (oy < 0 ? 1 : 0) : wall.y;
+    const wet = this.wetness(tx, ty);
+    const keep: Keep[] = [];
+    switch (wall.type) {
+      case 'arch': keep.push({ t0: ARCH.t0, t1: ARCH.t1, k0: 0, k1: 0.8 }); break;
+      case 'window': keep.push({ t0: WINDOW.t0, t1: WINDOW.t1, k0: WINDOW.k0 - 0.05, k1: WINDOW.k1 + 0.1 }); break;
+      case 'bay': keep.push({ t0: BAY.t0, t1: BAY.t1, k0: BAY.k0 - 0.05, k1: BAY.k1 + 0.08 }); break;
+      case 'door': keep.push({ t0: DOOR.t0, t1: DOOR.t1, k0: 0, k1: DOOR.k1 + 0.08 }); break;
+      case 'double_door': keep.push({ t0: DOUBLE.t0, t1: DOUBLE.t1, k0: 0, k1: DOUBLE.k1 + 0.08 }); break;
+      case 'fence_gate': case 'iron_gate': keep.push({ t0: FENCE_GAP.t0, t1: FENCE_GAP.t1, k0: 0, k1: 1 }); break;
+    }
+    const low = !!kind?.low;
+    const height = (WALL_HEIGHT * tall) / 10;
+    const strands = ivyLayout({
+      seed: Math.floor(hashOf(wall.x, wall.y, wall.dir === 'h' ? 0 : 1, (ox + oy > 0 ? 1 : 0) + wall.level * 2) * 2 ** 31),
+      grown: greenShows(days, shade, wet),
+      vigour: vigour(wall.x + (wall.dir === 'h' ? 0.5 : 0), wall.y + (wall.dir === 'v' ? 0.5 : 0)),
+      shade, wet, height,
+      top: low || !roofed,
+      ground: wall.level === 0,
+      below: wall.level > 0,
+      keep,
+    });
+    if (!strands.length) return;
+    const ctx = this.canvas.ctx;
+    // The face's two axes on the screen: a metre along it, and a metre up it.
+    const ax = (px(1, 0) - px(0, 0)) / 4, ay = (py(1, 0) - py(0, 0)) / 4;
+    const kx = (px(0, 1) - px(0, 0)) / height, ky = (py(0, 1) - py(0, 0)) / height;
+    // A face that runs right to left on the screen takes its pictures the other way round, so their light stays on the left.
+    const flip = ax < 0 ? -1 : 1;
+    const a = (flip * ax) / PPM, b = (flip * ay) / PPM, c = -kx / PPM, d = -ky / PPM;
+    /*
+     * Each picture taken down once to about the size it is drawn at (`atSize`),
+     * by the larger of its two scales on the face: sixty-four pixels to the
+     * metre skewed straight down to a fraction of that costs several times the
+     * same blit at its own size.
+     */
+    const scale = Math.max(Math.hypot(a, b), Math.hypot(c, d));
+    // In device pixels: a close view on a sharp screen draws them at their own size or more, and takes them as they are.
+    const smaller = scale * this.canvas.dpr < 0.9;
+    for (const s of strands) {
+      const pic = strandPic(s.kind, s.v, s.stage, this.bloom);
+      if (!pic) continue;
+      const k = s.kind === 'hang' ? 1 : 0;
+      const ox0 = px(s.t, k), oy0 = py(s.t, k);
+      const img = smaller ? this.atSize(pic.img, pic.img.width * scale, pic.img.height * scale) : pic.img;
+      const sx = img.width / pic.img.width, sy = img.height / pic.img.height;
+      ctx.save();
+      ctx.transform(a / sx, b / sx, c / sy, d / sy, ox0 - a * pic.ax - c * pic.ay, oy0 - b * pic.ax - d * pic.ay);
+      ctx.drawImage(img, 0, 0);
+      ctx.restore();
+    }
+  }
+
+  /** How near water a tile stands, nought to one, for what greens beside it: kept a few seconds, so a pond dug is seen. */
+  private wetCache = new Map<number, number>();
+  private wetKept = -Infinity;
+  private wetness(x: number, y: number): number {
+    if (Math.abs(this.time - this.wetKept) > 5) {
+      this.wetCache.clear();
+      this.wetKept = this.time;
+    }
+    const key = y * 65536 + x;
+    const had = this.wetCache.get(key);
+    if (had !== undefined) return had;
+    const w = this.game.world;
+    const reach = GREEN_WET_REACH - 1;
+    let near = GREEN_WET_REACH;
+    for (let dy = -reach; dy <= reach; dy++) for (let dx = -reach; dx <= reach; dx++) {
+      if (w.inBounds(x + dx, y + dy) && w.hasWater(x + dx, y + dy)) near = Math.min(near, Math.max(Math.abs(dx), Math.abs(dy)));
+    }
+    const v = wetFrom(near);
+    this.wetCache.set(key, v);
+    return v;
   }
 
   /** The hole in a wall, whatever the wall is made of. */
@@ -8323,6 +8532,12 @@ export class Renderer {
     if (FURNITURE_BY_ID.get(f.kind)?.roses) {
       const r = roseStage(f.setAt, Date.now() / 1000);
       return roseTrim(Math.floor(hash2(f.x * 4 + f.sx, f.y * 4 + f.sy, 71) * 4), r.days, r.blooms);
+    }
+    // The moss on a piece that gathers it (`greening.ts`), a stage every two days, and which way it faces.
+    if (mossyPiece(f)) {
+      const days = pieceGreen(this.game, f, this.greenAt) ?? 0;
+      const g = greenShows(days, 0, this.wetness(f.x, f.y));
+      return mossTrim(Math.round(g * PIECE_STAGES), pieceFacing(f));
     }
     if (rackSpots(f)) {
       let mask = 0;

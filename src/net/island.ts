@@ -2,6 +2,7 @@ import type { WornWire } from '../game/worn';
 import type { RealtimeChannel } from '@supabase/supabase-js';
 import type { ErrorReport } from './errors';
 import { CHUNK, World } from '../world/world';
+import { PAVED } from '../world/tiles';
 import { blankWorld, layChange, layHistory, layRows, rowsOf, type LandRow, type TileChange } from './landpack';
 import { generateAtlasWindow, loadAtlas, type Atlas } from '../world/atlas-world';
 import { PROJECT, supabase, signIn } from './supabase';
@@ -15,6 +16,13 @@ import type { GuideBook } from '../game/guide';
 import { packFog, unpackFog } from './fogpack';
 import type { Away } from '../game/away';
 import type { Kept, KeptBody } from '../game/keeper';
+
+/**
+ * The jobs whose work shows only on the ground's slow half: Clear the ivy and
+ * Scrub the moss (`GREEN_ACTIONS` in greening.ts, named here so the network
+ * layer takes nothing but types from the game).
+ */
+const CLEARS_GREEN: ReadonlySet<string> = new Set(['clear_ivy', 'scrub_moss']);
 
 /**
  * Playing on an island that lives in Postgres.
@@ -668,6 +676,14 @@ export interface IslandHooks {
    * settlement. Reported as "placed campfire doesn't show": it was there.
    */
   built?: (ground: IslandGround) => void;
+  /**
+   * A tile the island says was paved or had its paving lifted. When paving
+   * went down rides the ground's slow half (`greening.ts`) and the tile does
+   * not, so until that read comes the browser takes new paving as laid this
+   * moment rather than as old as greening -- a road laid a second ago is not
+   * drawn green for the second it takes to hear otherwise.
+   */
+  paved?: (x: number, y: number, paved: boolean) => void;
   /**
    * The springs near us (`src/game/springs.ts`): every one in range with how
    * many times the island has settled it, and the ponds and streams of any we
@@ -1613,6 +1629,13 @@ export class Island {
         equipped: said.equipped,
         tally: said.tally, ledger: said.ledger, ticked: said.ticked,
       });
+      /*
+       * A clearing of ivy or moss has landed: what it cleared rides the
+       * ground's slow half, so that is what the next ground read brings, and
+       * the stone shows bare a second after the job rather than at the next
+       * reconcile.
+       */
+      if ((said.settled ?? 0) > 0 && this.doing !== null && CLEARS_GREEN.has(this.doing)) this.groundSlow = true;
       this.doing = said.act ?? null;
       this.hooks.doing?.({
         act: said.act ?? null,
@@ -1668,7 +1691,14 @@ export class Island {
     // filter per subscription. Row level security already refuses rows from an
     // island we are not on; this is the belt behind the braces.
     if (c.world_id && this.info && c.world_id !== this.info.id) return;
+    const was = PAVED.has(w.getTile(c.x, c.y));
     if (!layChange(w, c)) return;
+    const is = PAVED.has(w.getTile(c.x, c.y));
+    if (was !== is) {
+      // Paving laid or lifted: the next ground read brings when (`greening.ts`).
+      this.groundSlow = true;
+      this.hooks.paved?.(c.x, c.y, is);
+    }
     this.hooks.ground(c.x, c.y);
   }
 

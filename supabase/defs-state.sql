@@ -384,6 +384,7 @@ create table if not exists furniture_def (
 );
 alter table furniture_def add column if not exists bell boolean not null default false;
 alter table furniture_def add column if not exists landmark boolean not null default false;
+alter table furniture_def add column if not exists mossy boolean not null default false;
 create table if not exists recipe_input (
   recipe text not null references recipe on delete cascade,
   ord int not null, item text not null, count int not null default 1,
@@ -1671,6 +1672,8 @@ insert into action_def (id, label, verb, skill, tool, corner, range, stamina, ba
 insert into action_def (id, label, verb, skill, tool, corner, range, stamina, base_time, difficulty, instant, repeatable) values ('sow_patch', 'Sow a patch', 'sowing a patch', 'farming', null, false, null, 0.06, 9, null, false, false);
 insert into action_def (id, label, verb, skill, tool, corner, range, stamina, base_time, difficulty, instant, repeatable) values ('tend_patch', 'Tend a patch', 'tending a patch', 'farming', null, false, null, 0.09, 12, null, false, false);
 insert into action_def (id, label, verb, skill, tool, corner, range, stamina, base_time, difficulty, instant, repeatable) values ('harvest_patch', 'Harvest a patch', 'harvesting a patch', 'farming', null, false, null, 0.12, 15, null, false, false);
+insert into action_def (id, label, verb, skill, tool, corner, range, stamina, base_time, difficulty, instant, repeatable) values ('clear_ivy', 'Clear the ivy', 'clearing ivy', null, 'sickle', false, null, 0.04, 8, null, false, false);
+insert into action_def (id, label, verb, skill, tool, corner, range, stamina, base_time, difficulty, instant, repeatable) values ('scrub_moss', 'Scrub the moss', 'scrubbing moss', null, 'brush', false, null, 0.04, 8, null, false, false);
 insert into action_def (id, label, verb, skill, tool, corner, range, stamina, base_time, difficulty, instant, repeatable) values ('drop_dirt_here', 'Drop (raises the ground)', 'dropping dirt', 'digging', null, false, null, 0.02, 2, null, false, false);
 
 delete from recipe_input;
@@ -4469,6 +4472,7 @@ insert into furniture_def values ('bell', 'Bell', 1, 1, null, false, false);
 update furniture_def set bell = true where id = 'bell';
 insert into furniture_def values ('statue', 'Statue', 1, 1, null, false, false);
 update furniture_def set landmark = true where id = 'statue';
+update furniture_def set mossy = true where id = 'statue';
 insert into furniture_def values ('hive', 'Hive', 2, 1, null, false, false);
 update furniture_def set hive = 40 where id = 'hive';
 insert into furniture_def values ('fish_pond', 'Fish pond', 2, 2, null, false, false);

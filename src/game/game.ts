@@ -52,6 +52,7 @@ import { BAIT_BY_ID, FISH, fishHere, pickFish, waterDepth } from './fishing';
 import { BRIDGES, bridgeDone, CLEARANCE, END_SLOP, spanBill, spanTiles, type Bridge, type BridgeKind } from './bridges';
 import { CLEAR_OF_BUILDINGS, LIFT_PER_MASONRY, concreteFor, foundationBill, foundationDone, liftFor, masonryFor, soilSays, type Foundation } from './foundations';
 import { poolLevel } from '../world/springs';
+import { greenNow, mossyPiece } from './greening';
 import { liveSettings, type Settings } from './settings';
 import { Skills, SKILL_DEFS, isQuiet } from './skills';
 import { jewelGain } from './gems';
@@ -241,6 +242,9 @@ export interface GameInit {
   world: World;
   /** When the woods were last turned over, in real seconds. */
   treesAt?: number;
+  /** When greening came in, and when each tile paved since was paved or scrubbed, as [x, y, seconds]. */
+  greenFrom?: number;
+  pavingSince?: Array<[number, number, number]>;
   spawn: { x: number; y: number };
   deed?: Deed | null;
   buildings?: BuildingsJSON;
@@ -815,6 +819,32 @@ export class Game {
    * Wednesday whether or not this tab was open for any of it.
    */
   treesAt = Date.now() / 1000;
+  /**
+   * When greening came to this island, in real seconds: nothing greens from
+   * before it (`greening.ts`). On an island it is the island's, off the
+   * ground's slow half; at home a save that has never held it starts from
+   * now, so a village that stood before this came in is bare on the day it
+   * arrives and greens over from there.
+   */
+  greenFrom = Date.now() / 1000;
+  /**
+   * When each tile paved since then was paved or last scrubbed, in real
+   * seconds, by "x,y". Beside the land rather than in it, the way the felling
+   * notches are; a tile paved before greening came in, or no longer paved,
+   * is not in it.
+   */
+  readonly pavingSince = new Map<string, number>();
+
+  /**
+   * A tile the island says was paved or had its paving lifted, before the
+   * ground read that says when (`Island.hooks.paved`): new paving is taken as
+   * laid now until then, and lifted paving forgets.
+   */
+  sawPaving(x: number, y: number, paved: boolean): void {
+    const at = `${x},${y}`;
+    if (!paved) this.pavingSince.delete(at);
+    else if (!this.pavingSince.has(at)) this.pavingSince.set(at, greenNow());
+  }
   /** How far down the island a tree turn has got, or -1 when none is running. */
   private treeRow = -1;
   /** The moment the turn in progress is for, banked until it finishes. */
@@ -995,6 +1025,8 @@ export class Game {
      * lifetime overdue on the first pass.
      */
     this.treesAt = init.treesAt ?? Date.now() / 1000;
+    this.greenFrom = init.greenFrom ?? Date.now() / 1000;
+    for (const [x, y, since] of init.pavingSince ?? []) this.pavingSince.set(`${x},${y}`, since);
     this.deed = init.deed ?? null;
     this.buildings = Buildings.fromJSON(init.buildings);
     this.creatures = Creatures.fromJSON(init.creatures);
@@ -4150,6 +4182,8 @@ export class Game {
   addFoundation(x: number, y: number, top: number, needed?: number): Foundation {
     const want = needed ?? concreteFor(this.world.tileCorners(x, y), top);
     const f: Foundation = { id: this.nextFoundationId++, x, y, top, ...foundationBill(want) };
+    // Poured as it is set out, when there is nothing to pour: bare from now.
+    if (foundationDone(f)) f.greenSince = greenNow();
     this.foundations.set(f.id, f);
     this.slabIndex.set(`${x},${y}`, f.id);
     return f;
@@ -5497,6 +5531,8 @@ export class Game {
   fitIntoWall(wall: Wall, item: string): void {
     if ((wall.needed[item] ?? 0) <= 0) return;
     wall.needed[item] -= 1;
+    // The last of it, and the ivy starts from bare stone (`greening.ts`).
+    if (isDone(wall)) wall.greenSince = greenNow();
     this.events.emit('world', wall.x, wall.y);
   }
 
@@ -6009,6 +6045,8 @@ export class Game {
           // Its colour, and for an arch the moment its roses were planted, which the island keeps for everybody.
           dye: r.dye ?? undefined,
           setAt: r.set ?? undefined,
+          // When the moss on a statue began, on this machine's clock (`greening.ts`).
+          greenSince: sinceAgo(r.green_ago),
           fuel: r.fuel ?? undefined, lit: r.lit ?? undefined, ash: r.ash ?? undefined,
           litres: r.litres ?? undefined, liquid: (r.liquid ?? undefined) as PlacedFurniture['liquid'],
           ferment: r.ferment ?? undefined,
@@ -6074,7 +6112,14 @@ export class Game {
      * Replaced outright rather than merged, because a wall somebody else took
      * down has to be able to come down here too.
      */
-    if (ground.buildings) this.buildings.sawIsland(ground.buildings);
+    if (ground.buildings) {
+      // When the ivy on each began, on this machine's clock rather than the island's (`greening.ts`).
+      for (const w of ground.buildings.walls ?? []) {
+        w.greenSince = sinceAgo(w.greenAgo);
+        delete w.greenAgo;
+      }
+      this.buildings.sawIsland(ground.buildings);
+    }
     /*
      * And the slabs, replaced outright for the same reason the walls are: one
      * somebody struck has to be able to come away here too. Shuttering that
@@ -6084,12 +6129,41 @@ export class Game {
       this.foundations.clear();
       this.slabIndex.clear();
       for (const f of ground.foundations) {
+        f.greenSince = sinceAgo(f.greenAgo);
+        delete f.greenAgo;
         this.foundations.set(f.id, f);
         this.slabIndex.set(`${f.x},${f.y}`, f.id);
       }
       if (ground.nextFoundationId) this.nextFoundationId = ground.nextFoundationId;
       // A pool dug in one is water: laid again with whatever the island says of them.
       this.springs.lay();
+    }
+    /*
+     * And the bridges, replaced outright like the slabs: one somebody pulled
+     * down has to come away here too. Until now nothing carried them, so on an
+     * island a bridge was neither drawn nor walked by anybody.
+     */
+    if (ground.bridges) {
+      this.bridges.clear();
+      for (const b of ground.bridges) {
+        b.greenSince = sinceAgo(b.greenAgo);
+        delete b.greenAgo;
+        this.bridges.set(b.id, b);
+      }
+      this.reindexDecks();
+    }
+    /*
+     * And the paving: when greening came in, and when each tile paved since
+     * was paved or last scrubbed. Replaced outright, since a tile lifted or
+     * laid again elsewhere has to be able to change here.
+     */
+    if (ground.greenFromAgo !== undefined && Number.isFinite(ground.greenFromAgo)) this.greenFrom = Date.now() / 1000 - ground.greenFromAgo;
+    if (ground.paving) {
+      this.pavingSince.clear();
+      for (const p of ground.paving) {
+        const since = sinceAgo(p.ago);
+        if (since !== undefined) this.pavingSince.set(`${p.x},${p.y}`, since);
+      }
     }
     for (const c of ground.crates ?? []) {
       this.crates.set(c.id, {
@@ -6411,6 +6485,8 @@ export class Game {
   addFurniture(kind: string, x: number, y: number, sx: number, sy: number, ql: number, items: Item[] = [], material?: string, facing: Side = 's'): PlacedFurniture {
     const [ax, ay] = furnitureAnchor(kind, sx, sy, facing);
     const f: PlacedFurniture = { id: this.nextFurnitureId++, x, y, sx: ax, sy: ay, kind, ql, items, material, facing };
+    // A statue set down is bare stone: the moss starts from here (`greening.ts`).
+    if (mossyPiece(f)) f.greenSince = greenNow();
     this.furniture.set(f.id, f);
     this.placed.furniture.add(f);
     this.events.emit('crate');
@@ -7403,6 +7479,12 @@ export interface IslandPlaced {
    * within reach; `units`, how many things that is, to its owner from anywhere.
    */
   grave?: { name: string | null; left: number; units?: number | null };
+  /**
+   * For a piece that gathers moss (a statue), seconds since the moss on it
+   * began: since it was set down or last scrubbed, and never from before
+   * greening came to the island (`greening.ts`). Absent for everything else.
+   */
+  green_ago?: number | null;
 }
 
 /** A crate, likewise. */
@@ -7437,6 +7519,14 @@ export interface IslandCrate {
   units?: number;
   things?: Array<{ id: number; def: string; ql: number; dmg: number; count: number; extra: string | null }>;
 }
+
+/**
+ * Seconds ago on the island as a moment on this machine's clock, in real
+ * seconds: when a thing began to green, for `greenSince`. Seconds since are
+ * what two clocks agree on without being set to each other.
+ */
+const sinceAgo = (ago: number | null | undefined): number | undefined =>
+  ago === null || ago === undefined || !Number.isFinite(ago) ? undefined : Date.now() / 1000 - ago;
 
 /** Everything on the ground within sight, as one answer. */
 /** An island clock for a ground read that comes without one: nothing lying about has been burning. */
@@ -7515,11 +7605,27 @@ export interface IslandGround {
    * went up in Postgres, the rules answered about it, and no browser ever drew
    * a wall of it.
    */
-  buildings?: BuildingsJSON;
+  buildings?: BuildingsJSON & { walls: Array<Wall & { greenAgo?: number | null }> };
   /**
    * And the slabs, which are not buildings: a foundation is ground somebody
    * poured, and it is laid beside the terrain rather than inside a house.
    */
-  foundations?: Foundation[];
+  foundations?: Array<Foundation & { greenAgo?: number | null }>;
   nextFoundationId?: number;
+  /**
+   * The bridges in range, spans and all, on the slow half: shaped as the
+   * browser's own. The island has kept them since bridges were ported and
+   * said nothing, so on an island a bridge was neither drawn nor walked.
+   */
+  bridges?: Array<Bridge & { greenAgo?: number | null }>;
+  /**
+   * Stone that ages (`greening.ts`), on the slow half: the seconds since
+   * greening came to this island, and every tile in range paved or scrubbed
+   * since, with the seconds since that. A paved tile not in the list began
+   * when greening came in. Each wall, slab, bridge and statue carries its own
+   * as `greenAgo` (`green_ago` on what is set down): seconds since it began,
+   * for the ones that green.
+   */
+  greenFromAgo?: number;
+  paving?: Array<{ x: number; y: number; ago: number }>;
 }

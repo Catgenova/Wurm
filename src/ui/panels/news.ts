@@ -52,6 +52,9 @@ import { ROSES_RULE } from '../../game/roses';
 import { DEVICE_COUNT } from '../../render/furniture';
 import { FLOWER_MOST, FLOWER_SEASONS } from '../../world/flowers';
 import { DYES } from '../../game/dyestuffs';
+import { GREEN_ACTIONS, GREEN_DAYS, GREEN_SHADE, GREEN_SUN, GREEN_WET } from '../../game/greening';
+import { FURNITURE } from '../../game/furniture';
+import { BRIDGES } from '../../game/bridges';
 import type { UIWindow } from '../windows';
 
 /**
@@ -779,6 +782,20 @@ export const NEWS: News[] = [
         `Grass flowers in ${listed(FLOWER_SEASONS)}, in drifts: up to ${numberWord(FLOWER_MOST.summer)} clumps a tile in summer and ${numberWord(FLOWER_MOST.spring)} in spring. Pick flowers gives a wildflower a clump, at your foraging quality, and the tile has none again until next spring.`,
         `Wildflowers are for dye: ${billWords((boil?.inputs ?? []).map((i) => [i.item, i.count ?? 1] as const))} boil into ${numberWord(boil?.count ?? 1)} pots of ${dye?.word ?? 'orange'}, at alchemy ${boil?.difficulty ?? 0}.`,
         'Steep rock is drawn with the grass above it hanging over its top edge, moss down its upper face, ferns and tufts in its cracks and the damp dark over water at its foot. Drawing only: nothing about the ground changes.',
+      ];
+    },
+  },
+  {
+    n: 59,
+    day: '2026-09-28',
+    lines: () => {
+      const [clear, scrub] = GREEN_ACTIONS;
+      const a = (name: string): string => `${article(name)} ${name.toLowerCase()}`;
+      return [
+        `Stone greens over as it stands. Ivy climbs every finished wall, fence and half wall of stone or brick, and moss gathers on paving, on a poured foundation, on ${listed([...FURNITURE.filter((f) => f.mossy).map((f) => a(f.name)), a(BRIDGES.stone.name)])}. Each is bare the day it is built, laid, set down or poured and greens a day at a time for ${GREEN_DAYS} days; everything already standing starts from bare stone today.`,
+        `How much shows is its days over ${GREEN_DAYS} times a pace: ${GREEN_SUN} on tops and on south and east faces, ${+(GREEN_SUN + GREEN_SHADE).toFixed(2)} on north and west faces, which the sun never reaches, and up to ${GREEN_WET} more beside water.`,
+        `${clear.label} with ${a(itemDef(clear.tool ?? '').name)}, a side of a wall at a time and every storey of it at once; ${scrub.label} with ${a(itemDef(scrub.tool ?? '').name)}, on paving, a foundation, a statue or an arch. Either starts it again from bare stone. On a settlement only its builders may; anywhere else anybody may. On an island the island keeps the clock, so everybody sees the same green.`,
+        'A bridge on an island is drawn and walked by everybody now. The island kept them and never said so, so nobody saw one or could cross it.',
       ];
     },
   },

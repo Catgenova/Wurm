@@ -1735,7 +1735,7 @@ export class UI {
         }),
       });
     }
-    for (const id of ['light_oven', 'put_out_oven', 'take_ashes_oven', 'sleep', 'set_home', 'pull_cart', 'drop_cart', 'board_vehicle', 'board_passenger', 'leave_vehicle', 'leave_passenger', 'unhitch_team', 'drink_from_vessel', 'empty_vessel', 'furniture_take_all', 'crate_follow', 'crate_work', 'pick_up_furniture']) {
+    for (const id of ['light_oven', 'put_out_oven', 'take_ashes_oven', 'sleep', 'set_home', 'pull_cart', 'drop_cart', 'board_vehicle', 'board_passenger', 'leave_vehicle', 'leave_passenger', 'unhitch_team', 'drink_from_vessel', 'empty_vessel', 'furniture_take_all', 'crate_follow', 'crate_work', 'scrub_moss', 'pick_up_furniture']) {
       const def = ACTION_BY_ID.get(id);
       if (!def || !def.applies(ft, g)) continue;
       const reason = def.check?.(ft, g) ?? null;
@@ -1832,7 +1832,7 @@ export class UI {
     const open = b.spans.find((s) => !isDone(s));
     entries.push({ label: `${b.spans.length} spans · ${def.carts ? 'carries a cart' : 'foot traffic only'}`, disabled: true });
     if (open) entries.push({ label: `The open span wants ${spanWants(open)}`, disabled: true });
-    for (const id of ['build_bridge', 'demolish_bridge']) {
+    for (const id of ['build_bridge', 'scrub_moss', 'demolish_bridge']) {
       const a = ACTION_BY_ID.get(id);
       if (!a || !a.applies(bt, g)) continue;
       const reason = a.check?.(bt, g) ?? null;
@@ -2312,6 +2312,12 @@ export class UI {
         }),
       }];
     };
+    // Stone that has greened over, cleared a side at a time: every storey of the wall on that border.
+    const ivy = (target: Extract<Target, { kind: 'tile' }>): MenuItem[] => {
+      const def = ACTION_BY_ID.get('clear_ivy');
+      if (!def || !def.applies(target, g)) return [];
+      return [item(def, target, def.labelFor?.(target, g) ?? def.label)];
+    };
     const b = bld.buildingAt(x, y);
     if (!b) {
       // No building here: a fence or a half wall still goes on any border,
@@ -2324,6 +2330,7 @@ export class UI {
         if (!isDone(standing)) entries.push(item(act('build_wall'), withSide, `Build ${what.toLowerCase()} (${SIDE_NAMES[side]}) · needs ${describeNeeds(standing, materialName)}`));
         entries.push(item(act('remove_wall'), withSide, `Remove ${what.toLowerCase()} (${SIDE_NAMES[side]})`));
         entries.push(...repoint(standing, withSide, `Repoint ${what.toLowerCase()} (${SIDE_NAMES[side]})`));
+        entries.push(...ivy(withSide));
       } else {
         const fence = act('plan_fence');
         const probe = fence.check?.({ ...withSide, wallType: 'fence', material: 'log' }, g) ?? null;
@@ -2386,6 +2393,8 @@ export class UI {
         });
       }
     }
+    // Every storey's wall on this side, whichever storey is being worked on.
+    entries.push(...ivy(withSide));
     const floor = bld.floor(level, x, y);
     const plan = act('plan_floor');
     if (floor) {

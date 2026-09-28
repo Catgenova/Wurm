@@ -1,4 +1,5 @@
 import { hash2, mulberry32 } from '../world/noise';
+import { cushions, hashOf, type Cushion } from './ivy';
 import type { Look } from '../game/look';
 import { emotePose } from '../game/emotes';
 import { drawBust, drawFigure, shineOver, type FigurePose } from './figure';
@@ -2070,6 +2071,19 @@ export function drawKiln(ctx: CanvasRenderingContext2D, sx: number, sy: number, 
  * bait. Either one is drawn sprung when there is something in it.
  */
 /**
+ * Where one tile of deck lies on the screen: its four corners in the world's
+ * order -- north, east, south, west -- at the height it is carried at, in
+ * pixels at zoom one from its middle, and which way the span runs. The deck
+ * was a lozenge of the one shape whatever the view, with its kerbs ruled in
+ * a V that stood out past both ends of it; from the corners it is the tile
+ * it spans at every turn, with its kerbs down its two sides.
+ */
+export interface DeckShape { q: Array<[number, number]>; along: 'x' | 'y' }
+
+/** The lozenge a deck was before it had corners: the tile at the first turn, spanning west to east. */
+const LOZENGE: DeckShape = { q: [[0, -24], [48, 0], [0, 24], [-48, 0]], along: 'x' };
+
+/**
  * One tile of bridge deck, drawn at the height the deck is carried at. The
  * unfinished part is drawn as bare stringers so you can see what is left.
  */
@@ -2081,100 +2095,159 @@ export function drawDeck(
   kind: string,
   done: boolean,
   drop: number,
+  shape: DeckShape = LOZENGE,
+  /** How far the moss on a stone arch has got, nought to one (`greening.ts`), and a number off where this span is. */
+  green = 0,
+  seed = 0,
 ): void {
   ctx.save();
   ctx.translate(sx, sy);
   ctx.scale(zoom, zoom);
-  // The deck fills its tile exactly, or the spans do not meet.
-  const W = 48;
-  const D = 24;
+  const q = shape.q;
   const stone = kind === 'stone';
   const top = stone ? '#9a968c' : kind === 'rope' ? '#8a7550' : '#7d6243';
   const side = stone ? '#6f6b62' : '#523d28';
+  const lerp = (a: [number, number], b: [number, number], t: number): [number, number] => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t];
+  // Its two sides, the edges that run the way the span does, each from the end nearer its start: and its two ends.
+  const sides: Array<[[number, number], [number, number]]> = shape.along === 'x' ? [[q[0], q[1]], [q[3], q[2]]] : [[q[0], q[3]], [q[1], q[2]]];
+  // A side drawn in toward the middle of the tile by a share `k` of the way: where a kerb or a stringer runs.
+  const inset = (a: [number, number], b: [number, number], k: number): [[number, number], [number, number]] => {
+    const c = [(q[0][0] + q[2][0]) / 2, (q[0][1] + q[2][1]) / 2];
+    return [[a[0] + (c[0] - a[0]) * k, a[1] + (c[1] - a[1]) * k], [b[0] + (c[0] - b[0]) * k, b[1] + (c[1] - b[1]) * k]];
+  };
   // What holds it up: piers for stone and wood, two hawsers for a rope bridge.
-  if (drop > 2) {
-    if (kind !== 'rope') {
-      // A pier down into whatever is underneath, cut off before it gets silly.
-      const h = Math.min(34, drop * 0.8);
-      ctx.fillStyle = side;
-      ctx.beginPath();
-      ctx.moveTo(-5, 2);
-      ctx.lineTo(5, 2);
-      ctx.lineTo(5, 2 + h);
-      ctx.lineTo(-5, 2 + h);
-      ctx.closePath();
-      ctx.fill();
-      ctx.fillStyle = 'rgba(0,0,0,0.2)';
-      ctx.fillRect(1, 2, 4, h);
-    }
+  if (drop > 2 && kind !== 'rope') {
+    // A pier down into whatever is underneath, cut off before it gets silly.
+    const h = Math.min(34, drop * 0.8);
+    ctx.fillStyle = side;
+    ctx.beginPath();
+    ctx.moveTo(-5, 2);
+    ctx.lineTo(5, 2);
+    ctx.lineTo(5, 2 + h);
+    ctx.lineTo(-5, 2 + h);
+    ctx.closePath();
+    ctx.fill();
+    ctx.fillStyle = 'rgba(0,0,0,0.2)';
+    ctx.fillRect(1, 2, 4, h);
   }
   if (!done) {
-    // Stringers only: two beams across the gap and nothing to walk on.
+    // Stringers only: a beam down each side and nothing to walk on.
     ctx.strokeStyle = side;
     ctx.lineWidth = 1.6;
-    for (const o of [-0.42, 0.42]) {
+    for (const [a, b] of sides) {
+      const [c, d] = inset(a, b, 0.16);
       ctx.beginPath();
-      ctx.moveTo(-W, o * D * 0.5);
-      ctx.lineTo(0, o * D + D * 0.5 * o);
-      ctx.lineTo(W, o * D * 0.5);
+      ctx.moveTo(c[0], c[1]);
+      ctx.lineTo(d[0], d[1]);
       ctx.stroke();
     }
     ctx.restore();
     return;
   }
-  // The deck itself: a flat lozenge on the tile, with a lip on the near side.
+  // The lip on the near edges: an edge whose outside looks down the screen.
+  const T = 2.5;
+  ctx.fillStyle = side;
+  for (let i = 0; i < 4; i++) {
+    const a = q[i], b = q[(i + 1) % 4];
+    if (b[0] - a[0] <= 0) continue;
+    ctx.beginPath();
+    ctx.moveTo(a[0], a[1]);
+    ctx.lineTo(b[0], b[1]);
+    ctx.lineTo(b[0], b[1] + T);
+    ctx.lineTo(a[0], a[1] + T);
+    ctx.closePath();
+    ctx.fill();
+  }
+  // The deck itself, the tile it spans.
   ctx.fillStyle = top;
   ctx.beginPath();
-  ctx.moveTo(-W, 0);
-  ctx.lineTo(0, -D);
-  ctx.lineTo(W, 0);
-  ctx.lineTo(0, D);
-  ctx.closePath();
-  ctx.fill();
-  ctx.fillStyle = side;
-  ctx.beginPath();
-  ctx.moveTo(-W, 0);
-  ctx.lineTo(0, D);
-  ctx.lineTo(W, 0);
-  ctx.lineTo(W, 2);
-  ctx.lineTo(0, D + 2);
-  ctx.lineTo(-W, 2);
+  q.forEach(([x, y], i) => (i ? ctx.lineTo(x, y) : ctx.moveTo(x, y)));
   ctx.closePath();
   ctx.fill();
   // Planking across the run, or the courses of an arch.
   ctx.strokeStyle = 'rgba(0,0,0,0.14)';
   ctx.lineWidth = 0.8;
-  for (let i = -3; i <= 3; i++) {
-    const t = i / 4;
+  const [[a0, b0], [a1, b1]] = sides;
+  for (let i = 1; i < 8; i++) {
+    const [x0, y0] = lerp(a0, b0, i / 8), [x1, y1] = lerp(a1, b1, i / 8);
     ctx.beginPath();
-    ctx.moveTo(t * W, -D + Math.abs(t) * D);
-    ctx.lineTo(t * W, D - Math.abs(t) * D);
+    ctx.moveTo(x0, y0);
+    ctx.lineTo(x1, y1);
     ctx.stroke();
   }
+  const kerbs = sides.map(([a, b]) => inset(a, b, 0.08));
   if (kind === 'rope') {
     // Handropes along both sides, which is all that is between you and the drop.
     ctx.strokeStyle = '#cfc3a4';
     ctx.lineWidth = 1;
-    for (const o of [-1, 1]) {
+    for (const [a, b] of kerbs) {
       ctx.beginPath();
-      ctx.moveTo(-W, o * D * 0.5 - 5);
-      ctx.lineTo(0, o * D - 6);
-      ctx.lineTo(W, o * D * 0.5 - 5);
+      ctx.moveTo(a[0], a[1] - 5);
+      ctx.quadraticCurveTo((a[0] + b[0]) / 2, (a[1] + b[1]) / 2 - 3, b[0], b[1] - 5);
       ctx.stroke();
     }
   } else {
-    // A kerb along both edges so the deck reads as something you stay on.
+    // A kerb along both sides so the deck reads as something you stay on.
     ctx.strokeStyle = side;
     ctx.lineWidth = 1.4;
-    for (const o of [-1, 1]) {
+    for (const [a, b] of kerbs) {
       ctx.beginPath();
-      ctx.moveTo(-W, o * D * 0.5 - 1);
-      ctx.lineTo(0, o * D - 1);
-      ctx.lineTo(W, o * D * 0.5 - 1);
+      ctx.moveTo(a[0], a[1] - 1);
+      ctx.lineTo(b[0], b[1] - 1);
       ctx.stroke();
     }
   }
+  // Its moss, where the view is close enough in to see a cushion of it.
+  if (stone && green > 0 && zoom >= 0.6) deckMoss(ctx, q, kerbs, drop, green, seed);
   ctx.restore();
+}
+
+/**
+ * The moss a stone arch gathers (`greening.ts`): cushions along its kerbs,
+ * a row along its near lip with a trail or two hanging off it, and the foot
+ * of its pier green where the water keeps it damp. In clumps along the span,
+ * the same clumps at every age, spreading as it ages.
+ */
+function deckMoss(ctx: CanvasRenderingContext2D, q: Array<[number, number]>, kerbs: Array<[[number, number], [number, number]]>,
+  drop: number, green: number, seed: number): void {
+  const cs: Cushion[] = [];
+  /*
+   * Along an edge in patches: two places on it, the same at every age, each a
+   * clump that widens as the moss gets on, cushions biggest at its heart and
+   * a speck or two at its edge -- rather than a bead to every step.
+   */
+  const along = (a: [number, number], b: [number, number], step: number, salt: number, r: number, lift = 0): void => {
+    const len = Math.hypot(b[0] - a[0], b[1] - a[1]);
+    const hearts = [0, 1].map((k) => ({ at: hashOf(seed, salt, k, 91), wide: (0.1 + 0.32 * hashOf(seed, salt, k + 2, 91)) * green * (k ? 0.7 : 1) }));
+    for (let d = step / 2, i = 0; d < len; d += step, i++) {
+      const t = d / len;
+      const patch = Math.max(...hearts.map((h) => (h.wide > 0 ? 1 - Math.abs(t - h.at) / h.wide : 0)));
+      if (patch <= 0 || hashOf(seed, salt, i, 81) > 0.3 + patch) continue;
+      cs.push([a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t - lift, r * (0.55 + 0.85 * patch)]);
+    }
+  };
+  kerbs.forEach(([a, b], k) => along(a, b, 3.6, k + 1, 1.5, 1));
+  for (let i = 0; i < 4; i++) {
+    const a = q[i], b = q[(i + 1) % 4];
+    if (b[0] - a[0] <= 0) continue;
+    along(a, b, 3.4, 10 + i, 1.3, -0.5);
+    // And what hangs off the lip: a trail of cushions straight down, off the heaviest of it.
+    for (let k = 0; k < 2; k++) {
+      if (hashOf(seed, i, 20 + k, 81) > green * 0.7) continue;
+      const [x, y] = [a[0] + (b[0] - a[0]) * (0.2 + 0.6 * hashOf(seed, i, 30 + k, 81)), a[1] + (b[1] - a[1]) * (0.2 + 0.6 * hashOf(seed, i, 30 + k, 81))];
+      const n = 1 + Math.round(green * 3 * hashOf(seed, i, 40 + k, 81));
+      for (let j = 1; j <= n; j++) cs.push([x + (hashOf(seed, i, 50 + j, 83) - 0.5) * 1.4, y + 2 + j * 2.4, 1.25 - j * 0.14]);
+    }
+  }
+  // The foot of the pier, down where the water keeps it damp.
+  if (drop > 2) {
+    const h = Math.min(34, drop * 0.8);
+    for (let i = 0; i < 6; i++) {
+      if (hashOf(seed, i, 17, 81) > green) continue;
+      cs.push([-4 + 8 * hashOf(seed, i, 18, 81), 2 + h - 2 - hashOf(seed, i, 19, 81) * h * 0.35 * green, 1.4 + green]);
+    }
+  }
+  cushions(ctx, cs);
 }
 
 export function drawTrap(ctx: CanvasRenderingContext2D, sx: number, sy: number, zoom: number, kind: string, baited: boolean, sprung: boolean): void {
