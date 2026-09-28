@@ -21,6 +21,8 @@ import { TINCTURE_BONUS, TINCTURE_SECONDS } from '../../game/boons';
 import { TINCTURE_NAMES } from '../../game/remedies';
 import { FED_SAID, MOTE_CHANCE } from '../../game/sacrifice';
 import { GRAVE_KEEPS, GRAVE_REACH } from '../../game/graves';
+import { RESTORE_HARM, RESTORE_HARM_SPREAD } from '../../game/archaeology';
+import { DAMAGE_MAX } from '../../game/game';
 import { UI_SIZE_MAX, UI_SIZE_MIN } from '../screen';
 import { defaultKey } from '../../game/keybinds';
 import { guidePages } from '../../game/guide';
@@ -709,6 +711,14 @@ export const NEWS: News[] = [
     day: '2026-09-28',
     lines: () => [
       'Yarn is spun and cloth woven standing at a spindle or a loom set down on the ground; one in your pack does not count. The crafting window now says so in the row: "spindle: set yours down" when you carry one, "stand at one" when you do not. Right-click the ground, choose Set furniture down and pick it.',
+    ],
+  },
+  {
+    n: 54,
+    day: '2026-09-28',
+    lines: () => [
+      `Nothing repairs a fragment or a tarnished bauble until it is restored: not Repair, not a repair kit, not Mend, not a worker mending the stores. Its damage only goes up, and one that reaches ${DAMAGE_MAX} before it is restored breaks and is gone.`,
+      `Restore is tried at any damage short of that now, rather than refusing a badly damaged piece and sending you to repair it first. A failure puts ${RESTORE_HARM} to ${RESTORE_HARM + RESTORE_HARM_SPREAD} more damage on every piece.`,
     ],
   },
 ];

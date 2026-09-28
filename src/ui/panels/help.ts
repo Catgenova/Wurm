@@ -4,7 +4,7 @@ import {
 } from '../../game/actions';
 import { CIRCLET_SHARE, CIRCLET_STONES, GEM_ODDS, GEMS, JEWEL_BONUS, tradeName } from '../../game/gems';
 import { ANVIL_SUBTILES } from '../../game/anvil';
-import { ARCHAEOLOGY_ACTION_BY_ID, LECTERN_GAIN, RELICS } from '../../game/archaeology';
+import { ARCHAEOLOGY_ACTION_BY_ID, FIND_DAMAGE, FIND_DAMAGE_SPREAD, LECTERN_GAIN, RELICS, RESTORE_AGE, RESTORE_HARM, RESTORE_HARM_SPREAD } from '../../game/archaeology';
 import { BELT_MAX, QL_PER_LOOP } from '../../game/belt';
 import { HUNGER_RATE } from '../../game/body';
 import { BOON_BONUS, BOON_FOODS, boonTime, REST_CAP, REST_MULT, REST_PER_SECOND, TINCTURE_BONUS, TINCTURE_SECONDS } from '../../game/boons';
@@ -1419,7 +1419,8 @@ export function helpText(): string {
     ${numberWord(TOP_QL)}, and what it is made of stretches or shortens that. Damage also makes a tool work as though it
     were poorer than it is. Past <b>${DAMAGE_WARN} damage</b> it warns you in red, and again at every
     ${numberWord(DAMAGE_WARN_STEP)} points after; at ${DAMAGE_MAX} it breaks and is gone.</p>
-    <p>Right-click anything damaged and choose <b>Repair</b>. It is its own skill: the work goes on a go
+    <p>Right-click anything damaged and choose <b>Repair</b> &mdash; anything but a fragment or a tarnished bauble nobody has
+    restored yet, which nothing mends (see <b>Digging up the past</b>). It is its own skill: the work goes on a go
     at a time, taking damage out and a little quality with it, and you can stop whenever you like.
     Taking ${numberWord(WORN)} damage out of a tool is ${numberWord(repairGoes(startOf('repair')))} goes at repair ${startOf('repair')} and costs it
     ${repairCost(startOf('repair'))} of quality; at repair ${SKILLED} it is ${numberWord(repairGoes(SKILLED))} goes for ${repairCost(SKILLED)}.
@@ -1685,15 +1686,18 @@ export function helpText(): string {
     through the topsoil carefully, and now and then it gives up a <b>fragment</b> of something old.
     Ground you have been over is no good again for a while, so keep walking.</p>
     <p>Nothing comes out of the ground whole or sound. A fragment names what it is a piece of and which
-    piece it is &mdash; <i>${LAST_RELIC.name} ${LAST_RELIC.parts - 1}/${LAST_RELIC.parts}</i> &mdash; and carries a good deal of damage, which
-    <b>Repair</b> takes out. There are ${numberWord(RELICS.length)} things under the island, from ${article(RELICS[0].name)} <b>${RELICS[0].name}</b> in
+    piece it is &mdash; <i>${LAST_RELIC.name} ${LAST_RELIC.parts - 1}/${LAST_RELIC.parts}</i> &mdash; and comes up with ${FIND_DAMAGE} to
+    ${FIND_DAMAGE + FIND_DAMAGE_SPREAD} damage. <b>Nothing repairs a fragment or a tarnished bauble until it is restored</b>: not
+    Repair, not a repair kit, not Mend, not a worker mending the stores. Its damage only goes up, from a restoring that
+    fails and from lying out in the weather, and one that reaches ${DAMAGE_MAX} before it is restored breaks and is gone.
+    Restored, it is a thing like any other and mends like one. There are ${numberWord(RELICS.length)} things under the island, from ${article(RELICS[0].name)} <b>${RELICS[0].name}</b> in
     ${numberWord(RELICS[0].parts)} pieces to ${article(LAST_RELIC.name)} <b>${LAST_RELIC.name}</b> in ${numberWord(LAST_RELIC.parts)}, and a relic is only recognised once your archaeology has
     come far enough to know what it is looking at. The commonplace turns up far more often than the
     rare, and the ground is kind enough to favour a piece you are still short of.</p>
     <p>With every piece in hand, right-click one and choose <b>Restore</b>. That is the
-    <b>Restoration</b> skill: a success puts the thing back together, and a failure marks all the
-    pieces and leaves you to mend them. What comes out is only as good as the pieces that went in, so
-    a careful excavator and a patient repairer make a better relic than either alone. Some of it is
+    <b>Restoration</b> skill, at any damage short of breaking: a success puts the thing back together, and a failure
+    puts ${RESTORE_HARM} to ${RESTORE_HARM + RESTORE_HARM_SPREAD} more damage on every piece. What comes out is only as good as the pieces that went in,
+    less ${percent(1 / RESTORE_AGE)} of it for each point of damage on them. Some of it is
     treasure and nothing more &mdash; a statuette, a bronze mirror, a bone comb, an old lamp &mdash;
     and some of it is an <b>old file</b>, an <b>old blade</b> or an <b>ancient helm</b>, which are the
     real prize: a file before you have a forge to cast one in.</p>

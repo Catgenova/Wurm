@@ -351,10 +351,10 @@ export const ITEM_DEFS: Record<string, ItemDef> = {
   book: { name: 'Book', category: 'misc', weight: 1.2, decay: 6, description: 'Papyrus sewn between leather boards. Reading it sharpens the head, and wears the pages.' },
   // An Artisan's Trade Book: its trade is its label.
   trade_book: { name: 'Trade book', category: 'misc', weight: 1.2, decay: 6, description: 'A book written on one trade, its name on the spine. Studied, it teaches that trade where a plain book teaches mind logic, and wears the pages as a plain one does.' },
-  fragment: { name: 'Fragment', category: 'misc', weight: 0.6, decay: 3, description: 'A broken piece of something old. Find the rest of it and a restorer can put it back together.' },
+  fragment: { name: 'Fragment', category: 'misc', weight: 0.6, decay: 3, description: 'A broken piece of something old. Find the rest of it and a restorer can put it back together. Nothing repairs it before then, and if it breaks first it is gone.' },
   treasure_map: { name: 'Treasure map', category: 'misc', weight: 0.1, decay: 20, description: 'A square of oiled hide with a stretch of country drawn on it and no names anywhere. Read it to see the picture; walk until the ground matches, then dig. Something is always left to watch over a hoard. Keep it in a pack or a crate — left lying in a field it will rot, and take the hoard with it.' },
   statuette: { name: 'Statuette', category: 'misc', weight: 1.4, decay: 2, description: 'A small figure in worn stone, carried by people who are long gone.' },
-  tarnished_bauble: { name: 'Tarnished bauble', category: 'misc', weight: 0.1, decay: 3, description: 'Gives nothing until it is restored. Restore it (restoration: difficulty {bauble.minor.difficulty} for a minor one, {bauble.major.difficulty} major, {bauble.ancient.difficulty} ancient) and what it gives is rolled then, with its rarity.' },
+  tarnished_bauble: { name: 'Tarnished bauble', category: 'misc', weight: 0.1, decay: 3, description: 'Gives nothing until it is restored. Restore it (restoration: difficulty {bauble.minor.difficulty} for a minor one, {bauble.major.difficulty} major, {bauble.ancient.difficulty} ancient) and what it gives is rolled then, with its rarity. Nothing repairs it before then, and if it breaks first it is gone.' },
   bauble_minor: { name: 'Minor bauble', category: 'misc', weight: 0.1, description: 'Set it into one of the {bauble.minor.slots} minor sockets of the altar of a settlement of yours. Every citizen of that settlement, while working on it, then gets what is written on it: less time per action, or more skill gained, in that one skill.' },
   bauble_major: { name: 'Major bauble', category: 'misc', weight: 0.1, description: 'Set it into one of the {bauble.major.slots} major sockets of the altar of a settlement of yours. Every citizen of that settlement, while working on it, then has the chance written on it of {bauble.yield:times} the yield from each action in that one skill.' },
   bauble_regret: { name: 'Bauble of Regret', category: 'misc', weight: 0.1, description: 'Undoes one of your trades. In the Trades window, Undo on your crafting or your fighting trade puts it down as though you had never taken it up, clears its tree, and uses this up; the next trade you take up in its place costs nothing, where a change costs {regret.saves} silver. Only on an island, where trades are kept.' },
@@ -959,6 +959,23 @@ export function rollRarity(rand: () => number, first = RARITY_ODDS[0]): number {
 export function itemDef(id: string): ItemDef {
   return ITEM_DEFS[id] ?? { name: id, category: 'misc', weight: 1 };
 }
+
+/**
+ * What a trowel turns up that a restorer has not had yet: a piece of a relic
+ * and a tarnished bauble.
+ *
+ * Asked for: "Artifacts that have not been restored should not be able to be
+ * repaired. If not restored before broken they are gone." So nothing takes
+ * damage off one of these -- not Repair, not a repair kit, not Mend, not a
+ * worker mending the stores -- and it comes out of the ground damaged and
+ * only ever takes more, from a restoring that fails and from lying out in the
+ * weather. At a hundred it breaks and is gone, as anything is. Restored, it
+ * is a thing like any other and mends like one. The island's `unrestored`.
+ */
+export const UNRESTORED: ReadonlySet<string> = new Set(['fragment', 'tarnished_bauble']);
+export const unrestored = (item: { id: string }): boolean => UNRESTORED.has(item.id);
+/** Why nothing mends one, in the island's words (`not_restored_says`). */
+export const NOT_RESTORED = 'It has not been restored, and nothing repairs it until it is. If it breaks first, it is gone.';
 
 /** What is counted by the lot rather than one by one: four cloth, not four cloths. */
 const BY_THE_LOT = new Set(['cloth', 'wool', 'leather', 'mortar', 'yarn', 'wax', 'sand', 'clay', 'dirt', 'thatch', 'peat', 'tar', 'coal', 'concrete', 'cotton', 'wemp', 'mixed_grass', 'sinew', 'honey', 'flour', 'cornmeal', 'dough', 'wheat', 'corn', 'thyme', 'basil', 'mint', 'sage', 'rosemary', 'lavender']);

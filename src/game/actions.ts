@@ -50,7 +50,7 @@ import { helpingOf, NUTRIENTS } from './nutrition';
 import { SKILL_DEFS } from './skills';
 import {
   describeFrom, itemDef, itemName, itemWeight, markOf, markSays, rarityOf, bagAdd, bagRefuses, bagSpare, isBag, storedLine, RARITIES, RARITY_WORD, rollRarity,
-  type Item,
+  NOT_RESTORED, unrestored, type Item,
 } from './items';
 import { listed, numberWord } from './words';
 import { knackable, RECIPE_ACTIONS } from './recipes';
@@ -2184,15 +2184,17 @@ export const ACTIONS: ActionDef[] = [
     repeat: true,
     stamina: 0.02,
     baseTime: 1,
+    // Not offered on a find nobody has restored yet (`unrestored`), which nothing mends.
     applies: (t, g) => {
       if (t.kind !== 'item') return false;
       const item = g.inventory.get(t.uid);
-      return !!item && item.dmg > 0;
+      return !!item && item.dmg > 0 && !unrestored(item);
     },
     check: (t, g) => {
       if (t.kind !== 'item') return null;
       const item = g.inventory.get(t.uid);
       if (!item) return 'It is gone.';
+      if (unrestored(item)) return NOT_RESTORED;
       if (item.dmg <= 0) return 'There is nothing wrong with it.';
       if (item.ql <= REPAIR_FLOOR) return 'It is worn away to nothing and will not take another repair.';
       return null;
@@ -2276,12 +2278,13 @@ export const ACTIONS: ActionDef[] = [
     applies: (t, g) => {
       if (t.kind !== 'item') return false;
       const item = g.inventory.get(t.uid);
-      return !!item && item.dmg > 0 && item.id !== 'repair_kit' && g.inventory.count('repair_kit') > 0;
+      return !!item && item.dmg > 0 && item.id !== 'repair_kit' && !unrestored(item) && g.inventory.count('repair_kit') > 0;
     },
     check: (t, g) => {
       if (t.kind !== 'item') return null;
       const item = g.inventory.get(t.uid);
       if (!item) return 'It is gone.';
+      if (unrestored(item)) return NOT_RESTORED;
       if (item.dmg <= 0) return 'There is nothing wrong with it.';
       if (item.id === 'repair_kit') return 'A kit does not mend itself.';
       if (g.inventory.count('repair_kit') < 1) return 'You have no repair kit.';

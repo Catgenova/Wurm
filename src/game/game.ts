@@ -32,7 +32,7 @@ import { Actor, type ActiveAction, type GuestSave } from './actor';
 import { HOST_ID, type PeerId } from '../net/protocol';
 import { Roster } from './roster';
 import { GameEmitter, type LogEntry, type LogKind } from './events';
-import { bagTake, DEED_DECAY, describeWith, foldInto, groundDecayRate, Inventory, ITEM_DEFS, itemName, type Item, markOf, type Mark, rarityOf, rarityStep, itemDef, sameMark, sameStack, spendOut } from './items';
+import { bagTake, DEED_DECAY, describeWith, foldInto, groundDecayRate, Inventory, ITEM_DEFS, itemName, type Item, markOf, type Mark, rarityOf, rarityStep, itemDef, sameMark, sameStack, spendOut, unrestored } from './items';
 import { BASE_SPEED, CARRY_CRAWL, CLIMB_LEARN, CLIMB_LEARN_FROM, CLIMB_LEARN_STEEP, CLIMB_PER_LEVEL, groundStep, MAX_STAND, MAX_STEP, Player, readPlayer, standsOn, walkKey, writePlayer, SWIM_DEPTH, SWIM_SPEED } from './player';
 import { randomLook, type Look } from './look';
 import { ACTION_FLOOR, ACTION_PACE, world } from './pace';
@@ -5486,12 +5486,15 @@ export class Game {
     this.events.emit('world', wall.x, wall.y);
   }
 
-  /** The most knocked-about thing in the deed's stores, and where it is kept. */
+  /**
+   * The most knocked-about thing in the deed's stores, and where it is kept.
+   * Never a find nobody has restored yet, which nothing mends (`unrestored`).
+   */
   damagedInStores(): { store: DeedStore; item: Item } | undefined {
     let best: { store: DeedStore; item: Item } | undefined;
     for (const store of this.deedStores()) {
       for (const item of store.items) {
-        if (item.dmg <= 1) continue;
+        if (item.dmg <= 1 || unrestored(item)) continue;
         if (!best || item.dmg > best.item.dmg) best = { store, item };
       }
     }

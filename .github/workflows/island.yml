@@ -1568,6 +1568,18 @@ jobs:
             --outfile=node_modules/.cache/baubles.mjs --log-level=error
           node node_modules/.cache/baubles.mjs
 
+      - name: A find nobody has restored takes no repair
+        run: |
+          # Asked for: an artifact that has not been restored cannot be repaired,
+          # and one that breaks before it is restored is gone. Repair, a repair
+          # kit and Mend refuse a fragment or a tarnished bauble in the same
+          # words on both sides, a worker mending the stores passes it by,
+          # Restore takes it at any damage short of breaking, and at the most
+          # damage a thing takes it is gone.
+          npx esbuild supabase/test/unrestored.ts --bundle --platform=node --format=esm \
+            --outfile=node_modules/.cache/unrestored.mjs --log-level=error
+          node node_modules/.cache/unrestored.mjs
+
       - name: A sacrifice at the altar, and the motes it leaves
         run: |
           # Asked for: rare, supreme and fantastic things given up at the

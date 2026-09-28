@@ -1,7 +1,7 @@
 import type { ActionDef, Target } from './actions';
 import type { Game } from './game';
 import { furnitureCentre, furnitureDef, type PlacedFurniture } from './furniture';
-import { itemName, type Item } from './items';
+import { itemName, NOT_RESTORED, unrestored, type Item } from './items';
 import { world, worldRate } from './pace';
 import { capital, spanWords, times } from './words';
 
@@ -155,6 +155,8 @@ export function castReason(g: Game, def: CastDef, item?: Item): string | null {
   if (g.skills.get(FAITH) < def.level) return `${def.name} takes ${def.level} prayer; you have ${g.skills.get(FAITH).toFixed(0)}.`;
   if (g.player.favour < def.cost) return `${def.name} costs ${def.cost} favour; you hold ${Math.floor(g.player.favour)}. Pray at an altar.`;
   if (def.on === 'item' && !item) return 'Choose something to lay it on.';
+  // Not on a find nobody has restored yet, which nothing mends (`unrestored`).
+  if (def.id === 'mend' && item && unrestored(item)) return NOT_RESTORED;
   if (def.id === 'mend' && item && item.dmg <= 0) return `There is nothing wrong with the ${itemName(item).toLowerCase()}.`;
   if (def.id === 'cunning' && item) {
     if ((item.bless ?? 0) >= BLESS_CAP) return `The ${itemName(item).toLowerCase()} has taken all it will take.`;

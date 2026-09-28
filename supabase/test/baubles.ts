@@ -15,7 +15,7 @@
  *     words, so one restored on either side is read the same on the other;
  *   * what is rolled is what the rules say: the tiers in their shares, the
  *     amounts inside their range times the rarity, every roll readable;
- *   * the island turns them up, restores them and refuses one too far gone;
+ *   * the island turns them up, and restores them at any damage short of breaking;
  *   * it sets one only at an altar, standing at it, on a settlement of yours,
  *     as a citizen, into the next empty socket or the one asked for -- a
  *     filled one only by the founder or a mayor, the old one lost -- in the
@@ -225,7 +225,7 @@ begin
   /* Restoring one. */
   b := give(w, u, 'tarnished_bauble', 1, 60, 'major');
   update item set dmg = 90 where id = b;
-  insert into said values ('GONETOOFAR', coalesce(act_refusal(w, u, 'restore_relic', jsonb_build_object('kind', 'item', 'uid', b)), 'null'));
+  insert into said values ('FARGONE', coalesce(act_refusal(w, u, 'restore_relic', jsonb_build_object('kind', 'item', 'uid', b)), 'null'));
   update item set dmg = 20 where id = b;
   insert into said values ('RESTORE', coalesce(act_refusal(w, u, 'restore_relic', jsonb_build_object('kind', 'item', 'uid', b)), 'null'));
   -- A go can fail its skill check (one in five, at a hundred against a major's thirty), which is what the
@@ -413,7 +413,7 @@ check(`the island turns up a bauble for about ${BAUBLE_SHARE * 100}% of finds`, 
 check('each with its tier on it and the damage of the ground', found > 0 && badTier === 0 && badDmg === 0, say('FINDS'));
 check('and says so', /^Your trowel turns up a tarnished (minor|major|ancient) bauble\. Restore it to see what it does\. \(QL [\d.]+, damage \d+\)$/.test(say('FOUNDSAID')),
   say('FOUNDSAID'));
-check('one too far gone is refused, as the browser refuses it', say('GONETOOFAR') === 'It is too far gone to restore. Repair it first.', say('GONETOOFAR'));
+check('one at 90 damage is restored as it is, since nothing repairs it first', say('FARGONE') === 'null', say('FARGONE'));
 check('one in hand may be restored', say('RESTORE') === 'null', say('RESTORE'));
 check('restored, it is a major bauble with what it gives written on it', say('RESTORED') === '0|bauble_major|double', say('RESTORED'));
 check('and says what it came out as', /^The tarnish comes away and the bauble is whole: .*major bauble \([a-z ]+: [\d.]+% chance of twice the yield\)\. \(QL [\d.]+\)$/.test(say('RESTORESAID')),
@@ -495,7 +495,7 @@ for (const i of pack) if (i.id === TARNISHED || i.id === 'fragment' || i.id === 
 const restoreDef = ACTION_BY_ID.get('restore_relic')!;
 const tarn = game.inventory.add(TARNISHED, { ql: 60, extra: 'major' });
 tarn.dmg = 90;
-check('the browser refuses one too far gone in the island\'s words', restoreDef.check?.({ kind: 'item', uid: tarn.uid }, game) === say('GONETOOFAR'));
+check('and so does the browser', (restoreDef.check?.({ kind: 'item', uid: tarn.uid }, game) ?? null) === null);
 game.skills.values.set('restoration', 100);
 // A go can fail its skill check, as on the island: go again until it comes clean.
 for (let i = 0; i < 12 && game.inventory.get(tarn.uid); i++) {

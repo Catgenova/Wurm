@@ -11,6 +11,12 @@ import { article } from './words';
 
 /** What one go at putting a relic back together teaches. */
 export const RESTORE_GAIN = 0.4;
+/**
+ * The damage a find comes out of the ground with: `FIND_DAMAGE` and up to
+ * `FIND_DAMAGE_SPREAD` more. The island's `perform_dig` rolls the same.
+ */
+export const FIND_DAMAGE = 18;
+export const FIND_DAMAGE_SPREAD = 50;
 
 /**
  * Archaeology and restoration. People lived on this island before you did and
@@ -241,7 +247,7 @@ export const ARCHAEOLOGY_ACTIONS: ActionDef[] = [
       if (kind === 'bauble') {
         const tier = rollTier(g.rand);
         const found = g.gather(TARNISHED, { ql: Math.max(1, g.productQl('archaeology', toolQl) * (0.55 + g.rand() * 0.35)), extra: tier });
-        found.dmg = 18 + g.rand() * 50;
+        found.dmg = FIND_DAMAGE + g.rand() * FIND_DAMAGE_SPREAD;
         g.events.emit('inventory');
         g.logMsg(`Your trowel turns up a tarnished ${tier} bauble. Restore it to see what it does. (QL ${found.ql.toFixed(1)}, damage ${found.dmg.toFixed(0)})`, 'event');
         return;
@@ -278,7 +284,7 @@ export const ARCHAEOLOGY_ACTIONS: ActionDef[] = [
         extra: `${relic.name} ${part}/${relic.parts}`,
       });
       // Nothing comes out of the ground sound.
-      item.dmg = 18 + g.rand() * 50;
+      item.dmg = FIND_DAMAGE + g.rand() * FIND_DAMAGE_SPREAD;
       g.events.emit('inventory');
       const left = partsMissing(g, relic).length;
       const short = left ? ` ${left} of ${relic.parts} still missing.` : ` That is all ${relic.parts} of them.`;
@@ -300,13 +306,13 @@ export const ARCHAEOLOGY_ACTIONS: ActionDef[] = [
     check: (t, g) => {
       if (t.kind !== 'item') return null;
       const item = g.inventory.get(t.uid);
-      if (item?.id === TARNISHED) return item.dmg >= 85 ? 'It is too far gone to restore. Repair it first.' : null;
+      // At any damage short of breaking: nothing mends a find before it is
+      // restored (`unrestored`), so it is restored as it is or not at all.
+      if (item?.id === TARNISHED) return null;
       const f = item && fragmentOf(item);
       if (!f) return 'That is not a fragment of anything.';
       const missing = partsMissing(g, f.relic);
       if (missing.length) return `You are missing ${missing.length} of the ${f.relic.parts} pieces of the ${f.relic.name} (${missing.join(', ')}).`;
-      const rough = piecesHeld(g, f.relic).find((it) => it.dmg >= 85);
-      if (rough) return 'One of the pieces is too far gone to join. Repair it first.';
       return null;
     },
     perform: (t, g) => {
