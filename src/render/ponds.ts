@@ -29,6 +29,7 @@ import { FALL_DROP, pondLevelAt, RUN_RATE, type PondWater, type StreamWater, typ
 import type { World } from '../world/world';
 import { DETAIL_FROM, drawFoot, drawLip, drawMist, drawSheet, footPoint, place, type FallView, type Placed, type Sheet } from './falls';
 import { HALF_H, HALF_W, HEIGHT_SCALE } from './iso';
+import { paintPads } from './pads';
 import { depthOf, type View } from './view';
 import { SPRING_EDGE, SPRING_FOAM, SPRING_PALE, SPRING_WATER } from './water';
 
@@ -1165,72 +1166,7 @@ export class SpringWater {
       at[m++] = pad.flower ? 1 : 0;
       if (m >= at.length) break;
     }
-    const shape = (grow: number, dy: number, notch: boolean): void => {
-      ctx.beginPath();
-      for (let i = 0; i < m; i += 6) {
-        const x = at[i];
-        const y = at[i + 1] + at[i + 3] * dy;
-        if (notch) {
-          ctx.moveTo(x, y);
-          ctx.ellipse(x, y, at[i + 2] * grow, at[i + 3] * grow, 0, at[i + 4] + PAD_NOTCH, at[i + 4] + Math.PI * 2 - PAD_NOTCH);
-          ctx.closePath();
-        } else {
-          ctx.moveTo(x + at[i + 2] * grow, y);
-          ctx.ellipse(x, y, at[i + 2] * grow, at[i + 3] * grow, 0, 0, Math.PI * 2);
-        }
-      }
-    };
-    shape(1.04, 0.24, false);
-    ctx.fillStyle = PAD_SHADOW;
-    ctx.fill();
-    shape(1, 0, true);
-    ctx.fillStyle = PAD_GREEN;
-    ctx.fill();
-    ctx.strokeStyle = PAD_RIM;
-    ctx.lineWidth = Math.max(0.7, 0.8 * z);
-    ctx.stroke();
-    // The paler middle, and close in the veins running out from it.
-    ctx.fillStyle = PAD_LIGHT;
-    ctx.beginPath();
-    for (let i = 0; i < m; i += 6) {
-      ctx.moveTo(at[i] - at[i + 2] * 0.1 + at[i + 2] * 0.5, at[i + 1] - at[i + 3] * 0.14);
-      ctx.ellipse(at[i] - at[i + 2] * 0.1, at[i + 1] - at[i + 3] * 0.14, at[i + 2] * 0.5, at[i + 3] * 0.46, 0, 0, Math.PI * 2);
-    }
-    ctx.fill();
-    if (z >= 1.8) {
-      ctx.strokeStyle = PAD_VEIN;
-      ctx.lineWidth = Math.max(0.6, 0.55 * z);
-      ctx.beginPath();
-      for (let i = 0; i < m; i += 6) {
-        for (let v = 1; v < 6; v++) {
-          const a = at[i + 4] + PAD_NOTCH + ((Math.PI * 2 - 2 * PAD_NOTCH) * v) / 6;
-          ctx.moveTo(at[i], at[i + 1]);
-          ctx.lineTo(at[i] + Math.cos(a) * at[i + 2] * 0.85, at[i + 1] + Math.sin(a) * at[i + 3] * 0.85);
-        }
-      }
-      ctx.stroke();
-    }
-    // The flowers, stood up off the pad: an outer ring of petals, a paler inner one, and the heart.
-    for (const [ink, reach, size] of [[PAD_PETAL, 0.34, 0.3], [PAD_PETAL_LIGHT, 0.17, 0.2], [PAD_HEART, 0, 0.1]] as const) {
-      ctx.fillStyle = ink;
-      ctx.beginPath();
-      for (let i = 0; i < m; i += 6) {
-        if (!at[i + 5]) continue;
-        const r = at[i + 2];
-        const x = at[i];
-        const y = at[i + 1] - r * 0.28;
-        const petals = reach ? 6 : 1;
-        for (let k = 0; k < petals; k++) {
-          const a = (k / petals) * Math.PI * 2 + at[i + 4];
-          const px = x + Math.cos(a) * r * reach;
-          const py = y + Math.sin(a) * r * reach * 0.55 - (reach ? r * 0.06 : 0);
-          ctx.moveTo(px + r * size, py);
-          ctx.ellipse(px, py, r * size, r * size * (reach ? 0.62 : 0.8), 0, 0, Math.PI * 2);
-        }
-      }
-      ctx.fill();
-    }
-    ctx.lineWidth = 1;
+    paintPads(ctx, at, m, z);
   }
 
   /** Foam at the foot of a step down a stream: a few small lumps, shaded under, and a drop or two thrown off them. */
@@ -1645,17 +1581,6 @@ const PLUME_SHADE = rgb(mix(SPRING_PALE, SPRING_EDGE, 0.22));
 /** Scratch for a cascade's foot on screen, and for a line's lily pads: where, how wide and deep, which way the notch faces, and whether in flower. */
 const CASCADE_AT: number[] = [];
 const PAD_AT = new Float64Array(6 * 256);
-/** A lily pad's colours: its shadow on the water, its green, its rim and veins, its paler middle; a flower's petals and heart. */
-const PAD_SHADOW = 'rgba(28,110,112,0.28)';
-const PAD_GREEN = 'rgb(126,186,102)';
-const PAD_RIM = 'rgb(78,140,72)';
-const PAD_VEIN = 'rgba(78,140,72,0.55)';
-const PAD_LIGHT = 'rgba(170,216,128,0.55)';
-const PAD_PETAL = 'rgb(244,166,180)';
-const PAD_PETAL_LIGHT = 'rgb(252,212,218)';
-const PAD_HEART = 'rgb(248,212,96)';
-/** Half the angle of the notch cut out of a lily pad. */
-const PAD_NOTCH = 0.32;
 
 /** Scratch for one line's streaks and flecks, filled and emptied rather than made each time. */
 const STREAKS: number[] = [];
@@ -1680,7 +1605,7 @@ function mistTexture(): HTMLCanvasElement {
 }
 
 /** A lump of foam: white and nearly solid through the middle, soft at the edge. */
-function foamTexture(): HTMLCanvasElement {
+export function foamTexture(): HTMLCanvasElement {
   const S = 64;
   const cv = document.createElement('canvas');
   cv.width = S;

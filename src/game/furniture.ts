@@ -219,6 +219,18 @@ export interface BoatDef {
   deck?: Array<[number, number]>;
 }
 
+/** Litres a well holds when it is full, and a tiered fountain the same. */
+export const WELL_HOLDS = 50;
+/**
+ * What a well draws in a second: this much at the least, and this much more
+ * the better it was built, all of it at quality 100 (`Game.wellRate`). The
+ * island's `well_rate` is the same sum.
+ */
+export const WELL_TRICKLE = 0.012;
+export const WELL_TRICKLE_QL = 0.055;
+/** The quality a well draws all of `WELL_TRICKLE_QL` more at. */
+export const WELL_TRICKLE_AT = 100;
+
 const piece = (
   id: string,
   name: string,
@@ -353,7 +365,17 @@ export const FURNITURE: FurnitureDef[] = [
   piece('stone_rose_arch', 'Stone rose arch', 4, 1, [['stone_brick', 36], ['mortar', 12]], 24, 22,
     `You lay the piers, turn the arch over them and plant a climbing rose at the foot of each. ${ROSES_RULE}`, undefined,
     { skill: 'masonry', tool: 'trowel', roses: true }),
-  piece('well', 'Well', 2, 2, [['stone_brick', 48], ['mortar', 16], ['shaft', 4], ['thick_rope', 1], ['nail', 16]], 30, 24, 'You line the shaft, cap it with a kerb and hang a windlass over it. It will find its own water.', undefined, { skill: 'masonry', tool: 'trowel', well: 50 }),
+  piece('well', 'Well', 2, 2, [['stone_brick', 48], ['mortar', 16], ['shaft', 4], ['thick_rope', 1], ['nail', 16]], 30, 24, 'You line the shaft, cap it with a kerb and hang a windlass over it. It will find its own water.', undefined, { skill: 'masonry', tool: 'trowel', well: WELL_HOLDS }),
+  /*
+   * A tiered fountain: basins of cut slab, each smaller than the one under
+   * it, on a coursed column, the water welling over the top one and spilling
+   * round the rim of each into the next. It is a well to every rule there is
+   * -- it draws its own water at a well's rate, up to a well's litres, and a
+   * bucket, a skin or a mouth takes from it as from one -- because `well` is
+   * the whole of what makes a thing a well, on both sides. Its cost is a
+   * well's, in dressed stone rather than a windlass.
+   */
+  piece('fountain', 'Tiered fountain', 3, 3, [['stone_brick', 32], ['stone_slab', 3], ['mortar', 16]], 32, 26, 'You set {bill.stone_slab:w} basins one over another on a coursed column, each smaller than the one under it, and lead the water up through the middle. It will find its own water, as a well does.', undefined, { skill: 'masonry', tool: 'trowel', well: WELL_HOLDS }),
   // Storage of a different sort: raw materials, rubbish, and something to pull it in.
   piece('bulk_bin', 'Raw material bin', 2, 2, [['plank', 48], ['timber', 16], ['nail', 48]], 20, 16, 'You build a deep bin with a hinged lid, the sort a cartload of ore goes into.', 400, { takes: 'raw' }),
   /*
@@ -608,6 +630,8 @@ for (const f of FURNITURE) {
   describeFrom(f.id, said);
 }
 describeWith({ bucketLitres: BUCKET_LITRES });
+// What a fountain draws, off the well's own rate: litres a minute at the least, and at quality 100.
+describeFrom('fountain', { least: (WELL_TRICKLE * 60).toFixed(1), most: ((WELL_TRICKLE + WELL_TRICKLE_QL) * 60).toFixed(1), top: WELL_TRICKLE_AT });
 // A tent's night measured against a bed's, off the two pieces.
 describeFrom('tent', { ofBed: (furnitureDef('tent').bed ?? 0) / (furnitureDef('bed').bed ?? 1) });
 // How the roses on an arch grow, off the rule that grows them.

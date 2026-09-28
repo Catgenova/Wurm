@@ -76,6 +76,7 @@ export const FOOTINGS: Partial<Record<number, Footing>> = {
   [TileType.Cobblestone]: 'stone',
   [TileType.Slabs]: 'stone',
   [TileType.Steps]: 'stone',
+  [TileType.SteppingStones]: 'stone',
   [TileType.Snow]: 'snow',
   [TileType.Marsh]: 'water',
 };
@@ -95,6 +96,8 @@ export function footingAt(g: Game, x: number, y: number, level: number): Footing
   if (floor) return MATERIAL_BY_ID.get(floor.material)?.kind === 'stone' ? 'stone' : 'wood';
   const bridge = g.bridgeAt(tx, ty);
   if (bridge) return bridge.kind === 'stone' ? 'stone' : 'wood';
+  // Stepping stones are stepped on, not waded through, whatever water is round them.
+  if (g.world.stonesAt(tx, ty)) return 'stone';
   if (g.world.hasWater(tx, ty) && g.world.heightAt(x, y) < g.world.surfaceAt(tx, ty)) return 'water';
   const tile = g.world.viewTile(tx, ty, true);
   // A flight of timber steps is boards underfoot, not stone.

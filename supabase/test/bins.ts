@@ -60,8 +60,9 @@ check('in the same words the island uses', RAW_BIN_REFUSAL === 'A raw material b
 const raw = Object.entries(ITEM_DEFS).filter(([, d]) => d.raw).map(([id]) => id);
 const made = new Set(RECIPES.map((r) => r.result));
 // Offal came in with a Cook's Bait Maker: cut from a carcass, as hide and fur are.
-// And moss, cut off a moss tile as mixed grass is off grass, and wildflowers, picked off grass in flower.
-check('forty-three raw materials on the list', raw.length === 43, String(raw.length));
+// And moss, cut off a moss tile as mixed grass is off grass, and wildflowers, picked off grass in flower; and water
+// lily and lotus flowers with the water garden, picked as rose petals are.
+check('forty-five raw materials on the list', raw.length === 45, String(raw.length));
 check('every one of them a stackable material', raw.every((id) => ITEM_DEFS[id].stackable && ITEM_DEFS[id].category === 'material'),
   raw.filter((id) => !(ITEM_DEFS[id].stackable && ITEM_DEFS[id].category === 'material')).join() || 'all of them');
 check('none of them what a recipe makes', raw.every((id) => !made.has(id)), raw.filter((id) => made.has(id)).join() || 'none');
@@ -115,9 +116,9 @@ check('nothing at all goes in both bins', both.length === 0, both.join() || 'non
 const mats = Object.keys(ITEM_DEFS).filter((id) => ITEM_DEFS[id].category === 'material');
 const homeless = mats.filter((id) => said(id) !== 'taken' && csaid(id) !== 'taken');
 check(`and every one of the ${mats.length} materials goes in one of them`, homeless.length === 0, homeless.join() || 'all placed');
-check('which is the forty-three raw and the rest worked',
-  mats.filter((id) => said(id) === 'taken').length === 43
-    && mats.filter((id) => csaid(id) === 'taken').length === mats.length - 43,
+check('which is the forty-five raw and the rest worked',
+  mats.filter((id) => said(id) === 'taken').length === 45
+    && mats.filter((id) => csaid(id) === 'taken').length === mats.length - 45,
   `${mats.filter((id) => said(id) === 'taken').length} raw, ${mats.filter((id) => csaid(id) === 'taken').length} worked`);
 
 /*
@@ -397,7 +398,7 @@ check('and counts out the same room as the browser does, 0.1 kg included',
 check('five hundred planks in leaves the same seven hundred and fifty',
   say('PART') === `${furnitureKg(part)}|${furnitureRoom(part, { id: 'plank' })}`, say('PART'));
 check('and the island splits the materials the way the browser does',
-  say('SPLIT') === `43|${mats.length - 43}|0`, `${say('SPLIT')} raw | worked | both`);
+  say('SPLIT') === `45|${mats.length - 45}|0`, `${say('SPLIT')} raw | worked | both`);
 
 check('the island stands a larder up and it holds 250 counted things',
   say('LARDER') === '250|0', say('LARDER'));

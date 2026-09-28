@@ -1,4 +1,4 @@
-import { TileType, TILE_DEFS, TREE_DEFS, BUSH_DEFS, ROCK_VARIANTS, SLAB_VARIANTS, treeSpecies, bushSpecies, slabVariant, stepsName } from './tiles';
+import { TileType, TILE_DEFS, TREE_DEFS, BUSH_DEFS, ROCK_VARIANTS, SLAB_VARIANTS, treeSpecies, bushSpecies, slabVariant, stepsName, stonesKind } from './tiles';
 import type { WaterField } from './springs';
 
 export type WorldListener = (x: number, y: number) => void;
@@ -837,7 +837,17 @@ export class World {
     if (t === TileType.Rock) return ROCK_VARIANTS[this.rockFace(x, y)].name;
     if (t === TileType.Slabs) return SLAB_VARIANTS[slabVariant(this.getData(x, y))].name;
     if (t === TileType.Steps) return stepsName(this.getData(x, y));
+    if (t === TileType.SteppingStones) return SLAB_VARIANTS[stonesKind(this.getData(x, y))].stones;
     return TILE_DEFS[t].name;
+  }
+
+  /**
+   * Whether a tile is stepping stones: walked dry-shod over whatever water is
+   * on it, at a walking pace, never swimming (`Player.update`), which the
+   * island says too (`in_deep_water`).
+   */
+  stonesAt(x: number, y: number): boolean {
+    return this.getTile(x, y) === TileType.SteppingStones;
   }
 
   /** Whether an entity can stand on the tile at all. */

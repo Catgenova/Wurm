@@ -27,7 +27,7 @@ import {
   MONSTER_SHARE, MONSTERS, OLD_AT, PULL_DEFAULT, RANGE_PER_STEP, rangeSteps, SKILL_STEP, SPECIES, trainedHit, YOUNG_FOR,
 } from '../../game/creatures';
 import { DEED_UPGRADES } from '../../game/deed';
-import { DYES } from '../../game/dyestuffs';
+import { DYE_BY_ID, DYES } from '../../game/dyestuffs';
 import { CROP_BY_SEED, CROPS, cropYield, growthWords, PATCH_TIME, RIPE, STAGE_NAMES } from '../../game/farming';
 import { PLANTER_GROWTH, SEASON_GROWTH, YEARLESS_GROWTH } from '../../game/growth';
 import { CASTS, FAITH, FAVOUR_CEILING, favourCap, PRAYER_BASE, PRAYER_LIFT, PRAYER_PEAKS, PRAYER_REST, PRAYER_TAPER } from '../../game/faith';
@@ -35,8 +35,10 @@ import { ANCIENT_EFFECTS, ANCIENT_PLUS, BAUBLE_HIGH, BAUBLE_KINDS, BAUBLE_LOW, B
 import { MOTE_CHANCE } from '../../game/sacrifice';
 import { HERB_HEAL, healAmount, SUITS_HEAL } from '../../game/firstaid';
 import { BAIT_BY_ID, biteShare, FISH, LINE_REACH } from '../../game/fishing';
-import { PER_ROLL, rollsAt } from '../../game/forage';
-import { BUCKET_LITRES, FURNITURE, furnitureDef, POND_EVERY, teamSaid } from '../../game/furniture';
+import { PER_ROLL, rollsAt, watersideOdds } from '../../game/forage';
+import { BUCKET_LITRES, FURNITURE, furnitureDef, POND_EVERY, teamSaid, WELL_TRICKLE, WELL_TRICKLE_QL } from '../../game/furniture';
+import { STONES_DEPTH, STONES_DIFFICULTY, STONES_SLABS, WATER_GARDEN_ACTIONS, yearSays } from '../../game/watergarden';
+import { WATER_PLANT_BY_ID, WATER_PLANT_DEEPEST, WATER_PLANT_SHALLOWEST, WATER_ROOTING, type WaterPlantDef } from '../../world/waterplants';
 import { GRAVE_KEEPS, GRAVE_REACH } from '../../game/graves';
 import {
   ASH_RATE, BASE_QUEUE, BOAT_LOAD_DRAG, CARRY_BASE, CARRY_PER_STRENGTH, CARRY_STOP, CHAR_START, DAMAGE_MAX, DAMAGE_WARN,
@@ -2298,6 +2300,52 @@ export function helpText(): string {
     ground from there as any spring's water runs. A pool with nothing lower beside it keeps its water.
     A foundation with no pool in it is a wall to water, and one poured over a spring stops it.
     <b>Fill the pool in</b> takes a trowel and <b>${POOL_FILL}</b> concrete, and stops a spring in it.</p>
+    ${waterGarden()}
+  `;
+}
+
+/** The water garden: stepping stones, the tiered fountain, and water lilies and lotus. */
+function waterGarden(): string {
+  const lily = WATER_PLANT_BY_ID.get('lily') as WaterPlantDef;
+  const lotus = WATER_PLANT_BY_ID.get('lotus') as WaterPlantDef;
+  const dyeOf = (item: string): { id: string; count: number; word: string } => {
+    const d = [...DYE_BY_ID.values()].find((x) => x.from === item);
+    return { id: d?.id ?? '', count: d?.count ?? 0, word: d?.word ?? '' };
+  };
+  const lilyDye = dyeOf(lily.flower);
+  const lotusDye = dyeOf(lotus.flower);
+  const reach = WATER_GARDEN_ACTIONS.find((a) => a.id === `plant_${lily.id}`)?.range ?? 1;
+  const perMinute = (litres: number): string => (litres * 60).toFixed(1);
+  const stones = SLAB_VARIANTS.map((v) => v.name.replace(/ slabs$/, '').toLowerCase());
+  const stonesOf = `${stones.slice(0, -1).join(', ')} or ${stones[stones.length - 1]}`;
+  return `
+    <h3>A water garden: stepping stones, a fountain, lilies and lotus</h3>
+    <p><b>Lay stepping stones</b> across shallow water &mdash; the edge of the sea, a pond, or ground a stream runs
+    over &mdash; with a trowel in your pack: a masonry job at difficulty ${STONES_DIFFICULTY}, and <b>${numberWord(STONES_SLABS)}</b>
+    cut slab a tile, of ${stonesOf}, which the stones are the colour of. They stand on the bottom, so only where the
+    water at the middle of the tile is <b>${metres(STONES_DEPTH)} m</b> deep or less, which is twice the
+    <b>${metres(SWIM_DEPTH)} m</b> you start to swim at; on bare ground or what grows flat on it, never on paving, a field or
+    anything standing. On a tile of them you walk at <b>${percent(ground(TileType.SteppingStones).speed / ground(TileType.Grass).speed)}</b> of
+    your pace on grass and neither wade nor swim, however deep the water round them is; a loaded cart loses
+    ${share(rollCost(TileType.SteppingStones))} of its pace bumping over them. <b>Take up the stepping stones</b> gives the slab back and leaves the
+    ground as it was.</p>
+    <p>A <b>tiered fountain</b> is a mason's job &mdash; ${bill('make_fountain')} &mdash; and is <b>a well to every rule</b>: it draws its
+    own water as a well does, <b>${perMinute(WELL_TRICKLE)}</b> litres a minute at the least and <b>${perMinute(WELL_TRICKLE + WELL_TRICKLE_QL)}</b> at
+    quality ${TOP_QL}, up to <b>${furnitureDef('fountain').well} litres</b>. Fill a bucket or a waterskin at it, or drink from it where you stand.</p>
+    <p><b>Water lilies</b> and <b>lotus</b> grow in still water. Botanizing on a tile with water on it or beside it &mdash; the sea, a
+    pond or a pool &mdash; turns up a <b>${itemDef(lily.from).name.toLowerCase()}</b> about one find in ${watersideOdds(lily.from)} and
+    <b>${itemDef(lotus.from).name.toLowerCase()}</b> one in ${watersideOdds(lotus.from)}, as well as everything it finds elsewhere.
+    Plant one within ${numberWord(reach)} tiles, in a pond, a pool or the shallows of the sea, where the water is
+    <b>${metres(WATER_PLANT_SHALLOWEST)} to ${metres(WATER_PLANT_DEEPEST)} m</b> deep &mdash; never where water runs, one to a tile, and not among
+    stepping stones. Its leaves are up at once, in their seasons, and it <b>roots in ${spanWords(WATER_ROOTING)}</b>; from then on it keeps the island's year,
+    the same for everybody. A water lily ${yearSays(lily)}; a lotus ${yearSays(lotus)}. In ${listed(SEASONS.filter((sn) => !lily.leaves.includes(sn) && !lotus.leaves.includes(sn)))}
+    only the root of either is left, under the water, and its leaves come up again in ${SEASONS.find((sn) => lily.leaves.includes(sn) && lotus.leaves.includes(sn))}.</p>
+    <p><b>Pick</b> a flower or a seed head and it is gone until the season turns. ${NumberWord(lilyDye.count)} water lily flowers and a bucket of
+    lye boil into ${numberWord(made(`make_${lilyDye.id}`))} pots of <b>${lilyDye.word}</b> dye, and ${numberWord(lotusDye.count)} lotus flowers into
+    ${numberWord(made(`make_${lotusDye.id}`))} of <b>${lotusDye.word}</b>. A seed head gives
+    <b>${numberWord(lotus.seedCount ?? 0)} ${itemDef(lotus.seed ?? '').name.toLowerCase()}</b>: plant them, or eat them &mdash; raw they fill
+    ${percent(itemDef(lotus.seed ?? '').food ?? 0)} of the food bar, roasted at a campfire (${numberWord(need('roast_lotus_seeds', lotus.seed ?? ''))} a handful)
+    ${percent(itemDef('roast_lotus_seeds').food ?? 0)}. <b>Pull it up</b> gives the root or the seed back.</p>
   `;
 }
 

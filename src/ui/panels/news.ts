@@ -1,5 +1,5 @@
 import { MATERIAL_BY_ID } from '../../game/building';
-import { TREE_AGES, TREE_DAWN_UTC, TREE_DEFS } from '../../world/tiles';
+import { TILE_DEFS, TileType, TREE_AGES, TREE_DAWN_UTC, TREE_DEFS } from '../../world/tiles';
 import { SEASON_DAYS } from '../../world/calendar';
 import { BLOOMS, BUSH_FLOWER_FROM, evergreen, LEAF_DAYS, SHED_DAYS, TURN_DAYS } from '../../render/foliage';
 import { lifeSeasons } from '../../render/life';
@@ -53,11 +53,13 @@ import { DEVICE_COUNT } from '../../render/furniture';
 import { FLOWER_MOST, FLOWER_SEASONS } from '../../world/flowers';
 import { DYES } from '../../game/dyestuffs';
 import { GREEN_ACTIONS, GREEN_DAYS, GREEN_SHADE, GREEN_SUN, GREEN_WET } from '../../game/greening';
-import { FURNITURE } from '../../game/furniture';
+import { FURNITURE, WELL_TRICKLE, WELL_TRICKLE_QL } from '../../game/furniture';
 import { BRIDGES } from '../../game/bridges';
 import { CROPS, growthWords } from '../../game/farming';
 import { PLANTER_GROWTH, SEASON_GROWTH } from '../../game/growth';
 import { SEASONS } from '../../world/calendar';
+import { STONES_DEPTH, STONES_SLABS, yearSays } from '../../game/watergarden';
+import { WATER_PLANT_BY_ID, WATER_PLANT_DEEPEST, WATER_PLANT_SHALLOWEST, WATER_ROOTING, type WaterPlantDef } from '../../world/waterplants';
 import type { UIWindow } from '../windows';
 
 /**
@@ -812,6 +814,21 @@ export const NEWS: News[] = [
         `A planter grows one crop ${growthWords(PLANTER_GROWTH)} in every season, winter too, indoors or out: a stage of cotton takes ${spanWords(CROPS.cotton.stageSeconds / PLANTER_GROWTH)} in one. Sow, tend, harvest or pull it up from its menu, with the same seeds, stages and yields as a field; the Farmer's perks on a sowing or a harvest work on it, and ${rotation} reads the planter's own last crop. A planter with something growing in it will not be picked up, and an empty one is bare earth.`,
         'Hovering over a field or a planter, and sowing one, says when the next stage comes in real time, and a field in winter how long it waits for spring.',
         'Bounty brings on the crops on your own settlements, the planters standing on them included, and no longer those on everybody else\'s.',
+      ];
+    },
+  },
+  {
+    n: 61,
+    day: '2026-09-28',
+    lines: () => {
+      const lily = WATER_PLANT_BY_ID.get('lily') as WaterPlantDef;
+      const lotus = WATER_PLANT_BY_ID.get('lotus') as WaterPlantDef;
+      const dyeWord = (item: string): string => DYES.find((d) => d.from === item)?.word ?? '';
+      const metres = (units: number): string => (units / 10).toFixed(1);
+      return [
+        `Lay stepping stones across shallow water — the sea's edge, a pond, or where a stream runs — with a trowel and ${numberWord(STONES_SLABS)} cut slab a tile, where the water is ${metres(STONES_DEPTH)} m deep or less (you swim from ${metres(SWIM_DEPTH)} m). On them you walk at ${percent(TILE_DEFS[TileType.SteppingStones].speed / TILE_DEFS[TileType.Grass].speed)} of your pace on grass and neither wade nor swim. Take up the stepping stones gives the slab back.`,
+        `A tiered fountain (masonry: ${pieceBill('fountain')}) is a well to every rule: it draws its own water, ${(WELL_TRICKLE * 60).toFixed(1)} to ${((WELL_TRICKLE + WELL_TRICKLE_QL) * 60).toFixed(1)} litres a minute by its quality, up to ${furnitureDef('fountain').well} litres; fill a bucket or a skin at it or drink from it.`,
+        `Botanizing at the water's edge turns up ${itemDef(lily.from).name.toLowerCase()}s and ${itemDef(lotus.from).name.toLowerCase()}. Plant them in still water ${metres(WATER_PLANT_SHALLOWEST)} to ${metres(WATER_PLANT_DEEPEST)} m deep; they root in ${spanWords(WATER_ROOTING)} and keep the island's year: a water lily ${yearSays(lily)}, a lotus ${yearSays(lotus)}. Water lily flowers boil into ${dyeWord(lily.flower)} dye and lotus flowers into ${dyeWord(lotus.flower)}; a seed head gives ${numberWord(lotus.seedCount ?? 0)} lotus seeds to eat or plant.`,
       ];
     },
   },

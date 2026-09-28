@@ -11,7 +11,7 @@
  * the algorithms are ported, the constants are not.
  */
 import { CATEGORY_DECAY, ITEM_DEFS } from '../src/game/items';
-import { BURYABLE, BUSH_DEFS, ROAD_TILES, ROCK_VARIANTS, TILE_DEFS, TREE_AGES, TREE_DEFS, TREE_ROOM_ONE, TREE_ROOM_TWO, TREE_SEEDS, TREE_SEED_BOTH, TREE_SEED_NONE, TREE_SEED_REACH, TREE_DAWN_UTC } from '../src/world/tiles';
+import { BURYABLE, STONE_BEDS, BUSH_DEFS, ROAD_TILES, ROCK_VARIANTS, TILE_DEFS, TREE_AGES, TREE_DEFS, TREE_ROOM_ONE, TREE_ROOM_TWO, TREE_SEEDS, TREE_SEED_BOTH, TREE_SEED_NONE, TREE_SEED_REACH, TREE_DAWN_UTC } from '../src/world/tiles';
 import { STEPS_BRICKS, STEPS_LEAST, STEPS_MORTAR, STEPS_MOST, STEPS_NAILS, STEPS_PLANKS, STEPS_SLABS, STEPS_TIMBER, STEPS_TWIST, TileType } from '../src/world/tiles';
 import { STEPS_BACK } from '../src/game/steps';
 import { SKILL_DEFS, isQuiet } from '../src/game/skills';
@@ -19,7 +19,9 @@ import { MATERIALS } from '../src/game/materials';
 import { ACTIONS } from '../src/game/actions';
 import { RECIPES } from '../src/game/recipes';
 import { FURNITURE } from '../src/game/furniture';
-import { FORAGE_TABLE, BOTANIZE_TABLE, EMPTY_CHANCE, FIND_CHECK, PER_ROLL } from '../src/game/forage';
+import { FORAGE_TABLE, BOTANIZE_TABLE, BOTANIZE_WATER_TABLE, EMPTY_CHANCE, FIND_CHECK, PER_ROLL } from '../src/game/forage';
+import { STONES_DEPTH, STONES_SLABS } from '../src/game/watergarden';
+import { WATER_PLANTS, WATER_PLANT_DEEPEST, WATER_PLANT_SHALLOWEST, WATER_ROOTING } from '../src/world/waterplants';
 import { CROP_LIST } from '../src/game/farming';
 import { FISH, BAITS } from '../src/game/fishing';
 import { WALL_TYPES, MATERIALS as BUILD_MATERIALS, ROOF_SHAPES, STOREY_SKILL, INDOORS_DECAY, INDOORS_REST, WALL_HEIGHT, LADDER_PLANKS, MAX_LEVELS, TOP_LEVELS } from '../src/game/building';
@@ -296,6 +298,8 @@ out.push(`create table if not exists flower_octave (
   i int primary key, cell int not null, salt int not null, weight int not null, eased boolean not null
 );`);
 out.push(`create table if not exists flower_season (season text primary key, drift int, most int not null);`);
+/** Ground stepping stones are laid over (`STONE_BEDS`). */
+out.push(`create table if not exists stone_bed (tile int primary key);`);
 out.push(`create table if not exists improve_material_def (
   id text primary key, name text not null, skill text not null
 );`);
@@ -354,6 +358,16 @@ out.push(`alter table tile_def add column if not exists rich_worms boolean not n
  * rock tile keeps its seam. */
 out.push(`create table if not exists slab_def (
   id int primary key, name text not null, item text not null
+);`);
+/*
+ * The two water plants (`src/world/waterplants.ts`): what each is planted
+ * from, the seasons its leaves are up, flowers and seeds in, and what a
+ * picking gives. The planted ones are `water_plant`, beside the land.
+ */
+out.push(`create table if not exists water_plant_def (
+  id text primary key, name text not null, from_item text not null,
+  leaves text[] not null, flowers text[] not null, flower_item text not null,
+  seeds text[] not null, seed_item text, seed_count int not null default 0
 );`);
 /* What a barrel holds and what a well finds for itself, in litres. */
 out.push(`alter table furniture_def add column if not exists liquid real;`);
@@ -911,7 +925,7 @@ out.push('alter table if exists crop drop constraint if exists crop_id_fkey;');
 out.push('');
 out.push(emptied(['item_def', 'tile_def', 'skill_def', 'material_def', 'rarity_def', 'dye_def',
   'slab_def', 'vessel_def', 'liquid_def', 'relic_def', 'trap_def', 'treasure_def', 'map_band',
-  'gem_def', 'jewel_def']));
+  'gem_def', 'jewel_def', 'water_plant_def']));
 GEMS.forEach((g, i) => out.push(`insert into gem_def values (${q(g.id)}, ${q(g.name)}, ${q(g.skill)}, ${q(g.weight)}, ${q(g.flavour)}, ${q(i)});`));
 for (const g of GEMS) if (g.perk) out.push(`update gem_def set perk = ${q(g.perk)} where id = ${q(g.id)};`);
 for (const id of JEWEL_PIECES) out.push(`insert into jewel_def values (${q(id)});`);
@@ -1030,7 +1044,7 @@ out.push(emptied(['melt_def', 'wall_fitting', 'recipe', 'recipe_input', 'recipe_
   'weapon_def', 'armour_class_def', 'armour_def', 'shield_def', 'hit_location',
   'wound_kind_def', 'butcher_part', 'species_butcher', 'hoard_metal', 'crate_def', 'metal_def',
   'pottery_def', 'mould_def', 'improve_material_def', 'improve_tool', 'improve_stock',
-  'improvable_def', 'item_feeds', 'boon_skill', 'plantable', 'buryable', 'flower_octave', 'flower_season', 'title_def',
+  'improvable_def', 'item_feeds', 'boon_skill', 'plantable', 'buryable', 'flower_octave', 'flower_season', 'stone_bed', 'title_def',
   'knack_kin', 'category_decay', 'vehicle_def', 'boat_def', 'tack_def', 'cast_def', 'path_def',
   'path_step', 'class_def', 'class_skill', 'class_channel', 'class_node', 'class_perk',
   'perk_fx_rule', 'perk_tier', 'pan_ore', 'rite_def',
@@ -1096,6 +1110,7 @@ FLOWER_OCTAVES.forEach((o, i) => out.push(`insert into flower_octave values (${q
 for (const [season, from] of Object.entries(FLOWER_FROM)) {
   out.push(`insert into flower_season values (${q(season)}, ${q(from)}, ${q(FLOWER_MOST[season as keyof typeof FLOWER_MOST])});`);
 }
+for (const t of [...STONE_BEDS].sort((a, b) => a - b)) out.push(`insert into stone_bed values (${q(t)});`);
 /*
  * Only the three that have a name. The browser keys rarity by an index into a
  * list whose first entry is the ordinary one with an empty name, and a row
@@ -1630,7 +1645,7 @@ BUSH_DEFS.forEach((b, i) => {
   out.push(`insert into bush_def values (${q(i)}, ${q(b.name)});`);
   if (b.yields) out.push(`update bush_def set yields = ${q(b.yields)} where id = ${q(i)};`);
 });
-for (const [id, table] of [['forage', FORAGE_TABLE], ['botanize', BOTANIZE_TABLE]] as Array<[string, Array<[string, number]>]>) {
+for (const [id, table] of [['forage', FORAGE_TABLE], ['botanize', BOTANIZE_TABLE], ['botanize_water', BOTANIZE_WATER_TABLE]] as Array<[string, Array<[string, number]>]>) {
   for (const [item, weight] of table) out.push(`insert into loot_table values (${q(id)}, ${q(item)}, ${q(weight)});`);
 }
 ROCK_VARIANTS.forEach((r, i) => {
@@ -1754,6 +1769,24 @@ for (const [fn, v] of [
   ['mote_chance', MOTE_CHANCE],
 ] as Array<[string, number]>) {
   out.push(`create or replace function ${fn}() returns double precision language sql immutable as $fn$ select ${q(v)}::double precision $fn$;`);
+}
+/*
+ * The water garden (`src/game/watergarden.ts`, `src/world/waterplants.ts`):
+ * how deep the water may be for stepping stones and for a water plant, what
+ * a tile of stones takes, and how long a water plant takes to root.
+ */
+for (const [fn, v] of [
+  ['stones_depth', STONES_DEPTH], ['stones_slabs', STONES_SLABS],
+  ['water_rooting', WATER_ROOTING], ['water_plant_shallowest', WATER_PLANT_SHALLOWEST], ['water_plant_deepest', WATER_PLANT_DEEPEST],
+] as Array<[string, number]>) {
+  out.push(`create or replace function ${fn}() returns double precision language sql immutable as $fn$ select ${q(v)}::double precision $fn$;`);
+}
+/* And how long rooting takes, in the words the browser says it in (`spanWords`). */
+out.push(`create or replace function water_rooting_said() returns text language sql immutable as $fn$ select ${q(spanWords(WATER_ROOTING))} $fn$;`);
+const arr = (xs: readonly string[]): string => `array[${xs.map(q).join(', ')}]::text[]`;
+for (const d of WATER_PLANTS) {
+  out.push(`insert into water_plant_def values (${[q(d.id), q(d.name), q(d.from), arr(d.leaves), arr(d.flowers), q(d.flower),
+    arr(d.seeds), q(d.seed ?? null), q(d.seedCount ?? 0)].join(', ')});`);
 }
 /* The four things a body wants (`src/game/nutrition.ts`), which a sacrifice fills to the top. */
 out.push(`create or replace function nutrients() returns text[] language sql immutable as $fn$ select array[${NUTRIENTS.map(q).join(', ')}]::text[] $fn$;`);

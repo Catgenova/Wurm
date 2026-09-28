@@ -49,6 +49,7 @@ import { furnitureAnchor, furnitureCapacity, furnitureDef, furnitureHeft, furnit
 import { DEED_ACTION_BY_ID, leaveQuestion, standingWord, upgradeProgress, upgradeReason } from '../game/deed';
 import { CROP_BY_SEED, cropDef, describeCrop, emptyFields, growthWords, planterPace, sownPace, stageNote, type Crop, type CropDef } from '../game/farming';
 import { PLANTER_GROWTH } from '../game/growth';
+import { describeWaterPlant } from '../game/watergarden';
 import { cornerReading, groundReading } from './tileinfo';
 import { deedWorkersAt, MAX_DEED_LEVEL, rankAtLeast, type Deed } from '../game/game';
 import { CRAFT_REACH, reachFor, recipeNeeds, recipeReason, recipeStatus, RECIPES, type CraftStock, type Recipe } from '../game/recipes';
@@ -758,6 +759,8 @@ export class UI {
       lines.push(w.tileName(pick.x, pick.y));
     }
     if (growing) lines.push(this.cropLine(growing));
+    const planted = this.game.waterPlantAt(pick.x, pick.y);
+    if (planted) lines.push(describeWaterPlant(this.game, planted, this.game.wallNow()));
     lines.push(`${pick.x}, ${pick.y} · slope ${w.slope(pick.x, pick.y)}`);
     lines.push(cornerReading(this.game, pick.cx, pick.cy));
     const reading = groundReading(this.game, pick.x, pick.y);

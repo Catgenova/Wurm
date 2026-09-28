@@ -44,7 +44,8 @@ import { BAUBLE_ACTIONS } from './baubles';
 import { SACRIFICE_ACTIONS } from './sacrifice';
 import { MEDITATION_ACTIONS } from './meditation';
 import { SPECIES, type Stance } from './creatures';
-import { BOTANIZE_TABLE, EMPTY_CHANCE, FIND_CHECK, FORAGE_TABLE, listOf, rollsAt, rollTable } from './forage';
+import { BOTANIZE_TABLE, BOTANIZE_WATER_TABLE, EMPTY_CHANCE, FIND_CHECK, FORAGE_TABLE, listOf, rollsAt, rollTable } from './forage';
+import { atWaterEdge, WATER_GARDEN_ACTIONS } from './watergarden';
 import type { FloorKind, RoofShape, Side, WallType } from './building';
 import { DEED_RADIUS, rankAtLeast, type Game } from './game';
 import { materialOfItem } from './materials';
@@ -1962,7 +1963,8 @@ export const ACTIONS: ActionDef[] = [
       if (t.kind !== 'tile') return;
       g.markForaged(t.x, t.y, 'botanize');
       const rolls = searches(g, 'botanize', 'botanizing');
-      const found = lookOver(g, 'botanize', 'botanizing', BOTANIZE_TABLE, rolls);
+      // At the water's edge the table has water lily roots and lotus seeds in it too.
+      const found = lookOver(g, 'botanize', 'botanizing', atWaterEdge(g, t.x, t.y) ? BOTANIZE_WATER_TABLE : BOTANIZE_TABLE, rolls);
       if (!found.length) {
         g.missed();
         g.logMsg(rolls > 1 ? `You go over the ground ${rolls} times and find nothing of interest.` : 'You find nothing of interest.', 'event');
@@ -2921,6 +2923,7 @@ export const ACTIONS: ActionDef[] = [
   ...BRIDGE_ACTIONS,
   ...SPRING_ACTIONS,
   ...FLOWER_ACTIONS,
+  ...WATER_GARDEN_ACTIONS,
   ...FOUNDATION_ACTIONS,
   ...STEPS_ACTIONS,
   ...FAITH_ACTIONS,
@@ -2990,7 +2993,9 @@ export const ACTIONS: ActionDef[] = [
 const SHAPES_GROUND = new Set(['dig', 'dredge', 'flatten', 'drop_dirt', 'drop_dirt_here', 'raise_rock',
   'mine', 'chip_corner', 'pack', 'cultivate', 'pave_cobble', 'pave_slabs', 'remove_paving',
   'dig_spring', 'stop_spring', 'dig_pool', 'fill_pool',
-  'lay_steps', 'lay_timber_steps', 'take_up_steps', 'plant_moss']);
+  'lay_steps', 'lay_timber_steps', 'take_up_steps', 'plant_moss',
+  // Stepping stones laid and taken up, and a water lily or a lotus planted or pulled up.
+  'lay_stones', 'lift_stones', 'plant_lily', 'plant_lotus', 'pull_water_plant']);
 for (const def of ACTIONS) {
   if (!SHAPES_GROUND.has(def.id)) continue;
   const was = def.check;

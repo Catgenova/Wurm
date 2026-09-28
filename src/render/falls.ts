@@ -19,6 +19,12 @@
  * of water falling that far, which is the same pace in the world at every
  * zoom.
  *
+ * A lip can also run round in a ring -- the rim of a fountain's basin --
+ * with the water going over it outward all the way round: the same sheet,
+ * with `u` running round the rim instead of along an axis and no ends to
+ * draw back from (`Sheet.ring`). Everything below asks where the lip is and
+ * which way is out through `lipAt`, which is the only place the two differ.
+ *
  * Strokes are counted by the tile of width and drawn as thick as the zoom
  * says, so a curtain eight tiles wide is eight tiles of the same water rather
  * than one fall stretched, and it costs what there is of it on the screen.
@@ -92,6 +98,23 @@ export interface Sheet {
   grow: number;
   /** Half the width of the water coming to the lip, in tiles, where that is narrower than the sheet: a stream's. */
   feed?: number;
+  /**
+   * A lip that runs round in a ring rather than along an axis: its middle,
+   * in tiles, and its radius. `u` then runs round it from the world's east
+   * toward its south, a tile of `u` a tile of rim, from `from` nought to
+   * `to` the whole way round; it has no ends, `half` is nought, and it falls
+   * outward, `way` being 1. `axis` and `line` then only key what varies
+   * along it, so give each ring a `line` of its own.
+   */
+  ring?: { x: number; y: number; r: number };
+  /** How far back from the lip the smooth water drawn into it begins, in tiles, where that is not `TONGUE`: a basin's rim, a hand's width in from its edge. */
+  back?: number;
+  /**
+   * How much water goes over, as a share of what a stream or a pond sends
+   * over a lip, where it is less: a fountain's rim. The foam, rings and spray
+   * where it lands are that much smaller; one if left out.
+   */
+  flow?: number;
 }
 
 /** A fall as it lies on the screen this frame, worked out once and read by every piece of it. */
@@ -122,6 +145,8 @@ export interface Placed {
   n: number;
   al: Float64Array;
   dn: Float64Array;
+  /** For a ring (`Sheet.ring`), with `x0` and `y0` its middle: its radius and reach in tiles, and the screen step for a tile along x and along y. */
+  ring?: { r: number; reach: number; xx: number; xy: number; yx: number; yy: number };
 }
 
 /** A fall this tall, in height units, is white by its foot and throws up the most spray and mist there is. */
@@ -192,6 +217,7 @@ function curveAt(f: number, out: number): void {
 
 /** A sheet on the screen this frame. */
 export function place(v: FallView, s: Sheet): Placed {
+  if (s.ring) return placeRing(v, s, s.ring);
   const along = s.axis === 0 ? [1, 0] : [0, 1];
   const fall = s.axis === 0 ? [0, s.way] : [s.way, 0];
   const wx = s.axis === 0 ? s.from : s.line;
@@ -228,22 +254,96 @@ export function place(v: FallView, s: Sheet): Placed {
   };
 }
 
+/**
+ * A ring on the screen this frame. Its curl is the same all the way round, as
+ * much as a straight sheet going over an edge seen side on: the curve is
+ * worked out once for the sheet, and a ring is seen going away from you on
+ * one side and toward you on the other.
+ */
+function placeRing(v: FallView, s: Sheet, g: { x: number; y: number; r: number }): Placed {
+  const x0 = v.ox + v.xx * g.x + v.xy * g.y;
+  const y0 = v.oy + v.yx * g.x + v.yy * g.y - s.top * v.hs;
+  let drop = 0;
+  for (let i = 0; i < s.land.length; i++) drop = Math.max(drop, s.top - s.land[i]);
+  const tall = Math.min(1, drop / FALL_TALL);
+  const out = CURL_OUT * s.curl * (1 - 0.72 / Math.PI);
+  const len = Math.hypot(v.xx, v.yx) * s.reach;
+  const n = Math.max(4, Math.min(14, Math.round((len + drop * v.hs) / 14)));
+  const al = new Float64Array(n + 1);
+  const dn = new Float64Array(n + 1);
+  for (let i = 0; i <= n; i++) {
+    curveAt((i / n) * s.grow, out);
+    al[i] = CV[0];
+    dn[i] = CV[1];
+  }
+  return {
+    sheet: s, x0, y0, ex: v.xx, ey: v.yx, dx: v.xy * s.reach, dy: v.yy * s.reach, hs: v.hs, drop, out, tall,
+    white: 0.25 + 0.7 * Math.min(1, drop / (FALL_TALL * 0.9)),
+    fallTime: Math.sqrt((2 * Math.max(drop, 4)) / UNITS_A_METRE / FALL_G),
+    // A ring carrying little water is spread thin however short its rim is.
+    thin: Math.max(0, Math.min(1, Math.max((s.to - s.from - 1.2) / 6, 1 - (s.flow ?? 1)))),
+    grow: s.grow, n, al, dn,
+    ring: { r: g.r, reach: s.reach, xx: v.xx, xy: v.xy, yx: v.yx, yy: v.yy },
+  };
+}
+
+/**
+ * Where the lip is at `u` on the screen, at the height it goes over at, and
+ * the step on the screen from there out to the foot, into `LIP`: along a
+ * straight lip the same step the whole way, round a ring out from its middle.
+ */
+function lipAt(p: Placed, u: number): void {
+  const g = p.ring;
+  if (!g) {
+    const du = u - p.sheet.from;
+    LIP[0] = p.x0 + p.ex * du;
+    LIP[1] = p.y0 + p.ey * du;
+    LIP[2] = p.dx;
+    LIP[3] = p.dy;
+    return;
+  }
+  const a = u / g.r;
+  const c = Math.cos(a);
+  const s = Math.sin(a);
+  const ox = g.xx * c + g.xy * s;
+  const oy = g.yx * c + g.yy * s;
+  LIP[0] = p.x0 + ox * g.r;
+  LIP[1] = p.y0 + oy * g.r;
+  LIP[2] = ox * g.reach;
+  LIP[3] = oy * g.reach;
+}
+
+/** The screen step along the lip at `u` for a tile of it, into `LIP[4]` and `LIP[5]`. */
+function alongAt(p: Placed, u: number): void {
+  const g = p.ring;
+  if (!g) {
+    LIP[4] = p.ex;
+    LIP[5] = p.ey;
+    return;
+  }
+  const a = u / g.r;
+  const c = Math.cos(a);
+  const s = Math.sin(a);
+  LIP[4] = g.xy * c - g.xx * s;
+  LIP[5] = g.yy * c - g.yx * s;
+}
+
 /** Where a point of a sheet is on the screen: `u` along the lip's axis, `f` of the way down it, and `off` of a tile out in front of it. */
 function at(p: Placed, u: number, f: number, off: number, o: Float64Array, k: number): void {
   const s = p.sheet;
   curveAt(f * s.grow, p.out);
   const a = CV[0] + off / s.reach;
-  const du = u - s.from;
-  o[k] = p.x0 + p.ex * du + p.dx * a;
-  o[k + 1] = p.y0 + p.ey * du + p.dy * a + p.hs * (s.top - landAt(s, u)) * CV[1];
+  lipAt(p, u);
+  o[k] = LIP[0] + LIP[2] * a;
+  o[k + 1] = LIP[1] + LIP[3] * a + p.hs * (s.top - landAt(s, u)) * CV[1];
 }
 
 /** The same at slice `i` of the sheet's own slices, without working the curve out again. */
 function atSlice(p: Placed, u: number, i: number, o: Float64Array, k: number): void {
   const s = p.sheet;
-  const du = u - s.from;
-  o[k] = p.x0 + p.ex * du + p.dx * p.al[i];
-  o[k + 1] = p.y0 + p.ey * du + p.dy * p.al[i] + p.hs * (s.top - landAt(s, u)) * p.dn[i];
+  lipAt(p, u);
+  o[k] = LIP[0] + LIP[2] * p.al[i];
+  o[k + 1] = LIP[1] + LIP[3] * p.al[i] + p.hs * (s.top - landAt(s, u)) * p.dn[i];
 }
 
 /** How far past its own stretch a piece of a sheet lays its water, in tiles: `HAIR`, or `HAIR_PX` on the screen where that is more. */
@@ -255,8 +355,11 @@ function seen(v: FallView, p: Placed, u0: number, u1: number, margin: number): b
   let hx = -Infinity;
   let ly = Infinity;
   let hy = -Infinity;
-  for (let c = 0; c < 4; c++) {
-    atSlice(p, c & 1 ? u1 : u0, c & 2 ? p.n : 0, PT, 0);
+  // A stretch of a ring is bounded by the whole of the ring: the four points of it furthest each way, lip and foot.
+  const q = p.ring ? (p.ring.r * Math.PI) / 2 : 0;
+  for (let c = 0; c < (p.ring ? 8 : 4); c++) {
+    if (p.ring) atSlice(p, (c & 3) * q, c & 4 ? p.n : 0, PT, 0);
+    else atSlice(p, c & 1 ? u1 : u0, c & 2 ? p.n : 0, PT, 0);
     lx = Math.min(lx, PT[0]);
     hx = Math.max(hx, PT[0]);
     ly = Math.min(ly, PT[1]);
@@ -319,13 +422,14 @@ function fray(p: Placed, end: number, f: number, t: number): number {
  * gradient along the line from one point of the lip to the foot below it
  * would change along the lip as well, and each piece would start it afresh.
  */
-function downSheet(ctx: CanvasRenderingContext2D, p: Placed): [CanvasGradient, CanvasGradient, CanvasGradient] {
-  const s = p.sheet;
-  const el = Math.hypot(p.ex, p.ey) || 1;
-  let nx = -p.ey / el;
-  let ny = p.ex / el;
-  atSlice(p, s.from, 0, PT, 0);
-  atSlice(p, s.from, p.n, PT, 2);
+function downSheet(ctx: CanvasRenderingContext2D, p: Placed, u = p.sheet.from): [CanvasGradient, CanvasGradient, CanvasGradient] {
+  // Round a ring the lip turns as it goes, so the square to it is taken where the piece is.
+  alongAt(p, u);
+  const el = Math.hypot(LIP[4], LIP[5]) || 1;
+  let nx = -LIP[5] / el;
+  let ny = LIP[4] / el;
+  atSlice(p, u, 0, PT, 0);
+  atSlice(p, u, p.n, PT, 2);
   let depth = (PT[2] - PT[0]) * nx + (PT[3] - PT[1]) * ny;
   if (depth < 0) {
     nx = -nx;
@@ -368,8 +472,9 @@ export function drawSheet(ctx: CanvasRenderingContext2D, v: FallView, p: Placed,
   const z = v.zoom;
   const t = v.t;
   const n = p.n;
-  const first = a <= lo + 1e-6;
-  const last = b >= hi - 1e-6;
+  // A ring has no ends: every piece of it meets another at both.
+  const first = !p.ring && a <= lo + 1e-6;
+  const last = !p.ring && b >= hi - 1e-6;
   // The water drawn a hair past each end of the stretch where another piece meets it.
   const hair = hairOf(p);
   const aw = first ? a : a - hair;
@@ -401,7 +506,7 @@ export function drawSheet(ctx: CanvasRenderingContext2D, v: FallView, p: Placed,
     ctx.fill();
   }
 
-  const [veil, rope, core] = downSheet(ctx, p);
+  const [veil, rope, core] = downSheet(ctx, p, p.ring ? (a + b) / 2 : s.from);
   const list = ROPES;
   list.length = 0;
   ropes(p, aw - ROPE_HALF, bw + ROPE_HALF, list);
@@ -616,7 +721,7 @@ function tears(ctx: CanvasRenderingContext2D, p: Placed, a: number, b: number, l
     const h = keyed(s, k, 92);
     const most = TEAR_WIDE * (0.45 + 0.55 * h);
     if (u - most < a || u + most > b) continue;
-    const end = Math.max(0, 1 - Math.min(u - lo, hi - u) / 0.4);
+    const end = p.ring ? 0 : Math.max(0, 1 - Math.min(u - lo, hi - u) / 0.4);
     if (keyed(s, k, 93) > (p.thin * 0.55 + end * 0.4) * Math.min(1, p.drop / 30)) continue;
     let clear = true;
     for (let r = 0; r < list.length && clear; r += 3) clear = Math.abs(u - list[r]) > list[r + 1] + most + ROPE_WANDER;
@@ -674,24 +779,28 @@ export function drawLip(ctx: CanvasRenderingContext2D, v: FallView, p: Placed, u
   if (b <= a || !seen(v, p, a, b, 20 * v.zoom)) return;
   const z = v.zoom;
   const t = v.t;
-  const first = a <= lo + 1e-6;
-  const last = b >= hi - 1e-6;
+  const first = !p.ring && a <= lo + 1e-6;
+  const last = !p.ring && b >= hi - 1e-6;
   const hair = hairOf(p);
   const aw = first ? a : a - hair;
   const bw = last ? b : b + hair;
   // How far back the smooth water reaches: all the way along the lip, and less toward its ends; and where a stream
-  // feeds it, drawn in from the stream's own width to the sheet's.
-  const reachBack = (u: number): number => TONGUE * Math.min(1, 0.3 + Math.min(u - lo, hi - u) / (s.half * 1.6)) * (s.feed ? 0.55 : 1);
+  // feeds it, drawn in from the stream's own width to the sheet's. Round a ring, the same the whole way.
+  const tongue = s.back ?? TONGUE;
+  const reachBack = (u: number): number =>
+    p.ring ? tongue : tongue * Math.min(1, 0.3 + Math.min(u - lo, hi - u) / (s.half * 1.6)) * (s.feed ? 0.55 : 1);
   const mid = (lo + hi) / 2;
   const narrow = s.feed ? Math.min(1, s.feed / ((hi - lo) / 2)) : 1;
   const inward = (u: number): number => mid + (u - mid) * narrow;
   const steps = Math.max(1, Math.ceil((b - a) / 0.25));
   // The water drawn in, on its surface, from clear to bright at the edge: shaded square to the lip, so every piece matches.
-  const el = Math.hypot(p.ex, p.ey) || 1;
-  let nx = -p.ey / el;
-  let ny = p.ex / el;
-  atSlice(p, s.from, 0, PT, 0);
-  at(p, s.from, 0, -TONGUE, PT, 2);
+  const um = p.ring ? (a + b) / 2 : s.from;
+  alongAt(p, um);
+  const el = Math.hypot(LIP[4], LIP[5]) || 1;
+  let nx = -LIP[5] / el;
+  let ny = LIP[4] / el;
+  atSlice(p, um, 0, PT, 0);
+  at(p, um, 0, -tongue, PT, 2);
   let depth = (PT[0] - PT[2]) * nx + (PT[1] - PT[3]) * ny;
   if (depth < 0) {
     nx = -nx;
@@ -809,25 +918,28 @@ export function drawFoot(ctx: CanvasRenderingContext2D, v: FallView, p: Placed, 
   const t = v.t;
   const tall = p.tall;
   const detail = z >= DETAIL_FROM;
+  const flow = s.flow ?? 1;
   // Where the foot is: the foot line on the screen at `u`, `out` of a tile out beyond it, `up` height units over the landing.
   const foot = (u: number, out: number, up: number, k: number): void => {
-    const du = u - s.from;
-    FT[k] = p.x0 + p.ex * du + p.dx * (1 + out / s.reach);
-    FT[k + 1] = p.y0 + p.ey * du + p.dy * (1 + out / s.reach) + p.hs * (s.top - landAt(s, u) - up);
+    lipAt(p, u);
+    FT[k] = LIP[0] + LIP[2] * (1 + out / s.reach);
+    FT[k + 1] = LIP[1] + LIP[3] * (1 + out / s.reach) + p.hs * (s.top - landAt(s, u) - up);
   };
-  // The fall's way out along the ground, as an angle round an ellipse on the screen, for the rings.
-  const fx = p.dx / s.reach;
-  const fy = p.dy / s.reach;
-  const way = Math.atan2(fy / (DISC_H * z), fx / (DISC_W * z));
-  // Thinner toward the ends of the foot, where less water comes down.
-  const inset = (u: number): number => Math.min(1, (Math.min(u - lo, hi - u) + 0.03) / (s.half * 0.9));
+  // The fall's way out along the ground, as an angle round an ellipse on the screen, for the rings: round a ring, where each ring is.
+  const wayAt = (u: number): number => {
+    lipAt(p, u);
+    return Math.atan2(LIP[3] / s.reach / (DISC_H * z), LIP[2] / s.reach / (DISC_W * z));
+  };
+  const way = wayAt(s.from);
+  // Thinner toward the ends of the foot, where less water comes down; a ring has none.
+  const inset = (u: number): number => (p.ring ? 1 : Math.min(1, (Math.min(u - lo, hi - u) + 0.03) / (s.half * 0.9)));
 
   if (s.wet && detail) {
     // The band of broken water spread in front of the foot, lying on the water.
     if (foamTex) {
       ctx.globalAlpha = 0.5;
       const every = 0.4;
-      const r = 0.22 + 0.18 * tall;
+      const r = (0.22 + 0.18 * tall) * flow;
       for (let k = Math.floor(a / every) - 1; k * every < b + every; k++) {
         const c = (k + 0.5 + (keyed(s, k, 61) - 0.5) * 0.5) * every;
         if (c < a || c >= b) continue;
@@ -846,11 +958,12 @@ export function drawFoot(ctx: CanvasRenderingContext2D, v: FallView, p: Placed, 
       const u = (k + 0.5 + (h - 0.5) * 0.5) * ringEvery;
       if (u < a || u >= b) continue;
       const age = (((t / (RING_LIFE * (0.85 + 0.3 * h)) + h * 5.1) % 1) + 1) % 1;
-      const r = (0.12 + 0.55 * age) * (0.8 + 0.4 * tall) * (0.4 + 0.6 * inset(u));
+      const r = (0.12 + 0.55 * age) * (0.8 + 0.4 * tall) * (0.4 + 0.6 * inset(u)) * flow;
       foot(Math.max(lo + 0.05, Math.min(hi - 0.05, u)), 0.06, 0, 0);
       ctx.strokeStyle = RINGS[Math.min(RINGS.length - 1, Math.floor((1 - age) * (1 - age) * RINGS.length))];
+      const w = p.ring ? wayAt(u) : way;
       ctx.beginPath();
-      ctx.ellipse(FT[0], FT[1], r * DISC_W * z * 1.35, r * DISC_H * z, 0, way - 1.5, way + 1.5);
+      ctx.ellipse(FT[0], FT[1], r * DISC_W * z * 1.35, r * DISC_H * z, 0, w - 1.5, w + 1.5);
       ctx.stroke();
     }
   }
@@ -869,7 +982,7 @@ export function drawFoot(ctx: CanvasRenderingContext2D, v: FallView, p: Placed, 
   const list = ROPES;
   list.length = 0;
   ropes(p, a - 0.2, b + 0.2, list);
-  const size = (s.wet ? 0.05 + 0.1 * tall * tall : 0.055 + 0.12 * tall * tall) * (z >= 1.25 ? 1 : detail ? 1.18 : 1.5);
+  const size = (s.wet ? 0.05 + 0.1 * tall * tall : 0.055 + 0.12 * tall * tall) * (z >= 1.25 ? 1 : detail ? 1.18 : 1.5) * flow;
   const near = every * 1.6;
   for (let row = 0; row < 2; row++) {
     for (let k = Math.floor((a - near) / every) - 1; k * every < b + near; k++) {
@@ -884,7 +997,7 @@ export function drawFoot(ctx: CanvasRenderingContext2D, v: FallView, p: Placed, 
       const grow = row === 0 ? 0.5 + 0.8 * heap : 0.7 + 0.35 * heap;
       const r = size * DISC_W * z * grow * (0.8 + 0.3 * pulse) * (0.45 + 0.55 * ins) * (0.55 + 0.85 * keyed(s, k * 2 + row, 64) ** 2);
       const out = row === 0 ? (keyed(s, k, 65) - 0.35) * 0.06 : (0.08 + 0.1 * keyed(s, k, 68)) * (0.7 + tall);
-      const up = row === 0 ? (s.wet ? 0.45 : 1) * (1.2 + 5 * tall + 10 * tall * tall) * heap * (0.75 + 0.4 * pulse) * ins : (s.wet ? 0.1 : 0.5) * (1 + 3 * tall) * ins;
+      const up = (row === 0 ? (s.wet ? 0.45 : 1) * (1.2 + 5 * tall + 10 * tall * tall) * heap * (0.75 + 0.4 * pulse) * ins : (s.wet ? 0.1 : 0.5) * (1 + 3 * tall) * ins) * flow;
       foot(u, out, up, 0);
       if (m + 4 > lumps.length) break;
       lumps[m++] = FT[0];
@@ -925,10 +1038,10 @@ export function drawFoot(ctx: CanvasRenderingContext2D, v: FallView, p: Placed, 
   ctx.fillStyle = FOAM;
   ctx.beginPath();
   const sprayEvery = SPRAY_EVERY * (z >= 1.5 ? 1 : 1.5);
-  const lift = (0.6 + 2.2 * tall) * HALF_H * z * 0.5;
+  const lift = (0.6 + 2.2 * tall) * HALF_H * z * 0.5 * flow;
   for (let k = Math.floor(a / sprayEvery) - 1; k * sprayEvery < b + sprayEvery; k++) {
     const h = keyed(s, k, 71);
-    if (h > 0.55 + 0.3 * tall) continue;
+    if (h > (0.55 + 0.3 * tall) * flow) continue;
     const u0k = (k + 0.5) * sprayEvery;
     if (u0k < a || u0k >= b) continue;
     const period = 0.6 + 0.5 * keyed(s, k, 72);
@@ -938,7 +1051,7 @@ export function drawFoot(ctx: CanvasRenderingContext2D, v: FallView, p: Placed, 
     const out = age * (0.1 + 0.25 * keyed(s, k, 74)) * (0.6 + tall);
     foot(u, out, 0, 0);
     const y = FT[1] - lift * (0.5 + h) * (age * 2 - age * age * 1.6) * inset(u0k);
-    const r = Math.max(0.6, (1.3 - age) * (0.7 + 0.5 * tall) * z * (0.6 + 0.6 * h));
+    const r = Math.max(0.6, (1.3 - age) * (0.7 + 0.5 * tall) * z * (0.6 + 0.6 * h) * Math.sqrt(flow));
     ctx.moveTo(FT[0] + r, y);
     ctx.arc(FT[0], y, r, 0, Math.PI * 2);
   }
@@ -948,8 +1061,8 @@ export function drawFoot(ctx: CanvasRenderingContext2D, v: FallView, p: Placed, 
 /** Where the foot of a sheet is on the screen at `u` along its lip. */
 export function footPoint(p: Placed, u: number): [number, number] {
   const s = p.sheet;
-  const du = u - s.from;
-  return [p.x0 + p.ex * du + p.dx, p.y0 + p.ey * du + p.dy + p.hs * (s.top - landAt(s, u))];
+  lipAt(p, u);
+  return [LIP[0] + LIP[2], LIP[1] + LIP[3] + p.hs * (s.top - landAt(s, u))];
 }
 
 /* ---- In the air ------------------------------------------------------------- */
@@ -976,9 +1089,9 @@ export function drawMist(
     const u = Math.max(lo + s.half, Math.min(hi - s.half, (k + 0.5 + (h - 0.5) * 0.6) * MIST_EVERY));
     for (let j = 0; j < 2; j++) {
       const age = (((t / (MIST_LIFE * (0.85 + 0.3 * h)) + h * 3.3 + j * 0.5) % 1) + 1) % 1;
-      const du = u - s.from;
-      const x = p.x0 + p.ex * du + p.dx;
-      const y = p.y0 + p.ey * du + p.dy + p.hs * (s.top - landAt(s, u));
+      lipAt(p, u);
+      const x = LIP[0] + LIP[2];
+      const y = LIP[1] + LIP[3] + p.hs * (s.top - landAt(s, u));
       const blown = lean.force * age * age * 40 * z;
       const px = x + lean.x * blown + Math.sin(age * 5 + k * 2.1 + j) * 5 * z;
       const py = y - age * (14 + 50 * tall) * z + lean.y * blown * 0.4;
@@ -1048,6 +1161,8 @@ const PT = new Float64Array(4);
 /** Scratch for the far edge of a rope at each slice of a sheet. */
 const ROPE_EDGE = new Float64Array(32);
 const CV = new Float64Array(2);
+/** Scratch for where the lip is at a point and the step out from it to the foot, and the step along it (`lipAt`, `alongAt`). */
+const LIP = new Float64Array(6);
 const FT = new Float64Array(4);
 const ROPES: number[] = [];
 const LUMPS = new Float64Array(4 * 512);

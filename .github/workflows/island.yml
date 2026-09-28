@@ -311,6 +311,19 @@ jobs:
           npx esbuild supabase/test/pools.ts --bundle --platform=node --format=esm \
             --outfile=node_modules/.cache/pools.mjs --log-level=error
           node node_modules/.cache/pools.mjs
+      - name: Stones across the water, a fountain that is a well, and lilies that keep the year
+        run: |
+          # Asked for: a water garden -- stepping stones, a tiered fountain,
+          # water lilies and lotus. Stones go down where the water is no
+          # deeper than twice swimming depth, and nobody on them swims:
+          # in_deep_water and the browser's body agree, and rpc_move walks
+          # them without a pull. A fountain is a well to every rule. A lily
+          # or a lotus is planted in still water and roots, flowers, seeds
+          # and dies back with the island's year, on both sides alike, pinned
+          # to each season in turn; every refusal is said in the same words.
+          npx esbuild supabase/test/pondlife.ts --bundle --platform=node --format=esm \
+            --outfile=node_modules/.cache/pondlife.mjs --log-level=error
+          node node_modules/.cache/pondlife.mjs
       - name: Nobody on the move is pulled back for going as fast as they can
         run: |
           # Reported as players rubberbanding when they move quickly. The
@@ -488,7 +501,7 @@ jobs:
           # words. The craft material bin is its opposite number off the same
           # bill, and takes exactly what the other refuses -- so the pair of
           # them partitions the materials: nothing goes in both, every material
-          # goes in one, and the split is forty-three raw to a hundred worked on
+          # goes in one, and the split is forty-five raw to a hundred worked on
           # both sides. It is measured in kilograms rather than counted, which
           # the island agrees to the unit: 250,000 nails, 1,250 planks or 416
           # timbers in the same bin.

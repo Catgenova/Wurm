@@ -39,6 +39,9 @@ export const DYES: DyeDef[] = [
   dye('lavender', 'Lavender', 'violet', '#8a6fbf', '#5d4a88', 'lavender', 8, 16, 'Lavender heads, boiled. A violet that keeps its scent for a while after.'),
   // And the one picked off the meadow in spring and summer (`world/flowers.ts`).
   dye('wildflowers', 'Wildflowers', 'orange', '#dc8c4a', '#a35f2c', 'wildflowers', 8, 12, 'Wildflowers, boiled down to an orange.'),
+  // The two picked off what is planted in still water (`watergarden.ts`).
+  dye('lily', 'Lily', 'white', '#ece8de', '#bfb8a6', 'water_lily', 8, 15, 'Water lily flowers, boiled. It dyes white, which nothing else does.'),
+  dye('lotus', 'Lotus', 'magenta', '#c0508c', '#86345f', 'lotus_flower', 8, 18, 'Lotus flowers, boiled. It dyes magenta.'),
 ];
 
 export const DYE_BY_ID = new Map(DYES.map((d) => [d.id, d]));

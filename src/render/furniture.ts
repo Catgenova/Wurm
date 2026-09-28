@@ -4,6 +4,7 @@ import { cropPlant } from './crops';
 import { materialOf } from '../game/materials';
 import type { Side } from '../game/building';
 import { HALF_H, HALF_W, HEIGHT_SCALE, UNITS_PER_TILE } from './iso';
+import { FOUNT, FOUNT_RIM } from './fountain';
 import { star } from './shine';
 import { ROSE_BUD, ROSE_FLOWER, ROSE_LEAFY } from '../game/roses';
 import { VIEWS } from './view';
@@ -133,6 +134,8 @@ const IRON: Paint = { body: hex('#6b6873'), ink: hex('#34323b') };
 const BRASS: Paint = { body: hex('#d9b460'), ink: hex('#7c5e28') };
 const LINEN: Paint = { body: hex('#efe9dc'), ink: hex('#9a8f7e') };
 const STONE: Paint = { body: hex('#d2cabb'), ink: hex('#857c6c') };
+/** Water standing still in a basin, as a piece is shown when it is not being drawn live. */
+const STILL_WATER = 'rgb(104,208,204)';
 const SOOT: Paint = { body: hex('#3a302c'), ink: hex('#1e1816') };
 
 /** A colour a piece has been dyed: the lit face and the shaded one. */
@@ -3683,6 +3686,72 @@ const MODELS: Record<string, Model> = {
     sc.rod([0, 1, za], [0, 0.4, 8.7], 0.12, ROPE);
     sc.lathe(0, 0.4, [[6.8, 1.1], [8.4, 1.35]], wood, 12, { staves: 8, bands: [[7.2, IRON, 0.3], [8.1, IRON, 0.3]], cap: paintOf(hex('#6f97a8')) });
     gable(sc, -8.2, 8.2, -4.2, 4.2, 14.2, 17.2, SHINGLE(wood), 'x', wood, 0.9, 4);
+  },
+
+  /*
+   * A tiered fountain: three dressed-stone basins one over another on a
+   * turned column, each smaller than the one under it -- a broad coursed
+   * basin on a round plinth, a flared bowl, a small bowl -- and a spout over
+   * the top one. Its water is drawn live over it (`./fountain`), in between
+   * its layers, so `trim` asks for one: 0 the plinth and the lowest basin, 1
+   * the column up out of it and the middle bowl, 2 the column over that, the
+   * top bowl and the spout. Drawn whole, as it is set down or shown, it has
+   * still water standing in its basins.
+   */
+  fountain: ({ sc, trim }) => {
+    const whole = trim === undefined;
+    const layer = (i: number): boolean => whole || trim === i;
+    const { low, mid, top, spout } = FOUNT;
+    const ring = (r: number, z: number): Pt[] => Array.from({ length: 32 }, (_, i) => sc.P(Math.cos((i / 32) * TAU) * r, Math.sin((i / 32) * TAU) * r, z));
+    // A basin's hollow: dark stone inside the rim, the far wall going down, and when drawn whole still water standing in it.
+    const hollow = (inner: number, rim: number, deep: number, water: number | null) => (): void => {
+      const g = sc.g;
+      const hole = ring(inner, rim);
+      sc.poly(hole);
+      g.fillStyle = rgb(STONE.body, 0.52);
+      g.fill();
+      g.save();
+      sc.poly(hole);
+      g.clip();
+      for (let d = 0; d < 3; d++) {
+        sc.poly([...ring(inner, rim - (d * deep) / 3), ...ring(inner, rim - ((d + 1) * deep) / 3).reverse()]);
+        g.fillStyle = rgb(STONE.body, 0.8 - d * 0.1);
+        g.fill('evenodd');
+      }
+      if (water !== null) {
+        sc.poly(ring(inner, water));
+        g.fillStyle = STILL_WATER;
+        g.fill();
+      }
+      g.restore();
+      sc.poly(hole);
+      g.strokeStyle = rgb(STONE.ink);
+      g.lineWidth = sc.ink;
+      g.stroke();
+    };
+    sc.shadows = layer(0) ? [[-low.lip, low.lip, -low.lip, low.lip]] : [];
+    if (layer(0)) {
+      sc.lathe(0, 0, [[0, low.lip + 0.6], [0.7, low.lip + 0.6]], STONE, 32);
+      sc.lathe(0, 0, [[0.7, low.r], [low.rim - 0.7, low.r], [low.rim - 0.7, low.lip], [low.rim, low.lip]], STONE, 32, {
+        courses: [1.9, 3.0],
+        lid: hollow(low.inner, low.rim, low.rim - 1, whole ? low.water : null),
+      });
+    }
+    if (layer(1)) {
+      sc.lathe(0, 0, [[low.water, 2.3], [low.water + 1.1, 2], [6.4, 1.6], [7.6, 1.9], [8.3, 2.4], [mid.under, 2.7]], STONE, 16);
+      sc.lathe(0, 0, [[mid.under, 2.7], [9.5, 4.4], [10.3, 6], [10.9, 7], [mid.rim, mid.r]], STONE, 28, {
+        courses: [10.1],
+        lid: hollow(mid.r - FOUNT_RIM, mid.rim, 1.6, whole ? mid.rim - 0.2 : null),
+      });
+    }
+    if (layer(2)) {
+      sc.lathe(0, 0, [[mid.rim, 1.4], [12.4, 1.15], [13.6, 1.1], [14.1, 1.35], [top.under, 1.7]], STONE, 14);
+      sc.lathe(0, 0, [[top.under, 1.7], [14.9, 2.6], [15.6, 3.4], [top.rim, top.r]], STONE, 22, {
+        lid: hollow(top.r - FOUNT_RIM, top.rim, 1, whole ? top.rim - 0.2 : null),
+      });
+      // The spout: a small urn the water wells up out of.
+      sc.lathe(0, 0, [[top.rim - 0.4, 1.05], [16.9, 0.72], [17.7, 0.82], [18.4, 1.08], [18.9, 0.88], [spout, 0.55]], STONE, 14);
+    }
   },
 
   /*

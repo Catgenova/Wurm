@@ -544,6 +544,8 @@ export class WaterField {
   private pools = new Map<number, { level: number; floor: number }>();
   /** Where a spring's water goes over the edge of a pool, by the tile of the pool the edge is on (\`spillsAt\`). */
   private spills = new Map<number, Spill[]>();
+  /** Every corner a stream's water runs over, lip and falls and all, by \`y * (width + 1) + x\` (\`runsOver\`). */
+  private running = new Set<number>();
 
   constructor(private readonly w: number, private readonly h: number) {}
 
@@ -593,12 +595,35 @@ export class WaterField {
     return this.spills.get(y * this.w + x) ?? NO_SPILLS;
   }
 
+  /**
+   * Whether water runs over a tile rather than standing on it: a stream's
+   * water crosses one of its corners -- where it leaves a pond over the lip,
+   * all the way down, and wherever it falls -- or a pool's water goes over
+   * the edge of the pool dug in it. Stepping stones are laid across it; a
+   * water lily will not take root in it. The island asks the same of the
+   * springs it keeps (\`water_runs\`).
+   */
+  runsOver(x: number, y: number): boolean {
+    if (this.spills.has(y * this.w + x)) return true;
+    if (!this.running.size) return false;
+    const cw = this.w + 1;
+    return this.running.has(y * cw + x) || this.running.has(y * cw + x + 1)
+      || this.running.has((y + 1) * cw + x) || this.running.has((y + 1) * cw + x + 1);
+  }
+
+  /** Whether a stream's water runs over a corner. */
+  runsAt(cx: number, cy: number): boolean {
+    return this.running.has(cy * (this.w + 1) + cx);
+  }
+
   /** Lay the water down afresh. */
   set(ponds: PondWater[], streams: StreamWater[]): void {
     this.ponds = ponds;
     this.streams = streams;
     this.byTile.clear();
     const cw = this.w + 1;
+    this.running.clear();
+    for (const s of streams) for (let k = 0; k < s.path.length; k += 2) this.running.add(s.path[k + 1] * cw + s.path[k]);
     for (const p of ponds) {
       const wet: number[] = [];
       for (const k of p.wet) wet.push(k % cw, Math.floor(k / cw));

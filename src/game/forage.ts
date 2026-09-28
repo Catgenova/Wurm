@@ -33,6 +33,25 @@ export const BOTANIZE_TABLE: Array<[string, number]> = [
   ['rosemary_seed', 5],
 ];
 
+/**
+ * What botanizing turns up at the water's edge -- on a tile with water on it
+ * or beside it, the sea, a pond or a pool -- as well as everything else in
+ * the table: a water lily root and a lotus seed, at these weights against
+ * the table's own. The island rolls the same table (`botanize_water`).
+ */
+export const WATERSIDE_FINDS: Array<[string, number]> = [
+  ['lily_root', 12],
+  ['lotus_seed', 9],
+];
+export const BOTANIZE_WATER_TABLE: Array<[string, number]> = [...BOTANIZE_TABLE, ...WATERSIDE_FINDS];
+
+/** How often a find at the water's edge is one of the waterside finds, one time in so many, for saying so. */
+export const watersideOdds = (id: string): number => {
+  const total = BOTANIZE_WATER_TABLE.reduce((s, e) => s + e[1], 0);
+  const w = WATERSIDE_FINDS.find((e) => e[0] === id)?.[1] ?? 0;
+  return w > 0 ? Math.round(total / w) : 0;
+};
+
 /** Points of skill between one look over the ground and the next. */
 export const PER_ROLL = 20;
 /** The share of looks that turn up nothing whatever the hand, before the skill is asked (a Naturalist's Sure Find takes it away). */

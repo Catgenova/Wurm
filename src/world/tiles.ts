@@ -48,6 +48,13 @@ export const TileType = {
    * and it is that again once nobody has walked it for long enough.
    */
   Trail: 24,
+  /**
+   * Flat stones set on the bottom of shallow water and walked dry-shod
+   * (`../game/watergarden`, drawn by `../render/stones`): what they were
+   * laid over and the stone they were cut from are both in the data byte, so
+   * taking them up leaves the bed as it was.
+   */
+  SteppingStones: 25,
 } as const;
 export type TileType = (typeof TileType)[keyof typeof TileType];
 
@@ -230,6 +237,8 @@ export const DUSTINESS: Readonly<Record<number, number>> = {
   [TileType.Marsh]: 0,
   [TileType.Kelp]: 0,
   [TileType.Reed]: 0,
+  // Wet stone at a stride: nothing to kick up.
+  [TileType.SteppingStones]: 0,
 };
 
 /** What this ground gives up underfoot, 0 for ground that gives up nothing. */
@@ -483,6 +492,14 @@ export const TILE_DEFS: Record<TileType, TileDef> = {
    * `render/trails.ts`), so this colour is the path's and the map's.
    */
   [TileType.Trail]: { name: 'Trail', color: [222, 199, 152], ...PACKED_PACE, digYield: 'dirt', pavable: true, turnsToDirt: true },
+  /*
+   * A walking pace and no better: a stone at a stride, not a road. A loaded
+   * wheel bumps from one to the next, so a cart pays for it; and nothing is
+   * dug, paved, planted or foraged through it -- it is taken up first. Its
+   * colour is the stone's, for the map; on the ground the bed under the water
+   * is drawn and the stones are laid over it (`render/stones.ts`).
+   */
+  [TileType.SteppingStones]: { name: 'Stepping stones', color: [176, 172, 162], speed: 1, roll: 0.35 },
 };
 
 /**
@@ -502,15 +519,16 @@ export const PAVED: ReadonlySet<number> = new Set<number>(
  * Slab paving comes in the four stones it is cut from, kept in the tile's data
  * byte the way a rock tile keeps its seam.
  */
-export const SLAB_VARIANTS: Array<{ name: string; color: RGB; item: string; courses: number }> = [
+export const SLAB_VARIANTS: Array<{ name: string; color: RGB; item: string; courses: number; stones: string }> = [
   // `courses` is how many flags run across a tile, which is how big the stone
   // is cut: marble comes off the block whole and slate splits into small
   // pieces. It is the difference between a temple floor and a garden path, and
   // it costs one number a stone to say it.
-  { name: 'Stone slabs', color: [172, 170, 164], item: 'stone_slab', courses: 3 },
-  { name: 'Slate slabs', color: [104, 112, 126], item: 'slate_slab', courses: 4 },
-  { name: 'Marble slabs', color: [224, 222, 216], item: 'marble_slab', courses: 2 },
-  { name: 'Sandstone slabs', color: [204, 180, 134], item: 'sandstone_slab', courses: 3 },
+  // `stones` is what a tile of stepping stones cut from it is called.
+  { name: 'Stone slabs', color: [172, 170, 164], item: 'stone_slab', courses: 3, stones: 'Stepping stones' },
+  { name: 'Slate slabs', color: [104, 112, 126], item: 'slate_slab', courses: 4, stones: 'Slate stepping stones' },
+  { name: 'Marble slabs', color: [224, 222, 216], item: 'marble_slab', courses: 2, stones: 'Marble stepping stones' },
+  { name: 'Sandstone slabs', color: [204, 180, 134], item: 'sandstone_slab', courses: 3, stones: 'Sandstone stepping stones' },
 ];
 export const slabVariant = (data: number): number => Math.min(SLAB_VARIANTS.length - 1, data & 3);
 export const SLAB_BY_ITEM = new Map(SLAB_VARIANTS.map((v, i) => [v.item, i]));
@@ -597,6 +615,28 @@ export function stepsGroundRefusal(c: readonly number[]): string | null {
  * steepest slope a flight is laid on. The island's `stand_cap`.
  */
 export const standCap = (tile: number, cap: number): number => (tile === TileType.Steps ? Math.max(STEPS_MOST, cap) : cap);
+
+/**
+ * A tile of stepping stones keeps two things in its data byte: the stone
+ * they were cut from, in the low two bits as a slab's is (`SLAB_VARIANTS`),
+ * and the ground they were laid over, in the six above, which is what the
+ * tile goes back to when they are taken up. The island reads and writes the
+ * same bits (`stones_data`).
+ */
+export const stonesData = (kind: number, bed: number): number => (kind & 3) | ((bed & 63) << 2);
+export const stonesKind = (data: number): number => slabVariant(data);
+export const stonesBed = (data: number): TileType => ((data >> 2) & 63) as TileType;
+
+/**
+ * What stepping stones are laid over: bare ground and what grows flat on it,
+ * wet or dry. Not paving, which is laid already; not a field, which is sown;
+ * and not a tree, a bush or a stump, which stand on the tile.
+ */
+export const STONE_BEDS: ReadonlySet<number> = new Set<number>([
+  TileType.Grass, TileType.Dirt, TileType.PackedDirt, TileType.Sand, TileType.Rock, TileType.Steppe,
+  TileType.Tundra, TileType.Marsh, TileType.Clay, TileType.Peat, TileType.Tar, TileType.Moss,
+  TileType.Snow, TileType.Kelp, TileType.Reed, TileType.Lawn,
+]);
 
 export interface TreeDef {
   name: string;

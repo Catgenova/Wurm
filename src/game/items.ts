@@ -298,6 +298,14 @@ export const ITEM_DEFS: Record<string, ItemDef> = {
   lavender: { name: 'Lavender', category: 'material', weight: 0.05, stackable: true, raw: true, decay: 6, description: 'Cut off a lavender bush with a sickle. Boiled, it gives a violet.' },
   // Picked off grass in flower (`world/flowers.ts`), and boiled for the dye that is theirs.
   wildflowers: { name: 'Wildflowers', category: 'material', weight: 0.05, stackable: true, raw: true, decay: 6, description: wildflowerUse() },
+  // Off a planted water lily and a lotus: see `watergarden.ts`. Their dyes are `lily` and `lotus` (`dyestuffs.ts`).
+  water_lily: { name: 'Water lily', category: 'material', weight: 0.05, stackable: true, raw: true, decay: 6, description: 'A water lily flower, picked off one planted in still water. Boiled, it gives the only white there is.' },
+  lotus_flower: { name: 'Lotus flower', category: 'material', weight: 0.08, stackable: true, raw: true, decay: 6, description: 'A lotus flower, picked off one planted in still water. Boiled, it gives a magenta.' },
+  // What is planted in still water to grow them: found by botanizing at the water's edge, and a lotus's own seed heads.
+  lily_root: { name: 'Water lily root', category: 'plant', weight: 0.2, stackable: true, decay: 20,
+    description: 'Found by botanizing at the water\'s edge. Plant it in still water {shallow} to {deep} m deep -- a pond, a pool or the shallows of the sea, never where water runs -- and it lays its pads on the water at once. It roots in {rooting} and then {year}, white or pink, open by day and shut at night; in winter only the root is left under the water, and the pads come up again in spring. A flower picked is gone until the season turns.' },
+  lotus_seed: { name: 'Lotus seeds', category: 'plant', weight: 0.02, stackable: true, decay: 40, food: 0.03, feeds: { starch: 0.02, fat: 0.01 },
+    description: 'Found by botanizing at the water\'s edge, and {seeds} to a lotus seed head. Eaten raw they fill {food:pct} of the food bar, roasted at a campfire {item.roast_lotus_seeds.food:pct}. Planted in still water {shallow} to {deep} m deep, a seed holds its leaves up out of the water on stalks at once; it roots in {rooting} and then {year}; in winter only the root is left under the water. What is picked is gone until the season turns.' },
   pickaxe_head: { name: 'Pickaxe head', category: 'material', weight: 1.2, stackable: true, decay: 1 },
   hammer_head: { name: 'Hammer head', category: 'material', weight: 1, stackable: true, decay: 1 },
   knife_blade: { name: 'Knife blade', category: 'material', weight: 1.2, stackable: true, decay: 1 },
@@ -344,6 +352,7 @@ export const ITEM_DEFS: Record<string, ItemDef> = {
   baked_potato: { name: 'Baked potato', category: 'food', weight: 0.2, stackable: true, food: 0.22, decay: 90, feeds: { starch: 0.18, greens: 0.03 } },
   roast_onion: { name: 'Roast onion', category: 'food', weight: 0.15, stackable: true, food: 0.16, decay: 90, feeds: { greens: 0.12, fat: 0.02 } },
   roast_nuts: { name: 'Roasted nuts', category: 'food', weight: 0.1, stackable: true, food: 0.12, decay: 40, feeds: { fat: 0.14 } },
+  roast_lotus_seeds: { name: 'Roasted lotus seeds', category: 'food', weight: 0.06, stackable: true, food: 0.14, decay: 40, feeds: { starch: 0.1, fat: 0.04 } },
   berry_compote: { name: 'Berry compote', category: 'food', weight: 0.3, stackable: true, food: 0.3, decay: 60, description: 'Berries stewed down in a bowl over a fire.', feeds: { greens: 0.2, starch: 0.06 } },
   stew: { name: 'Stew', category: 'food', weight: 0.6, stackable: true, food: 0.75, decay: 70, description: 'Meat and vegetables simmered together. The best meal a campfire can make.', feeds: { flesh: 0.26, starch: 0.22, greens: 0.2, fat: 0.12 } },
   pottage: { name: 'Pottage', category: 'food', weight: 0.7, stackable: true, food: 0.6, decay: 50, description: 'A thick pot of vegetables and grain, simmered down slowly.', feeds: { starch: 0.24, greens: 0.22, fat: 0.1 } },
@@ -503,6 +512,7 @@ export const ITEM_DEFS: Record<string, ItemDef> = {
   kiln: { name: 'Kiln', category: 'misc', weight: 34, decay: 3, description: 'A brick kiln for firing clay. Set it down anywhere dry and flat; take it up again when it is cold and empty.' },
   oven: { name: 'Oven', category: 'misc', weight: 46, decay: 3, description: 'A bread oven of brick and mortar. Feed it wood, light it, and cook at it as you would a fire — only it does not burn the dinner.' },
   well: { name: 'Well', category: 'misc', weight: 58, decay: 3, description: 'A lined shaft with a windlass over it. It draws its own water, faster the better it was sunk, and holds {well} litres.' },
+  fountain: { name: 'Tiered fountain', category: 'misc', weight: 64, decay: 3, description: 'Basins of stone one over another on a column, the water welling over the top one and spilling round each into the next. It is a well to everything: it draws its own water as a well does, {least} litres a minute at the least and {most} at quality {top}, and holds {well} litres; fill a bucket or a waterskin at it, or drink from it where you stand.' },
   bulk_bin: { name: 'Raw material bin', category: 'misc', weight: 38, decay: 4, description: 'A deep bin for raw materials: ore, logs, dirt, shards, hides. Holds {capacity}, and nothing a bench has touched.' },
   craft_bin: { name: 'Craft material bin', category: 'misc', weight: 38, decay: 4, description: 'A deep bin for worked materials: planks, nails, ribbons, hinges, lumps, bricks. It does not count what is in it — it weighs it, and holds {heft} kg of whatever a bench has turned out.' },
   seed_bin: { name: 'Seed bin', category: 'misc', weight: 14, decay: 4, description: 'A bin with a tight lid for seed. It weighs what is in it rather than counting it: {heft} kg, which is {fits.wheat_seed} wheat seeds or {fits.potato_seed} seed potatoes.' },

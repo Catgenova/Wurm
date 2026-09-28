@@ -25,6 +25,7 @@ import type { Nutrient } from './nutrition';
 import type { Ledger } from './ledger';
 import type { GuideBook } from './guide';
 import type { Crop } from './farming';
+import type { WaterPlant } from '../world/waterplants';
 import { keyX, keyY } from './tileindex';
 import type { PlacedCrate } from './crates';
 import type { CreatureJSON } from './creatures';
@@ -263,6 +264,8 @@ interface SaveData {
   planted?: Crop[];
   /** The field clock (`Game.fieldTime`). A save from before the year has none, and starts it at the game clock. */
   fieldTime?: number;
+  /** The water lilies and lotus planted here. A save from before them has none. */
+  waterPlants?: WaterPlant[];
   crate?: { x: number; y: number; items: Item[] } | null;
   /**
    * Everybody who has ever visited, and what they had when they left.
@@ -351,6 +354,7 @@ function meta(game: Game): SaveMeta {
     sown: [...game.sown].map(([k, id]): [number, number, string] => [keyX(k), keyY(k), id]),
     planted: [...game.planted.values()],
     fieldTime: game.fieldTime,
+    waterPlants: [...game.waterPlants.values()],
     guests: game.guestRecords(),
   };
 }
@@ -615,6 +619,7 @@ function finish(world: World, m: SaveMeta): Game {
     sown: m.sown,
     planted: m.planted,
     fieldTime: m.fieldTime,
+    waterPlants: m.waterPlants,
     marks: m.marks,
     hoards: m.hoards,
     crate: m.crate ?? null,

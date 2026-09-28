@@ -23,7 +23,7 @@ import { anvilAnchor, anvilCovers, ANVIL_SUBTILES, type PlacedAnvil } from './an
 import { fireAnchor, fireCentre, fireCovers, FIRE_SUBTILES, type PlacedCampfire } from './campfire';
 import { smelterAnchor, smelterCentre, smelterCovers, SMELTER_H, SMELTER_W, type PlacedSmelter, type SmeltJob } from './smelter';
 import { kilnAnchor, kilnCovers, KILN_SUBTILES, type PlacedKiln } from './kiln';
-import { ACROSS_OF, DEED_PLACE, FURNITURE, ONE_ALTAR, deckSpot, isPlanter, furnitureAnchor, furnitureCapacity, furnitureCentre, furnitureCovers, furnitureDef, furnitureHeft, furnitureHolds, furnitureKg, furnitureRefuses, furnitureRoom, furnitureUnits, hiveRate, hiveRoom, HIVE_SWARMS, HIVE_WAX, POND_EVERY, rackDeck, rackSpots, teamOf, vehicleOf, type LiquidKind, type PlacedFurniture, furnitureName, LIQUID_NAME, isBoat, furnitureFootprint, type BoatDef } from './furniture';
+import { WELL_TRICKLE, WELL_TRICKLE_AT, WELL_TRICKLE_QL, ACROSS_OF, DEED_PLACE, FURNITURE, ONE_ALTAR, deckSpot, isPlanter, furnitureAnchor, furnitureCapacity, furnitureCentre, furnitureCovers, furnitureDef, furnitureHeft, furnitureHolds, furnitureKg, furnitureRefuses, furnitureRoom, furnitureUnits, hiveRate, hiveRoom, HIVE_SWARMS, HIVE_WAX, POND_EVERY, rackDeck, rackSpots, teamOf, vehicleOf, type LiquidKind, type PlacedFurniture, furnitureName, LIQUID_NAME, isBoat, furnitureFootprint, type BoatDef } from './furniture';
 import { emptyCrate, occupiedRefusal, shutIn } from './creaturecrate';
 import { bury, crumble, graveAt, graveRefusal, graveSays, GRAVE_MARK } from './graves';
 import { cropStageSeconds, RIPE, settleCrop, type Crop } from './farming';
@@ -54,6 +54,7 @@ import { BRIDGES, bridgeDone, CLEARANCE, END_SLOP, spanBill, spanTiles, type Bri
 import { CLEAR_OF_BUILDINGS, LIFT_PER_MASONRY, concreteFor, foundationBill, foundationDone, liftFor, masonryFor, soilSays, type Foundation } from './foundations';
 import { poolLevel } from '../world/springs';
 import { greenNow, mossyPiece } from './greening';
+import type { WaterPlant, WaterPlantKind } from '../world/waterplants';
 import { liveSettings, type Settings } from './settings';
 import { Skills, SKILL_DEFS, isQuiet } from './skills';
 import { jewelGain } from './gems';
@@ -279,6 +280,8 @@ export interface GameInit {
   planted?: Crop[];
   /** The field clock, in growing seconds (`Game.fieldTime`). */
   fieldTime?: number;
+  /** The water lilies and lotus planted here. */
+  waterPlants?: WaterPlant[];
   marks?: Marker[];
   hoards?: Hoard[];
   player?: { x: number; y: number; name: string; stats: Player['stats']; level?: number; equipped?: Record<string, number | null>; rested?: number; boons?: Boon[]; knacks?: Record<string, number>; nutrition?: Record<Nutrient, number>;
@@ -819,6 +822,12 @@ export class Game {
    * season. Null reads this machine's, set right by the island's (`wallSkew`).
    */
   wallClock: (() => number) | null = null;
+  /**
+   * The water lilies and lotus planted in still water, by tile (`watergarden.ts`):
+   * when each was planted and last picked, in seconds of the wall clock, which
+   * is all that is kept of one. On an island the island's, off the slow ground read.
+   */
+  readonly waterPlants = new Map<number, WaterPlant>();
   /** Tiles a prospector has marked, and when the marks fade. */
   prospected: { tiles: Set<number>; until: number } | null = null;
   hooks: GameHooks = { prompt: async (_q, fallback) => fallback, confirm: async () => true };
@@ -1069,6 +1078,7 @@ export class Game {
     this.fieldTime = init.fieldTime ?? this.time;
     for (const c of init.planted ?? []) if (c.planter !== undefined) this.planted.set(c.planter, c);
     for (const [x, y, id] of init.sown ?? []) this.sown.set(tileKey(x, y), id);
+    for (const w of init.waterPlants ?? []) this.waterPlants.set(tileKey(w.x, w.y), { ...w });
     for (const k of init.kilns ?? []) {
       this.kilns.set(k.id, k);
       if (k.id >= this.nextKilnId) this.nextKilnId = k.id + 1;
@@ -5060,7 +5070,7 @@ export class Game {
 
   /** Litres a well draws in a second: a deep, true-lined shaft finds more water. */
   wellRate(f: PlacedFurniture): number {
-    return 0.012 + (f.ql / 100) * 0.055;
+    return WELL_TRICKLE + (f.ql / WELL_TRICKLE_AT) * WELL_TRICKLE_QL;
   }
 
   /** Comb a hive draws in a second for each swarm keeping it. */
@@ -6309,6 +6319,13 @@ export class Game {
      */
     const into = (c: { grown?: number; ago?: number }): number =>
       c.grown !== undefined && Number.isFinite(c.grown) ? c.grown : c.ago !== undefined && Number.isFinite(c.ago) ? c.ago : 0;
+    // And what is planted in the water, on the same slow half: when it was planted and last picked, which is all of it.
+    if (ground.waterPlants !== undefined) {
+      this.waterPlants.clear();
+      for (const w of ground.waterPlants) {
+        this.waterPlants.set(tileKey(w.x, w.y), { x: w.x, y: w.y, kind: w.kind, at: w.at, picked: w.picked ?? null });
+      }
+    }
     if (ground.crops !== undefined) {
       this.crops.clear();
       const field = this.fieldNow();
@@ -6912,6 +6929,24 @@ export class Game {
 
   cropAt(x: number, y: number): Crop | undefined {
     return this.crops.get(tileKey(x, y));
+  }
+
+  /** The water lily or lotus planted on a tile, if there is one. */
+  waterPlantAt(x: number, y: number): WaterPlant | undefined {
+    return this.waterPlants.size ? this.waterPlants.get(tileKey(x, y)) : undefined;
+  }
+
+  /** Plant a water lily or a lotus on a tile, at a moment of the wall clock in seconds. */
+  plantWater(x: number, y: number, kind: WaterPlantKind, at: number): WaterPlant {
+    const p: WaterPlant = { x, y, kind, at, picked: null };
+    this.waterPlants.set(tileKey(x, y), p);
+    this.events.emit('world', x, y);
+    return p;
+  }
+
+  /** Pull up whatever is planted on a tile. */
+  pullWater(x: number, y: number): void {
+    if (this.waterPlants.delete(tileKey(x, y))) this.events.emit('world', x, y);
   }
 
   plantCrop(x: number, y: number, id: string, seedQl: number, pace = 1): Crop {
@@ -7696,6 +7731,13 @@ export interface IslandGround {
    */
   notches?: Array<{ x: number; y: number; cuts: number }>;
   treesAgo?: number;
+  /**
+   * The water lilies and lotus planted near you, on the slow half: when each
+   * was planted and last picked, in seconds of the wall clock -- the same
+   * clock both sides read the year off, so what one is doing is worked out
+   * here exactly as the island works it out (`waterPlantState`).
+   */
+  waterPlants?: Array<{ x: number; y: number; kind: WaterPlantKind; at: number; picked: number | null }>;
   /**
    * Your own settlement, on the slow half.
    *

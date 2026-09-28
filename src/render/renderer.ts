@@ -32,7 +32,7 @@ import {
 import { foundationDone } from '../game/foundations';
 import { DYE_BY_ID } from '../game/dyestuffs';
 import { hash2 } from '../world/noise';
-import { bareRock, DAMP_SAND, dustiness, FLAT, growth, oreWash, PAVED, ROCK_VARIANTS, SLAB_VARIANTS, STREWN, TileType, TILE_DEFS, COVERED, bushSpecies, slabVariant, trailGround, treeSpecies, treeVariant } from '../world/tiles';
+import { bareRock, DAMP_SAND, dustiness, FLAT, growth, oreWash, PAVED, ROCK_VARIANTS, SLAB_VARIANTS, STREWN, TileType, TILE_DEFS, COVERED, bushSpecies, slabVariant, trailGround, stonesBed, treeSpecies, treeVariant } from '../world/tiles';
 import { HALF_H, HALF_W, HEIGHT_SCALE, UNITS_PER_TILE } from './iso';
 import { depthOf, type View } from './view';
 import { FALLS, roofModel, type Fall, type RoofGable, type RoofModel, type RoofPt } from './roofshape';
@@ -68,8 +68,13 @@ import { maxHealth, SPECIES, type Creature } from '../game/creatures';
 import { rarityOf } from '../game/items';
 import { CREST_ALPHA, FOAM_WIDTH, foamAlpha, LONG_WAVE, SHORT_WAVE, SPRING_EDGE, SPRING_PALETTE, springLevel, SWELL_SPEED, swellAt, swellShow, TROUGH_ALPHA, WATER_LIT, WATER_PALETTE, waterLevel } from './water';
 import { Wakes } from './wake';
-import { SpringWater } from './ponds';
+import { foamTexture, SpringWater } from './ponds';
+import { drawFountain } from './fountain';
+import { fallView } from './falls';
 import { drawPool, type Run } from './pools';
+import { drawStones, STONES_RISE } from './stones';
+import { drawPlantsFlat, drawPlantUpright, plantFoot, standsUp, type PlantFrame } from './waterplants';
+import type { WaterPlant } from '../world/waterplants';
 import type { WaterField } from '../world/springs';
 import { Dust } from './dust';
 import { Gaits } from './gait';
@@ -157,7 +162,7 @@ export interface Pick {
 }
 
 interface Entity {
-  kind: 'tree' | 'bush' | 'stump' | 'player' | 'peer' | 'pile' | 'token' | 'crate' | 'creature' | 'campfire' | 'crop' | 'smelter' | 'kiln' | 'furniture' | 'hull' | 'anvil' | 'post' | 'trap' | 'deck' | 'life';
+  kind: 'tree' | 'bush' | 'stump' | 'player' | 'peer' | 'pile' | 'token' | 'crate' | 'creature' | 'campfire' | 'crop' | 'smelter' | 'kiln' | 'furniture' | 'hull' | 'anvil' | 'post' | 'trap' | 'deck' | 'life' | 'waterplant';
   x: number;
   y: number;
   sx: number;
@@ -174,6 +179,8 @@ interface Entity {
   post?: PlacedPost;
   trap?: PlacedTrap;
   deck?: { kind: string; done: boolean; drop: number; id: number; shape?: DeckShape; green?: number };
+  /** A lotus standing up off the water: its raised leaves, flowers and seed heads, sorted among what else stands there. */
+  plant?: WaterPlant;
   /** 1 rare, 2 supreme, 3 fantastic, for the shine over it; absent for the ordinary run of things. */
   rare?: number;
   /**
@@ -663,6 +670,7 @@ export class Renderer {
     e.post = undefined;
     e.trap = undefined;
     e.deck = undefined;
+    e.plant = undefined;
     e.lift = undefined;
     e.drawDx = undefined;
     e.drawDy = undefined;
@@ -694,6 +702,23 @@ export class Renderer {
   /** Whether any water was drawn this frame; an inland view skips the surface pass. */
   private drewWater = false;
   private seaPath = new Path2D();
+  /** The tiles of stepping stones on the line of the ground being drawn, as x and y pairs: in sight, and only remembered. */
+  private stoneRow: number[] = [];
+  private stoneRowDim: number[] = [];
+  /** The foam a fountain's falling water lands in, made the first time one is drawn running. */
+  private fountainFoam: HTMLCanvasElement | null = null;
+  /** The water plants on the line of the ground being drawn, and what their drawing is told this frame. */
+  private plantRow: WaterPlant[] = [];
+  private plantFrame: PlantFrame | null = null;
+  /** The top of the water on a tile as it is drawn this frame -- a pond still rising stands where it has got to -- or null where there is none. */
+  private readonly drawnSurface = (x: number, y: number): number | null => {
+    const w = this.game.world;
+    if (!w.hasWater(x, y)) return null;
+    let top = -Infinity;
+    if (w.water) for (const p of w.water.pondsAt(x, y)) top = Math.max(top, this.springWater.levelOf(p));
+    return top > -Infinity ? top : w.surfaceAt(x, y);
+  };
+  private readonly groundHere = (x: number, y: number): number => this.game.world.heightAt(x, y);
   /**
    * The water springs have made above the sea: its ponds, streams, falls and
    * wells as they are drawn (`./ponds`). Idle, and free, while there are none.
@@ -766,14 +791,6 @@ export class Renderer {
   private season: Season = 'spring';
   /** How a face of a flight of steps is lit: the light walls are drawn in (`faceLight`). */
   private readonly stepsLight = (ux: number, uy: number): number => this.faceLight(ux, uy);
-  /**
-   * Where a foot stands at a point of the ground: on the tread under it on a
-   * flight of steps, a riser higher at a time, and on the ground everywhere else.
-   */
-  private footAt(wx: number, wy: number): number {
-    const w = this.game.world;
-    return w.getTile(Math.floor(wx), Math.floor(wy)) === TileType.Steps ? stepsFootAt(w, wx, wy) : w.heightAt(wx, wy);
-  }
   /** The wind as the surface sees it, worked out once a frame rather than per tile. */
   private surf = { dirX: 1, dirY: 0, force: 0.5 };
   private drawnTiles = 0;
@@ -1081,8 +1098,9 @@ export class Renderer {
     // is cached and thrown away with the colour it decides rather than being
     // asked again every frame. And a trail is the ground it was worn out of,
     // with the path drawn across it (`drawTrail`) -- unless it is the path's
-    // own colour that is wanted, shaded the same.
-    const ground = own ? type : COVERED.has(type) || type === TileType.Trail ? this.groundAt(x, y, lit) : type;
+    // own colour that is wanted, shaded the same -- and stepping stones are
+    // the ground they were laid over, under the water with the stones on it.
+    const ground = own ? type : COVERED.has(type) || type === TileType.Trail || type === TileType.SteppingStones ? this.groundAt(x, y, lit) : type;
     const def = TILE_DEFS[ground];
     const c = w.corners(x, y, this.colorBuf);
     const gx = (c[1] + c[2] - (c[0] + c[3])) / 2 / UNITS_PER_TILE;
@@ -1234,7 +1252,8 @@ export class Renderer {
    */
   private groundAt(x: number, y: number, lit: boolean): TileType {
     const world = this.game.world;
-    const t = world.viewTile(x, y, lit) as TileType;
+    // Stepping stones are laid over a ground and keep which in their data: that ground is what is under the water.
+    const t = this.bedOf(x, y, lit);
     // A trail is the ground it was worn out of, which its byte keeps.
     if (t === TileType.Trail) return trailGround(world.viewData(x, y, lit));
     if (!COVERED.has(t)) return t;
@@ -1247,7 +1266,7 @@ export class Renderer {
       const nx = x + (e === 1 ? 1 : e === 3 ? -1 : 0);
       const ny = y + (e === 0 ? -1 : e === 2 ? 1 : 0);
       if (nx < 0 || ny < 0 || nx >= world.w || ny >= world.h) continue;
-      const n = world.viewTile(nx, ny, lit) as TileType;
+      const n = this.bedOf(nx, ny, lit);
       // Not another one of these, and not a road.
       if (COVERED.has(n) || PAVED.has(n)) continue;
       if ((world.heightAt(nx + 0.5, ny + 0.5) < 0) !== under) continue;
@@ -1263,6 +1282,30 @@ export class Renderer {
       if (n > most || (n === most && u < best)) { best = u; most = n; }
     }
     return best;
+  }
+
+  /** What a tile is, with a tile of stepping stones taken for the ground they were laid over. */
+  private bedOf(x: number, y: number, lit: boolean): TileType {
+    const world = this.game.world;
+    const t = world.viewTile(x, y, lit) as TileType;
+    return t === TileType.SteppingStones ? stonesBed(world.viewData(x, y, lit)) : t;
+  }
+
+  /**
+   * The height a body at (x, y) is drawn standing at, on the ground under it
+   * with nothing laid over it: the ground, or afloat at the top of the water
+   * over it -- the sea's surface or a pond's -- on a flight of garden steps
+   * the tread under it, a riser higher at a time, and on stepping stones the
+   * stones' tops, however deep the water round them is.
+   */
+  private footAt(x: number, y: number): number {
+    const world = this.game.world;
+    const tx = Math.floor(x);
+    const ty = Math.floor(y);
+    if (world.getTile(tx, ty) === TileType.Steps) return stepsFootAt(world, x, y);
+    const ground = world.heightAt(x, y);
+    if (world.stonesAt(tx, ty)) return Math.max(ground, world.hasWater(tx, ty) ? world.surfaceAt(tx, ty) : ground) + STONES_RISE;
+    return Math.max(ground, world.surfaceAt(tx, ty) - 4);
   }
 
   /**
@@ -1987,6 +2030,9 @@ export class Renderer {
     const fogPath = new Path2D();
     this.seaPath = new Path2D();
     this.drewWater = false;
+    this.plantFrame = this.game.waterPlants.size
+      ? { cam, t: this.time, now: Date.now() / 1000, dark: this.game.darkness(), surface: this.drawnSurface, ground: this.groundHere }
+      : null;
     // The swell runs down the wind, and everything crossing open water drags
     // something behind it. Both are worked out once for the frame.
     const wind = this.game.wind();
@@ -2247,6 +2293,8 @@ export class Renderer {
          */
         const here = world.viewTile(x, y, lit) as TileType;
         const t0 = this.groundAt(x, y, lit);
+        // Stepping stones go down after the line's water, over it; remembered ones too, as paving is.
+        if (here === TileType.SteppingStones) (lit ? this.stoneRow : this.stoneRowDim).push(x, y);
         ctx.strokeStyle = grid && !wet ? GRID_COLOR : color;
         ctx.stroke();
         // Weed on the bottom goes under the water rather than over it.
@@ -2360,6 +2408,17 @@ export class Renderer {
           const avg = (c[0] + c[1] + c[2] + c[3]) / 4;
           this.take('token', x, y, baseX, baseY + hh - avg * hs, tokenSprite());
         }
+        // A water plant: what lies on the water goes down after the line's water; a lotus's stalks stand up among everything else.
+        if (this.plantFrame) {
+          const plant = this.game.waterPlantAt(x, y);
+          if (plant) {
+            this.plantRow.push(plant);
+            if (standsUp(plant, this.plantFrame.now)) {
+              const [px, py] = plantFoot(plant, this.plantFrame);
+              this.take('waterplant', x, y, px, py, null).plant = plant;
+            }
+          }
+        }
         if (this.game.crops.size) {
           const crop = this.game.cropAt(x, y);
           if (crop) {
@@ -2459,7 +2518,7 @@ export class Renderer {
             if (peer.uid && this.seated.has(peer.uid)) continue;
             const [px, py] = this.game.roster.drawnAt(peer);
             this.take('peer', x, y, cam.worldToScreenX(px, py),
-              cam.worldToScreenY(px, py, Math.max(this.footAt(px, py), world.surfaceAt(Math.floor(px), Math.floor(py)) - 4) + peer.level * WALL_HEIGHT), null).peer = peer;
+              cam.worldToScreenY(px, py, this.footAt(px, py) + peer.level * WALL_HEIGHT), null).peer = peer;
           }
         }
         if (this.game.creatures.list.size) {
@@ -2469,7 +2528,7 @@ export class Renderer {
             // One shut in a crate is drawn in the crate, by the crate.
             if (cr.mode === 'stored') continue;
             this.take('creature', x, y, cam.worldToScreenX(cr.x, cr.y),
-              cam.worldToScreenY(cr.x, cr.y, deckHere ?? Math.max(this.footAt(cr.x, cr.y), world.surfaceAt(Math.floor(cr.x), Math.floor(cr.y)) - 4)), null).creature = cr;
+              cam.worldToScreenY(cr.x, cr.y, deckHere ?? this.footAt(cr.x, cr.y)), null).creature = cr;
           }
         }
         if (this.game.foundations.size) this.drawFoundation(x, y, lit);
@@ -2480,8 +2539,8 @@ export class Renderer {
         // On a bridge you stand on the deck, not in whatever is under it.
         // On the deck unless you are in a hull passing under it.
         const deck = this.game.afloat() ? null : this.game.laidOver(player.tileX, player.tileY);
-        // Afloat in deep water, at the top of it: the sea's surface, or a pond's.
-        const ph = deck !== null ? deck : Math.max(this.footAt(player.x, player.y), world.surfaceAt(player.tileX, player.tileY) - 4) + player.visualLevel * WALL_HEIGHT;
+        // Afloat in deep water, at the top of it: the sea's surface, or a pond's; on stepping stones, on their tops.
+        const ph = deck !== null ? deck : this.footAt(player.x, player.y) + player.visualLevel * WALL_HEIGHT;
         // A driver is drawn on the seat, which is a lift in screen pixels
         // rather than in world height: the cart is under them, not the ground.
         const drivenBy = this.game.driving();
@@ -2516,6 +2575,12 @@ export class Renderer {
       }
       // The light on this line's ponds, and the streams, falls and springs whose water lies on it, over the ground and under what stands on it.
       if (water) this.springWater.row(ctx, d);
+      // Then the stepping stones standing up out of all of it, before anybody standing on them; and the pads lying on it.
+      if (this.stoneRow.length || this.stoneRowDim.length) this.stonesOnLine(ctx);
+      if (this.plantRow.length && this.plantFrame) {
+        drawPlantsFlat(ctx, this.plantRow, this.plantFrame);
+        this.plantRow.length = 0;
+      }
       // Petals and leaves lying on this line's ground and floating on its water.
       this.life.ground(ctx, d);
       // The roofs of the buildings whose last walls this line drew, before
@@ -2541,6 +2606,15 @@ export class Renderer {
     }
 
     this.drawOverlays(ctx, zoom);
+  }
+
+  /** The stepping stones of the line of the ground just drawn, over its water, each one out in the sea cut out of the sea the swell goes over. */
+  private stonesOnLine(ctx: CanvasRenderingContext2D): void {
+    const world = this.game.world;
+    if (this.stoneRowDim.length) drawStones(ctx, this.camera, world, this.stoneRowDim, this.time, false, this.seaPath);
+    if (this.stoneRow.length) drawStones(ctx, this.camera, world, this.stoneRow, this.time, true, this.seaPath);
+    this.stoneRow.length = 0;
+    this.stoneRowDim.length = 0;
   }
 
   /**
@@ -2940,6 +3014,28 @@ export class Renderer {
             ctx.textAlign = 'left';
             ctx.lineWidth = 1;
           }
+        } else if (piece.kind === 'fountain') {
+          /*
+           * A tiered fountain: its stone in three layers with its water drawn
+           * live in between them, running while it holds a litre or more to
+           * draw (`drawFountain`). Clicked by all three layers together.
+           */
+          const [wx, wy] = furnitureCentre(piece);
+          const base = this.pieceBase(piece, wx, wy);
+          const fv = fallView(this.camera, this.time, this.canvas.width, this.canvas.height, HEIGHT_SCALE * zoom);
+          const dark = this.game.darkness();
+          const flowing = (piece.litres ?? 0) >= 1;
+          if (flowing) this.fountainFoam ??= foamTexture();
+          const foam = this.fountainFoam;
+          let box: [number, number, number, number] | null = null;
+          this.paint(ctx, zoom, hovering ? 'hover' : 'none', 0, ent.sx, ent.sy, (g, px, py) => {
+            const v = { ...fv, ox: fv.ox + px - ent.sx, oy: fv.oy + py - ent.sy };
+            drawFountain(g, { v, x: wx, y: wy, base, key: piece.id, flowing, dark, foamTex: foam }, (layer) => {
+              const b = drawFurniture(g, px, py, zoom, piece.kind, false, undefined, layer, view, piece.material, undefined, 'all', false);
+              box = box ? [Math.min(box[0], b[0]), Math.min(box[1], b[1]), Math.max(box[2], b[2]), Math.max(box[3], b[3])] : b;
+            });
+          });
+          drawn = box;
         } else {
           /*
            * Only the first of her layers when she is drawn in layers round her
@@ -3020,6 +3116,10 @@ export class Renderer {
         const post = ent.post;
         this.paint(ctx, zoom, hovering ? 'hover' : 'none', 0, ent.sx, ent.sy, (g, px, py) => drawWorkPost(g, px, py, zoom, postLeft(post) / postLife(post.ql), post.worker !== null));
         this.postHits.push({ x: ent.x, y: ent.y, left: ent.sx - 9 * zoom, top: ent.sy - 30 * zoom, w: 18 * zoom, h: 32 * zoom, post: post.id });
+        continue;
+      }
+      if (ent.kind === 'waterplant' && ent.plant && this.plantFrame) {
+        drawPlantUpright(ctx, ent.plant, this.plantFrame);
         continue;
       }
       if (ent.kind === 'deck' && ent.deck) {
@@ -7957,7 +8057,8 @@ export class Renderer {
   private markWakes(): void {
     const w = this.game.world;
     const now = this.time;
-    const afloat = (x: number, y: number): boolean => w.heightAt(x, y) < w.surfaceAt(Math.floor(x), Math.floor(y)) - 0.5;
+    // Nobody on stepping stones is in the water, however deep it is round them.
+    const afloat = (x: number, y: number): boolean => w.heightAt(x, y) < w.surfaceAt(Math.floor(x), Math.floor(y)) - 0.5 && !w.stonesAt(Math.floor(x), Math.floor(y));
     const player = this.game.player;
     const boat = this.game.driving();
     const hull = boat && furnitureDef(boat.kind).boat ? boat : null;
