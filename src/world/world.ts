@@ -716,6 +716,19 @@ export class World {
     return this.notches.get(`${x},${y}`) ?? 0;
   }
 
+  /**
+   * The wear feet have put on each tile somebody has been walking, keyed by
+   * its index (`y * w + x`): see `WEARS` in tiles.ts. Beside the land rather
+   * than in it, as the notches are, because it changes with every step and a
+   * tile's byte is what everybody else is told about; the island keeps the
+   * same in `tile_wear`. A tile with none is not in here at all.
+   */
+  readonly wear = new Map<number, number>();
+
+  wearAt(x: number, y: number): number {
+    return this.inBounds(x, y) ? this.wear.get(y * this.w + x) ?? 0 : 0;
+  }
+
   /** Cut this far into the tree here, or at nought close the notch over. */
   setNotch(x: number, y: number, cuts: number): void {
     if (cuts > 0) this.notches.set(`${x},${y}`, cuts);

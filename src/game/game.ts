@@ -6,7 +6,8 @@ import { defaultKey } from './keybinds';
 import { listed, numberWord, percent, share, spanWords } from './words';
 import { brazierBurn, shoreNear } from './placeables';
 import type { Hoard } from './treasure';
-import { packTreeData, TILE_DEFS, TileType, TREE_DEFS, TREE_AGES, TREE_ROOM_ONE, TREE_ROOM_TWO, TREE_SEED_BOTH, TREE_SEED_NONE, TREE_SEED_REACH, TREE_SEEDS, lastDawn, treeAge, treeSpecies, LAWN_AFTER, mownDays, mownToday } from '../world/tiles';
+import { packTreeData, TILE_DEFS, TileType, TREE_DEFS, TREE_AGES, TREE_ROOM_ONE, TREE_ROOM_TWO, TREE_SEED_BOTH, TREE_SEED_NONE, TREE_SEED_REACH, TREE_SEEDS, lastDawn, treeAge, treeSpecies, LAWN_AFTER, mownDays, mownToday, FLOWERS_PICKED, WEAR_FALL, WEAR_MOST, WEAR_TRAIL, trailGround, wears } from '../world/tiles';
+import { yearOf } from '../world/calendar';
 import { oreAt } from '../world/ore';
 import { World } from '../world/world';
 import { ACTIONS, ACTION_BY_ID, TEACHES_NOTHING, TRY_LEARN, type ActionDef, type Target } from './actions';
@@ -2700,6 +2701,17 @@ export class Game {
       moved = p.update(dt, this.world, rule);
     }
     this.acting.stepped = moved;
+    /*
+     * And the ground under a step on your own feet wears (`WEARS`), in a game
+     * of your own. On an island the island counts it, off the walk it is told
+     * about (`rpc_move`), and says so when a tile changes; a saddle, a seat or
+     * a hull puts no feet on the ground at all.
+     */
+    if (p.steppedX >= 0) {
+      if (!this.bodyFromIsland && !p.carried) this.wearStep(p.steppedX, p.steppedY);
+      p.steppedX = -1;
+      p.steppedY = -1;
+    }
     if (boat && furnitureDef(boat.kind).boat?.sail && moved > 0) {
       const w = this.wind();
       if (w.force >= 0.5 && sailWord(this.heading(), w) === 'reaching') this.note('reach');
@@ -6939,6 +6951,8 @@ export class Game {
       this.treeRow = 0;
       this.treeTurn = nowSeconds;
       this.treeGone.length = 0;
+      // A year begun since the last turn: every picked tile of flowers flowers again.
+      this.treeNewYear = yearOf(nowSeconds) !== yearOf(this.treesAt);
     }
     const gone = this.treeGone;
     const until = Math.min(w.h, this.treeRow + TREE_STRIP);
@@ -6951,13 +6965,16 @@ export class Game {
           continue;
         }
         // Grass kept cut on a deed becomes lawn; a day without a cut starts
-        // the count over.
+        // the count over. And flowers picked this year stay picked beside the
+        // count, until a new year begins.
         if (here === TileType.Grass) {
           const data = w.getData(x, y);
           if (data) {
-            if (!mownToday(data)) w.setTile(x, y, TileType.Grass, 0);
-            else if (mownDays(data) + 1 >= LAWN_AFTER) w.setTile(x, y, TileType.Lawn, 0);
-            else w.setTile(x, y, TileType.Grass, mownDays(data) + 1);
+            const picked = this.treeNewYear ? 0 : data & FLOWERS_PICKED;
+            if (!mownToday(data)) {
+              if (data !== picked) w.setTile(x, y, TileType.Grass, picked);
+            } else if (mownDays(data) + 1 >= LAWN_AFTER) w.setTile(x, y, TileType.Lawn, 0);
+            else w.setTile(x, y, TileType.Grass, (mownDays(data) + 1) | picked);
           }
           continue;
         }
@@ -6988,6 +7005,55 @@ export class Game {
     const cleared = new Set(gone.map(([x, y]) => y * w.w + x));
     for (const [x, y, species] of gone) this.seedTrees(x, y, species, cleared);
     gone.length = 0;
+    // And the day's fall off every worn tile, after the seeding, as on the island.
+    this.wearDay();
+  }
+
+  /** Whether the turn in progress is the first of a new year. */
+  private treeNewYear = false;
+
+  /**
+   * A step on your own feet onto a tile: a point of wear on it, if it is one
+   * of the grounds that wear (`WEARS`) or a trail already, up to `WEAR_MOST`;
+   * and at `WEAR_TRAIL` a trail, keeping in its byte what it was. The island
+   * does the same in `wear_step`, off the walk it is told about.
+   *
+   * A bridge deck is not the ground under it, and ground a building or a
+   * foundation stands on is built ground: neither wears.
+   */
+  wearStep(x: number, y: number): void {
+    const w = this.world;
+    if (!w.inBounds(x, y)) return;
+    const here = w.getTile(x, y);
+    if (!wears(here)) return;
+    if (this.bridgeAt(x, y) || this.buildings.buildingAt(x, y) || this.foundationAt(x, y)) return;
+    // Kept with the game's papers rather than the land (`save.ts`), so a step
+    // does not mark the whole island as wanting writing out again.
+    const i = y * w.w + x;
+    const had = w.wear.get(i) ?? 0;
+    if (had >= WEAR_MOST) return;
+    w.wear.set(i, had + 1);
+    if (had + 1 >= WEAR_TRAIL && here !== TileType.Trail) w.setTile(x, y, TileType.Trail, here);
+  }
+
+  /**
+   * The day's fall off every worn tile, at the turn of the woods: `WEAR_FALL`
+   * each, and a tile with none left is forgotten -- and if it is a trail, it
+   * is the ground it was worn out of again. The island's `trail_day`.
+   */
+  private wearDay(): void {
+    const w = this.world;
+    if (!w.wear.size) return;
+    for (const [i, v] of [...w.wear]) {
+      if (v > WEAR_FALL) {
+        w.wear.set(i, v - WEAR_FALL);
+        continue;
+      }
+      w.wear.delete(i);
+      const x = i % w.w;
+      const y = (i - x) / w.w;
+      if (w.getTile(x, y) === TileType.Trail) w.setTile(x, y, trailGround(w.getData(x, y)), 0);
+    }
   }
 
   /**

@@ -1,6 +1,6 @@
 import { matOfItem, workingQl } from './materials';
 import { COINS_PER_LUMP, INGOT_LUMPS, INGOT_WEIGHT, ingotOf, METALS, MOULDS, RARE_LUMP_FACTOR } from './metal';
-import { dyeWord } from './dyestuffs';
+import { DYES, dyeWord } from './dyestuffs';
 import { WALL_TYPES } from './building';
 import { candleBurn, lanternReach, torchBurn, torchReach } from './light';
 import { CLOSE_CLOTH, CLOSE_RIGHT } from './wounds';
@@ -93,6 +93,12 @@ export const isWorked = (id: string): boolean => {
 export const CATEGORY_DECAY: Record<ItemCategory, number> = { food: 200, plant: 100, material: 25, tool: 12, misc: 12 };
 /** What a settlement does to the rot of everything lying on its land: a tenth of the pace in the wild. */
 export const DEED_DECAY = 0.1;
+
+/** What wildflowers are for, off the dye boiled from them, so the card says what the recipe does. */
+function wildflowerUse(): string {
+  const d = DYES.find((y) => y.from === 'wildflowers');
+  return `Picked off grass in flower, a wildflower for every clump. ${d ? `${capital(numberWord(d.count))} of them and a bucket of lye boil into ${d.word} dye, for cloth, leather, a banner or a sail.` : ''}`;
+}
 
 export const ITEM_DEFS: Record<string, ItemDef> = {
   shovel: { name: 'Shovel', category: 'tool', weight: 3, description: 'A shovel for digging, flattening and packing dirt.' },
@@ -290,6 +296,8 @@ export const ITEM_DEFS: Record<string, ItemDef> = {
   // What a sickle cuts off a bush. Dyestuffs, both of them.
   rose_petals: { name: 'Rose petals', category: 'material', weight: 0.05, stackable: true, raw: true, decay: 6, description: 'Cut off a rose bush with a sickle. Boiled, they give a pink that nothing else on the island gives.' },
   lavender: { name: 'Lavender', category: 'material', weight: 0.05, stackable: true, raw: true, decay: 6, description: 'Cut off a lavender bush with a sickle. Boiled, it gives a violet.' },
+  // Picked off grass in flower (`world/flowers.ts`), and boiled for the dye that is theirs.
+  wildflowers: { name: 'Wildflowers', category: 'material', weight: 0.05, stackable: true, raw: true, decay: 6, description: wildflowerUse() },
   pickaxe_head: { name: 'Pickaxe head', category: 'material', weight: 1.2, stackable: true, decay: 1 },
   hammer_head: { name: 'Hammer head', category: 'material', weight: 1, stackable: true, decay: 1 },
   knife_blade: { name: 'Knife blade', category: 'material', weight: 1.2, stackable: true, decay: 1 },

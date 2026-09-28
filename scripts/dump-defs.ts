@@ -58,6 +58,8 @@ import { CROWD_HIDES, DEEDS_JOINED, PLANTABLE } from '../src/game/game';
 import { RARITIES, RARITY_LIFT, RARITY_ODDS, RARITY_WORD } from '../src/game/items';
 import { DYES } from '../src/game/dyestuffs';
 import { SLAB_VARIANTS } from '../src/world/tiles';
+import { FLOWERS_PICKED, WEAR_FALL, WEAR_MOST, WEAR_TRAIL, WEARS } from '../src/world/tiles';
+import { FLOWER_FROM, FLOWER_MOST, FLOWER_OCTAVES, FLOWER_STEP } from '../src/world/flowers';
 import {
   DREDGE_DEPTH, MINE_DEPTH, WORMY, RICH_WORMS, FLATTEN_STEP, SPOIL_REACH, SLOPE_PER_SKILL, SLOPE_FLOOR,
   TILE_CORNERS, DIG_TILE_TIME, PAN_ORES,
@@ -141,6 +143,8 @@ out.push(`alter table tile_def add column if not exists paved boolean not null d
 out.push(`alter table tile_def add column if not exists bed boolean not null default false;`);
 // A made road -- packed, cobbled or slabbed -- which a Terraformer's Road Legs walk faster.
 out.push(`alter table tile_def add column if not exists road boolean not null default false;`);
+// Ground feet wear to a trail (`WEARS`): grass, lawn, steppe, tundra and moss.
+out.push(`alter table tile_def add column if not exists wears boolean not null default false;`);
 out.push(`create table if not exists skill_def (
   id text primary key, name text not null, start real not null, parent text
 );`);
@@ -279,6 +283,16 @@ out.push(`alter table species_def add column if not exists glow real;`);
 out.push(`create table if not exists plantable (tile int primary key);`);
 /** Ground a spadeful of dirt covers over, leaving dirt. */
 out.push(`create table if not exists buryable (tile int primary key);`);
+/*
+ * Where wildflowers grow (`world/flowers.ts`): the lattices a drift is laid
+ * on, and how high a tile has to stand in one to flower in each season and
+ * how many clumps it may carry. `flower_drift` reads the first, `flower_bloom`
+ * the second; the arithmetic is ported and these numbers are not.
+ */
+out.push(`create table if not exists flower_octave (
+  i int primary key, cell int not null, salt int not null, weight int not null, eased boolean not null
+);`);
+out.push(`create table if not exists flower_season (season text primary key, drift int, most int not null);`);
 out.push(`create table if not exists improve_material_def (
   id text primary key, name text not null, skill text not null
 );`);
@@ -931,6 +945,7 @@ for (const [id, d] of Object.entries(TILE_DEFS)) {
   if (d.paved) out.push(`update tile_def set paved = true where id = ${q(Number(id))};`);
   if (d.bed) out.push(`update tile_def set bed = true where id = ${q(Number(id))};`);
   if (ROAD_TILES.includes(Number(id))) out.push(`update tile_def set road = true where id = ${q(Number(id))};`);
+  if (WEARS.has(Number(id))) out.push(`update tile_def set wears = true where id = ${q(Number(id))};`);
 }
 for (const d of SKILL_DEFS) {
   out.push(`insert into skill_def values (${q(d.id)}, ${q(d.name)}, ${q(d.start)}, ${q((d as { parent?: string }).parent)});`);
@@ -1010,7 +1025,7 @@ out.push(emptied(['melt_def', 'wall_fitting', 'recipe', 'recipe_input', 'recipe_
   'weapon_def', 'armour_class_def', 'armour_def', 'shield_def', 'hit_location',
   'wound_kind_def', 'butcher_part', 'species_butcher', 'hoard_metal', 'crate_def', 'metal_def',
   'pottery_def', 'mould_def', 'improve_material_def', 'improve_tool', 'improve_stock',
-  'improvable_def', 'item_feeds', 'boon_skill', 'plantable', 'buryable', 'title_def',
+  'improvable_def', 'item_feeds', 'boon_skill', 'plantable', 'buryable', 'flower_octave', 'flower_season', 'title_def',
   'knack_kin', 'category_decay', 'vehicle_def', 'boat_def', 'tack_def', 'cast_def', 'path_def',
   'path_step', 'class_def', 'class_skill', 'class_channel', 'class_node', 'class_perk',
   'perk_fx_rule', 'perk_tier', 'pan_ore', 'rite_def',
@@ -1072,6 +1087,10 @@ for (const id of [...unnamed].sort()) {
 }
 for (const t of [...PLANTABLE].sort((a, b) => a - b)) out.push(`insert into plantable values (${q(t)});`);
 for (const t of [...BURYABLE].sort((a, b) => a - b)) out.push(`insert into buryable values (${q(t)});`);
+FLOWER_OCTAVES.forEach((o, i) => out.push(`insert into flower_octave values (${q(i)}, ${q(o.cell)}, ${q(o.salt)}, ${q(o.weight)}, ${q(o.eased)});`));
+for (const [season, from] of Object.entries(FLOWER_FROM)) {
+  out.push(`insert into flower_season values (${q(season)}, ${q(from)}, ${q(FLOWER_MOST[season as keyof typeof FLOWER_MOST])});`);
+}
 /*
  * Only the three that have a name. The browser keys rarity by an index into a
  * list whose first entry is the ordinary one with an empty name, and a row
@@ -1308,6 +1327,10 @@ for (const [fn, v] of [
   ['tree_dawn_utc', TREE_DAWN_UTC], ['tree_seeds', TREE_SEEDS], ['tree_seed_reach', TREE_SEED_REACH],
   ['tree_seed_none', TREE_SEED_NONE], ['tree_seed_both', TREE_SEED_BOTH],
   ['tree_room_two', TREE_ROOM_TWO], ['tree_room_one', TREE_ROOM_ONE],
+  /* Worn paths: the wear at which a tile is a trail, the most it holds, and what it loses at each turn of the woods. */
+  ['wear_trail', WEAR_TRAIL], ['wear_most', WEAR_MOST], ['wear_fall', WEAR_FALL],
+  /* And wildflowers: the bit in a grass byte that says they have been picked this year, and the drift a clump more takes. */
+  ['flowers_picked', FLOWERS_PICKED], ['flower_step', FLOWER_STEP],
   /* And how many other people's settlements you may be a citizen of. */
   ['deeds_joined', DEEDS_JOINED], ['crowd_hides', CROWD_HIDES],
   /* And what a brush is worth, which the card had been claiming and no rule read. */

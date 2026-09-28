@@ -37,6 +37,8 @@ export const DYES: DyeDef[] = [
   // The two a sickle cuts off a bush.
   dye('rose', 'Rose', 'pink', '#d6879f', '#9c5468', 'rose_petals', 8, 15, 'Rose petals, boiled gently. A pink that fades in the sun and is dyed again every spring.'),
   dye('lavender', 'Lavender', 'violet', '#8a6fbf', '#5d4a88', 'lavender', 8, 16, 'Lavender heads, boiled. A violet that keeps its scent for a while after.'),
+  // And the one picked off the meadow in spring and summer (`world/flowers.ts`).
+  dye('wildflowers', 'Wildflowers', 'orange', '#dc8c4a', '#a35f2c', 'wildflowers', 8, 12, 'Wildflowers, boiled down to an orange.'),
 ];
 
 export const DYE_BY_ID = new Map(DYES.map((d) => [d.id, d]));

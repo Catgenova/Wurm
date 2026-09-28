@@ -14,6 +14,7 @@ create table if not exists tile_def (
 alter table tile_def add column if not exists paved boolean not null default false;
 alter table tile_def add column if not exists bed boolean not null default false;
 alter table tile_def add column if not exists road boolean not null default false;
+alter table tile_def add column if not exists wears boolean not null default false;
 create table if not exists skill_def (
   id text primary key, name text not null, start real not null, parent text
 );
@@ -99,6 +100,10 @@ alter table material_def add column if not exists note text;
 alter table species_def add column if not exists glow real;
 create table if not exists plantable (tile int primary key);
 create table if not exists buryable (tile int primary key);
+create table if not exists flower_octave (
+  i int primary key, cell int not null, salt int not null, weight int not null, eased boolean not null
+);
+create table if not exists flower_season (season text primary key, drift int, most int not null);
 create table if not exists improve_material_def (
   id text primary key, name text not null, skill text not null
 );
@@ -703,6 +708,8 @@ insert into item_def values ('rose_petals', 'Rose petals', 'material', 0.05, tru
 update item_def set raw = true where id = 'rose_petals';
 insert into item_def values ('lavender', 'Lavender', 'material', 0.05, true, 6, null);
 update item_def set raw = true where id = 'lavender';
+insert into item_def values ('wildflowers', 'Wildflowers', 'material', 0.05, true, 6, null);
+update item_def set raw = true where id = 'wildflowers';
 insert into item_def values ('pickaxe_head', 'Pickaxe head', 'material', 1.2, true, 1, null);
 insert into item_def values ('hammer_head', 'Hammer head', 'material', 1, true, 1, null);
 insert into item_def values ('knife_blade', 'Knife blade', 'material', 1.2, true, 1, null);
@@ -968,6 +975,7 @@ insert into item_def values ('pewter_ingot', 'Pewter ingot', 'material', 2.5, tr
 insert into item_def values ('electrum_ingot', 'Electrum ingot', 'material', 2.5, true, 1, null);
 insert into item_def values ('steel_ingot', 'Steel ingot', 'material', 2.5, true, 1, null);
 insert into tile_def values (0, 'Grass', 1, false, 'dirt', false, true, true, true, true, false);
+update tile_def set wears = true where id = 0;
 insert into tile_def values (1, 'Dirt', 1, false, 'dirt', false, false, false, true, false, true);
 insert into tile_def values (2, 'Packed dirt', 1.05, false, null, false, false, false, true, false, false);
 update tile_def set road = true where id = 2;
@@ -975,7 +983,9 @@ insert into tile_def values (3, 'Sand', 0.9, false, 'sand', false, false, false,
 update tile_def set bed = true where id = 3;
 insert into tile_def values (4, 'Rock', 0.9, false, null, true, false, false, false, false, false);
 insert into tile_def values (5, 'Steppe', 1, false, 'dirt', false, true, true, true, true, false);
+update tile_def set wears = true where id = 5;
 insert into tile_def values (6, 'Tundra', 0.95, false, 'dirt', false, true, true, true, true, false);
+update tile_def set wears = true where id = 6;
 insert into tile_def values (7, 'Marsh', 0.6, false, 'dirt', false, true, true, false, true, false);
 insert into tile_def values (8, 'Clay', 0.9, false, 'clay', false, false, false, false, false, true);
 update tile_def set bed = true where id = 8;
@@ -984,6 +994,7 @@ update tile_def set bed = true where id = 9;
 insert into tile_def values (10, 'Tar', 0.5, false, 'tar', false, false, false, false, false, true);
 update tile_def set bed = true where id = 10;
 insert into tile_def values (11, 'Moss', 1, false, 'dirt', false, true, true, true, true, false);
+update tile_def set wears = true where id = 11;
 insert into tile_def values (12, 'Snow', 0.8, false, null, true, false, false, false, false, false);
 insert into tile_def values (14, 'Cobblestone', 1.25, false, null, false, false, false, false, false, false);
 update tile_def set paved = true where id = 14;
@@ -994,11 +1005,13 @@ insert into tile_def values (17, 'Bush', 0.5, false, null, false, false, false, 
 insert into tile_def values (18, 'Kelp', 1, false, null, false, false, false, false, false, false);
 insert into tile_def values (19, 'Reed', 0.8, false, null, false, false, false, false, false, false);
 insert into tile_def values (20, 'Lawn', 1, false, null, false, true, true, true, true, false);
+update tile_def set wears = true where id = 20;
 insert into tile_def values (21, 'Stone slabs', 1.3, false, null, false, false, false, false, false, false);
 update tile_def set paved = true where id = 21;
 update tile_def set road = true where id = 21;
 insert into tile_def values (22, 'Stump', 0.7, false, null, false, false, false, false, false, false);
 insert into tile_def values (23, 'Garden steps', 1, false, null, false, false, false, false, false, false);
+insert into tile_def values (24, 'Trail', 1.05, false, 'dirt', false, false, false, true, true, false);
 insert into skill_def values ('body_strength', 'Body strength', 20, null);
 insert into skill_def values ('body_stamina', 'Body stamina', 20, null);
 insert into skill_def values ('body_control', 'Body control', 20, null);
@@ -1243,6 +1256,7 @@ insert into action_def (id, label, verb, skill, tool, corner, range, stamina, ba
 insert into action_def (id, label, verb, skill, tool, corner, range, stamina, base_time, difficulty, instant, repeatable) values ('demolish_bridge', 'Pull it down', 'pulling the bridge down', null, null, false, null, 0.08, 12, null, false, false);
 insert into action_def (id, label, verb, skill, tool, corner, range, stamina, base_time, difficulty, instant, repeatable) values ('dig_spring', 'Dig a spring', 'digging for a spring', 'digging', 'shovel', false, null, 0.12, 30, 12, false, false);
 insert into action_def (id, label, verb, skill, tool, corner, range, stamina, base_time, difficulty, instant, repeatable) values ('stop_spring', 'Stop up the spring', 'stopping up the spring', 'digging', 'shovel', false, null, 0.06, 10, null, false, false);
+insert into action_def (id, label, verb, skill, tool, corner, range, stamina, base_time, difficulty, instant, repeatable) values ('pick_flowers', 'Pick flowers', 'picking flowers', 'foraging', null, false, null, 0.02, 3, null, false, false);
 insert into action_def (id, label, verb, skill, tool, corner, range, stamina, base_time, difficulty, instant, repeatable) values ('plan_foundation', 'Set out a foundation', 'shuttering a foundation', 'masonry', 'mallet', false, null, 0.03, 4, null, false, false);
 insert into action_def (id, label, verb, skill, tool, corner, range, stamina, base_time, difficulty, instant, repeatable) values ('pour_foundation', 'Pour the foundation', 'pouring concrete', 'masonry', 'trowel', false, null, 0.05, 6, null, false, true);
 insert into action_def (id, label, verb, skill, tool, corner, range, stamina, base_time, difficulty, instant, repeatable) values ('dig_pool', 'Dig a pool', 'breaking out a pool', 'masonry', 'pickaxe', false, null, 0.12, 30, null, false, false);
@@ -1578,6 +1592,7 @@ insert into action_def (id, label, verb, skill, tool, corner, range, stamina, ba
 insert into action_def (id, label, verb, skill, tool, corner, range, stamina, base_time, difficulty, instant, repeatable) values ('make_umber', 'Boil umber', 'boiling umber', 'alchemy', null, false, null, 0.04, 12, 10, false, true);
 insert into action_def (id, label, verb, skill, tool, corner, range, stamina, base_time, difficulty, instant, repeatable) values ('make_rose', 'Boil rose', 'boiling rose', 'alchemy', null, false, null, 0.04, 12, 15, false, true);
 insert into action_def (id, label, verb, skill, tool, corner, range, stamina, base_time, difficulty, instant, repeatable) values ('make_lavender', 'Boil lavender', 'boiling lavender', 'alchemy', null, false, null, 0.04, 12, 16, false, true);
+insert into action_def (id, label, verb, skill, tool, corner, range, stamina, base_time, difficulty, instant, repeatable) values ('make_wildflowers', 'Boil wildflowers', 'boiling wildflowers', 'alchemy', null, false, null, 0.04, 12, 12, false, true);
 insert into action_def (id, label, verb, skill, tool, corner, range, stamina, base_time, difficulty, instant, repeatable) values ('make_cover_thyme', 'Work thyme into a cover', 'working a thyme cover', 'first_aid', null, false, null, 0.02, 9, 12, false, true);
 insert into action_def (id, label, verb, skill, tool, corner, range, stamina, base_time, difficulty, instant, repeatable) values ('make_cover_basil', 'Work basil into a cover', 'working a basil cover', 'first_aid', null, false, null, 0.02, 9, 12, false, true);
 insert into action_def (id, label, verb, skill, tool, corner, range, stamina, base_time, difficulty, instant, repeatable) values ('make_cover_mint', 'Work mint into a cover', 'working a mint cover', 'first_aid', null, false, null, 0.02, 9, 12, false, true);
@@ -1707,6 +1722,8 @@ delete from item_feeds;
 delete from boon_skill;
 delete from plantable;
 delete from buryable;
+delete from flower_octave;
+delete from flower_season;
 delete from title_def;
 delete from knack_kin;
 delete from category_decay;
@@ -2072,6 +2089,13 @@ insert into buryable values (10);
 insert into buryable values (11);
 insert into buryable values (19);
 insert into buryable values (20);
+insert into buryable values (24);
+insert into flower_octave values (0, 7, 7331, 2, true);
+insert into flower_octave values (1, 3, 7349, 1, false);
+insert into flower_season values ('spring', 182, 2);
+insert into flower_season values ('summer', 166, 4);
+insert into flower_season values ('autumn', null, 0);
+insert into flower_season values ('winter', null, 0);
 insert into rarity_def values ('rare', 1, 1.1, 0.8, 5, 0.01, 'Something in the grain runs true and it comes out better than it had any right to be.', 'Something gives under the file, and what was an ordinary thing is not one any more.', 1.5, 1.2);
 insert into rarity_def values ('supreme', 2, 1.25, 0.6, 12, 0.1, 'Your hands know what to do before you do, and what they leave is not far off perfect.', 'You go over it once more and it comes back at you: a better thing than the one you started on.', 2, 1.4);
 insert into rarity_def values ('fantastic', 3, 1.5, 0.35, 25, 0.1, 'For a moment the whole of it is obvious, and what you set down is the finest thing you will ever make.', 'The last stroke lands and the whole of it settles. You will not make its like again.', 3, 1.6);
@@ -2085,6 +2109,7 @@ insert into dye_def values ('verdigris', 'Verdigris', 'green');
 insert into dye_def values ('umber', 'Umber', 'brown');
 insert into dye_def values ('rose', 'Rose', 'pink');
 insert into dye_def values ('lavender', 'Lavender', 'violet');
+insert into dye_def values ('wildflowers', 'Wildflowers', 'orange');
 insert into improve_material_def values ('metal', 'metal', 'blacksmithing');
 insert into improve_tool values ('metal', 0, 'file');
 insert into improve_tool values ('metal', 1, 'whetstone');
@@ -2364,6 +2389,7 @@ update item_def set description = 'Fletching for arrows, and only a bird carries
 update item_def set description = 'Spun on a spindle. Woven on a loom it becomes cloth.' where id = 'yarn';
 update item_def set description = 'Cut off a rose bush with a sickle. Boiled, they give a pink that nothing else on the island gives.' where id = 'rose_petals';
 update item_def set description = 'Cut off a lavender bush with a sickle. Boiled, it gives a violet.' where id = 'lavender';
+update item_def set description = 'Picked off grass in flower, a wildflower for every clump. Eight of them and a bucket of lye boil into orange dye, for cloth, leather, a banner or a sail.' where id = 'wildflowers';
 update item_def set description = 'A fleece shorn from a living Woola. It grows back, which fur never does.' where id = 'wool';
 update item_def set description = 'Wool or cotton spun and woven. Stuffs a mattress and makes what you wear.' where id = 'cloth';
 update item_def set description = 'A soft pelt taken from a butchered wildermon.' where id = 'fur';
@@ -3984,6 +4010,11 @@ create or replace function tree_seed_none() returns double precision language sq
 create or replace function tree_seed_both() returns double precision language sql immutable as $fn$ select 0.3::double precision $fn$;
 create or replace function tree_room_two() returns double precision language sql immutable as $fn$ select 8::double precision $fn$;
 create or replace function tree_room_one() returns double precision language sql immutable as $fn$ select 4::double precision $fn$;
+create or replace function wear_trail() returns double precision language sql immutable as $fn$ select 8::double precision $fn$;
+create or replace function wear_most() returns double precision language sql immutable as $fn$ select 12::double precision $fn$;
+create or replace function wear_fall() returns double precision language sql immutable as $fn$ select 1::double precision $fn$;
+create or replace function flowers_picked() returns double precision language sql immutable as $fn$ select 8::double precision $fn$;
+create or replace function flower_step() returns double precision language sql immutable as $fn$ select 8::double precision $fn$;
 create or replace function deeds_joined() returns double precision language sql immutable as $fn$ select 3::double precision $fn$;
 create or replace function crowd_hides() returns double precision language sql immutable as $fn$ select 20::double precision $fn$;
 create or replace function care_bonus() returns double precision language sql immutable as $fn$ select 0.25::double precision $fn$;
@@ -4902,9 +4933,9 @@ insert into class_perk values ('naturalist_hay_cutter', 'naturalist', 2, 10, 'Ha
 insert into class_perk values ('naturalist_reed_cutter', 'naturalist', 2, 11, 'Reed Cutter', 'Cutting reeds always gives three (now two, and one more on a chance of your foraging in 140).', '{"count:reed":3}');
 insert into class_perk values ('naturalist_ink_maker', 'naturalist', 2, 19, 'Ink Maker', 'Grinding ink makes four (now two).', '{"count:ink":4}');
 insert into class_perk values ('naturalist_sure_find', 'naturalist', 3, 3, 'Sure Find', 'No look over the ground comes up empty by chance, foraging or botanizing (now 1 in 5 does, before the skill is asked).', '{"empty:forage":0,"empty:botanize":0}');
-insert into class_perk values ('naturalist_sure_boil', 'naturalist', 3, 17, 'Sure Boil', 'Alchemy fails half as often (now a check at difficulty 10–22).', '{"fail:make_candle":0.5,"fail:make_lye":0.5,"fail:make_ink":0.5,"fail:make_woad":0.5,"fail:make_madder":0.5,"fail:make_scarlet":0.5,"fail:make_cochineal":0.5,"fail:make_gall":0.5,"fail:make_weld":0.5,"fail:make_verdigris":0.5,"fail:make_umber":0.5,"fail:make_rose":0.5,"fail:make_lavender":0.5,"fail:brew_tea_thyme":0.5,"fail:make_tincture_thyme":0.5,"fail:brew_tea_basil":0.5,"fail:make_tincture_basil":0.5,"fail:brew_tea_mint":0.5,"fail:make_tincture_mint":0.5,"fail:brew_tea_sage":0.5,"fail:make_tincture_sage":0.5,"fail:brew_tea_rosemary":0.5,"fail:make_tincture_rosemary":0.5}');
+insert into class_perk values ('naturalist_sure_boil', 'naturalist', 3, 17, 'Sure Boil', 'Alchemy fails half as often (now a check at difficulty 10–22).', '{"fail:make_candle":0.5,"fail:make_lye":0.5,"fail:make_ink":0.5,"fail:make_woad":0.5,"fail:make_madder":0.5,"fail:make_scarlet":0.5,"fail:make_cochineal":0.5,"fail:make_gall":0.5,"fail:make_weld":0.5,"fail:make_verdigris":0.5,"fail:make_umber":0.5,"fail:make_rose":0.5,"fail:make_lavender":0.5,"fail:make_wildflowers":0.5,"fail:brew_tea_thyme":0.5,"fail:make_tincture_thyme":0.5,"fail:brew_tea_basil":0.5,"fail:make_tincture_basil":0.5,"fail:brew_tea_mint":0.5,"fail:make_tincture_mint":0.5,"fail:brew_tea_sage":0.5,"fail:make_tincture_sage":0.5,"fail:brew_tea_rosemary":0.5,"fail:make_tincture_rosemary":0.5}');
 insert into class_perk values ('naturalist_sure_hands', 'naturalist', 3, 24, 'Sure Hands', 'A dressing slips half as often (now a check at difficulty 10).', '{"fail:bind_wound":0.5}');
-insert into class_perk values ('naturalist_thrifty_dyer', 'naturalist', 4, 16, 'Thrifty Dyer', 'A dye boil takes 6–8 of its dyestuff (now 8–10), and the one bucket of lye.', '{"need:make_woad":0.75,"need:make_madder":0.75,"need:make_scarlet":0.75,"need:make_cochineal":0.75,"need:make_gall":0.75,"need:make_weld":0.75,"need:make_verdigris":0.75,"need:make_umber":0.75,"need:make_rose":0.75,"need:make_lavender":0.75}');
+insert into class_perk values ('naturalist_thrifty_dyer', 'naturalist', 4, 16, 'Thrifty Dyer', 'A dye boil takes 6–8 of its dyestuff (now 8–10), and the one bucket of lye.', '{"need:make_woad":0.75,"need:make_madder":0.75,"need:make_scarlet":0.75,"need:make_cochineal":0.75,"need:make_gall":0.75,"need:make_weld":0.75,"need:make_verdigris":0.75,"need:make_umber":0.75,"need:make_rose":0.75,"need:make_lavender":0.75,"need:make_wildflowers":0.75}');
 insert into class_perk values ('naturalist_quick_mend', 'naturalist', 4, 29, 'Quick Mend', 'A wound you dress closes 50% faster until it closes or is cleaned out, whoever''s it is.', '{"mend:bind_wound":1.5}');
 insert into class_perk values ('naturalist_cover_maker', 'naturalist', 4, 30, 'Cover Maker', 'Two of one herb and one cotton make five healing covers (now three).', '{"count:cover":5}');
 insert into class_perk values ('naturalist_rare_find', 'naturalist', 5, 12, 'Rare Find', '1 in 100 finds foraging or botanizing come up rare (now none do); supreme and fantastic follow at their usual odds.', '{"rare:forage":0.01,"rare:botanize":0.01}');
@@ -5985,6 +6016,11 @@ insert into recipe_input values ('make_lavender', 0, 'lavender', 8);
 insert into recipe_input values ('make_lavender', 1, 'lye_bucket', 1);
 insert into recipe_gives values ('make_lavender', 'bucket', 1, 'return');
 insert into recipe_gives values ('make_lavender', 'bucket', 1, 'salvage');
+insert into recipe (id, result, count, tool, station, skill, label, verb, base_time, stamina, difficulty, consume_on_fail, ql_from_inputs, material, wood, extra, done, fail) values ('make_wildflowers', 'dye', 2, null, null, 'alchemy', 'Boil wildflowers', 'boiling wildflowers', 12, 0.04, 12, true, false, null, null, 'Wildflowers', 'Wildflowers, boiled down to an orange. Two pots of it, and the bucket is empty.', 'The colour breaks in the pot and goes out grey and streaky. The lot is wasted.');
+insert into recipe_input values ('make_wildflowers', 0, 'wildflowers', 8);
+insert into recipe_input values ('make_wildflowers', 1, 'lye_bucket', 1);
+insert into recipe_gives values ('make_wildflowers', 'bucket', 1, 'return');
+insert into recipe_gives values ('make_wildflowers', 'bucket', 1, 'salvage');
 insert into recipe (id, result, count, tool, station, skill, label, verb, base_time, stamina, difficulty, consume_on_fail, ql_from_inputs, material, wood, extra, done, fail) values ('make_cover_thyme', 'cover', 3, null, null, 'first_aid', 'Work thyme into a cover', 'working a thyme cover', 9, 0.02, 12, true, false, null, null, 'Thyme', 'You bruise the thyme and work it into the cotton. Three covers. Open and bleeding. Thyme in the dressing keeps it clean.', 'The thyme goes to a green paste that will sit on nothing.');
 insert into recipe_input values ('make_cover_thyme', 0, 'thyme', 2);
 insert into recipe_input values ('make_cover_thyme', 1, 'cotton', 1);

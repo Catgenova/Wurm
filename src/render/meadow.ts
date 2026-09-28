@@ -46,7 +46,7 @@ import { UNITS_PER_TILE } from './iso';
 type Ctx = CanvasRenderingContext2D;
 type Rand = () => number;
 /** A lobe: where it is and how big, which is all a mass of them ever needs. */
-type Lobe = [number, number, number];
+export type Lobe = [number, number, number];
 
 /** A little painted thing, and where it is rooted in its own picture. */
 export interface Sprig {
@@ -129,7 +129,7 @@ export interface Strew {
  * The same four the ivy on a wall is built from, because a clump of grass seen
  * from here and a clump of ivy seen from here are the same kind of thing.
  */
-interface Green { line: string; shade: string; lit: string; top: string; foot: string }
+export interface Green { line: string; shade: string; lit: string; top: string; foot: string }
 
 /**
  * Those four, in three strengths, as offsets from the ground they grow out of:

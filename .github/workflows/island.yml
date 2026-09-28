@@ -1093,6 +1093,35 @@ jobs:
             --outfile=node_modules/.cache/year.mjs --log-level=error
           node node_modules/.cache/year.mjs
 
+      - name: Feet wear the same trails on both sides
+        run: |
+          # Grass, lawn, steppe, tundra and moss wear where people walk: a
+          # step on your own feet is a point of wear, and at the threshold the
+          # tile is a trail keeping what it was; each turn of the woods takes
+          # wear off and gives a trail with none left back. The same rows are
+          # walked through rpc_move and through the browser's own body: the
+          # same tiles wear by the same amounts and turn at the same step, a
+          # bridge, a building, a foundation, a storey and a saddle wear
+          # nothing, the most is kept without a write, the woods' turn does
+          # the same on both sides and is told, and a step costs one keyed
+          # write.
+          npx esbuild supabase/test/trails.ts --bundle --platform=node --format=esm \
+            --outfile=node_modules/.cache/trails.mjs --log-level=error
+          node node_modules/.cache/trails.mjs
+
+      - name: Wildflowers bloom in the same places on both sides
+        run: |
+          # Where grass flowers and how thick is worked out from where it is,
+          # by the page that draws it and by the island that lets it be
+          # picked: the same drift to the last whole number on every tile of
+          # four seeds, the same clumps in every season, counted in the same
+          # year. Pick flowers gives the same wildflowers and the same words
+          # on both sides, and the first turn of a new year makes a picked
+          # tile flower again on both, and tells everybody.
+          npx esbuild supabase/test/flowers.ts --bundle --platform=node --format=esm \
+            --outfile=node_modules/.cache/flowers.mjs --log-level=error
+          node node_modules/.cache/flowers.mjs
+
       - name: A team stays in the traces until it is taken out
         run: |
           # "hitching wildermon to the wagon doesn't seem to be working". On an

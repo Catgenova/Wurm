@@ -227,6 +227,8 @@ interface SaveData {
    */
   trees?: number;
   notches?: Array<[number, number, number]>;
+  /** The wear feet have put on the ground, as [x, y, wear] (`World.wear`). A save from before it has none. */
+  wear?: Array<[number, number, number]>;
   settings: { grid: boolean; rotation?: number; eighths?: number; deedBorder?: boolean; cutaway?: boolean; tileWindow?: boolean; fog?: boolean; follow?: boolean; edgePan?: boolean };
   savedAt: number;
   deed?: Deed | null;
@@ -306,6 +308,7 @@ function meta(game: Game): SaveMeta {
       const [x, y] = at.split(',').map(Number);
       return [x, y, cuts] as [number, number, number];
     }),
+    wear: [...w.wear].map(([i, v]) => [i % w.w, Math.floor(i / w.w), v] as [number, number, number]),
     // The view used to turn in quarters and now turns in eighths. Written
     // under a name that says which, so a save from before is still read as
     // the angle it was left at rather than half of it.
@@ -559,6 +562,7 @@ function finish(world: World, m: SaveMeta): Game {
   // handful of shards, so that is what it becomes.
   for (let i = 0; i < world.tiles.length; i++) if (world.tiles[i] === 13) world.tiles[i] = TileType.Cobblestone;
   for (const [x, y, cuts] of m.notches ?? []) world.setNotch(x, y, cuts);
+  for (const [x, y, v] of m.wear ?? []) if (world.inBounds(x, y) && v > 0) world.wear.set(y * world.w + x, v);
   const game = new Game({
     seed: m.seed,
     world,

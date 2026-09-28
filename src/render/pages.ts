@@ -127,3 +127,44 @@ export class ColourPages {
     return this.pages.size;
   }
 }
+
+/**
+ * A whole number a tile, kept by the page the way the colours are: what the
+ * ground round a tile makes of it for anything that is drawn off its
+ * neighbours -- a path's mask, a face of rock's lip -- worked out once and
+ * dropped when the tile or one beside it changes. Nought means nobody has
+ * asked; whoever keeps a number here keeps it one more than the answer.
+ */
+export class MarkPages {
+  private pages = new Map<number, Uint16Array>();
+  private readonly across: number;
+
+  constructor(worldWidth: number) {
+    this.across = ((worldWidth + SIDE - 1) >> BITS) + 1;
+  }
+
+  get(x: number, y: number): number {
+    const page = this.pages.get((y >> BITS) * this.across + (x >> BITS));
+    return page ? page[((y & MASK) << BITS) | (x & MASK)] : 0;
+  }
+
+  set(x: number, y: number, v: number): void {
+    const key = (y >> BITS) * this.across + (x >> BITS);
+    let page = this.pages.get(key);
+    if (!page) {
+      if (this.pages.size >= KEEP) this.pages.clear();
+      page = new Uint16Array(SLOTS);
+      this.pages.set(key, page);
+    }
+    page[((y & MASK) << BITS) | (x & MASK)] = v;
+  }
+
+  forget(x: number, y: number): void {
+    const page = this.pages.get((y >> BITS) * this.across + (x >> BITS));
+    if (page) page[((y & MASK) << BITS) | (x & MASK)] = 0;
+  }
+
+  clear(): void {
+    this.pages.clear();
+  }
+}

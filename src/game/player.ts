@@ -170,6 +170,13 @@ export class Player {
   /** Steepness of the last step taken between tiles, for the climbing skill. */
   lastClimb = 0;
   /**
+   * The tile the last step on the ground went into, for the wear it puts on
+   * it (`WEARS`), or -1 when there has been none since it was last read. A
+   * step on a floor or onto a stair is not a step on the ground.
+   */
+  steppedX = -1;
+  steppedY = -1;
+  /**
    * What the legs are worth against the usual walking pace. One on foot; a
    * team's pace when there is a vehicle under you, which is how a wagon full
    * of stone still gets home before dark.
@@ -334,6 +341,10 @@ export class Player {
       // the land under it does, and a flight of steps is no climb.
       this.lastClimb = this.level === 0 && level === 0 && !onSteps(world, fx, fy, tx, ty)
         ? Math.abs(world.centerHeight(tx, ty) - world.centerHeight(fx, fy)) : 0;
+      if (this.level === 0 && level === 0) {
+        this.steppedX = tx;
+        this.steppedY = ty;
+      }
       this.level = level;
     }
     this.x = nx;

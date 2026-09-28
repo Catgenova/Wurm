@@ -32,6 +32,16 @@ export function seasonAt(now: number): { season: Season; day: number } {
   return { season: SEASONS[Math.floor(inYear / SEASON_DAYS)], day: (inYear % SEASON_DAYS) + 1 };
 }
 
+/**
+ * Which year a moment falls in: nought for the first, counted from the first
+ * dawn of the first spring and below nought before it. A year begins with a
+ * spring, so a new one is what a picked tile of flowers waits for. The
+ * island's `year_of` is the same count.
+ */
+export function yearOf(now: number): number {
+  return Math.floor(Math.floor((now - YEAR_FROM) / DAY) / YEAR_DAYS);
+}
+
 /** The season as the hud says it: "Spring, day 3 of 7". */
 export function seasonLine(now: number): string {
   const { season, day } = seasonAt(now);

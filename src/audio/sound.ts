@@ -68,6 +68,7 @@ export const FOOTINGS: Partial<Record<number, Footing>> = {
   [TileType.Sand]: 'grit',
   [TileType.Dirt]: 'grit',
   [TileType.PackedDirt]: 'grit',
+  [TileType.Trail]: 'grit',
   [TileType.Clay]: 'grit',
   [TileType.Peat]: 'grit',
   [TileType.Tar]: 'grit',

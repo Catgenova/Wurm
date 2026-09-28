@@ -1,5 +1,6 @@
 export { TRY_LEARN, tryGain } from './learn';
-import { BURYABLE, BUSH_DEFS, SLAB_BY_ITEM, SLAB_VARIANTS, TILE_DEFS, TREE_AGES, TREE_DEFS, TileType, bushSpecies, packTreeData, slabVariant, treeAge, treeSpecies, treeVariant, lastDawn, nextDawn, type TreeAge, LAWN_AFTER, MOWN_TODAY, mownDays, mownToday } from '../world/tiles';
+import { BURYABLE, BUSH_DEFS, SLAB_BY_ITEM, SLAB_VARIANTS, TILE_DEFS, TREE_AGES, TREE_DEFS, TileType, bushSpecies, packTreeData, slabVariant, treeAge, treeSpecies, treeVariant, lastDawn, nextDawn, type TreeAge, LAWN_AFTER, MOWN_TODAY, MOWING, mownDays, mownToday } from '../world/tiles';
+import { FLOWER_ACTIONS, groundSays } from './wildflowers';
 import { isSeam } from '../world/tiles';
 import type { World } from '../world/world';
 import { bedrockAt, oreAt } from '../world/ore';
@@ -216,8 +217,12 @@ export interface ActionDef {
   perform(t: Target, g: Game): boolean | void;
 }
 
-/** Ground a shovel can tread down into packed dirt: soil, and anything growing on it. */
-const PACKABLE = new Set<number>([TileType.Dirt, TileType.Grass, TileType.Lawn, TileType.Steppe, TileType.Tundra, TileType.Moss]);
+/**
+ * Ground a shovel can tread down into packed dirt: soil, anything growing on
+ * it, and a trail feet have half done the job on -- which is how a path
+ * people wore becomes a road: pack it, then pave it. The island's `packable`.
+ */
+const PACKABLE = new Set<number>([TileType.Dirt, TileType.Grass, TileType.Lawn, TileType.Steppe, TileType.Tundra, TileType.Moss, TileType.Trail]);
 
 const DIGGABLE_PLANT_TILES = new Set<number>([TileType.Grass, TileType.Dirt, TileType.Moss, TileType.Lawn, TileType.Steppe, TileType.Tundra]);
 
@@ -783,12 +788,14 @@ export const ACTIONS: ActionDef[] = [
         text += treeOutlook(age, g.treesAt);
       } else if (type === TileType.Stump) {
         text = `You see the stump of ${an(TREE_DEFS[treeSpecies(w.getData(t.x, t.y))].name.toLowerCase())} at (${t.x}, ${t.y}). Dig it out, or leave it a day.`;
-      } else if (type === TileType.Grass && w.getData(t.x, t.y)) {
+      } else if (type === TileType.Grass && (w.getData(t.x, t.y) & MOWING)) {
         const d = w.getData(t.x, t.y);
         text += ` Kept cut: ${mownDays(d) + (mownToday(d) ? 1 : 0)} of ${LAWN_AFTER} days towards lawn.`;
       } else if (type === TileType.Bush) {
         text = `You see a ${BUSH_DEFS[bushSpecies(w.getData(t.x, t.y))].name.toLowerCase()} at (${t.x}, ${t.y}).`;
       }
+      // What feet have done to it, and what is in flower on it: the island's words (`ground_says`).
+      text += groundSays(g, t.x, t.y);
       // And for a Fisher with a Fishing Journal, what the water holds for them.
       const water = w.hasWater(t.x, t.y) ? ` Water laps over it.${fishJournal(g, t.x, t.y)}` : '';
       let extra = '';
@@ -2908,6 +2915,7 @@ export const ACTIONS: ActionDef[] = [
   ...LANTERN_ACTIONS,
   ...BRIDGE_ACTIONS,
   ...SPRING_ACTIONS,
+  ...FLOWER_ACTIONS,
   ...FOUNDATION_ACTIONS,
   ...STEPS_ACTIONS,
   ...FAITH_ACTIONS,

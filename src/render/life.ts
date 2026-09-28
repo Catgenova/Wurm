@@ -27,10 +27,12 @@
 import type { Camera } from '../engine/camera';
 import { DAWN, DUSK } from '../game/game';
 import type { Season } from '../world/calendar';
+import { FLOWER_MOST, flowersOn } from '../world/flowers';
 import { hash2 } from '../world/noise';
 import { BUSH_DEFS, TileType, TREE_AGES, TREE_DEFS, bushSpecies, treeSpecies, treeVariant, type TreeDef } from '../world/tiles';
 import type { World } from '../world/world';
 import { AUTUMN, bloomOf, blooms, bushYear, SHED_MOST, shedOn, shedding } from './foliage';
+import { FLOWER_TOP } from './flowers';
 import { HALF_H, HALF_W, HEIGHT_SCALE } from './iso';
 import { grownAt, WORLD_SCALE } from './sprites';
 import { depthOf, type View } from './view';
@@ -57,7 +59,7 @@ const MOST_OVER = (1600 * 1000) / (HALF_W * HALF_H * 2);
  * or near water (weighted: see `nearWeight`).
  */
 const SHARE = {
-  bush: 0.2, planter: 0.65, blossom: 0.22,
+  bush: 0.2, planter: 0.65, blossom: 0.22, wildflowers: 0.04,
   pond: 0.07, stream: 0.1, fishPond: 0.75,
   grass: 0.3,
 } as const;
@@ -600,12 +602,25 @@ export class SmallLife {
           continue;
         }
         /*
-         * Wildflowers, when there are any (batch B): a tile of grass in flower
-         * is a home for butterflies like a flowering bush, at a much smaller
-         * share since there are so many more of them. This is the place: ask
-         * whether the tile is in flower, and take it down as a Nectar home with
-         * its flowers' height as `top`.
+         * Wildflowers: a tile of grass in flower is a home for butterflies like
+         * a flowering bush, at a much smaller share since there are so many
+         * more of them, and the likelier the more clumps it has.
          */
+        if (nectar && t === TileType.Grass) {
+          const clumps = flowersOn(w.seed, x, y, t, data[i], f.season);
+          const roll = hash2(x, y, 5019);
+          if (clumps > 0 && roll < SHARE.wildflowers * clumps / FLOWER_MOST.summer && f.visible(x, y)) {
+            const h = this.home();
+            h.kind = Home.Nectar;
+            h.x = x + 0.5;
+            h.y = y + 0.5;
+            h.ground = w.centerHeight(x, y);
+            h.top = FLOWER_TOP;
+            h.reach = 0.6;
+            h.roll = roll / SHARE.wildflowers;
+            continue;
+          }
+        }
         if (water && pools !== null) {
           const roll = hash2(x, y, 5011);
           if (roll < SHARE.pond && pools.wet(x, y) && f.visible(x, y)) {

@@ -82,11 +82,12 @@ import { TURNS } from '../../render/view';
 import { ORE_DENSITY, seamShare } from '../../world/ore';
 import {
   BUSH_DEFS, groundRoll, ROCK_VARIANTS, SLAB_VARIANTS, STEPS_BRICKS, STEPS_LEAST, STEPS_MOST, STEPS_PLANKS, STEPS_SLABS, STEPS_TWIST, TILE_DEFS, TileType,
-  TREE_DAWN_UTC, TREE_DEFS,
+  TREE_DAWN_UTC, TREE_DEFS, WEAR_FALL, WEAR_MOST, WEAR_TRAIL, WEARS,
 } from '../../world/tiles';
 import { STEPS_BACK, stepsBack, STONE_DIFFICULTY, STONE_STEPS_BILL, TIMBER_DIFFICULTY, TIMBER_STEPS_BILL } from '../../game/steps';
 import { ROSES_RULE } from '../../game/roses';
 import { DEVICE_COUNT } from '../../render/furniture';
+import { FLOWER_MOST, FLOWER_SEASONS } from '../../world/flowers';
 import { SEASON_DAYS, SEASONS, YEAR_DAYS } from '../../world/calendar';
 import { BLOOMS, BUSH_EVERGREEN, BUSH_FLOWER_FROM, evergreen, LEAF_DAYS, SHED_DAYS, TURN_DAYS } from '../../render/foliage';
 import { lifeSeasons } from '../../render/life';
@@ -142,6 +143,26 @@ const mat = (id: string): MaterialDef => {
 const ground = (t: TileType) => TILE_DEFS[t];
 /** What a kind of ground takes off a full wagon's pace. */
 const rollCost = (t: TileType): number => 1 - groundRoll(ground(t).roll, 1);
+/**
+ * The day a tile walked `steps` times a day wears through to a trail, a
+ * night's fall coming off between one day and the next; or none, when the
+ * nights take off all the days put on.
+ */
+const daysToTrail = (steps: number): number | null => {
+  let wear = 0;
+  for (let day = 1; day <= 4 * WEAR_MOST; day++) {
+    wear = Math.min(WEAR_MOST, wear + steps);
+    if (wear >= WEAR_TRAIL) return day;
+    wear = Math.max(0, wear - WEAR_FALL);
+  }
+  return null;
+};
+/** "once", "twice", "three times": how often a thing is done in a day. */
+const often = (n: number): string => (n === 1 ? 'once' : n === 2 ? 'twice' : `${numberWord(n)} times`);
+/** A walk there and back puts a step on every tile of the way each way. */
+const STEPS_A_TRIP = 2;
+/** The walks there and back a day the help works a trail out for. */
+const TRIPS_A_DAY = [1, 2] as const;
 /** How much of one of the four a thing feeds. */
 const feeds = (id: string, nutrient: string): number => (itemDef(id).feeds as Record<string, number> | undefined)?.[nutrient] ?? 0;
 /** The best anything can be made, and the roughest. */
@@ -1100,6 +1121,33 @@ export function helpText(): string {
     <p>Walking somewhere with a load routes you the way a carter would take it: round the bog and along
     the stone, even when the stone is the longer way about. An empty cart still cuts straight through.
     The hud says what the ground under you is costing whenever it costs anything.</p>
+    <h3>Paths worn by feet</h3>
+    <p>${capital(listed([...WEARS].map((t) => ground(t as TileType).name.toLowerCase())))} wear where people walk. Every step
+    onto a tile of it adds <b>one</b> to its wear, up to <b>${WEAR_MOST}</b>, and at <b>${WEAR_TRAIL}</b> it is worn through
+    to a <b>trail</b> of bare earth. Every day at <b>${hudHour(TREE_DAWN_UTC)} UTC</b>, when the woods turn, each tile
+    loses <b>${WEAR_FALL}</b>, and a trail with none left grows back into what it was.</p>
+    <p>So a line walked there and back ${often(TRIPS_A_DAY[0])} a day is a trail in
+    <b>${numberWord(daysToTrail(STEPS_A_TRIP * TRIPS_A_DAY[0]) ?? 0)} days</b>, and one walked there and back
+    ${often(TRIPS_A_DAY[1])} a day in <b>${numberWord(daysToTrail(STEPS_A_TRIP * TRIPS_A_DAY[1]) ?? 0)}</b>;
+    ${daysToTrail(WEAR_FALL) === null ? `crossing a tile ${often(WEAR_FALL)} a day never wears it through, though it keeps a trail that is there already open` : `crossing a tile ${often(WEAR_FALL)} a day wears it through in ${numberWord(daysToTrail(WEAR_FALL) ?? 0)} days`}.
+    A trail nobody walks is gone again within <b>${numberWord(Math.ceil(WEAR_MOST / WEAR_FALL))} days</b>. Examine a tile to
+    see its wear.</p>
+    <p>Only your own feet wear the ground: riding, a seat on a cart and a deck do not, nor does walking a
+    bridge or a floor above the ground. Paved, built on, tilled or planted ground never wears, and nor
+    does ground a building or a foundation stands on. A trail is walked and rolled like packed dirt
+    &mdash; at ${percent(ground(TileType.Trail).speed)} of the pace of grass on foot, costing a full wagon
+    ${share(rollCost(TileType.Trail))} &mdash; and is dug, packed and paved like it. Nothing flowers on one.</p>
+    <h3>Wildflowers</h3>
+    <p>Grass flowers in ${listed(FLOWER_SEASONS)}: pink, white, yellow and a little blue, in drifts set by
+    where the ground is, the same for everybody. A tile in a drift carries up to
+    <b>${numberWord(FLOWER_MOST.summer)} clumps</b> in summer, when the drifts are widest, and up to
+    <b>${numberWord(FLOWER_MOST.spring)}</b> in spring; nothing flowers in autumn or winter. Only grass flowers:
+    lawn, steppe, tundra, moss, a trail, a field and paving never do, nor does anything under a building.</p>
+    <p>Choose <b>Pick flowers</b> on a tile in flower, with bare hands: you get a <b>wildflower</b> for each clump
+    on it, at your foraging quality, and foraging rises. The tile is bare of them for everybody until the
+    first day of the next ${SEASONS[0]}, when every picked tile flowers again.</p>
+    <p>Wildflowers are for <b>dye</b>: ${bill('make_wildflowers')} boil into ${numberWord(made('make_wildflowers'))} pots of
+    ${DYES.find((d) => d.id === 'wildflowers')?.word ?? 'orange'}, at ${workedAt('make_wildflowers')}.</p>
     <h3>Large carts and wagons</h3>
     <p>A small cart is a barrow you pull yourself. The ones that follow are <b>driven</b>: a wildermon
     goes in the traces, you sit on the seat, and what is on the back weighs nothing at all as far as the

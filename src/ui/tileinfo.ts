@@ -3,9 +3,13 @@ import { isSeam } from '../world/tiles';
 import type { Game } from '../game/game';
 import { itemDef } from '../game/items';
 import { bedrockAt } from '../world/ore';
-import { groundRoll, TILE_DEFS, TileType, dustiness, standCap, stepsGroundRefusal, stepsTimber, STEPS_BRICKS, STEPS_MOST, STEPS_PLANKS, STEPS_SLABS } from '../world/tiles';
+import {
+  groundRoll, TILE_DEFS, TileType, dustiness, standCap, stepsGroundRefusal, stepsTimber, STEPS_BRICKS, STEPS_MOST, STEPS_PLANKS, STEPS_SLABS,
+  trailGround, WEAR_FALL, WEAR_MOST, WEAR_TRAIL, WEARS,
+} from '../world/tiles';
 import { STONE_STEPS_BILL, TIMBER_STEPS_BILL, stepsBack } from '../game/steps';
 import { numberWord } from '../game/words';
+import { flowersHere } from '../game/wildflowers';
 import { SLOW_SLOPE } from '../game/player';
 
 /**
@@ -115,6 +119,17 @@ export function tileUses(g: Game, x: number, y: number): string[] {
     const held = [def.forage && !g.isForaged(x, y, 'forage') ? 'something to pick' : null, def.botanize && !g.isForaged(x, y, 'botanize') ? 'something to gather' : null].filter(Boolean);
     lines.push(`Can be ${grows.join(' and ')} · ${held.length ? `${held.join(' and ')} on it now` : 'picked clean for the moment'}`);
   }
+  // What feet do to it. The wear itself is the island's to count on an island, and only
+  // said here where this browser keeps it (`World.wear`).
+  const worn = g.ask ? '' : ` · ${w.wearAt(x, y)} on it now`;
+  if (type === TileType.Trail) {
+    const was = TILE_DEFS[trailGround(w.getData(x, y))].name.toLowerCase();
+    lines.push(`Worn bare by feet: ${was} again once its wear is gone, at ${WEAR_FALL} a day and ${WEAR_MOST} at most${worn}`);
+  } else if (WEARS.has(type)) {
+    lines.push(`Feet wear it: a point a step, a trail at ${WEAR_TRAIL}, ${WEAR_FALL} off a day${worn}`);
+  }
+  const blooms = type === TileType.Grass ? flowersHere(g, x, y) : 0;
+  if (blooms) lines.push(`In flower: Pick flowers for ${blooms === 1 ? 'a wildflower' : `${blooms} wildflowers`}`);
   if (TILLABLE.has(type)) lines.push('Rake: turns into a field, ready for sowing');
   if (type === TileType.Field) lines.push('Sow it, tend it and reap it. An untended field gives back only its seed.');
 

@@ -43,10 +43,15 @@ import { betterThanCommon, CHANNELS, husbandryOdds, pct as cardPct } from '../..
 import { CHAIN_MOST, FALL_DROP, FILL_RATE, POOL_DEPTH, POOL_LIP, SPRING_DEPTH, SPRINGS_EACH } from '../../world/springs';
 import { POOL_FILL } from '../../game/foundations';
 import { MAX_STAND, SWIM_DEPTH } from '../../game/player';
-import { STEPS_BRICKS, STEPS_LEAST, STEPS_MOST, STEPS_PLANKS, STEPS_SLABS, STEPS_TWIST } from '../../world/tiles';
+import {
+  STEPS_BRICKS, STEPS_LEAST, STEPS_MOST, STEPS_PLANKS, STEPS_SLABS, STEPS_TWIST, TILE_DEFS as GROUNDS, TileType as Ground, WEAR_FALL, WEAR_MOST,
+  WEAR_TRAIL, WEARS,
+} from '../../world/tiles';
 import { STEPS_BACK, stepsBack, STONE_STEPS_BILL, TIMBER_STEPS_BILL } from '../../game/steps';
 import { ROSES_RULE } from '../../game/roses';
 import { DEVICE_COUNT } from '../../render/furniture';
+import { FLOWER_MOST, FLOWER_SEASONS } from '../../world/flowers';
+import { DYES } from '../../game/dyestuffs';
 import type { UIWindow } from '../windows';
 
 /**
@@ -762,6 +767,20 @@ export const NEWS: News[] = [
       `Collect works on dirt now, as it does on sand and clay: stand on a tile of dirt with a shovel and choose Collect dirt, and you fill a shovel off the top of it while the tile keeps its type and its height.`,
       `Cut moss on a moss tile gives ${numberWord(MOSS_PER_CUT)} moss, as Cut grass gives mixed grass, and the tile stays moss. Plant moss on a tile of dirt with ${MOSS_PLANT} moss in your pack and the tile turns to moss.`,
     ],
+  },
+  {
+    n: 58,
+    day: '2026-09-28',
+    lines: () => {
+      const dye = DYES.find((d) => d.id === 'wildflowers');
+      const boil = RECIPE_BY_ID.get('make_wildflowers');
+      return [
+        `${capital(listed([...WEARS].map((t) => GROUNDS[t as Ground].name.toLowerCase())))} wear where people walk: a step on your own feet puts one wear on a tile, up to ${WEAR_MOST}, and at ${WEAR_TRAIL} it is a trail of bare earth, walked and rolled like packed dirt. Each tile loses ${WEAR_FALL} at every turn of the woods, at ${TREE_DAWN_UTC}:00 UTC, and a trail with none left is what it was again. Paved, built on, tilled or planted ground never wears.`,
+        `Grass flowers in ${listed(FLOWER_SEASONS)}, in drifts: up to ${numberWord(FLOWER_MOST.summer)} clumps a tile in summer and ${numberWord(FLOWER_MOST.spring)} in spring. Pick flowers gives a wildflower a clump, at your foraging quality, and the tile has none again until next spring.`,
+        `Wildflowers are for dye: ${billWords((boil?.inputs ?? []).map((i) => [i.item, i.count ?? 1] as const))} boil into ${numberWord(boil?.count ?? 1)} pots of ${dye?.word ?? 'orange'}, at alchemy ${boil?.difficulty ?? 0}.`,
+        'Steep rock is drawn with the grass above it hanging over its top edge, moss down its upper face, ferns and tufts in its cracks and the damp dark over water at its foot. Drawing only: nothing about the ground changes.',
+      ];
+    },
   },
 ];
 

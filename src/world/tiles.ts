@@ -42,6 +42,12 @@ export const TileType = {
    * where the bare ground would be too steep to stand on.
    */
   Steps: 23,
+  /**
+   * Ground worn bare by feet: grass, lawn, steppe, tundra or moss that enough
+   * people have walked over (`WEAR_TRAIL`). The data byte keeps what it was,
+   * and it is that again once nobody has walked it for long enough.
+   */
+  Trail: 24,
 } as const;
 export type TileType = (typeof TileType)[keyof typeof TileType];
 
@@ -76,6 +82,8 @@ export const FLAT: ReadonlySet<number> = new Set<number>([
   TileType.Sand, TileType.Dirt, TileType.PackedDirt, TileType.Field,
   TileType.Marsh, TileType.Reed, TileType.Clay, TileType.Peat, TileType.Tar,
   TileType.Kelp, TileType.Snow, TileType.Lawn, TileType.Steps,
+  // A path is one colour from end to end: nudged a tenth a tile, it was a line of paving stones.
+  TileType.Trail,
 ]);
 
 /**
@@ -186,6 +194,8 @@ export const growth = (t: number): number => GROWTH[t] ?? 0;
 export const BURYABLE: ReadonlySet<number> = new Set<number>([
   TileType.Grass, TileType.Lawn, TileType.Steppe, TileType.Tundra, TileType.Moss,
   TileType.Marsh, TileType.Sand, TileType.Clay, TileType.Peat, TileType.Tar, TileType.Reed,
+  // And a trail, which is one of those five worn bare: soft ground, and buried the same.
+  TileType.Trail,
 ]);
 
 /**
@@ -193,10 +203,11 @@ export const BURYABLE: ReadonlySet<number> = new Set<number>([
  * bare dirt, a ploughed field — goes up in a cloud; turf and moss hold
  * together and barely mark; a marsh swallows the whole question.
  */
+const PACKED_DUST = 0.8;
 export const DUSTINESS: Readonly<Record<number, number>> = {
   [TileType.Sand]: 1,
   [TileType.Dirt]: 0.9,
-  [TileType.PackedDirt]: 0.8,
+  [TileType.PackedDirt]: PACKED_DUST,
   [TileType.Field]: 0.85,
   [TileType.Clay]: 0.65,
   [TileType.Steppe]: 0.7,
@@ -214,6 +225,8 @@ export const DUSTINESS: Readonly<Record<number, number>> = {
   [TileType.Lawn]: 0.13,
   [TileType.Tar]: 0.12,
   [TileType.Moss]: 0.1,
+  // Trodden earth, and as dusty as the packed dirt it walks like.
+  [TileType.Trail]: PACKED_DUST,
   [TileType.Marsh]: 0,
   [TileType.Kelp]: 0,
   [TileType.Reed]: 0,
@@ -282,6 +295,13 @@ export interface TileDef {
   bed?: boolean;
 }
 
+/**
+ * How packed earth walks and rolls: a shade quicker than grass underfoot and
+ * nine tenths of the way to stone under a laden wheel. Ground packed with a
+ * shovel and ground worn to a trail by feet are both this.
+ */
+const PACKED_PACE = { speed: 1.05, roll: 0.9 } as const;
+
 export const TILE_DEFS: Record<TileType, TileDef> = {
   /*
    * A teal blue-green rather than the yellow-green of a hayfield: cool and a
@@ -314,7 +334,7 @@ export const TILE_DEFS: Record<TileType, TileDef> = {
    * dug plot read as one ground somebody had shaded in: earth that has been
    * walked flat for a season has the colour trodden out of it.
    */
-  [TileType.PackedDirt]: { name: 'Packed dirt', color: [194, 182, 168], speed: 1.05, pavable: true, roll: 0.9 },
+  [TileType.PackedDirt]: { name: 'Packed dirt', color: [194, 182, 168], ...PACKED_PACE, pavable: true },
   /*
    * Clean cream, and the palest ground on the island. It was a saturated
    * yellow-tan for a long while -- the last colour on the map still picked
@@ -452,6 +472,17 @@ export const TILE_DEFS: Record<TileType, TileDef> = {
    * what is left of it from far enough out that the treads are not drawn.
    */
   [TileType.Steps]: { name: 'Garden steps', color: [196, 190, 176], speed: 1, roll: 0.2 },
+  /*
+   * A path worn into the grass, as the pictures it was asked for with have
+   * them: bare sandy earth, a warmer and lighter ground than the packed dirt of
+   * a road and a shade darker than a beach. It walks and rolls as packed dirt
+   * does, is dug for dirt like the grass it was, and can be paved, which is
+   * how a path people made becomes a road.
+   *
+   * It is drawn as the ground it was with the path lying across it (see
+   * `render/trails.ts`), so this colour is the path's and the map's.
+   */
+  [TileType.Trail]: { name: 'Trail', color: [222, 199, 152], ...PACKED_PACE, digYield: 'dirt', pavable: true, turnsToDirt: true },
 };
 
 /**
@@ -946,6 +977,48 @@ export const MOWN_DAYS = 3;
 export const LAWN_AFTER = 3;
 export const mownDays = (data: number): number => data & MOWN_DAYS;
 export const mownToday = (data: number): boolean => (data & MOWN_TODAY) !== 0;
+/** The part of a grass byte that is the mowing count, and nothing else. */
+export const MOWING = MOWN_DAYS | MOWN_TODAY;
+
+/**
+ * The bit over the mowing count that says the flowers on a tile of grass
+ * have been picked this year (`world/flowers.ts`). The day's pass keeps it
+ * with whatever count is beside it, and clears it at the first turn of a
+ * new year, which is the first dawn of spring. The island reads the same bit.
+ */
+export const FLOWERS_PICKED = 8;
+
+/**
+ * Worn paths.
+ *
+ * Every step somebody takes on their own feet onto a tile of one of these
+ * puts a point of wear on it, up to `WEAR_MOST`; at `WEAR_TRAIL` it is worn
+ * through to a `Trail`, whose data byte keeps which of these it was. At every
+ * turn of the woods each worn tile loses `WEAR_FALL`, and a trail whose wear
+ * is gone is the ground it was again. A trail takes wear the same way, so a
+ * path people keep walking stays a path.
+ *
+ * So one round trip a day -- two steps on every tile of the way -- gains a
+ * point a day against the fall and wears a path through in a week, and a
+ * tile crossed once is back to nothing the next morning. Paved, tilled or
+ * planted ground is none of these five, and ground under a building, a
+ * foundation or a bridge's deck is passed over (`Game.wearStep`, and
+ * `wear_step` on the island): none of it wears.
+ *
+ * The wear itself is kept beside the land, as the felling notches are
+ * (`World.wear` here, `tile_wear` on the island): it changes with every step
+ * and nobody else needs to hear of it until the tile changes.
+ */
+export const WEARS: ReadonlySet<number> = new Set<number>([
+  TileType.Grass, TileType.Lawn, TileType.Steppe, TileType.Tundra, TileType.Moss,
+]);
+export const WEAR_TRAIL = 8;
+export const WEAR_MOST = 12;
+export const WEAR_FALL = 1;
+/** Whether a step onto this tile wears it: one of the five, or a trail already. */
+export const wears = (t: number): boolean => t === TileType.Trail || WEARS.has(t);
+/** The ground a trail was worn out of, off its data byte. */
+export const trailGround = (data: number): TileType => (WEARS.has(data) ? data : TileType.Grass) as TileType;
 
 /**
  * The species, in the low nibble and the top bit of the byte.

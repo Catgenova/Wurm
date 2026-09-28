@@ -32,7 +32,7 @@ import {
 import { foundationDone } from '../game/foundations';
 import { DYE_BY_ID } from '../game/dyestuffs';
 import { hash2 } from '../world/noise';
-import { bareRock, DAMP_SAND, dustiness, FLAT, growth, oreWash, PAVED, ROCK_VARIANTS, SLAB_VARIANTS, STREWN, TileType, TILE_DEFS, COVERED, bushSpecies, slabVariant, treeSpecies, treeVariant } from '../world/tiles';
+import { bareRock, DAMP_SAND, dustiness, FLAT, growth, oreWash, PAVED, ROCK_VARIANTS, SLAB_VARIANTS, STREWN, TileType, TILE_DEFS, COVERED, bushSpecies, slabVariant, trailGround, treeSpecies, treeVariant } from '../world/tiles';
 import { HALF_H, HALF_W, HEIGHT_SCALE, UNITS_PER_TILE } from './iso';
 import { depthOf, type View } from './view';
 import { FALLS, roofModel, type Fall, type RoofGable, type RoofModel, type RoofPt } from './roofshape';
@@ -91,10 +91,14 @@ import { FLOAT_COLOURS, Floaters } from './floaters';
 import { drawSpeech } from './bubble';
 import { SKILL_BY_ID } from '../game/skills';
 import { PUFFS, PUFF_DRIFT, PUFF_RISE, puffAge, puffOf } from './smoke';
-import { CROWD, DROWNS, hemOf, ruffle, strew, strewLook, WADES, WADE_DEPTH } from './meadow';
+import { CROWD, DROWNS, hemOf, ruffle, strew, strewLook, WADES, WADE_DEPTH, type Lobe } from './meadow';
 import { seam } from './seam';
 import { SWAY_MAX, swayAt } from './sway';
-import { ColourPages } from './pages';
+import { ColourPages, MarkPages } from './pages';
+import { trailMask, trailShape, type TrailShape } from './trails';
+import { clumpOf, FLOWER_COLOURS, flowerSprite, swayFrame, tileColour } from './flowers';
+import { flowerSeason, flowersOn } from '../world/flowers';
+import { drawFace, EDGES, ROCK_MOSS, topEdges, type Face } from './outcrops';
 import { forgetTrees, grownAt, spriteScaleFor, bushSprite, crateSprite, cropSprite, drawAnvil, drawCampfire, drawCreature, drawKiln, drawPlayer, drawSmelter, facingOf, pileSprite, tokenSprite, treeSprite, type Sprite, drawWorkPost, drawTrap, drawDeck, stumpSprite } from './sprites';
 import { wildermonTop } from './wildermon';
 import { SmallLife, type Mote } from './life';
@@ -348,6 +352,70 @@ const MEADOW_FROM = 1;
  * between two grounds is drawn over exactly the range it always was.
  */
 const RUFFLE_FROM = 0.5;
+/** How far up a face from the water the damp reaches, in height units: seven tenths of a metre. */
+const DAMP_UNITS = 7;
+/** How steep a tile is: the fall across it, as the ground's colour measures it. */
+const slopeOf = (w: { getHeight(x: number, y: number): number }, x: number, y: number): number => {
+  const h0 = w.getHeight(x, y), h1 = w.getHeight(x + 1, y), h2 = w.getHeight(x + 1, y + 1), h3 = w.getHeight(x, y + 1);
+  return Math.hypot((h1 + h2 - h0 - h3) / 2 / UNITS_PER_TILE, (h2 + h3 - h0 - h1) / 2 / UNITS_PER_TILE);
+};
+/**
+ * The zoom from which wildflowers are the painted clumps rather than a speck
+ * of colour each: the level of detail everything else drops at, where a
+ * clump would be ten pixels and a head two.
+ */
+const FLOWERS_DRAWN = 0.6;
+/**
+ * One side of a cut: the polygon in `a` (screen pairs, `n` numbers) kept to
+ * the side of the line (x0, y0)-(x1, y1) that (cx, cy) is on, written into
+ * `out`, and how many numbers it came to. Sutherland and Hodgman's, a line at
+ * a time, which is all a convex tile needs.
+ */
+function cutByLine(a: Float64Array, n: number, x0: number, y0: number, x1: number, y1: number, cx: number, cy: number, out: Float64Array): number {
+  const dx = x1 - x0, dy = y1 - y0;
+  const s = dx * (cy - y0) - dy * (cx - x0) >= 0 ? 1 : -1;
+  const side = (px: number, py: number): number => s * (dx * (py - y0) - dy * (px - x0));
+  let m = 0;
+  let px = a[n - 2], py = a[n - 1];
+  let ps = side(px, py);
+  for (let i = 0; i < n; i += 2) {
+    const qx = a[i], qy = a[i + 1];
+    const qs = side(qx, qy);
+    if ((qs >= 0) !== (ps >= 0) && m + 2 <= out.length) {
+      const t = ps / (ps - qs);
+      out[m++] = px + (qx - px) * t;
+      out[m++] = py + (qy - py) * t;
+    }
+    if (qs >= 0 && m + 2 <= out.length) {
+      out[m++] = qx;
+      out[m++] = qy;
+    }
+    px = qx;
+    py = qy;
+    ps = qs;
+  }
+  return m;
+}
+
+/** The radius of a lobe of grass along a worn path's edge, in screen pixels at zoom one: a shade under the ruffle's. */
+const TRAIL_LOBE = 3.6;
+/** From how close a path's grass is drawn with its shade under it as well as itself. */
+const TRAIL_NEAR = 1.5;
+
+/** Circles at `at` moved by (dx, dy) and grown by `grow`, filled in one colour as one shape. */
+function circles(g: CanvasRenderingContext2D, at: Lobe[], n: number, dx: number, dy: number, grow: number, fill: string): void {
+  g.beginPath();
+  for (let i = 0; i < n; i++) {
+    const [x, y, r] = at[i];
+    const rr = Math.max(0.25, r + grow);
+    g.moveTo(x + dx + rr, y + dy);
+    g.arc(x + dx, y + dy, rr, 0, 7);
+  }
+  g.fillStyle = fill;
+  g.fill();
+}
+/** And the shade the grass along its edge throws on the path. */
+const TRAIL_SHADE = 'rgba(70, 52, 30, 0.13)';
 const IRON: readonly [number, number, number] = [0x7b, 0x81, 0x88];
 /** Its own shade, so a bar of it reads as round stock rather than as a painted line. */
 const IRON_DARK: readonly [number, number, number] = [0x44, 0x4a, 0x51];
@@ -510,6 +578,30 @@ export class Renderer {
   private shadow = { dx: 0, dy: 0, alpha: 0 };
   /** Tile colours as the map remembers them, for ground nobody is watching. */
   private memColors: ColourPages;
+  /**
+   * Each tile's path mask plus one (`trails.ts`), worked out from the tiles
+   * round it, for ground in sight and ground remembered; the shapes a path's
+   * pieces are drawn in, by tile, with the mask they were made for; and the
+   * colour of a path's bare earth on each tile in sight, shaded as the ground
+   * under it is.
+   */
+  private trailMarks: MarkPages;
+  private trailMemMarks: MarkPages;
+  private trailShapes = new Map<number, { mask: number; shape: TrailShape }>();
+  private trailPaint: ColourPages;
+  /**
+   * Each tile's wildflowers plus one: how many clumps, and the colour the
+   * patch is mostly, three bits over the count (`flowerAt`). Kept until the
+   * tile changes, the season turns, or a building goes up or comes down.
+   */
+  private flowerMarks: MarkPages;
+  private flowerSeasonNow: Season | null = null;
+  private flowerBuildings = -1;
+  /** Coloured specks for the flowers of a line of ground seen from far off, by colour: x, y pairs. */
+  private flowerSpecks: Float32Array[] = FLOWER_COLOURS.map(() => new Float32Array(4096));
+  private flowerSpeckN: number[] = FLOWER_COLOURS.map(() => 0);
+  /** Each steep tile's face (`outcrops.ts`): its top edges and what grows above them, kept until a tile round it changes. */
+  private faces = new Map<number, Face>();
   private lastVision = -1;
   private pts = new Float64Array(8);
   /** The tile's outline in screen pixels from its anchor corner, worked out once a frame. */
@@ -756,6 +848,10 @@ export class Renderer {
   ) {
     this.colors = new ColourPages(game.world.w);
     this.memColors = new ColourPages(game.world.w);
+    this.trailMarks = new MarkPages(game.world.w);
+    this.trailMemMarks = new MarkPages(game.world.w);
+    this.trailPaint = new ColourPages(game.world.w);
+    this.flowerMarks = new MarkPages(game.world.w);
     game.world.onChange((x, y) => this.invalidate(x, y));
     // Ground dug under or beside a stream moves the line it runs along.
     game.world.onChange((x, y) => this.springWater.touched(x, y));
@@ -904,6 +1000,12 @@ export class Renderer {
         if (w.inBounds(xx, yy)) {
           this.colors.forget(xx, yy);
           this.memColors.forget(xx, yy);
+          this.trailMarks.forget(xx, yy);
+          this.trailMemMarks.forget(xx, yy);
+          this.trailPaint.forget(xx, yy);
+          this.trailShapes.delete(yy * w.w + xx);
+          this.flowerMarks.forget(xx, yy);
+          this.faces.delete(yy * w.w + xx);
         }
       }
     }
@@ -959,13 +1061,15 @@ export class Renderer {
   }
 
   /** Flat-shaded colour for a tile: base colour, slope lighting, per-tile variation and depth tint under water. */
-  private computeColor(x: number, y: number, type: TileType, data: number, light: [number, number, number], lit = true): string {
+  private computeColor(x: number, y: number, type: TileType, data: number, light: [number, number, number], lit = true, own = false): string {
     const w = this.game.world;
     // A wood is a field with trees in it and a kelp bed is sand with weed
     // in it, not soils of their own: see `groundAt`. Worked out here, so it
     // is cached and thrown away with the colour it decides rather than being
-    // asked again every frame.
-    const ground = COVERED.has(type) ? this.groundAt(x, y, lit) : type;
+    // asked again every frame. And a trail is the ground it was worn out of,
+    // with the path drawn across it (`drawTrail`) -- unless it is the path's
+    // own colour that is wanted, shaded the same.
+    const ground = own ? type : COVERED.has(type) || type === TileType.Trail ? this.groundAt(x, y, lit) : type;
     const def = TILE_DEFS[ground];
     const c = w.corners(x, y, this.colorBuf);
     const gx = (c[1] + c[2] - (c[0] + c[3])) / 2 / UNITS_PER_TILE;
@@ -1118,6 +1222,8 @@ export class Renderer {
   private groundAt(x: number, y: number, lit: boolean): TileType {
     const world = this.game.world;
     const t = world.viewTile(x, y, lit) as TileType;
+    // A trail is the ground it was worn out of, which its byte keeps.
+    if (t === TileType.Trail) return trailGround(world.viewData(x, y, lit));
     if (!COVERED.has(t)) return t;
     // A tree takes the ground it stands on and weed takes the floor it grows
     // out of, so neither of them is allowed to take the other's.
@@ -1238,6 +1344,329 @@ export class Renderer {
     }
     ctx.restore();
     return true;
+  }
+
+  /**
+   * The wildflowers on a tile, plus one: how many clumps in the low three
+   * bits, the colour the patch is mostly over them. Off the island's own rule
+   * (`world/flowers.ts`) for the season it is, and none under a building.
+   */
+  private flowerAt(x: number, y: number): number {
+    const had = this.flowerMarks.get(x, y);
+    if (had) return had - 1;
+    const w = this.game.world;
+    const n = this.flowerSeasonNow === null || this.game.buildings.buildingAt(x, y) ? 0
+      : flowersOn(w.seed, x, y, w.getTile(x, y), w.getData(x, y), this.flowerSeasonNow);
+    const v = n ? n | (tileColour(x, y) << 3) : 0;
+    this.flowerMarks.set(x, y, v + 1);
+    return v;
+  }
+
+  /**
+   * A tile's wildflowers: a clump for each its drift gives it, each where the
+   * tile's coordinates put it, leaning with the wind and nodding on its own
+   * clock (`render/flowers.ts`). From three fifths of a tile's zoom up they
+   * are the painted clumps; further out, a speck of colour a clump, laid with
+   * the rest of the line's in one fill a colour.
+   *
+   * What it costs: a kept lookup a tile of grass, and one picture blitted a
+   * clump -- a fifth of a meadow flowers in summer and a tenth in spring, two
+   * or three clumps a tile -- or a rectangle a clump from far off.
+   */
+  private drawFlowers(ctx: CanvasRenderingContext2D, x: number, y: number, pts: Float64Array, zoom: number): void {
+    const f = this.flowerAt(x, y);
+    const n = f & 7;
+    if (!n) return;
+    const main = f >> 3;
+    const [a, b, c, d] = this.cornerAt;
+    const ax = pts[a], ay = pts[a + 1], bx = pts[b], by = pts[b + 1];
+    const cx = pts[c], cy = pts[c + 1], dx = pts[d], dy = pts[d + 1];
+    const far = zoom < FLOWERS_DRAWN;
+    const lean = this.lean.x * this.lean.force;
+    for (let i = 0; i < n; i++) {
+      const [u, v, colour, variant, phase, size] = clumpOf(x, y, i, n, main);
+      const sx = (ax + (bx - ax) * u) * (1 - v) + (dx + (cx - dx) * u) * v;
+      const sy = (ay + (by - ay) * u) * (1 - v) + (dy + (cy - dy) * u) * v;
+      if (far) {
+        // Two specks a clump, side by side, a little up off the ground.
+        const k = this.flowerSpeckN[colour];
+        const buf = this.flowerSpecks[colour];
+        if (k + 4 <= buf.length) {
+          buf[k] = sx - 2.4 * zoom;
+          buf[k + 1] = sy - 3 * zoom;
+          buf[k + 2] = sx + 2.2 * zoom;
+          buf[k + 3] = sy - 4.4 * zoom;
+          this.flowerSpeckN[colour] = k + 4;
+        }
+        continue;
+      }
+      const spr = flowerSprite(colour, variant, swayFrame(lean, this.lean.force, this.time, phase));
+      const k = zoom * size;
+      const ready = this.atSize(spr.canvas, spr.w * k, spr.h * k);
+      ctx.drawImage(ready, sx - spr.ax * k, sy - spr.ay * k, spr.w * k, spr.h * k);
+    }
+  }
+
+  /** A steep tile's face, off its corners and the tiles round it: worked out once and kept. */
+  private faceAt(x: number, y: number, gx: number, gy: number): Face {
+    const w = this.game.world;
+    const key = y * w.w + x;
+    const had = this.faces.get(key);
+    if (had) return had;
+    const tops = topEdges(w.getHeight(x, y), w.getHeight(x + 1, y), w.getHeight(x + 1, y + 1), w.getHeight(x, y + 1));
+    const face: Face = { tops: [-1, -1, -1, -1], wetTop: false, shade: 0 };
+    for (let e = 0; e < 4; e++) {
+      if (!tops[e]) continue;
+      const nx = x + EDGES[e].dx, ny = y + EDGES[e].dy;
+      if (!w.inBounds(nx, ny)) { face.tops[e] = -2; continue; }
+      // The ground over the top edge grows, and is the top: not more of the same face going on up.
+      const ground = this.groundAt(nx, ny, true);
+      const steep = bareRock(slopeOf(w, nx, ny)) > 0;
+      face.tops[e] = growth(ground) > 0 && !steep ? ground : -2;
+      if (w.hasWater(nx, ny)) face.wetTop = true;
+    }
+    // Turned from the sun, which is in the south-east: its way down against (1, 1).
+    const l = Math.hypot(gx, gy) || 1;
+    face.shade = Math.max(0, Math.min(1, (1 + (gx + gy) / l / Math.SQRT2) / 2));
+    if (this.faces.size > 16384) this.faces.clear();
+    this.faces.set(key, face);
+    return face;
+  }
+
+  /** Where each edge of a tile's square crosses a height, as (u, v) pairs, in order round it. */
+  private crossings(h: readonly number[], level: number, out: number[]): number {
+    let n = 0;
+    const sq = [[0, 0], [1, 0], [1, 1], [0, 1]];
+    for (let i = 0; i < 4; i++) {
+      const j = (i + 1) & 3;
+      const a = h[i], b = h[j];
+      if ((a < level) === (b < level)) continue;
+      const t = (level - a) / (b - a);
+      out[n++] = sq[i][0] + (sq[j][0] - sq[i][0]) * t;
+      out[n++] = sq[i][1] + (sq[j][1] - sq[i][1]) * t;
+    }
+    return n;
+  }
+
+  private faceH = [0, 0, 0, 0];
+  private faceCross = [0, 0, 0, 0, 0, 0, 0, 0];
+  private faceDamp = [0, 0, 0, 0, 0, 0, 0, 0];
+
+  /**
+   * The dressing on a face of steep ground (`outcrops.ts`): its lip of grass,
+   * its moss, its cracks and ferns, and the damp where water is at its foot
+   * or over its top -- on a tile steep enough to show its rock, turned
+   * towards the camera, and only the part of it above any water.
+   *
+   * What it costs: every tile pays four corner heights it already has and a
+   * square root; a face in view pays a fill each for its moss and its lip,
+   * and from three fifths of a tile's zoom a stroke of cracks, a fill of
+   * damp and the moss's line and the lip's shade, a fern or two from zoom one
+   * and the light on the moss and the lip from half as close again
+   * (`drawFace`). Only a face with water against it is clipped, to the part
+   * above the water. What it is made of is worked out once a face and kept.
+   */
+  private dressFace(ctx: CanvasRenderingContext2D, x: number, y: number, pts: Float64Array, zoom: number, sea: boolean, pond: boolean): void {
+    const w = this.game.world;
+    const h = this.faceH;
+    h[0] = w.getHeight(x, y);
+    h[1] = w.getHeight(x + 1, y);
+    h[2] = w.getHeight(x + 1, y + 1);
+    h[3] = w.getHeight(x, y + 1);
+    const gx = (h[1] + h[2] - h[0] - h[3]) / 2 / UNITS_PER_TILE;
+    const gy = (h[2] + h[3] - h[0] - h[1]) / 2 / UNITS_PER_TILE;
+    const bare = bareRock(Math.hypot(gx, gy));
+    if (bare <= 0) return;
+    const face = this.faceAt(x, y, gx, gy);
+    const [a, b, c, d] = this.cornerAt;
+    const ax = pts[a], ay = pts[a + 1], bx = pts[b], by = pts[b + 1];
+    const cx = pts[c], cy = pts[c + 1], dx = pts[d], dy = pts[d + 1];
+    const X = (u: number, v: number): number => (ax + (bx - ax) * u) * (1 - v) + (dx + (cx - dx) * u) * v;
+    const Y = (u: number, v: number): number => (ay + (by - ay) * u) * (1 - v) + (dy + (cy - dy) * u) * v;
+    // Turned towards the camera: its top edges higher on the screen than its middle.
+    let up = 0;
+    let tops = 0;
+    for (let e = 0; e < 4; e++) {
+      if (face.tops[e] === -1) continue;
+      const E = EDGES[e];
+      up += Y((E.a[0] + E.b[0]) / 2, (E.a[1] + E.b[1]) / 2);
+      tops++;
+    }
+    if (!tops || up / tops >= Y(0.5, 0.5) - 1) return;
+    // The water against it, if any: the sea's nothing, or a pond's level.
+    let level = -Infinity;
+    if (pond) level = w.surfaceAt(x, y);
+    else if (sea) level = 0;
+    const under = (h[0] < level ? 1 : 0) + (h[1] < level ? 1 : 0) + (h[2] < level ? 1 : 0) + (h[3] < level ? 1 : 0);
+    if (under === 4) return;
+    let waterline: [number, number, number, number] | null = null;
+    let dampline: [number, number, number, number] | null = null;
+    // Cut off at the water, where there is any against it; a dry face is dressed whole, and not cut at all.
+    if (under) {
+      ctx.save();
+      ctx.beginPath();
+      // Only above the water: the corners that stand clear of it and where its edges cross the line.
+      const sq = [[0, 0], [1, 0], [1, 1], [0, 1]];
+      let first = true;
+      for (let i = 0; i < 4; i++) {
+        const j = (i + 1) & 3;
+        if (h[i] >= level) {
+          if (first) ctx.moveTo(X(sq[i][0], sq[i][1]), Y(sq[i][0], sq[i][1]));
+          else ctx.lineTo(X(sq[i][0], sq[i][1]), Y(sq[i][0], sq[i][1]));
+          first = false;
+        }
+        if ((h[i] < level) !== (h[j] < level)) {
+          const t = (level - h[i]) / (h[j] - h[i]);
+          const u = sq[i][0] + (sq[j][0] - sq[i][0]) * t, v = sq[i][1] + (sq[j][1] - sq[i][1]) * t;
+          if (first) ctx.moveTo(X(u, v), Y(u, v));
+          else ctx.lineTo(X(u, v), Y(u, v));
+          first = false;
+        }
+      }
+      const cr = this.faceCross, dm = this.faceDamp;
+      if (this.crossings(h, level, cr) === 4 && this.crossings(h, level + DAMP_UNITS, dm) === 4) {
+        waterline = [cr[0], cr[1], cr[2], cr[3]];
+        // The damp line's ends matched to the waterline's, nearest to nearest.
+        const flip = Math.hypot(dm[0] - cr[0], dm[1] - cr[1]) > Math.hypot(dm[2] - cr[0], dm[3] - cr[1]);
+        dampline = flip ? [dm[2], dm[3], dm[0], dm[1]] : [dm[0], dm[1], dm[2], dm[3]];
+      }
+      ctx.closePath();
+      ctx.clip();
+    }
+    drawFace(ctx, {
+      x, y, face, bare, zoom, X, Y,
+      hem: (t) => hemOf(t as TileType),
+      moss: ROCK_MOSS,
+      sized: (cv, cw, ch) => this.atSize(cv, cw, ch),
+      waterline, dampline,
+    }, zoom < 0.6 ? 0 : zoom < 1.5 ? 1 : 2);
+    if (under) ctx.restore();
+  }
+
+  /** Which of a tile's screen corners, times two, is each of its world corners: (0,0), (1,0), (1,1), (0,1). Set each frame. */
+  private cornerAt = [0, 2, 4, 6];
+
+  /** A tile's path mask (`trails.ts`), from the tiles round it, kept until one of them changes. */
+  private trailMaskAt(x: number, y: number, lit: boolean): number {
+    const pages = lit ? this.trailMarks : this.trailMemMarks;
+    const had = pages.get(x, y);
+    if (had) return had - 1;
+    const w = this.game.world;
+    const m = trailMask((dx, dy) => {
+      const nx = x + dx, ny = y + dy;
+      return nx >= 0 && ny >= 0 && nx < w.w && ny < w.h && w.viewTile(nx, ny, lit) === TileType.Trail;
+    });
+    pages.set(x, y, m + 1);
+    return m;
+  }
+
+  /** The colour of a path's bare earth on a tile, shaded as the ground under it is. */
+  private trailColor(x: number, y: number, lit: boolean): string {
+    if (!lit) return this.computeColor(x, y, TileType.Trail, 0, this.sunNow, false, true);
+    let c = this.trailPaint.get(x, y);
+    if (!c) {
+      c = this.computeColor(x, y, TileType.Trail, 0, this.sunNow, true, true);
+      this.trailPaint.set(x, y, c);
+    }
+    return c;
+  }
+
+  /** Lobes of grass along a path's edges, placed on screen: written over rather than made afresh. */
+  private trailLobes: Lobe[] = [];
+  /** The tile a path is cut to, let out, and two buffers to cut its pieces through. */
+  private trailQuad = new Float64Array(8);
+  private trailCut = [new Float64Array(1024), new Float64Array(1024)];
+
+  /**
+   * The part of a worn path that lies on one tile (`trails.ts`): its bare
+   * earth, in the path's colour shaded as this tile is, and the lobes of the
+   * ground's own green lying over its edges, cut to the tile. The shapes
+   * are the tile's own square mapped onto the tile as it lies, so a path
+   * follows the ground over a bank and holds still as the view comes round.
+   *
+   * What it costs: one fill a tile, cut to the tile by hand, and one more
+   * for the lobes from three fifths of a tile's zoom up (two from
+   * `TRAIL_NEAR`); the shapes are worked out once a tile and kept, and nothing
+   * here is asked of a tile with no path on or beside it but its kept mask.
+   */
+  private drawTrail(ctx: CanvasRenderingContext2D, x: number, y: number, mask: number, pts: Float64Array, lit: boolean, zoom: number): void {
+    const world = this.game.world;
+    const key = y * world.w + x;
+    let kept = this.trailShapes.get(key);
+    if (!kept || kept.mask !== mask) {
+      if (this.trailShapes.size > 4096) this.trailShapes.clear();
+      kept = { mask, shape: trailShape(x, y, mask) };
+      this.trailShapes.set(key, kept);
+    }
+    const { polys, lobes } = kept.shape;
+    if (!polys.length) return;
+    const [a, b, c, d] = this.cornerAt;
+    const ax = pts[a], ay = pts[a + 1], bx = pts[b], by = pts[b + 1];
+    const cx = pts[c], cy = pts[c + 1], dx = pts[d], dy = pts[d + 1];
+    const X = (u: number, v: number): number => (ax + (bx - ax) * u) * (1 - v) + (dx + (cx - dx) * u) * v;
+    const Y = (u: number, v: number): number => (ay + (by - ay) * u) * (1 - v) + (dy + (cy - dy) * u) * v;
+    /*
+     * Cut to the tile let out by a pixel and a half all round. The tile after
+     * this one strokes its own outline in its own colour, and half of that
+     * line lies on this tile -- across the path, wherever the path crosses
+     * into it, as a thread of grass. This tile's path drawn over the edge lies
+     * under the next tile's, which is the same path in the same place. Cut by
+     * hand, on the screen, rather than with the canvas's clip: a clip is a
+     * mask made and thrown away a tile, and it cost more than all the rest of
+     * the path together.
+     */
+    const mx = (pts[0] + pts[2] + pts[4] + pts[6]) / 4, my = (pts[1] + pts[3] + pts[5] + pts[7]) / 4;
+    const quad = this.trailQuad;
+    for (let k = 0; k < 4; k++) {
+      const ex = pts[k * 2] - mx, ey = pts[k * 2 + 1] - my;
+      const el = Math.hypot(ex, ey) || 1;
+      quad[k * 2] = pts[k * 2] + (ex / el) * 1.5;
+      quad[k * 2 + 1] = pts[k * 2 + 1] + (ey / el) * 1.5;
+    }
+    ctx.beginPath();
+    for (const p of polys) {
+      let buf = this.trailCut[0];
+      let n = 0;
+      for (let i = 0; i < p.length && n + 2 <= buf.length; i += 2) {
+        buf[n++] = X(p[i], p[i + 1]);
+        buf[n++] = Y(p[i], p[i + 1]);
+      }
+      for (let k = 0; k < 4 && n; k++) {
+        const out = buf === this.trailCut[0] ? this.trailCut[1] : this.trailCut[0];
+        n = cutByLine(buf, n, quad[k * 2], quad[k * 2 + 1], quad[((k + 1) & 3) * 2], quad[((k + 1) & 3) * 2 + 1], mx, my, out);
+        buf = out;
+      }
+      if (n < 6) continue;
+      ctx.moveTo(buf[0], buf[1]);
+      for (let i = 2; i < n; i += 2) ctx.lineTo(buf[i], buf[i + 1]);
+      ctx.closePath();
+    }
+    ctx.fillStyle = this.trailColor(x, y, lit);
+    ctx.fill();
+    // The grass over its edges, only where there is grass to lie over them,
+    // only on ground in sight, and only close enough to see a lobe.
+    const ground = this.groundAt(x, y, lit);
+    if (lit && zoom >= 0.6 && lobes.length && growth(ground) > 0) {
+      const r = TRAIL_LOBE * zoom;
+      const at = this.trailLobes;
+      let n = 0;
+      for (let i = 0; i < lobes.length; i += 3) {
+        const lx = X(lobes[i], lobes[i + 1]), ly = Y(lobes[i], lobes[i + 1]), lr = r * lobes[i + 2];
+        const had = at[n];
+        if (had) { had[0] = lx; had[1] = ly; had[2] = lr; } else at[n] = [lx, ly, lr];
+        n++;
+      }
+      /*
+       * No line round them and no light on them: they are the grass itself
+       * running to the path's edge, not tufts lying on it, and lit one by one
+       * they were a row of beads. Close to, a breath of shade under them
+       * first, down and away from the sun, so the grass stands a little proud
+       * of the earth it has grown over; from further off the lobes alone, a
+       * fill a tile.
+       */
+      if (zoom >= TRAIL_NEAR) circles(ctx, at, n, r * 0.3, r * 0.35, 0, TRAIL_SHADE);
+      circles(ctx, at, n, 0, 0, 0, hemOf(ground).shade);
+    }
   }
 
   /**
@@ -1531,6 +1960,16 @@ export class Renderer {
     }
     this.markWakes();
     this.markDust();
+    // Wildflowers come and go with the season, and none grow inside a building.
+    {
+      const season = flowerSeason(Date.now() / 1000);
+      const built = this.game.buildings.list.size;
+      if (season !== this.flowerSeasonNow || built !== this.flowerBuildings) {
+        this.flowerSeasonNow = season;
+        this.flowerBuildings = built;
+        this.flowerMarks.clear();
+      }
+    }
     // A tile last seen a moment ago has a new memory; throw away the colour
     // that was worked out from the old one.
     if (vision.revision !== this.lastVision) {
@@ -1540,6 +1979,7 @@ export class Renderer {
         this.memColors.forgetBox(Math.max(0, box.x0), Math.max(0, box.y0),
           Math.min(world.w - 1, box.x1), Math.min(world.h - 1, box.y1));
       } else this.memColors.clear();
+      this.trailMemMarks.clear();
     }
     // The sun moves through the day, so the ground has to be shaded again as it
     // goes. It is cut into steps rather than recomputed every frame: a repaint
@@ -1551,6 +1991,7 @@ export class Renderer {
     if (sunStep !== this.lastSun) {
       this.lastSun = sunStep;
       this.colors.clear();
+      this.trailPaint.clear();
     }
     /*
      * Where a shadow falls, and how long it is. Straight down and invisible at
@@ -1636,6 +2077,13 @@ export class Renderer {
      * world's axes rather than the screen's needs to know which.
      */
     const paveRot = co.findIndex((cc) => cc[0] === 0 && cc[1] === 0);
+    // And which of the tile's screen corners is each of its world corners, for
+    // anything laid on in the tile's own square: (0,0), (1,0), (1,1), (0,1).
+    const cornerAt = this.cornerAt;
+    for (let k = 0; k < 4; k++) {
+      const [cu, cv] = k === 0 ? [0, 0] : k === 1 ? [1, 0] : k === 2 ? [1, 1] : [0, 1];
+      cornerAt[k] = co.findIndex((cc) => cc[0] === cu && cc[1] === cv) * 2;
+    }
     const bottomMargin = 220 * zoom;
     const pts = this.pts;
     const c = this.cornerBuf;
@@ -1688,6 +2136,7 @@ export class Renderer {
         this.grainN = 0;
         this.grainM = 0;
       }
+      for (let k = 0; k < this.flowerSpeckN.length; k++) this.flowerSpeckN[k] = 0;
       const baseY = (d * stepH - cam.cy) * zoom + H / 2;
       let e = eMin;
       if (V.staggered && ((e + d) & 1) !== 0) e++;
@@ -1778,7 +2227,9 @@ export class Renderer {
          * no weed at all.
          */
         const wades = wet && WADES.has(t0) && (c[0] + c[1] + c[2] + c[3]) / 4 > (pond ? Math.max(0, this.pondTop) : 0) - WADE_DEPTH;
-        if (grassy && (!wet || wades) && STREWN.has(t0)) this.strewTile(t0, x, y, pts, paveRot, zoom, lit);
+        if (grassy && (!wet || wades) && STREWN.has(t0) && here !== TileType.Trail) this.strewTile(t0, x, y, pts, paveRot, zoom, lit);
+        // And the wildflowers in it, in their season: see `drawFlowers`.
+        if (lit && !wet && here === TileType.Grass) this.drawFlowers(ctx, x, y, pts, zoom);
         /*
          * And where something greener grows beside this, it comes over the
          * edge of it. Paving is left out: a flagstone or a cobble was laid to
@@ -1798,6 +2249,17 @@ export class Renderer {
             if (known === 0) seams.setFlag(x, y, drew ? 2 : 1);
           }
         }
+        /*
+         * And a path worn across it: the path itself on a trail, or the wedge
+         * of one that crosses a corner of this tile on the diagonal. Asked of
+         * every tile, off a mask kept beside the colour.
+         */
+        if (!wet) {
+          const tm = this.trailMaskAt(x, y, lit);
+          if (tm) this.drawTrail(ctx, x, y, tm, pts, lit, zoom);
+        }
+        // And a face of steep ground dressed as the rock in the pictures is: see `dressFace`.
+        if (lit) this.dressFace(ctx, x, y, pts, zoom, sea, pond);
         if (paved && !wet && PAVED.has(t0)) this.paving(t0, x, y, world.viewData(x, y, lit), pts, paveRot);
         // A flight of garden steps, built up the tile over its colour: see `steps.ts`.
         if (!wet && t0 === TileType.Steps) {
@@ -1990,6 +2452,17 @@ export class Renderer {
       if (grain) {
         this.specks(ctx, this.grainDark, this.grainN, 'rgba(0,0,0,0.095)');
         this.specks(ctx, this.grainPale, this.grainM, 'rgba(255,255,255,0.07)');
+      }
+      // The line's wildflowers from far off, a fill a colour.
+      for (let k = 0; k < this.flowerSpeckN.length; k++) {
+        const n = this.flowerSpeckN[k];
+        if (!n) continue;
+        const buf = this.flowerSpecks[k];
+        const sz = Math.max(2.3, 3.8 * zoom);
+        ctx.beginPath();
+        for (let i = 0; i < n; i += 2) ctx.rect(buf[i] - sz / 2, buf[i + 1] - sz / 2, sz, sz);
+        ctx.fillStyle = FLOWER_COLOURS[k].petal;
+        ctx.fill();
       }
       // The light on this line's ponds, and the streams, falls and springs whose water lies on it, over the ground and under what stands on it.
       if (water) this.springWater.row(ctx, d);
