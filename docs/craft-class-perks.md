@@ -5,8 +5,8 @@ The perks chosen for the fourteen craft classes, class by class, on 26 September
 ## Tiers
 
 - A class is taken at 50 in one of its skills.
-- Its 18 perks are offered three at a time in six tiers. The first opens when the class is taken; the others open at 60, 70, 80, 90 and 100 in the class's main skill.
-- A player takes one perk at each tier, so at 100 they hold 6 of their class's 18. The **Tiers** line under each class says what each tier offers, and a built class's `TIERS` row in `src/game/perks.ts` must match it.
+- Its 18 perks are offered three at a time in six tiers. The first opens when the class is taken; the others open at 60, 70, 80, 90 and 99 in the class's main skill (the last was 100 until 28 September).
+- A player takes one perk at each tier, so at 99 they hold 6 of their class's 18. The **Tiers** line under each class says what each tier offers, and a built class's `TIERS` row in `src/game/perks.ts` must match it.
 
 Each class was offered 50 perks and 18 were picked. A perk keeps the number it was offered under, which is the number it was picked by. Figures in brackets are the game's own when the perks were chosen, so each line can be checked against the rule it changes when it is built.
 
@@ -35,7 +35,7 @@ Main skill digging; also paving.
 
 **Tiers** (swept): 50 — Quick Level, Bed Worker, Quick Paver · 60 — Level Hand, Wader, Stump Puller ·
 70 — Steep Cut, Dredger, Bed True · 80 — Frugal Cobbler, Road Legs, Soil Porter ·
-90 — Strong Back, Long Reach, Dig Out the Tile · 100 — Clean Earth, Rare Earth, Treasure Nose.
+90 — Strong Back, Long Reach, Dig Out the Tile · 99 — Clean Earth, Rare Earth, Treasure Nose.
 
 ## Miner
 
@@ -62,7 +62,7 @@ Main skill mining; also prospecting and archaeology.
 
 **Tiers** (swept): 50 — Ore Sense, Coal Hand, Chipper · 60 — Rock Slide, Wet Work, Far Reader ·
 70 — Quick Pick, Rich Seam, Keen Trowel · 80 — Sure Swing, Pieces that Fit, Ore Cart ·
-90 — Face Shaper, Gem Eye, Bauble Hunter · 100 — Rare Ore, Treasure in the Rock, Pan.
+90 — Face Shaper, Gem Eye, Bauble Hunter · 99 — Rare Ore, Treasure in the Rock, Pan.
 
 ## Mason
 
@@ -89,7 +89,7 @@ Main skill masonry; also stonecutting.
 
 **Tiers** (swept): 50 — Quick Chisel, Quick Mason, Concrete Hand · 60 — Sure Chisel, Double Lift, Steep Stone ·
 70 — Good Mix, Wet Set, Brick Porter · 80 — Three from a Shard, Two at a Time, Bridge Mason ·
-90 — Salvage, Hod Carrier, Rubble Fill · 100 — Tall Walls, Nothing Wasted, Repoint.
+90 — Salvage, Hod Carrier, Rubble Fill · 99 — Tall Walls, Nothing Wasted, Repoint.
 
 ## Carpenter
 
@@ -116,7 +116,7 @@ Main skill carpentry; also fine carpentry, bowyery and fletching.
 
 **Tiers** (swept): 50 — Quick Saw, String Maker, Saw Care · 60 — Heavy Timber, Thatcher, Shipwright ·
 70 — Keel Layer, Timber Salvage, Bowyer's Draw · 80 — Deep Hold, Sure Hull, True Bow ·
-90 — Clean Sawing, Smooth Axle, Fence Builder · 100 — Master Joiner, Deep Drawers, Bridge Wright.
+90 — Clean Sawing, Smooth Axle, Fence Builder · 99 — Master Joiner, Deep Drawers, Bridge Wright.
 
 ## Smith
 
@@ -143,7 +143,7 @@ Main skill blacksmithing; also smelting, weaponsmithing, armorsmithing, platesmi
 
 **Tiers** (swept): 50 — Glassblower, Mail Maker, Plate Maker · 60 — Toolsmith, Metal Polisher, Ingots ·
 70 — Hard Sand, Second Heat, Nail Maker · 80 — Keen Edge, Balanced, Forge Reach ·
-90 — Sure Alloy, Reclaimer, Clean Pour · 100 — Sure Hammer, Long Shift, Temper Bath.
+90 — Sure Alloy, Reclaimer, Clean Pour · 99 — Sure Hammer, Long Shift, Temper Bath.
 
 ## Forester
 
@@ -170,7 +170,7 @@ Main skill woodcutting; also forestry.
 
 **Tiers** (swept): 50 — Woodsman's Stride, Tap Resin, Clear Brush · 60 — Nest Finder, Honey Hunter, Coppice ·
 70 — Clean Stroke, Heavy Swing, Sure Hatchet · 80 — Clean Drop, Fruitful, Kindling ·
-90 — Sprout Picker, Nursery, Hedge Harvest · 100 — Choice Logs, Rare Heartwood, Master Grafter.
+90 — Sprout Picker, Nursery, Hedge Harvest · 99 — Choice Logs, Rare Heartwood, Master Grafter.
 
 ## Farmer
 
@@ -197,7 +197,7 @@ Main skill farming; also milling.
 
 **Tiers** (swept): 50 — Fodder, Milkmaid, Sack Porter · 60 — Seed Saver, Fast Growth, Bumper Crop ·
 70 — More Meal, Full Press, Barn Reach · 80 — Crop Rotation, Worn-in Rake, Sow a Patch ·
-90 — Rare Harvest, Tend a Patch, Harvest a Patch · 100 — Herb Plot, Grain Master, Fibre Farmer.
+90 — Rare Harvest, Tend a Patch, Harvest a Patch · 99 — Herb Plot, Grain Master, Fibre Farmer.
 
 ## Cook
 
@@ -224,7 +224,7 @@ Main skill cooking; also butchering and brewing.
 
 **Tiers** (swept): 50 — Flavoursome, Full Carcass, Strong Brew · 60 — Pantry Reach, Bait Maker, Taste ·
 70 — Fine Fare, Hearty, Long-lasting · 80 — Big Pot, Frugal Cook, Filling ·
-90 — Prime Cuts, Hide Keeper, Cool Pack · 100 — Balanced Diet, Broth, Distil.
+90 — Prime Cuts, Hide Keeper, Cool Pack · 99 — Balanced Diet, Broth, Distil.
 
 ## Tailor
 
@@ -251,7 +251,7 @@ Main skill tailoring; also leatherworking and ropemaking.
 
 **Tiers** (swept): 50 — Full Fleece, Quick Spindle, Sure Tan · 60 — Saddler, Fisher's Friend, Workshop Reach ·
 70 — Sure Needle, Lye Saver, Sure Awl · 80 — Sack Maker, Deep Pockets, Nothing Wasted ·
-90 — Even Thread, Tight Weave, Light Pack · 100 — Master Tailor, Patch, Tent.
+90 — Even Thread, Tight Weave, Light Pack · 99 — Master Tailor, Patch, Tent.
 
 ## Herdsman
 
@@ -278,7 +278,7 @@ Main skill animal husbandry; also taming.
 
 **Tiers** (swept): 50 — Soft Hand, Brushwork, Short Rest · 60 — Healing Hands, Light Crate, Stud Book ·
 70 — Patient Coax, Lasting Care, Quick Gestation · 80 — Young Trust, Light Eaters, True Blood ·
-90 — Well Kept, Twins, Choose the Sex · 100 — Any Bait, Long-lived, Bred Up.
+90 — Well Kept, Twins, Choose the Sex · 99 — Any Bait, Long-lived, Bred Up.
 
 Brush it down, Put it to a mate and Look it over were rules on both sides that no menu offered. They are on a wildermon's menu now, which is where most of these perks are reached.
 
@@ -307,7 +307,7 @@ Main skill foraging; also botanizing, alchemy and first aid.
 
 **Tiers** (swept): 50 — Keen Eye, Quick Lye, Quick Dressing · 60 — Hay Cutter, Reed Cutter, Ink Maker ·
 70 — Sure Find, Sure Boil, Sure Hands · 80 — Thrifty Dyer, Quick Mend, Cover Maker ·
-90 — Rare Find, Double Boil, Field Medic · 100 — Herb Tea, Salve, Tincture.
+90 — Rare Find, Double Boil, Field Medic · 99 — Herb Tea, Salve, Tincture.
 
 ## Fisher
 
@@ -336,7 +336,7 @@ The browser had drifted from the island here too. A rod and a net wore their own
 
 **Tiers** (swept): 50 — Quick Cast, Bait Saver, Quick Net · 60 — Long Cast, Wide Net, Fishing Journal ·
 70 — Net Care, Cool Pack, Rod Care · 80 — Steady Hand, Full Net, Deep Creel ·
-90 — Strong Bait, Any Bait, Big Fish · 100 — Rare Catch, Smoke Fish, Fish Pond.
+90 — Strong Bait, Any Bait, Big Fish · 99 — Rare Catch, Smoke Fish, Fish Pond.
 
 ## Mender
 
@@ -363,7 +363,7 @@ Main skill repair; also restoration.
 
 **Tiers** (swept): 50 — Quick Hands, Tool Care, Quick Restore · 60 — Clean Repair, Armour Care, Gentle Hands ·
 70 — Big Mend, Post Keeper, Sure Restore · 80 — Light Touch, Fine Restore, Age Undone ·
-90 — Lucky Polish, Second Look, Repair Kit · 100 — Tier Up, Handyman, Sealant.
+90 — Lucky Polish, Second Look, Repair Kit · 99 — Tier Up, Handyman, Sealant.
 
 ## Artisan
 
@@ -390,4 +390,4 @@ Main skill jewellery; also pottery and papyrusmaking.
 
 **Tiers** (swept): 50 — Sure Setting, Keep the Stone, Deep Pot · 60 — Cut True, Fine Castings, Gem Eye ·
 70 — Focus Cutter, Sealed Jar, Sturdy Binding · 80 — Bright Stone, Keen Focus, Good Read ·
-90 — More Stones, Amphora, Potter's Wheel · 100 — Glaze, Trade Book, Circlet.
+90 — More Stones, Amphora, Potter's Wheel · 99 — Glaze, Trade Book, Circlet.

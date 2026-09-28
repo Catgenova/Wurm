@@ -840,6 +840,13 @@ export const NEWS: News[] = [
       `Everything that keeps the year keeps it in those days. The woods come into leaf over the first ${numberWord(LEAF_DAYS)} days of spring, turn over the first ${numberWord(TURN_DAYS)} of autumn and drop their leaves over the last ${numberWord(SHED_DAYS)}; roses and lavender flower from day ${BUSH_FLOWER_FROM} of spring. An arch's roses are in leaf ${numberWord(ROSE_LEAFY)} day after it is set down, in bud ${numberWord(ROSE_BUD)} and in flower ${numberWord(ROSE_FLOWER)}; a water plant roots in ${spanWords(WATER_ROOTING)}; and a crop in a field grows ${listed(SEASONS.map((s) => `${growthWords(SEASON_GROWTH[s])} in ${s}`))}: ${spanWords(SEASON_SECONDS)} of each.`,
     ],
   },
+  {
+    n: 63,
+    day: '2026-09-28',
+    lines: () => [
+      `The last of a trade's ${numberWord(PERK_TIER_AT.length)} tiers of perks opens at ${PERK_TIER_AT[PERK_TIER_AT.length - 1]} in its main skill, where it was 100. After the first, which comes with the trade, the tiers open at ${listed(PERK_TIER_AT.slice(1).map(String))}.`,
+    ],
+  },
 ];
 
 /** The highest entry this browser has shown. */

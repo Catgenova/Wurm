@@ -62,10 +62,11 @@ export const PERK_CLASSES: ReadonlySet<string> = new Set(['terraformer', 'miner'
  * The six tiers, as the skill each one opens at.
  *
  * The first opens with the trade itself, whichever of its skills took it to
- * fifty. The other five open at sixty, seventy, eighty, ninety and a hundred
- * in the trade's main skill, the one it is named for.
+ * fifty. The other five open at sixty, seventy, eighty, ninety and
+ * ninety-nine in the trade's main skill, the one it is named for: "Change
+ * tier 6 class perks from requiring level 100 to requiring 99."
  */
-export const PERK_TIER_AT = [CLASS_AT, 60, 70, 80, 90, 100] as const;
+export const PERK_TIER_AT = [CLASS_AT, 60, 70, 80, 90, 99] as const;
 /** How many perks each tier offers, of which one is taken. */
 export const PERKS_PER_TIER = 3;
 

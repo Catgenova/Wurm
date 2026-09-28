@@ -4,11 +4,13 @@
  * Asked for: "We are replacing the current bonuses. Each 10 levels in the
  * primary skill of the class grants 1 skill point, for a total of 6 (class
  * starts with 1 point)", and then "Every class will have 6 tiers: level 50,
- * 60, 70, 80, 90, 100. Each tier allows one choice between 3 choices."
+ * 60, 70, 80, 90, 100. Each tier allows one choice between 3 choices." The
+ * sixth has opened at 99 since: "Change tier 6 class perks from requiring
+ * level 100 to requiring 99."
  *
  * So a trade in `PERK_CLASSES` has no tree. It has eighteen perks, three to a
  * tier, and at each tier its holder takes one of the three. The first tier
- * opens with the trade; the other five open at sixty to a hundred in the
+ * opens with the trade; the other five open at sixty to ninety-nine in the
  * trade's main skill (`PERK_TIER_AT`). A perk taken is taken: the way to
  * choose again is to put the trade down, which clears it, and costs what
  * putting a trade down always has -- `CLASS_CHANGE_COST` in silver, or a
