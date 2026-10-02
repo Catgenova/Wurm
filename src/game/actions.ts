@@ -810,6 +810,8 @@ export const ACTIONS: ActionDef[] = [
       if (b) extra += ` It belongs to ${b.name}, ${b.levels === 1 ? 'a single-storey building' : `${b.levels} storeys tall`}.`;
       // And a glasshouse says what it is for (`glasshouse.ts`).
       extra += glassSays(g.buildings, b);
+      // And its deck, if the tile stands on piers (`pier_says`).
+      if (b) extra += g.pierSays(t.x, t.y);
       const crates = g.cratesOnTile(t.x, t.y);
       if (crates.length) extra += ` ${crates.length === 1 ? 'A crate stands' : `${crates.length} crates stand`} here.`;
       g.logMsg(`${text} Height ${avg.toFixed(1)}, slope ${w.slope(t.x, t.y)}.${water}${extra}`, 'event');
@@ -872,7 +874,8 @@ export const ACTIONS: ActionDef[] = [
       if (g.world.hasWater(t.x, t.y)) return 'You cannot plant moss underwater.';
       const have = g.inventory.count('moss');
       if (have < MOSS_PLANT) return `It takes ${MOSS_PLANT} moss to plant a tile; you have ${have}.`;
-      return null;
+      // Not the ground under a building, which a tile on piers is (`piers.ts`).
+      return underBuilding(g, t.x, t.y);
     },
     perform: (t, g) => {
       if (t.kind !== 'tile') return;
@@ -1307,6 +1310,9 @@ export const ACTIONS: ActionDef[] = [
     check: (t, g) => {
       if (t.kind !== 'tile') return null;
       if (!g.inventory.has('pickaxe')) return 'You need a pickaxe to mine.';
+      // A face that comes down brings a corner down with it (`MINE_COLLAPSE`): not under a building, a tile on piers among them.
+      const under = cornerUnderBuilding(g, t.cx, t.cy);
+      if (under) return under;
       if (g.world.getHeight(t.cx, t.cy) < -mineDepth(g)) return 'The water is too deep here to work in.';
       const ore = oreAt(g.world, t.x, t.y);
       if (ore && g.skills.get('mining') < oreNeeds(g, ore.level)) return `${ore.name} needs mining ${oreNeeds(g, ore.level)} to work. Yours is ${g.skills.get('mining').toFixed(1)}.`;
@@ -1735,7 +1741,8 @@ export const ACTIONS: ActionDef[] = [
       if (t.kind === 'tile' && t.x === g.player.tileX && t.y === g.player.tileY) {
         return 'You would be planting it under your own feet. Step off the tile first.';
       }
-      return null;
+      // Nor under a building, where a tile on piers has grass or sand under its deck (`piers.ts`).
+      return t.kind === 'tile' ? underBuilding(g, t.x, t.y) : null;
     },
     perform: (t, g) => {
       if (t.kind !== 'tile') return;
@@ -1783,7 +1790,9 @@ export const ACTIONS: ActionDef[] = [
       const asked = t.itemUid !== undefined ? g.inventory.get(t.itemUid) : undefined;
       if (asked !== undefined && !(asked?.id === 'sprout' && fruitSprout(asked))) return 'That is not a fruit sprout.';
       if (!asked && !g.inventory.items.some((it) => it.id === 'sprout' && fruitSprout(it))) return 'You have no fruit sprout to graft.';
-      return g.inventory.has('carving_knife') ? null : 'You need a carving knife to graft.';
+      if (!g.inventory.has('carving_knife')) return 'You need a carving knife to graft.';
+      // Nor under a building (`piers.ts`).
+      return underBuilding(g, t.x, t.y);
     },
     perform: (t, g) => {
       if (t.kind !== 'tile') return;
@@ -2968,7 +2977,8 @@ export const ACTIONS: ActionDef[] = [
     applies: (t, g) => t.kind === 'item' && g.inventory.get(t.uid)?.id === 'dirt',
     check: (_t, g) => {
       const c = g.nearestCornerToPlayer();
-      return slopeRefusal(g, 'digging', c.cx, c.cy, 1);
+      // Not a corner of a building: standing on a deck on piers, the ground under it (`piers.ts`), as `drop_dirt` has it.
+      return cornerUnderBuilding(g, c.cx, c.cy) ?? slopeRefusal(g, 'digging', c.cx, c.cy, 1);
     },
     perform: (t, g) => {
       if (t.kind !== 'item') return;

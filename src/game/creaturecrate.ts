@@ -157,6 +157,8 @@ export function letOut(g: Game, c: Creature): void {
   }
   c.state = 'idle';
   c.until = g.time;
+  // Never onto a deck on piers, where no creature goes: off it, to the nearest ground it may stand on (`piers.ts`).
+  g.creatures.offPiers(g, c);
   g.events.emit('creature');
 }
 

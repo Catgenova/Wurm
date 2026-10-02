@@ -324,6 +324,21 @@ jobs:
           npx esbuild supabase/test/pondlife.ts --bundle --platform=node --format=esm \
             --outfile=node_modules/.cache/pondlife.mjs --log-level=error
           node node_modules/.cache/pondlife.mjs
+      - name: A building stands on piers over a slope and over the water, the same on both sides
+        run: |
+          # Asked for: a building may take in tiles that slope or lie under
+          # shallow water by standing its ground floor on piers, walked at
+          # the deck's height on both sides, with the ground under it left
+          # alone. One scene -- a sea shelving deep, a pond with a lily in
+          # it, a bank and a terrace -- is put to both: every tile planned on
+          # or refused, under the same deck; three buildings carried out a
+          # tile at a time; the piers' bill in every material; walls, stairs
+          # and a deck taken up; walking on, off and along a deck, and a
+          # cart and a hull refused one; the ground under it dug, flattened,
+          # packed and paved; a crate on it, Examine and the ground read.
+          npx esbuild supabase/test/piers.ts --bundle --platform=node --format=esm \
+            --outfile=node_modules/.cache/piers.mjs --log-level=error
+          node node_modules/.cache/piers.mjs
       - name: Nobody on the move is pulled back for going as fast as they can
         run: |
           # Reported as players rubberbanding when they move quickly. The

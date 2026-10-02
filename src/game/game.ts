@@ -54,8 +54,9 @@ import { BAIT_BY_ID, FISH, fishHere, pickFish, waterDepth } from './fishing';
 import { BRIDGES, bridgeDone, CLEARANCE, END_SLOP, spanBill, spanTiles, type Bridge, type BridgeKind } from './bridges';
 import { CLEAR_OF_BUILDINGS, LIFT_PER_MASONRY, concreteFor, foundationBill, foundationDone, liftFor, masonryFor, soilSays, type Foundation } from './foundations';
 import { poolLevel } from '../world/springs';
+import { deckOver, floorNear, levelGround, pierDrop, pierGround, pierRefusal, pierSays, type PierGround } from './piers';
 import { greenNow, mossyPiece } from './greening';
-import type { WaterPlant, WaterPlantKind } from '../world/waterplants';
+import { WATER_PLANT_BY_ID, type WaterPlant, type WaterPlantKind } from '../world/waterplants';
 import { liveSettings, type Settings } from './settings';
 import { Skills, SKILL_DEFS, isQuiet } from './skills';
 import { jewelGain } from './gems';
@@ -1175,6 +1176,8 @@ export class Game {
     // bare rock or a hole, which is the whole of what it was poured for.
     if (level <= 0 && this.foundations.size && this.slabAt(x, y)) return true;
     if (!this.world.isPassable(x, y)) return false;
+    // A tile on piers is its deck, and until the deck is built there is nothing there to stand on.
+    if (level <= 0 && this.buildings.pierTiles.size && this.buildings.onPiers(x, y)) return this.pierDeckAt(x, y) !== null;
     if (level <= 0) return true;
     const f = this.buildings.floor(level, x, y);
     if (!f || !isDone(f)) return false;
@@ -1205,6 +1208,8 @@ export class Game {
     }
     if (this.standable(x1, y1, level) && !b.blocksAt(level, x0, y0, x1, y1)) {
       if (level === 0) {
+        const deck = this.deckStep(x0, y0, x1, y1);
+        if (deck !== null) return deck ? 0 : null;
         const slab = this.slabStep(x0, y0, x1, y1);
         if (slab !== null) return slab ? 0 : null;
         if (!groundStep(this.world, x0, y0, x1, y1, this.climbStep()) || !standsOn(this.world, x1, y1, this.standSlope())) return null;
@@ -1223,6 +1228,8 @@ export class Game {
    */
   readonly driveRule = (x0: number, y0: number, level: number, x1: number, y1: number): number | null => {
     if (level !== 0) return null;
+    // A deck on piers takes feet, not wheels (`pier_step`).
+    if (this.buildings.pierTiles.size && this.buildings.onPiers(x1, y1)) return null;
     // A wooden bridge or a stone arch carries wheels; a rope bridge does not.
     if (this.bridges.size && this.bridgeStep(x0, y0, x1, y1)) {
       const b = this.bridgeAt(x1, y1) ?? this.bridgeAt(x0, y0);
@@ -1253,6 +1260,8 @@ export class Game {
     const up = this.mounted();
     if (!up || level !== 0) return null;
     if (!this.world.inBounds(x1, y1) || !this.world.isPassable(x1, y1)) return null;
+    // A deck on piers takes feet, not hooves (`pier_step`).
+    if (this.buildings.pierTiles.size && this.buildings.onPiers(x1, y1)) return null;
     // Only the web-footed sort will take a rider into deep water.
     if (!this.creatures.species(up).swims && this.world.bedAt(x1 + 0.5, y1 + 0.5) < this.world.surfaceAt(x1, y1) - SWIM_DEPTH) return null;
     if (this.buildings.blocksAt(0, x0, y0, x1, y1)) return null;
@@ -1269,6 +1278,8 @@ export class Game {
     if (!boat || level !== 0) return null;
     const def = furnitureDef(boat.kind).boat;
     if (!def || !this.world.inBounds(x1, y1)) return null;
+    // No hull goes in under a deck on piers, among its posts (`pier_step`).
+    if (this.buildings.pierTiles.size && this.buildings.onPiers(x1, y1)) return null;
     return -this.world.centerHeight(x1, y1) >= def.draught ? 0 : null;
   };
 
@@ -1412,7 +1423,9 @@ export class Game {
   /** Water deep enough to float this hull, near where the player is standing. */
   launchSpot(kind: string, x: number, y: number): boolean {
     const def = furnitureDef(kind).boat;
-    return !!def && this.world.inBounds(x, y) && -this.world.centerHeight(x, y) >= def.draught;
+    // And never in under a deck on piers (`launch_spot`).
+    return !!def && this.world.inBounds(x, y) && -this.world.centerHeight(x, y) >= def.draught
+      && !(this.buildings.pierTiles.size > 0 && this.buildings.onPiers(x, y));
   }
 
   /** How the player may move right now, and how many storeys they may cross. */
@@ -1423,9 +1436,25 @@ export class Game {
     return { rule: this.stepRule, levels: TOP_LEVELS };
   }
 
-  /** Height of the player's feet, storeys included. */
+  /** Height of the player's feet, storeys included: in a building on piers, from its deck. */
   playerHeight(): number {
-    return this.world.heightAt(this.player.x, this.player.y) + this.player.visualLevel * 30;
+    const base = this.deckBase(this.player.tileX, this.player.tileY, this.player.level);
+    return (base ?? this.world.heightAt(this.player.x, this.player.y)) + this.player.visualLevel * 30;
+  }
+
+  /**
+   * What a body on a tile at a storey stands on, storeys not counted, in a
+   * building that stands on piers: its deck, on every storey of every tile of
+   * it -- a tile of level ground in it is at the deck's height anyway -- and
+   * on the ground floor of a tile on piers only once the deck there is built.
+   * Null everywhere else, where the ground is what a body stands on.
+   */
+  deckBase(x: number, y: number, level: number): number | null {
+    if (!this.buildings.pierTiles.size) return null;
+    const b = this.buildings.buildingAt(x, y);
+    if (b?.deck == null) return null;
+    if (level > 0 || !this.buildings.onPiers(x, y)) return b.deck;
+    return this.pierDeckAt(x, y);
   }
 
   /**
@@ -1560,12 +1589,19 @@ export class Game {
     return this.buildings.buildingAt(this.player.tileX, this.player.tileY);
   }
 
-  /** Why a tile cannot take a building plan, or null when it can. */
-  planReason(x: number, y: number): string | null {
+  /**
+   * Why a tile cannot take a building plan, or null when it can: a new plan
+   * on it, or `into` the building beside it that it would be added to.
+   *
+   * Level, dry ground is built on as it stands, and has to be packed first.
+   * Any other ground a building stands on piers over (`piers.ts`): under the
+   * deck of the building it joins, or under a deck at the tile's own top for a
+   * new plan. The island's `plan_reason` and `extend_reason`.
+   */
+  planReason(x: number, y: number, into?: Building): string | null {
     if (!this.onDeed(x, y)) return 'You may only build on your own deed.';
     if (this.isToken(x, y)) return 'The settlement token stands here.';
     if (this.buildings.buildingAt(x, y)) return 'That tile is already part of a building.';
-    if (this.world.getTile(x, y) !== TileType.PackedDirt) return 'Buildings need flat packed dirt. Pack the tile first.';
     /*
      * Unless it is a slab, and then the ground under it is the slab's business.
      *
@@ -1577,15 +1613,120 @@ export class Game {
      * on. Shuttering is not a slab: a plan is a line of boards round a hole.
      */
     const slab = this.foundationAt(x, y);
-    if (slab && !foundationDone(slab)) return 'The foundation here is only shuttered. Pour it first.';
-    if (slab?.pool) return 'You cannot build in water.';
-    if (!slab) {
-      if (this.world.slope(x, y) !== 0) return 'The tile must be perfectly flat. Flatten it first.';
-      if (this.world.hasWater(x, y)) return 'You cannot build in water.';
+    if (slab) {
+      if (this.world.getTile(x, y) !== TileType.PackedDirt) return 'Buildings need flat packed dirt. Pack the tile first.';
+      if (!foundationDone(slab)) return 'The foundation here is only shuttered. Pour it first.';
+      if (slab.pool) return 'You cannot build in water.';
+      // And level with a deck the building already has, since a floor is.
+      if (into?.deck != null && slab.top !== into.deck) {
+        return `The slab here is poured to ${slab.top} and the floor of ${into.name} stands at ${into.deck}. A floor is level.`;
+      }
+    } else {
+      const site = this.pierSite(x, y, into);
+      if (site.deck === null) {
+        if (this.world.getTile(x, y) !== TileType.PackedDirt) return 'Buildings need flat packed dirt. Pack the tile first.';
+      } else {
+        const plant = this.waterPlantAt(x, y);
+        const why = pierRefusal(site.ground, site.deck, plant ? WATER_PLANT_BY_ID.get(plant.kind)?.name.toLowerCase() ?? 'water plant' : undefined);
+        if (why) return why;
+        // What would be left under the deck, or on nothing until it is built (`pier_site_refusal`).
+        const under = this.pierSiteRefusal(x, y);
+        if (under) return under;
+      }
     }
     if (this.groundAt(x, y).length) return 'Clear away the items lying there first.';
     return null;
   }
+
+  /**
+   * Why a tile whose ground would take piers cannot be taken onto them yet,
+   * or null: what is there would be left under the deck, or standing on
+   * nothing until it is built. A bridge landing on it lands on its ground;
+   * a hull, a cart, a fire or a crate standing on it would be shut under the
+   * deck; and a body standing on it would stand on nothing. A creature on it
+   * is moved off as it is planned (`Creatures.shoo`). The island's
+   * `pier_site_refusal`, in its words and order.
+   */
+  pierSiteRefusal(x: number, y: number): string | null {
+    if (this.bridges.size && this.bridgeEndAt(x, y)) return 'A bridge lands on this tile. Take the bridge down first.';
+    if (this.anythingPlaced(x, y)) return 'Move what stands on the tile first.';
+    if (this.player.tileX === x && this.player.tileY === y) return 'Step off the tile first.';
+    if (this.peerOn(x, y)) return 'Somebody is standing on that tile.';
+    return null;
+  }
+
+  /** The bridge one of whose two ends is this tile, if any. */
+  bridgeEndAt(x: number, y: number): Bridge | undefined {
+    for (const b of this.bridges.values()) if ((b.ax === x && b.ay === y) || (b.bx === x && b.by === y)) return b;
+    return undefined;
+  }
+
+  /** Whether somebody else on the island stands on a tile, on its ground or its deck. */
+  peerOn(x: number, y: number): boolean {
+    if (!this.roster.size) return false;
+    for (const p of this.roster.list()) if (p.level === 0 && Math.floor(p.x) === x && Math.floor(p.y) === y) return true;
+    return false;
+  }
+
+  /**
+   * What a tile would stand on as a tile of a building: its ground, and the
+   * deck it would stand on piers under, or null for level ground built on as
+   * it stands. `into` is the building it would join; without one it is a new
+   * plan, whose deck is the tile's own top -- or the level taken, when one is
+   * taken higher than that, which is how a stilt house is set up high over
+   * its water (as a foundation is poured to it, `foundationTop`).
+   */
+  pierSite(x: number, y: number, into?: Building): { ground: PierGround; deck: number | null } {
+    const ground = pierGround(this.world, x, y);
+    const floor = into ? into.deck ?? floorNear(this.buildings, this.world, (tx, ty) => this.slabAt(tx, ty)?.top ?? null, into, x, y) : null;
+    if (levelGround(ground, floor)) return { ground, deck: null };
+    if (floor !== null) return { ground, deck: floor };
+    const top = deckOver(ground);
+    return { ground, deck: this.level !== null && this.level > top ? this.level : top };
+  }
+
+  /** How far the deck over a tile on piers stands above its lowest corner: what its tallest post spans. */
+  pierDropAt(x: number, y: number): number {
+    const b = this.buildings.buildingAt(x, y);
+    return b?.deck != null && this.buildings.onPiers(x, y) ? pierDrop(pierGround(this.world, x, y), b.deck) : 0;
+  }
+
+  /**
+   * The height of the finished deck over a tile on piers, or null: off the
+   * piers, or on a tile whose deck is not built yet, which is nowhere to
+   * stand (`standable`).
+   */
+  pierDeckAt(x: number, y: number): number | null {
+    const bld = this.buildings;
+    if (!bld.pierTiles.size || !bld.onPiers(x, y)) return null;
+    const f = bld.floor(0, x, y);
+    return f && isDone(f) ? bld.buildingAt(x, y)?.deck ?? null : null;
+  }
+
+  /** What Examine says of a tile on piers (`pierSays`, the island's `pier_says`), and nothing off the piers. */
+  pierSays(x: number, y: number): string {
+    const b = this.buildings.onPiers(x, y) ? this.buildings.buildingAt(x, y) : undefined;
+    if (b?.deck == null) return '';
+    return pierSays(b.deck, this.pierDropAt(x, y), this.pierDeckAt(x, y) !== null, this.world.hasWater(x, y) ? this.world.surfaceAt(x, y) : null);
+  }
+
+  /** Whether a tile stands on piers whose deck is not finished: nothing to stand on at all. */
+  pierBare(x: number, y: number): boolean {
+    return this.buildings.pierTiles.size > 0 && this.buildings.onPiers(x, y) && this.pierDeckAt(x, y) === null;
+  }
+
+  /**
+   * What a thing set down on a tile stands on, where the tile is on piers: its
+   * finished deck (true), which is dry, level floor whatever is under it, or
+   * nothing yet (false). Null off the piers, where the ground answers.
+   */
+  deckFooting(x: number, y: number): boolean | null {
+    if (!this.buildings.pierTiles.size || !this.buildings.onPiers(x, y)) return null;
+    return this.pierDeckAt(x, y) !== null;
+  }
+
+  /** Whether a body on a tile is on a deck rather than on the ground or in the water under it. */
+  readonly onPierDeck = (x: number, y: number): boolean => this.buildings.pierTiles.size > 0 && this.pierDeckAt(x, y) !== null;
 
   /**
    * How many actions you can hold in your head at once, the one in hand
@@ -2791,7 +2932,8 @@ export class Game {
       [p.x, p.y] = this.passengerSpot(ship, p.seat);
     } else {
       const { rule } = this.movement();
-      moved = p.update(dt, this.world, rule);
+      // A deck on piers is walked dry and level, whatever is under it (`piers.ts`).
+      moved = p.update(dt, this.world, rule, this.buildings.pierTiles.size ? this.onPierDeck : undefined);
     }
     this.acting.stepped = moved;
     /*
@@ -4142,7 +4284,8 @@ export class Game {
   /**
    * The height of anything laid over a tile that you stand on instead of the
    * ground under it: a poured slab, or a finished bridge deck. Null when the
-   * ground is the ground.
+   * ground is the ground. A deck on piers is not asked here: a body on one is
+   * on a storey of its building (`deckBase`), and nothing else is there.
    */
   laidOver(x: number, y: number): number | null {
     const slab = this.foundations.size ? this.slabAt(x, y) : undefined;
@@ -4221,10 +4364,12 @@ export class Game {
      */
     const ends = [this.topDeck(ax, ay), this.topDeck(bx, by)];
     for (const [i, [x, y]] of ([[ax, ay], [bx, by]] as Array<[number, number]>).entries()) {
+      // A deck on piers is landed on once it is built, and is dry, solid ground whatever is under it (`piers.ts`).
+      if (this.pierBare(x, y)) return 'A bridge lands on a finished deck: build the deck at that end first.';
       // The bank of a ravine always shares a corner with the ravine, so what
       // matters is whether you can stand in the middle of the tile, not
       // whether every corner of it is dry.
-      if (!ends[i].level && !this.slabAt(x, y) && (!w.isPassable(x, y) || w.centerHeight(x, y) < w.surfaceAt(x, y) && w.hasWater(x, y))) {
+      if (!ends[i].level && !this.slabAt(x, y) && !this.onPierDeck(x, y) && (!w.isPassable(x, y) || w.centerHeight(x, y) < w.surfaceAt(x, y) && w.hasWater(x, y))) {
         return 'Both ends want dry, solid ground to stand on.';
       }
       if (this.bridgeAt(x, y)) return 'One end is already under a bridge.';
@@ -4281,11 +4426,15 @@ export class Game {
     return f && foundationDone(f) ? f : undefined;
   }
 
-  /** How high the top of a tile is: a poured slab's, the water in a pool dug in one, or the ground's own. */
+  /**
+   * How high the top of a tile is: a poured slab's, the water in a pool dug
+   * in one, a finished deck on piers, or the ground's own -- the order the
+   * island's `surface_height` asks in, which is where a bridge lands.
+   */
   surfaceHeight(x: number, y: number): number {
     const slab = this.slabAt(x, y);
     if (slab) return slab.pool ? poolLevel(slab.top) : slab.top;
-    return this.world.centerHeight(x, y);
+    return this.pierDeckAt(x, y) ?? this.world.centerHeight(x, y);
   }
 
   /**
@@ -4345,6 +4494,25 @@ export class Game {
     if (!onto && !this.slabAt(x0, y0)) return null;
     if (Math.abs(this.surfaceHeight(x1, y1) - this.surfaceHeight(x0, y0)) > this.climbStep()) return false;
     return !!onto || standsOn(this.world, x1, y1, this.standSlope());
+  }
+
+  /**
+   * A step on, off or along a deck on piers, or null when no deck is in it.
+   *
+   * The slab's question asked of the deck: how far up or down the next
+   * surface is, held to the climb a body takes between two tile centres.
+   * Landing on a deck asks nothing of the ground under it; stepping off one
+   * onto the ground asks what any step onto that ground asks. Higher than the
+   * climb, the edge of a deck is a drop a body is stopped at. The island's
+   * `walk_share` asks the same of `deck_surface`.
+   */
+  deckStep(x0: number, y0: number, x1: number, y1: number): boolean | null {
+    if (!this.buildings.pierTiles.size) return null;
+    const onto = this.pierDeckAt(x1, y1);
+    const from = this.pierDeckAt(x0, y0);
+    if (onto === null && from === null) return null;
+    if (Math.abs((onto ?? this.surfaceHeight(x1, y1)) - (from ?? this.surfaceHeight(x0, y0))) > this.climbStep()) return false;
+    return onto !== null || standsOn(this.world, x1, y1, this.standSlope());
   }
 
   /** Why a slab cannot be poured over this tile to that level, or null. */
@@ -6554,8 +6722,9 @@ export class Game {
   /** Why a smelter cannot stand on this block of subtiles, or null. */
   smelterPlaceReason(x: number, y: number, sx: number, sy: number): string | null {
     const [ax, ay] = smelterAnchor(sx, sy);
-    if (!this.world.isPassable(x, y) || this.world.hasWater(x, y)) return 'A smelter needs dry, solid ground.';
-    if (this.world.slope(x, y) > 12) return 'The ground is too uneven to lay stone on.';
+    const deck = this.deckFooting(x, y);
+    if (deck === false || (deck === null && (!this.world.isPassable(x, y) || this.world.hasWater(x, y)))) return 'A smelter needs dry, solid ground.';
+    if (deck === null && this.world.slope(x, y) > 12) return 'The ground is too uneven to lay stone on.';
     if (this.isToken(x, y)) return 'Not on the token.';
     for (let dy = 0; dy < SMELTER_H; dy++) {
       for (let dx = 0; dx < SMELTER_W; dx++) {
@@ -6588,8 +6757,9 @@ export class Game {
   /** Why a kiln cannot stand on this block of subtiles, or null. */
   kilnPlaceReason(x: number, y: number, sx: number, sy: number): string | null {
     const [ax, ay] = kilnAnchor(sx, sy);
-    if (!this.world.isPassable(x, y) || this.world.hasWater(x, y)) return 'A kiln needs dry, solid ground.';
-    if (this.world.slope(x, y) > 14) return 'The ground is too uneven to lay brick on.';
+    const deck = this.deckFooting(x, y);
+    if (deck === false || (deck === null && (!this.world.isPassable(x, y) || this.world.hasWater(x, y)))) return 'A kiln needs dry, solid ground.';
+    if (deck === null && this.world.slope(x, y) > 14) return 'The ground is too uneven to lay brick on.';
     if (this.isToken(x, y)) return 'Not on the token.';
     for (let dy = 0; dy < KILN_SUBTILES; dy++) {
       for (let dx = 0; dx < KILN_SUBTILES; dx++) {
@@ -6636,8 +6806,9 @@ export class Game {
       for (let dy = 0; dy < fh; dy++) for (let dx = 0; dx < fw; dx++) if (this.occupiedSubtile(x, y, ax + dx, ay + dy, except)) return 'Something is already in the water there.';
       return null;
     }
-    if (!this.world.isPassable(x, y) || this.world.hasWater(x, y)) return 'Furniture needs dry, solid ground.';
-    if (this.world.slope(x, y) > 16) return 'The floor is too uneven for it to stand.';
+    const deck = this.deckFooting(x, y);
+    if (deck === false || (deck === null && (!this.world.isPassable(x, y) || this.world.hasWater(x, y)))) return 'Furniture needs dry, solid ground.';
+    if (deck === null && this.world.slope(x, y) > 16) return 'The floor is too uneven for it to stand.';
     if (this.isToken(x, y)) return 'Not on the token.';
     // An altar goes down on a settlement of yours, and on one that has none yet; one already standing may still be turned where it is.
     if (def.deed && except === undefined && !this.onDeed(x, y)) return DEED_PLACE;
@@ -6830,8 +7001,9 @@ export class Game {
 
   anvilPlaceReason(x: number, y: number, sx: number, sy: number): string | null {
     const [ax, ay] = anvilAnchor(sx, sy);
-    if (!this.world.isPassable(x, y) || this.world.hasWater(x, y)) return 'An anvil needs dry, level ground.';
-    if (this.world.slope(x, y) > 16) return 'The ground is too uneven.';
+    const deck = this.deckFooting(x, y);
+    if (deck === false || (deck === null && (!this.world.isPassable(x, y) || this.world.hasWater(x, y)))) return 'An anvil needs dry, level ground.';
+    if (deck === null && this.world.slope(x, y) > 16) return 'The ground is too uneven.';
     if (this.isToken(x, y)) return 'Not on the token.';
     for (let dy = 0; dy < ANVIL_SUBTILES; dy++) {
       for (let dx = 0; dx < ANVIL_SUBTILES; dx++) {

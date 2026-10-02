@@ -6,6 +6,7 @@ import type { DeedStore, Game } from './game';
 import { DAY_SECONDS } from './game';
 import { CROP_BY_SEED, cropDef, cropReady, cropYield } from './farming';
 import { MINE_COLLAPSE, MINE_DEPTH } from './actions';
+import { PIER_SHOO } from './piers';
 import { bedrockAt, oreAt } from '../world/ore';
 import { DIGGABLE, findChance, relicsWithin } from './archaeology';
 import { fishable, fishHere, waterDepth } from './fishing';
@@ -2690,10 +2691,66 @@ export class Creatures {
     return n;
   }
 
-  /** Whether a tile is somewhere a creature can walk: passable, dry, in bounds, and no steeper than anything stands on. */
+  /**
+   * Whether a tile is somewhere a creature can walk: passable, dry, in
+   * bounds, and no steeper than anything stands on -- and not a tile on
+   * piers, under a deck or on one, where nothing goes but a body on its own
+   * two feet (`piers.ts`, the island's `creature_tile_ok`).
+   */
   tileOk(game: Game, x: number, y: number): boolean {
     const w = game.world;
+    if (game.buildings.pierTiles.size && game.buildings.onPiers(x, y)) return false;
     return w.inBounds(x, y) && w.isPassable(x, y) && w.centerHeight(x, y) >= -1 && standsOn(w, x, y);
+  }
+
+  /**
+   * Every creature standing on a tile just planned on piers, moved off it:
+   * to the middle of the nearest tile it may walk, ring by ring out to
+   * `PIER_SHOO` tiles, each ring from its north-west corner a row at a time;
+   * left where it is if there is none. One in a crate is where its crate is,
+   * and one in the traces where its cart is. The island's `pier_shoo_all`,
+   * tile for tile, which moves one walking to the tile as well: a creature
+   * there walks a leg at a time, and this one a step.
+   */
+  shoo(game: Game, x: number, y: number): void {
+    for (const c of this.list.values()) {
+      if (c.mode === 'stored' || c.hitchedTo !== null || Math.floor(c.x) !== x || Math.floor(c.y) !== y) continue;
+      this.moveOff(game, c, x, y);
+    }
+  }
+
+  /**
+   * A creature put down on a tile on piers -- let out of a crate standing on
+   * a deck, or at the feet of somebody standing on one -- moved off it as
+   * `shoo` moves one. The island's `creature_off_piers`.
+   */
+  offPiers(game: Game, c: Creature): void {
+    const x = Math.floor(c.x), y = Math.floor(c.y);
+    if (game.buildings.pierTiles.size && game.buildings.onPiers(x, y)) this.moveOff(game, c, x, y);
+  }
+
+  private moveOff(game: Game, c: Creature, x: number, y: number): void {
+    const to = this.nearestOk(game, x, y, PIER_SHOO);
+    if (!to) return;
+    c.x = to[0] + 0.5;
+    c.y = to[1] + 0.5;
+    c.tx = c.x;
+    c.ty = c.y;
+    c.moving = false;
+    if (c.state === 'wander') c.state = 'idle';
+  }
+
+  /** The nearest tile to (x, y) a creature may walk, `reach` tiles off at most, ring by ring, rows from the north; or null. */
+  nearestOk(game: Game, x: number, y: number, reach: number): [number, number] | null {
+    for (let r = 1; r <= reach; r++) {
+      for (let dy = -r; dy <= r; dy++) {
+        for (let dx = -r; dx <= r; dx++) {
+          if (Math.max(Math.abs(dx), Math.abs(dy)) !== r) continue;
+          if (this.tileOk(game, x + dx, y + dy)) return [x + dx, y + dy];
+        }
+      }
+    }
+    return null;
   }
 
   /**
@@ -3518,8 +3575,8 @@ export class Creatures {
     this.gainSkill(game, c, GATHER_SKILL.mine, 0.225);
     // Its own skill decides the metal, though no seam gives up more than it holds.
     const ql = Math.min(ore.maxQl, Math.max(1, Math.min(100, skill * (0.6 + game.rand() * 0.8) + 1)));
-    // As with a miner's pick, the face only comes down by luck.
-    if (game.rand() < MINE_COLLAPSE && game.world.rockHeight(c.workX, c.workY) > 1) {
+    // As with a miner's pick, the face only comes down by luck -- and never a corner of a building (`piers.ts`).
+    if (game.rand() < MINE_COLLAPSE && game.world.rockHeight(c.workX, c.workY) > 1 && !game.buildings.aroundCorner(c.workX, c.workY)) {
       game.world.setHeight(c.workX, c.workY, game.world.getHeight(c.workX, c.workY) - 1);
       game.world.setDirt(c.workX, c.workY, 0);
       game.exposeRock(c.workX, c.workY);
@@ -3553,8 +3610,8 @@ export class Creatures {
     const skill = c.skills[GATHER_SKILL.quarry] ?? 1;
     this.gainSkill(game, c, GATHER_SKILL.quarry, 0.225);
     const ql = Math.min(100, Math.max(1, skill * (0.6 + game.rand() * 0.8) + 1));
-    // Cutting the face back is a matter of luck, as it is for a miner.
-    if (game.rand() < MINE_COLLAPSE && w.rockHeight(c.workX, c.workY) > 1) {
+    // Cutting the face back is a matter of luck, as it is for a miner -- and never a corner of a building (`piers.ts`).
+    if (game.rand() < MINE_COLLAPSE && w.rockHeight(c.workX, c.workY) > 1 && !game.buildings.aroundCorner(c.workX, c.workY)) {
       w.setHeight(c.workX, c.workY, w.getHeight(c.workX, c.workY) - 1);
       w.setDirt(c.workX, c.workY, 0);
       game.exposeRock(c.workX, c.workY);
@@ -4417,9 +4474,12 @@ export class Creatures {
     const p = game.player;
     const distP = Math.hypot(p.x - c.x, p.y - c.y);
     if (distP > 18) {
-      // Lost sight of you: catches up.
-      c.x = p.x;
-      c.y = p.y;
+      // Lost sight of you: catches up -- unless you are on a deck on piers,
+      // where it does not go (`tileOk`): it waits for you to come off it.
+      if (!game.buildings.onPiers(Math.floor(p.x), Math.floor(p.y))) {
+        c.x = p.x;
+        c.y = p.y;
+      }
       c.enemy = null;
       return;
     }

@@ -11,6 +11,7 @@ import {
   floorBill,
   floorKind,
   GLASS_ROOF,
+  heftWord,
   isDone,
   MATERIALS,
   progressOf,
@@ -20,8 +21,10 @@ import {
   WALL_TYPE_BY_ID,
   WALL_TYPES,
   workLevel,
+  type Building,
   type Side,
 } from '../game/building';
+import { deckBill, metres, pierDrop } from '../game/piers';
 import { baitHint, CREATURE_ACTION_BY_ID } from '../game/creatureActions';
 import { FIELD_GLASS_ONLY, glassDone, glazing, isGlasshouse, underGlass } from '../game/glasshouse';
 import { GLASSHOUSE_GROWTH } from '../game/growth';
@@ -2386,6 +2389,8 @@ export class UI {
 
   /** Planning and construction entries for a tile: footprint, walls on the nearest side, floors, storeys. */
   private buildingEntries(pick: Pick): MenuItem[] {
+    /** What a tile going on piers adds to an entry: to its label, and a note of the deck and the drop. */
+    type PierNote = { on: string; note?: string };
     const g = this.game;
     const bld = g.buildings;
     const { x, y } = pick;
@@ -2458,8 +2463,17 @@ export class UI {
       }
       if (!g.onDeed(x, y)) return entries;
       const nb = bld.neighbourBuilding(x, y);
-      if (nb) entries.push(item(act('add_to_building'), base, `Add to ${nb.name}`));
-      entries.push(item(act('plan_building'), base));
+      // Where the ground is not level with the floor the tile would stand on piers: the deck it would stand under, and the drop (`piers.ts`).
+      const onPiers = (into?: Building): PierNote => {
+        const site = g.foundationAt(x, y) ? null : g.pierSite(x, y, into);
+        return site?.deck == null ? { on: '' } : { on: ' on piers', note: `deck at ${site.deck}, ${metres(pierDrop(site.ground, site.deck))} m drop` };
+      };
+      if (nb) {
+        const p = onPiers(nb);
+        entries.push({ ...item(act('add_to_building'), base, `Add to ${nb.name}${p.on}`), note: p.note });
+      }
+      const p = onPiers();
+      entries.push({ ...item(act('plan_building'), base, `${act('plan_building').label}${p.on}`), note: p.note });
       return entries;
     }
     const level = workLevel(b);
@@ -2517,22 +2531,35 @@ export class UI {
     entries.push(...ivy(withSide));
     const floor = bld.floor(level, x, y);
     const plan = act('plan_floor');
+    // The ground floor of a tile on piers is its deck, and the piers under it go on its bill (`piers.ts`).
+    const deck = level === 0 && bld.onPiers(x, y);
     if (floor) {
-      const what = floorKind(floor) === 'floor' && level === 0 ? 'flooring' : FLOOR_KIND_NAMES[floorKind(floor)];
+      const what = deck ? 'deck' : floorKind(floor) === 'floor' && level === 0 ? 'flooring' : FLOOR_KIND_NAMES[floorKind(floor)];
       if (!isDone(floor)) entries.push(item(act('build_floor'), base, `Build ${what} · needs ${describeNeeds(floor, materialName)}`));
       entries.push(item(act('remove_floor'), base, `Remove ${what}`));
     } else {
-      const floorLabel = level > 0 ? 'floor' : 'flooring';
-      const probe = plan.check?.({ ...base, material: 'log' }, g) ?? null;
+      const floorLabel = deck ? 'deck' : level > 0 ? 'floor' : 'flooring';
+      /*
+       * Asked first with the heaviest material, which nothing standing is too
+       * heavy for: whatever refuses it refuses every material. A deck lighter
+       * than the walls it would carry (`deckBears`) is refused material by
+       * material below, each in its own words, so a building of stone is
+       * offered its stone decks and shown why not the rest.
+       */
+      const heaviest = MATERIALS.reduce((a, m) => (m.heft > a.heft ? m : a));
+      const probe = plan.check?.({ ...base, material: heaviest.id }, g) ?? null;
       if (probe) entries.push({ label: `Plan ${floorLabel}`, hint: probe, disabled: true });
       else {
         entries.push({
           label: `Plan ${floorLabel}`,
-          children: MATERIALS.map((m) => ({
-            label: m.name,
-            note: describeNeeds(floorBill(m.id), materialName),
-            onSelect: () => g.requestAction(plan, { ...base, material: m.id, floorKind: 'floor' }),
-          })),
+          children: MATERIALS.map((m) => {
+            const t: Target = { ...base, material: m.id, floorKind: 'floor' };
+            const why = plan.check?.(t, g) ?? null;
+            if (why) return { label: m.name, hint: why, disabled: true };
+            const bill = describeNeeds(deck ? deckBill(m.id, g.pierDropAt(x, y)) : floorBill(m.id), materialName);
+            // A deck carries what it is laid in (`deckCarries`), and says so.
+            return { label: m.name, note: deck ? `${bill} · walls up to ${heftWord(m.heft)}` : bill, onSelect: () => g.requestAction(plan, t) };
+          }),
         });
         if (level > 0) {
           const stairs = plan.check?.({ ...withSide, material: 'log', floorKind: 'stairs' }, g) ?? null;

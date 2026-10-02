@@ -27,6 +27,7 @@ import { FISH, BAITS } from '../src/game/fishing';
 import { GLASS_ROOF, WALL_TYPES, MATERIALS as BUILD_MATERIALS, ROOF_SHAPES, STOREY_SKILL, INDOORS_DECAY, INDOORS_REST, WALL_HEIGHT, LADDER_PLANKS, MAX_LEVELS, TOP_LEVELS, WALL_THICK } from '../src/game/building';
 import { REPOINT_BACK } from '../src/game/buildActions';
 import { CONCRETE_PER_STEP } from '../src/game/foundations';
+import { PIER_CLEAR, PIER_DROP, PIER_SHOO, PIER_WALL_DROP, PIER_WATER } from '../src/game/piers';
 import { COAX_LAPSE, COAX_STEP, HERD_REACH, HUNT_HOME, HUNT_LEASH, HUNT_REST, OLD_AT, YOUNG_FOR, SITE_LOOKS, WILD_RANGE, WILD_REACH, WILD_REST, WILD_REST_SPREAD, SHOE_DAYS, SHOE_PACE, SHOE_STEP, SHOES_PER_MOUNT,
          COMPANION_SIGHT, COMPANION_LEASH, COMPANION_REACH, COMPANION_BLOW, COMPANION_PACE, BLOW_MEMORY, FIGHT_BACK_GOES } from '../src/game/creatures';
 import { FAMILY_OF, KNACK_BONUS, KNACK_CAP, KNACK_HOME, KNACK_ODDS, TITLES } from '../src/game/titles';
@@ -1796,6 +1797,19 @@ const arr = (xs: readonly string[]): string => `array[${xs.map(q).join(', ')}]::
 for (const d of WATER_PLANTS) {
   out.push(`insert into water_plant_def values (${[q(d.id), q(d.name), q(d.from), arr(d.leaves), arr(d.flowers), q(d.flower),
     arr(d.seeds), q(d.seed ?? null), q(d.seedCount ?? 0)].join(', ')});`);
+}
+/*
+ * Piers and stilts (`src/game/piers.ts`): the most a deck stands over the
+ * lowest corner of the ground or bed under its tile, the deepest water a pier
+ * stands in, how far a deck clears the water, the drop under a tile that
+ * costs a whole solid wall's bill of the deck's material in piers, and how far
+ * a creature on a tile planned on piers is moved off it at most.
+ */
+for (const [fn, v] of [
+  ['pier_drop', PIER_DROP], ['pier_water', PIER_WATER], ['pier_clear', PIER_CLEAR], ['pier_wall_drop', PIER_WALL_DROP],
+  ['pier_shoo', PIER_SHOO],
+] as Array<[string, number]>) {
+  out.push(`create or replace function ${fn}() returns int language sql immutable as $fn$ select ${q(v)}::int $fn$;`);
 }
 /* The four things a body wants (`src/game/nutrition.ts`), which a sacrifice fills to the top. */
 out.push(`create or replace function nutrients() returns text[] language sql immutable as $fn$ select array[${NUTRIENTS.map(q).join(', ')}]::text[] $fn$;`);

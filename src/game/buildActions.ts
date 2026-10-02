@@ -30,6 +30,7 @@ import { glassPlanRefusal, glassResync } from './glasshouse';
 import { counterFinished, counterGone, counterPlanRefusal, counterRemoveRefusal, counterStreetRefusal } from './counters';
 import { lampWallRefusal } from './lamps';
 import { itemDef, spendOut, type Item } from './items';
+import { billPlus, deckBears, deckCarries, metres, pierBill, pierDrop } from './piers';
 
 type TileTarget = Extract<Target, { kind: 'tile' }>;
 const isTile = (t: Target): t is TileTarget => t.kind === 'tile';
@@ -169,6 +170,9 @@ function repointReason(g: Game, t: TileTarget): string | null {
   if (b && wall.building === b.id) {
     // What is under it has to carry the new stone, as it would a new wall,
     // and the new stone has to carry what stands on it.
+    // A building on piers stands on its decks, which carry what they are laid in (`piers.ts`).
+    const deck = b.deck != null ? deckCarries(mat, g.buildings.deckUnder(b), b.name) : null;
+    if (deck) return deck;
     const bears = g.buildings.bearing(b, wall.level);
     if (mat.heft > bears) return `${mat.name} is too heavy to raise over what is under it. This storey carries ${heftWord(bears)}, no more.`;
     let over = 0;
@@ -218,8 +222,18 @@ export const BUILD_ACTIONS: ActionDef[] = [
     perform: (t, g) => {
       if (!isTile(t)) return;
       const name = ((t as { name?: string }).name ?? '').trim();
-      const b = g.buildings.create(name.slice(0, 32) || 'House', t.x, t.y);
-      g.logMsg(`You plan ${b.name} here. Extend it onto neighbouring flat packed tiles, then plan walls on its borders.`, 'event');
+      // On level ground, as it stands; anywhere else, on piers under a deck at the tile's top (`piers.ts`).
+      const site = g.foundationAt(t.x, t.y) ? null : g.pierSite(t.x, t.y);
+      const deck = site?.deck ?? undefined;
+      const b = g.buildings.create(name.slice(0, 32) || 'House', t.x, t.y, deck);
+      // Nothing walks under a deck: a creature standing there is moved off (`Creatures.shoo`).
+      if (deck !== undefined) g.creatures.shoo(g, t.x, t.y);
+      if (site && deck !== undefined) {
+        g.logMsg(`You plan ${b.name} here on piers: its deck at ${deck}, ${metres(pierDrop(site.ground, deck))} m over the lowest ground under it.`
+          + ' Plan the deck to build it and the piers under it, then plan walls on it.', 'event');
+      } else {
+        g.logMsg(`You plan ${b.name} here. Extend it onto neighbouring flat packed tiles, then plan walls on its borders.`, 'event');
+      }
       g.events.emit('world', t.x, t.y);
     },
   },
@@ -238,16 +252,24 @@ export const BUILD_ACTIONS: ActionDef[] = [
       const b = g.buildings.neighbourBuilding(t.x, t.y);
       if (!b) return 'There is no building next to this tile.';
       if (b.levels > 1) return 'The footprint cannot change once upper floors are planned.';
-      return g.planReason(t.x, t.y) ?? counterStreetRefusal(g, t.x, t.y);
+      return g.planReason(t.x, t.y, b) ?? counterStreetRefusal(g, t.x, t.y);
     },
     perform: (t, g) => {
       if (!isTile(t)) return;
       const b = g.buildings.neighbourBuilding(t.x, t.y);
       if (!b) return;
-      g.buildings.addTile(b, t.x, t.y);
+      // Under the building's deck, or its floor if it has no deck yet, where the ground is not level with it (`piers.ts`).
+      const site = g.foundationAt(t.x, t.y) ? null : g.pierSite(t.x, t.y, b);
+      const deck = site?.deck ?? undefined;
+      g.buildings.addTile(b, t.x, t.y, deck);
+      if (deck !== undefined) g.creatures.shoo(g, t.x, t.y);
       // A tile with no glass over it: a glasshouse is one no longer, and what grows in it goes back on the field's clock.
       glassResync(g);
-      g.logMsg(`You add the tile to ${b.name}.`, 'event');
+      if (site && deck !== undefined) {
+        g.logMsg(`You add the tile to ${b.name} on piers: under its deck at ${deck}, ${metres(pierDrop(site.ground, deck))} m over the lowest ground under it.`, 'event');
+      } else {
+        g.logMsg(`You add the tile to ${b.name}.`, 'event');
+      }
       g.events.emit('world', t.x, t.y);
     },
   },
@@ -295,7 +317,8 @@ export const BUILD_ACTIONS: ActionDef[] = [
       const b = buildingOf(g, t);
       if (!b) return 'No building here.';
       const level = topLevel(b);
-      if (level > 0) {
+      // On an upper storey, and on the ground floor of a tile on piers, which is its deck.
+      if (level > 0 || g.buildings.onPiers(t.x, t.y)) {
         const floor = g.buildings.floor(level, t.x, t.y);
         if (!floor || !isDone(floor)) return 'Build the floor of this storey first.';
       }
@@ -315,6 +338,9 @@ export const BUILD_ACTIONS: ActionDef[] = [
        * being told rather than by watching it come down.
        */
       const mat = material(t.material);
+      // And a building on piers stands on its decks, which carry what they are laid in (`piers.ts`).
+      const deck = mat && b.deck != null ? deckCarries(mat, g.buildings.deckUnder(b), b.name) : null;
+      if (deck) return deck;
       const bears = g.buildings.bearing(b, level);
       if (mat && mat.heft > bears) {
         return `${mat.name} is too heavy to raise over what is under it. This storey carries ${heftWord(bears)}, no more.`;
@@ -682,9 +708,13 @@ export const BUILD_ACTIONS: ActionDef[] = [
       } else if (kind === 'stairs' || kind === 'ladder') {
         if (level < 1) return 'Stairs and ladders belong to an upper storey; plan another storey first.';
         if (!t.side) return 'Choose the side to climb from.';
-        if (level > 1 && !g.buildings.floor(level - 1, t.x, t.y)) return 'Plan the floor of the storey below first.';
+        // A flight or a ladder up from a tile on piers stands on its deck.
+        if ((level > 1 || g.buildings.onPiers(t.x, t.y)) && !g.buildings.floor(level - 1, t.x, t.y)) return 'Plan the floor of the storey below first.';
       }
       if (g.buildings.floor(level, t.x, t.y)) return kind === 'roof' ? 'There is already roof planned here.' : 'There is already a floor planned here.';
+      // A deck on piers carries what it is laid in, and the building standing on it is as heavy as its heaviest wall.
+      const mat = material(t.material);
+      if (mat && level === 0 && kind === 'floor' && g.buildings.onPiers(t.x, t.y)) return deckBears(mat, g.buildings.heaviestWall(b), b.name);
       return null;
     },
     perform: (t, g) => {
@@ -701,8 +731,11 @@ export const BUILD_ACTIONS: ActionDef[] = [
       if (kind === 'roof' && !b.roof) b.roof = t.roofShape ?? 'hip';
       const floor = g.buildings.setFloor(b, level, t.x, t.y, t.material, kind, kind === 'stairs' || kind === 'ladder' ? t.side : undefined);
       glassResync(g);
+      // The ground floor of a tile on piers is its deck, and the piers under it go on its bill (`piers.ts`).
+      const piers = level === 0 && kind === 'floor' && g.buildings.onPiers(t.x, t.y);
+      if (piers) Object.assign(floor, billPlus(floor, pierBill(t.material, g.pierDropAt(t.x, t.y))));
       const shape = kind === 'roof' ? `${roofShapeDef(b).name.toLowerCase()} ` : '';
-      const what = kind === 'ladder' ? 'ladder' : `${shape}${material(t.material)?.name.toLowerCase()} ${FLOOR_KIND_NAMES[kind]}`;
+      const what = kind === 'ladder' ? 'ladder' : `${shape}${material(t.material)?.name.toLowerCase()} ${piers ? 'deck on piers' : FLOOR_KIND_NAMES[kind]}`;
       g.logMsg(`You plan a ${what}. It needs ${needsText(floor)}.`, 'event');
       g.events.emit('world', t.x, t.y);
     },
@@ -768,6 +801,14 @@ export const BUILD_ACTIONS: ActionDef[] = [
       if (!floor) return 'There is nothing here to remove.';
       if (floorKind(floor) !== 'roof') {
         for (const side of ['n', 'e', 's', 'w'] as const) if (g.buildings.wall(level, t.x, t.y, side)) return 'Take down the walls standing on it first.';
+      }
+      // A deck on piers holds up whatever stands or lies on it, and whoever is taking it up (`deck_refusal`).
+      if (level === 0 && g.buildings.onPiers(t.x, t.y)) {
+        if (g.anythingPlaced(t.x, t.y) || g.groundAt(t.x, t.y).length) return 'Clear what stands or lies on the deck first.';
+        if (g.bridges.size && g.bridgeEndAt(t.x, t.y)) return 'A bridge lands on the deck. Take the bridge down first.';
+        const p = g.player;
+        if (p.level === 0 && p.tileX === t.x && p.tileY === t.y) return 'Step off the deck first.';
+        if (g.peerOn(t.x, t.y)) return 'Somebody is standing on the deck.';
       }
       return null;
     },

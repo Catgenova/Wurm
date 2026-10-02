@@ -166,8 +166,10 @@ export const CRATE_ACTIONS: ActionDef[] = [
       if (rack) {
         if (kind !== 'plank') return `A ${CRATE_DEFS[kind].name.toLowerCase()} will not sit on the runners. The rack takes plank crates.`;
       } else {
-        if (!g.world.isPassable(t.x, t.y) || g.world.hasWater(t.x, t.y)) return 'Crates need dry, open ground.';
-        if (g.world.slope(t.x, t.y) > 20) return 'The ground is too steep for a crate to stand.';
+        // A deck on piers is dry, level floor whatever is under it, and one not built yet is nothing to stand on.
+        const deck = g.deckFooting(t.x, t.y);
+        if (deck === false || (deck === null && (!g.world.isPassable(t.x, t.y) || g.world.hasWater(t.x, t.y)))) return 'Crates need dry, open ground.';
+        if (deck === null && g.world.slope(t.x, t.y) > 20) return 'The ground is too steep for a crate to stand.';
       }
       if (g.crateAt(t.x, t.y, t.sx, t.sy)) return 'There is already a crate on that spot.';
       if (g.isToken(t.x, t.y)) return 'Not on the token.';

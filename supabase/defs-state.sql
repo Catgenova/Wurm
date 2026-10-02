@@ -6283,6 +6283,11 @@ create or replace function water_plant_deepest() returns double precision langua
 create or replace function water_rooting_said() returns text language sql immutable as $fn$ select 'an hour' $fn$;
 insert into water_plant_def values ('lily', 'Water lily', 'lily_root', array['spring', 'summer', 'autumn']::text[], array['spring', 'summer']::text[], 'water_lily', array[]::text[], null, 0);
 insert into water_plant_def values ('lotus', 'Lotus', 'lotus_seed', array['spring', 'summer', 'autumn']::text[], array['summer']::text[], 'lotus_flower', array['autumn']::text[], 'lotus_seed', 3);
+create or replace function pier_drop() returns int language sql immutable as $fn$ select 60::int $fn$;
+create or replace function pier_water() returns int language sql immutable as $fn$ select 20::int $fn$;
+create or replace function pier_clear() returns int language sql immutable as $fn$ select 5::int $fn$;
+create or replace function pier_wall_drop() returns int language sql immutable as $fn$ select 100::int $fn$;
+create or replace function pier_shoo() returns int language sql immutable as $fn$ select 8::int $fn$;
 create or replace function nutrients() returns text[] language sql immutable as $fn$ select array['starch', 'flesh', 'fat', 'greens']::text[] $fn$;
 create or replace function seasons() returns text[] language sql immutable as $fn$ select array['spring', 'summer', 'autumn', 'winter']::text[] $fn$;
 create or replace function season_days() returns int language sql immutable as $fn$ select 30::int $fn$;

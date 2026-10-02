@@ -80,6 +80,7 @@ import { drawFountain } from './fountain';
 import { fallView } from './falls';
 import { drawPool, type Run } from './pools';
 import { drawStones, STONES_RISE } from './stones';
+import { drawPierFeet, drawPierTile, pierFeetOf, slabOutline, type PierFoot, type PierTile } from './piers';
 import { drawPlantsFlat, drawPlantUpright, plantFoot, standsUp, type PlantFrame } from './waterplants';
 import type { WaterPlant } from '../world/waterplants';
 import type { WaterField } from '../world/springs';
@@ -479,6 +480,13 @@ function scatterOf(b: Border, level: number, n: number): number {
 }
 
 /** Four whole numbers to one in [0, 1), the same every time: where a thing falls, by where it is. */
+/** Whether two sets of numbers hold the same ones, nothing counting as empty. */
+function sameSet(a: ReadonlySet<number> | null, b: ReadonlySet<number> | null): boolean {
+  if ((a?.size ?? 0) !== (b?.size ?? 0)) return false;
+  for (const v of a ?? []) if (!b!.has(v)) return false;
+  return true;
+}
+
 function hash4(a: number, b: number, c: number, d: number): number {
   let k = (a * 374761393 + b * 668265263 + c * 1442695041 + d * 2246822519) | 0;
   k = Math.imul(k ^ (k >>> 13), 1274126177);
@@ -721,6 +729,23 @@ export class Renderer {
   /** The tiles of stepping stones on the line of the ground being drawn, as x and y pairs: in sight, and only remembered. */
   private stoneRow: number[] = [];
   private stoneRowDim: number[] = [];
+  /** The water round the feet of piers, by the tile in front of each, whose water they wait for (`piers.ts`). */
+  private pierFeet = new Map<string, PierFoot[]>();
+  /**
+   * The lines of the ground with a tile of a building standing on piers in
+   * the water, this frame, and those buildings: before each, the swell and
+   * the wakes are laid over the water drawn so far (`layWater`).
+   */
+  private wetPierLines: Set<number> | null = null;
+  private wetPierBuildings: Set<number> | null = null;
+  /** The width the last tile of ground was edged in: its edge lies half that over the tiles beside it. */
+  private groundEdge = 1;
+  /**
+   * Those buildings as they were last worked out: again only when the tiles
+   * on piers change (`Buildings.pierStamp`), or a second on for the water,
+   * which can rise under a deck; and their lines again only for a new view.
+   */
+  private wetPierCache: { stamp: number; at: number; buildings: Set<number> | null; view: View | null; lines: Set<number> | null } | null = null;
   /** The foam a fountain's falling water lands in, made the first time one is drawn running. */
   private fountainFoam: HTMLCanvasElement | null = null;
   /** The water plants on the line of the ground being drawn, and what their drawing is told this frame. */
@@ -1123,7 +1148,6 @@ export class Renderer {
 
   private lightLayers(lights: LightSource[], w: number, h: number): { mask: HTMLCanvasElement; warm: HTMLCanvasElement; box: Box } {
     const cam = this.camera;
-    const world = this.game.world;
     const zoom = cam.zoom;
     const lw = Math.max(1, Math.ceil(w * LIGHT_RES)), lh = Math.max(1, Math.ceil(h * LIGHT_RES));
     const sheet = (had: HTMLCanvasElement | undefined): HTMLCanvasElement => {
@@ -1134,7 +1158,8 @@ export class Renderer {
     /** Each light where it falls on the screen this frame, and how far it reaches there. */
     const placed = (l: LightSource): { sx: number; sy: number; r: number } | null => {
       const sx = cam.worldToScreenX(l.x, l.y);
-      const sy = cam.worldToScreenY(l.x, l.y, world.heightAt(l.x, l.y));
+      // At what it stands on: the ground, or the finished deck of a tile on piers (`standTop`).
+      const sy = cam.worldToScreenY(l.x, l.y, this.standTop(l.x, l.y));
       // A flame is never steady; a candle behind cloth very nearly is.
       const r = Math.max(8, l.radius * HALF_W * zoom * this.flicker(l));
       return sx < -r || sy < -r || sx > w + r || sy > h + r ? null : { sx, sy, r };
@@ -1194,7 +1219,7 @@ export class Renderer {
     const steady = lights.filter((l) => l.steady);
     const live = lights.filter((l) => !l.steady);
     const key = `${lw}x${lh}|${cam.cx.toFixed(2)},${cam.cy.toFixed(2)},${zoom},${cam.rotation}|`
-      + steady.map((l) => `${l.x.toFixed(3)},${l.y.toFixed(3)},${world.heightAt(l.x, l.y)},${l.radius},${l.strength},${l.cast ?? ''},${l.castAlpha ?? ''}`).join(';');
+      + steady.map((l) => `${l.x.toFixed(3)},${l.y.toFixed(3)},${this.standTop(l.x, l.y)},${l.radius},${l.strength},${l.cast ?? ''},${l.castAlpha ?? ''}`).join(';');
     if (!this.lit || this.lit.key !== key) {
       const mask = sheet(this.lit?.mask), warm = sheet(this.lit?.warm);
       const m = ctxOf(mask), c = ctxOf(warm);
@@ -2178,6 +2203,8 @@ export class Renderer {
     const fogPath = new Path2D();
     this.seaPath = new Path2D();
     this.drewWater = false;
+    this.pierFeet.clear();
+    this.wetPiers(cam.view);
     this.plantFrame = this.game.waterPlants.size
       ? { cam, t: this.time, now: Date.now() / 1000, dark: this.game.darkness(), surface: this.drawnSurface, ground: this.groundHere }
       : null;
@@ -2346,6 +2373,7 @@ export class Renderer {
         world, cam, view: V, now: Date.now(), t: this.time, width: W, height: H, dLo, dHi,
         lean: this.lean, sun, dark: this.game.darkness(), wellAt: this.wellAt,
         slab: this.game.foundations.size ? this.slabOver : undefined,
+        decked: this.game.buildings.pierTiles.size ? this.pierOver : undefined,
       }, water);
     }
     // The day of the year the trees are dressed for, and what is out in it.
@@ -2367,6 +2395,8 @@ export class Renderer {
     }, zoom);
 
     for (let d = dLo; d <= dHi; d++) {
+      // A building on piers in the water stands in front of all the water drawn before its line, swell and wakes and all.
+      if (this.wetPierLines?.has(d)) this.layWater(ctx, zoom);
       this.ents.length = 0;
       this.entN = 0;
       if (grain) {
@@ -2445,10 +2475,21 @@ export class Renderer {
         if (here === TileType.SteppingStones) (lit ? this.stoneRow : this.stoneRowDim).push(x, y);
         ctx.strokeStyle = grid && !wet ? GRID_COLOR : color;
         ctx.stroke();
+        // How wide that edge went down, which a deck's shade on this tile has to come back over (`piers.ts`).
+        this.groundEdge = ctx.lineWidth;
         // Weed on the bottom goes under the water rather than over it.
         if (grassy && wet && DROWNS.has(here)) this.strewTile(here, x, y, pts, paveRot, zoom, lit);
         if (sea) this.drawWater(V, x, y, c, fogged && !lit ? fogPath : undefined);
         if (pond) this.drawPonds(V, x, y, c, fogged && !lit ? fogPath : undefined);
+        // The water lapping round the feet of piers this tile is in front of, now its water is down (`piers.ts`).
+        if (wet && this.game.buildings.pierTiles.size && this.game.buildings.onPiers(x, y)) this.pierFeetHere(x, y, V);
+        if (this.pierFeet.size) {
+          const feet = this.pierFeet.get(`${x},${y}`);
+          if (feet) {
+            drawPierFeet(ctx, cam, feet, this.time);
+            this.pierFeet.delete(`${x},${y}`);
+          }
+        }
 
         // A flat ground gets no speckles. A sward is a flat ground with clumps
         // growing in it, and the speckles are what it had instead of clumps:
@@ -2544,7 +2585,7 @@ export class Renderer {
           this.take(t === TileType.Tree ? 'tree' : t === TileType.Bush ? 'bush' : 'stump', x, y, baseX, baseY + hh - avg * hs, spr);
         }
         if (this.game.ground.size && this.game.groundAt(x, y).length) {
-          const avg = (c[0] + c[1] + c[2] + c[3]) / 4;
+          const avg = (this.game.buildings.pierTiles.size ? this.game.pierDeckAt(x, y) : null) ?? (c[0] + c[1] + c[2] + c[3]) / 4;
           const pile = this.take('pile', x, y, baseX, baseY + hh - avg * hs, pileSprite());
           // A heap shines for the best thing in it: one fantastic hatchet under
           // a hundred rocks is still a fantastic hatchet lying in the grass.
@@ -2619,13 +2660,13 @@ export class Renderer {
         if (this.game.anythingPlaced(x, y)) {
           for (const sm of this.game.smeltersOnTile(x, y)) {
             const [wx, wy] = smelterCentre(sm);
-            const se = this.take('smelter', x, y, cam.worldToScreenX(wx, wy), cam.worldToScreenY(wx, wy, world.heightAt(wx, wy)), null);
+            const se = this.take('smelter', x, y, cam.worldToScreenX(wx, wy), cam.worldToScreenY(wx, wy, this.standTop(wx, wy)), null);
             se.smelter = sm;
             if (sm.rare) se.rare = sm.rare;
           }
           for (const kl of this.game.kilnsOnTile(x, y)) {
             const [wx, wy] = kilnCentre(kl);
-            const ke = this.take('kiln', x, y, cam.worldToScreenX(wx, wy), cam.worldToScreenY(wx, wy, world.heightAt(wx, wy)), null);
+            const ke = this.take('kiln', x, y, cam.worldToScreenX(wx, wy), cam.worldToScreenY(wx, wy, this.standTop(wx, wy)), null);
             ke.kiln = kl;
             if (kl.rare) ke.rare = kl.rare;
           }
@@ -2641,21 +2682,21 @@ export class Renderer {
           }
           for (const an of this.game.anvilsOnTile(x, y)) {
             const [wx, wy] = anvilCentre(an);
-            const ae = this.take('anvil', x, y, cam.worldToScreenX(wx, wy), cam.worldToScreenY(wx, wy, world.heightAt(wx, wy)), null);
+            const ae = this.take('anvil', x, y, cam.worldToScreenX(wx, wy), cam.worldToScreenY(wx, wy, this.standTop(wx, wy)), null);
             ae.anvil = an;
             if (an.rare) ae.rare = an.rare;
           }
           for (const po of this.game.postsOnTile(x, y)) {
             const [wx, wy] = postCentre(po);
-            this.take('post', x, y, cam.worldToScreenX(wx, wy), cam.worldToScreenY(wx, wy, world.heightAt(wx, wy)), null).post = po;
+            this.take('post', x, y, cam.worldToScreenX(wx, wy), cam.worldToScreenY(wx, wy, this.standTop(wx, wy)), null).post = po;
           }
           for (const tr of this.game.trapsOnTile(x, y)) {
             const [wx, wy] = trapCentre(tr);
-            this.take('trap', x, y, cam.worldToScreenX(wx, wy), cam.worldToScreenY(wx, wy, world.heightAt(wx, wy)), null).trap = tr;
+            this.take('trap', x, y, cam.worldToScreenX(wx, wy), cam.worldToScreenY(wx, wy, this.standTop(wx, wy)), null).trap = tr;
           }
           for (const fire of this.game.campfiresOnTile(x, y)) {
             const [wx, wy] = fireCentre(fire);
-            this.take('campfire', x, y, cam.worldToScreenX(wx, wy), cam.worldToScreenY(wx, wy, world.heightAt(wx, wy)), null).fire = fire;
+            this.take('campfire', x, y, cam.worldToScreenX(wx, wy), cam.worldToScreenY(wx, wy, this.standTop(wx, wy)), null).fire = fire;
           }
           for (const crate of this.game.cratesOnTile(x, y)) {
             // A crate standing on a rack is drawn by the rack, up on its deck
@@ -2663,7 +2704,7 @@ export class Renderer {
             // crate on the floor underneath the first.
             if (this.game.rackAt(crate.x, crate.y, crate.sx, crate.sy)) continue;
             const [wx, wy] = crateCentre(crate);
-            const ce = this.take('crate', x, y, cam.worldToScreenX(wx, wy), cam.worldToScreenY(wx, wy, world.heightAt(wx, wy)), crateSprite(crate.kind));
+            const ce = this.take('crate', x, y, cam.worldToScreenX(wx, wy), cam.worldToScreenY(wx, wy, this.standTop(wx, wy)), crateSprite(crate.kind));
             ce.crateId = crate.id;
             if (crate.rare) ce.rare = crate.rare;
           }
@@ -2674,11 +2715,12 @@ export class Renderer {
             if (peer.uid && this.seated.has(peer.uid)) continue;
             const [px, py] = this.game.roster.drawnAt(peer);
             this.take('peer', x, y, cam.worldToScreenX(px, py),
-              cam.worldToScreenY(px, py, this.footAt(px, py) + peer.level * WALL_HEIGHT), null).peer = peer;
+              cam.worldToScreenY(px, py, (this.game.deckBase(Math.floor(px), Math.floor(py), peer.level) ?? this.footAt(px, py)) + peer.level * WALL_HEIGHT), null).peer = peer;
           }
         }
         if (this.game.creatures.list.size) {
-          // Anything standing on a tile with a deck or a slab over it stands on that.
+          // Anything standing on a tile with a bridge's deck or a slab over it stands on that. No
+          // creature goes onto a tile on piers (`Creatures.tileOk`), so the ground is all there is.
           const deckHere = this.game.laidOver(x, y);
           for (const cr of this.game.creatures.atTile(x, y)) {
             // One shut in a crate is drawn in the crate, by the crate.
@@ -2694,9 +2736,12 @@ export class Renderer {
       if (d === playerDepth && player.aboard === null && !this.helming) {
         // On a bridge you stand on the deck, not in whatever is under it.
         // On the deck unless you are in a hull passing under it.
-        const deck = this.game.afloat() ? null : this.game.laidOver(player.tileX, player.tileY);
+        // In a building on piers, on its deck and the storeys over it (`piers.ts`).
+        const piered = this.game.afloat() ? null : this.game.deckBase(player.tileX, player.tileY, player.level);
+        const deck = this.game.afloat() || piered !== null ? null : this.game.laidOver(player.tileX, player.tileY);
         // Afloat in deep water, at the top of it: the sea's surface, or a pond's; on stepping stones, on their tops.
-        const ph = deck !== null ? deck : this.footAt(player.x, player.y) + player.visualLevel * WALL_HEIGHT;
+        const ph = piered !== null ? piered + player.visualLevel * WALL_HEIGHT
+          : deck !== null ? deck : this.footAt(player.x, player.y) + player.visualLevel * WALL_HEIGHT;
         // A driver is drawn on the seat, which is a lift in screen pixels
         // rather than in world height: the cart is under them, not the ground.
         const drivenBy = this.game.driving();
@@ -2733,6 +2778,7 @@ export class Renderer {
       if (water) this.springWater.row(ctx, d);
       // Then the stepping stones standing up out of all of it, before anybody standing on them; and the pads lying on it.
       if (this.stoneRow.length || this.stoneRowDim.length) this.stonesOnLine(ctx);
+
       if (this.plantRow.length && this.plantFrame) {
         drawPlantsFlat(ctx, this.plantRow, this.plantFrame);
         this.plantRow.length = 0;
@@ -2742,7 +2788,13 @@ export class Renderer {
       // The roofs of the buildings whose last walls this line drew, before
       // anything standing in front of them.
       const roofs = this.roofQueue.get(d);
-      if (roofs) for (const bb of roofs) this.drawPitchedRoof(bb);
+      if (roofs) {
+        for (const bb of roofs) {
+          // And so does its roof, over the water drawn beside its last tiles.
+          if (this.wetPierBuildings?.has(bb.id)) this.layWater(ctx, zoom);
+          this.drawPitchedRoof(bb);
+        }
+      }
       // And whatever small thing is in the air over it, sorted in with everything standing on it.
       for (const m of this.life.aloft(d)) this.take('life', m.tx, m.ty, m.sx, m.sy, null).mote = m;
       if (this.ents.length) this.drawEntities(ctx, zoom);
@@ -2848,7 +2900,15 @@ export class Renderer {
 
   private pieceBase(f: { kind: string }, wx: number, wy: number): number {
     const h = this.game.world.heightAt(wx, wy);
-    return furnitureDef(f.kind).boat ? Math.max(h, 0) : h;
+    return furnitureDef(f.kind).boat ? Math.max(h, 0) : this.standTop(wx, wy);
+  }
+
+  /** Whether a tile stands on piers, for the pond painter (`WaterFrame.decked`). */
+  private readonly pierOver = (x: number, y: number): boolean => this.game.buildings.onPiers(x, y);
+
+  /** How high a thing set down at a point stands: on the finished deck of a tile on piers, or on the ground. */
+  private standTop(wx: number, wy: number): number {
+    return (this.game.buildings.pierTiles.size ? this.game.pierDeckAt(Math.floor(wx), Math.floor(wy)) : null) ?? this.game.world.heightAt(wx, wy);
   }
 
   /**
@@ -3432,7 +3492,7 @@ export class Renderer {
       }
     } else {
       const tile: FloorTile = { building: 0, level: ghost.level, x: ghost.x, y: ghost.y, material: ghost.material, kind: ghost.floorKind, facing: ghost.side, ...floorBill(ghost.material, ghost.floorKind) };
-      const base = world.getHeight(ghost.x, ghost.y);
+      const base = this.game.buildings.buildingAt(ghost.x, ghost.y)?.deck ?? world.getHeight(ghost.x, ghost.y);
       if (ghost.floorKind === 'stairs') this.drawStairs(tile, ghost.x, ghost.y, base, 0.6);
       else this.drawLadder(tile, ghost.x, ghost.y, base, 0.6);
       if (!ghost.ok) {
@@ -3488,7 +3548,9 @@ export class Renderer {
     const w = this.game.world;
     const inside = bld.buildingAt(this.game.player.tileX, this.game.player.tileY);
     const building = bld.buildingAt(x, y);
-    const base = w.getHeight(x, y);
+    const ground = w.getHeight(x, y);
+    // A building on piers stands every storey on its deck (`piers.ts`); anything else on the ground.
+    const base = building?.deck ?? ground;
     // One border across the top of the screen and one down a side, whichever
     // way we are looking: between them every wall on the island is claimed by
     // exactly one tile, and claimed by the tile in front of it.
@@ -3505,6 +3567,8 @@ export class Renderer {
        * of the hatch, which laid after it covered them.
        */
       let late: (() => void) | null = null;
+      // Under the ground floor of a tile on piers, the piers: see `piers.ts`.
+      if (level === 0 && building && bld.pierTiles.size && bld.onPiers(x, y)) this.drawPiers(x, y, V);
       if (building) {
         const floor = bld.floor(level, x, y);
         /*
@@ -3561,10 +3625,12 @@ export class Renderer {
             const [tx, ty] = border.dir === 'h'
               ? [border.x, bld.buildingAt(border.x, border.y) === plan ? border.y : border.y - 1]
               : [bld.buildingAt(border.x, border.y) === plan ? border.x : border.x - 1, border.y];
+            // A finished deck on piers is built, not marked out: its edge is the edge of the deck.
+            if (level === 0 && bld.pierTiles.size && this.game.pierDeckAt(tx, ty) !== null) continue;
             // Nothing stands in the air: an upper storey is only marked out
             // where there is a floor under it to mark out.
             if (level === 0 || bld.floor(level, tx, ty)) {
-              this.drawScaffold(border, base, level, inside?.id === plan.id && inFront ? 0.35 : 1);
+              this.drawScaffold(border, plan.deck ?? ground, level, inside?.id === plan.id && inFront ? 0.35 : 1);
             }
           }
           continue;
@@ -3577,7 +3643,7 @@ export class Renderer {
          */
         if (cutaway && building?.id !== wall.building && !this.edgeOn(border)) continue;
         const dim = inFront && this.wallsMyRoom(border);
-        this.drawWall(wall, border, base, dim ? 0.3 : 1);
+        this.drawWall(wall, border, (wall.building ? bld.list.get(wall.building)?.deck : undefined) ?? ground, dim ? 0.3 : 1);
       }
       late?.();
     }
@@ -3596,6 +3662,97 @@ export class Renderer {
     const cam = this.camera;
     const [nx, ny] = border.dir === 'h' ? [0, 1] : [-1, 0];
     return Math.abs(cam.rotateX(nx, ny) + cam.rotateY(nx, ny)) < 1e-6;
+  }
+
+  /**
+   * A tile on piers as its painter takes it (`piers.ts`), or null for one
+   * that has no deck to stand under. Its open sides are the ones with no tile
+   * of the building on piers beyond them; each corner's post is drawn by the
+   * last of the building's tiles on piers round that corner to be drawn,
+   * after the ground of every one of them, and kept off the decks of the
+   * others, which were laid before it and stand over it (`hide`). `hide` is
+   * only worked out when `withHide`, for the post; the feet do without it.
+   */
+  private pierTileAt(x: number, y: number, V: View, withHide: boolean): PierTile | null {
+    const g = this.game;
+    const bld = g.buildings;
+    const b = bld.buildingAt(x, y);
+    const deck = b?.deck;
+    if (!b || deck == null) return null;
+    const world = g.world;
+    const mine = (tx: number, ty: number): boolean => bld.onPiers(tx, ty) && bld.buildingAt(tx, ty)?.id === b.id;
+    const corners: Array<[number, number]> = [[x, y], [x + 1, y], [x + 1, y + 1], [x, y + 1]];
+    const posts = corners.map(([cx, cy]) => {
+      const owner = this.drawnLast(V, cx, cy, mine);
+      return !!owner && owner[0] === x && owner[1] === y;
+    });
+    const hide = corners.map(([cx, cy], i) => {
+      if (!withHide || !posts[i]) return null;
+      const decks: number[][] = [];
+      for (const [tx, ty] of [[cx - 1, cy - 1], [cx, cy - 1], [cx - 1, cy], [cx, cy]] as Array<[number, number]>) {
+        if ((tx !== x || ty !== y) && mine(tx, ty) && g.pierDeckAt(tx, ty) !== null) decks.push(slabOutline(this.camera, tx, ty, deck, deck - FLOOR_DEEP));
+      }
+      return decks.length ? decks : null;
+    });
+    const open = [[0, -1], [1, 0], [0, 1], [-1, 0]].map(([dx, dy]) => !mine(x + dx, y + dy));
+    const floor = bld.floor(0, x, y);
+    const planned = floor && floorKind(floor) === 'floor' ? floor : undefined;
+    const water = world.hasWater(x, y) ? world.surfaceAt(x, y) : null;
+    return {
+      x, y, deck, ground: world.tileCorners(x, y), water,
+      sea: water !== null && world.water?.levelAt(x, y) == null,
+      open, posts, hide, material: planned?.material ?? null, progress: planned ? progressOf(planned) : 0,
+      lit: g.vision.state(x, y) === VISIBLE,
+      // The tile's own ground was edged a moment ago, half its width over the shade of the decks beside it.
+      seam: Math.max(1, this.groundEdge) / 2,
+    };
+  }
+
+  /** Of the tiles round a corner that pass `keep`, the one drawn last this frame: on the deepest line, and furthest along it. */
+  private drawnLast(V: View, cx: number, cy: number, keep: (tx: number, ty: number) => boolean): [number, number] | null {
+    const order = (tx: number, ty: number): number => depthOf(V, tx, ty) * 1e6 + V.e[0] + V.e[1] * tx + V.e[2] * ty;
+    let best: [number, number] | null = null;
+    for (const [tx, ty] of [[cx - 1, cy - 1], [cx, cy - 1], [cx - 1, cy], [cx, cy]] as Array<[number, number]>) {
+      if (keep(tx, ty) && (!best || order(tx, ty) > order(best[0], best[1]))) best = [tx, ty];
+    }
+    return best;
+  }
+
+  /** The piers under a tile on piers, before its deck: see `piers.ts`. */
+  private drawPiers(x: number, y: number, V: View): void {
+    const p = this.pierTileAt(x, y, V, true);
+    if (p) drawPierTile(this.canvas.ctx, this.camera, p);
+  }
+
+  /**
+   * The water round the feet of the posts of a tile on piers, worked out as
+   * its water goes down, before anything stands on it: each foot is laid
+   * with the water of the tile in front of its corner, the last of the four
+   * round it to be drawn -- now, if that is this tile, and otherwise when
+   * that tile's water is down -- and never under the decks round it, in whose
+   * shade it stands.
+   */
+  private pierFeetHere(x: number, y: number, V: View): void {
+    const p = this.pierTileAt(x, y, V, false);
+    if (!p || p.water === null) return;
+    const bld = this.game.buildings;
+    const cam = this.camera;
+    for (const f of pierFeetOf(cam, p)) {
+      const cx = Math.round(f.wx), cy = Math.round(f.wy);
+      for (const [tx, ty] of [[cx - 1, cy - 1], [cx, cy - 1], [cx - 1, cy], [cx, cy]] as Array<[number, number]>) {
+        if (!bld.onPiers(tx, ty)) continue;
+        const q: number[] = [];
+        for (const [qx, qy] of [[tx, ty], [tx + 1, ty], [tx + 1, ty + 1], [tx, ty + 1]]) q.push(cam.worldToScreenX(qx, qy), cam.worldToScreenY(qx, qy, f.h));
+        f.under.push(q);
+      }
+      // A post with decks all round it stands in their shade, and nothing laps round it that shows.
+      if (f.under.length === 4) continue;
+      const front = this.drawnLast(V, cx, cy, () => true) ?? [x, y];
+      const key = `${front[0]},${front[1]}`;
+      const row = this.pierFeet.get(key);
+      if (row) row.push(f);
+      else this.pierFeet.set(key, [f]);
+    }
   }
 
   /** World point on a tile from a coordinate across (t) and away from the climbing side (s). */
@@ -3658,7 +3815,9 @@ export class Renderer {
     }
     if (!any) return;
     const rise = level * WALL_HEIGHT;
-    const corner = (cx: number, cy: number): [number, number] => [cam.worldToScreenX(cx, cy), cam.worldToScreenY(cx, cy, world.getHeight(cx, cy) + rise)];
+    // On a building on piers, on its deck.
+    const deck = this.game.buildings.buildingAt(x, y)?.deck;
+    const corner = (cx: number, cy: number): [number, number] => [cam.worldToScreenX(cx, cy), cam.worldToScreenY(cx, cy, (deck ?? world.getHeight(cx, cy)) + rise)];
     const q = [corner(x, y), corner(x + 1, y), corner(x + 1, y + 1), corner(x, y + 1)];
     const mx = (q[0][0] + q[1][0] + q[2][0] + q[3][0]) / 4, my = (q[0][1] + q[1][1] + q[2][1] + q[3][1]) / 4;
     ctx.save();
@@ -3750,7 +3909,7 @@ export class Renderer {
       return t + i * Math.max(reachOf(met[0]), halfOf(met[0]));
     };
     const t0 = end(-1), t1 = end(1);
-    const h = world.getHeight(fx, fy) + level * WALL_HEIGHT;
+    const h = ((wall.building ? bld.list.get(wall.building)?.deck : undefined) ?? world.getHeight(fx, fy)) + level * WALL_HEIGHT;
     const out = new Float64Array(12);
     [[t0, s0], [t1, s0], [t1, s1], [t0, s1]].forEach(([t, s], k) => {
       out[k * 3] = ax + dx * t + nx * s;
@@ -4507,6 +4666,8 @@ export class Renderer {
     const pitch = ROOF_PITCH * roofShapeDef(b).rise;
     let eave = -Infinity;
     for (const f of roofs) eave = Math.max(eave, world.getHeight(f.x, f.y));
+    // A building on piers stands on its deck, whatever the ground under it does.
+    if (b.deck != null) eave = b.deck;
     eave += level * WALL_HEIGHT;
     const X = (p: RoofPt): number => cam.worldToScreenX(p[0], p[1]);
     const Y = (p: RoofPt, drop = 0): number => cam.worldToScreenY(p[0], p[1], eave + pitch * p[2] - drop);
@@ -5650,8 +5811,10 @@ export class Renderer {
      * kerb round every hole in it. It is edged in what its flights are built
      * of, the board or the stone along their sides.
      */
-    if (done && floor.level > 0) {
-      const bld = this.game.buildings;
+    const bld = this.game.buildings;
+    // The ground floor of a tile on piers is a deck standing clear of the ground, and it has an edge too.
+    const decked = floor.level === 0 && bld.pierTiles.size > 0 && bld.onPiers(x, y);
+    if (done && (floor.level > 0 || decked)) {
       const st = stairStyle(floor.material);
       const lum = (c: readonly [number, number, number]): number => 0.299 * c[0] + 0.587 * c[1] + 0.114 * c[2];
       const C = (c: readonly [number, number, number], k: number, a = 1): string =>
@@ -5671,7 +5834,10 @@ export class Renderer {
         if (cam.rotateX(nx, ny) + cam.rotateY(nx, ny) < 1e-6) continue;
         // Nothing beyond it, or the well a flight comes up: a ladder's hatch is cut when the ladder goes in.
         const beyond = bld.floor(floor.level, x + nx, y + ny);
-        if (beyond && floorKind(beyond) !== 'stairs') continue;
+        if (!decked && beyond && floorKind(beyond) !== 'stairs') continue;
+        // On a deck, beyond is the building's own floor at the deck's height: level ground, or another finished deck.
+        if (decked && bld.buildingAt(x + nx, y + ny)?.id === floor.building
+          && (!bld.onPiers(x + nx, y + ny) || (!!beyond && isDone(beyond)))) continue;
         const across = Math.abs(cam.rotateX(nx, ny)) > Math.abs(cam.rotateY(nx, ny));
         // The edge that runs across the view catches more of the light than
         // the one that runs into it, as a wall's two faces do.
@@ -6214,6 +6380,9 @@ export class Renderer {
       const seenX = border.dir === 'h' ? border.x : (toward > 0 ? border.x - 1 : border.x);
       const seenY = border.dir === 'h' ? (toward > 0 ? border.y : border.y - 1) : border.y;
       const indoors = !!bld.buildingAt(seenX, seenY);
+      // A ground-floor wall standing on the deck of a tile on piers is out of reach of the ground: nothing grows up it from there, and no damp.
+      const aloft = wall.level === 0 && bld.pierTiles.size > 0
+        && (bld.onPiers(border.x, border.y) || bld.onPiers(border.dir === 'h' ? border.x : border.x - 1, border.dir === 'h' ? border.y - 1 : border.y));
       /**
        * A finished wall of the same kind standing square to this one at its
        * `i` end, on the camera's side of it (`near`) or the far side, and as
@@ -6871,7 +7040,7 @@ export class Renderer {
          * of it.
          */
         this.threshold(cob, { px, py, quad }, ARCH.t0, ARCH.t1, zoom);
-        if (cob.growth && wall.level === 0 && !indoors) blit(cob.base[v], 0, 1, -1);
+        if (cob.growth && wall.level === 0 && !indoors && !aloft) blit(cob.base[v], 0, 1, -1);
         this.archShade({ px, py, quad }, zoom);
         this.archDepth(cob.reveal, 1, { px, py, quad }, zoom);
         ctx.restore();
@@ -6931,7 +7100,7 @@ export class Renderer {
         ctx.lineJoin = 'round';
         ctx.stroke();
       }
-      if (wall.level === 0 && !indoors) {
+      if (wall.level === 0 && !indoors && !aloft) {
         onStone();
         blit(cob.foot[v], 0, 1, 1, false, 0, cob.under ? 0.004 : 0, turned);
         // The face's half of the hedge, where a doorway took the other half
@@ -7023,7 +7192,7 @@ export class Renderer {
        * darker body. A face the shade barely touches keeps them anyway.
        */
       if (cob.gleam && cob.shadow(lit) > 0.05) {
-        const ground = wall.level === 0 && !indoors;
+        const ground = wall.level === 0 && !indoors && !aloft;
         gleamed(arched ? cob.arch[v] : windowed ? cob.window[v] : doored ? cob.door[v] : gated ? cob.gate[v] : bayed ? cob.bay[v] : cob.face[v], ground ? (cob.plinth + 8) / cob.h : 0, turned);
         if (ground) { onStone(); gleamed(cob.foot[v], 0, turned, cob.under ? 0.004 : 0); offStone(); }
       }
@@ -8702,7 +8871,8 @@ export class Renderer {
     const w = this.game.world;
     const now = this.time;
     // Nobody on stepping stones is in the water, however deep it is round them.
-    const afloat = (x: number, y: number): boolean => w.heightAt(x, y) < w.surfaceAt(Math.floor(x), Math.floor(y)) - 0.5 && !w.stonesAt(Math.floor(x), Math.floor(y));
+    const afloat = (x: number, y: number): boolean => w.heightAt(x, y) < w.surfaceAt(Math.floor(x), Math.floor(y)) - 0.5 && !w.stonesAt(Math.floor(x), Math.floor(y))
+      && !this.game.onPierDeck(Math.floor(x), Math.floor(y));
     const player = this.game.player;
     const boat = this.game.driving();
     const hull = boat && furnitureDef(boat.kind).boat ? boat : null;
@@ -8735,6 +8905,58 @@ export class Renderer {
     this.swellBand(ctx, zoom, 0, LONG_WAVE, CREST_ALPHA, 1);
     this.swellBand(ctx, zoom, 0.55, SHORT_WAVE, TROUGH_ALPHA * 0.7, 0.62);
     ctx.restore();
+  }
+
+  /**
+   * Which lines of the ground this frame have a tile of a building standing
+   * on piers in the water (`piers.ts`), and which buildings those are.
+   */
+  private wetPiers(V: View): void {
+    this.wetPierLines = null;
+    this.wetPierBuildings = null;
+    const bld = this.game.buildings;
+    if (!bld.pierTiles.size) return;
+    let c = this.wetPierCache;
+    if (!c || c.stamp !== bld.pierStamp || this.time - c.at > 1 || this.time < c.at) {
+      const world = this.game.world;
+      let wet: Set<number> | null = null;
+      for (const key of bld.pierTiles) {
+        const [x, y] = key.split(',').map(Number);
+        const b = bld.buildingAt(x, y);
+        if (b && world.hasWater(x, y)) (wet ??= new Set()).add(b.id);
+      }
+      // The lines are kept while the buildings are the same, whatever the water does.
+      const same = !!c && c.stamp === bld.pierStamp && sameSet(c.buildings, wet);
+      c = this.wetPierCache = { stamp: bld.pierStamp, at: this.time, buildings: wet, view: same ? c!.view : null, lines: same ? c!.lines : null };
+    }
+    if (!c.buildings) return;
+    if (c.view !== V || !c.lines) {
+      c.lines = new Set();
+      c.view = V;
+      for (const id of c.buildings) {
+        for (const key of bld.list.get(id)?.tiles ?? []) {
+          const [x, y] = key.split(',').map(Number);
+          c.lines.add(depthOf(V, x, y));
+        }
+      }
+    }
+    this.wetPierBuildings = c.buildings;
+    this.wetPierLines = c.lines;
+  }
+
+  /**
+   * The swell and the wakes laid over the water drawn so far, which is then
+   * done with: before a building standing on piers in the water is drawn in
+   * front of it, so neither is laid over the building. The water under its
+   * own decks is never in it (`drawWater`, `drawPonds`): that is in their
+   * shade, and the piers stand in it.
+   */
+  private layWater(ctx: CanvasRenderingContext2D, zoom: number): void {
+    this.drawSwell(ctx, zoom);
+    this.drawWakes(ctx, zoom);
+    this.seaPath = new Path2D();
+    this.drewWater = false;
+    if (this.pondPath) this.pondPath = new Path2D();
   }
 
   /** One train of waves: a wavelength, a lean off the wind, and a speed. */
@@ -8905,23 +9127,25 @@ export class Renderer {
     const show = swellShow(force);
     ctx.fillStyle = WATER_PALETTE[level];
     ctx.beginPath();
+    // The water under a deck on piers is in its shade, and no swell runs there (`layWater`).
+    const sea = this.wetPierLines && this.game.buildings.onPiers(x, y) ? null : this.seaPath;
     for (let k = 0; k < n; k += 2) {
       const sx = cam.worldToScreenX(poly[k], poly[k + 1]);
       const sy = cam.worldToScreenY(poly[k], poly[k + 1], 0);
       if (k === 0) {
         ctx.moveTo(sx, sy);
         fogInto?.moveTo(sx, sy);
-        this.seaPath.moveTo(sx, sy);
+        sea?.moveTo(sx, sy);
       } else {
         ctx.lineTo(sx, sy);
         fogInto?.lineTo(sx, sy);
-        this.seaPath.lineTo(sx, sy);
+        sea?.lineTo(sx, sy);
       }
     }
     ctx.closePath();
     fogInto?.closePath();
-    this.seaPath.closePath();
-    this.drewWater = true;
+    sea?.closePath();
+    if (sea) this.drewWater = true;
     ctx.fill();
     // Foam, where the ground crosses the waterline. The two points the
     // polygon had to interpolate to know its own shape are the beach.
@@ -8982,6 +9206,8 @@ export class Renderer {
     const cs = V.corners;
     const poly = this.waterPoly;
     const edge = this.waterEdge;
+    // The water under a deck on piers is in its shade, and no wake runs there (`layWater`).
+    const wakes = this.pondPath && this.wetPierLines && this.game.buildings.onPiers(x, y) ? null : this.pondPath;
     for (let q = 0; q < this.pondsHereN; q++) {
       const level = this.pondsHereLevel[q];
       const mask = this.pondsHereMask[q];
@@ -9026,16 +9252,16 @@ export class Renderer {
         if (k === 0) {
           ctx.moveTo(sx, sy);
           fogInto?.moveTo(sx, sy);
-          this.pondPath?.moveTo(sx, sy);
+          wakes?.moveTo(sx, sy);
         } else {
           ctx.lineTo(sx, sy);
           fogInto?.lineTo(sx, sy);
-          this.pondPath?.lineTo(sx, sy);
+          wakes?.lineTo(sx, sy);
         }
       }
       ctx.closePath();
       fogInto?.closePath();
-      this.pondPath?.closePath();
+      wakes?.closePath();
       ctx.fill();
       if (cross === 4) {
         ctx.strokeStyle = POND_SHORE;
@@ -9231,7 +9457,7 @@ export class Renderer {
         // Show which border a wall would go on, at the storey being worked on.
         const side = nearestSide(hover.x, hover.y, hover.wx, hover.wy);
         const [ax, ay, bx, by] = borderPoints(borderOf(hover.x, hover.y, side));
-        const h = w.getHeight(hover.x, hover.y) + workLevel(building) * WALL_HEIGHT + 0.5;
+        const h = (building.deck ?? w.getHeight(hover.x, hover.y)) + workLevel(building) * WALL_HEIGHT + 0.5;
         ctx.beginPath();
         ctx.moveTo(cam.worldToScreenX(ax, ay), cam.worldToScreenY(ax, ay, h));
         ctx.lineTo(cam.worldToScreenX(bx, by), cam.worldToScreenY(bx, by, h));

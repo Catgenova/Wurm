@@ -5,6 +5,7 @@ import { candleBurn, lanternReach } from '../../game/light';
 import { flameSources } from '../../game/lantern';
 import { WORLD_PACE } from '../../game/pace';
 import { SKILL_BY_ID } from '../../game/skills';
+import { deckBill, metres, PIER_CLEAR, PIER_DROP, PIER_WALL_DROP, PIER_WATER } from '../../game/piers';
 import { TILE_DEFS, TileType, TREE_AGES, TREE_DAWN_UTC, TREE_DEFS } from '../../world/tiles';
 import { SEASON_DAYS, seasonLine, YEAR_DAYS, YEAR_FROM } from '../../world/calendar';
 import { BLOOMS, BUSH_FLOWER_FROM, evergreen, LEAF_DAYS, SHED_DAYS, TURN_DAYS } from '../../render/foliage';
@@ -42,7 +43,7 @@ import { JEWEL_PIECES } from '../../game/gems';
 import { itemDef, RARITIES, rarityChance } from '../../game/items';
 import { weaponCarry } from '../../render/figure';
 import { TRY_LEARN } from '../../game/learn';
-import { CLIMB_LEARN_FROM, MAX_STEP } from '../../game/player';
+import { CLIMB_LEARN_FROM, CLIMB_PER_LEVEL, MAX_STEP } from '../../game/player';
 import { ALL_GOALS } from '../../game/journal';
 import { SPECIES } from '../../game/creatures';
 import { betterThanCommon, CHANNELS, husbandryOdds, pct as cardPct } from '../../game/traits';
@@ -856,6 +857,18 @@ export const NEWS: News[] = [
     lines: () => [
       `The last of a trade's ${numberWord(PERK_TIER_AT.length)} tiers of perks opens at ${PERK_TIER_AT[PERK_TIER_AT.length - 1]} in its main skill, where it was 100. After the first, which comes with the trade, the tiers open at ${listed(PERK_TIER_AT.slice(1).map(String))}.`,
     ],
+  },
+  {
+    n: 65,
+    day: '2026-10-02',
+    lines: () => {
+      const full = deckBill('plank', PIER_DROP).needed;
+      return [
+        `A tile that is not level and dry at a building's floor height — one that slopes, one lower than the floor, or one under at most ${metres(PIER_WATER)} m of water — takes the building on piers: a level deck at the floor height on timber posts braced across, or on stone piers with arches between them, up to ${metres(PIER_DROP)} m over the tile's lowest corner. Level, dry ground at the floor height is still packed first and built on as it stands.`,
+        `Planned on such a tile, a building's deck is set at its highest corner, ${metres(PIER_CLEAR)} m over the water, or a level you have taken, whichever is highest; every tile added must lie wholly under it. Plan deck on each: the floor's materials and ${share(10 / PIER_WALL_DROP)} of a solid wall more for every metre of drop, rounded up item by item — a plank deck ${metres(PIER_DROP)} m up takes ${full.plank} planks and ${full.timber} timbers. A deck carries no wall heavier than the material it is laid in, and the lightest deck under a building carries all of it.`,
+        `A deck is walked at its height once it is built, never in the water under it: you step onto or off it from ground up to ${metres(MAX_STEP)} m above or below it, and ${(CLIMB_PER_LEVEL / 10).toFixed(2)} m more for each level of climbing; a bridge lands on it as on a bank. Walls, stairs, furniture and crates go on it; no creature, cart, mount or boat goes onto it or under it. On an island, as offline, the ground under any building cannot now be dug at a corner, raised, mined, cut back, packed, cultivated, paved or planted.`,
+      ];
+    },
   },
   {
     n: 67,

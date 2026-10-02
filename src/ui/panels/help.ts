@@ -12,7 +12,7 @@ import { TINCTURE_NAMES } from '../../game/remedies';
 import { BREW_BY_ID, BREWS } from '../../game/brewing';
 import { BRIDGES, CLEARANCE, END_SLOP } from '../../game/bridges';
 import { HOARD_LUMPS, HOARD_MORE } from '../../game/butcher';
-import { floorBill, GLASS_ROOF, INDOORS_DECAY, MATERIALS as WALL_MATERIALS, MAX_LEVELS, roofShapeDef, roofShapeOf, SIDE_NAMES, wallBill, WALL_TYPE_BY_ID, WALL_TYPES } from '../../game/building';
+import { floorBill, GLASS_ROOF, HEFT_WORDS, INDOORS_DECAY, MATERIALS as WALL_MATERIALS, MAX_LEVELS, roofShapeDef, roofShapeOf, SIDE_NAMES, wallBill, WALL_TYPE_BY_ID, WALL_TYPES } from '../../game/building';
 import { materialName } from '../../game/buildActions';
 import { COUNTER_HOLDS, COUNTER_REACH, COUNTER_SEEN, COUNTER_WALL } from '../../game/counters';
 import { flameSources } from '../../game/lantern';
@@ -69,6 +69,7 @@ import { ORDER_LIFE } from '../../game/orders';
 import { KEPT_BEST, NUTRIENT_HOURS, NUTRIENT_NAMES, NUTRIENTS, TABLE_BEST } from '../../game/nutrition';
 import { OVEN_CAPACITY } from '../../game/placeables';
 import { BASE_SPEED, CARRY_CRAWL, CLIMB_LEARN_FROM, CLIMB_PER_LEVEL, MAX_STAND, MAX_STEP, SWIM_DEPTH } from '../../game/player';
+import { deckBill, PIER_CLEAR, PIER_DROP, PIER_WALL_DROP, PIER_WATER } from '../../game/piers';
 import { POST_LIFE_MAX, POST_LIFE_MIN, postRadius } from '../../game/posts';
 import { CRAFT_REACH, RECIPE_BY_ID, RECIPES, TRADE_BOOK_AT, TRADE_BOOK_SKILLS } from '../../game/recipes';
 import { MIN_GAIN, SKILL_BY_ID, skillGain } from '../../game/skills';
@@ -1021,6 +1022,31 @@ export function helpText(): string {
     can walk through. Feed them materials with <b>Build fence</b> exactly as you would a wall, and take
     them down again from the same menu. Nothing rests on waist-high work: a storey cannot be planned
     over a run of fence or half wall, so if you want a floor above, the wall below has to be a wall.</p>
+    <p><b>Piers and stilts.</b> A tile that is not level and dry at a building's floor height &mdash; one
+    that slopes, one lower than the floor, or one under at most ${metres(PIER_WATER)} m of water &mdash; takes
+    the building on piers: its ground floor is a <b>deck</b>, level with the building's floor and carried
+    down to the ground or the bed of the water on timber posts braced across, or on stone piers with arches
+    between them, by the material the deck is laid in. Level, dry ground at the floor's height is built on as
+    it stands, packed first. Plan a building on a tile that needs piers and its deck is set at the tile's
+    highest corner, or ${metres(PIER_CLEAR)} m over the water if that is higher, or at a level you have
+    taken if that is higher still. Every tile added after it must lie wholly under the deck &mdash; so plan
+    a house on a hillside from its highest tile &mdash; with its lowest corner at most ${metres(PIER_DROP)} m
+    under the deck, on bare ground or what grows flat on it: no tree, field, paving or water plant, nothing
+    standing on it, no bridge landing on it and nobody on it. A creature on it is moved off as it is planned.
+    <b>Plan deck</b> on each: it takes the floor's materials and, for every metre from the deck down to the
+    tile's lowest corner, ${share(10 / PIER_WALL_DROP)} of a solid wall of the same material more, rounded up
+    item by item &mdash; a plank deck ${metres(PIER_DROP)} m up takes ${deckBill('plank', PIER_DROP).needed.plank}
+    planks and ${deckBill('plank', PIER_DROP).needed.timber} timbers. A deck carries no wall heavier than the
+    material it is laid in (${Object.entries(HEFT_WORDS).sort(([a], [b]) => Number(a) - Number(b)).map(([, w]) => w).join(', then ')}, lightest first), and the lightest deck under
+    a building carries every storey of it. Until its deck is built nobody stands on the tile; built, it is
+    floor at the deck's height, dry whatever is under it, walls, stairs, furniture and crates go on it as on
+    any floor, and a bridge lands on it as on a bank. You step onto or off a deck from ground at most
+    ${metres(MAX_STEP)} m above or below it, and ${(CLIMB_PER_LEVEL / 10).toFixed(2)} m more for each level of
+    climbing. An edge higher than that stops you: a deck that high over every tile beside it is reached by
+    carrying the building on until the ground beside it comes within the step, or over a bridge. No
+    creature, cart, mount or boat goes onto a deck or under one, and the ground under a
+    building cannot be dug, raised, flattened, mined, packed, cultivated, paved or planted while it stands,
+    nor tilled unless the building is a glasshouse.</p>
     <p>Materials: saw logs into planks and timbers, bundle cut grass into thatch, mix clay and sand
     into mortar, press clay and grass into adobe, and chip silver and gold from veins in the mountains.</p>
     <h3>Nails, furniture and storage</h3>

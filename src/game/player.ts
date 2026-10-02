@@ -225,8 +225,13 @@ export class Player {
     this.path = null;
   }
 
-  /** Returns the distance actually moved this frame (tiles). */
-  update(dt: number, world: World, rule?: StepRule): number {
+  /**
+   * Returns the distance actually moved this frame (tiles). `decked` says
+   * whether a tile is the finished deck of a building on piers (`piers.ts`):
+   * nobody on one is in the water under it, and a step onto one or off it is
+   * no climb.
+   */
+  update(dt: number, world: World, rule?: StepRule, decked?: (x: number, y: number) => boolean): number {
     this.visualLevel += (this.level - this.visualLevel) * Math.min(1, dt * 7);
     if (Math.abs(this.level - this.visualLevel) < 0.01) this.visualLevel = this.level;
     const step = (x0: number, y0: number, x1: number, y1: number): number | null =>
@@ -263,21 +268,25 @@ export class Player {
     // Out of your depth in a pond as much as in the sea: measured down from whichever water is here. On stepping stones the feet are dry however deep it is.
     const h = world.heightAt(this.x, this.y);
     this.swimming = !this.carried && !world.stonesAt(Math.floor(this.x), Math.floor(this.y))
-      && world.bedAt(this.x, this.y) < world.surfaceAt(Math.floor(this.x), Math.floor(this.y)) - SWIM_DEPTH;
+      && world.bedAt(this.x, this.y) < world.surfaceAt(Math.floor(this.x), Math.floor(this.y)) - SWIM_DEPTH
+      && !decked?.(Math.floor(this.x), Math.floor(this.y));
 
     if (vx === 0 && vy === 0) {
       this.moving = false;
       return 0;
     }
 
-    const tileDef = TILE_DEFS[world.getTile(this.tileX, this.tileY)];
+    // A deck on piers is walked as a floor is, whatever grows or stands in the water under it.
+    const deck = !!decked?.(this.tileX, this.tileY);
+    const under = deck ? TileType.PackedDirt : world.getTile(this.tileX, this.tileY);
+    const tileDef = TILE_DEFS[under];
     // Feet hardly care what is under them. A laden wheel cares about little
     // else, and that is what makes a paved road worth the stone in it.
     let speed = BASE_SPEED * tileDef.speed * this.speedMul * groundRoll(tileDef.roll, this.wheelLoad);
     // Your own legs on a made road, if a trade has taught them one.
-    if (this.speedMul === 1 && this.roadPace !== 1 && ROAD_TILES.includes(world.getTile(this.tileX, this.tileY))) speed *= this.roadPace;
+    if (this.speedMul === 1 && this.roadPace !== 1 && ROAD_TILES.includes(under)) speed *= this.roadPace;
     // And through brush, if a trade has taught them that.
-    if (this.speedMul === 1) speed *= this.tilePace[world.getTile(this.tileX, this.tileY)] ?? 1;
+    if (this.speedMul === 1) speed *= this.tilePace[under] ?? 1;
     if (this.swimming) speed *= this.swimSpeed;
     if (this.stats.stamina < 0.1) speed *= 0.5;
     if (this.burden > 0) speed /= 1 + this.burden;
@@ -289,23 +298,23 @@ export class Player {
      * taken here are inches it will let you keep.
      */
     if (this.stalled) speed *= CARRY_CRAWL;
-    // Uphill slows you down.
+    // Uphill slows you down; a deck is level, whatever the ground under it does.
     const ahead = world.heightAt(this.x + vx * 0.15, this.y + vy * 0.15);
-    const grade = (ahead - h) / (0.15 * UNITS_PER_TILE);
+    const grade = deck ? 0 : (ahead - h) / (0.15 * UNITS_PER_TILE);
     if (grade > 0) speed /= 1 + grade * 1.6;
     // And a steep tile is slow going whichever way it is crossed — on your
     // own feet. A hull floats over whatever the bottom does, and a seat has
     // legs or wheels under it that answer for their own pace.
-    const steep = this.carried ? 0 : world.slope(this.tileX, this.tileY);
+    const steep = this.carried || deck ? 0 : world.slope(this.tileX, this.tileY);
     if (steep > SLOW_SLOPE) speed *= SLOW_SLOPE / steep;
 
     const len = Math.min(speed * dt, distanceLimit);
     const nx = this.x + vx * len;
     const ny = this.y + vy * len;
     let moved = 0;
-    if (this.tryMove(world, nx, ny, step)) moved = len;
-    else if (this.tryMove(world, nx, this.y, step)) moved = Math.abs(vx * len);
-    else if (this.tryMove(world, this.x, ny, step)) moved = Math.abs(vy * len);
+    if (this.tryMove(world, nx, ny, step, decked)) moved = len;
+    else if (this.tryMove(world, nx, this.y, step, decked)) moved = Math.abs(vx * len);
+    else if (this.tryMove(world, this.x, ny, step, decked)) moved = Math.abs(vy * len);
     else this.path = null;
 
     if (moved > 0) {
@@ -318,7 +327,8 @@ export class Player {
   }
 
   /** Move to a point if the tile it lies on can be entered from here; updates the storey. */
-  private tryMove(world: World, nx: number, ny: number, step: (x0: number, y0: number, x1: number, y1: number) => number | null): boolean {
+  private tryMove(world: World, nx: number, ny: number, step: (x0: number, y0: number, x1: number, y1: number) => number | null,
+    decked?: (x: number, y: number) => boolean): boolean {
     const tx = Math.floor(nx);
     const ty = Math.floor(ny);
     const fx = this.tileX;
@@ -340,7 +350,7 @@ export class Player {
       if (level === null) return false;
       // The ground's own step, taken on the ground: a floor is flat whatever
       // the land under it does, and a flight of steps is no climb.
-      this.lastClimb = this.level === 0 && level === 0 && !onSteps(world, fx, fy, tx, ty)
+      this.lastClimb = this.level === 0 && level === 0 && !onSteps(world, fx, fy, tx, ty) && !decked?.(fx, fy) && !decked?.(tx, ty)
         ? Math.abs(world.centerHeight(tx, ty) - world.centerHeight(fx, fy)) : 0;
       if (this.level === 0 && level === 0) {
         this.steppedX = tx;

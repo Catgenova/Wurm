@@ -363,7 +363,8 @@ begin
   -- a tile anybody may build on, and that is not what is being asked here.
   insert into deed (world_id, name, x, y, radius, level, founded_by)
     values (w, 'Slabtown', ${TX + 3}, ${TY + 3}, 5, 1, u);
-  insert into said values ('BARE|' || coalesce(plan_reason(w, u, ${TX}, ${TY}), 'ALLOWED'));
+  insert into said values ('BARE|' || coalesce(plan_reason(w, u, ${TX}, ${TY}), 'ALLOWED')
+    || '|' || coalesce(pier_deck_for(w, u, ${TX}, ${TY}, null)::text, 'on its ground'));
   select coalesce(max(fo.id), 0) + 1 into v_id from foundation fo where fo.world_id = w;
   insert into foundation (world_id, id, x, y, top, needed, total, made_by)
     values (w, v_id, ${TX}, ${TY}, 10, '{"concrete": 3}'::jsonb, '{"concrete": 3}'::jsonb, u);
@@ -371,15 +372,22 @@ begin
   update foundation fo set needed = '{"concrete": 0}'::jsonb where fo.world_id = w and fo.id = v_id;
   insert into said values ('POURED|' || coalesce(plan_reason(w, u, ${TX}, ${TY}), 'ALLOWED'));
   insert into said values ('SURFACE|' || surface_height(w, ${TX}, ${TY}) || '|' || centre_height(w, ${TX}, ${TY}));
+  -- And planned, it stands on the slab, not on piers.
+  perform perform_building(w, u, 'plan_building', jsonb_build_object('kind', 'tile', 'x', ${TX}, 'y', ${TY}, 'cx', ${TX}, 'cy', ${TY}, 'name', 'Slab house'));
+  insert into said select 'ONSLAB|' || bt.pier || '|' || coalesce(b.deck::text, 'no deck')
+    from building_tile bt join building b on b.world_id = bt.world_id and b.id = bt.building
+   where bt.world_id = w and bt.x = ${TX} and bt.y = ${TY};
 end $$;
 select k from said;
 rollback;
 `);
-check('a sloping tile refuses a building on the island, as it always has',
-  field('BARE', island2) === 'The tile must be perfectly flat. Flatten it first.', `"${field('BARE', island2)}"`);
+// A sloping tile used to refuse a building outright; now it takes one on piers, under a deck at its highest corner (`piers.ts`).
+check('a sloping tile takes a building on the island only on piers, under a deck at its top',
+  field('BARE', island2) === 'ALLOWED|10', `"${field('BARE', island2)}"`);
 check('shuttering over it is not enough',
   field('SHUTTERED', island2) === 'The foundation here is only shuttered. Pour it first.', `"${field('SHUTTERED', island2)}"`);
 check('and the poured slab takes the building', field('POURED', island2) === 'ALLOWED', `"${field('POURED', island2)}"`);
+check('on the slab itself, not on piers', field('ONSLAB', island2) === 'false|no deck', `"${field('ONSLAB', island2)}"`);
 const [slabTop, groundTop] = field('SURFACE', island2).split('|');
 check('the island stands you on the slab, not on what is under it',
   Number(slabTop) === 10 && Number(groundTop) < 10, `${slabTop} against ${groundTop}`);

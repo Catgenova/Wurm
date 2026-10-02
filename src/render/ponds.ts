@@ -56,6 +56,8 @@ export interface WaterFrame {
   wellAt: (spring: number) => readonly [number, number] | null;
   /** Whether a poured slab stands over a tile: water running on the ground beside one runs under its edge, not over it. */
   slab?: (x: number, y: number) => boolean;
+  /** Whether a deck on piers stands over a tile: no ripple, ring, lily pad or welling spring is put by a corner of one, in its shade (`piers.ts`). */
+  decked?: (x: number, y: number) => boolean;
 }
 
 /** How deep the water running down a stream is over the ground, in height units: enough to lie on it. */
@@ -467,6 +469,8 @@ export class SpringWater {
       const x = w.x;
       const y = w.y;
       if (!this.onScreen([x - 1, y - 1, x + 1, y + 1, this.levels[w.pond] - 2, this.levels[w.pond] + 2], margin)) continue;
+      // Welling up under a deck on piers, it is in the deck's shade and not drawn over it.
+      if (f.decked && (f.decked(x - 1, y - 1) || f.decked(x, y - 1) || f.decked(x - 1, y) || f.decked(x, y))) continue;
       w.row = this.clampRow(Math.max(depthOf(V, x - 1, y - 1), depthOf(V, x, y - 1), depthOf(V, x - 1, y), depthOf(V, x, y)));
     }
     if (this.zoom >= DETAIL_FROM) {
@@ -1025,9 +1029,17 @@ export class SpringWater {
     const z = this.zoom;
     const t = f.t;
     const long = 0.1 * DISC_W * z;
+    const decked = f.decked;
+    /** Whether corner `k` has a deck on piers over a tile round it. */
+    const shaded = (k: number): boolean => {
+      if (!decked) return false;
+      const cx = d.inner[k * 2], cy = d.inner[k * 2 + 1];
+      return decked(cx - 1, cy - 1) || decked(cx, cy - 1) || decked(cx - 1, cy) || decked(cx, cy);
+    };
     for (let k = 0; k < n; k++) {
       // Not yet under a pond still rising.
       if (d.innerTop[k] >= level - 0.2) continue;
+      if (decked && shaded(k)) continue;
       const cx = d.inner[k * 2];
       const cy = d.inner[k * 2 + 1];
       const row = this.clampRow(d.rows[k]) - this.rowBase;
@@ -1052,7 +1064,7 @@ export class SpringWater {
     }
     // The lily pads floating on it, once it has risen to them.
     d.pads.forEach((pad, q) => {
-      if (d.innerTop[pad.k] < level - 0.5) this.rowPads[this.clampRow(d.rows[pad.k]) - this.rowBase].push(i, q);
+      if (d.innerTop[pad.k] < level - 0.5 && !(decked && shaded(pad.k))) this.rowPads[this.clampRow(d.rows[pad.k]) - this.rowBase].push(i, q);
     });
     // Two rings at a time at most, each on its own corner, opening and fading.
     for (let slot = 0; slot < 2; slot++) {
@@ -1060,7 +1072,7 @@ export class SpringWater {
       const cycle = Math.floor(age);
       const phase = age - cycle;
       const k = Math.floor(hash2(cycle, slot, i) * n);
-      if (d.innerTop[k] >= level - 0.2) continue;
+      if (d.innerTop[k] >= level - 0.2 || (decked && shaded(k))) continue;
       const cx = d.inner[k * 2] + (hash2(cycle, k, 1) - 0.5) * 0.3;
       const cy = d.inner[k * 2 + 1] + (hash2(k, cycle, 2) - 0.5) * 0.3;
       this.rings.push({

@@ -397,6 +397,14 @@ export interface Building {
   workLevel?: number;
   /** The shape of its roof, chosen when the first roof tile is planned. */
   roof?: RoofShape;
+  /**
+   * The height its ground floor stands at when any of it stands on piers
+   * (`piers.ts`), set when the first tile on piers is taken in; absent (or
+   * null, off the island) for a building standing on its ground.
+   */
+  deck?: number | null;
+  /** Which of its tiles stand on piers, as `x,y` keys; absent for none. */
+  piers?: string[];
 }
 
 /** The storey being worked on, clamped to what exists. */
@@ -489,6 +497,10 @@ export class Buildings {
   readonly tileIndex = new Map<string, number>();
   readonly walls = new Map<string, Wall>();
   readonly floors = new Map<string, FloorTile>();
+  /** Every tile that stands on piers, whoever's building it is in (`piers.ts`). */
+  readonly pierTiles = new Set<string>();
+  /** Counts every change to which tiles stand on piers, for what is worked out from them and kept (`Renderer.wetPiers`). */
+  pierStamp = 0;
   nextId = 1;
 
   buildingAt(x: number, y: number): Building | undefined {
@@ -496,18 +508,65 @@ export class Buildings {
     return id === undefined ? undefined : this.list.get(id);
   }
 
-  create(name: string, x: number, y: number): Building {
+  /** A new plan on one tile: on its ground, or on piers under a deck at `deck`. */
+  create(name: string, x: number, y: number, deck?: number): Building {
     const b: Building = { id: this.nextId++, name, tiles: [tileKey(x, y)], levels: 1 };
     this.list.set(b.id, b);
     this.tileIndex.set(tileKey(x, y), b.id);
+    if (deck !== undefined) this.standOnPiers(b, x, y, deck);
     return b;
   }
 
-  addTile(b: Building, x: number, y: number): void {
+  addTile(b: Building, x: number, y: number, deck?: number): void {
     const key = tileKey(x, y);
     if (this.tileIndex.has(key)) return;
     b.tiles.push(key);
     this.tileIndex.set(key, b.id);
+    if (deck !== undefined) this.standOnPiers(b, x, y, deck);
+  }
+
+  /** A tile of a building stood on piers, under a deck that is the building's from now on if it had none. */
+  private standOnPiers(b: Building, x: number, y: number, deck: number): void {
+    const key = tileKey(x, y);
+    b.deck ??= deck;
+    (b.piers ??= []).push(key);
+    this.pierTiles.add(key);
+    this.pierStamp++;
+  }
+
+  /** Whether any of the four tiles round a corner is a tile of a building: a corner whose ground is not to be moved. */
+  aroundCorner(cx: number, cy: number): boolean {
+    for (let y = cy - 1; y <= cy; y++) for (let x = cx - 1; x <= cx; x++) if (this.tileIndex.has(tileKey(x, y))) return true;
+    return false;
+  }
+
+  /**
+   * The deck a building on piers stands on at its lightest: the material of
+   * the deck planned on each of its tiles on piers, the least heft first and
+   * then by id, as the island's `deck_carries` orders them. Undefined for a
+   * building with no deck planned on piers.
+   */
+  deckUnder(b: Building): MaterialDef | undefined {
+    let best: MaterialDef | undefined;
+    for (const key of b.piers ?? []) {
+      const [x, y] = key.split(',').map(Number);
+      const f = this.floor(0, x, y);
+      const m = f && floorKind(f) === 'floor' ? MATERIAL_BY_ID.get(f.material) : undefined;
+      if (m && (!best || m.heft < best.heft || (m.heft === best.heft && m.id < best.id))) best = m;
+    }
+    return best;
+  }
+
+  /** The heaviest wall planned or standing in a building, as a heft; nought for none. */
+  heaviestWall(b: Building): number {
+    let most = 0;
+    for (const w of this.walls.values()) if (w.building === b.id) most = Math.max(most, MATERIAL_BY_ID.get(w.material)?.heft ?? 0);
+    return most;
+  }
+
+  /** Whether a tile stands on piers. */
+  onPiers(x: number, y: number): boolean {
+    return this.pierTiles.size > 0 && this.pierTiles.has(tileKey(x, y));
   }
 
   /** Drop a tile from a footprint; deletes the building when it was the last one. */
@@ -515,6 +574,11 @@ export class Buildings {
     const key = tileKey(x, y);
     b.tiles = b.tiles.filter((t) => t !== key);
     this.tileIndex.delete(key);
+    if (b.piers?.includes(key)) {
+      b.piers = b.piers.filter((t) => t !== key);
+      this.pierTiles.delete(key);
+      this.pierStamp++;
+    }
     if (!b.tiles.length) this.list.delete(b.id);
   }
 
@@ -927,12 +991,15 @@ export class Buildings {
   sawIsland(data: BuildingsJSON): void {
     this.list.clear();
     this.tileIndex.clear();
+    this.pierTiles.clear();
+    this.pierStamp++;
     this.walls.clear();
     this.floors.clear();
     this.nextId = data.nextId ?? 1;
     for (const bl of data.list ?? []) {
       this.list.set(bl.id, bl);
       for (const t of bl.tiles) this.tileIndex.set(t, bl.id);
+      for (const t of bl.piers ?? []) this.pierTiles.add(t);
     }
     for (const w of data.walls ?? []) this.walls.set(wallKey(w.level, w), w);
     for (const f of data.floors ?? []) this.floors.set(floorKey(f.level, f.x, f.y), f);
