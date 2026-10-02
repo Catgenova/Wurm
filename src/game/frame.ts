@@ -60,6 +60,7 @@ import {
 } from './building';
 import type { Game } from './game';
 import { AQ_OVER } from './aqueducts';
+import { drawbridgeWinchAt, JETTY_OVER_WINCH } from './gates';
 import { GLASS, GLASS_PITCHED } from './glasshouse';
 import { TileType } from '../world/tiles';
 
@@ -206,6 +207,8 @@ export function jettyReason(g: Game, t: TileTarget, b: Building, kind: FloorKind
   // No span of a bridge or an aqueduct goes under it (`aqueducts.ts`); a bridge's ends are its banks.
   const span = g.bridges.size ? g.bridgeAt(t.x, t.y) : undefined;
   if (span) return span.kind === 'aqueduct' ? AQ_OVER : 'A bridge crosses that tile.';
+  // gates: nor over a drawbridge's winch, whose gallows rise over that tile higher than a storey (`gates.ts`).
+  if (g.bridges.size && drawbridgeWinchAt(g, t.x, t.y)) return JETTY_OVER_WINCH;
   const tile = g.world.getTile(t.x, t.y);
   if (!g.world.isPassable(t.x, t.y) || tile === TileType.Bush) return 'A jetty is built over open ground: clear the tree or the bush from under it first.';
   const bears = bld.jettyBearer(b, level, t.x, t.y);

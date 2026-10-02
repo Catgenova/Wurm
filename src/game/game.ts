@@ -57,6 +57,7 @@ import { BAIT_BY_ID, FISH, fishHere, pickFish, waterDepth } from './fishing';
 import { BRIDGES, bridgeDone, CLEARANCE, END_SLOP, spanBill, spanTiles, type Bridge, type BridgeKind } from './bridges';
 import { AQ_NOT_THROWN, AQ_OVER, channelOf } from './aqueducts';
 import { AQUEDUCT_LPS, aqueductShut, type Channel } from '../world/aqueducts';
+import { BRIDGE_END_HERE, bridgeEndAt, bridgeEndRefusal, deckDown, hingeKey, hingeOf, isDrawbridge, keepHiddenAsks } from './gates';
 import { CLEAR_OF_BUILDINGS, LIFT_PER_MASONRY, concreteFor, foundationBill, foundationDone, liftFor, masonryFor, soilSays, type Foundation } from './foundations';
 import { poolLevel } from '../world/springs';
 import { deckOver, floorNear, levelGround, pierDrop, pierGround, pierRefusal, pierSays, type PierGround } from './piers';
@@ -626,6 +627,8 @@ export class Game {
   readonly springs: Springs;
   /** Tile key to the bridge whose deck covers it, rebuilt whenever one changes. */
   private deckIndex = new Map<string, number>();
+  /** The hinge of every drawbridge drawn up, by `hingeKey`, to the bridge: a border shut to everything (`gates.ts`). */
+  readonly hinges = new Map<string, number>();
   /** Concrete slabs poured over sloping tiles, one to a tile. */
   readonly foundations = new Map<number, Foundation>();
   nextFoundationId = 1;
@@ -1084,6 +1087,8 @@ export class Game {
     for (const [x, y, since] of init.pavingSince ?? []) this.pavingSince.set(`${x},${y}`, since);
     this.deed = init.deed ?? null;
     this.buildings = Buildings.fromJSON(init.buildings);
+    // A hidden door is a door to whoever its padlock admits, and a wall to everybody else (`gates.ts`).
+    this.buildings.admits = (w) => this.lockRefusal({ lock: w.lock, x: w.x, y: w.y }) === null;
     this.creatures = Creatures.fromJSON(init.creatures);
     for (const c of init.crates ?? []) {
       this.crates.set(c.id, c);
@@ -1237,7 +1242,8 @@ export class Game {
     // Deck is ground: it is flat, and the drop under it is not your problem.
     if (this.bridges.size) {
       const deck = this.bridgeStepLevel(x0, y0, x1, y1);
-      if (deck !== null && deck === level) return deck;
+      // gates: and a wall on the border is still a wall, a portcullis let down among them (`gates.ts`).
+      if (deck !== null && deck === level) return b.blocksAt(level, x0, y0, x1, y1) ? null : deck;
     }
     if (this.standable(x1, y1, level) && !b.blocksAt(level, x0, y0, x1, y1)) {
       if (level === 0) {
@@ -1310,6 +1316,8 @@ export class Game {
       if (b.level) return null;
       // Coming off the deck onto the bank: the bank still has to take wheels.
       if (!this.bridgeAt(x1, y1) && !this.vehicleGround(x1, y1)) return null;
+      // gates: and through a gateway wide enough, as off any other ground (`gates.ts`).
+      if (this.buildings.blocksVehicle(x0, y0, x1, y1)) return null;
       return 0;
     }
     if (!this.vehicleGround(x1, y1)) return null;
@@ -1726,6 +1734,8 @@ export class Game {
     if (this.isToken(x, y)) return 'The settlement token stands here.';
     if (this.buildings.buildingAt(x, y)) return 'That tile is already part of a building.';
     if (this.bridgeAt(x, y)?.kind === 'aqueduct') return AQ_OVER;
+    // gates: nor over the end of a bridge, whose winch or landing stands there (`gates.ts`).
+    if (this.bridges.size && bridgeEndAt(this, x, y)) return BRIDGE_END_HERE;
     /*
      * Unless it is a slab, and then the ground under it is the slab's business.
      *
@@ -3788,6 +3798,8 @@ export class Game {
   }
 
   requestAction(def: ActionDef, target: Target, goes?: number): void {
+    // gates: a hidden door asked for is kept only while a plan of a wall on its border is in hand or lined up (`keepHiddenAsks`).
+    keepHiddenAsks(this);
     // A crate with a wildermon in it is carried, set down or opened, and that is all.
     const held = occupiedRefusal(this, def.id, target);
     if (held) {
@@ -3872,15 +3884,18 @@ export class Game {
         return;
       }
     }
-    if (!def.instant && this.player.stats.stamina < EXHAUSTED) {
-      this.logMsg('You are too exhausted to do that. Rest a moment.', 'error');
+    // gates: in the words a hidden door's ask is refused in too (`gates.ts`).
+    const spent = this.bodyRefusal(def);
+    if (spent) {
+      this.logMsg(spent, 'error');
       return;
     }
     // Something already in hand: line this one up behind it instead of dropping it.
     if (this.action) {
-      const room = this.queueCapacity() - 1 - this.queue.length;
-      if (room <= 0) {
-        this.logMsg(`You can only keep ${this.queueCapacity()} jobs in your head at once. Mind logic is what widens that.`, 'error');
+      // gates: in the words a hidden door's ask is refused in too, when there would be no room for its plan (`gates.ts`).
+      const full = this.queueRefusal();
+      if (full) {
+        this.logMsg(full, 'error');
         return;
       }
       /*
@@ -3904,6 +3919,24 @@ export class Game {
       return;
     }
     this.startAction(def, target, goes);
+  }
+
+  /**
+   * Why this body is too spent for a job now, as asking for one says it, or
+   * null: the island's `body_refusal`.
+   */
+  bodyRefusal(def: ActionDef): string | null {
+    return !def.instant && this.player.stats.stamina < EXHAUSTED ? 'You are too exhausted to do that. Rest a moment.' : null;
+  }
+
+  /**
+   * Why another job will not fit in the head now, as asking for one says it,
+   * or null: the room `rpc_act` measures on an island, of the job in hand and
+   * those lined up behind it.
+   */
+  queueRefusal(): string | null {
+    if (!this.action || this.queueCapacity() - 1 - this.queue.length > 0) return null;
+    return `You can only keep ${this.queueCapacity()} jobs in your head at once. Mind logic is what widens that.`;
   }
 
   /** Put an action in hand and either begin it or start walking to it. */
@@ -4444,7 +4477,8 @@ export class Game {
   // ---- Bridges: ground where there was none. ----
 
   addBridge(kind: BridgeKind, ax: number, ay: number, bx: number, by: number, height: number, material?: string, level = 0): Bridge {
-    const spans = spanTiles(ax, ay, bx, by).map(([x, y]) => ({ x, y, ...spanBill(kind) }));
+    // The first span, beside the end it is set out from, carries a drawbridge's winch.
+    const spans = spanTiles(ax, ay, bx, by).map(([x, y], i) => ({ x, y, ...spanBill(kind, i === 0) }));
     const b: Bridge = { id: this.nextBridgeId++, kind, ax, ay, bx, by, height, material, level, spans };
     this.bridges.set(b.id, b);
     this.reindexDecks();
@@ -4462,9 +4496,13 @@ export class Game {
   /** Which tiles have deck over them, worked out once rather than per step. */
   reindexDecks(): void {
     this.deckIndex.clear();
+    this.hinges.clear();
     for (const b of this.bridges.values()) {
       for (const s of b.spans) this.deckIndex.set(`${s.x},${s.y}`, b.id);
+      // A drawbridge drawn up stands on end over its hinge, which is shut to everything (`gates.ts`).
+      if (isDrawbridge(b) && b.raised) this.hinges.set(hingeKey(b.level ?? 0, hingeOf(b)), b.id);
     }
+    this.buildings.barred = this.hinges.size ? (level, br) => this.hinges.has(hingeKey(level, br)) : undefined;
   }
 
   /** The bridge whose deck covers this tile, finished or not. */
@@ -4476,7 +4514,8 @@ export class Game {
   /** The height of finished deck over this tile, or null for open ground: an aqueduct's deck is water, and nobody stands on it. */
   deckAt(x: number, y: number): number | null {
     const b = this.bridgeAt(x, y);
-    return b && bridgeDone(b) && b.kind !== 'aqueduct' ? b.height : null;
+    // A drawbridge drawn up has no deck: what is under it is what there is (`gates.ts`).
+    return b && deckDown(b) && b.kind !== 'aqueduct' ? b.height : null;
   }
 
   /** Whether a tile is walked on a bridge's deck rather than on the ground: under an aqueduct it is the ground, worn and climbed as ever. */
@@ -4553,11 +4592,12 @@ export class Game {
   bridgeStepLevel(x0: number, y0: number, x1: number, y1: number): number | null {
     // Onto the deck, from an end or from the deck itself. Never an aqueduct's: under it is open ground.
     const to = this.bridgeAt(x1, y1);
-    if (to && bridgeDone(to) && to.kind !== 'aqueduct' && this.onBridge(to, x0, y0)) return to.level ?? 0;
+    // gates: a drawbridge drawn up has no deck to step onto or off (`deckDown`).
+    if (to && deckDown(to) && to.kind !== 'aqueduct' && this.onBridge(to, x0, y0)) return to.level ?? 0;
     // And off the far end of it again, which is a step down onto solid ground
     // from a deck the terrain underneath knows nothing about.
     const from = this.bridgeAt(x0, y0);
-    return from && bridgeDone(from) && from.kind !== 'aqueduct' && this.onBridge(from, x1, y1) ? from.level ?? 0 : null;
+    return from && deckDown(from) && from.kind !== 'aqueduct' && this.onBridge(from, x1, y1) ? from.level ?? 0 : null;
   }
 
   /**
@@ -4567,7 +4607,9 @@ export class Game {
    */
   topDeck(x: number, y: number): { level: number; height: number } {
     const base = this.surfaceHeight(x, y);
-    const b = this.buildings.buildingAt(x, y);
+    // gates: and a jetty's floor out past the footprint, a floor of the storey it is out from, as the island's
+    // `top_deck` has it: a bridge's end lands on it as on any finished floor (`frame.ts`).
+    const b = this.buildings.buildingAt(x, y) ?? this.buildings.jettyAt(x, y);
     if (b) {
       for (let l = b.levels - 1; l >= 1; l--) {
         if (this.standable(x, y, l)) return { level: l, height: base + l * WALL_HEIGHT };
@@ -4609,8 +4651,14 @@ export class Game {
       if (!ends[i].level && !this.slabAt(x, y) && !this.onPierDeck(x, y) && (!w.isPassable(x, y) || w.centerHeight(x, y) < w.surfaceAt(x, y) && w.hasWater(x, y))) {
         return 'Both ends want dry, solid ground to stand on.';
       }
-      if (this.bridgeAt(x, y)) return 'One end is already under a bridge.';
+      // gates: nor on the end of another, which the island's `bridge_at` counts as under it as it counts a span.
+      if (this.bridgeAt(x, y) || this.bridgeEndAt(x, y)) return 'One end is already under a bridge.';
     }
+    // gates: not from inside a ground floor nor through a wall, and a drawbridge outside at both ends (`gates.ts`).
+    const outside = bridgeEndRefusal(this, kind, ax, ay, bx, by, [ends[0].level, ends[1].level]);
+    if (outside) return outside;
+    // A drawbridge goes from bank to bank: its hinge and its winch stand on the ground (`gates.ts`).
+    if (def.grounded && (ends[0].level || ends[1].level)) return `A ${def.name.toLowerCase()} goes from ground to ground, not to a storey.`;
     if (ends[0].level !== ends[1].level) {
       const named = (n: number): string => (n ? `storey ${n + 1}` : 'the ground');
       return `One end is on ${named(ends[0].level)} and the other on ${named(ends[1].level)}. A deck meets one storey or the other.`;
@@ -4620,7 +4668,8 @@ export class Game {
     if (Math.abs(ha - hb) > END_SLOP) return `The two ends are ${Math.abs(ha - hb).toFixed(0)} apart in height. One deck will not meet both; level one of them.`;
     const height = Math.round((ha + hb) / 2);
     for (const [x, y] of span) {
-      if (this.bridgeAt(x, y)) return 'Something is already bridged across there.';
+      // gates: nor over the end of another, as the island has it (`bridge_at`).
+      if (this.bridgeAt(x, y) || this.bridgeEndAt(x, y)) return 'Something is already bridged across there.';
       if (this.buildings.buildingAt(x, y)) return 'Not over a building.';
       if (this.buildings.jettyAt(x, y)) return 'Not over a building\'s jetty.';
       if (height - this.surfaceHeight(x, y) < CLEARANCE) return 'That is not a gap, it is ground. Walk it.';

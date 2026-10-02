@@ -176,6 +176,8 @@ export const STROKE_BY_ID: Record<string, Stroke> = {
   fit_lock: 'metal', take_off_lock: 'metal',
   // A lantern hung on a post's iron hook or set in a pillar's iron cage, and lifted off it (`lamps.ts`).
   fit_lamp: 'metal', take_lamp: 'metal',
+  // A portcullis and a drawbridge: chain over a winch, and an iron grille in its grooves (`gates.ts`).
+  raise_portcullis: 'metal', lower_portcullis: 'metal', raise_drawbridge: 'metal', lower_drawbridge: 'metal',
   // Water, poured or drawn.
   fish: 'water', fill_bucket: 'water', fill_skin: 'water',
   empty_vessel: 'water', pour_into_barrel: 'water', empty_creel: 'water',

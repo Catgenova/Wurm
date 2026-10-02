@@ -44,8 +44,9 @@ import { anvilAnchor, anvilName, type PlacedAnvil } from '../game/anvil';
 import { postCandidates, postKeep, postLife, postName, postRadius, postState, type PlacedPost } from '../game/posts';
 import { baitInPack, creelHold, trapDef, trapHolds, trapKeep, trapLife, trapName, TRAPS, trapState, type PlacedTrap } from '../game/traps';
 import { BAIT_BY_ID } from '../game/fishing';
-import { BRIDGES, bridgeDef, bridgeName, bridgeState, spanWants, type Bridge } from '../game/bridges';
+import { BRIDGES, bridgeDef, bridgeDone, bridgeName, bridgeState, spanWants, type Bridge } from '../game/bridges';
 import { aqueductEntries, aqueductMenu } from './aqueducts';
+import { drawbridgeState, fitsMaterial, gateHoverLine, gatePlanRefusal, hiddenDoorIronWords, hiddenDoorWants, isDrawbridge, planHiddenDoor, portcullisAt, portcullisState } from '../game/gates';
 import { foundationState } from '../game/foundations';
 import { BLESS_CAP, CASTS, FAITH, favourCap } from '../game/faith';
 import { BAUBLE_SAID, BAUBLE_TIER_BY_ID, BAUBLE_TIERS, readBauble, socketsOf, socketText, TARNISHED } from '../game/baubles';
@@ -107,6 +108,7 @@ import type { Island } from '../net/island';
 import { awayLines } from '../game/away';
 import { clearQuestion } from '../game/keeper';
 import { uiBox } from './screen';
+import { capital } from '../game/words';
 
 export interface UICallbacks {
   /** Quarter-turn the camera: +1 or -1. */
@@ -127,6 +129,26 @@ export interface UICallbacks {
 /** Builds and updates every HTML overlay above the canvas. */
 /** Why a job cannot be done just now, as the game will answer it: down in a cellar or up top first (`cellarGate`), then the job's own say. */
 const cellarReason = (g: Game, def: ActionDef, t: Target): string | null => cellarGate(g, def.id, t) ?? def.check?.(t, g) ?? null;
+
+/**
+ * Raising and lowering a portcullis on the side of a tile, and its padlock
+ * (`gates.ts`): whatever of them applies, each with its reason when it
+ * cannot be done. Asked of the game alone, as every row of a tile's menu can
+ * be.
+ */
+function gateEntries(g: Game, t: Extract<Target, { kind: 'tile' }>): MenuItem[] {
+  const out: MenuItem[] = [];
+  // Where it stands, as a drawbridge's menu says where that does.
+  const port = portcullisAt(g, t);
+  if (port && isDone(port)) out.push({ label: capital(portcullisState(port)), disabled: true });
+  for (const id of ['raise_portcullis', 'lower_portcullis', 'fit_lock', 'take_off_lock']) {
+    const a = ACTION_BY_ID.get(id);
+    if (!a || !a.applies(t, g)) continue;
+    const reason = a.check?.(t, g) ?? null;
+    out.push({ label: `${a.labelFor?.(t, g) ?? a.label} (${SIDE_NAMES[t.side ?? 'n']})`, hint: reason ?? undefined, disabled: !!reason, onSelect: () => g.requestAction(a, t) });
+  }
+  return out;
+}
 
 /**
  * The way down to the cellar under a tile, from its ground floor: planned
@@ -865,16 +887,29 @@ export class UI {
       lines.push(`${token ? 'Settlement token of' : 'Part of'} ${here.name}${who}${level}`);
       lines.push(mine ? standingWord(mine.role) : 'You are a stranger here: you may walk it and shape nothing.');
     }
+    // A drawbridge says whether it is up (`gates.ts`).
+    const span = pick.bridge !== undefined ? this.game.bridges.get(pick.bridge) : undefined;
+    if (span && isDrawbridge(span)) lines.push(`${bridgeName(span)} · ${bridgeDone(span) ? drawbridgeState(span) : bridgeState(span)}`);
     const b = this.game.buildings.buildingAt(pick.x, pick.y);
+    // And a portcullis, or a hidden door to whoever it admits, whatever storey is worked on and from either side (`gates.ts`).
+    const gateSide = nearestSide(pick.x, pick.y, pick.wx, pick.wy);
+    const gateLine = gateHoverLine(this.game, pick.x, pick.y, gateSide, SIDE_NAMES[gateSide], !!b && workLevel(b) > 0);
+    if (gateLine && !b) lines.push(gateLine);
     if (b) {
       const level = workLevel(b);
       lines.push(`${b.name} · ${b.levels === 1 ? 'one storey' : `${b.levels} storeys, working on storey ${level + 1}`}${isGlasshouse(this.game.buildings, b) ? ' · a glasshouse' : ''}`);
+      if (gateLine) lines.push(gateLine);
       const side = nearestSide(pick.x, pick.y, pick.wx, pick.wy);
-      const wall = this.game.buildings.wall(level, pick.x, pick.y, side);
-      if (wall) {
-        const type = WALL_TYPE_BY_ID.get(wall.type)?.name.toLowerCase() ?? wall.type;
+      const wall = gateLine && level === 0 ? undefined : this.game.buildings.wall(level, pick.x, pick.y, side);
+      if (gateLine && level === 0) {
+        // Said above, with its state.
+      } else if (wall) {
+        // What it is to you: a hidden door you hold no key to is the solid wall it looks like (`gates.ts`).
+        const seen = this.game.buildings.seenType(wall);
+        const type = WALL_TYPE_BY_ID.get(seen)?.name.toLowerCase() ?? seen;
         const mat = MATERIALS.find((m) => m.id === wall.material)?.name.toLowerCase() ?? wall.material;
-        lines.push(`${SIDE_NAMES[side]} wall: ${type} ${mat}${isDone(wall) ? '' : ` · ${Math.round(progressOf(wall) * 100)}% built`}`);
+        const gate = seen === 'portcullis' && isDone(wall) ? ` · ${portcullisState(wall)}` : '';
+        lines.push(`${SIDE_NAMES[side]} wall: ${type} ${mat}${isDone(wall) ? '' : ` · ${Math.round(progressOf(wall) * 100)}% built`}${gate}`);
       } else {
         lines.push(`${SIDE_NAMES[side]} side: no wall`);
       }
@@ -1119,7 +1154,8 @@ export class UI {
           label: 'Throw a bridge across from here',
           children: options.map((o) => ({
             label: o.def.name,
-            note: o.reason ? undefined : `${o.def.bill.map(([id, n]) => `${n} ${itemName({ uid: 0, id, ql: 1, dmg: 0, count: 1 }).toLowerCase()}`).join(', ')} a span · ${o.def.carts ? 'carts cross' : 'foot only'}`,
+            note: o.reason ? undefined : `${o.def.bill.map(([id, n]) => `${n} ${itemName({ uid: 0, id, ql: 1, dmg: 0, count: 1 }).toLowerCase()}`).join(', ')} a span${
+              o.def.winch ? ` · the first also ${o.def.winch.map(([id, n]) => `${n} ${itemName({ uid: 0, id, ql: 1, dmg: 0, count: 1 }).toLowerCase()}`).join(', ')}` : ''} · ${o.def.carts ? 'carts cross' : 'foot only'}`,
             hint: o.reason ?? undefined,
             disabled: !!o.reason,
             onSelect: () => this.game.requestAction(planBridge, { ...target, material: o.kind }),
@@ -2049,7 +2085,8 @@ export class UI {
     const open = b.spans.find((s) => !isDone(s));
     entries.push({ label: `${b.spans.length} spans · ${def.carts ? 'carries a cart' : 'foot traffic only'}`, disabled: true });
     if (open) entries.push({ label: `The open span wants ${spanWants(open)}`, disabled: true });
-    for (const id of ['build_bridge', 'scrub_moss', 'demolish_bridge']) {
+    if (isDrawbridge(b) && !open) entries.push({ label: capital(drawbridgeState(b)), disabled: true });
+    for (const id of ['build_bridge', 'raise_drawbridge', 'lower_drawbridge', 'fit_lock', 'take_off_lock', 'scrub_moss', 'demolish_bridge']) {
       const a = ACTION_BY_ID.get(id);
       if (!a || !a.applies(bt, g)) continue;
       const reason = a.check?.(bt, g) ?? null;
@@ -2572,7 +2609,8 @@ export class UI {
       const withSide: Extract<Target, { kind: 'tile' }> = { ...base, side };
       const standing = bld.wall(0, x, y, side);
       if (standing) {
-        const what = WALL_TYPE_BY_ID.get(standing.type)?.name ?? 'Fence';
+        const what = WALL_TYPE_BY_ID.get(bld.seenType(standing))?.name ?? 'Fence';
+        entries.push(...gateEntries(this.game, withSide));
         if (!isDone(standing)) entries.push(item(act('build_wall'), withSide, `Build ${what.toLowerCase()} (${SIDE_NAMES[side]}) · needs ${describeNeeds(standing, materialName)}`));
         entries.push(item(act('remove_wall'), withSide, `Remove ${what.toLowerCase()} (${SIDE_NAMES[side]})`));
         entries.push(...repoint(standing, withSide, `Repoint ${what.toLowerCase()} (${SIDE_NAMES[side]})`));
@@ -2641,6 +2679,8 @@ export class UI {
       });
     }
     const wall = bld.wall(level, x, y, side);
+    // A portcullis stands on the ground floor, whichever storey is being worked on.
+    entries.push(...gateEntries(this.game, withSide));
     if (wall) {
       if (!isDone(wall)) entries.push(item(act('build_wall'), withSide, `Build wall (${sideName}) · needs ${describeNeeds(wall, materialName)}`));
       entries.push(item(act('remove_wall'), withSide, `Remove wall (${sideName})`));
@@ -2653,14 +2693,27 @@ export class UI {
         entries.push({
           label: `Plan wall (${sideName})`,
           // A railing only off the ground: up a storey, or on a deck on piers (`frame.ts`).
-          children: WALL_TYPES.filter((wt) => wt.id !== 'railing' || level > 0 || bld.onPiers(x, y)).map((wt) => ({
-            label: wt.name,
-            children: MATERIALS.map((m) => ({
-              label: m.name,
-              note: describeNeeds(wallBill(m.id, wt.id), materialName),
-              onSelect: () => g.requestAction(plan, { ...withSide, wallType: wt.id, material: m.id }),
-            })),
-          })),
+          children: WALL_TYPES.filter((wt) => wt.id !== 'railing' || level > 0 || bld.onPiers(x, y)).map((wt) => {
+            // A hidden door is planned as a solid wall, the door asked for with the plan itself, with its iron in
+            // hand; and a portcullis only on the ground floor (`gates.ts`): said on the type, before a material.
+            const hidden = wt.id === 'hidden_door';
+            const lacks = hidden ? hiddenDoorWants(g)
+              : wt.ground && level > 0 ? gatePlanRefusal(wt.id, MATERIALS.find((m) => fitsMaterial(wt.id, m)), level, !bld.buildingAt(x, y)) : null;
+            return {
+              label: wt.name,
+              hint: lacks ?? undefined,
+              disabled: !!lacks,
+              // A portcullis is laid only in stone or brick (`gates.ts`).
+              children: MATERIALS.filter((m) => fitsMaterial(wt.id, m)).map((m) => ({
+                label: m.name,
+                note: describeNeeds(wallBill(m.id, wt.id), materialName)
+                  + (hidden ? `, and ${hiddenDoorIronWords()} as it is planned` : ''),
+                onSelect: () => (hidden
+                  ? planHiddenDoor(g, plan, { ...withSide, material: m.id })
+                  : g.requestAction(plan, { ...withSide, wallType: wt.id, material: m.id })),
+              })),
+            };
+          }),
         });
       }
     }

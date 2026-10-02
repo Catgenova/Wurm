@@ -1150,6 +1150,43 @@ export function bagTake(bag: Item, uid: number): Item | null {
   return item;
 }
 
+/** An item made over in place as `fresh` would be added new, keeping its number. */
+const remake = (it: Item, fresh: Omit<Item, 'uid'>): void => {
+  const { uid } = it;
+  for (const k of Object.keys(it)) delete (it as unknown as Record<string, unknown>)[k];
+  Object.assign(it, { uid, ...fresh });
+};
+
+/**
+ * gates: a padlock fitted, to a store, a gate or a hidden door: its own item
+ * becomes the key cut to it, numbered as it was, so the padlock, the lock and
+ * the key share the one number and nothing new is numbered. It is what a key
+ * cut new would be -- the padlock's quality and what it was made of, and
+ * nothing else of it. Every key is keyed to its own number this way, so no
+ * key says more about its lock than another. The island's `key_from_padlock`.
+ */
+export function keyFromPadlock(it: Item): void {
+  remake(it, { id: 'key', ql: it.ql, dmg: 0, count: 1, extra: it.extra, keyed: it.uid });
+}
+
+/**
+ * And the key, thrown in after its padlock as the padlock comes off: the same
+ * item, a padlock again, as a new one is handed back. The island's
+ * `padlock_from_key`.
+ */
+export function padlockFromKey(it: Item): void {
+  remake(it, { id: 'padlock', ql: 40, dmg: 0, count: 1, extra: undefined });
+}
+
+/**
+ * gates: the padlock fitting one takes, to a store, a gate or a hidden door:
+ * the first numbered of those in the pack that are not locked against use, as
+ * the island takes it (`and not locked order by id`). One locked against use
+ * is not there to be fitted, and with only those there is no padlock to fit.
+ */
+export const padlockToFit = (items: readonly Item[]): Item | undefined =>
+  items.filter((i) => i.id === 'padlock' && !i.locked).sort((a, b) => a.uid - b.uid)[0];
+
 export function itemName(item: Item): string {
   const def = itemDef(item.id);
   const rare = rarityOf(item).name;

@@ -439,7 +439,7 @@ export class Vision {
    */
   private lineOfSight(ex: number, ey: number, eyeH: number, tx: number, ty: number, level = 0): boolean {
     const world = this.game.world;
-    if (this.game.buildings.walls.size && this.wallInTheWay(level, ex, ey, tx, ty)) return false;
+    if ((this.game.buildings.walls.size || this.game.hinges.size) && this.wallInTheWay(level, ex, ey, tx, ty)) return false;
     const dx = tx - ex;
     const dy = ty - ey;
     const steps = Math.max(Math.abs(dx), Math.abs(dy));
@@ -521,14 +521,25 @@ export class Vision {
     return (y * (this.w + 1) + x) * 2 + (dir === 'v' ? 1 : 0);
   }
 
-  /** The borders shut to the eye on a storey: a finished wall of a type that is `opaque`. */
+  /**
+   * The borders shut to the eye on a storey: a finished wall of a type that is
+   * `opaque` -- as this body sees it, so a hidden door its padlock does not
+   * admit is the solid wall it looks like -- and the hinge of a drawbridge
+   * drawn up, which stands on end there (`gates.ts`).
+   */
   private shutAt(level: number): Set<number> {
     let set = this.shut.get(level);
     if (set) return set;
     set = new Set();
-    for (const w of this.game.buildings.walls.values()) {
-      if (w.level !== level || !WALL_TYPE_BY_ID.get(w.type)?.opaque || !isDone(w)) continue;
+    const bld = this.game.buildings;
+    for (const w of bld.walls.values()) {
+      if (w.level !== level || !WALL_TYPE_BY_ID.get(bld.seenType(w))?.opaque || !isDone(w)) continue;
       set.add(this.borderKey(w.dir, w.x, w.y));
+    }
+    for (const key of this.game.hinges.keys()) {
+      const [lv, dir, at] = key.split(':');
+      const [x, y] = at.split(',').map(Number);
+      if (Number(lv) === level) set.add(this.borderKey(dir as 'v' | 'h', x, y));
     }
     this.shut.set(level, set);
     return set;

@@ -1,6 +1,6 @@
 import type { ActionDef, Target } from './actions';
 import { isDone } from './building';
-import { BRIDGES, bridgeDone, CLEARANCE, spanTiles, spanWants, type Bridge } from './bridges';
+import { BRIDGES, bridgeDone, CLEARANCE, PULL_REACH, pullDownRefusal, spanTiles, spanWants, type Bridge } from './bridges';
 import type { Game } from './game';
 import { greenNow } from './greening';
 import { itemDef } from './items';
@@ -385,10 +385,12 @@ export const AQUEDUCT_ACTIONS: ActionDef[] = [
     check: (t, g) => {
       const b = aqueductOf(g, t);
       if (!b) return 'It is gone.';
-      if (Math.hypot(b.ax + 0.5 - g.player.x, b.ay + 0.5 - g.player.y) > 4.5 && Math.hypot(b.bx + 0.5 - g.player.x, b.by + 0.5 - g.player.y) > 4.5) {
+      // gates: from as near either end as a bridge is pulled down from (`PULL_REACH`), and on a settlement only by
+      // its builders, as a bridge is (`pullDownRefusal`).
+      if (Math.hypot(b.ax + 0.5 - g.player.x, b.ay + 0.5 - g.player.y) > PULL_REACH && Math.hypot(b.bx + 0.5 - g.player.x, b.by + 0.5 - g.player.y) > PULL_REACH) {
         return 'Stand at one end of it.';
       }
-      return null;
+      return pullDownRefusal(g, b, AQUEDUCT_ACTIONS.find((a) => a.id === 'demolish_aqueduct')?.label);
     },
     perform: (t, g) => {
       const b = aqueductOf(g, t);

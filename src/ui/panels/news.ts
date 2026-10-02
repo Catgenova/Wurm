@@ -1,5 +1,5 @@
 import {
-  CELLAR_DECAY, CELLAR_DEPTH, CELLAR_SOIL, COLUMN_SHARE, columnBill, floorBill, GLASS_ROOF, INDOORS_DECAY, INDOORS_REST, JETTY_REACH, MATERIAL_BY_ID, RAILING_HEIGHT,
+  CELLAR_DECAY, CELLAR_DEPTH, CELLAR_SOIL, COLUMN_SHARE, columnBill, floorBill, GLASS_ROOF, INDOORS_DECAY, INDOORS_REST, JETTY_REACH, MATERIAL_BY_ID, MATERIALS as WALL_MATERIALS, RAILING_HEIGHT,
   roofShapeDef, roofShapeOf, WALL_HEIGHT, WALL_TYPE_BY_ID, wallBill as typeBill,
 } from '../../game/building';
 import { CELLAR_DAYLIGHT } from '../../game/cellar';
@@ -20,7 +20,7 @@ import { INGOT_LUMPS, INGOT_WEIGHT, MOULD_BY_ID } from '../../game/metal';
 import { meltLumps } from '../../game/melt';
 import { ORDER_LIFE } from '../../game/orders';
 import { POST_LIFE_MIN } from '../../game/posts';
-import { GLAZE_ASH, KIT_MEND, MOSS_PER_CUT, MOSS_PLANT } from '../../game/actions';
+import { ACTION_BY_ID, GLAZE_ASH, KIT_MEND, MOSS_PER_CUT, MOSS_PLANT } from '../../game/actions';
 import { CIRCLET_SHARE, CIRCLET_STONES, GEMS } from '../../game/gems';
 import { RECIPE_BY_ID, RECIPES, TRADE_BOOK_AT } from '../../game/recipes';
 import { BOARD_TOP } from '../../game/boards';
@@ -36,7 +36,7 @@ import { TINCTURE_NAMES } from '../../game/remedies';
 import { FED_SAID, MOTE_CHANCE } from '../../game/sacrifice';
 import { GRAVE_KEEPS, GRAVE_REACH } from '../../game/graves';
 import { RESTORE_HARM, RESTORE_HARM_SPREAD } from '../../game/archaeology';
-import { DAMAGE_MAX, DAY_SECONDS } from '../../game/game';
+import { DAMAGE_MAX, DAY_SECONDS, goSeconds } from '../../game/game';
 import { UI_SIZE_MAX, UI_SIZE_MIN } from '../screen';
 import { defaultKey } from '../../game/keybinds';
 import { guidePages } from '../../game/guide';
@@ -65,9 +65,10 @@ import { FLOWER_MOST, FLOWER_SEASONS } from '../../world/flowers';
 import { DYES } from '../../game/dyestuffs';
 import { GREEN_ACTIONS, GREEN_DAYS, GREEN_SHADE, GREEN_SUN, GREEN_WET } from '../../game/greening';
 import { FURNITURE, WELL_TRICKLE, WELL_TRICKLE_QL } from '../../game/furniture';
-import { BRIDGES, CLEARANCE } from '../../game/bridges';
+import { BRIDGES, CLEARANCE, PULL_REACH } from '../../game/bridges';
 import { AQUEDUCT } from '../../game/aqueducts';
 import { AQUEDUCT_FLOW, AQUEDUCT_LPS, CHANNEL_DEEP, CHANNEL_WIDE, TILE_METRES } from '../../world/aqueducts';
+import { gateJobWords, gateReach, HIDDEN_DOOR_IRON, HIDDEN_DOOR_LAPSE } from '../../game/gates';
 import { CROPS, growthWords } from '../../game/farming';
 import { GLASSHOUSE_GROWTH, PLANTER_GROWTH, SEASON_GROWTH, SEASON_SECONDS, YEAR_SECONDS } from '../../game/growth';
 import { SEASONS } from '../../world/calendar';
@@ -922,6 +923,25 @@ export const NEWS: News[] = [
       'When the water at its head stands lower than the channel, the channel runs dry and whatever only it kept goes dry with it; take the fountain away and the water runs off downhill there, fill the pool in and it goes off the foundation over its lowest edge. One pond or pool feeds one aqueduct. Nobody walks along one, and pulling it down gives back half of what went into it.',
       'Under one you go through its arches, and its piers stand in the way along it; the ground there is walked, worn and climbed as it was. Nothing is planted, built, poured or dug under a span, and none is set out over a tree or a bush. Its stone takes moss as a stone arch\'s does.',
     ],
+  },
+  {
+    n: 69,
+    day: '2026-10-02',
+    lines: () => {
+      const stones = WALL_MATERIALS.filter((m) => m.kind === 'stone').map((m) => m.name.toLowerCase());
+      const portReach = gateReach('raise_portcullis');
+      const winchReach = gateReach('raise_drawbridge');
+      const planWall = ACTION_BY_ID.get('plan_wall');
+      const pull = ACTION_BY_ID.get('demolish_bridge')?.label;
+      return [
+        `A portcullis is a new wall type for a ground-floor wall of ${listed(stones)}: a gateway as wide as a double door with an iron grille of ${billWords(WALL_TYPE_BY_ID.get('portcullis')?.fittings ?? [])} over the stone's own bill. Raise the portcullis takes ${gateJobWords('raise_portcullis', goSeconds)} and Lower the portcullis ${gateJobWords('lower_portcullis', goSeconds)}, from either side, within ${numberWord(portReach)} tile${portReach === 1 ? '' : 's'} of the tile beside it. Down, nothing passes it, no person, cart or wildermon, and it is still seen through; up, everything passes, carts included.`,
+        `A drawbridge is a new bridge of planks from open ground to open ground with at most ${numberWord(BRIDGES.draw.span)} tiles of deck, each span taking ${billWords(BRIDGES.draw.bill)} and its first ${billWords(BRIDGES.draw.winch ?? [])} more for its gallows and winch. ${winchReach === 0 ? 'Standing on the tile it was set out from' : `Within ${numberWord(winchReach)} tiles of the tile it was set out from`}, Raise the drawbridge takes ${gateJobWords('raise_drawbridge', goSeconds)} and Lower the drawbridge ${gateJobWords('lower_drawbridge', goSeconds)}. Up, it stands on end over its hinge: nothing crosses it or sees past it, and anybody out on its deck is left in whatever is under it; down, ${BRIDGES.draw.carts ? 'a cart crosses it' : 'it carries foot traffic'}. Its winch is not set on the ground under a jetty, nor a jetty floored out over its winch: its gallows rise there higher than a storey.`,
+        `A hidden door is built of exactly a solid wall's bill and drawn exactly as one. Plan wall, Hidden door plans a solid wall there in every way anybody else can see or read, ${spanWords(goSeconds(planWall?.baseTime ?? 0))} and ${percent(planWall?.stamina ?? 0)} of your stamina; as the plan is finished it takes ${billWords(HIDDEN_DOOR_IRON)} and the padlock becomes its key. Each is asked for with its own plan, for that side of that tile, and kept only if the plan is started or lined up; then for as long as a plan of a wall on that side is in hand or lined up, so several may be lined up. Walking away puts the work down and keeps the ask; Esc forgets it with the jobs. The next solid wall you plan on that side, on whichever storey you are working, is the door. One still waiting ${spanWords(HIDDEN_DOOR_LAPSE)} after it was asked for lapses, and its plan is a solid wall. To whoever holds that key, and to the founder of the settlement it stands on, it is a door with a dashed seam and a keyhole on its face; to everybody else it is a solid wall in every way, and on an island their browser is told nothing else.`,
+        'Fit a padlock to a portcullis or to a drawbridge\'s winch and only its key, and the founder of the settlement it stands on, raise it, lower it, or take it down.',
+        'Every bridge thrown across now starts and ends on open ground, on a finished deck on piers or on a finished upper floor, a jetty\'s among them, never inside a building on a ground floor laid on the ground nor on another bridge\'s end, and never meets its deck through a wall: from a storey or a deck it goes out through a doorway, an archway or an open side. Nothing is built on a tile a bridge comes ashore on.',
+        `${pull} works on a bridge on an island again: it had been answering with an error. Where either end of the bridge stands on a settlement, only its builders may ${pull?.toLowerCase()}, as only they may take down a building's wall there, and a guest may not; anywhere else, anybody may. It is done within ${PULL_REACH} tiles of the middle of either end. ${ACTION_BY_ID.get('demolish_aqueduct')?.label} goes by the same two rules.`,
+      ];
+    },
   },
   {
     n: 70,

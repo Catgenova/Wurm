@@ -27,6 +27,7 @@ import {
 import type { PlacedCrate } from './crates';
 import { pickDye } from './dyes';
 import type { Game } from './game';
+import { gatePlanRefusal, gateRemoveRefusal, planGate, planLine } from './gates';
 import { greenNow } from './greening';
 import { glassPlanRefusal, glassResync } from './glasshouse';
 import { counterFinished, counterGone, counterPlanRefusal, counterRemoveRefusal, counterStreetRefusal } from './counters';
@@ -415,7 +416,8 @@ export const BUILD_ACTIONS: ActionDef[] = [
       if (mat && mat.heft > bears) {
         return `${mat.name} is too heavy to raise over what is under it. This storey carries ${heftWord(bears)}, no more.`;
       }
-      return null;
+      // A portcullis in stone on the ground floor; a hidden door's padlock and hinges in hand (`gates.ts`).
+      return gatePlanRefusal(t.wallType, mat, level, !g.buildings.buildingAt(t.x, t.y));
     },
     perform: (t, g) => {
       if (!isTile(t) || !t.side || !t.wallType || !t.material) return;
@@ -423,12 +425,14 @@ export const BUILD_ACTIONS: ActionDef[] = [
       if (!b) return;
       // A fence type stood in a building is still a fence, to a Carpenter's Fence Builder.
       const wall = g.buildings.setWall(b, wallLevel(g, t), t.x, t.y, t.side, t.wallType, t.material, fenceScale(g, t.wallType));
+      // gates: a solid wall planned on a border its planner asked a hidden door on takes its padlock and hinges now,
+      // and cuts its key, and says so on the end of the plan's own line; and any other type is named as what it is
+      // ("a portcullis in stone brick", and a railing as "a log railing"), as the island names it (`planLine`).
+      const gate = planGate(g, wall);
       // A glasshouse is walled all round (`glasshouse.ts`).
       glassResync(g);
-      const type = WALL_TYPE_BY_ID.get(t.wallType)?.name.toLowerCase() ?? t.wallType;
-      // A railing is named as one: "a log railing", not "a railing log wall".
-      const what = t.wallType === 'railing' ? `${material(t.material)?.name.toLowerCase()} railing` : `${type} ${material(t.material)?.name.toLowerCase()} wall`;
-      g.logMsg(`You plan a ${what} on the ${SIDE_NAMES[t.side]} side. It needs ${needsText(wall)}.`, 'event');
+      g.logMsg(`${planLine(t.wallType, material(t.material)?.name ?? t.material, SIDE_NAMES[t.side])} It needs ${needsText(wall)}.${
+        gate ? ` ${gate}` : ''}`, 'event');
       g.events.emit('world', t.x, t.y);
     },
   },
@@ -686,7 +690,10 @@ export const BUILD_ACTIONS: ActionDef[] = [
       const over = jettyRoofOnWall(g, wall) ?? storeyOnWall(g, wall);
       if (over) return over;
       // And a shop counter comes down empty, till and all (`counters.ts`).
-      return counterRemoveRefusal(g, wall);
+      const counter = counterRemoveRefusal(g, wall);
+      if (counter) return counter;
+      // gates: a padlock on a portcullis keeps it from being taken down as from being worked (`gates.ts`).
+      return gateRemoveRefusal(g, wall);
     },
     perform: (t, g) => {
       if (!isTile(t) || !t.side) return;

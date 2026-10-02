@@ -20,6 +20,7 @@
  */
 import { execFileSync } from 'node:child_process';
 import { floorBill, MATERIALS, ROOF_SHAPES, WALL_TYPE_BY_ID, WALL_TYPES, wallBill } from '../../src/game/building';
+import { HIDDEN_DOOR_HINGES } from '../../src/game/gates';
 
 const psql = (sql: string): string =>
   execFileSync('psql', ['-v', 'ON_ERROR_STOP=1', '-X', '-q', '-t', '-A', '-f', '-'], {
@@ -54,9 +55,15 @@ check('it is walked through, and not only by people',
 check('and it hangs nothing, so it casts no ironwork',
   arch.fittings === undefined && psql(`select count(*) from wall_fitting where type = 'arch'`) === '0',
   'the only opening in the list with no hinges in its bill');
-const swings = WALL_TYPES.filter((t) => t.passable && t.fittings);
+/*
+ * Hung on something: its own fittings, or -- for a hidden door, built of
+ * exactly a solid wall's bill so that nothing on its row gives it away -- a
+ * door's hinges taken as it is planned (`gates.ts`).
+ */
+const hung = (t: (typeof WALL_TYPES)[number]): boolean => !!t.fittings?.length || (t.id === 'hidden_door' && HIDDEN_DOOR_HINGES > 0);
+const swings = WALL_TYPES.filter((t) => t.passable && t.id !== 'arch');
 check('every other thing you can walk through does hang on something',
-  swings.length === 4 && swings.every((t) => t.id !== 'arch'),
+  swings.length > 0 && swings.every(hung),
   swings.map((t) => t.name.toLowerCase()).join(', '));
 
 /* ---- and what it costs, in each material ---- */

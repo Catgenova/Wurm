@@ -192,6 +192,9 @@ out.push(`alter table wall_type_def add column if not exists beast_proof boolean
 /* Wide enough to drive a cart through: a double door, an archway, a gate. */
 out.push(`alter table wall_type_def add column if not exists wide boolean not null default false;`);
 out.push(`create table if not exists wall_fitting (type text not null, item text not null, count int not null, primary key (type, item));`);
+/* Laid only in stone or brick, and raised only on the ground floor: a portcullis (`gates.ts`). */
+out.push(`alter table wall_type_def add column if not exists stone boolean not null default false;`);
+out.push(`alter table wall_type_def add column if not exists ground boolean not null default false;`);
 out.push(`create table if not exists build_material_def (
   id text primary key, name text not null, kind text not null, tool text not null, skill text not null
 );`);
@@ -480,6 +483,11 @@ out.push(`create table if not exists bridge_def (
 out.push(`create table if not exists bridge_bill (
   kind text not null, item text not null, count int not null, primary key (kind, item)
 );`);
+/* What a drawbridge's first span takes over the rest -- its hinges, gallows, winch and chains -- and that both its ends are on the ground (`gates.ts`). */
+out.push(`create table if not exists bridge_winch (
+  kind text not null, item text not null, count int not null, primary key (kind, item)
+);`);
+out.push(`alter table bridge_def add column if not exists grounded boolean not null default false;`);
 /* Something to sleep in, and how much of a night it is worth. */
 out.push(`alter table furniture_def add column if not exists bed real;`);
 /* Crate spots on a rack's deck: its footprint is what it carries. */
@@ -1060,7 +1068,7 @@ out.push(emptied(['melt_def', 'wall_fitting', 'recipe', 'recipe_input', 'recipe_
   'knack_kin', 'category_decay', 'vehicle_def', 'boat_def', 'tack_def', 'cast_def', 'path_def',
   'path_step', 'class_def', 'class_skill', 'class_channel', 'class_node', 'class_perk',
   'perk_fx_rule', 'perk_tier', 'pan_ore', 'rite_def',
-  'school_def', 'school_stone', 'spell_def', 'bridge_def', 'bridge_bill', 'brew_def',
+  'school_def', 'school_stone', 'spell_def', 'bridge_def', 'bridge_bill', 'bridge_winch', 'brew_def',
   'dyeable_item', 'dyeable_class']));
 
 /*
@@ -1604,6 +1612,8 @@ for (const w of WALL_TYPES) {
   out.push(`insert into wall_type_def values (${q(w.id)}, ${q(w.name)}, ${q(w.factor)}, ${q(w.passable)}, ${q(w.height ?? null)}, ${q(!!w.low)}, ${q(!!w.railed)}, ${q(!!w.standalone)});`);
   if (w.beastProof) out.push(`update wall_type_def set beast_proof = true where id = ${q(w.id)};`);
   if (w.wide) out.push(`update wall_type_def set wide = true where id = ${q(w.id)};`);
+  if (w.stone) out.push(`update wall_type_def set stone = true where id = ${q(w.id)};`);
+  if (w.ground) out.push(`update wall_type_def set ground = true where id = ${q(w.id)};`);
   for (const [item, n] of w.fittings ?? []) out.push(`insert into wall_fitting values (${q(w.id)}, ${q(item)}, ${q(n)});`);
 }
 for (const r of ROOF_SHAPES) {
@@ -1704,6 +1714,8 @@ for (const b of Object.values(BRIDGES)) {
   out.push(`insert into bridge_def values (` + [q(b.id), q(b.name), q(b.span), q(b.tool),
     q(b.skill), q(b.difficulty), q(b.carts), q(b.note)].join(', ') + `);`);
   for (const [item, n] of b.bill) out.push(`insert into bridge_bill values (${q(b.id)}, ${q(item)}, ${q(n)});`);
+  for (const [item, n] of b.winch ?? []) out.push(`insert into bridge_winch values (${q(b.id)}, ${q(item)}, ${q(n)});`);
+  if (b.grounded) out.push(`update bridge_def set grounded = true where id = ${q(b.id)};`);
 }
 for (const b of BREWS) {
   out.push(`insert into brew_def values (` + [q(b.id), q(b.name), q(b.input), q(b.count),

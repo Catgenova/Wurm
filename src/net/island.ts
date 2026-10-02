@@ -23,6 +23,12 @@ import type { Kept, KeptBody } from '../game/keeper';
  * layer takes nothing but types from the game).
  */
 const CLEARS_GREEN: ReadonlySet<string> = new Set(['clear_ivy', 'scrub_moss']);
+/**
+ * And the jobs that raise or lower a gate (`gates.ts`) or put a padlock on
+ * one: a portcullis rides the walls and a drawbridge the bridges, both on the
+ * slow half.
+ */
+const WORKS_A_GATE: ReadonlySet<string> = new Set(['raise_portcullis', 'lower_portcullis', 'raise_drawbridge', 'lower_drawbridge', 'fit_lock', 'take_off_lock']);
 
 /**
  * Playing on an island that lives in Postgres.
@@ -130,6 +136,8 @@ interface HeardBody {
   gone?: unknown;
   upto?: unknown;
   refresh?: unknown;
+  /** A portcullis or a drawbridge in this block went up or down (`perform_gate`). */
+  gates?: unknown;
   /** Where a keeper of the island has put this body. */
   x?: unknown;
   y?: unknown;
@@ -1733,7 +1741,7 @@ export class Island {
        * the stone shows bare a second after the job rather than at the next
        * reconcile.
        */
-      if ((said.settled ?? 0) > 0 && this.doing !== null && CLEARS_GREEN.has(this.doing)) this.groundSlow = true;
+      if ((said.settled ?? 0) > 0 && this.doing !== null && (CLEARS_GREEN.has(this.doing) || WORKS_A_GATE.has(this.doing))) this.groundSlow = true;
       this.doing = said.act ?? null;
       this.hooks.doing?.({
         act: said.act ?? null,
@@ -2091,6 +2099,8 @@ export class Island {
 
   /** Land as the island sent it: the changes themselves, or how far it has got, for the history read to catch up to. */
   private heardLand(body: HeardBody): void {
+    // A gate in this block went up or down (`perform_gate`): the next ground read brings it.
+    if (body.gates === true) this.groundSlow = true;
     if (Array.isArray(body.rows)) {
       for (const c of body.rows as Array<TileChange & { n: number }>) this.applyChange(c);
     } else if (typeof body.upto === 'number' && body.upto > this.seenChange) {
@@ -3080,13 +3090,20 @@ export class Island {
     return (data as { why?: string } | null)?.why ?? null;
   }
 
-  async act(action: string, target: Record<string, unknown>, times = 1): Promise<ActResult> {
+  async act(action: string, target: Record<string, unknown>, times = 1, hidden = false): Promise<ActResult> {
     if (!this.info) return { started: false, why: 'You are not on an island.' };
     // A word at a cellar's stairs still on its way lands first, so the job is judged on the storey the body is on.
     if (this.turning) await waitAtMost(this.turning, MOVE_LOST);
-    const { data, error } = await supabase().rpc('rpc_act', {
-      p_world: this.info.id, p_action: action, p_target: target, p_times: times,
-    });
+    /*
+     * gates: a solid wall asked for as a hidden door (`gates.ts`) goes by
+     * `rpc_plan_hidden_wall`, which is `rpc_act`'s own path for the plan and
+     * keeps the ask beside it in the same transaction, and answers as it does.
+     */
+    const { data, error } = hidden
+      ? await supabase().rpc('rpc_plan_hidden_wall', { p_world: this.info.id, p_target: target, p_times: times })
+      : await supabase().rpc('rpc_act', {
+        p_world: this.info.id, p_action: action, p_target: target, p_times: times,
+      });
     if (error) return { started: false, why: error.message };
     const result = data as ActResult;
     /*

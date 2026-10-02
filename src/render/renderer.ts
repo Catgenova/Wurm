@@ -125,6 +125,14 @@ import { flowerSeason, flowersOn } from '../world/flowers';
 import { drawFace, EDGES, ROCK_MOSS, topEdges, type Face } from './outcrops';
 import { forgetTrees, grownAt, spriteScaleFor, bushSprite, crateSprite, cropSprite, drawAnvil, drawCampfire, drawCreature, drawKiln, drawPlayer, drawSmelter, facingOf, pileSprite, tokenSprite, treeSprite, type Sprite, drawWorkPost, drawTrap, drawDeck, stumpSprite, type DeckShape } from './sprites';
 import { wildermonTop } from './wildermon';
+import {
+  drawChains, drawDrawbridgeSpan, drawGallows, drawGatewayDressing, drawGrille, drawGrooves, drawHiddenMark, drawHingeCrib, drawLandingCrib,
+  drawStandingDeck,
+  gallowsTop, gatewayArch, gatewayClear, gatewayPicture, moveTo, DRAWBRIDGE_FALL, DRAWBRIDGE_RISE, GATEWAY, PORTCULLIS_DROP, PORTCULLIS_RISE, type ArchShape,
+  type DrawbridgeGeom, type Motion, type WallFace,
+} from './gates';
+import { hingeKey, hingeOf, isDrawbridge, landingOf } from '../game/gates';
+import { bridgeDone, type Bridge } from '../game/bridges';
 import { SmallLife, type Mote } from './life';
 import { lookStep, yearAt } from './foliage';
 import { FIGURE_TOP } from './figure';
@@ -200,7 +208,7 @@ interface Entity {
   anvil?: PlacedAnvil;
   post?: PlacedPost;
   trap?: PlacedTrap;
-  deck?: { kind: string; done: boolean; drop: number; id: number; shape?: DeckShape; green?: number };
+  deck?: { kind: string; done: boolean; drop: number; id: number; shape?: DeckShape; green?: number; span?: number };
   /** A lotus standing up off the water: its raised leaves, flowers and seed heads, sorted among what else stands there. */
   plant?: WaterPlant;
   /** 1 rare, 2 supreme, 3 fantastic, for the shine over it; absent for the ordinary run of things. */
@@ -2338,6 +2346,22 @@ export class Renderer {
     // What is burning, for glass to glow with at night, and last frame's glow gone.
     this.lightsNow = this.game.darkness() > 0.02 ? this.game.lights() : [];
     this.glassNight.length = 0;
+    // Every drawbridge by the border it is hinged on, and the two tiles either side of that border, one of
+    // which draws it (`drawGateAt`): a number per tile, so the tiles with none cost one lookup.
+    this.drawbridges.clear();
+    this.landings.clear();
+    this.hingeTiles.clear();
+    if (this.game.bridges.size) {
+      for (const b of this.game.bridges.values()) {
+        if (!isDrawbridge(b)) continue;
+        // And the border its far end comes down on, where the crib it lands on is drawn from.
+        for (const [border, into] of [[hingeOf(b), this.drawbridges], [landingOf(b), this.landings]] as const) {
+          into.set(hingeKey(0, border), b);
+          this.hingeTiles.add(border.x * 65536 + border.y);
+          this.hingeTiles.add(border.dir === 'h' ? border.x * 65536 + border.y - 1 : (border.x - 1) * 65536 + border.y);
+        }
+      }
+    }
     // Other people are walked along between one word about them and the next,
     // on the drawing clock rather than the world's: it is smoothing, not
     // simulation, and should stay smooth even when nothing is being simulated.
@@ -2803,6 +2827,7 @@ export class Renderer {
             this.take(t === TileType.Tree ? 'tree' : t === TileType.Bush ? 'bush' : 'stump', x, y, baseX, baseY + hh - avg * hs, spr);
           }
           if (this.game.buildings.list.size || this.game.buildings.walls.size) this.drawStructures(x, y, V, d > playerDepth);
+          if (this.hingeTiles.has(x * 65536 + y)) this.drawGateAt(x, y, V);
           fogPath.moveTo(pts[0], pts[1]);
           fogPath.lineTo(pts[2], pts[3]);
           fogPath.lineTo(pts[4], pts[5]);
@@ -2885,7 +2910,15 @@ export class Renderer {
             const [px, py] = this.aqueducts.sortPoint(b, x, y, 'off');
             this.take('deck', x, y, px, py, null).aq = { b, k: b.spans.length - 1, part: 'off' };
           }
-          if (bridge && bridge.kind !== 'aqueduct') {
+          // A drawbridge lying on the far bank is laid a span at a time; anything else of it is drawn at its hinge (`drawGateAt`).
+          if (bridge && isDrawbridge(bridge)) {
+            const i = bridge.spans.findIndex((sp) => sp.x === x && sp.y === y);
+            if (i >= 0 && this.drawbridgeUp(bridge) === 0) {
+              const wx = x + 0.5, wy = y + 0.5;
+              this.take('deck', x, y, cam.worldToScreenX(wx, wy), cam.worldToScreenY(wx, wy, bridge.height), null).deck =
+                { kind: 'draw', done: Object.values(bridge.spans[i].needed).every((n) => n <= 0), drop: 0, id: bridge.id, span: i };
+            }
+          } else if (bridge && bridge.kind !== 'aqueduct') {
             const span = bridge.spans.find((sp) => sp.x === x && sp.y === y);
             const wx = x + 0.5;
             const wy = y + 0.5;
@@ -2991,6 +3024,7 @@ export class Renderer {
         }
         if (this.game.foundations.size) this.drawFoundation(x, y, lit);
         if (this.game.buildings.list.size || this.game.buildings.walls.size) this.drawStructures(x, y, V, d > playerDepth);
+        if (this.hingeTiles.has(x * 65536 + y)) this.drawGateAt(x, y, V);
       }
 
       // Down in a cellar you are drawn with it (`drawCellarView`), and from up top not at all.
@@ -3070,6 +3104,11 @@ export class Renderer {
           this.drawPitchedRoof(bb);
           if (cut?.length) ctx.restore();
         }
+      }
+      // A drawbridge's gallows and a deck off the bank stand in front of any roof this line laid (`drawGateAt`).
+      if (this.gateLate.length) {
+        for (const draw of this.gateLate) draw();
+        this.gateLate.length = 0;
       }
       // And whatever small thing is in the air over it, sorted in with everything standing on it.
       for (const m of this.life.aloft(d)) this.take('life', m.tx, m.ty, m.sx, m.sy, null).mote = m;
@@ -3652,6 +3691,14 @@ export class Renderer {
       if (ent.kind === 'deck' && ent.aq) {
         const box = this.aqueducts.draw(ctx, ent.aq);
         if (box) this.deckHits.push({ x: ent.x, y: ent.y, left: box.left, top: box.top, w: box.w, h: box.h, bridge: ent.aq.b.id, aq: box.shape });
+        continue;
+      }
+      if (ent.kind === 'deck' && ent.deck?.kind === 'draw') {
+        const b = this.game.bridges.get(ent.deck.id);
+        // Its chains go up to a gallows, which there is none of on a building's floor (`drawGateAt`).
+        if (b) drawDrawbridgeSpan(ctx, this.project, this.drawbridgeGeom(b), ent.deck.span ?? 0, zoom, this.deckLit(b), ent.deck.done,
+          bridgeDone(b) && !this.game.buildings.buildingAt(b.ax, b.ay));
+        this.deckHits.push({ x: ent.x, y: ent.y, left: ent.sx - 40 * zoom, top: ent.sy - 22 * zoom, w: 80 * zoom, h: 44 * zoom, bridge: ent.deck.id });
         continue;
       }
       if (ent.kind === 'deck' && ent.deck) {
@@ -8608,7 +8655,10 @@ export class Renderer {
        * The picture's hole and the clip below both come out of `ARCH`, so
        * there is one statement about where a doorway is.
        */
-      const arched = wall.type === 'arch';
+      // gates: a portcullis is a gateway as wide as a double door, under a segmental head, with its grille hung in it
+      // (`gatewayArch`, `drawGrille`): the face's own picture with that hole cut out of it and dressed (`gatewayPicture`).
+      const gateway = wall.type === 'portcullis';
+      const arched = wall.type === 'arch' || gateway;
       const windowed = wall.type === 'window';
       const doored = wall.type === 'door';
       const gated = wall.type === 'double_door';
@@ -8618,6 +8668,7 @@ export class Renderer {
       const cut = arched || windowed || doored || gated || bayed;
       /** Whichever hole this section has, added to the path that is open. */
       const hole = (s: number): void => {
+        if (gateway) { gatewayArch(ctx, { px, py }, zoom, WALL_HEIGHT).hole(s); return; }
         if (arched) { this.archGeom({ px, py, quad }, zoom).hole(s); return; }
         const [t0, t1, k0, k1] = doored
           ? [DOOR.t0, DOOR.t1, 0, DOOR.k1]
@@ -8663,14 +8714,45 @@ export class Renderer {
        * a hairline of whatever is behind, and on a coat of mud that is a
        * ruled line down the wall at every seam.
        */
-      if (cob.under) {
-        onStone();
-        flush(T0, T1, -sunk, 1);
-        ctx.fillStyle = rgb(cob.under, 1);
-        ctx.fill();
-        offStone();
+      /*
+       * gates: a portcullis's gateway, its way through laid first and unclipped -- the threshold, the shade,
+       * the wall's thickness, the grooves and the grille, each kept to the opening by its own shape -- and its
+       * picture, with the hole cut and the dressing laid, over the lot (`gates.ts`). The hedge does not turn
+       * the corner into it, as it does into an archway: what grows on the face stops at the jambs, as the ivy
+       * stops round the head (`gatewayClear`), so nothing stands in the grille's way.
+       */
+      const gw = gateway ? gatewayArch(ctx, { px, py }, zoom, WALL_HEIGHT) : undefined;
+      if (gw) {
+        // A wall drawn faint, in front of the room you are in, is seen through: there it is kept to the opening.
+        const faint = alpha < 1;
+        if (faint) { ctx.save(); gw.outline(1); ctx.clip(); }
+        this.threshold(cob, { px, py, quad }, gw.t0, gw.t1, zoom);
+        this.archShade({ px, py, quad }, zoom, gw, () => gw.outline(1));
+        this.archDepth(cob.reveal, 1, { px, py, quad }, zoom, gw);
+        drawGrooves(ctx, { px, py }, zoom, gw);
+        this.grille(wall, border, { px, py }, lit, gw);
+        if (faint) ctx.restore();
       }
-      blit(arched ? cob.arch[v]
+      if (cob.under) {
+        if (gw) {
+          // Round the opening rather than clipped to it.
+          flush(T0, T1, -sunk, 1);
+          gw.hole(1);
+          ctx.fillStyle = rgb(cob.under, 1);
+          ctx.fill('evenodd');
+        } else {
+          onStone();
+          flush(T0, T1, -sunk, 1);
+          ctx.fillStyle = rgb(cob.under, 1);
+          ctx.fill();
+          offStone();
+        }
+      }
+      /** gates: the face's picture with a portcullis's gateway in it. */
+      const gatePic = (img: HTMLCanvasElement): HTMLCanvasElement =>
+        gatewayPicture(img, WALL_HEIGHT, cob.reveal.map((c) => c * 1.3) as unknown as [number, number, number], cob.line);
+      blit(gateway ? gatePic(cob.face[v])
+        : arched ? cob.arch[v]
         : windowed ? cob.window[v]
         : doored ? cob.door[v]
         : gated ? cob.gate[v]
@@ -8694,7 +8776,7 @@ export class Renderer {
       }
       wear(
         cob.h,
-        arched ? [ARCH.t0, ARCH.t1] : doored ? [DOOR.t0, DOOR.t1] : gated ? [DOUBLE.t0, DOUBLE.t1] : null,
+        gateway ? [GATEWAY.t0 - 0.12, GATEWAY.t1 + 0.12] : arched ? [ARCH.t0, ARCH.t1] : doored ? [DOOR.t0, DOOR.t1] : gated ? [DOUBLE.t0, DOUBLE.t1] : null,
         windowed ? cob.h * (1 - WINDOW.k0) : bayed ? cob.h * (1 - BAY.k0) : null,
         !(cob.vigas && this.bearsJoists(wall.building, border)),
       );
@@ -8705,7 +8787,7 @@ export class Renderer {
        * the hour has to reach the stone and the bush in one pass or the bush
        * is cut in half along the edge of the opening.
        */
-      if (arched) {
+      if (arched && !gw) {
         const geom = this.archGeom({ px, py, quad }, zoom);
         ctx.save();
         geom.outline(1);
@@ -8734,6 +8816,14 @@ export class Renderer {
          * rather than as an edge somebody cut.
          */
         geom.rim(1);
+        ctx.strokeStyle = rgb(cob.line, 0.95, 0.6);
+        ctx.lineWidth = Math.max(1, 1.5 * zoom);
+        ctx.lineJoin = 'round';
+        ctx.stroke();
+      }
+      // gates: and the same line round a portcullis's gateway, whose way through went in under its picture.
+      if (gw) {
+        gw.rim(1);
         ctx.strokeStyle = rgb(cob.line, 0.95, 0.6);
         ctx.lineWidth = Math.max(1, 1.5 * zoom);
         ctx.lineJoin = 'round';
@@ -8799,7 +8889,8 @@ export class Renderer {
           blit(cob.base[v], 0, 1);
           if (countered) ctx.restore();
         }
-        if (cob.growth && arched) blit(cob.archWeed[v], 0, 1);
+        // gates: a portcullis's gateway takes a cart gate's tussocks, kept off its opening as its ivy is (`gatewayClear`).
+        if (cob.growth && arched) blit(gateway ? gatewayClear(cob.gateWeed[v], WALL_HEIGHT) : cob.archWeed[v], 0, 1);
       }
       // After the foot, and down to it: the sole it lays along the footing runs into the post.
       if (cob.post) posts(cob.post, 0, 1, wall.level === 0 ? cob.plinth / cob.h : -sunk);
@@ -8834,7 +8925,7 @@ export class Renderer {
             blit(V.shade[v], 1 - V.sh / cob.h, 1, 1, false, 0, 0, false, false);
             ctx.globalAlpha = alpha;
           }
-          const zone = arched ? [ARCH.t0, ARCH.t1, 0.76] : windowed ? [WINDOW.t0, WINDOW.t1, 0.78]
+          const zone = gateway ? [GATEWAY.t0, GATEWAY.t1, GATEWAY.crown + 0.16] : arched ? [ARCH.t0, ARCH.t1, 0.76] : windowed ? [WINDOW.t0, WINDOW.t1, 0.78]
             : doored ? [DOOR.t0, DOOR.t1, 0.8] : gated ? [DOUBLE.t0, DOUBLE.t1, 0.8] : bayed ? [BAY.t0, BAY.t1, 0.8] : null;
           ctx.save();
           if (zone) {
@@ -8876,7 +8967,7 @@ export class Renderer {
        */
       if (cob.gleam && cob.shadow(lit) > 0.05) {
         const ground = wall.level === 0 && !indoors && !aloft;
-        gleamed(arched ? cob.arch[v] : windowed ? cob.window[v] : doored ? cob.door[v] : gated ? cob.gate[v] : bayed ? cob.bay[v] : cob.face[v], ground ? (cob.plinth + 8) / cob.h : 0, turned);
+        gleamed(gateway ? gatePic(cob.face[v]) : arched ? cob.arch[v] : windowed ? cob.window[v] : doored ? cob.door[v] : gated ? cob.gate[v] : bayed ? cob.bay[v] : cob.face[v], ground ? (cob.plinth + 8) / cob.h : 0, turned);
         if (ground) { onStone(); gleamed(cob.foot[v], 0, turned, cob.under ? 0.004 : 0); offStone(); }
       }
       if (cob.soft && indoors) inside();
@@ -8907,11 +8998,13 @@ export class Renderer {
       if (cob.growth && !roofed && !indoors) {
         // Round a shop counter's opening, board and awning, as its hedge goes (`counterCut`).
         if (countered) this.counterCut({ px, py });
-        blit(cob.spill[v], 0, 1 + cob.pad / cob.h);
+        // gates: kept off a portcullis's gateway, to the stone round its head (`gatewayClear`).
+        blit(gateway ? gatewayClear(cob.spill[v], WALL_HEIGHT, 1 + cob.pad / cob.h) : cob.spill[v], 0, 1 + cob.pad / cob.h);
         if (countered) ctx.restore();
         // And the tongue of it that hangs into the opening, on the variants
         // whose curtain reaches that far along the wall.
-        if (arched) blit(cob.archIvy[v], 0, 1);
+        // gates: and over a portcullis's gateway, kept to the stone round its head (`gatewayClear`).
+        if (arched) blit(gateway ? gatewayClear(cob.gateIvy[v], WALL_HEIGHT) : cob.archIvy[v], 0, 1);
         if (windowed) blit(cob.winIvy[v], 0, 1);
         if (doored) blit(cob.doorIvy[v], 0, 1);
         if (gated) blit(cob.gateIvy[v], 0, 1);
@@ -8921,6 +9014,7 @@ export class Renderer {
       if (bayed && !indoors && !countered) this.paintedBay(cob, { px, py, quad }, zoom, this.lampBehind(wall, border));
       if (countered) this.drawCounterPart('front', wall, border, { px, py, quad }, zoom, lit, { line: cob.line, reveal: cob.reveal, wood: cob.beam, woodLine: cob.beamLine });
       if (!cut) this.wallOpenings(wall, mat, lit, { px, py, quad }, zoom, border);
+      if (wall.type === 'hidden_door' && this.game.buildings.seenType(wall) === 'hidden_door') drawHiddenMark(ctx, { px, py }, zoom, cob.line);
       ctx.globalAlpha = 1;
       return;
     }
@@ -8980,6 +9074,7 @@ export class Renderer {
       const seenY = border.dir === 'h' ? (toward > 0 ? border.y : border.y - 1) : border.y;
       this.wallIvy(wall, px, py, tall, nx * toward, ny * toward, !!up && isDone(up), !!this.game.buildings.buildingAt(seenX, seenY));
     }
+    if (wall.type === 'hidden_door' && this.game.buildings.seenType(wall) === 'hidden_door') drawHiddenMark(ctx, { px, py }, zoom, mat.trim);
     ctx.globalAlpha = 1;
   }
 
@@ -9029,6 +9124,7 @@ export class Renderer {
     const keep: Keep[] = [];
     switch (wall.type) {
       case 'arch': keep.push({ t0: ARCH.t0, t1: ARCH.t1, k0: 0, k1: 0.8 }); break;
+      case 'portcullis': keep.push({ t0: GATEWAY.t0 - 0.06, t1: GATEWAY.t1 + 0.06, k0: 0, k1: GATEWAY.crown + 0.16 }); break;
       case 'window': keep.push({ t0: WINDOW.t0, t1: WINDOW.t1, k0: WINDOW.k0 - 0.05, k1: WINDOW.k1 + 0.1 }); break;
       case 'bay': keep.push({ t0: BAY.t0, t1: BAY.t1, k0: BAY.k0 - 0.05, k1: BAY.k1 + 0.08 }); break;
       // A counter's opening, its board and the awning over it (`counter.ts`).
@@ -9214,9 +9310,126 @@ export class Renderer {
       case 'arch':
         this.wallArch(mat, lit, g, zoom);
         break;
+      case 'portcullis':
+        this.wallGateway(wall, border, mat, lit, g, zoom);
+        break;
       default:
         break;
     }
+  }
+
+  // ---- Gates: a portcullis's grille and a drawbridge (`gates.ts`). ----
+
+  /** Where each gate is in its travel, by the border or the bridge. */
+  private gateMotion = new Map<string, Motion>();
+  /** This frame's drawbridges, by the border each is hinged on, and the tiles either side of each hinge. */
+  private drawbridges = new Map<string, Bridge>();
+  private landings = new Map<string, Bridge>();
+  private hingeTiles = new Set<number>();
+  /** What `drawGateAt` found on this line, laid after the line's roofs and before what stands on it. */
+  private gateLate: Array<() => void> = [];
+  /** A world point and a height, to the screen. */
+  private readonly project = (x: number, y: number, h: number): [number, number] =>
+    [this.camera.worldToScreenX(x, y), this.camera.worldToScreenY(x, y, h)];
+
+  /** How far a thing that moves between two ends is along its way now: nought at one, one at the other. */
+  private travel(key: string, to: number, up: number, down: number): number {
+    const { m, at } = moveTo(this.gateMotion.get(key), to, this.time, up, down);
+    this.gateMotion.set(key, m);
+    return at;
+  }
+
+  /** A portcullis's grille in its arch, as far down as it has dropped. */
+  private grille(wall: Wall, border: Border, g: WallFace, lit: number, a: ArchShape): void {
+    // The grille goes in with the last of the wall's bill: until then it is an archway being built.
+    if (!isDone(wall)) return;
+    const down = this.travel(`p:${wall.level}:${border.dir}:${border.x},${border.y}`, wall.lowered ? 1 : 0, PORTCULLIS_DROP, PORTCULLIS_RISE);
+    drawGrille(this.canvas.ctx, g, a, this.camera.zoom, down, lit, WALL_HEIGHT);
+  }
+
+  /** How far a drawbridge stands up now: nought lying on the far bank, one on end. */
+  private drawbridgeUp(b: Bridge): number {
+    return this.travel(`b:${b.id}`, b.raised ? 1 : 0, DRAWBRIDGE_RISE, DRAWBRIDGE_FALL);
+  }
+
+  /** Where everything about a drawbridge is, and how far up it stands. */
+  private drawbridgeGeom(b: Bridge): DrawbridgeGeom {
+    const ux = Math.sign(b.bx - b.ax), uy = Math.sign(b.by - b.ay);
+    return {
+      hx: b.ax + 0.5 + ux * 0.5, hy: b.ay + 0.5 + uy * 0.5, ux, uy, nx: -uy, ny: ux,
+      len: b.spans.length, h: b.height, up: this.drawbridgeUp(b), groundAt: (x, y) => this.game.world.heightAt(x, y),
+    };
+  }
+
+  /** The light on a drawbridge's planks, as a floor's: a face running across it. */
+  private deckLit(b: Bridge): number {
+    return this.faceLight(-Math.sign(b.by - b.ay), Math.sign(b.bx - b.ax));
+  }
+
+  /**
+   * A drawbridge's gallows and winch, and its deck whenever it is not lying on
+   * the far bank, drawn by the tile that has the hinge for a back border --
+   * the one in front of it -- as a wall on that border is, but after the
+   * roofs that line lays (`gateLate`): a roof is laid a line in front of its
+   * own walls, and a gallows a tile in front of a gatehouse stood under its
+   * eaves. Seen from the winch side the deck stands behind the gallows; from
+   * the far side, in front.
+   */
+  private drawGateAt(x: number, y: number, V: View): void {
+    for (const side of V.back) {
+      const border = borderOf(x, y, side);
+      const key = hingeKey(0, border);
+      const landing = this.landings.get(key);
+      if (landing) this.drawLandingAt(landing);
+      const b = this.drawbridges.get(key);
+      if (!b) continue;
+      const ctx = this.canvas.ctx;
+      const zoom = this.camera.zoom;
+      const g = this.drawbridgeGeom(b);
+      const P = this.project;
+      const lit = this.deckLit(b);
+      const done = bridgeDone(b);
+      const near = (dx: number, dy: number): boolean => this.camera.nearSide(dx, dy) > 0;
+      // A face of timber is lit as a wall facing the same way is.
+      const faceLit = (ox: number, oy: number): number => this.faceLight(-oy, ox);
+      // Which side of the hinge the camera is on: the winch's, or the far bank's.
+      const winchSide = this.camera.nearSide(-g.ux, -g.uy) > 0;
+      // A drawbridge set out from a building's floor before that was refused has no gallows in there, nor a crib.
+      const open = !this.game.buildings.buildingAt(b.ax, b.ay);
+      const deck = (): void => {
+        if (!done || g.up <= 0) return;
+        drawStandingDeck(ctx, P, g, zoom, lit, faceLit);
+      };
+      const crib = (): void => {
+        if (open && isDone(b.spans[0])) drawHingeCrib(ctx, P, g, zoom, near, faceLit, lit);
+      };
+      const gallows = (): void => {
+        if (!done || !open) return;
+        drawGallows(ctx, P, g, zoom, near, faceLit);
+        // The chains: whole when it is off the bank, and the length over the winch end when it lies on it.
+        if (g.up > 0) drawChains(ctx, P, g, zoom, lit);
+        else drawChains(ctx, P, g, zoom, lit, { d0: -0.2, d1: 0 });
+      };
+      this.gateLate.push(winchSide ? () => { deck(); crib(); gallows(); } : () => { crib(); gallows(); deck(); });
+      if (done) {
+        // What is clicked for it, standing: the gallows and the deck on end.
+        const [lx, ly] = P(g.hx - g.nx * 0.6, g.hy - g.ny * 0.6, Math.max(gallowsTop(g), g.h + g.len * UNITS_PER_TILE * g.up));
+        const [rx, ry] = P(g.hx + g.nx * 0.6, g.hy + g.ny * 0.6, g.groundAt(g.hx, g.hy));
+        const left = Math.min(lx, rx), top = Math.min(ly, ry);
+        this.deckHits.push({ x: b.ax, y: b.ay, left, top, w: Math.abs(rx - lx), h: Math.abs(ry - ly), bridge: b.id });
+      }
+    }
+  }
+
+  /** The crib a drawbridge's far end comes down on, laid with the rest of the line its border is the back of. */
+  private drawLandingAt(b: Bridge): void {
+    const last = b.spans[b.spans.length - 1];
+    if (!last || !isDone(last) || this.game.buildings.buildingAt(b.bx, b.by)) return;
+    const g = this.drawbridgeGeom(b);
+    const near = (dx: number, dy: number): boolean => this.camera.nearSide(dx, dy) > 0;
+    const faceLit = (ox: number, oy: number): number => this.faceLight(-oy, ox);
+    const lit = this.deckLit(b);
+    this.gateLate.push(() => drawLandingCrib(this.canvas.ctx, this.project, g, this.camera.zoom, near, faceLit, lit));
   }
 
   /**
@@ -9540,13 +9753,16 @@ export class Renderer {
    *
    * Two washes. One flat over the whole opening, for standing under a wall;
    * one along the head, for standing under the part of it that leans over
-   * you. Called clipped to the hole, so neither reaches the stone.
+   * you. Called clipped to the hole, so neither reaches the stone -- or
+   * handed the hole as `region` to lay them in, unclipped.
    */
-  private archShade(g: WallGeom, zoom: number): void {
+  private archShade(g: WallGeom, zoom: number, geom: ArchShape | ReturnType<Renderer['archGeom']> = this.archGeom(g, zoom),
+    region: () => void = () => g.quad(0, 1, 0, 1)): void {
     const ctx = this.canvas.ctx;
-    const { px, py, quad } = g;
-    const { spring, headK } = this.archGeom(g, zoom);
-    quad(0, 1, 0, 1);
+    const { px, py } = g;
+    // gates: under a portcullis's gateway too, whose head is its own (`gatewayArch`), laid in the opening's own shape.
+    const { spring, headK } = geom;
+    region();
     ctx.fillStyle = 'rgba(38, 34, 22, 0.18)';
     ctx.fill();
     // From the crown down to the springing, where the head stops overhanging.
@@ -9554,15 +9770,17 @@ export class Renderer {
     const wash = ctx.createLinearGradient(px(0.5, top), py(0.5, top), px(0.5, spring), py(0.5, spring));
     wash.addColorStop(0, 'rgba(38, 34, 22, 0.20)');
     wash.addColorStop(1, 'rgba(38, 34, 22, 0)');
-    quad(0, 1, 0, 1);
+    region();
     ctx.fillStyle = wash;
     ctx.fill();
   }
 
-  private archDepth(ink: readonly [number, number, number], lit: number, g: WallGeom, zoom: number): void {
+  private archDepth(ink: readonly [number, number, number], lit: number, g: WallGeom, zoom: number,
+    geom: ArchShape | ReturnType<Renderer['archGeom']> = this.archGeom(g, zoom)): void {
     const ctx = this.canvas.ctx;
     const { px, py } = g;
-    const { t0, t1, spring, steps, headT, headK } = this.archGeom(g, zoom);
+    // gates: round a portcullis's gateway too (`gatewayArch`).
+    const { t0, t1, spring, steps, headT, headK } = geom;
     /*
      * Nothing is painted on the far side of it.
      *
@@ -9626,6 +9844,31 @@ export class Renderer {
       const k = JAMB_LIT + (SOFFIT_LIT - JAMB_LIT) * Math.sin(Math.PI * u);
       strip(headT(i / steps), headK(i / steps), headT((i + 1) / steps), headK((i + 1) / steps), k, i % 2 === 1);
     }
+  }
+
+  /**
+   * A portcullis on a wall drawn in its flat colour (`gates.ts`): the gateway
+   * as `wallArch` draws an archway -- its shade, the wall's thickness round
+   * it, the edge of it -- with the voussoirs and jamb stones in the
+   * material's trim, the grooves, and the grille hung in them.
+   */
+  private wallGateway(wall: Wall, border: Border, mat: MaterialDef, lit: number, g: WallGeom, zoom: number): void {
+    const ctx = this.canvas.ctx;
+    const geom = gatewayArch(ctx, g, zoom, WALL_HEIGHT);
+    ctx.save();
+    geom.outline(1);
+    ctx.clip();
+    this.archShade(g, zoom, geom);
+    this.archDepth(mat.color, lit, g, zoom, geom);
+    drawGrooves(ctx, g, zoom, geom);
+    this.grille(wall, border, g, lit, geom);
+    ctx.restore();
+    drawGatewayDressing(ctx, g, geom, mat.color.map((c) => c * lit) as unknown as [number, number, number], mat.trim,
+      { detail: zoom >= 0.6, line: Math.max(0.8, 1.1 * zoom) });
+    geom.rim(1);
+    ctx.strokeStyle = rgb(mat.trim, lit * 0.85);
+    ctx.lineWidth = Math.max(1, 1.2 * zoom);
+    ctx.stroke();
   }
 
   private wallArch(mat: MaterialDef, lit: number, g: WallGeom, zoom: number): void {

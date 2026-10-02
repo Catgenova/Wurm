@@ -33,6 +33,8 @@ create table if not exists wall_type_def (
 alter table wall_type_def add column if not exists beast_proof boolean not null default false;
 alter table wall_type_def add column if not exists wide boolean not null default false;
 create table if not exists wall_fitting (type text not null, item text not null, count int not null, primary key (type, item));
+alter table wall_type_def add column if not exists stone boolean not null default false;
+alter table wall_type_def add column if not exists ground boolean not null default false;
 create table if not exists build_material_def (
   id text primary key, name text not null, kind text not null, tool text not null, skill text not null
 );
@@ -201,6 +203,10 @@ create table if not exists bridge_def (
 create table if not exists bridge_bill (
   kind text not null, item text not null, count int not null, primary key (kind, item)
 );
+create table if not exists bridge_winch (
+  kind text not null, item text not null, count int not null, primary key (kind, item)
+);
+alter table bridge_def add column if not exists grounded boolean not null default false;
 alter table furniture_def add column if not exists bed real;
 alter table furniture_def add column if not exists crates int;
 alter table furniture_def add column if not exists roses boolean not null default false;
@@ -1349,6 +1355,10 @@ insert into action_def (id, label, verb, skill, tool, corner, range, stamina, ba
 insert into action_def (id, label, verb, skill, tool, corner, range, stamina, base_time, difficulty, instant, repeatable) values ('take_from_store', 'Take out', 'taking it out', null, null, false, null, 0, 0, null, true, false);
 insert into action_def (id, label, verb, skill, tool, corner, range, stamina, base_time, difficulty, instant, repeatable) values ('fit_lock', 'Fit a padlock', 'fitting a padlock', 'blacksmithing', null, false, null, 0.02, 6, null, false, false);
 insert into action_def (id, label, verb, skill, tool, corner, range, stamina, base_time, difficulty, instant, repeatable) values ('take_off_lock', 'Take the padlock off', 'taking the padlock off', null, null, false, null, 0.02, 4, null, false, false);
+insert into action_def (id, label, verb, skill, tool, corner, range, stamina, base_time, difficulty, instant, repeatable) values ('raise_portcullis', 'Raise the portcullis', 'winching the portcullis up', null, null, false, 1, 0.04, 6, null, false, false);
+insert into action_def (id, label, verb, skill, tool, corner, range, stamina, base_time, difficulty, instant, repeatable) values ('lower_portcullis', 'Lower the portcullis', 'letting the portcullis down', null, null, false, 1, 0.01, 2, null, false, false);
+insert into action_def (id, label, verb, skill, tool, corner, range, stamina, base_time, difficulty, instant, repeatable) values ('raise_drawbridge', 'Raise the drawbridge', 'winching the drawbridge up', null, null, false, 0, 0.06, 10, null, false, false);
+insert into action_def (id, label, verb, skill, tool, corner, range, stamina, base_time, difficulty, instant, repeatable) values ('lower_drawbridge', 'Lower the drawbridge', 'letting the drawbridge down', null, null, false, 0, 0.02, 4, null, false, false);
 insert into action_def (id, label, verb, skill, tool, corner, range, stamina, base_time, difficulty, instant, repeatable) values ('make_planks', 'Saw into planks', 'sawing', 'carpentry', 'saw', false, null, 0.04, 5, null, false, true);
 insert into action_def (id, label, verb, skill, tool, corner, range, stamina, base_time, difficulty, instant, repeatable) values ('make_timbers', 'Saw into timbers', 'sawing', 'carpentry', 'saw', false, null, 0.04, 5, null, false, true);
 insert into action_def (id, label, verb, skill, tool, corner, range, stamina, base_time, difficulty, instant, repeatable) values ('make_shafts', 'Carve shafts', 'carving shafts', 'carpentry', 'carving_knife', false, null, 0.03, 5, null, false, true);
@@ -1797,6 +1807,7 @@ delete from school_stone;
 delete from spell_def;
 delete from bridge_def;
 delete from bridge_bill;
+delete from bridge_winch;
 delete from brew_def;
 delete from dyeable_item;
 delete from dyeable_class;
@@ -4306,6 +4317,14 @@ insert into wall_type_def values ('half_wall', 'Half wall', 0.5, false, 0.5, tru
 insert into wall_type_def values ('counter', 'Shop counter', 0.75, false, null, false, false, false);
 insert into wall_fitting values ('counter', 'hinge', 2);
 insert into wall_type_def values ('railing', 'Railing', 0.35, false, 0.36, true, true, false);
+insert into wall_type_def values ('portcullis', 'Portcullis', 1, true, null, false, false, false);
+update wall_type_def set wide = true where id = 'portcullis';
+update wall_type_def set stone = true where id = 'portcullis';
+update wall_type_def set ground = true where id = 'portcullis';
+insert into wall_fitting values ('portcullis', 'ribbon', 16);
+insert into wall_fitting values ('portcullis', 'bracket', 8);
+insert into wall_type_def values ('hidden_door', 'Hidden door', 1, true, null, false, false, false);
+update wall_type_def set beast_proof = true where id = 'hidden_door';
 insert into roof_shape_def values ('gable', 'Gabled', 1, 0.3, false, 'One ridge down the length of it, falling to the eaves on the long sides; the ends are wall carried up in a triangle rather than roof. A tile of it takes three tenths of what a solid wall of the same stuff does.');
 insert into roof_shape_def values ('hip', 'Hipped', 1, 0.5, false, 'Falling away on every side, with no gable ends to raise, and it sheds weather off every wall. A tile of it takes half of what a solid wall of the same stuff does.');
 insert into roof_shape_def values ('flat', 'Flat', 0, 0.85, true, 'A deck rather than a roof: laid heavy enough to walk out onto, and what you get for it is a terrace. A tile of it takes 85% of what a solid wall of the same stuff does.');
@@ -4657,6 +4676,14 @@ insert into bridge_def values ('aqueduct', 'Aqueduct', 8, 'trowel', 'masonry', 4
 insert into bridge_bill values ('aqueduct', 'mortar', 30);
 insert into bridge_bill values ('aqueduct', 'stone_brick', 40);
 insert into bridge_bill values ('aqueduct', 'stone_slab', 10);
+insert into bridge_def values ('draw', 'Drawbridge', 2, 'mallet', 'carpentry', 34, true, 'Its first span also takes six timbers, four hinges and eight metal ribbons: the hinge, the gallows, the winch and its chains. Both ends outside, on open ground, with at most two tiles of deck between them. Raised or lowered, standing at the end it was set out from, by anyone its padlock admits, or by anybody at all without one, and pulled down by them too, within 4.5 tiles of the middle of either end, on a settlement only by those of them who are its builders. Raised, nothing crosses it and it stops the eye over its hinge; lowered, a cart crosses it.');
+insert into bridge_bill values ('draw', 'plank', 24);
+insert into bridge_bill values ('draw', 'timber', 8);
+insert into bridge_bill values ('draw', 'nail', 24);
+insert into bridge_winch values ('draw', 'timber', 6);
+insert into bridge_winch values ('draw', 'hinge', 4);
+insert into bridge_winch values ('draw', 'ribbon', 8);
+update bridge_def set grounded = true where id = 'draw';
 insert into brew_def values ('ale', 'Ale', 'wheat', 12, 15, 2250, 12, 'You mash the wheat into the water and leave it to work. It will be ale.');
 insert into brew_def values ('cider', 'Cider', 'apple', 20, 15, 4500, 18, 'You break the apples into the water and bung the barrel. It will be cider.');
 insert into brew_def values ('mead', 'Mead', 'honey', 12, 15, 6000, 24, 'You stir the honey through until it goes. It will be mead, in its own time.');

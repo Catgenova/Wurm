@@ -1,6 +1,7 @@
 import type { ActionDef, Target } from './actions';
 import type { Game } from './game';
-import type { Item } from './items';
+import { keyFromPadlock, padlockFromKey, padlockToFit, type Item } from './items';
+import { gateLockable } from './gates';
 
 /**
  * A lock, and the one key cut to it.
@@ -60,11 +61,12 @@ export function lockRefusal(items: readonly Item[], store: Lockable | undefined,
 export const lockWord = (store: Lockable | undefined, canOpen: boolean): string =>
   !isLocked(store) ? '' : canOpen ? ' (unlocked)' : ' (locked)';
 
-/** The crate or piece of furniture a target is pointing at, if it is one. */
+/** The crate, piece of furniture, portcullis or drawbridge a target is pointing at, if it is one. */
 export function lockableAt(g: Game, t: Target): (Lockable & { x: number; y: number }) | undefined {
   if (t.kind === 'crate') return g.crates.get(t.id);
   if (t.kind === 'furniture') return g.furniture.get(t.id);
-  return undefined;
+  // A portcullis on the ground floor, or a drawbridge's winch (`gates.ts`).
+  return gateLockable(g, t);
 }
 
 /**
@@ -82,28 +84,28 @@ export const LOCK_ACTIONS: ActionDef[] = [
     skill: 'blacksmithing',
     stamina: 0.02,
     baseTime: 6,
-    applies: (t, g) => lockableAt(g, t) !== undefined && g.inventory.has('padlock'),
+    // gates: a padlock locked against use is not one to fit (`padlockToFit`).
+    applies: (t, g) => lockableAt(g, t) !== undefined && padlockToFit(g.inventory.items) !== undefined,
     check: (t, g) => {
       const store = lockableAt(g, t);
       if (!store) return 'It is gone.';
       if (isLocked(store)) return 'There is a padlock on it already.';
-      if (!g.inventory.has('padlock')) return 'You have no padlock. Forge one at a smelter.';
+      if (!padlockToFit(g.inventory.items)) return 'You have no padlock. Forge one at a smelter.';
       return null;
     },
     perform: (t, g) => {
       const store = lockableAt(g, t);
-      const lock = g.inventory.find('padlock');
+      const lock = padlockToFit(g.inventory.items);
       if (!store || !lock) return;
       /*
        * The padlock's own uid is the number, minted by being consumed. It is
        * unique on an island for as long as the island lasts, so there is
        * nothing to allocate and nothing two machines could disagree about.
+       * gates: and the padlock's own item becomes the key, as the island
+       * makes it (`keyFromPadlock`): every key keyed to its own number.
        */
-      const code = lock.uid;
-      if (!g.inventory.remove(lock.uid, 1)) return;
-      store.lock = code;
-      const key = g.inventory.add('key', { ql: lock.ql, extra: lock.extra });
-      key.keyed = code;
+      store.lock = lock.uid;
+      keyFromPadlock(lock);
       g.logMsg(`You fit the padlock and cut its key. Nothing opens it now but that key${
         g.deedOfMineAt(Math.floor(store.x), Math.floor(store.y)) ? ', or you, on your own land' : ''}.`, 'event');
       g.events.emit('inventory');
@@ -132,8 +134,9 @@ export const LOCK_ACTIONS: ActionDef[] = [
       // The key goes with the lock it was cut to. A key to nothing is an
       // item nobody can tell from a key to something, and a pack full of
       // those is how a lock stops being worth fitting.
-      if (key) g.inventory.remove(key.uid, 1);
-      g.inventory.add('padlock', { ql: 40 });
+      // gates: the key itself becomes the padlock handed back, as the island makes it (`padlockFromKey`).
+      if (key) padlockFromKey(key);
+      else g.inventory.add('padlock', { ql: 40 });
       g.logMsg(`You take the padlock off${key ? ' and throw the key in after it' : ''}. It is open to anybody again.${
         code ? '' : ''}`, 'event');
       g.events.emit('inventory');

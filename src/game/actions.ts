@@ -25,6 +25,7 @@ import { ARCHAEOLOGY_ACTIONS } from './archaeology';
 import { CIRCLET, CIRCLET_SET, CIRCLET_STONES, circletSays, circletWithRoom, gemOf, maybeGem, stonesOf } from './gems';
 import { TREASURE_ACTIONS, maybeMap } from './treasure';
 import { LOCK_ACTIONS } from './locks';
+import { GATE_ACTIONS } from './gates';
 import { FIRST_AID_ACTIONS } from './firstaid';
 import { REMEDY_ACTIONS } from './remedies';
 import { fillFromSource, PLACEABLE_ACTIONS, sourceFor, vesselBecomes, waterNear } from './placeables';
@@ -3010,6 +3011,8 @@ export const ACTIONS: ActionDef[] = [
   ...PLACEABLE_ACTIONS,
   ...CRATE_ACTIONS,
   ...LOCK_ACTIONS,
+  // Raising and lowering a portcullis and a drawbridge (`gates.ts`).
+  ...GATE_ACTIONS,
   ...RECIPE_ACTIONS,
   ...BUTCHER_ACTIONS,
   ...CAMPFIRE_ACTIONS,

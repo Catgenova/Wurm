@@ -2038,6 +2038,30 @@ jobs:
             --outfile=node_modules/.cache/artisan.mjs --log-level=error
           node node_modules/.cache/artisan.mjs
 
+      - name: A portcullis, a drawbridge and a hidden door, the same on both sides
+        run: |
+          # Asked for: a portcullis raised and lowered that stops everything but
+          # the eye when it is down; a drawbridge worked from its winch that
+          # cannot be crossed when it is up; and a door that is a solid wall to
+          # everybody its lock does not admit -- "the island must never tell a
+          # browser it is a door unless that player is admitted". This asks
+          # what each costs, what the ground read says to four people (the
+          # founder, a key holder, a builder with no key and a stranger) and
+          # that the wall table cannot be read round it, what a browser fed that
+          # read lets through and sees through at every state of both gates,
+          # who may raise and lower each in the same words on both sides, the
+          # island's own walk over the drawbridge, who may pull a bridge down on
+          # a settlement and off one, and that planning a hidden door leaves
+          # nothing on the player row anybody may read, writes the one line a
+          # solid wall's plan writes and moves no counter further than it --
+          # each ask waiting on its own border, lapsing, and never kept for a
+          # plan that is refused -- and all of it beside what the other batches
+          # build: decks on piers, aqueducts, cellars, jetties, columns,
+          # railings and glasshouses.
+          npx esbuild supabase/test/gates.ts --bundle --platform=node --format=esm \
+            --outfile=node_modules/.cache/gates.mjs --log-level=error
+          node node_modules/.cache/gates.mjs
+
       - name: The exact benefit, and where its number comes from
         run: |
           # Text the player reads says what changes and by how much, and where

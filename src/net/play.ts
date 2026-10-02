@@ -7,6 +7,7 @@ import { supabase } from './supabase';
 import { Island, type ItemRow, type PlayerRow } from './island';
 import { generateAtlasWorld, loadAtlas } from '../world/atlas-world';
 import { ACTION_BY_ID, type ActionDef, type Target } from '../game/actions';
+import { hiddenAsk } from '../game/gates';
 import { saidWords } from '../game/roster';
 import { skillRises, tookOff } from './felt';
 import { packAll } from './packed';
@@ -232,7 +233,8 @@ export async function startIsland(params: URLSearchParams, tell: Telling): Promi
 
   game.ask = (def: ActionDef, target: Target, goes?: number) => {
     lastTarget = target;
-    void island.act(def.id, target as unknown as Record<string, unknown>, goes ?? 1);
+    // gates: a solid wall asked for as a hidden door goes in the one call that keeps the ask with its plan (`gates.ts`).
+    void island.act(def.id, target as unknown as Record<string, unknown>, goes ?? 1, hiddenAsk(target));
   };
   game.stop = () => {
     lastTarget = null;

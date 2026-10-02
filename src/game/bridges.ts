@@ -2,6 +2,7 @@ import type { ActionDef, Target } from './actions';
 import { isDone, progressOf, type Bill } from './building';
 import type { Game } from './game';
 import { greenNow } from './greening';
+import { rankAtLeast } from './ranks';
 import { itemDef } from './items';
 import { fill } from './words';
 import { AQUEDUCT_FLOW, CHANNEL_WIDE, TILE_METRES } from '../world/aqueducts';
@@ -21,7 +22,14 @@ import { AQUEDUCT_FLOW, CHANNEL_WIDE, TILE_METRES } from '../world/aqueducts';
  * season and carries anything at all, further than either.
  */
 
-export type BridgeKind = 'rope' | 'wood' | 'stone' | 'aqueduct';
+export type BridgeKind = 'rope' | 'wood' | 'stone' | 'aqueduct' | 'draw';
+
+/**
+ * gates: how near the middle of one of its two end tiles a body stands to
+ * pull a bridge down, in tiles. The island's `bridge_pull_reach`, which the
+ * parity test holds to this.
+ */
+export const PULL_REACH = 4.5;
 
 export interface BridgeDef {
   id: BridgeKind;
@@ -36,6 +44,14 @@ export interface BridgeDef {
   difficulty: number;
   /** Wheels may cross it. */
   carts: boolean;
+  /**
+   * What the first tile of deck takes over the rest: a drawbridge's hinges,
+   * and the gallows, winch and chains that raise it, all at the end it is set
+   * out from (`gates.ts`).
+   */
+  winch?: Array<[string, number]>;
+  /** Both ends on the ground: a drawbridge, which lands on no storey. */
+  grounded?: boolean;
   note: string;
 }
 
@@ -89,6 +105,24 @@ export const BRIDGES: Record<BridgeKind, BridgeDef> = {
     carts: false,
     note: '',
   },
+  /*
+   * A plank deck hinged at the end it is set out from, where a gallows and a
+   * winch stand to haul it up on two chains (`gates.ts`). Down, it is a
+   * bridge; up, it stands on end over its hinge and nothing crosses.
+   */
+  draw: {
+    id: 'draw',
+    name: 'Drawbridge',
+    bill: [['plank', 24], ['timber', 8], ['nail', 24]],
+    span: 2,
+    tool: 'mallet',
+    skill: 'carpentry',
+    difficulty: 34,
+    carts: true,
+    winch: [['timber', 6], ['hinge', 4], ['ribbon', 8]],
+    grounded: true,
+    note: 'Its first span also takes {winch.timber:w} timbers, {winch.hinge:w} hinges and {winch.ribbon:w} metal ribbons: the hinge, the gallows, the winch and its chains. Both ends outside, on open ground, with at most {span:w} tiles of deck between them. Raised or lowered, standing at the end it was set out from, by anyone its padlock admits, or by anybody at all without one, and pulled down by them too, within {reach} tiles of the middle of either end, on a settlement only by those of them who are its builders. Raised, nothing crosses it and it stops the eye over its hinge; lowered, a cart crosses it.',
+  },
 };
 
 /**
@@ -111,8 +145,8 @@ export const CHANNEL_LINING: Array<[string, number]> = [['mortar', 10], ['stone_
   a.note = `A stone arch whose deck is a channel ${CHANNEL_WIDE * TILE_METRES} m wide, carrying ${AQUEDUCT_FLOW} litres a minute of a spring's water from the pond or pool at its head to the basin at its foot. Nobody walks it.`;
 }
 
-// A bridge's note counts what it is made of off its own bill: `{bill.thick_rope:W}`.
-for (const b of Object.values(BRIDGES)) b.note = fill(b.note, { ...b, bill: Object.fromEntries(b.bill) });
+// A bridge's note counts what it is made of off its own bill: `{bill.thick_rope:W}`, and a drawbridge's winch off its own.
+for (const b of Object.values(BRIDGES)) b.note = fill(b.note, { ...b, bill: Object.fromEntries(b.bill), winch: Object.fromEntries(b.winch ?? []), reach: PULL_REACH });
 
 export interface BridgeSpan extends Bill {
   x: number;
@@ -147,6 +181,10 @@ export interface Bridge {
    * was decked or it was last scrubbed. See `greening.ts`.
    */
   greenSince?: number;
+  /** A drawbridge drawn up on its hinge: no deck to cross, and its hinge shut (`gates.ts`). */
+  raised?: boolean;
+  /** The padlock on a drawbridge's winch, by the number it shares with its key (`locks.ts`). */
+  lock?: number;
 }
 
 export const bridgeDef = (b: Bridge): BridgeDef => BRIDGES[b.kind] ?? BRIDGES.rope;
@@ -173,10 +211,11 @@ export function spanTiles(ax: number, ay: number, bx: number, by: number): Array
   return out;
 }
 
-/** One tile of deck, unbuilt. */
-export const spanBill = (kind: BridgeKind): Bill => {
+/** One tile of deck, unbuilt: the first also takes a drawbridge's winch. */
+export const spanBill = (kind: BridgeKind, first = false): Bill => {
   const needed: Record<string, number> = {};
   for (const [id, n] of BRIDGES[kind].bill) needed[id] = n;
+  if (first) for (const [id, n] of BRIDGES[kind].winch ?? []) needed[id] = (needed[id] ?? 0) + n;
   return { needed, total: { ...needed } };
 };
 
@@ -207,6 +246,25 @@ export function spanWants(s: BridgeSpan): string {
 
 type BridgeTarget = Extract<Target, { kind: 'bridge' }>;
 const bridgeOf = (g: Game, t: Target): Bridge | undefined => (t.kind === 'bridge' ? g.bridges.get((t as BridgeTarget).id) : undefined);
+
+/**
+ * gates: why a bridge -- an aqueduct too -- is not this body's to pull down,
+ * or null. Where either end stands on a settlement, only that settlement's
+ * builders may, as only they may take down a building's wall there
+ * (`may_shape`); anywhere else, anybody may. Asked of each end in turn, and
+ * named as the island names it (`last_refusal`, `aqueduct_refusal`), by the
+ * job's own label: "That is part of Annhold. Only its builders may pull it
+ * down there."
+ */
+export function pullDownRefusal(g: Game, b: Bridge, job = BRIDGE_ACTIONS.find((a) => a.id === 'demolish_bridge')?.label): string | null {
+  const label = job?.toLowerCase();
+  for (const [x, y] of [[b.ax, b.ay], [b.bx, b.by]] as Array<[number, number]>) {
+    const mine = g.deedOfMineAt(x, y);
+    const d = mine ? (rankAtLeast(mine.role, 'builder') ? null : mine) : g.deedAt(x, y);
+    if (d) return `That is part of ${d.name}. Only its builders may ${label} there.`;
+  }
+  return null;
+}
 
 export const BRIDGE_ACTIONS: ActionDef[] = [
   {
@@ -317,10 +375,13 @@ export const BRIDGE_ACTIONS: ActionDef[] = [
     check: (t, g) => {
       const b = bridgeOf(g, t);
       if (!b) return 'It is gone.';
-      if (Math.hypot(b.ax + 0.5 - g.player.x, b.ay + 0.5 - g.player.y) > 4.5 && Math.hypot(b.bx + 0.5 - g.player.x, b.by + 0.5 - g.player.y) > 4.5) {
+      // gates: the reach, in the one place it is written (`PULL_REACH`).
+      if (Math.hypot(b.ax + 0.5 - g.player.x, b.ay + 0.5 - g.player.y) > PULL_REACH && Math.hypot(b.bx + 0.5 - g.player.x, b.by + 0.5 - g.player.y) > PULL_REACH) {
         return 'Stand at one end of it.';
       }
-      return null;
+      // gates: on a settlement, only its builders pull a bridge down (`pullDownRefusal`); and a padlock on a
+      // drawbridge's winch keeps it from being pulled down as from being worked (`gates.ts`).
+      return pullDownRefusal(g, b) ?? g.lockRefusal({ lock: b.lock, x: b.ax, y: b.ay });
     },
     perform: (t, g) => {
       const b = bridgeOf(g, t);

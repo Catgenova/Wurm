@@ -1,5 +1,5 @@
 import {
-  CHIP_CHANCE, CLEARED_TO, FRUIT_MATURE, FRUIT_OLD, GLAZE_ASH, KIT_MEND, MINE_COLLAPSE, MINE_DEPTH, MOSS_PER_CUT, MOSS_PLANT, PROSPECT_REACH,
+  ACTION_BY_ID, CHIP_CHANCE, CLEARED_TO, FRUIT_MATURE, FRUIT_OLD, GLAZE_ASH, KIT_MEND, MINE_COLLAPSE, MINE_DEPTH, MOSS_PER_CUT, MOSS_PLANT, PROSPECT_REACH,
   PROSPECT_STEP, REPAIR_FLOOR, repairGo, RESIN_TREE,
 } from '../../game/actions';
 import { CIRCLET_SHARE, CIRCLET_STONES, GEM_ODDS, GEMS, JEWEL_BONUS, tradeName } from '../../game/gems';
@@ -10,9 +10,10 @@ import { HUNGER_RATE } from '../../game/body';
 import { BOON_BONUS, BOON_FOODS, boonTime, REST_CAP, REST_MULT, REST_PER_SECOND, TINCTURE_BONUS, TINCTURE_SECONDS } from '../../game/boons';
 import { TINCTURE_NAMES } from '../../game/remedies';
 import { BREW_BY_ID, BREWS } from '../../game/brewing';
-import { BRIDGES, CLEARANCE, END_SLOP } from '../../game/bridges';
+import { BRIDGES, CLEARANCE, END_SLOP, PULL_REACH } from '../../game/bridges';
 import { AQUEDUCT } from '../../game/aqueducts';
 import { AQUEDUCT_FLOW, AQUEDUCT_LPS, CHANNEL_DEEP, CHANNEL_WIDE, CORNER_LITRES, FOUNTAIN_RIM, TILE_METRES } from '../../world/aqueducts';
+import { gateJobWords, gateReach, HIDDEN_DOOR_IRON, HIDDEN_DOOR_LAPSE } from '../../game/gates';
 import { HOARD_LUMPS, HOARD_MORE } from '../../game/butcher';
 import {
   CELLAR_DECAY, CELLAR_DEPTH, CELLAR_SOIL, COLUMN_SHARE, columnBill, floorBill, GLASS_ROOF, HEFT_WORDS, INDOORS_DECAY, INDOORS_REST, JETTY_REACH, MATERIALS as WALL_MATERIALS,
@@ -259,6 +260,11 @@ const STUDY_TIME = ARCHAEOLOGY_ACTION_BY_ID.get('study_book')?.baseTime ?? 0;
 
 /** Stone that ages: the two clearings, and the day a thing at a pace is covered on. */
 const [CLEAR_IVY, SCRUB_MOSS] = GREEN_ACTIONS;
+/** Planning a wall, which a hidden door's plan is in every way anybody else can see. */
+const PLAN_WALL = ACTION_BY_ID.get('plan_wall');
+/** Pulling a bridge down, which a settlement keeps to its builders. */
+const BRIDGE_PULL = ACTION_BY_ID.get('demolish_bridge');
+const AQUEDUCT_PULL = ACTION_BY_ID.get('demolish_aqueduct');
 const coveredBy = (pace: number): number => Math.ceil(GREEN_DAYS / pace);
 /** A name as the middle of a sentence has it, with its article: "a statue". */
 const aOrAn = (name: string): string => `${article(name)} ${name.toLowerCase()}`;
@@ -1057,6 +1063,32 @@ export function helpText(): string {
     them down again from the same menu. Nothing rests on waist-high work: a storey cannot be planned
     over a run of fence, half wall or railing, so if you want a floor above, the side below needs a wall,
     or a finished column at each end.</p>
+    <p>A <b>portcullis</b> is a wall type for a ground-floor wall of stone or brick &mdash;
+    ${listed(WALL_MATERIALS.filter((m) => m.kind === 'stone').map((m) => m.name.toLowerCase()))} &mdash;
+    a gateway as wide as a double door with an iron grille, ${billWords(WALL_TYPE_BY_ID.get('portcullis')?.fittings ?? [])} over the stone's own bill
+    (in stone brick, ${billWords(Object.entries(wallBill('stone_brick', 'portcullis').total))}). <b>Raise the portcullis</b> takes
+    ${gateJobWords('raise_portcullis', goSeconds)} and <b>Lower the portcullis</b> ${gateJobWords('lower_portcullis', goSeconds)},
+    from either side of it, standing within ${numberWord(gateReach('raise_portcullis'))} tile${gateReach('raise_portcullis') === 1 ? '' : 's'} of the tile beside it.
+    Down, nothing passes it: no person, no cart, no wildermon. Up, everything does, carts included. Up or down, it is seen
+    through. Point at it from either side, on any storey, to read whether it is up or down and padlocked. Without a padlock
+    anybody may raise or lower it; <b>Fit a padlock</b> to it and only its key and the founder of the settlement it stands on may
+    raise it, lower it or take it down.</p>
+    <p>A <b>hidden door</b> is built of exactly a solid wall's bill and drawn exactly as one. <b>Plan wall</b>, <b>Hidden door</b>
+    plans a solid wall there, in every way anybody else can see or read: the same job, ${spanWords(goSeconds(PLAN_WALL?.baseTime ?? 0))} and
+    ${percent(PLAN_WALL?.stamina ?? 0)} of your stamina, the same words over your head, and on an island the same record. Only you and
+    the island know it was asked for as a door: on an island it is asked for in the one call that asks for the plan, when you
+    reach the wall. The ask is for that side of that tile. It is kept only if the plan is started or lined up behind your other
+    jobs, so a plan refused &mdash; too far away, too tired, your head already full, or the padlock and hinges not in your pack
+    &mdash; asks for nothing. Kept, it waits as long as you have a plan of a wall on that side in hand or lined up, whichever plan
+    that is: walking away puts the work down and the ask waits with it, and once no plan on that side is left &mdash; refused as it
+    comes up, or forgotten with <kbd>Esc</kbd> &mdash; the ask goes too. The next solid wall you plan on that side, on whichever
+    storey you are working, is the hidden door. So you may ask for one on several sides and line their plans up. An ask still
+    waiting ${spanWords(HIDDEN_DOOR_LAPSE)} after it was made lapses, and its plan is a solid wall. As the plan is finished it takes ${billWords(HIDDEN_DOOR_IRON)} out of your pack and the padlock becomes its key; if they have left your pack by
+    then, it stays a solid wall. To whoever holds that key, and to the founder of the
+    settlement it stands on, it is a door: you walk through it and see through it, its face shows a dashed seam and a keyhole, and
+    pointing at it from either side says your key opens it. To everybody else it is a solid wall in every way: they cannot pass it or
+    see through it, it offers them a wall's work and nothing else, and on an island their browser is told it is a solid wall. No
+    wildermon and no cart ever passes one.</p>
     <p><b>Piers and stilts.</b> A tile that is not level and dry at a building's floor height &mdash; one
     that slopes, one lower than the floor, or one under at most ${metres(PIER_WATER)} m of water &mdash; takes
     the building on piers: its ground floor is a <b>deck</b>, level with the building's floor and carried
@@ -1311,11 +1343,37 @@ export function helpText(): string {
     <p>Stand on one bank and right-click the other: <b>Throw a bridge across from here</b>. It must run
     straight (north, south, east or west), both ends must be dry ground you can stand in the middle of,
     the ends must be within ${numberWord(END_SLOP)} height units of each other, and everything between must be at
-    least ${numberWord(CLEARANCE)} units below the deck &mdash; a gap, not a slope. ${NumberWord(Object.values(BRIDGES).filter((b) => b !== AQUEDUCT).length)} kinds:
+    least ${numberWord(CLEARANCE)} units below the deck &mdash; a gap, not a slope. The deck is carried at the mean of its
+    end tiles' heights, each taken at the tile's middle, the mean of its corners, or at the top of a foundation poured
+    on it or of a finished deck on piers; an end on an upper floor is taken at that floor's height.
+    ${NumberWord(Object.values(BRIDGES).filter((b) => b !== AQUEDUCT).length)} kinds:
     ${listed(Object.values(BRIDGES).filter((b) => b !== AQUEDUCT).map((b) => `a <b>${b.name.toLowerCase()}</b> (${billWords(b.bill)} a span${b.tool === 'trowel' ? ', with a trowel' : ''}) goes <b>${numberWord(b.span)}</b> tiles and ${b.carts ? 'carries a cart' : 'takes foot traffic only'}`))}.</p>
+    <p>An end may also be a finished upper floor of a building, a jetty's floor among them, or a building's finished
+    deck on piers. It may not be inside a building on a ground floor laid on the ground, nor on the end of another
+    bridge, and no end meets its deck through a wall: from a storey or a deck, a bridge goes out through a doorway, an
+    archway or an open side. Nothing is built on a tile a bridge comes ashore on.</p>
     <p>A planned bridge is built a span at a time, exactly as a wall is: stand by the open part and feed
     it what it wants, one unit a go. Until the last span is decked nothing crosses. Pulling one down
-    again gives you half of what went into it. A boat passes underneath.</p>
+    again gives you half of what went into it. <b>${BRIDGE_PULL?.label}</b> is done within ${PULL_REACH} tiles of the middle of either end. Where either end stands on a
+    settlement only its builders may do it, as only they may take down a building's wall there, and a guest may not; anywhere
+    else, anybody may. A boat passes underneath.</p>
+    <p>A <b>drawbridge</b> goes from open ground to open ground, neither end inside a building, with at most
+    ${numberWord(BRIDGES.draw.span)} tiles of deck, and its first span also takes ${billWords(BRIDGES.draw.winch ?? [])} for its hinge,
+    gallows, winch and chains. It is hinged at the end you set it out from, where its winch stands.
+    ${gateReach('raise_drawbridge') === 0 ? 'Standing on that tile' : `Within ${numberWord(gateReach('raise_drawbridge'))} tiles of that tile`},
+    <b>Raise the drawbridge</b> takes ${gateJobWords('raise_drawbridge', goSeconds)} and <b>Lower the drawbridge</b>
+    ${gateJobWords('lower_drawbridge', goSeconds)}. Raised, it stands on end over its hinge: nobody, no cart and no wildermon
+    crosses it, its hinge is shut, and it stops the eye there. What is under the span is then all there is, and anybody out on
+    the deck as it goes up is left in it. A moat or a ditch under it keeps people off only where its sides are too steep to
+    climb: a tile that falls more than ${MAX_STAND} height units from its highest corner to its lowest, or a step of more than
+    ${MAX_STEP} between the middles of neighbouring tiles, each ${CLIMB_PER_LEVEL} more for every level of climbing. Water in it stops nobody; it
+    is swum. Lowered, it is a bridge and carries a cart. Its deck is carried at the mean of its end tiles' heights, as every
+    bridge's is, so one over a moat a tile wide, between the sloping tiles of its banks, sits halfway down it. A foundation
+    on each end tile, dug to bare rock, set out and poured, is level with the tile's highest corner, the bank's, and the deck is
+    then level with the bank. Its winch is not set on the ground under a jetty, and no jetty is floored out over its winch:
+    its gallows rise there higher than a storey. Without a padlock anybody may raise or lower it; a padlock on its winch keeps raising,
+    lowering and pulling it down to its key and the founder of the settlement it stands on, over and above who may pull a
+    bridge down there.</p>
     <h3>Aqueducts</h3>
     <p>An <b>aqueduct</b> is a stone arcade with a channel of water along its top: it takes a spring's water out of a
     pond or a pool and carries it over whatever lies between to a basin up to <b>${numberWord(AQUEDUCT.span)}</b> tiles off.
@@ -1331,8 +1389,9 @@ export function helpText(): string {
     either end, and on a settlement only its builders may lead water from it or to it. One pond or pool feeds one
     aqueduct: the first set out from it takes all its water, and another from the same water is refused. It is built
     as a bridge is, a span at a time and a unit a go, with a trowel: each span wants ${billWords(AQUEDUCT.bill)}, a
-    masonry job at difficulty ${AQUEDUCT.difficulty}. <b>Pull the aqueduct down</b> gives back half of what went into
-    it. Its stone takes moss as a stone arch's does (see Ivy and moss on old stone).</p>
+    masonry job at difficulty ${AQUEDUCT.difficulty}. <b>${AQUEDUCT_PULL?.label}</b> gives back half of what went into
+    it, and is done as a bridge is pulled down: within ${PULL_REACH} tiles of the middle of either end, and where either end
+    stands on a settlement, only by its builders. Its stone takes moss as a stone arch's does (see Ivy and moss on old stone).</p>
     <p>Nobody walks along it &mdash; its top is water between its parapets. Under it you go through its arches across
     its run, and once any of a span's stone is laid its piers stand in the way along it, from either end. The ground
     under its arches is walked, worn and climbed as it was, its cliffs as steep as ever. Nothing is planted, no
@@ -1608,8 +1667,8 @@ export function helpText(): string {
     <p>Everything anybody built has been open to everybody who could walk to it. A crate on your own
     deed was safe because the <i>ground</i> was yours; a crate anywhere else, a cart at a work post,
     a cupboard in a house you had invited somebody into, was a thing anybody could empty.</p>
-    <p>A <b>padlock</b> is forged at a smelter and comes with no key. <b>Fit</b> it to a crate or a
-    piece of storage furniture and it closes and cuts <b>one key</b> to itself, there and then. A key
+    <p>A <b>padlock</b> is forged at a smelter and comes with no key. <b>Fit</b> it to a crate, a
+    piece of storage furniture, a portcullis or a drawbridge's winch and it closes and cuts <b>one key</b> to itself, there and then. A key
     is an ordinary item: hand it over and you have handed over what it opens, and there is no list
     anywhere saying you did. Take the padlock off and the key goes with it.</p>
     <p>On a <b>ship, a wagon or a cart</b> a padlock locks more than the hold: without its key

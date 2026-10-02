@@ -28,6 +28,7 @@ import {
   type RoofShape,
 } from '../game/building';
 import { cornerName } from '../game/frame';
+import { fitsMaterial, hiddenDoorIronWords, hiddenDoorWants, planHiddenDoor } from '../game/gates';
 import type { Game } from '../game/game';
 import { nearestSide, type Pick } from '../render/renderer';
 import type { MenuItem } from './contextmenu';
@@ -164,10 +165,18 @@ export function frameJettyEntries(g: Game, pick: Pick): MenuItem[] {
             label: `Plan wall or railing (${SIDE_NAMES[side]})`,
             children: WALL_TYPES.filter((wt) => !wt.standalone).map((wt) => ({
               label: wt.name,
-              children: MATERIALS.map((m) => {
-                const t: TileTarget = { ...withSide, wallType: wt.id, material: m.id };
-                const why = plan.check?.(t, g) ?? null;
-                return { label: m.name, note: describeNeeds(wallBill(m.id, wt.id), materialName), hint: why ?? undefined, disabled: !!why, onSelect: () => g.requestAction(plan, t) };
+              // gates: a portcullis only in stone or brick, and a hidden door asked for with a solid wall's plan, its iron in hand (`gates.ts`).
+              children: MATERIALS.filter((m) => fitsMaterial(wt.id, m)).map((m) => {
+                const hidden = wt.id === 'hidden_door';
+                const t: TileTarget = { ...withSide, wallType: hidden ? 'solid' : wt.id, material: m.id };
+                const why = (hidden ? hiddenDoorWants(g) : null) ?? plan.check?.(t, g) ?? null;
+                return {
+                  label: m.name,
+                  note: describeNeeds(wallBill(m.id, wt.id), materialName) + (hidden ? `, and ${hiddenDoorIronWords()} as it is planned` : ''),
+                  hint: why ?? undefined,
+                  disabled: !!why,
+                  onSelect: () => (hidden ? planHiddenDoor(g, plan, { ...withSide, material: m.id }) : g.requestAction(plan, t)),
+                };
               }),
             })),
           });

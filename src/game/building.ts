@@ -6,7 +6,8 @@
 import { fill } from './words';
 
 export type WallType = 'solid' | 'window' | 'bay' | 'door' | 'double_door' | 'arch' | 'fence' | 'fence_gate' | 'half_wall' | 'iron_gate'
-  | 'counter' | 'railing';
+  | 'counter' | 'railing'
+  | 'portcullis' | 'hidden_door';
 
 /**
  * How high a railing stands, as a share of a storey: waist-high, a little
@@ -56,6 +57,10 @@ export interface WallTypeDef {
    * waist-high and seen over.
    */
   opaque?: boolean;
+  /** Laid only in a stone or brick material, with a trowel: a portcullis runs in grooves cut in masonry (`gates.ts`). */
+  stone?: boolean;
+  /** Raised only in a wall on the ground floor: a portcullis (`gates.ts`). */
+  ground?: boolean;
 }
 
 export const WALL_TYPES: WallTypeDef[] = [
@@ -105,6 +110,20 @@ export const WALL_TYPES: WallTypeDef[] = [
    * and there are fences for that. See `frame.ts` and `railing.ts`.
    */
   { id: 'railing', name: 'Railing', factor: 0.35, passable: false, height: RAILING_HEIGHT, low: true, railed: true },
+  /*
+   * An archway of stone with an iron grille in grooves in its jambs, raised
+   * and lowered (`gates.ts`). Up, it is an archway, carts and beasts and all;
+   * down, nothing passes it, and it is still seen through. Laid only in stone
+   * and only on the ground floor (`gatePlanRefusal`).
+   */
+  { id: 'portcullis', name: 'Portcullis', factor: 1, passable: true, wide: true, stone: true, ground: true, fittings: [['ribbon', 16], ['bracket', 8]] },
+  /*
+   * A door that is a solid wall of its material to everybody its padlock
+   * does not admit (`gates.ts`): the bill is a solid wall's, to the unit, and
+   * the padlock and hinges go in when it is planned, so nothing about it is
+   * any different to anybody else. Never to a beast.
+   */
+  { id: 'hidden_door', name: 'Hidden door', factor: 1, passable: true, beastProof: true },
 ];
 export const WALL_TYPE_BY_ID = new Map(WALL_TYPES.map((w) => [w.id, w]));
 /** Whether a wall type is waist-high work that nothing can be built over. */
@@ -348,6 +367,10 @@ export interface Wall extends Bill {
    * greening came to the island (`Game.greenFrom`).
    */
   greenSince?: number;
+  /** A portcullis let down: shut to everything that walks or rolls (`gates.ts`). */
+  lowered?: boolean;
+  /** The padlock on a portcullis or a hidden door, by the number it shares with its key (`locks.ts`). */
+  lock?: number;
 }
 
 /**
@@ -632,6 +655,23 @@ export class Buildings {
    */
   private readonly chosen = new Map<number, { level: number; levels: number }>();
   nextId = 1;
+  /**
+   * Whether the body playing opens a wall's padlock: a hidden door is a door
+   * only to whoever its lock admits (`gates.ts`). Set by the game; unset, it
+   * admits nobody.
+   */
+  admits?: (w: Wall) => boolean;
+  /**
+   * A border shut by something that is not a wall: a drawbridge drawn up on
+   * its hinge (`gates.ts`). Set by the game while one is up, and unset
+   * otherwise so a map with no walls asks nothing.
+   */
+  barred?: (level: number, b: Border) => boolean;
+
+  /** What a wall is to the body playing: a hidden door its padlock does not admit is a solid wall. */
+  seenType(w: Wall): WallType {
+    return w.type === 'hidden_door' && !this.admits?.(w) ? 'solid' : w.type;
+  }
 
   /** Work on a storey of a building, and keep to it across what the island sends. */
   chooseWorkLevel(b: Building, level: number): void {
@@ -1342,18 +1382,19 @@ export class Buildings {
 
   /** Same, for the walls of a given storey. */
   blocksAt(level: number, x0: number, y0: number, x1: number, y1: number, beast = false): boolean {
-    if (!this.walls.size) return false;
+    if (!this.walls.size && !this.barred) return false;
     const dx = x1 - x0;
     const dy = y1 - y0;
     if (dx === 0 && dy === 0) return false;
     if (Math.abs(dx) + Math.abs(dy) === 1) {
       const border: Border =
         dx === 1 ? { x: x1, y: y0, dir: 'v' } : dx === -1 ? { x: x0, y: y0, dir: 'v' } : dy === 1 ? { x: x0, y: y1, dir: 'h' } : { x: x0, y: y0, dir: 'h' };
+      if (this.barred?.(level, border)) return true;
       const w = this.wallOnBorder(level, border);
       if (!w || !isDone(w)) return false;
-      const def = WALL_TYPE_BY_ID.get(w.type);
-      // A gate bound in iron swings for a person and for nothing else.
-      return !(def?.passable ?? false) || (beast && !!def?.beastProof);
+      const def = WALL_TYPE_BY_ID.get(this.seenType(w));
+      // A gate bound in iron swings for a person and for nothing else; a portcullis let down, for nothing at all.
+      return !(def?.passable ?? false) || (beast && !!def?.beastProof) || !!w.lowered;
     }
     // Diagonal: allowed only when at least one of the two L-shaped routes is open.
     const viaX = !this.blocksAt(level, x0, y0, x1, y0, beast) && !this.blocksAt(level, x1, y0, x1, y1, beast);
@@ -1370,17 +1411,18 @@ export class Buildings {
    * impassable as it ever was.
    */
   blocksVehicle(x0: number, y0: number, x1: number, y1: number): boolean {
-    if (!this.walls.size) return false;
+    if (!this.walls.size && !this.barred) return false;
     const dx = x1 - x0;
     const dy = y1 - y0;
     if (dx === 0 && dy === 0) return false;
     if (Math.abs(dx) + Math.abs(dy) === 1) {
       const border: Border =
         dx === 1 ? { x: x1, y: y0, dir: 'v' } : dx === -1 ? { x: x0, y: y0, dir: 'v' } : dy === 1 ? { x: x0, y: y1, dir: 'h' } : { x: x0, y: y0, dir: 'h' };
+      if (this.barred?.(0, border)) return true;
       const w = this.wallOnBorder(0, border);
       if (!w || !isDone(w)) return false;
-      const def = WALL_TYPE_BY_ID.get(w.type);
-      return !(def?.passable ?? false) || !def?.wide;
+      const def = WALL_TYPE_BY_ID.get(this.seenType(w));
+      return !(def?.passable ?? false) || !def?.wide || !!w.lowered;
     }
     const viaX = !this.blocksVehicle(x0, y0, x1, y0) && !this.blocksVehicle(x1, y0, x1, y1);
     const viaY = !this.blocksVehicle(x0, y0, x0, y1) && !this.blocksVehicle(x0, y1, x1, y1);
