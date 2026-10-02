@@ -47,7 +47,7 @@ import { CLIMB_LEARN_FROM, CLIMB_PER_LEVEL, MAX_STEP } from '../../game/player';
 import { ALL_GOALS } from '../../game/journal';
 import { SPECIES } from '../../game/creatures';
 import { betterThanCommon, CHANNELS, husbandryOdds, pct as cardPct } from '../../game/traits';
-import { CHAIN_MOST, FALL_DROP, FILL_RATE, POOL_DEPTH, POOL_LIP, SPRING_DEPTH, SPRINGS_EACH } from '../../world/springs';
+import { CHAIN_MOST, FALL_DROP, FILL_RATE, POOL_DEPTH, POOL_LIP, RUN_RATE, SPRING_DEPTH, SPRINGS_EACH } from '../../world/springs';
 import { POOL_FILL } from '../../game/foundations';
 import { MAX_STAND, SWIM_DEPTH } from '../../game/player';
 import {
@@ -61,7 +61,9 @@ import { FLOWER_MOST, FLOWER_SEASONS } from '../../world/flowers';
 import { DYES } from '../../game/dyestuffs';
 import { GREEN_ACTIONS, GREEN_DAYS, GREEN_SHADE, GREEN_SUN, GREEN_WET } from '../../game/greening';
 import { FURNITURE, WELL_TRICKLE, WELL_TRICKLE_QL } from '../../game/furniture';
-import { BRIDGES } from '../../game/bridges';
+import { BRIDGES, CLEARANCE } from '../../game/bridges';
+import { AQUEDUCT } from '../../game/aqueducts';
+import { AQUEDUCT_FLOW, AQUEDUCT_LPS, CHANNEL_DEEP, CHANNEL_WIDE, TILE_METRES } from '../../world/aqueducts';
 import { CROPS, growthWords } from '../../game/farming';
 import { GLASSHOUSE_GROWTH, PLANTER_GROWTH, SEASON_GROWTH, SEASON_SECONDS, YEAR_SECONDS } from '../../game/growth';
 import { SEASONS } from '../../world/calendar';
@@ -882,6 +884,16 @@ export const NEWS: News[] = [
         `When the last pane or the last wall goes in, whatever already grows in the building carries on from as far into its stage as it had grown, at the glasshouse's pace; take a tile of the roof or a wall down, or add a tile to the footprint, and it carries on at a field's pace from there. A glasshouse is indoors, and what is left lying in it rots at ${share(INDOORS_DECAY)} of the rate in the open.`,
       ];
     },
+  },
+  {
+    n: 68,
+    day: '2026-10-02',
+    lines: () => [
+      `Aqueducts. Right-click a pool, a pond, a tiered fountain or a hollow that would hold ${metres(SPRING_DEPTH)} m of water, and Lead an aqueduct here from the first pond or pool straight out from it, up to ${numberWord(AQUEDUCT.span)} tiles off: a stone arcade built a span at a time with a trowel, ${billWords(AQUEDUCT.bill)} a span. Its channel is carried at the height of the water at its head, which must stand no lower than the water at its foot, with everything under it ${metres(CLEARANCE)} m or more below its bed.`,
+      `Finished, it takes all the water that went over that pond's lip or that pool's edge — a channel ${CHANNEL_WIDE * TILE_METRES} m wide and ${metres(CHANNEL_DEEP)} m deep running ${RUN_RATE} tiles a second, ${AQUEDUCT_FLOW} litres a minute — and the stream it fed dries up. A pool at its foot goes over its lowest edge; a hollow fills at that rate and then spills on; a fountain takes ${AQUEDUCT_LPS} litres a second on top of its own well's; bare ground sends it downhill.`,
+      'When the water at its head stands lower than the channel, the channel runs dry and whatever only it kept goes dry with it; take the fountain away and the water runs off downhill there, fill the pool in and it goes off the foundation over its lowest edge. One pond or pool feeds one aqueduct. Nobody walks along one, and pulling it down gives back half of what went into it.',
+      'Under one you go through its arches, and its piers stand in the way along it; the ground there is walked, worn and climbed as it was. Nothing is planted, built, poured or dug under a span, and none is set out over a tree or a bush. Its stone takes moss as a stone arch\'s does.',
+    ],
   },
   {
     n: 70,

@@ -11,6 +11,8 @@ import { BOON_BONUS, BOON_FOODS, boonTime, REST_CAP, REST_MULT, REST_PER_SECOND,
 import { TINCTURE_NAMES } from '../../game/remedies';
 import { BREW_BY_ID, BREWS } from '../../game/brewing';
 import { BRIDGES, CLEARANCE, END_SLOP } from '../../game/bridges';
+import { AQUEDUCT } from '../../game/aqueducts';
+import { AQUEDUCT_FLOW, AQUEDUCT_LPS, CHANNEL_DEEP, CHANNEL_WIDE, CORNER_LITRES, FOUNTAIN_RIM, TILE_METRES } from '../../world/aqueducts';
 import { HOARD_LUMPS, HOARD_MORE } from '../../game/butcher';
 import { floorBill, GLASS_ROOF, HEFT_WORDS, INDOORS_DECAY, MATERIALS as WALL_MATERIALS, MAX_LEVELS, roofShapeDef, roofShapeOf, SIDE_NAMES, wallBill, WALL_TYPE_BY_ID, WALL_TYPES } from '../../game/building';
 import { materialName } from '../../game/buildActions';
@@ -80,7 +82,7 @@ import {
   betterThanCommon, CHANNELS as BLOOD, FIGHT_SHARE, FIGHTING, GRADE_STEP, husbandryOdds, inheritChance, pct as cardPct, TIERS, TRAIT_SLOTS,
   TRAIT_SOURCES, TRAITS, upgradeChance, type TraitTier,
 } from '../../game/traits';
-import { CHAIN_MOST, FALL_DROP, FILL_RATE, POND_MOST, POOL_DEPTH, POOL_LIP, RUN_MOST, SPRING_DEPTH, SPRINGS_EACH } from '../../world/springs';
+import { CHAIN_MOST, FALL_DROP, FILL_RATE, POND_MOST, POOL_DEPTH, POOL_LIP, RUN_MOST, RUN_RATE, SPRING_DEPTH, SPRINGS_EACH } from '../../world/springs';
 import { CLEAR_OF_BUILDINGS, CONCRETE_PER_STEP, LIFT_PER_MASONRY, POOL_FILL } from '../../game/foundations';
 import { AWARENESS, awarenessReach, BASE_SIGHT, LIGHT_GIVES_BACK, NIGHT_LOSS, TREE_OPACITY } from '../../game/vision';
 import { NO_GO, pointAt, windWord, windWorth } from '../../game/wind';
@@ -1183,17 +1185,59 @@ export function helpText(): string {
     <p>Stand on one bank and right-click the other: <b>Throw a bridge across from here</b>. It must run
     straight (north, south, east or west), both ends must be dry ground you can stand in the middle of,
     the ends must be within ${numberWord(END_SLOP)} height units of each other, and everything between must be at
-    least ${numberWord(CLEARANCE)} units below the deck &mdash; a gap, not a slope. ${NumberWord(Object.keys(BRIDGES).length)} kinds:
-    ${listed(Object.values(BRIDGES).map((b) => `a <b>${b.name.toLowerCase()}</b> (${billWords(b.bill)} a span${b.tool === 'trowel' ? ', with a trowel' : ''}) goes <b>${numberWord(b.span)}</b> tiles and ${b.carts ? 'carries a cart' : 'takes foot traffic only'}`))}.</p>
+    least ${numberWord(CLEARANCE)} units below the deck &mdash; a gap, not a slope. ${NumberWord(Object.values(BRIDGES).filter((b) => b !== AQUEDUCT).length)} kinds:
+    ${listed(Object.values(BRIDGES).filter((b) => b !== AQUEDUCT).map((b) => `a <b>${b.name.toLowerCase()}</b> (${billWords(b.bill)} a span${b.tool === 'trowel' ? ', with a trowel' : ''}) goes <b>${numberWord(b.span)}</b> tiles and ${b.carts ? 'carries a cart' : 'takes foot traffic only'}`))}.</p>
     <p>A planned bridge is built a span at a time, exactly as a wall is: stand by the open part and feed
     it what it wants, one unit a go. Until the last span is decked nothing crosses. Pulling one down
     again gives you half of what went into it. A boat passes underneath.</p>
+    <h3>Aqueducts</h3>
+    <p>An <b>aqueduct</b> is a stone arcade with a channel of water along its top: it takes a spring's water out of a
+    pond or a pool and carries it over whatever lies between to a basin up to <b>${numberWord(AQUEDUCT.span)}</b> tiles off.
+    Right-click the tile it is to pour into &mdash; a pool dug in a foundation, a pond, a tiered fountain, or a hollow
+    that would hold <b>${metres(SPRING_DEPTH)} m</b> of water or more over no more than ${POND_MOST} corners &mdash; and
+    <b>Lead an aqueduct here</b> offers the first pond or pool met going straight out from it each way, north, south,
+    east and west, as far as an aqueduct spans, and says why wherever one will not do. <b>Throw a bridge across</b>
+    does not set one out.</p>
+    <p>Its channel is carried at the height the water at its head stands when it is set out, and never moves. The
+    water at its foot must stand no higher than that &mdash; a fountain holds its water <b>${FOUNTAIN_RIM}</b> height
+    units over the ground it stands on &mdash; and everything under it at least <b>${metres(CLEARANCE)} m</b> below the
+    channel's bed; nothing bridged or built may be in its way, nor a tree or a bush under a span, nor a bridge at
+    either end, and on a settlement only its builders may lead water from it or to it. One pond or pool feeds one
+    aqueduct: the first set out from it takes all its water, and another from the same water is refused. It is built
+    as a bridge is, a span at a time and a unit a go, with a trowel: each span wants ${billWords(AQUEDUCT.bill)}, a
+    masonry job at difficulty ${AQUEDUCT.difficulty}. <b>Pull the aqueduct down</b> gives back half of what went into
+    it. Its stone takes moss as a stone arch's does (see Ivy and moss on old stone).</p>
+    <p>Nobody walks along it &mdash; its top is water between its parapets. Under it you go through its arches across
+    its run, and once any of a span's stone is laid its piers stand in the way along it, from either end. The ground
+    under its arches is walked, worn and climbed as it was, its cliffs as steep as ever. Nothing is planted, no
+    building planned, no foundation poured and no pool dug under a span, and no tree seeds itself there.</p>
+    <p>Finished, it runs whenever a spring's pond or pool stands over its head at the channel's height or higher:
+    <b>all</b> the water that would have gone over that pond's lip, or that pool's edge, goes along the channel
+    instead, and the stream that ran on from there dries up with every pond only it kept. The channel is
+    <b>${CHANNEL_WIDE * TILE_METRES} m</b> wide and its water <b>${metres(CHANNEL_DEEP)} m</b> deep, running at the springs'
+    own ${RUN_RATE} tiles a second: <b>${AQUEDUCT_LPS} litres a second</b>, ${AQUEDUCT_FLOW} a minute, and
+    ${1 / RUN_RATE} s along each span. At its foot a <b>pool</b> is full already and goes over its lowest edge, as if a
+    spring rose in it &mdash; never the edge its end pier stands on, which is a wall to it, as is every edge between
+    neighbouring tiles of an aqueduct's line; a <b>hollow</b> fills at the channel's rate &mdash; ${CORNER_LITRES} litres for each corner under its
+    water and each height unit of water over that corner &mdash; and then spills over its lip and runs on, at once if
+    a spring's pond already stands in it; a
+    <b>fountain</b> takes ${AQUEDUCT_LPS} litres a second on top of what its own well draws, so emptied it is full
+    again in ${+((furnitureDef('fountain').well ?? 0) / AQUEDUCT_LPS).toFixed(2)} s; and onto bare ground it runs away downhill from the tile's lowest corner. The
+    message as the last span is laid, and the aqueduct's own menu, say which, and how long a hollow takes to fill. A
+    spring dug in the pond or the pool at its head says that its water goes along it.</p>
+    <p>Where the water at its head stands lower than the channel &mdash; the spring stopped up, its pond cut lower
+    &mdash; the channel runs dry, and whatever only it kept goes dry with it: a hollow it filled empties, a pool at its
+    foot keeps its water and goes over its edge no more, and a fountain is back to its own well. Take the fountain
+    away and the water pours onto that tile and away downhill from its lowest corner; fill the pool in and it lands on
+    the foundation's top and goes off it over its lowest edge, as the pool's water did; set a fountain down there again
+    and it keeps it again. The aqueduct's menu says why one stands dry: no spring's water at its head, water there
+    standing under its channel, or another aqueduct from the same water taking it first.</p>
     <h3>Ivy and moss on old stone</h3>
     <p>Stone greens over as it stands. <b>Ivy</b> climbs every finished wall, fence and half wall of
     ${listed(WALL_MATERIALS.filter((m) => m.kind === 'stone').map((m) => m.name.toLowerCase()))}, up from its foot and down from its
     top where nothing stands on it, and keeps clear of doorways, arches, windows and gates. <b>Moss</b> gathers in the
     joints of paving (${listed(Object.values(TILE_DEFS).filter((d) => d.paved).map((d) => d.name.toLowerCase()))}), on a poured foundation, on
-    ${listed(FURNITURE.filter((f) => f.mossy).map((f) => aOrAn(f.name)))} and on ${aOrAn(BRIDGES.stone.name)}. Each is bare on the day it is
+    ${listed(FURNITURE.filter((f) => f.mossy).map((f) => aOrAn(f.name)))}, on ${aOrAn(BRIDGES.stone.name)} and on ${aOrAn(BRIDGES.aqueduct.name)}. Each is bare on the day it is
     built, laid, set down or poured and greens a day at a time for <b>${GREEN_DAYS} days</b> &mdash; a day is
     ${GREEN_DAY / HOUR} hours of real time &mdash; and grows no more after that. Whatever was already standing when this came in
     started from bare stone that day. On an island the island keeps the clock, so everybody sees the same
@@ -1206,7 +1250,7 @@ export function helpText(): string {
     and one looking out over water after ${numberWord(coveredBy(GREEN_SUN + GREEN_SHADE + GREEN_WET))}.</p>
     <p><b>${CLEAR_IVY.label}</b> with ${aOrAn(itemDef(CLEAR_IVY.tool ?? '').name)}: right-click a wall and choose the side, and every storey
     of the wall on that side comes clean at once. <b>${SCRUB_MOSS.label}</b> with ${aOrAn(itemDef(SCRUB_MOSS.tool ?? '').name)}: right-click
-    the paving or the foundation (both, where one tile has both), the statue or the arch. Either takes
+    the paving or the foundation (both, where one tile has both), the statue, the arch or the aqueduct. Either takes
     ${spanWords(goSeconds(CLEAR_IVY.baseTime))} a go with a tool of no quality, less with a better one, and ${percent(CLEAR_IVY.stamina)} of your
     stamina, and leaves bare stone that starts greening again from then. Nothing is cleared that has not
     grown a day yet. On a settlement only its builders may do it, and a guest may not; anywhere else,
@@ -2397,7 +2441,8 @@ export function helpText(): string {
     the drop is <b>${metres(FALL_DROP)} m</b> or more, or into a lower pool beside it, and on down the
     ground from there as any spring's water runs. A pool with nothing lower beside it keeps its water.
     A foundation with no pool in it is a wall to water, and one poured over a spring stops it.
-    <b>Fill the pool in</b> takes a trowel and <b>${POOL_FILL}</b> concrete, and stops a spring in it.</p>
+    <b>Fill the pool in</b> takes a trowel and <b>${POOL_FILL}</b> concrete, and stops a spring in it.
+    An <b>aqueduct</b> takes all a pond's or a pool's water elsewhere, ${AQUEDUCT_FLOW} litres a minute: see Aqueducts.</p>
     ${waterGarden()}
   `;
 }

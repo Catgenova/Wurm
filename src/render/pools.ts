@@ -66,7 +66,7 @@ const HUG = 0.6;
 const FOOT_REACH = 0.9;
 
 /** A side of a tile, by the way out through it. */
-type Side = 'n' | 'e' | 's' | 'w';
+export type Side = 'n' | 'e' | 's' | 'w';
 const SIDES: readonly Side[] = ['n', 'e', 's', 'w'];
 const OUT: Record<Side, readonly [number, number]> = { n: [0, -1], e: [1, 0], s: [0, 1], w: [-1, 0] };
 /** Which axis a side of a tile runs along, 0 for x and 1 for y. */
@@ -91,6 +91,8 @@ export interface PoolScene {
   slabTop: (x: number, y: number) => number | null;
   /** The water going over the edges of the pool dug in a tile; nothing where there is none. */
   spillsAt: (x: number, y: number) => readonly Spill[] | undefined;
+  /** Where an aqueduct's channel goes through the rim of the pool in a tile, which side and how far along it (`./aqueducts`): open to the water, nothing going over. */
+  channels?: (x: number, y: number) => ReadonlyArray<{ side: Side; t0: number; t1: number }> | undefined;
   /** The ground at a corner. */
   ground: (cx: number, cy: number) => number;
   /**
@@ -248,12 +250,12 @@ const rgb = (c: RGB, k = 1): string =>
   `rgb(${Math.min(255, c[0] * k) | 0}, ${Math.min(255, c[1] * k) | 0}, ${Math.min(255, c[2] * k) | 0})`;
 const rgba = (c: RGB, a: number): string => `rgba(${c[0] | 0}, ${c[1] | 0}, ${c[2] | 0}, ${a.toFixed(3)})`;
 
-/** Water over the rim, going out or coming in: which side, how far along it, and the curtain it is part of. */
+/** Water over the rim, going out or coming in: which side, how far along it, and the curtain it is part of -- none through an aqueduct's channel. */
 interface Notch {
   side: Side;
   t0: number;
   t1: number;
-  run: Run;
+  run: Run | null;
   out: boolean;
 }
 
@@ -303,6 +305,8 @@ function layout(p: PoolScene, x: number, y: number, top: number): Layout {
     const t1 = Math.min(1, into.open1 - here);
     if (t1 > t0) notches.push({ side, t0, t1, run: into, out: false });
   }
+  // And where an aqueduct's channel goes through the rim.
+  for (const c of p.channels?.(x, y) ?? []) notches.push({ ...c, run: null, out: true });
 
   // The grid: the rim's inner lines both ways, and the ends of every notch along its side.
   const us = [0, RIM, 1 - RIM, 1];
@@ -461,10 +465,11 @@ export function drawPool(ctx: CanvasRenderingContext2D, cam: Camera, p: PoolScen
    * pool lays its water over this one's and then lays the same stretch again.
    */
   const fv = fallsView(cam, p);
-  const placed = notches.map((n) => place(fv, sheetOf(p, n.run)));
+  const placed = notches.map((n) => (n.run ? place(fv, sheetOf(p, n.run)) : null));
   notches.forEach((n, i) => {
     const here = ALONG[n.side] === 0 ? x : y;
-    if (n.out) drawLip(ctx, fv, placed[i], here + n.t0 - HAIR, here + n.t1 + HAIR);
+    const at = placed[i];
+    if (n.out && at) drawLip(ctx, fv, at, here + n.t0 - HAIR, here + n.t1 + HAIR);
   });
   /*
    * Where it comes in from a pool above, its foot: all of the foot that comes
@@ -476,9 +481,10 @@ export function drawPool(ctx: CanvasRenderingContext2D, cam: Camera, p: PoolScen
    */
   if (t !== null) {
     notches.forEach((n, i) => {
-      if (n.out) return;
+      const at = placed[i];
+      if (n.out || !at) return;
       const here = ALONG[n.side] === 0 ? x : y;
-      drawFoot(ctx, fv, placed[i], here + n.t0 - FOOT_REACH, here + n.t1 + FOOT_REACH, p.falls?.foam ?? null);
+      drawFoot(ctx, fv, at, here + n.t0 - FOOT_REACH, here + n.t1 + FOOT_REACH, p.falls?.foam ?? null);
     });
   }
 
@@ -528,16 +534,17 @@ export function drawPool(ctx: CanvasRenderingContext2D, cam: Camera, p: PoolScen
    * the line of the tile it lands on, and the mist off it, once for the curtain.
    */
   notches.forEach((n, i) => {
-    if (!n.out) return;
+    const at = placed[i];
+    if (!n.out || !n.run || !at) return;
     const here = ALONG[n.side] === 0 ? x : y;
-    const sheet = placed[i].sheet;
+    const sheet = at.sheet;
     let high = -Infinity;
     for (let k = 0; k < sheet.land.length; k++) high = Math.max(high, sheet.land[k]);
     if (sheet.top - high < 0.5) return;
-    if (cam.nearSide(OUT[n.side][0], OUT[n.side][1]) > 0) drawSheet(ctx, fv, placed[i], here + n.t0, here + n.t1);
+    if (cam.nearSide(OUT[n.side][0], OUT[n.side][1]) > 0) drawSheet(ctx, fv, at, here + n.t0, here + n.t1);
     if (t === null || !p.falls || n.run.onto) return;
-    p.falls.foot(p.falls.row(x + OUT[n.side][0], y + OUT[n.side][1]), placed[i], here + n.t0, here + n.t1);
-    if (here === n.run.lo) p.falls.mist(placed[i]);
+    p.falls.foot(p.falls.row(x + OUT[n.side][0], y + OUT[n.side][1]), at, here + n.t0, here + n.t1);
+    if (here === n.run.lo) p.falls.mist(at);
   });
   ctx.lineWidth = 1;
 }

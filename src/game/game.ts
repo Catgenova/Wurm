@@ -17,7 +17,7 @@ import type { ItemRow } from '../net/island';
 import { packed, type Aged } from '../net/packed';
 import { DROWN_RATE, DROWN_WARN, EXHAUSTED, HEAL_FED, HEAL_RATE, HUNGER_RATE, SWIM_LEARN, SWIM_WIND, THIRST_RATE, WIND_PER_LEVEL, WIND_REST, WIND_STARVING, WIND_WALK } from './body';
 import { markName, MARK_CAP, MARK_COLOURS, type Marker } from './marks';
-import { Buildings, connectsDown, floorKind, INDOORS_DECAY, isDone, roofShapeDef, TOP_LEVELS, WALL_HEIGHT, walkableKind, type BuildingsJSON, type Building, type Wall, type Side } from './building';
+import { Buildings, connectsDown, floorKind, INDOORS_DECAY, isDone, progressOf, roofShapeDef, TOP_LEVELS, WALL_HEIGHT, walkableKind, type BuildingsJSON, type Building, type Wall, type Side } from './building';
 import { crateCentre, crateName, crateCapacity, crateUnits, STORE_REACH, subtileOf, type CrateKind, type PlacedCrate } from './crates';
 import { anvilAnchor, anvilCovers, ANVIL_SUBTILES, type PlacedAnvil } from './anvil';
 import { fireAnchor, fireCentre, fireCovers, FIRE_SUBTILES, type PlacedCampfire } from './campfire';
@@ -52,6 +52,8 @@ import {
 } from './traps';
 import { BAIT_BY_ID, FISH, fishHere, pickFish, waterDepth } from './fishing';
 import { BRIDGES, bridgeDone, CLEARANCE, END_SLOP, spanBill, spanTiles, type Bridge, type BridgeKind } from './bridges';
+import { AQ_NOT_THROWN, AQ_OVER, channelOf } from './aqueducts';
+import { AQUEDUCT_LPS, aqueductShut, type Channel } from '../world/aqueducts';
 import { CLEAR_OF_BUILDINGS, LIFT_PER_MASONRY, concreteFor, foundationBill, foundationDone, liftFor, masonryFor, soilSays, type Foundation } from './foundations';
 import { poolLevel } from '../world/springs';
 import { deckOver, floorNear, levelGround, pierDrop, pierGround, pierRefusal, pierSays, type PierGround } from './piers';
@@ -1156,6 +1158,10 @@ export class Game {
       return f ? { top: f.top, pool: !!f.pool } : null;
     };
     this.springs.pools = () => [...this.foundations.values()].filter((f) => f.pool && foundationDone(f));
+    // And the aqueducts, which carry it from one basin to another (`./aqueducts`).
+    this.springs.channels = () => this.aqueductChannels();
+    // Whose piers are walls to a pool's water, set out or built.
+    this.springs.shut = () => aqueductShut([...this.bridges.values()].filter((b) => b.kind === 'aqueduct'));
     this.springs.load(init.springs);
     this.vision = new Vision(this);
     this.world.onChange((x, y) => {
@@ -1200,6 +1206,8 @@ export class Game {
    */
   readonly stepRule = (x0: number, y0: number, level: number, x1: number, y1: number): number | null => {
     const b = this.buildings;
+    // An aqueduct's piers stand on the ground between its tiles, along its run.
+    if (level === 0 && this.bridges.size && this.pierBetween(x0, y0, x1, y1)) return null;
     if (this.connector(x1, y1, level + 1) && !b.blocksAt(level, x0, y0, x1, y1)) return level + 1;
     // Deck is ground: it is flat, and the drop under it is not your problem.
     if (this.bridges.size) {
@@ -1230,6 +1238,7 @@ export class Game {
     if (level !== 0) return null;
     // A deck on piers takes feet, not wheels (`pier_step`).
     if (this.buildings.pierTiles.size && this.buildings.onPiers(x1, y1)) return null;
+    if (this.bridges.size && this.pierBetween(x0, y0, x1, y1)) return null;
     // A wooden bridge or a stone arch carries wheels; a rope bridge does not.
     if (this.bridges.size && this.bridgeStep(x0, y0, x1, y1)) {
       const b = this.bridgeAt(x1, y1) ?? this.bridgeAt(x0, y0);
@@ -1262,6 +1271,7 @@ export class Game {
     if (!this.world.inBounds(x1, y1) || !this.world.isPassable(x1, y1)) return null;
     // A deck on piers takes feet, not hooves (`pier_step`).
     if (this.buildings.pierTiles.size && this.buildings.onPiers(x1, y1)) return null;
+    if (this.bridges.size && this.pierBetween(x0, y0, x1, y1)) return null;
     // Only the web-footed sort will take a rider into deep water.
     if (!this.creatures.species(up).swims && this.world.bedAt(x1 + 0.5, y1 + 0.5) < this.world.surfaceAt(x1, y1) - SWIM_DEPTH) return null;
     if (this.buildings.blocksAt(0, x0, y0, x1, y1)) return null;
@@ -1273,9 +1283,10 @@ export class Game {
    * it and nowhere else: no beaching, no dragging it over a sandbar, and
    * nothing indoors.
    */
-  readonly sailRule = (_x0: number, _y0: number, level: number, x1: number, y1: number): number | null => {
+  readonly sailRule = (x0: number, y0: number, level: number, x1: number, y1: number): number | null => {
     const boat = this.afloat();
     if (!boat || level !== 0) return null;
+    if (this.bridges.size && this.pierBetween(x0, y0, x1, y1)) return null;
     const def = furnitureDef(boat.kind).boat;
     if (!def || !this.world.inBounds(x1, y1)) return null;
     // No hull goes in under a deck on piers, among its posts (`pier_step`).
@@ -1602,6 +1613,7 @@ export class Game {
     if (!this.onDeed(x, y)) return 'You may only build on your own deed.';
     if (this.isToken(x, y)) return 'The settlement token stands here.';
     if (this.buildings.buildingAt(x, y)) return 'That tile is already part of a building.';
+    if (this.bridgeAt(x, y)?.kind === 'aqueduct') return AQ_OVER;
     /*
      * Unless it is a slab, and then the ground under it is the slab's business.
      *
@@ -3035,7 +3047,7 @@ export class Game {
        * was gone at the next refresh, as swimming's was before it. The island
        * pays it now, off the walk it is told about (`rpc_move`), by this rule.
        */
-      if (!this.bodyFromIsland && !p.carried && !this.bridgeAt(p.tileX, p.tileY) && p.lastClimb > MAX_STEP * CLIMB_LEARN_FROM) {
+      if (!this.bodyFromIsland && !p.carried && !this.onWalkedDeck(p.tileX, p.tileY) && p.lastClimb > MAX_STEP * CLIMB_LEARN_FROM) {
         this.gainSkill('climbing', CLIMB_LEARN + (p.lastClimb / MAX_STEP) * CLIMB_LEARN_STEEP);
       }
       p.lastClimb = 0;
@@ -4275,10 +4287,47 @@ export class Game {
     return id === undefined ? undefined : this.bridges.get(id);
   }
 
-  /** The height of finished deck over this tile, or null for open ground. */
+  /** The height of finished deck over this tile, or null for open ground: an aqueduct's deck is water, and nobody stands on it. */
   deckAt(x: number, y: number): number | null {
     const b = this.bridgeAt(x, y);
-    return b && bridgeDone(b) ? b.height : null;
+    return b && bridgeDone(b) && b.kind !== 'aqueduct' ? b.height : null;
+  }
+
+  /** Whether a tile is walked on a bridge's deck rather than on the ground: under an aqueduct it is the ground, worn and climbed as ever. */
+  onWalkedDeck(x: number, y: number): boolean {
+    const b = this.bridgeAt(x, y);
+    return !!b && b.kind !== 'aqueduct';
+  }
+
+  /**
+   * Whether a step between two neighbouring tiles goes through one of an
+   * aqueduct's piers: along its run, between two tiles of its line, beside a
+   * bay with any of its stone laid. Across its run you go under its arches.
+   * The island's `aqueduct_pier`.
+   */
+  pierBetween(x0: number, y0: number, x1: number, y1: number): boolean {
+    if (Math.abs(x1 - x0) + Math.abs(y1 - y0) !== 1) return false;
+    for (const [x, y] of [[x0, y0], [x1, y1]]) {
+      const b = this.bridgeAt(x, y);
+      if (b?.kind !== 'aqueduct') continue;
+      const along = b.ay === b.by ? y0 === b.ay && y1 === b.ay : x0 === b.ax && x1 === b.ax;
+      const sp = b.spans.find((s) => s.x === x && s.y === y);
+      if (along && sp && (isDone(sp) || progressOf(sp) > 0)) return true;
+    }
+    return false;
+  }
+
+  /** What is said of a tile a bridge or an aqueduct is carried over, where a pour or a pool would go; null where none is. */
+  carriedOver(x: number, y: number): string | null {
+    const b = this.bridgeAt(x, y);
+    return b ? (b.kind === 'aqueduct' ? AQ_OVER : 'A bridge is carried over that tile.') : null;
+  }
+
+  /** The finished aqueducts, as the springs' water sees them. */
+  aqueductChannels(): Channel[] {
+    const out: Channel[] = [];
+    for (const b of this.bridges.values()) if (b.kind === 'aqueduct' && bridgeDone(b)) out.push(channelOf(this, b));
+    return out;
   }
 
   /**
@@ -4316,13 +4365,13 @@ export class Game {
    * keeps you upstairs instead of dropping you into the yard.
    */
   bridgeStepLevel(x0: number, y0: number, x1: number, y1: number): number | null {
-    // Onto the deck, from an end or from the deck itself.
+    // Onto the deck, from an end or from the deck itself. Never an aqueduct's: under it is open ground.
     const to = this.bridgeAt(x1, y1);
-    if (to && bridgeDone(to) && this.onBridge(to, x0, y0)) return to.level ?? 0;
+    if (to && bridgeDone(to) && to.kind !== 'aqueduct' && this.onBridge(to, x0, y0)) return to.level ?? 0;
     // And off the far end of it again, which is a step down onto solid ground
     // from a deck the terrain underneath knows nothing about.
     const from = this.bridgeAt(x0, y0);
-    return from && bridgeDone(from) && this.onBridge(from, x1, y1) ? from.level ?? 0 : null;
+    return from && bridgeDone(from) && from.kind !== 'aqueduct' && this.onBridge(from, x1, y1) ? from.level ?? 0 : null;
   }
 
   /**
@@ -4344,6 +4393,8 @@ export class Game {
   /** Why a bridge of this sort cannot be thrown between these two tiles, or null. */
   bridgeReason(kind: BridgeKind, ax: number, ay: number, bx: number, by: number): string | null {
     const def = BRIDGES[kind];
+    // An aqueduct is set out from where it pours (`plan_aqueduct`).
+    if (kind === 'aqueduct') return AQ_NOT_THROWN;
     const w = this.world;
     if (!w.inBounds(ax, ay) || !w.inBounds(bx, by)) return 'Not there.';
     if (ax !== bx && ay !== by) return 'A bridge runs straight. Pick an end level with this one, north, south, east or west.';
@@ -4450,7 +4501,8 @@ export class Game {
     const b = this.buildings.buildingAt(x, y);
     if (b) return `${b.name} stands on it.`;
     if (this.isToken(x, y)) return 'The settlement token stands there.';
-    if (this.bridgeAt(x, y)) return 'A bridge is carried over that tile.';
+    const over = this.carriedOver(x, y);
+    if (over) return over;
     if (this.groundAt(x, y).length) return 'Clear away the things lying there first: they would go into the water.';
     const p = this.placed;
     if (p.furniture.at(x, y).length || p.crates.at(x, y).length || p.campfires.at(x, y).length || p.smelters.at(x, y).length
@@ -4546,7 +4598,8 @@ export class Game {
       }
     }
     if (this.isToken(x, y)) return 'The settlement token stands there.';
-    if (this.bridgeAt(x, y)) return 'A bridge is carried over that tile.';
+    const over = this.carriedOver(x, y);
+    if (over) return over;
     if (this.groundAt(x, y).length) return 'Clear away the things lying there first: the pour would bury them.';
     const other = this.deedAt(x, y);
     if (other && !this.onDeed(x, y)) return `That is inside ${other.name}. Pour your concrete on your own ground.`;
@@ -5358,7 +5411,9 @@ export class Game {
       if (def.well) {
         const before = f.litres ?? 0;
         if (before < def.well) {
-          f.litres = Math.min(def.well, before + this.wellRate(f) * dt);
+          // A fountain an aqueduct pours into takes the channel's water on top of its own (`AQUEDUCT_LPS`).
+          const fed = f.kind === 'fountain' && this.springs.feeds(f.x, f.y) ? AQUEDUCT_LPS : 0;
+          f.litres = Math.min(def.well, before + (this.wellRate(f) + fed) * dt);
           f.liquid = 'water';
           if (Math.floor(f.litres) !== Math.floor(before)) this.events.emit('crate');
         }
@@ -6776,6 +6831,8 @@ export class Game {
     if (mossyPiece(f)) f.greenSince = greenNow();
     this.furniture.set(f.id, f);
     this.placed.furniture.add(f);
+    // A fountain set down where an aqueduct pours keeps its water from now (`./aqueducts`).
+    if (kind === 'fountain') this.springs.channelChanged({ from: [x, y], to: [x, y] });
     this.events.emit('crate');
     return f;
   }
@@ -6786,6 +6843,8 @@ export class Game {
     this.furniture.delete(id);
     // A planter goes with whatever was in it, though nothing lifts one that has anything in it.
     this.planted.delete(id);
+    // And a fountain an aqueduct poured into leaves its water to run away downhill.
+    if (f?.kind === 'fountain') this.springs.channelChanged({ from: [f.x, f.y], to: [f.x, f.y] });
     this.events.emit('crate');
   }
 
@@ -7488,7 +7547,7 @@ export class Game {
     if (!w.inBounds(x, y)) return;
     const here = w.getTile(x, y);
     if (!wears(here)) return;
-    if (this.bridgeAt(x, y) || this.buildings.buildingAt(x, y) || this.foundationAt(x, y)) return;
+    if (this.onWalkedDeck(x, y) || this.buildings.buildingAt(x, y) || this.foundationAt(x, y)) return;
     // Kept with the game's papers rather than the land (`save.ts`), so a step
     // does not mark the whole island as wanting writing out again.
     const i = y * w.w + x;
@@ -7533,6 +7592,8 @@ export class Game {
         const gy = y + dy;
         if (!w.inBounds(gx, gy) || !PLANTABLE.has(w.getTile(gx, gy)) || cleared.has(gy * w.w + gx)) continue;
         if (this.deedAt(gx, gy)) continue;
+        // Nor under an aqueduct's spans: it would grow up through its arches (the island's `tree_day`).
+        if (this.bridges.size && this.bridgeAt(gx, gy)?.kind === 'aqueduct') continue;
         spots.push([gx, gy]);
       }
     }

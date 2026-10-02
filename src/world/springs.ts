@@ -84,6 +84,12 @@ export interface Pond {
    * has none.
    */
   spill?: { edge: [number, number, number, number]; to: number };
+  /**
+   * The litres it holds full, on a pond whose water comes to it along an
+   * aqueduct (`./aqueducts`): it fills at the channel's flow rather than
+   * rising `FILL_RATE` a second as a spring's own ponds are drawn to.
+   */
+  volume?: number;
 }
 
 /** Water running from one pond to where it goes next. */
@@ -94,6 +100,16 @@ export interface Stream {
   path: number[];
   /** Where it ends: the pond it runs into, the sea, or nowhere (it soaks away into the ground). */
   to: number | 'sea' | 'lost';
+  /**
+   * The aqueduct it is carried along, when it is (`./aqueducts`): its water
+   * leaves the pond it runs out of by the channel rather than over that
+   * pond's lip, `along` tiles of it, and `path` is where it runs from the foot
+   * of the channel on -- nothing when it pours into a pool or a fountain.
+   */
+  via?: number;
+  along?: number;
+  /** Poured into a fountain, which keeps it. */
+  fountain?: true;
 }
 
 /** Everything one spring's water does. */
@@ -151,10 +167,35 @@ export function springCorner(height: (x: number, y: number) => number, tx: numbe
  * equals, and on from there: into the pool below and over its edge in turn,
  * or down the ground as any stream runs. A foundation with no pool in it is a
  * wall. A pool with nothing lower beside it keeps its water.
+ *
+ * Water poured out onto the ground at a corner (`run`, the foot of an
+ * aqueduct with no pool under it) does not fill anything there first: it
+ * runs from that corner as a stream does from a lip, down the slope and into
+ * whatever hollow it comes to, and on. Its first stream runs out of no pond
+ * (`from` is -1), and nothing it comes to is refused: a hollow too shallow
+ * or too wide for a spring is filled or crossed as any stream's is.
+ *
+ * Water poured onto the top of a foundation with no pool in it (`pour`, the
+ * foot of an aqueduct whose pool has been filled in) runs over the slab and
+ * off its edge with the lowest thing beyond it, as a pool's water goes over
+ * its edge: into a pool below, or down the face of the slab to the ground,
+ * and on from there.
+ *
+ * An edge an aqueduct's pier stands on (`shut`: an aqueduct runs over both
+ * tiles beside it, one after the other) is a wall to a pool's water.
  */
+export interface SettleHow {
+  run?: boolean;
+  pour?: boolean;
+  shut?: Shut;
+}
+/** Whether the edge between a tile and the one beside it is walled where a pool's water would go over it. */
+export type Shut = (px: number, py: number, nx: number, ny: number) => boolean;
+
 export function settleChain(
-  height: (x: number, y: number) => number | null, sx: number, sy: number, slabs?: SlabAt, tile?: [number, number],
+  height: (x: number, y: number) => number | null, sx: number, sy: number, slabs?: SlabAt, tile?: [number, number], how: boolean | SettleHow = false,
 ): Chain | SpringRefusal {
+  const { run = false, pour = false, shut } = typeof how === 'boolean' ? { run: how } as SettleHow : how;
   const R = SPRING_REACH;
   const W = 2 * R + 1;
   const x0 = sx - R;
@@ -302,6 +343,7 @@ export function settleChain(
       ];
       for (const [nx, ny, ax, ay, bx, by] of sides) {
         if (mine.has(ny * 100000 + nx) || !inWindow(nx, ny)) continue;
+        if (shut?.(tx, ty, nx, ny)) continue;
         const s = slabs!(nx, ny);
         let got: Outlet | null = null;
         if (s) {
@@ -328,14 +370,38 @@ export function settleChain(
   };
 
   const box = (): [number, number, number, number] => [x0 + lo[0], y0 + lo[1], x0 + hi[0], y0 + hi[1]];
-  let from: number;
-  let path: number[];
-  let c: number;
-  const pool = slabs && tile ? slabs(tile[0], tile[1]) : null;
-  if (pool && !pool.pool) return 'buried';
-  if (pool?.pool) {
+  let from = 0;
+  let path: number[] = [];
+  let c = 0;
+  const pool = slabs && tile && !run ? slabs(tile[0], tile[1]) : null;
+  if (pool && !pool.pool && !pour) return 'buried';
+  /** The pool the water comes to first, when it does: the one the spring is dug in, or one it pours down into off a slab. */
+  let into: { tx: number; ty: number; top: number } | null = null;
+  if (run) {
+    from = -1;
+    path = [(sy - y0) * W + (sx - x0)];
+    c = path[0];
+  } else if (pool && !pool.pool) {
+    // Over the top of the slab and off its edge with the lowest thing beyond it, out of no pond.
+    look(at([tile![0], tile![1]]));
+    look(at([tile![0] + 1, tile![1] + 1]));
+    const out = outlet([[tile![0], tile![1]]], pool.top);
+    if (!out) {
+      streams.push({ from: -1, path: [], to: 'lost' });
+      return { ponds, streams, box: box() };
+    }
+    if (out.pool) {
+      streams.push({ from: -1, path: [out.edge[0], out.edge[1]], to: 0 });
+      into = { tx: out.pool[0], ty: out.pool[1], top: out.to + POOL_LIP };
+    } else {
+      from = -1;
+      path = [at(out.foot!)];
+      c = path[0];
+    }
+  } else if (pool?.pool) into = { tx: tile![0], ty: tile![1], top: pool.top };
+  if (into) {
     // Pool to pool, down to the one whose water goes over onto the ground, or keeps it.
-    let tx = tile![0], ty = tile![1], top = pool.top;
+    let { tx, ty, top } = into;
     for (;;) {
       const tiles = basin(tx, ty, top);
       const out = outlet(tiles, poolLevel(top));
@@ -361,7 +427,7 @@ export function settleChain(
       c = path[0];
       break;
     }
-  } else {
+  } else if (!run && !pool) {
     const first = pond((sy - y0) * W + (sx - x0));
     if (first.kind === 'wide') return 'wide';
     if (first.kind !== 'pond' || first.pond.level - first.pond.floor < SPRING_DEPTH) return 'flat';
@@ -506,6 +572,8 @@ export interface PondWater {
    */
   from: number;
   since: number;
+  /** How fast it rises, in height units a second, where that is not `FILL_RATE`: a pond an aqueduct fills (`pondRate`). */
+  rate?: number;
 }
 
 /** A stream as it is drawn: from the lip of one pond down to where it goes, running from when that pond is full. */
@@ -515,16 +583,20 @@ export interface StreamWater {
   path: number[];
   to: Stream['to'];
   since: number;
+  /** The aqueduct it comes along, and how many tiles of channel (`Stream.via`). */
+  via?: number;
+  along?: number;
+  fountain?: true;
 }
 
 /** When a pond that rises from `from` at `since` stands at its level. */
-export const pondFull = (p: Pick<PondWater, 'from' | 'level' | 'since'>): number =>
-  p.since + (Math.abs(p.level - p.from) / FILL_RATE) * 1000;
+export const pondFull = (p: Pick<PondWater, 'from' | 'level' | 'since' | 'rate'>): number =>
+  p.since + (Math.abs(p.level - p.from) / (p.rate ?? FILL_RATE)) * 1000;
 
 /** Where a pond's surface stands at a moment of the wall clock, for drawing it rising. */
-export function pondLevelAt(p: Pick<PondWater, 'from' | 'level' | 'since'>, now: number): number {
+export function pondLevelAt(p: Pick<PondWater, 'from' | 'level' | 'since' | 'rate'>, now: number): number {
   const gone = Math.max(0, now - p.since) / 1000;
-  const by = Math.min(Math.abs(p.level - p.from), gone * FILL_RATE);
+  const by = Math.min(Math.abs(p.level - p.from), gone * (p.rate ?? FILL_RATE));
   return p.level >= p.from ? p.from + by : p.from - by;
 }
 

@@ -33,6 +33,7 @@ import { HUSBANDRY_ACTIONS } from './husbandry';
 import { DYE_ACTIONS } from './dyes';
 import { TRAP_ACTIONS } from './traps';
 import { BRIDGE_ACTIONS } from './bridges';
+import { AQ_OVER, AQUEDUCT_ACTIONS } from './aqueducts';
 import { SPRING_ACTIONS } from './springs';
 import { FOUNDATION_ACTIONS } from './foundations';
 import { STEPS_ACTIONS } from './steps';
@@ -89,6 +90,8 @@ export type Target =
       facing?: Side;
       /** Which cast is being called for, when one is. */
       spell?: string;
+      /** The tile an aqueduct is led from, when one is being set out to pour into this one. */
+      head?: [number, number];
     }
   | { kind: 'crate'; id: number }
   /** Somebody else on the island, by who they are (a Naturalist's Field Medic dressing their wounds). */
@@ -1728,6 +1731,8 @@ export const ACTIONS: ActionDef[] = [
     baseTime: 5,
     applies: (t, g) => DIGGABLE_PLANT_TILES.has(tile(t, g)) && g.inventory.has('sprout'),
     check: (t, g) => {
+      // A tree would grow up through an aqueduct's arches.
+      if (t.kind === 'tile' && g.bridgeAt(t.x, t.y)?.kind === 'aqueduct') return AQ_OVER;
       // The one chosen off the menu, or the first that comes to hand. Sprouts
       // come in nine species and do not look alike once they are twenty years
       // old, so a pack holding oak and cedar had no way to say which.
@@ -2936,6 +2941,7 @@ export const ACTIONS: ActionDef[] = [
   ...LAMP_ACTIONS,
   ...COUNTER_ACTIONS,
   ...BRIDGE_ACTIONS,
+  ...AQUEDUCT_ACTIONS,
   ...SPRING_ACTIONS,
   ...FLOWER_ACTIONS,
   ...WATER_GARDEN_ACTIONS,

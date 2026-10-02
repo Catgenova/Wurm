@@ -4,6 +4,7 @@ import type { Game } from './game';
 import { greenNow } from './greening';
 import { itemDef } from './items';
 import { fill } from './words';
+import { AQUEDUCT_FLOW, CHANNEL_WIDE, TILE_METRES } from '../world/aqueducts';
 
 /**
  * Bridges.
@@ -20,7 +21,7 @@ import { fill } from './words';
  * season and carries anything at all, further than either.
  */
 
-export type BridgeKind = 'rope' | 'wood' | 'stone';
+export type BridgeKind = 'rope' | 'wood' | 'stone' | 'aqueduct';
 
 export interface BridgeDef {
   id: BridgeKind;
@@ -72,7 +73,43 @@ export const BRIDGES: Record<BridgeKind, BridgeDef> = {
     carts: true,
     note: 'Voussoirs turned over a centring and a slab road laid on the fill. It is the work of a season and it will outlast everybody who used it.',
   },
+  /*
+   * A stone arch whose deck is a water channel (`./aqueducts`). Set out from
+   * the basin it pours into rather than thrown from a bank, so it is not
+   * among what "Throw a bridge across" offers; nobody walks it.
+   */
+  aqueduct: {
+    id: 'aqueduct',
+    name: 'Aqueduct',
+    bill: [],
+    span: 8,
+    tool: 'trowel',
+    skill: 'masonry',
+    difficulty: 44,
+    carts: false,
+    note: '',
+  },
 };
+
+/**
+ * What an aqueduct's channel adds to a span of stone arch: the slabs it is
+ * lined with and the mortar they are bedded in. Its span, its trade and how
+ * hard it is are the stone arch's own.
+ */
+export const CHANNEL_LINING: Array<[string, number]> = [['mortar', 10], ['stone_slab', 4]];
+{
+  const a = BRIDGES.aqueduct;
+  const s = BRIDGES.stone;
+  const bill = new Map(s.bill);
+  for (const [id, n] of CHANNEL_LINING) bill.set(id, (bill.get(id) ?? 0) + n);
+  // Named in the order the island names them, so a span says what it wants the same way on both sides.
+  a.bill = [...bill.entries()].sort(([x], [y]) => (x < y ? -1 : 1));
+  a.span = s.span;
+  a.tool = s.tool;
+  a.skill = s.skill;
+  a.difficulty = s.difficulty;
+  a.note = `A stone arch whose deck is a channel ${CHANNEL_WIDE * TILE_METRES} m wide, carrying ${AQUEDUCT_FLOW} litres a minute of a spring's water from the pond or pool at its head to the basin at its foot. Nobody walks it.`;
+}
 
 // A bridge's note counts what it is made of off its own bill: `{bill.thick_rope:W}`.
 for (const b of Object.values(BRIDGES)) b.note = fill(b.note, { ...b, bill: Object.fromEntries(b.bill) });
@@ -153,9 +190,12 @@ export const CLEARANCE = 3;
 export const END_SLOP = 12;
 
 export const bridgeState = (b: Bridge): string => {
-  if (bridgeDone(b)) return `${b.spans.length} tiles · finished`;
+  const n = b.spans.length;
+  // An aqueduct is counted in spans, as its own menu counts it.
+  const size = b.kind === 'aqueduct' ? `${n} span${n === 1 ? '' : 's'}` : `${n} tiles`;
+  if (bridgeDone(b)) return `${size} · finished`;
   const left = b.spans.filter((s) => !isDone(s)).length;
-  return `${b.spans.length} tiles · ${Math.round(bridgeProgress(b) * 100)}% · ${left} still open`;
+  return `${size} · ${Math.round(bridgeProgress(b) * 100)}% · ${left} still open`;
 };
 
 /** What one tile of deck still wants, written out. */
@@ -218,7 +258,8 @@ export const BRIDGE_ACTIONS: ActionDef[] = [
     stamina: 0.06,
     baseTime: 9,
     repeat: true,
-    applies: (t, g) => bridgeOf(g, t) !== undefined,
+    // An aqueduct is worked as one (`./aqueducts`).
+    applies: (t, g) => bridgeOf(g, t) !== undefined && bridgeOf(g, t)!.kind !== 'aqueduct',
     labelFor: (t, g) => {
       const b = bridgeOf(g, t);
       const s = b && b.spans.find((x) => !isDone(x));
@@ -272,7 +313,7 @@ export const BRIDGE_ACTIONS: ActionDef[] = [
     verb: 'pulling the bridge down',
     stamina: 0.08,
     baseTime: 12,
-    applies: (t, g) => bridgeOf(g, t) !== undefined,
+    applies: (t, g) => bridgeOf(g, t) !== undefined && bridgeOf(g, t)!.kind !== 'aqueduct',
     check: (t, g) => {
       const b = bridgeOf(g, t);
       if (!b) return 'It is gone.';

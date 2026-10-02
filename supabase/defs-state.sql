@@ -1280,6 +1280,9 @@ insert into action_def (id, label, verb, skill, tool, corner, range, stamina, ba
 insert into action_def (id, label, verb, skill, tool, corner, range, stamina, base_time, difficulty, instant, repeatable) values ('plan_bridge', 'Throw a bridge across', 'setting out a bridge', null, null, false, 18, 0.04, 5, null, false, false);
 insert into action_def (id, label, verb, skill, tool, corner, range, stamina, base_time, difficulty, instant, repeatable) values ('build_bridge', 'Work on the bridge', 'building the bridge', null, null, false, null, 0.06, 9, null, false, true);
 insert into action_def (id, label, verb, skill, tool, corner, range, stamina, base_time, difficulty, instant, repeatable) values ('demolish_bridge', 'Pull it down', 'pulling the bridge down', null, null, false, null, 0.08, 12, null, false, false);
+insert into action_def (id, label, verb, skill, tool, corner, range, stamina, base_time, difficulty, instant, repeatable) values ('plan_aqueduct', 'Lead an aqueduct here', 'setting out an aqueduct', null, null, false, 18, 0.04, 5, null, false, false);
+insert into action_def (id, label, verb, skill, tool, corner, range, stamina, base_time, difficulty, instant, repeatable) values ('build_aqueduct', 'Work on the aqueduct', 'building the aqueduct', null, null, false, null, 0.06, 9, null, false, true);
+insert into action_def (id, label, verb, skill, tool, corner, range, stamina, base_time, difficulty, instant, repeatable) values ('demolish_aqueduct', 'Pull the aqueduct down', 'pulling the aqueduct down', null, null, false, null, 0.08, 12, null, false, false);
 insert into action_def (id, label, verb, skill, tool, corner, range, stamina, base_time, difficulty, instant, repeatable) values ('dig_spring', 'Dig a spring', 'digging for a spring', 'digging', 'shovel', false, null, 0.12, 30, 12, false, false);
 insert into action_def (id, label, verb, skill, tool, corner, range, stamina, base_time, difficulty, instant, repeatable) values ('stop_spring', 'Stop up the spring', 'stopping up the spring', 'digging', 'shovel', false, null, 0.06, 10, null, false, false);
 insert into action_def (id, label, verb, skill, tool, corner, range, stamina, base_time, difficulty, instant, repeatable) values ('pick_flowers', 'Pick flowers', 'picking flowers', 'foraging', null, false, null, 0.02, 3, null, false, false);
@@ -4637,6 +4640,10 @@ insert into bridge_def values ('stone', 'Stone arch', 8, 'trowel', 'masonry', 44
 insert into bridge_bill values ('stone', 'stone_brick', 40);
 insert into bridge_bill values ('stone', 'mortar', 20);
 insert into bridge_bill values ('stone', 'stone_slab', 6);
+insert into bridge_def values ('aqueduct', 'Aqueduct', 8, 'trowel', 'masonry', 44, false, 'A stone arch whose deck is a channel 1 m wide, carrying 96000 litres a minute of a spring''s water from the pond or pool at its head to the basin at its foot. Nobody walks it.');
+insert into bridge_bill values ('aqueduct', 'mortar', 30);
+insert into bridge_bill values ('aqueduct', 'stone_brick', 40);
+insert into bridge_bill values ('aqueduct', 'stone_slab', 10);
 insert into brew_def values ('ale', 'Ale', 'wheat', 12, 15, 2250, 12, 'You mash the wheat into the water and leave it to work. It will be ale.');
 insert into brew_def values ('cider', 'Cider', 'apple', 20, 15, 4500, 18, 'You break the apples into the water and bung the barrel. It will be cider.');
 insert into brew_def values ('mead', 'Mead', 'honey', 12, 15, 6000, 24, 'You stir the honey through until it goes. It will be mead, in its own time.');

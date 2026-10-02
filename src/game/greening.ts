@@ -88,8 +88,8 @@ export const wetFrom = (near: number): number => Math.max(0, 1 - near / GREEN_WE
 export const ivied = (w: Wall): boolean => isDone(w) && MATERIAL_BY_ID.get(w.material)?.kind === 'stone';
 /** A piece moss gathers on (`FurnitureDef.mossy`): a statue. */
 export const mossyPiece = (f: { kind: string }): boolean => !!furnitureDef(f.kind).mossy;
-/** A bridge moss gathers on: a finished stone arch. */
-export const mossyBridge = (b: Bridge): boolean => b.kind === 'stone' && bridgeDone(b);
+/** A bridge moss gathers on: a finished stone arch, or a finished aqueduct, which is one. */
+export const mossyBridge = (b: Bridge): boolean => (b.kind === 'stone' || b.kind === 'aqueduct') && bridgeDone(b);
 
 /** The days a wall has been greening, or null for a wall ivy does not climb. */
 export function wallGreen(g: Game, w: Wall, now: number): number | null {
@@ -164,7 +164,7 @@ export function mossOn(g: Game, t: Target, now: number): Mossy | null {
 /** What is scrubbed, as the log says it. */
 export function mossWords(m: Mossy): string {
   if (m.piece) return `the ${furnitureDef(m.piece.kind).name.toLowerCase()}`;
-  if (m.bridge) return 'the bridge';
+  if (m.bridge) return m.bridge.kind === 'aqueduct' ? 'the aqueduct' : 'the bridge';
   return m.paving && m.slab ? 'the paving and the foundation' : m.paving ? 'the paving' : 'the foundation';
 }
 

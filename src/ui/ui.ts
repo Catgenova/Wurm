@@ -40,6 +40,7 @@ import { postCandidates, postKeep, postLife, postName, postRadius, postState, ty
 import { baitInPack, creelHold, trapDef, trapHolds, trapKeep, trapLife, trapName, TRAPS, trapState, type PlacedTrap } from '../game/traps';
 import { BAIT_BY_ID } from '../game/fishing';
 import { BRIDGES, bridgeDef, bridgeName, bridgeState, spanWants, type Bridge } from '../game/bridges';
+import { aqueductEntries, aqueductMenu } from './aqueducts';
 import { foundationState } from '../game/foundations';
 import { BLESS_CAP, CASTS, FAITH, favourCap } from '../game/faith';
 import { BAUBLE_SAID, BAUBLE_TIER_BY_ID, BAUBLE_TIERS, readBauble, socketsOf, socketText, TARNISHED } from '../game/baubles';
@@ -1042,7 +1043,8 @@ export class UI {
     // Throwing a bridge from where you are standing to the tile under the cursor.
     const planBridge = ACTION_BY_ID.get('plan_bridge');
     if (planBridge && (pick.x !== this.game.player.tileX || pick.y !== this.game.player.tileY)) {
-      const options = (Object.keys(BRIDGES) as Array<keyof typeof BRIDGES>)
+      // An aqueduct is not thrown from a bank but led to where it pours (`aqueductMenu`).
+      const options = (Object.keys(BRIDGES) as Array<keyof typeof BRIDGES>).filter((kind) => kind !== 'aqueduct')
         .map((kind) => ({ kind, def: BRIDGES[kind], reason: planBridge.check?.({ ...target, material: kind }, this.game) ?? null }))
         .filter((o) => o.reason === null || !/runs straight|nothing between|a gap, it is ground|dry, solid ground/.test(o.reason));
       if (options.length) {
@@ -1058,6 +1060,8 @@ export class UI {
         });
       }
     }
+    // Leading an aqueduct to the pool, pond, fountain or hollow under the cursor, from water straight out from it.
+    entries.push(...aqueductMenu(this.game, pick.x, pick.y, target));
     // Setting a carried trap on the spot under the cursor.
     const trapSet = ACTION_BY_ID.get('set_trap');
     const trapItems = this.game.inventory.items.filter((it) => it.id === 'snare' || it.id === 'deadfall' || it.id === 'creel');
@@ -1912,6 +1916,7 @@ export class UI {
   /** Working on a bridge, or taking it down again. */
   private bridgeEntries(b: Bridge): MenuItem[] {
     const g = this.game;
+    if (b.kind === 'aqueduct') return aqueductEntries(g, b);
     const bt: Target = { kind: 'bridge', id: b.id };
     const def = bridgeDef(b);
     const entries: MenuItem[] = [];

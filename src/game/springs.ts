@@ -14,8 +14,9 @@ import type { ActionDef } from './actions';
 import type { World } from '../world/world';
 import {
   FILL_RATE, pondFull, POND_MOST, RUN_RATE, settleChain, springCorner, SPRING_DEPTH, SPRINGS_EACH, WaterField,
-  type Chain, type Pond, type PondWater, type SlabAt, type Stream, type StreamWater,
+  type Chain, type Pond, type PondWater, type Shut, type SlabAt, type Stream, type StreamWater,
 } from '../world/springs';
+import { AQUEDUCT_FLOW, pondRate, settleWater, type Channel } from '../world/aqueducts';
 
 /** One spring, and what its water does. */
 export interface Spring {
@@ -32,6 +33,8 @@ export interface Spring {
   fill: Array<{ from: number; since: number }>;
   /** Counted up each time the island settles it, so a browser asks again only for one that has changed. */
   ver: number;
+  /** The tile each aqueduct its water goes along draws from, by the aqueduct's id, as it was settled: for saying so. */
+  heads?: Record<number, [number, number]>;
 }
 
 /** A spring as a save keeps it: where it is and who dug it. Its water is worked out again from the ground. */
@@ -64,7 +67,9 @@ export interface IslandSpring {
  * How each pond of a chain rises, for drawing: a pond that was there before
  * (its lowest corner was under water) goes on from the level it stood at, and
  * a new one rises from its floor once the one above it is full and the water
- * has run down to it.
+ * has run down to it -- along an aqueduct's channel first, where it comes by
+ * one, and at the channel's flow rather than `FILL_RATE` where an aqueduct
+ * fills it (`pondRate`).
  */
 export function fillings(chain: Chain, was: WaterField | null, now: number): Array<{ from: number; since: number }> {
   const out: Array<{ from: number; since: number }> = [];
@@ -79,9 +84,9 @@ export function fillings(chain: Chain, was: WaterField | null, now: number): Arr
     const since = from !== null ? now : Math.max(now, ready);
     const f = { from: from ?? p.floor, since };
     out.push(f);
-    const full = pondFull({ from: f.from, level: p.level, since });
+    const full = pondFull({ from: f.from, level: p.level, since, rate: pondRate(p) });
     const stream = chain.streams.find((s) => s.from === i);
-    ready = full + (stream ? ((stream.path.length / 2) / RUN_RATE) * 1000 : 0);
+    ready = full + (stream ? (((stream.along ?? 0) + stream.path.length / 2) / RUN_RATE) * 1000 : 0);
   });
   return out;
 }
@@ -97,6 +102,17 @@ export class Springs {
   slabs: SlabAt = () => null;
   /** Every foundation with a pool dug in it, which is water whether or not a spring rises in it. */
   pools: () => Iterable<{ x: number; y: number; top: number }> = () => [];
+  /** The finished aqueducts, as the water sees them (`Channel`); none until the game says. */
+  channels: () => Channel[] = () => [];
+  /** The edges every aqueduct's piers stand on, set out or built, which a pool's water does not go over (`aqueductShut`). */
+  shut: () => Shut | undefined = () => undefined;
+  /**
+   * The aqueducts that pour into a fountain with water running along them,
+   * and when each channel's water started along it and from water standing
+   * at what level, by the aqueduct's id.
+   */
+  private fed = new Set<number>();
+  private flowing = new Map<number, { since: number; level: number }>();
 
   constructor(private readonly world: World) {
     this.water = new WaterField(world.w, world.h);
@@ -124,7 +140,7 @@ export class Springs {
     if (slab && !slab.pool) return 'Dig a pool in the foundation first: a spring under a slab has nowhere to rise.';
     if (!slab && this.world.hasWater(x, y)) return 'There is water here already.';
     const [cx, cy] = springCorner((a, b) => this.world.getHeight(a, b), x, y);
-    const r = settleChain(this.height, cx, cy, this.slabs, [x, y]);
+    const r = settleChain(this.height, cx, cy, this.slabs, [x, y], { shut: this.shut() });
     if (slab && typeof r !== 'string') {
       // One spring to a pool: a second would only send the same water over the same edge.
       const tiles = r.ponds[0].tiles ?? [];
@@ -136,12 +152,23 @@ export class Springs {
     return null;
   }
 
+  /** The tile each aqueduct a chain's water goes along draws from, by the aqueduct's id. */
+  private headsOf(chain: Chain, channels: readonly Channel[]): Record<number, [number, number]> | undefined {
+    let out: Record<number, [number, number]> | undefined;
+    for (const st of chain.streams) {
+      const c = st.via === undefined ? undefined : channels.find((ch) => ch.id === st.via);
+      if (c) (out ??= {})[c.id] = [c.from[0], c.from[1]];
+    }
+    return out;
+  }
+
   /** Dig a spring: its water rises now, and runs on down to wherever it goes. */
   dig(x: number, y: number, by: string | null, now: number): Spring | null {
     const [cx, cy] = springCorner((a, b) => this.world.getHeight(a, b), x, y);
-    const chain = settleChain(this.height, cx, cy, this.slabs, [x, y]);
+    const channels = this.channels();
+    const chain = settleWater(this.height, cx, cy, this.slabs, [x, y], channels, this.shut());
     if (typeof chain === 'string') return null;
-    const s: Spring = { id: this.nextId++, x, y, cx, cy, by, chain, fill: fillings(chain, null, now), ver: 1 };
+    const s: Spring = { id: this.nextId++, x, y, cx, cy, by, chain, fill: fillings(chain, null, now), ver: 1, heads: this.headsOf(chain, channels) };
     this.list.set(s.id, s);
     this.lay();
     return s;
@@ -173,10 +200,11 @@ export class Springs {
   update(now: number): void {
     if (!this.dirty.size) return;
     const was = this.water;
+    const channels = this.channels();
     for (const id of this.dirty) {
       const s = this.list.get(id);
       if (!s) continue;
-      const chain = settleChain(this.height, s.cx, s.cy, this.slabs, [s.x, s.y]);
+      const chain = settleWater(this.height, s.cx, s.cy, this.slabs, [s.x, s.y], channels, this.shut());
       // A spring whose hollow has been filled in or dug out too wide, or whose pool has been filled in, stops: its water goes.
       if (typeof chain === 'string') {
         this.list.delete(id);
@@ -184,6 +212,7 @@ export class Springs {
       }
       s.chain = chain;
       s.fill = fillings(chain, was, now);
+      s.heads = this.headsOf(chain, channels);
       s.ver++;
     }
     this.dirty.clear();
@@ -195,17 +224,34 @@ export class Springs {
     const ponds: PondWater[] = [];
     const streams: StreamWater[] = [];
     const cw = this.world.w + 1;
+    this.fed.clear();
+    // Water already running along a channel from water standing at the same level runs on: settling the ground again does not empty it.
+    const ran = new Map(this.flowing);
+    this.flowing.clear();
     for (const s of this.list.values()) {
       s.chain.ponds.forEach((p, i) => {
         const wet = new Set<number>();
         for (let k = 0; k < p.wet.length; k += 2) wet.add(p.wet[k + 1] * cw + p.wet[k]);
         const f = s.fill[i] ?? { from: p.level, since: 0 };
-        ponds.push({ spring: s.id, index: i, level: p.level, floor: p.floor, wet, lip: p.lip, over: p.over, from: f.from, since: f.since });
+        const rate = pondRate(p);
+        ponds.push({ spring: s.id, index: i, level: p.level, floor: p.floor, wet, lip: p.lip, over: p.over, from: f.from, since: f.since, ...(rate ? { rate } : {}) });
       });
       for (const st of s.chain.streams) {
         const f = s.fill[st.from];
-        const since = f ? pondFull({ from: f.from, level: s.chain.ponds[st.from].level, since: f.since }) : 0;
-        streams.push({ spring: s.id, from: st.from, path: st.path, to: st.to, since });
+        const above = s.chain.ponds[st.from];
+        const full = f && above ? pondFull({ from: f.from, level: above.level, since: f.since, rate: pondRate(above) }) : 0;
+        if (st.via === undefined) {
+          streams.push({ spring: s.id, from: st.from, path: st.path, to: st.to, since: full });
+          continue;
+        }
+        // Along the channel first, and on from its foot once the water has run the length of it.
+        const before = ran.get(st.via);
+        const start = before && above && before.level === above.level ? Math.min(before.since, full) : full;
+        const was = this.flowing.get(st.via);
+        this.flowing.set(st.via, { since: was === undefined ? start : Math.min(was.since, start), level: above?.level ?? 0 });
+        const foot = start + ((st.along ?? 0) / RUN_RATE) * 1000;
+        if (st.fountain) this.fed.add(st.via);
+        streams.push({ spring: s.id, from: st.from, path: st.path, to: st.to, since: foot, via: st.via, along: st.along, ...(st.fountain ? { fountain: true } : {}) });
       }
     }
     const field = new WaterField(this.world.w, this.world.h);
@@ -226,7 +272,7 @@ export class Springs {
     this.list.clear();
     for (const r of saved ?? []) {
       const [cx, cy] = springCorner((a, b) => this.world.getHeight(a, b), r.x, r.y);
-      const chain = settleChain(this.height, cx, cy, this.slabs, [r.x, r.y]);
+      const chain = settleWater(this.height, cx, cy, this.slabs, [r.x, r.y], this.channels(), this.shut());
       if (r.id >= this.nextId) this.nextId = r.id + 1;
       if (typeof chain === 'string') continue;
       this.list.set(r.id, { id: r.id, x: r.x, y: r.y, cx, cy, by: r.by, chain, fill: chain.ponds.map((p) => ({ from: p.level, since: 0 })), ver: 1 });
@@ -252,7 +298,13 @@ export class Springs {
     for (const c of chains) {
       this.list.set(c.id, {
         id: c.id, x: c.x, y: c.y, cx: c.cx, cy: c.cy, by: c.mine ? null : 'somebody else', ver: c.ver,
-        chain: { ponds: c.chain.ponds.map(({ level, floor, wet, lip, over }) => ({ level, floor, wet, lip, over })), streams: c.chain.streams, box: c.chain.box },
+        // A pool's tiles and the edge it goes over, and the litres a pond an aqueduct fills holds, as well as where it stands.
+        chain: {
+          ponds: c.chain.ponds.map(({ level, floor, wet, lip, over, tiles, spill, volume }) => ({
+            level, floor, wet, lip, over, ...(tiles ? { tiles } : {}), ...(spill ? { spill } : {}), ...(volume ? { volume } : {}),
+          })),
+          streams: c.chain.streams, box: c.chain.box,
+        },
         fill: c.chain.ponds.map((p) => ({ from: p.from ?? p.level, since: p.since ? Date.parse(p.since) : 0 })),
       });
       changed = true;
@@ -264,13 +316,63 @@ export class Springs {
   wanted(near: Array<{ id: number; ver: number }>): number[] {
     return near.filter((n) => this.list.get(n.id)?.ver !== n.ver).map((n) => n.id);
   }
+
+  /** Whether an aqueduct keeps a fountain on this tile full: one pouring into it with a spring's water running along it. */
+  feeds(x: number, y: number): boolean {
+    if (!this.fed.size) return false;
+    for (const c of this.channels()) if (this.fed.has(c.id) && c.to[0] === x && c.to[1] === y) return true;
+    return false;
+  }
+
+  /** When a spring's water starts along an aqueduct's channel, in milliseconds of the wall clock, or null while none reaches its head. */
+  flowingSince(id: number): number | null {
+    return this.flowing.get(id)?.since ?? null;
+  }
+
+  /** How many aqueducts a spring's water runs along now. */
+  get running(): number {
+    return this.flowing.size;
+  }
+
+  /**
+   * An aqueduct was finished or taken down, or what stands where one pours
+   * changed: every spring whose water reaches either end is settled again at
+   * the end of the turn. On an island the island does it.
+   */
+  channelChanged(c: { from: [number, number]; to: [number, number] }): void {
+    this.touched(c.from[0], c.from[1]);
+    this.touched(c.to[0], c.to[1]);
+  }
 }
 
 /** How fast a pond rises, in metres a minute, for anything that says so. */
 export const RISE_A_MINUTE = (FILL_RATE / 10) * 60;
 
+/**
+ * What is said when a spring is dug whose water an aqueduct takes: how deep
+ * its pond will stand, and the aqueduct its water goes along instead of over
+ * the lip, by the tile it draws from (`head`). The island's
+ * `aqueduct_spring_says`. Null where no aqueduct takes it.
+ */
+export function aqueductSpringSays(chain: Chain, head: (id: number) => readonly [number, number] | undefined): string | null {
+  const along = chain.streams.find((st) => st.via !== undefined);
+  const at = along?.via !== undefined ? head(along.via) : undefined;
+  if (!along || !at) return null;
+  const first = chain.ponds[0];
+  const k = along.from;
+  const go = `along the aqueduct from ${at[0]}, ${at[1]}, ${AQUEDUCT_FLOW} litres a minute`;
+  const more = `${k} more pond${k === 1 ? '' : 's'} below it, and from the last of those`;
+  if (first.tiles) {
+    return k ? `Water wells up in the pool. It runs down into ${more} ${go}.` : `Water wells up in the pool. It goes ${go}, instead of over its edge.`;
+  }
+  const stand = `Water wells up at the bottom of the hollow. It will stand ${((first.level - first.floor) / 10).toFixed(1)} m deep over ${first.wet.length / 2} corners`;
+  return k ? `${stand}, then spill over the lowest point of its rim and run down into ${more} ${go}.` : `${stand}, then go ${go}, instead of over its rim.`;
+}
+
 /** What is said when a spring is dug: how deep its pond will stand, and where its water goes after that. */
-export function springSays(s: Spring): string {
+export function springSays(s: Spring, head: (id: number) => readonly [number, number] | undefined = (id) => s.heads?.[id]): string {
+  const along = aqueductSpringSays(s.chain, head);
+  if (along) return along;
   const [first, ...rest] = s.chain.ponds;
   const last = s.chain.streams[s.chain.streams.length - 1];
   const deep = ((first.level - first.floor) / 10).toFixed(1);

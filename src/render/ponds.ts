@@ -58,6 +58,14 @@ export interface WaterFrame {
   slab?: (x: number, y: number) => boolean;
   /** Whether a deck on piers stands over a tile: no ripple, ring, lily pad or welling spring is put by a corner of one, in its shade (`piers.ts`). */
   decked?: (x: number, y: number) => boolean;
+  /**
+   * The line of the ground the bay of an aqueduct over a point is drawn in,
+   * or null where none stands over it: water under its arches goes down no
+   * later, so its piers and its coping stand in front of it (`./aqueducts`).
+   * And a count that changes when the bays do, for the lines kept per view.
+   */
+  under?: (wx: number, wy: number) => number | null;
+  underKey?: number;
 }
 
 /** How deep the water running down a stream is over the ground, in height units: enough to lie on it. */
@@ -115,6 +123,8 @@ interface PondDraw {
   level: number;
   from: number;
   since: number;
+  /** How fast it rises, in height units a second, where that is not the springs' own: a hollow an aqueduct fills (`pondRate`). */
+  rate?: number;
   /** Where its water comes in, and a unit step in the ground from there toward the lip it leaves by. */
   inX: number;
   inY: number;
@@ -336,6 +346,8 @@ export class SpringWater {
   private rowBase = 0;
   /** This frame's projection, as the falls are drawn with it. */
   private fv: FallView = { ox: 0, oy: 0, xx: 0, xy: 0, yx: 0, yy: 0, hs: HEIGHT_SCALE, zoom: 1, t: 0, width: 1, height: 1 };
+  /** What the lines kept for the runs and falls were worked out for: the turn of the view, and the aqueducts over the water. */
+  private rowsKey = 0;
   private splashes: Splash[] = [];
   private rings: Ring[] = [];
   /** How strongly a bow shows in the spray this frame. */
@@ -369,6 +381,8 @@ export class SpringWater {
     this.f = f;
     this.frameNo++;
     const cam = f.cam;
+    // The lines kept for each piece are for this turn of the view and these aqueducts over the water.
+    this.rowsKey = cam.rotation + 8 * (f.underKey ?? 0);
     this.zoom = cam.zoom;
     this.ox = cam.worldToScreenX(0, 0);
     this.oy = cam.worldToScreenY(0, 0, 0);
@@ -423,7 +437,7 @@ export class SpringWater {
       if (reach <= run.s[0] || !this.onScreen(run.box, margin)) continue;
       this.project(run);
       run.shown = this.frameNo;
-      if (run.rowsFor !== cam.rotation) this.runRows(run, V);
+      if (run.rowsFor !== this.rowsKey) this.runRows(run, V);
       // Consecutive pieces on the same line of the ground go down as one.
       let j0 = 0;
       for (let j = 0; j < run.n - 1; j++) {
@@ -493,7 +507,7 @@ export class SpringWater {
     const keepRising = new Map<string, { from: number; since: number }>();
     this.ponds = field.ponds.map((p) => {
       // A pond the rules have laid again just as it was keeps rising from where it was rising from.
-      const key = `${p.spring}:${p.index}:${p.level}:${p.floor}:${p.wet.size}`;
+      const key = `${p.spring}:${p.index}:${p.level}:${p.floor}:${p.wet.size}:${p.rate ?? ''}`;
       const had = this.rising.get(key);
       const rise = had && (was || had.since <= p.since) ? had : { from: p.from, since: p.since };
       keepRising.set(key, rise);
@@ -523,7 +537,7 @@ export class SpringWater {
         innerTop.push(top);
       }
       return {
-        pond: p, level: p.level, from: rise.from, since: rise.since, inX: p.lip[0], inY: p.lip[1], driftX: 0, driftY: 0, pads: [],
+        pond: p, level: p.level, from: rise.from, since: rise.since, ...(p.rate ? { rate: p.rate } : {}), inX: p.lip[0], inY: p.lip[1], driftX: 0, driftY: 0, pads: [],
         inner: Int32Array.from(inner), innerTop: Float64Array.from(innerTop), rows: new Int32Array(inner.length / 2), rowsFor: -1, box,
         twin: false,
       };
@@ -728,8 +742,16 @@ export class SpringWater {
       }
       fall.sheetRows[k] = sheet;
       fall.lipRows[k] = Math.max(sheet, lip);
+      // Falling past an aqueduct's pier or under its arch: no later than the bay, so the masonry stands in front of it.
+      const mid = (fall.cuts[k] + fall.cuts[k + 1]) / 2;
+      const out = s.line + s.way * 0.3;
+      const bay = this.f?.under?.(s.axis === 1 ? out : mid, s.axis === 1 ? mid : out) ?? null;
+      if (bay !== null) {
+        fall.sheetRows[k] = Math.min(fall.sheetRows[k], bay);
+        fall.lipRows[k] = Math.min(fall.lipRows[k], bay);
+      }
     }
-    fall.rowsFor = this.f?.cam.rotation ?? -1;
+    fall.rowsFor = this.rowsKey;
   }
 
   /**
@@ -875,8 +897,10 @@ export class SpringWater {
         if (!slab || !slab(tx, ty)) row = Math.max(row, d);
       }
       run.rows[j] = row > -Infinity ? row : any;
+      const bay = this.f?.under?.((run.x[j] + run.x[j + 1]) / 2, (run.y[j] + run.y[j + 1]) / 2) ?? null;
+      if (bay !== null && bay < run.rows[j]) run.rows[j] = bay;
     }
-    run.rowsFor = this.f?.cam.rotation ?? -1;
+    run.rowsFor = this.rowsKey;
   }
 
   private clampRow(d: number): number {
@@ -1001,7 +1025,7 @@ export class SpringWater {
       : [lo, s.line - 2, hi, s.line + 2, low - 4, s.top + 12];
     if (!this.onScreen(box, 80 * this.zoom)) return;
     fall.placed = place(this.fv, s);
-    if (fall.rowsFor !== f.cam.rotation) this.fallRows(fall, f.view);
+    if (fall.rowsFor !== this.rowsKey) this.fallRows(fall, f.view);
   }
 
   /**

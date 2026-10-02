@@ -339,6 +339,20 @@ jobs:
           npx esbuild supabase/test/piers.ts --bundle --platform=node --format=esm \
             --outfile=node_modules/.cache/piers.mjs --log-level=error
           node node_modules/.cache/piers.mjs
+      - name: An aqueduct carries a spring's water over a valley into its basin
+        run: |
+          # Asked for: aqueducts -- a stone bridge whose deck is a channel,
+          # from a pond or a pool to a basin no higher. Both sides refuse the
+          # same plans in the same words, take the whole of the water at its
+          # head along it, fill a hollow at its foot at the channel's rate,
+          # keep a fountain full and send a full pool's water on over its
+          # edge; and dry up the same way when the head falls or the foot goes.
+          # Its piers are walls to a pool's water and stand in the way along
+          # it, the ground under its arches is the ground, and nothing is
+          # planted, planned or dug under a span, on both sides alike.
+          npx esbuild supabase/test/aqueduct.ts --bundle --platform=node --format=esm \
+            --outfile=node_modules/.cache/aqueduct.mjs --log-level=error
+          node node_modules/.cache/aqueduct.mjs
       - name: Nobody on the move is pulled back for going as fast as they can
         run: |
           # Reported as players rubberbanding when they move quickly. The

@@ -28,6 +28,7 @@ import {
   type Building,
   floorBill,
   roofShapeOf,
+  TOP_LEVELS,
 } from '../game/building';
 import { foundationDone } from '../game/foundations';
 import { DYE_BY_ID } from '../game/dyestuffs';
@@ -78,6 +79,7 @@ import { Wakes } from './wake';
 import { foamTexture, SpringWater } from './ponds';
 import { drawFountain } from './fountain';
 import { fallView } from './falls';
+import { AqueductPainter, hullOf, type AqueductPart, type AqueductShape } from './aqueducts';
 import { drawPool, type Run } from './pools';
 import { drawStones, STONES_RISE } from './stones';
 import { drawPierFeet, drawPierTile, pierFeetOf, slabOutline, type PierFoot, type PierTile } from './piers';
@@ -213,6 +215,8 @@ interface Entity {
   layer?: number;
   /** Something small aloft over this line of the ground: a butterfly, a dragonfly, a petal or a leaf (`./life`). */
   mote?: Mote;
+  /** A piece of an aqueduct: a bay's insides or its face and water, the spout at its foot, or the cut at its head (`./aqueducts`). */
+  aq?: AqueductPart;
 }
 
 /**
@@ -257,6 +261,10 @@ interface HitRect {
   post?: number;
   trap?: number;
   bridge?: number;
+  /** An aqueduct's bay: its outline in the box, which is what a click has to land on (`./aqueducts`). */
+  aq?: AqueductShape;
+  /** Or the outlines in the box a click has to land on one of, each as x, y pairs: a bridge's deck and its lips. */
+  poly?: Float64Array[];
 }
 
 
@@ -599,6 +607,62 @@ const clamp255 = (v: number): number => (v < 0 ? 0 : v > 255 ? 255 : v | 0);
 /** The crops whose plants flower, which a butterfly will come to in a planter: the herbs and the fibre crops. */
 const FLOWERING_LOOKS: ReadonlySet<CropLook> = new Set<CropLook>(['herb', 'fibre']);
 
+/** Scratch for the outlines `coveredAfter` tests a point against. */
+const COVER_PTS = new Float64Array(8);
+
+/** Whether a point is inside a closed outline of `n` numbers, x, y pairs, by the crossings of a ray from it. */
+function inPolygon(p: ArrayLike<number>, n: number, x: number, y: number): boolean {
+  let inside = false;
+  for (let i = 0, j = n - 2; i < n; j = i, i += 2) {
+    const xi = p[i];
+    const yi = p[i + 1];
+    const xj = p[j];
+    const yj = p[j + 1];
+    if (yi > y !== yj > y && x < ((xj - xi) * (y - yi)) / (yj - yi) + xi) inside = !inside;
+  }
+  return inside;
+}
+
+/** How deep the lip `drawDeck` lays under a deck's edges that run left to right is, in zoom-one pixels. */
+const DECK_EDGE = 2.5;
+
+/**
+ * The outlines a bridge's deck is drawn in on the screen, each as x, y
+ * pairs: its tile at the deck's height (`q`, from the deck's middle in
+ * zoom-one pixels), a tile's diamond where it has no shape, and the lip
+ * `drawDeck` lays under each of its edges that runs left to right.
+ */
+function deckOutline(q: ReadonlyArray<readonly [number, number]> | undefined, sx: number, sy: number, zoom: number): Float64Array[] {
+  const top = q ?? [[0, -24], [48, 0], [0, 24], [-48, 0]];
+  const out = [new Float64Array(top.flatMap(([x, y]) => [sx + x * zoom, sy + y * zoom]))];
+  top.forEach(([x, y], i) => {
+    const [nx, ny] = top[(i + 1) % top.length];
+    if (nx - x <= 0) return;
+    const ax = sx + x * zoom, ay = sy + y * zoom, bx = sx + nx * zoom, by = sy + ny * zoom;
+    out.push(Float64Array.of(ax, ay, bx, by, bx, by + DECK_EDGE * zoom, ax, ay + DECK_EDGE * zoom));
+  });
+  return out;
+}
+
+/** How far down the pier `drawDeck` stands a deck on reaches from just under its middle, in zoom-one pixels: nought for none. */
+function deckPier(kind: string, drop: number): number {
+  return drop > 2 && kind !== 'rope' ? Math.min(34, drop * 0.8) : 0;
+}
+
+/** Whether a point is within `r` of the segment from `ax, ay` to `bx, by`. */
+function nearSegment(ax: number, ay: number, bx: number, by: number, x: number, y: number, r: number): boolean {
+  const dx = bx - ax, dy = by - ay;
+  const l2 = dx * dx + dy * dy;
+  const t = l2 > 0 ? Math.max(0, Math.min(1, ((x - ax) * dx + (y - ay) * dy) / l2)) : 0;
+  return Math.hypot(x - ax - dx * t, y - ay - dy * t) <= r;
+}
+
+/** Whether a point is inside the convex hull of some points, x, y pairs. */
+function inHull(pts: number[], x: number, y: number): boolean {
+  const hull = hullOf(pts);
+  return hull.length >= 6 && inPolygon(hull, hull.length, x, y);
+}
+
 export class Renderer {
   readonly camera = new Camera();
   time = 0;
@@ -703,6 +767,7 @@ export class Renderer {
     e.view = undefined;
     e.layer = undefined;
     e.mote = undefined;
+    e.aq = undefined;
     this.ents.push(e);
     return e;
   }
@@ -765,6 +830,8 @@ export class Renderer {
    * wells as they are drawn (`./ponds`). Idle, and free, while there are none.
    */
   readonly springWater = new SpringWater();
+  /** The aqueducts: their arches, their channels' water, and the falls at their spouts (`./aqueducts`). */
+  private readonly aqueducts = new AqueductPainter();
   /** Which curtain each side of each pool's tiles is part of, worked out once a frame for all the tiles that ask (`runOf`). */
   private readonly poolRuns = new Map<number, Run | null>();
   /**
@@ -2363,6 +2430,37 @@ export class Renderer {
     this.postHits.length = 0;
     this.trapHits.length = 0;
     this.deckHits.length = 0;
+    // Where the aqueducts are this frame and how their water stands, once, if there are any bridges at all.
+    if (this.game.bridges.size) {
+      const springs = this.game.springs;
+      this.aqueducts.frame({
+        cam, world, t: this.time, now: Date.now(), dark: this.game.darkness(), sunUp: Math.max(0, sun[2]),
+        fv: fallView(cam, this.time, W, H, HEIGHT_SCALE * zoom),
+        flowing: (id) => springs.flowingSince(id),
+        surface: (x, y) => world.water?.levelAt(x, y) ?? null,
+        slab: (x, y) => this.game.slabAt(x, y)?.top ?? null,
+        bare: (x, y) => {
+          const sl = this.game.foundations.size ? this.game.slabAt(x, y) : undefined;
+          return sl && !sl.pool ? sl.top : null;
+        },
+        pours: (id) => {
+          for (const sp of springs.list.values()) {
+            const st = sp.chain.streams.find((t) => t.via === id);
+            if (st) return st.path.length >= 2 ? [st.path[0], st.path[1]] : null;
+          }
+          return null;
+        },
+        foam: world.water ? this.springWater.foam : null,
+        mist: (placed) => this.springWater.mistOf(placed),
+        moss: (b, x, y, shade) => Math.round(greenShows(bridgeGreen(this.game, b, this.greenAt) ?? 0, shade, this.wetness(x, y)) * PAVE_STAGES),
+        fountain: (x, y) => {
+          const fu = this.game.furnitureOnTile(x, y).find((p) => p.kind === 'fountain');
+          if (!fu) return null;
+          const [fx, fy] = furnitureCentre(fu);
+          return { x: fx, y: fy, base: this.pieceBase(fu, fx, fy) };
+        },
+      }, this.game.bridges.values(), world.w);
+    }
     this.drawnTiles = 0;
     // The water springs have made, if any: where each pond stands this frame, how far each stream has run, and which line of the ground each piece goes after.
     const water = world.water;
@@ -2374,6 +2472,7 @@ export class Renderer {
         lean: this.lean, sun, dark: this.game.darkness(), wellAt: this.wellAt,
         slab: this.game.foundations.size ? this.slabOver : undefined,
         decked: this.game.buildings.pierTiles.size ? this.pierOver : undefined,
+        ...(this.game.bridges.size ? { under: (wx: number, wy: number) => this.aqueducts.under(wx, wy, V), underKey: this.aqueducts.underKey } : {}),
       }, water);
     }
     // The day of the year the trees are dressed for, and what is out in it.
@@ -2631,7 +2730,29 @@ export class Renderer {
          */
         if (this.game.bridges.size) {
           const bridge = this.game.bridgeAt(x, y);
-          if (bridge) {
+          // An aqueduct's bay is two pieces, its insides behind whoever stands under it and its face in front (`./aqueducts`).
+          if (bridge?.kind === 'aqueduct') {
+            const k = bridge.spans.findIndex((sp) => sp.x === x && sp.y === y);
+            for (const part of ['back', 'front'] as const) {
+              const [px, py] = this.aqueducts.sortPoint(bridge, x, y, part);
+              this.take('deck', x, y, px, py, null).aq = { b: bridge, k, part };
+            }
+          }
+          // And the fall at its foot goes with the tile it pours into, and the cut its water comes in by with the tile it draws from.
+          for (const b of this.aqueducts.footAt(x, y) ?? []) {
+            const [px, py] = this.aqueducts.sortPoint(b, x, y, 'spout');
+            this.take('deck', x, y, px, py, null).aq = { b, k: b.spans.length - 1, part: 'spout' };
+          }
+          for (const b of this.aqueducts.headAt(x, y) ?? []) {
+            const [px, py] = this.aqueducts.sortPoint(b, x, y, 'intake');
+            this.take('deck', x, y, px, py, null).aq = { b, k: 0, part: 'intake' };
+          }
+          // And water poured onto a foundation at the foot going over its edge, with the tile it falls into.
+          for (const { b } of this.aqueducts.offAt(x, y) ?? []) {
+            const [px, py] = this.aqueducts.sortPoint(b, x, y, 'off');
+            this.take('deck', x, y, px, py, null).aq = { b, k: b.spans.length - 1, part: 'off' };
+          }
+          if (bridge && bridge.kind !== 'aqueduct') {
             const span = bridge.spans.find((sp) => sp.x === x && sp.y === y);
             const wx = x + 0.5;
             const wy = y + 0.5;
@@ -2792,7 +2913,14 @@ export class Renderer {
         for (const bb of roofs) {
           // And so does its roof, over the water drawn beside its last tiles.
           if (this.wetPierBuildings?.has(bb.id)) this.layWater(ctx, zoom);
+          // Not over the bays of an aqueduct standing in front of it, drawn on the lines before this one.
+          const cut = this.game.bridges.size ? this.aqueducts.before(bb.tiles, d, V) : null;
+          if (cut?.length) {
+            ctx.save();
+            this.aqueducts.clipOut(ctx, cut);
+          }
           this.drawPitchedRoof(bb);
+          if (cut?.length) ctx.restore();
         }
       }
       // And whatever small thing is in the air over it, sorted in with everything standing on it.
@@ -3340,10 +3468,29 @@ export class Renderer {
         drawPlantUpright(ctx, ent.plant, this.plantFrame);
         continue;
       }
+      if (ent.kind === 'deck' && ent.aq) {
+        const box = this.aqueducts.draw(ctx, ent.aq);
+        if (box) this.deckHits.push({ x: ent.x, y: ent.y, left: box.left, top: box.top, w: box.w, h: box.h, bridge: ent.aq.b.id, aq: box.shape });
+        continue;
+      }
       if (ent.kind === 'deck' && ent.deck) {
         const deck = ent.deck;
         this.paint(ctx, zoom, hovering ? 'hover' : 'none', 0, ent.sx, ent.sy, (g, px, py) => drawDeck(g, px, py, zoom, deck.kind, deck.done, deck.drop, deck.shape, deck.green, ent.x * 31 + ent.y * 17));
-        this.deckHits.push({ x: ent.x, y: ent.y, left: ent.sx - 40 * zoom, top: ent.sy - 22 * zoom, w: 80 * zoom, h: 44 * zoom, bridge: deck.id });
+        // The deck as it is laid: the tile at the deck's height and its edge under it, not a box round it.
+        const poly = deckOutline(deck.shape?.q, ent.sx, ent.sy, zoom);
+        let l = Infinity, t = Infinity, r = -Infinity, b = -Infinity;
+        for (const o of poly) {
+          for (let k = 0; k < o.length; k += 2) {
+            l = Math.min(l, o[k]);
+            r = Math.max(r, o[k]);
+            t = Math.min(t, o[k + 1]);
+            b = Math.max(b, o[k + 1]);
+          }
+        }
+        // And the pier under it, which the deck is laid over.
+        const pier = deckPier(deck.kind, deck.drop);
+        if (pier > 0) this.deckHits.push({ x: ent.x, y: ent.y, left: ent.sx - 5 * zoom, top: ent.sy + 2 * zoom, w: 10 * zoom, h: pier * zoom, bridge: deck.id });
+        this.deckHits.push({ x: ent.x, y: ent.y, left: l, top: t, w: r - l, h: b - t, bridge: deck.id, poly });
         continue;
       }
       if (ent.kind === 'trap' && ent.trap) {
@@ -5715,6 +5862,7 @@ export class Renderer {
           return o && foundationDone(o) ? o.top : null;
         },
         spillsAt: (px, py) => world.water?.spillsAt(px, py),
+        channels: this.game.bridges.size ? (px, py) => this.aqueducts.cutsAt(px, py) : undefined,
         ground: (cx, cy) => world.getHeight(cx, cy),
         falls: world.water ? {
           view: water.view,
@@ -9643,7 +9791,11 @@ export class Renderer {
     }
     for (let i = this.deckHits.length - 1; i >= 0; i--) {
       const h = this.deckHits[i];
-      if (sx >= h.left && sx <= h.left + h.w && sy >= h.top && sy <= h.top + h.h) return { ...this.makePick(h.x, h.y, sx, sy), bridge: h.bridge };
+      if (sx < h.left || sx > h.left + h.w || sy < h.top || sy > h.top + h.h) continue;
+      if (h.poly && !h.poly.some((o) => inPolygon(o, o.length, sx, sy))) continue;
+      // An aqueduct's bay takes the click where its masonry is drawn and nothing drawn after it stands over that point.
+      if (h.aq && (!this.aqueducts.hits(h.aq, sx, sy) || this.coveredAfter(sx, sy, h.x, h.y, h.bridge))) continue;
+      return { ...this.makePick(h.x, h.y, sx, sy), bridge: h.bridge };
     }
     for (let i = this.anvilHits.length - 1; i >= 0; i--) {
       const h = this.anvilHits[i];
@@ -9679,6 +9831,171 @@ export class Renderer {
       }
     }
     return null;
+  }
+
+  /**
+   * Whether something drawn after the bay of an aqueduct on tile `bx, by`
+   * stands over a screen point: the ground or the water of a line of the
+   * ground nearer the camera, a foundation or a deck on piers on one, a wall
+   * a nearer line draws, or the roof of a building laid after it. A click
+   * there is on that, not on the masonry behind it.
+   */
+  private coveredAfter(sx: number, sy: number, bx: number, by: number, bridge: number | undefined): boolean {
+    const cam = this.camera;
+    const world = this.game.world;
+    const V = cam.view;
+    const d0 = depthOf(V, bx, by);
+    const iso = cam.screenToIso(sx, sy);
+    const stepW = HALF_W * V.unit;
+    const stepH = HALF_H * V.unit;
+    const eF = iso.x / stepW;
+    const dF = iso.y / stepH;
+    const bld = this.game.buildings;
+    // As high as anything on a line can stand: the ground, and the storeys and the roof of a building on it.
+    const up = Math.ceil(((world.maxHeight + (TOP_LEVELS + 2) * WALL_HEIGHT) * HEIGHT_SCALE) / stepH) + 1;
+    const down = Math.ceil((-world.minHeight * HEIGHT_SCALE) / stepH) + 3;
+    const p = COVER_PTS;
+    const corner = (cx: number, cy: number, h: number, i: number): void => {
+      p[i * 2] = cam.worldToScreenX(cx, cy);
+      p[i * 2 + 1] = cam.worldToScreenY(cx, cy, h);
+    };
+    for (let d = Math.floor(dF) + up; d > d0 && d >= Math.floor(dF) - down; d--) {
+      for (let e = Math.floor(eF) - 1; e <= Math.ceil(eF) + 1; e++) {
+        if (V.staggered && ((e + d) & 1) !== 0) continue;
+        const x = V.x[0] + V.x[1] * d + V.x[2] * e;
+        const y = V.y[0] + V.y[1] * d + V.y[2] * e;
+        if (!world.inBounds(x, y)) continue;
+        // The ground, or the water over it.
+        const water = world.surfaceAt(x, y);
+        corner(x, y, Math.max(world.getHeight(x, y), water), 0);
+        corner(x + 1, y, Math.max(world.getHeight(x + 1, y), water), 1);
+        corner(x + 1, y + 1, Math.max(world.getHeight(x + 1, y + 1), water), 2);
+        corner(x, y + 1, Math.max(world.getHeight(x, y + 1), water), 3);
+        if (inPolygon(p, 8, sx, sy)) return true;
+        // A poured foundation, as the box it stands in. (A bridge's deck drawn after the bay is before it in `deckHits`.)
+        const slab = this.game.foundations.size ? this.game.slabAt(x, y) : undefined;
+        if (slab && this.boxHas(x, y, null, slab.top, sx, sy)) return true;
+        // A finished deck on piers, as thick as it is laid (`slabOutline`).
+        const deck = bld.pierTiles.size ? this.game.pierDeckAt(x, y) : null;
+        if (deck !== null && this.boxHas(x, y, deck - FLOOR_DEEP, deck, sx, sy)) return true;
+        // The walls this line draws: the borders of the tile facing away from the camera, every storey of them.
+        for (const side of V.back) {
+          for (let level = 0; level < TOP_LEVELS; level++) {
+            const w = bld.walls.size ? bld.wall(level, x, y, side) : undefined;
+            if (!w) break;
+            if (!isDone(w) || WALL_TYPE_BY_ID.get(w.type)?.low) continue;
+            const owner = bld.list.get(w.building);
+            const [ax, ay, bx2, by2] = side === 'n' ? [x, y, x + 1, y] : side === 's' ? [x, y + 1, x + 1, y + 1] : side === 'w' ? [x, y, x, y + 1] : [x + 1, y, x + 1, y + 1];
+            // On the ground at the corner of the tile drawing it, or on the deck of a building on piers (`drawStructures`).
+            const base = owner?.deck ?? world.getHeight(x, y);
+            corner(ax, ay, base + level * WALL_HEIGHT, 0);
+            corner(bx2, by2, base + level * WALL_HEIGHT, 1);
+            corner(bx2, by2, base + (level + 1) * WALL_HEIGHT, 2);
+            corner(ax, ay, base + (level + 1) * WALL_HEIGHT, 3);
+            if (owner && inPolygon(p, 8, sx, sy)) return true;
+          }
+        }
+      }
+    }
+    // A roof laid after it, unless the bay stands in front of that building and is cut out of its roof (`AqueductPainter.before`).
+    for (const [row, list] of this.roofQueue) {
+      if (row <= d0) continue;
+      for (const b of list) {
+        if (this.aqueducts.before(b.tiles, row, V).some((c) => c.b.id === bridge && c.b.spans[c.k].x === bx && c.b.spans[c.k].y === by)) continue;
+        if (this.roofCovers(b, sx, sy)) return true;
+      }
+    }
+    return false;
+  }
+
+  /** Whether a screen point is in the box over a tile from `bottom` (its ground where null) up to `top`, as the eye sees it. */
+  private boxHas(x: number, y: number, bottom: number | null, top: number, sx: number, sy: number): boolean {
+    const cam = this.camera;
+    const w = this.game.world;
+    const pts: number[] = [];
+    for (const [cx, cy] of [[x, y], [x + 1, y], [x + 1, y + 1], [x, y + 1]]) {
+      const px = cam.worldToScreenX(cx, cy);
+      pts.push(px, cam.worldToScreenY(cx, cy, top), px, cam.worldToScreenY(cx, cy, bottom ?? w.getHeight(cx, cy)));
+    }
+    return inHull(pts, sx, sy);
+  }
+
+  /**
+   * Whether a screen point is on a building's pitched roof as `drawPitchedRoof`
+   * lays it: a face, a hair past its edges as it is outlined; the cap along a
+   * ridge or a hip, as wide as it is stroked; the fascia under an eave on the
+   * near side; or a gable end on the near side (`drawGable`).
+   */
+  private roofCovers(b: Building, sx: number, sy: number): boolean {
+    const kept = this.roofShapes.get(b.id);
+    if (!kept) return false;
+    const cam = this.camera;
+    const zoom = cam.zoom;
+    const world = this.game.world;
+    const bld = this.game.buildings;
+    const roofs: FloorTile[] = [];
+    for (const k of b.tiles) {
+      const [x, y] = k.split(',').map(Number);
+      const f = bld.floor(b.levels, x, y);
+      if (f && floorKind(f) === 'roof') roofs.push(f);
+    }
+    if (!roofs.length) return false;
+    let eave = -Infinity;
+    for (const f of roofs) eave = Math.max(eave, world.getHeight(f.x, f.y));
+    // A building on piers stands on its deck, whatever the ground under it does.
+    if (b.deck != null) eave = b.deck;
+    eave += b.levels * WALL_HEIGHT;
+    const pitch = ROOF_PITCH * roofShapeDef(b).rise;
+    const model = kept.model;
+    const X = (q: RoofPt): number => cam.worldToScreenX(q[0], q[1]);
+    const Y = (q: RoofPt, drop = 0): number => cam.worldToScreenY(q[0], q[1], eave + pitch * q[2] - drop);
+    for (const face of model.faces) {
+      const n = face.pts.length;
+      const poly = new Float64Array(n * 2);
+      let cx = 0, cy = 0;
+      face.pts.forEach((q, i) => {
+        poly[i * 2] = X(q);
+        poly[i * 2 + 1] = Y(q);
+        cx += poly[i * 2] / n;
+        cy += poly[i * 2 + 1] / n;
+      });
+      for (let i = 0; i < n * 2; i += 2) {
+        const l = Math.hypot(poly[i] - cx, poly[i + 1] - cy) || 1;
+        poly[i] += ((poly[i] - cx) / l) * 0.5;
+        poly[i + 1] += ((poly[i + 1] - cy) / l) * 0.5;
+      }
+      if (inPolygon(poly, n * 2, sx, sy)) return true;
+    }
+    for (const c of model.creases) {
+      if (c.kind === 'valley' || !isDone(roofs[c.tile])) continue;
+      const w = Math.max(1.5, covering(roofs[c.tile].material).cap.w * zoom);
+      const reach = (w + Math.max(1.2, 1.4 * zoom)) / 2 + Math.max(0.5, 0.5 * zoom);
+      if (nearSegment(X(c.a), Y(c.a), X(c.b), Y(c.b), sx, sy, reach)) return true;
+    }
+    const p = COVER_PTS;
+    for (const e of model.edges) {
+      if (!isDone(roofs[e.tile])) continue;
+      const [ox, oy] = FALLS[e.out];
+      if (cam.nearSide(ox, oy) < 0) continue;
+      const dp = covering(roofs[e.tile].material).fascia.deep;
+      p[0] = X(e.a); p[1] = Y(e.a); p[2] = X(e.b); p[3] = Y(e.b);
+      p[4] = X(e.b); p[5] = Y(e.b, dp); p[6] = X(e.a); p[7] = Y(e.a, dp);
+      if (inPolygon(p, 8, sx, sy)) return true;
+    }
+    for (const g of model.gables) {
+      const [ox, oy] = FALLS[g.out];
+      if (cam.nearSide(ox, oy) < 0) continue;
+      const out: number[] = [];
+      const at = (q: RoofPt, h: number): void => {
+        const wx = q[0] + ox * WALL_THICK, wy = q[1] + oy * WALL_THICK;
+        out.push(cam.worldToScreenX(wx, wy), cam.worldToScreenY(wx, wy, eave + h));
+      };
+      at(g.line[0], 0);
+      for (const q of g.line) at(q, pitch * q[2]);
+      at(g.line[g.line.length - 1], 0);
+      if (inPolygon(out, out.length, sx, sy)) return true;
+    }
+    return false;
   }
 
   private pointInTile(x: number, y: number, sx: number, sy: number): boolean {

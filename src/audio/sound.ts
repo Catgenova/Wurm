@@ -95,7 +95,8 @@ export function footingAt(g: Game, x: number, y: number, level: number): Footing
   const floor = level > 0 || g.buildings.buildingAt(tx, ty) ? g.buildings.floor(level, tx, ty) : null;
   if (floor) return MATERIAL_BY_ID.get(floor.material)?.kind === 'stone' ? 'stone' : 'wood';
   const bridge = g.bridgeAt(tx, ty);
-  if (bridge) return bridge.kind === 'stone' ? 'stone' : 'wood';
+  // Under an aqueduct the feet are on the ground: nobody walks its deck.
+  if (bridge && bridge.kind !== 'aqueduct') return bridge.kind === 'stone' ? 'stone' : 'wood';
   // Stepping stones are stepped on, not waded through, whatever water is round them.
   if (g.world.stonesAt(tx, ty)) return 'stone';
   if (g.world.hasWater(tx, ty) && g.world.heightAt(x, y) < g.world.surfaceAt(tx, ty)) return 'water';
@@ -156,13 +157,15 @@ export const STROKE_BY_ID: Record<string, Stroke> = {
   place_anvil: 'stone', pick_up_anvil: 'stone',
   // A bauble pressed into its socket in the altar's stone.
   set_bauble: 'stone',
+  // An aqueduct's stone, laid in mortar with a trowel, and pulled down again.
+  build_aqueduct: 'stone', demolish_aqueduct: 'stone',
   // Timber. Building is a mallet on pegs whatever the walls end up being made
   // of, which is the one place the material of the thing and the noise of
   // making it genuinely part company.
   plan_building: 'wood', add_to_building: 'wood', remove_from_plan: 'wood',
   plan_wall: 'wood', plan_fence: 'wood', build_wall: 'wood', remove_wall: 'wood',
   add_floor: 'wood', plan_floor: 'wood', build_floor: 'wood', remove_floor: 'wood', remove_storey: 'wood',
-  plan_bridge: 'wood', build_bridge: 'wood', demolish_bridge: 'wood',
+  plan_bridge: 'wood', build_bridge: 'wood', demolish_bridge: 'wood', plan_aqueduct: 'wood',
   place_crate: 'wood', pick_up_crate: 'wood', place_post: 'wood', pick_up_post: 'wood',
   place_furniture: 'wood', turn_furniture: 'wood', pick_up_furniture: 'wood',
   lay_timber_steps: 'wood',
