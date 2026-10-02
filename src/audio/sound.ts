@@ -165,6 +165,7 @@ export const STROKE_BY_ID: Record<string, Stroke> = {
   plan_building: 'wood', add_to_building: 'wood', remove_from_plan: 'wood',
   plan_wall: 'wood', plan_fence: 'wood', build_wall: 'wood', remove_wall: 'wood',
   add_floor: 'wood', plan_floor: 'wood', build_floor: 'wood', remove_floor: 'wood', remove_storey: 'wood',
+  plan_column: 'wood', build_column: 'wood', remove_column: 'wood',
   plan_bridge: 'wood', build_bridge: 'wood', demolish_bridge: 'wood', plan_aqueduct: 'wood',
   place_crate: 'wood', pick_up_crate: 'wood', place_post: 'wood', pick_up_post: 'wood',
   place_furniture: 'wood', turn_furniture: 'wood', pick_up_furniture: 'wood',

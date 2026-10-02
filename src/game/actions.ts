@@ -6,6 +6,8 @@ import type { World } from '../world/world';
 import { bedrockAt, oreAt } from '../world/ore';
 import { BUILD_ACTIONS } from './buildActions';
 import { CELLAR_ACTIONS, cellarFloorSaid, dropRefusal } from './cellar';
+import { FRAME_ACTIONS, frameSays } from './frameActions';
+import { jettyOver } from './frame';
 import { ANVIL_ACTIONS } from './anvil';
 import { POST_ACTIONS } from './posts';
 import { FISHING_ACTIONS, fishJournal } from './fishing';
@@ -82,7 +84,12 @@ export type Target =
       floorKind?: FloorKind;
       /** Which shape of roof, when a roof is what is being planned. */
       roofShape?: RoofShape;
+      /** The building a storey job is for, on a tile out past its footprint: a jetty's (`frame.ts`). */
       buildingId?: number;
+      /** Wall work round a flat roof, on the roof's own level, rather than on the storey being worked. */
+      terrace?: boolean;
+      /** The storey a storey job is for, 0 the ground floor: the one the menu was showing (`jobLevel`). */
+      level?: number;
       /** Subtile for placing objects. */
       sx?: number;
       sy?: number;
@@ -368,9 +375,10 @@ const unpacked = (t: Target, g: Game): string | null =>
 export const CELLAR_UNDER = 'There is a cellar dug out under that ground. The ground over a cellar is not dug, raised or levelled while the cellar is there.';
 const underBuilding = (g: Game, x: number, y: number): string | null =>
   (g.buildings.cellar(x, y) ? CELLAR_UNDER : g.buildings.buildingAt(x, y) ? 'You cannot do that inside a building.' : null);
+/** Nor at a corner of one, nor of its jetty, which stands a storey over that ground (`frame.ts`). */
 const cornerUnderBuilding = (g: Game, cx: number, cy: number): string | null => {
   for (let y = cy - 1; y <= cy; y++) for (let x = cx - 1; x <= cx; x++) if (g.buildings.cellar(x, y)) return CELLAR_UNDER;
-  for (let y = cy - 1; y <= cy; y++) for (let x = cx - 1; x <= cx; x++) if (g.buildings.buildingAt(x, y)) return 'You cannot dig under a building.';
+  for (let y = cy - 1; y <= cy; y++) for (let x = cx - 1; x <= cx; x++) if (g.buildings.buildingAt(x, y) || g.buildings.jettyAt(x, y)) return 'You cannot dig under a building.';
   return null;
 };
 
@@ -851,6 +859,8 @@ export const ACTIONS: ActionDef[] = [
         extra += under.dug >= CELLAR_DEPTH ? ` A cellar is dug out under it, ${CELLAR_DEPTH} deep.`
           : ` The ground under it is dug out ${under.dug} of ${CELLAR_DEPTH} down, for a cellar.`;
       }
+      // A jetty over it, columns on its corners, a roof on columns (`frameSays`).
+      extra += frameSays(g, t.x, t.y);
       const crates = g.cratesOnTile(t.x, t.y);
       if (crates.length) extra += ` ${crates.length === 1 ? 'A crate stands' : `${crates.length} crates stand`} here.`;
       g.logMsg(`${text} Height ${avg.toFixed(1)}, slope ${w.slope(t.x, t.y)}.${water}${extra}`, 'event');
@@ -1782,8 +1792,9 @@ export const ACTIONS: ActionDef[] = [
       if (t.kind === 'tile' && t.x === g.player.tileX && t.y === g.player.tileY) {
         return 'You would be planting it under your own feet. Step off the tile first.';
       }
-      // Nor under a building, where a tile on piers has grass or sand under its deck (`piers.ts`).
-      return t.kind === 'tile' ? underBuilding(g, t.x, t.y) : null;
+      // Nor under a building, where a tile on piers has grass or sand under its deck (`piers.ts`),
+      // and not under a jetty, which it would grow up through (`frame.ts`).
+      return t.kind === 'tile' ? (underBuilding(g, t.x, t.y) ?? jettyOver(g, t.x, t.y)) : null;
     },
     perform: (t, g) => {
       if (t.kind !== 'tile') return;
@@ -2971,6 +2982,7 @@ export const ACTIONS: ActionDef[] = [
   },
   ...BUILD_ACTIONS,
   ...CELLAR_ACTIONS,
+  ...FRAME_ACTIONS,
   ...CREATURE_ACTIONS,
   ...CREATURE_CRATE_ACTIONS,
   ...HUSBANDRY_ACTIONS,

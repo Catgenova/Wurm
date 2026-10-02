@@ -763,6 +763,29 @@ jobs:
           npx esbuild supabase/test/told.ts --bundle --platform=node --format=esm \
             --outfile=node_modules/.cache/told.mjs --log-level=error
           node node_modules/.cache/told.mjs
+      - name: A jetty out over the street, a railing round the roof, a hall on columns
+        run: |
+          # A storey stopped at the edge of the ground floor, a flat roof you
+          # could walk out on had nothing round it, and the only thing that
+          # held anything up was a wall, so there was no such thing as a porch,
+          # a balcony or a market roof. A storey above the ground floors out a
+          # tile now on the wall under it, open to the storey as a jetty or
+          # shut off behind a door as a balcony; a railing goes round the open
+          # edges up there and round a flat roof; and a column on each end of a
+          # side closes it as a wall does. Every refusal, every storey closed
+          # in or left open, every bill, the shelter under a roof on columns,
+          # Examine's words and the edge you stop at are put to both sides.
+          # Where it meets the rest of a building: a jetty off a building on
+          # piers counts from the deck, a column stands on a built deck no
+          # heavier than the lightest one and a deck carries it, a deck holds
+          # what stands on it, a deck's edge takes a railing; no glass column
+          # and no glass over a jetty under a flat roof; no jetty over an
+          # aqueduct's span and no aqueduct under a jetty; a cellar is filled
+          # in before its columns are asked about; a shop counter a jetty rests
+          # on says the jetty first; and no piece stands in a column's corner.
+          npx esbuild supabase/test/frame.ts --bundle --platform=node --format=esm \
+            --outfile=node_modules/.cache/frame.mjs --log-level=error
+          node node_modules/.cache/frame.mjs
       - name: Glass in the window, and a colour on the wall
         run: |
           # Every window on the island has had glass in it since the first day

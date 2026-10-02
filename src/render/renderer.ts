@@ -20,6 +20,8 @@ import {
   FLOOR_DEEP,
   WALL_TYPE_BY_ID,
   workLevel,
+  TOP_LEVELS,
+  type Column,
   type Border,
   type FloorTile,
   type MaterialDef,
@@ -28,7 +30,6 @@ import {
   type Building,
   floorBill,
   roofShapeOf,
-  TOP_LEVELS,
   CELLAR_DEPTH,
   CELLAR_LEVEL,
   type CellarTile,
@@ -46,6 +47,8 @@ import { GLASS } from '../game/glasshouse';
 import type { LightSource } from '../game/light';
 import { FLOOR_PPT, FLOOR_TILES, concrete, flooring, slabbing } from './flooring';
 import { LADDER, stairStyle } from './stairing';
+import { BEAM_DEEP, drawBeam, drawColumn, drawJettySupports, drawRailing, JOIST_DEEP, PILASTER_PROUD, type Cut, type RailEnds } from './framing';
+import { jettyBase } from '../game/frame';
 import { drawSteps, stepsFootAt } from './steps';
 import { seasonAt, type Season } from '../world/calendar';
 import { drawShine, shines } from './shine';
@@ -254,6 +257,20 @@ function crewOf(kind: string): Crew | null {
   return c;
 }
 
+/**
+ * A wall drawn after a pilaster it runs out from (`Renderer.pilasterGuard`):
+ * from `x` on the screen on, on its `side`, and what of it stands over the
+ * pilaster's head nearer the corner inside the box `over` (x0, y0, x1, y1),
+ * over the head's line where the pilaster is let go to be seen through.
+ */
+interface PilasterGuard {
+  x: number;
+  side: number;
+  over: [number, number, number, number] | null;
+  /** The pilaster's head's line along the face, where it crosses the box's two sides. */
+  head: [number, number] | null;
+}
+
 interface HitRect {
   x: number;
   y: number;
@@ -299,6 +316,8 @@ const PLAN_COLOR = 'rgba(120, 220, 140, 0.95)';
 const SHADE_INK = 'rgba(50, 44, 70, 0.26)';
 /** Steps to a storey's flight: six made every step half a metre, and a flight a pile of blocks. */
 const FLIGHT_STEPS = 8;
+/** The ground under a jetty: open ground with a storey over it, in its shade. */
+const JETTY_SHADE = 'rgba(50, 44, 70, 0.13)';
 /**
  * Concrete, and the shadow line down a shutter board.
  *
@@ -2373,6 +2392,9 @@ export class Renderer {
       this.cutInFront();
     }
     this.queueRoofs(V, dLo, dHi);
+    this.linePilasters.length = 0;
+    this.frameCuts.clear();
+    this.jettyCuts.clear();
     const grid = this.game.settings.grid && zoom >= 0.7;
     const vision = this.game.vision;
     const fogged = this.game.settings.fog;
@@ -2951,7 +2973,7 @@ export class Renderer {
             const [px, py] = this.game.roster.drawnAt(peer);
             const flight = peer.level === 0 ? this.onFlight(px, py) : null;
             const pe = this.take('peer', x, y, cam.worldToScreenX(px, py),
-              cam.worldToScreenY(px, py, flight ? flight.h : (this.game.deckBase(Math.floor(px), Math.floor(py), peer.level) ?? this.footAt(px, py)) + peer.level * WALL_HEIGHT), null);
+              cam.worldToScreenY(px, py, flight ? flight.h : (this.game.deckBase(Math.floor(px), Math.floor(py), peer.level) ?? this.footOn(px, py, peer.level)) + peer.level * WALL_HEIGHT), null);
             pe.peer = peer;
             if (flight) pe.clip = flight.clip;
           }
@@ -2986,7 +3008,7 @@ export class Renderer {
         const flight = piered === null && deck === null && player.level === 0 && !drivenBy && !up ? this.onFlight(player.x, player.y) : null;
         // Afloat in deep water, at the top of it: the sea's surface, or a pond's; on stepping stones, on their tops.
         const ph = piered !== null ? piered + player.visualLevel * WALL_HEIGHT
-          : deck !== null ? deck : flight ? flight.h : this.footAt(player.x, player.y) + player.visualLevel * WALL_HEIGHT;
+          : deck !== null ? deck : flight ? flight.h : this.footOn(player.x, player.y, player.level) + player.visualLevel * WALL_HEIGHT;
         // A driver sorts with the vehicle rather than with their own feet, a
         // hair behind it, so the figure is drawn onto the seat and not under
         // the box it is sitting on.
@@ -3027,6 +3049,11 @@ export class Renderer {
       }
       // Petals and leaves lying on this line's ground and floating on its water.
       this.life.ground(ctx, d);
+      // The line's pilasters, over every wall of it and under its roofs (`drawColumnsAt`).
+      if (this.linePilasters.length) {
+        for (const lay of this.linePilasters) lay();
+        this.linePilasters.length = 0;
+      }
       // The roofs of the buildings whose last walls this line drew, before
       // anything standing in front of them.
       const roofs = this.roofQueue.get(d);
@@ -3289,7 +3316,25 @@ export class Renderer {
     if (ents.length > 1) ents.sort((a, b) => a.sy - b.sy || a.sx - b.sx || (a.lift ?? 0) - (b.lift ?? 0));
     const player = this.game.player;
     this.playerFacing = this.facingOnScreen(player.dirX, player.dirY, this.playerFacing);
+    /*
+     * What stands still on the ground under a jetty is behind the jetty's
+     * floor (`underJetty`), cut out of it until the next thing is drawn.
+     * Whoever and whatever moves about under one is drawn whole, as before:
+     * a body, a beast, a bird is looked for, and under a floor that deep
+     * would be lost.
+     */
+    let behind = false;
     for (const ent of ents) {
+      if (behind) {
+        ctx.restore();
+        behind = false;
+      }
+      const under = ent.kind === 'life' || ent.kind === 'player' || ent.kind === 'peer' || ent.kind === 'creature' ? null : this.underJetty(ent);
+      if (under) {
+        ctx.save();
+        ctx.clip(under, 'evenodd');
+        behind = true;
+      }
       if (ent.kind === 'life') {
         if (ent.mote) this.life.draw(ctx, ent.mote);
         continue;
@@ -3750,6 +3795,7 @@ export class Renderer {
         this.crateHits.push({ x: ent.x, y: ent.y, left: left + dw * 0.15, top: top + dh * 0.2, w: dw * 0.7, h: dh * 0.75, crate: ent.crateId });
       }
     }
+    if (behind) ctx.restore();
     // Down a cellar it goes on once, over the whole of the cellar (`drawCellarView`).
     if (this.ghost && !this.inCellarPass) this.drawGhost(ctx, zoom, this.ghost);
   }
@@ -3813,7 +3859,7 @@ export class Renderer {
     const p = this.game.player;
     const bld = this.game.buildings;
     if (!bld.list.size) return null;
-    if (!bld.buildingAt(p.tileX, p.tileY)) return null;
+    if (!bld.buildingAt(p.tileX, p.tileY) && !(p.level > 0 && bld.jettyAt(p.tileX, p.tileY))) return null;
     const room = bld.room(p.level, p.tileX, p.tileY);
     return room ? new Set(room.tiles) : null;
   }
@@ -3844,6 +3890,9 @@ export class Renderer {
     const ground = w.getHeight(x, y);
     // A building on piers stands every storey on its deck (`piers.ts`); anything else on the ground.
     const base = building?.deck ?? ground;
+    // A tile out past a footprint carrying a storey's floor: a jetty, at its building's floor height (`frame.ts`).
+    const jetty = building ? undefined : bld.jettyAt(x, y);
+    const floorBase = jetty ? (jettyBase(this.game, jetty, x, y) ?? base) : base;
     // One border across the top of the screen and one down a side, whichever
     // way we are looking: between them every wall on the island is claimed by
     // exactly one tile, and claimed by the tile in front of it.
@@ -3854,9 +3903,11 @@ export class Renderer {
     const { cutaway } = this.game.settings;
     // Looking into a cellar, a building with none under it is looked at as its ground floor is.
     const viewLevel = this.game.settings.viewLevel === null ? null : Math.max(0, this.game.settings.viewLevel);
-    // And one over a cellar is taken off, all of it: only another building's wall on this tile's borders stands.
-    const gone = !!building && this.cut.has(building.id);
+    // And one over a cellar is taken off, all of it, its jetties with it: only another building's wall on this tile's borders stands.
+    const gone = (!!building && this.cut.has(building.id)) || (!!jetty && this.cut.has(jetty.id));
+    if (jetty && !gone) this.jettyShade(x, y, jetty);
     // Floors, stairs and ladders for each storey, walls of each storey, then the roof one level up.
+    let columnsTo = -1;
     for (let level = 0; level <= maxLevels; level++) {
       /*
        * A ladder goes on after the walls of the storey it opens into: its
@@ -3866,7 +3917,8 @@ export class Renderer {
       let late: (() => void) | null = null;
       // Under the ground floor of a tile on piers, the piers: see `piers.ts`.
       if (level === 0 && building && !gone && bld.pierTiles.size && bld.onPiers(x, y)) this.drawPiers(x, y, V);
-      if (building && !gone) {
+      const host = gone ? undefined : building ?? (level > 0 ? jetty : undefined);
+      if (host) {
         const floor = bld.floor(level, x, y);
         /*
          * Looking at one storey means lifting the ceilings above it off, but
@@ -3885,7 +3937,7 @@ export class Renderer {
           // Under a finished roof drawn whole over it -- you are not standing under it, nor looking into the storey --
           // it is not seen, and not drawn.
           const down = level === 0 && climb && !!bld.cellar(x, y);
-          const lid = down && viewLevel === null && !this.roomTiles?.has(`${x},${y}`) ? bld.roofAt(building.levels, x, y) : undefined;
+          const lid = down && viewLevel === null && !this.roomTiles?.has(`${x},${y}`) ? bld.roofAt(host.levels, x, y) : undefined;
           if (down) {
             if (!lid || !isDone(lid)) this.drawOpening(floor, x, y, base, alpha);
           } else switch (floorKind(floor)) {
@@ -3899,15 +3951,19 @@ export class Renderer {
               // A flat roof is a deck, laid a tile at a time like a floor so
               // anybody out on it stands on it; a pitched one is laid whole,
               // after its walls: see `queueRoofs`.
-              if (roofShapeOf(building) === 'flat') this.drawDeck(floor, x, y, base, alpha);
+              if (roofShapeOf(host) === 'flat') this.drawDeck(floor, x, y, floorBase, alpha);
               break;
             default:
-              this.drawFloor(floor, x, y, base, alpha);
+              // A jetty overhangs on its joists or its corbels (`framing.ts`).
+              if (jetty) this.drawJettyUnder(floor, jetty, x, y, floorBase, alpha);
+              this.drawFloor(floor, x, y, floorBase, alpha);
           }
         }
       }
       if (level >= maxLevels || (viewLevel !== null && level > viewLevel)) {
         late?.();
+        // A railing round a flat roof stands on the roof's own level (`frame.ts`).
+        if (level === maxLevels && !gone && (viewLevel === null || level <= viewLevel)) this.drawTerrace(x, y, level, [backA, backB], building ?? jetty, base, inFront);
         if (level >= maxLevels) break;
         continue;
       }
@@ -3915,7 +3971,10 @@ export class Renderer {
       // of the storey, before any wall of the storey stands on it -- on a
       // floor, that is: a hatch or a flight has none to take it.
       const slot = level ? bld.floor(level, x, y) : undefined;
-      if (!gone && (level === 0 || (slot && (floorKind(slot) === 'floor' || floorKind(slot) === 'roof')))) this.groundShade(x, y, level, V);
+      // Not on a jetty's floor, which stands at its building's height and not its ground's.
+      if (!gone && (level === 0 || (!jetty && slot && (floorKind(slot) === 'floor' || floorKind(slot) === 'roof')))) this.groundShade(x, y, level, V);
+      // The foot of a column put up before this tile, which its ground or floor has just covered.
+      if (bld.columns.size) this.columnFootOn(x, y, V, level);
       for (const border of [backA, backB]) {
         const wall = bld.wallOnBorder(level, border);
         if (!wall) {
@@ -3925,18 +3984,23 @@ export class Renderer {
            * a footprint still looks like one.
            */
           const plan = bld.edgeOf(border);
-          if (plan && !(cutaway && building?.id !== plan.id) && !this.cut.has(plan.id)) {
+          // A side with a column at an end of it is built, not marked out: it is open on purpose (`framing.ts`).
+          if (plan && !(cutaway && building?.id !== plan.id) && !this.cut.has(plan.id) && !this.columnEnds(border)) {
             const [tx, ty] = border.dir === 'h'
               ? [border.x, bld.buildingAt(border.x, border.y) === plan ? border.y : border.y - 1]
               : [bld.buildingAt(border.x, border.y) === plan ? border.x : border.x - 1, border.y];
             // A finished deck on piers is built, not marked out: its edge is the edge of the deck.
             if (level === 0 && bld.pierTiles.size && this.game.pierDeckAt(tx, ty) !== null) continue;
             // Nothing stands in the air: an upper storey is only marked out
-            // where there is a floor under it to mark out.
-            if (level === 0 || bld.floor(level, tx, ty)) {
+            // where there is a floor under it to mark out. Nor where the
+            // storey goes on out over its own jetty, open to it (`frame.ts`).
+            const [ox, oy] = border.dir === 'h' ? [tx, ty === border.y ? border.y - 1 : border.y] : [tx === border.x ? border.x - 1 : border.x, ty];
+            if ((level === 0 || bld.floor(level, tx, ty)) && !(level > 0 && bld.floor(level, ox, oy)?.building === plan.id)) {
               this.drawScaffold(border, plan.deck ?? ground, level, inside?.id === plan.id && inFront ? 0.35 : 1);
             }
           }
+          // Two columns with no wall between them carry a beam (`framing.ts`).
+          if (bld.columns.size) this.drawBeamOn(border, level, inFront);
           continue;
         }
         /*
@@ -3945,13 +4009,30 @@ export class Renderer {
          * stands between the viewer and the inside: those are the ones a
          * cutaway takes away.
          */
-        if (cutaway && building?.id !== wall.building && !this.edgeOn(border)) continue;
+        // A jetty's tile is its building's on the storeys it is floored on.
+        const own = building ?? (level > 0 && jetty && bld.floor(level, x, y)?.building === jetty.id ? jetty : undefined);
+        // A railing hides nothing behind it, and a balcony with its railings cut away is a shelf.
+        if (cutaway && own?.id !== wall.building && wall.type !== 'railing' && !this.edgeOn(border)) continue;
         if (this.cut.has(wall.building)) continue;
         const dim = inFront && this.wallsMyRoom(border);
-        this.drawWall(wall, border, (wall.building ? bld.list.get(wall.building)?.deck : undefined) ?? ground, dim ? 0.3 : 1);
+        // A railing hides little, and the edge you stand at reads as railed: it is let go no further than this.
+        const alpha = dim ? (wall.type === 'railing' ? 0.7 : 0.3) : 1;
+        // A building on piers stands its walls on its deck; a jetty's stand at its building's floor (`jettyWallBase`).
+        const at = this.jettyWallBase(wall, border, (wall.building ? bld.list.get(wall.building)?.deck : undefined) ?? ground);
+        // Drawn after a pilaster it runs out from, it is drawn from the pilaster's face on.
+        const guard = this.pilasterGuard(wall, border, at, V, x, y);
+        if (guard) this.guardedWall(wall, border, at, alpha, guard);
+        else this.drawWall(wall, border, at, alpha);
+        // And over a railing or a half wall between two columns, the beam they carry.
+        if (bld.columns.size && WALL_TYPE_BY_ID.get(wall.type)?.low) this.drawBeamOn(border, level, inFront);
       }
       late?.();
+      // The storey's columns on the corner this tile draws (`cornerClaim`), before the floor or the deck over them.
+      if (bld.columns.size) this.drawColumnsAt(x, y, V, level, level);
+      columnsTo = level;
     }
+    // And any on storeys this tile's own did not reach.
+    if (bld.columns.size) this.drawColumnsAt(x, y, V, columnsTo + 1, TOP_LEVELS);
   }
 
   /**
@@ -5445,6 +5526,13 @@ export class Renderer {
         const ground = g.world.getHeight(x, y);
         for (const [px, py] of [[x, y], [x + 1, y], [x + 1, y + 1], [x, y + 1]]) grow(box, px, py, ground + b.levels * WALL_HEIGHT + 24, ground);
         box.front = Math.max(box.front, depthOf(V, x, y));
+        // Its jetties too, a tile out, at its floor's height (`frame.ts`): one of them can stand over the cellar's box.
+        for (const [jx, jy] of [[x, y - 1], [x + 1, y], [x, y + 1], [x - 1, y]]) {
+          if (bld.jettyAt(jx, jy)?.id !== b.id) continue;
+          const floor = jettyBase(g, b, jx, jy) ?? ground;
+          for (const [px, py] of [[jx, jy], [jx + 1, jy], [jx + 1, jy + 1], [jx, jy + 1]]) grow(box, px, py, floor + b.levels * WALL_HEIGHT + 24, g.world.getHeight(px, py));
+          box.front = Math.max(box.front, depthOf(V, jx, jy));
+        }
       }
       if (near.some((c) => box.front >= c.front && box.x0 < c.x1 && box.x1 > c.x0 && box.y0 < c.y1 && box.y1 > c.y0)) this.cut.add(b.id);
     }
@@ -5472,8 +5560,8 @@ export class Renderer {
       if (viewLevel !== null && b.levels > viewLevel) continue;
       if (this.cut.has(b.id)) continue;
       let front = -Infinity;
-      for (const k of b.tiles) {
-        const [x, y] = k.split(',').map(Number);
+      // Its jetties' tiles too, where the roof goes out over them (`roofTiles`).
+      for (const [x, y] of bld.roofTiles(b)) {
         const f = bld.floor(b.levels, x, y);
         if (f && floorKind(f) === 'roof') front = Math.max(front, depthOf(V, x, y));
       }
@@ -5586,8 +5674,8 @@ export class Renderer {
     const zoom = cam.zoom;
     const level = b.levels;
     const roofs: FloorTile[] = [];
-    for (const k of b.tiles) {
-      const [x, y] = k.split(',').map(Number);
+    // Over its jetties as well as its footprint (`roofTiles`).
+    for (const [x, y] of bld.roofTiles(b)) {
       const f = bld.floor(level, x, y);
       if (f && floorKind(f) === 'roof') roofs.push(f);
     }
@@ -5602,7 +5690,9 @@ export class Renderer {
     const model = kept.model;
     const pitch = ROOF_PITCH * roofShapeDef(b).rise;
     let eave = -Infinity;
-    for (const f of roofs) eave = Math.max(eave, world.getHeight(f.x, f.y));
+    // A jetty's ground is not the building's: the eaves are over the footprint's.
+    for (const f of roofs) if (bld.buildingAt(f.x, f.y)) eave = Math.max(eave, world.getHeight(f.x, f.y));
+    if (eave === -Infinity) eave = this.buildingBase(b.id);
     // A building on piers stands on its deck, whatever the ground under it does.
     if (b.deck != null) eave = b.deck;
     eave += level * WALL_HEIGHT;
@@ -6390,15 +6480,17 @@ export class Renderer {
     for (const b of gable.borders) {
       const border: Border = { dir, x: b.x, y: b.y };
       const wall = bld.wallOnBorder(level - 1, border);
-      const cob = wall && isDone(wall) ? this.masonryOf(wall) : undefined;
+      // Over two columns and no wall, the gable is laid in the columns' stuff, on their beam (`framing.ts`).
+      const face = wall && isDone(wall) ? wall : bld.carried(level - 1, border) ? bld.column(level - 1, border.x, border.y) : undefined;
+      const cob = face ? this.masonryOf(face) : undefined;
       const [ax, ay] = borderPoints(border);
       const P = (t: number, h: number): [number, number] => at(ax + dx * t, ay + dy * t, h);
       if (!cob) {
-        const mat = MATERIAL_BY_ID.get(wall?.material ?? roofs[b.tile].material);
+        const mat = MATERIAL_BY_ID.get(face?.material ?? wall?.material ?? roofs[b.tile].material);
         ctx.beginPath();
         ctx.moveTo(...P(-0.01, -1)); ctx.lineTo(...P(1.01, -1)); ctx.lineTo(...P(1.01, top + 2)); ctx.lineTo(...P(-0.01, top + 2));
         ctx.closePath();
-        ctx.fillStyle = rgb(mat ? this.painted(mat, wall?.dye).color : [180, 160, 140], lit);
+        ctx.fillStyle = rgb(mat ? this.painted(mat, face?.dye ?? wall?.dye).color : [180, 160, 140], lit);
         ctx.fill();
         continue;
       }
@@ -6428,6 +6520,612 @@ export class Renderer {
     ctx.restore();
   }
 
+  // -------------------------------------------------------------------------
+  // Jetties, railings and columns (`framing.ts`, `../game/frame.ts`).
+  // -------------------------------------------------------------------------
+
+  /**
+   * The storey being looked at, as `drawStructures` draws to it: looking into
+   * a cellar, every building over none is drawn as its ground floor is, so
+   * the ground floor's walls, columns and beams with it. Null for all of them.
+   */
+  private seenLevel(): number | null {
+    const v = this.game.settings.viewLevel;
+    return v === null ? null : Math.max(0, v);
+  }
+
+  /** Whether a column stands at either end of a border, on any storey. */
+  private columnEnds(border: Border): boolean {
+    const bld = this.game.buildings;
+    if (!bld.columns.size) return false;
+    const [ax, ay, bx, by] = borderPoints(border);
+    return bld.hasColumnAt(ax, ay) || bld.hasColumnAt(bx, by);
+  }
+
+  /** The height a building's floors are counted from: its deck on piers (`piers.ts`), or the ground at its first tile, as its own walls are drawn. */
+  private buildingBase(id: number): number {
+    const b = this.game.buildings.list.get(id);
+    if (!b || !b.tiles.length) return 0;
+    if (b.deck != null) return b.deck;
+    const i = b.tiles[0].indexOf(',');
+    return this.game.world.getHeight(+b.tiles[0].slice(0, i), +b.tiles[0].slice(i + 1));
+  }
+
+  /** Where feet stand on a tile at a storey: up on a jetty, its building's floor; anywhere else, the ground. */
+  private footOn(x: number, y: number, level: number): number {
+    if (level > 0) {
+      const j = this.game.buildings.jettyAt(Math.floor(x), Math.floor(y));
+      const h = j ? jettyBase(this.game, j, Math.floor(x), Math.floor(y)) : null;
+      if (h !== null) return h;
+    }
+    return this.footAt(x, y);
+  }
+
+  /** The height a wall stands from: a jetty's at its building's floor, whatever the ground under it does. */
+  private jettyWallBase(wall: Wall, border: Border, base: number): number {
+    if (!wall.building) return base;
+    const bld = this.game.buildings;
+    const [ox, oy] = border.dir === 'h' ? [border.x, border.y - 1] : [border.x - 1, border.y];
+    for (const [tx, ty] of [[border.x, border.y], [ox, oy]]) {
+      const j = bld.jettyAt(tx, ty);
+      if (j && j.id === wall.building) return jettyBase(this.game, j, tx, ty) ?? base;
+    }
+    return base;
+  }
+
+  /**
+   * Where the floor of the jetty over a tile stands on the screen, as a cut
+   * for what stands on the ground under it: the slab from its boards down
+   * through the joists under it (`drawJettySupports`), which are over it and
+   * in front of it wherever the two meet on the screen, while the walls on
+   * the slab behind it are not. Drawn before the line's things (the tile is
+   * on the line), so the thing is cut out of it rather than the slab laid
+   * again. Null where no finished jetty floor is drawn over the tile: none,
+   * the storey not looked at, or the building taken off over a cellar.
+   * Worked out once a tile a frame.
+   */
+  private underJetty(ent: Entity): Path2D | null {
+    const bld = this.game.buildings;
+    const j = bld.jettyAt(ent.x, ent.y);
+    if (!j) return null;
+    const key = `${ent.x},${ent.y}`;
+    const had = this.jettyCuts.get(key);
+    if (had !== undefined) return had;
+    let out: Path2D | null = null;
+    const seen = this.seenLevel();
+    for (let level = 1; level < j.levels && !this.cut.has(j.id); level++) {
+      const f = bld.floor(level, ent.x, ent.y);
+      if (!f || f.building !== j.id || floorKind(f) !== 'floor') continue;
+      if (isDone(f) && (seen === null || level <= seen)) {
+        const cam = this.camera;
+        const top = (jettyBase(this.game, j, ent.x, ent.y) ?? this.game.world.getHeight(ent.x, ent.y)) + level * WALL_HEIGHT + 0.5;
+        const pts: number[] = [];
+        for (const h of [top, top - FLOOR_DEEP - JOIST_DEEP]) {
+          for (const [px, py] of [[ent.x, ent.y], [ent.x + 1, ent.y], [ent.x + 1, ent.y + 1], [ent.x, ent.y + 1]]) {
+            pts.push(cam.worldToScreenX(px, py), cam.worldToScreenY(px, py, h));
+          }
+        }
+        const hull = hullOf(pts);
+        out = new Path2D();
+        out.rect(-1e5, -1e5, 2e5, 2e5);
+        out.moveTo(hull[0], hull[1]);
+        for (let i = 2; i < hull.length; i += 2) out.lineTo(hull[i], hull[i + 1]);
+        out.closePath();
+      }
+      break;
+    }
+    this.jettyCuts.set(key, out);
+    return out;
+  }
+  /** The jetty floors over tiles this frame, as `underJetty` cuts them. */
+  private readonly jettyCuts = new Map<string, Path2D | null>();
+
+  /** The ground under a jetty, in its shade: open ground, with a storey over it. */
+  private jettyShade(x: number, y: number, jetty: Building): void {
+    let over = false;
+    for (let level = 1; level < jetty.levels && !over; level++) {
+      const f = this.game.buildings.floor(level, x, y);
+      over = !!f && f.building === jetty.id && isDone(f);
+    }
+    if (!over) return;
+    const cam = this.camera;
+    const w = this.game.world;
+    const ctx = this.canvas.ctx;
+    ctx.beginPath();
+    for (const [cx, cy] of [[x, y], [x + 1, y], [x + 1, y + 1], [x, y + 1]]) {
+      ctx.lineTo(cam.worldToScreenX(cx, cy), cam.worldToScreenY(cx, cy, w.getHeight(cx, cy)));
+    }
+    ctx.closePath();
+    ctx.fillStyle = JETTY_SHADE;
+    ctx.fill();
+  }
+
+  /** What a jetty's floor rests on, under it, before it is laid: its joists or its corbels, on the sides turned to the camera. */
+  private drawJettyUnder(floor: FloorTile, jetty: Building, x: number, y: number, base: number, alpha: number): void {
+    if (!isDone(floor) || floorKind(floor) !== 'floor') return;
+    const bld = this.game.buildings;
+    const steps: Array<[Side, number, number]> = [['n', 0, -1], ['e', 1, 0], ['s', 0, 1], ['w', -1, 0]];
+    // On its wall, or, that wall taken down, on the beam a column at each end of that side carries (`jettyOnWall`).
+    const bears = bld.jettyBearer(jetty, floor.level, x, y)?.side
+      ?? steps.find(([side, dx, dy]) => bld.tileIndex.get(`${x + dx},${y + dy}`) === jetty.id && bld.carried(floor.level - 1, borderOf(x, y, side)))?.[0];
+    if (!bears) return;
+    const open: Side[] = [];
+    for (const [side, dx, dy] of steps) {
+      if (side === bears) continue;
+      const beyond = bld.floor(floor.level, x + dx, y + dy);
+      if (beyond && beyond.building === jetty.id) continue;
+      if (bld.tileIndex.get(`${x + dx},${y + dy}`) === jetty.id) continue;
+      open.push(side);
+    }
+    drawJettySupports(this.canvas.ctx, this.camera, x, y, base + floor.level * WALL_HEIGHT + 0.5, floor.material, bears, open, alpha);
+  }
+
+  /** The railings round a flat roof that this tile draws: on its back borders, on the roof's own level. */
+  private drawTerrace(x: number, y: number, level: number, backs: Border[], own: Building | undefined, base: number, inFront: boolean): void {
+    const bld = this.game.buildings;
+    const { cutaway } = this.game.settings;
+    for (const border of backs) {
+      const wall = bld.wallOnBorder(level, border);
+      if (!wall || this.cut.has(wall.building)) continue;
+      if (cutaway && own?.id !== wall.building && wall.type !== 'railing') continue;
+      const dim = inFront && this.wallsMyRoom(border);
+      const at = (wall.building ? bld.list.get(wall.building)?.deck : undefined) ?? base;
+      this.drawWall(wall, border, this.jettyWallBase(wall, border, at), dim ? (wall.type === 'railing' ? 0.7 : 0.3) : 1);
+    }
+  }
+
+  /**
+   * The beam two finished columns carry along a side with no full wall on it,
+   * under what is over them. Seen through as the columns under it are: in
+   * front of you in your room, or on a storey of it not your own.
+   */
+  private drawBeamOn(border: Border, level: number, inFront: boolean): void {
+    const bld = this.game.buildings;
+    if (!bld.carried(level, border)) return;
+    const c = bld.column(level, border.x, border.y) as Column;
+    if (this.cut.has(c.building)) return;
+    const top = this.buildingBase(c.building) + (level + 1) * WALL_HEIGHT + 0.5 - FLOOR_DEEP;
+    const dim = this.wallsMyRoom(border) && (inFront || level !== this.game.player.level);
+    drawBeam(this.canvas.ctx, this.camera, border, top, c.material, dim ? 0.35 : 1);
+  }
+
+  /**
+   * Per view, which of the four tiles round a corner draws its column, as an
+   * offset back to the corner: the last but one of them to be drawn, after
+   * the walls running away from the camera from the corner and before those
+   * coming toward it. A pilaster is laid at the end of that tile's line
+   * (`drawColumnsAt`).
+   */
+  private readonly claims = new Map<View, ReadonlyArray<readonly [number, number]>>();
+  private cornerOrder(V: View): ReadonlyArray<readonly [number, number]> {
+    const had = this.claims.get(V);
+    if (had) return had;
+    const offs: Array<[number, number]> = [[-1, -1], [0, -1], [-1, 0], [0, 0]];
+    const key = ([ox, oy]: [number, number]): [number, number] => [V.d[1] * ox + V.d[2] * oy, V.e[1] * ox + V.e[2] * oy];
+    offs.sort((a, b) => key(a)[0] - key(b)[0] || key(a)[1] - key(b)[1]);
+    this.claims.set(V, offs);
+    return offs;
+  }
+  private cornerClaim(V: View): readonly [number, number] {
+    return this.cornerOrder(V)[2];
+  }
+
+  /** The four borders meeting on a corner, each with the way it runs out from it. */
+  private static arms(cx: number, cy: number): Array<[Border, number, number]> {
+    return [
+      [{ dir: 'h', x: cx, y: cy }, 1, 0], [{ dir: 'h', x: cx - 1, y: cy }, -1, 0],
+      [{ dir: 'v', x: cx, y: cy }, 0, 1], [{ dir: 'v', x: cx, y: cy - 1 }, 0, -1],
+    ];
+  }
+
+  /** Half a finished wall's thickness, as it is drawn. */
+  private static halfOf(w: Wall): number {
+    const k = WALL_TYPE_BY_ID.get(w.type);
+    return (k?.railed ? FENCE_THICK : WALL_THICK) * (k?.thick ?? 1);
+  }
+
+  /**
+   * Whether a column stands engaged in walls: two or more finished full-height
+   * walls of its storey meeting on its corner, which make it a pilaster
+   * (`framing.ts`). As half the thickest of them, or 0 for a column standing free.
+   */
+  private engagedIn(level: number, cx: number, cy: number): number {
+    const bld = this.game.buildings;
+    let n = 0, half = 0;
+    for (const [b] of Renderer.arms(cx, cy)) {
+      const w = bld.wallOnBorder(level, b);
+      if (!w || !isDone(w) || WALL_TYPE_BY_ID.get(w.type)?.low) continue;
+      n++;
+      half = Math.max(half, Renderer.halfOf(w));
+    }
+    return n >= 2 ? half : 0;
+  }
+
+  /**
+   * Whether what stands on a border is drawn whole, as `drawStructures` draws
+   * it: on a storey being looked at, not cut away, and not let go to be seen
+   * through in front of you. A wall needs `w`; a beam is never cut away.
+   */
+  private drawnWhole(b: Border, level: number, V: View, w?: Wall): boolean {
+    const { cutaway } = this.game.settings;
+    const viewLevel = this.seenLevel();
+    if (viewLevel !== null && level > viewLevel) return false;
+    const bld = this.game.buildings;
+    // The tile that draws it: the one it is a back edge of.
+    const [tx, ty] = b.dir === 'h' ? (V.back.includes('n') ? [b.x, b.y] : [b.x, b.y - 1]) : (V.back.includes('w') ? [b.x, b.y] : [b.x - 1, b.y]);
+    // Looking into a cellar, the building over it is not drawn at all; a beam is its columns'.
+    if (this.cut.size && (w ? this.cut.has(w.building) : this.cut.has(bld.column(level, b.x, b.y)?.building ?? -1))) return false;
+    if (w && cutaway && w.type !== 'railing' && !this.edgeOn(b)) {
+      const building = bld.buildingAt(tx, ty);
+      const jetty = building ? undefined : bld.jettyAt(tx, ty);
+      const own = building ?? (level > 0 && jetty && bld.floor(level, tx, ty)?.building === jetty.id ? jetty : undefined);
+      if (own?.id !== w.building) return false;
+    }
+    if (!this.wallsMyRoom(b)) return true;
+    const p = this.game.player;
+    const inFront = depthOf(V, tx, ty) > depthOf(V, p.tileX, p.tileY);
+    return w ? !inFront : !(inFront || level !== p.level);
+  }
+
+  /**
+   * What stands in front of a pilaster on corner `cx, cy`, or over it, and
+   * hides it there: its storey's walls above its head, those coming toward the
+   * camera from its face on, the beams on its head, and the walls and the
+   * floors of the storey over it, each as it is drawn whole (`drawnWhole`).
+   * It is drawn after all of them, with them cut out of it.
+   */
+  private pilasterCuts(level: number, cx: number, cy: number, base: number, head: number, r: number, V: View): Cut[] {
+    const bld = this.game.buildings;
+    const cam = this.camera;
+    const cuts: Cut[] = [];
+    const foot = base + level * WALL_HEIGHT;
+    const arms = Renderer.arms(cx, cy);
+    // How far past the corner a wall can run, joining the others there.
+    let e = 0;
+    for (const [b] of arms) for (const lv of [level, level + 1]) {
+      const w = bld.wallOnBorder(lv, b);
+      if (w && isDone(w)) e = Math.max(e, Renderer.halfOf(w));
+    }
+    for (const [b, dx, dy] of arms) {
+      const w = bld.wallOnBorder(level, b);
+      const full = !!w && isDone(w) && !WALL_TYPE_BY_ID.get(w.type)?.low;
+      if (w && isDone(w) && this.drawnWhole(b, level, V, w)) {
+        const half = w.type === 'railing' ? 0.05 : Renderer.halfOf(w);
+        const top = foot + WALL_HEIGHT * this.standing(w, b);
+        if (top > head) cuts.push({ x: cx, y: cy, dx, dy, t0: -e, t1: 1, half, h0: head, h1: top });
+        if (cam.rotateX(dx, dy) + cam.rotateY(dx, dy) > 1e-6) cuts.push({ x: cx, y: cy, dx, dy, t0: r, t1: 1, half, h0: foot, h1: top });
+      }
+      if (!full && bld.carried(level, b) && this.drawnWhole(b, level, V)) {
+        const top = base + (level + 1) * WALL_HEIGHT + 0.5 - FLOOR_DEEP;
+        cuts.push({ x: cx, y: cy, dx, dy, t0: 0, t1: 1, half: 0.05, h0: top - BEAM_DEEP, h1: top });
+      }
+      const up = bld.wallOnBorder(level + 1, b);
+      if (up && isDone(up) && this.drawnWhole(b, level + 1, V, up)) {
+        const h0 = foot + WALL_HEIGHT;
+        cuts.push({ x: cx, y: cy, dx, dy, t0: -e, t1: 1, half: Renderer.halfOf(up), h0, h1: h0 + WALL_HEIGHT * this.standing(up, b) });
+      }
+    }
+    // The floors and the decks of the storey over it round its corner, which lie over its head, drawn whole.
+    const viewLevel = this.seenLevel();
+    const over = level + 1;
+    if (viewLevel === null || over <= viewLevel) {
+      const top = base + over * WALL_HEIGHT + 0.5;
+      for (const [tx, ty] of [[cx - 1, cy - 1], [cx, cy - 1], [cx - 1, cy], [cx, cy]]) {
+        const f = bld.floor(over, tx, ty);
+        if (!f || !isDone(f)) continue;
+        const kind = floorKind(f);
+        const owner = bld.list.get(f.building);
+        if (kind !== 'floor' && !(kind === 'roof' && owner && roofShapeOf(owner) === 'flat')) continue;
+        // A ceiling over your room is let go to be seen through.
+        if (over > this.game.player.level && this.roomTiles?.has(`${tx},${ty}`)) continue;
+        cuts.push({ x: tx, y: ty + 0.5, dx: 1, dy: 0, t0: 0, t1: 1, half: 0.5, h0: top - FLOOR_DEEP, h1: top });
+      }
+    }
+    return cuts;
+  }
+
+  /** Where a column stands on its storey and where its head is: under the floor or the eaves over it, or under a beam. */
+  private columnSpan(level: number, cx: number, cy: number, base: number): [number, number] {
+    const bld = this.game.buildings;
+    const h0 = base + level * WALL_HEIGHT + (level > 0 ? 0.5 : 0);
+    const round: Border[] = [{ dir: 'h', x: cx, y: cy }, { dir: 'h', x: cx - 1, y: cy }, { dir: 'v', x: cx, y: cy }, { dir: 'v', x: cx, y: cy - 1 }];
+    const beamed = round.some((b) => bld.carried(level, b) && !(bld.wallOnBorder(level, b) && !WALL_TYPE_BY_ID.get(bld.wallOnBorder(level, b)!.type)?.low));
+    return [h0, base + (level + 1) * WALL_HEIGHT + 0.5 - FLOOR_DEEP - (beamed ? BEAM_DEEP : 0)];
+  }
+
+  /**
+   * The pilasters of the line of the ground being drawn, laid over its
+   * structures and under its roofs and everything standing on it.
+   */
+  private readonly linePilasters: Array<() => void> = [];
+
+  /**
+   * The columns on the corner a tile draws (`cornerClaim`), storey by storey:
+   * after the walls either side of the corner behind it and before those
+   * coming toward the camera, and before the roof over them. A column
+   * standing free goes up with the tile's own storey. A pilaster goes up at
+   * the end of the tile's line (`linePilasters`), after every wall of the
+   * line, with what hides it cut out of it (`pilasterCuts`), and before the
+   * line's roofs and whatever stands on it in front. A wall coming toward the
+   * camera from it whose tile is on a later line is drawn from its face on,
+   * and what of that wall stands over its head goes on just before it
+   * (`pilasterGuard`, `overHeads`).
+   */
+  private drawColumnsAt(x: number, y: number, V: View, from: number, to: number): void {
+    const bld = this.game.buildings;
+    const [ox, oy] = this.cornerClaim(V);
+    const cx = x - ox, cy = y - oy;
+    if (!bld.hasColumnAt(cx, cy)) return;
+    const viewLevel = this.seenLevel();
+    for (let level = from; level <= to; level++) {
+      const c = bld.column(level, cx, cy);
+      // Looking into a cellar, a building over it goes, its columns with it.
+      if (!c || (viewLevel !== null && level > viewLevel) || this.cut.has(c.building)) continue;
+      const engaged = this.engagedIn(level, cx, cy);
+      if (engaged > 0) {
+        this.linePilasters.push(() => {
+          this.overHeads(level, cx, cy, V, engaged);
+          this.columnOn(c, level, cx, cy, V, engaged);
+        });
+      } else this.columnOn(c, level, cx, cy, V, engaged);
+    }
+  }
+
+  /**
+   * One column, drawn: free, or a pilaster with what hides it cut out of it.
+   * Seen through in the room you are in, in front of you or on a storey of it
+   * not your own, as its walls are: a free column in front of you as the tile
+   * that puts it up is, a pilaster as the last tile round its corner is, which
+   * draws the walls coming toward the camera from it.
+   */
+  private columnOn(c: Column, level: number, cx: number, cy: number, V: View, engaged: number): void {
+    const base = this.buildingBase(c.building);
+    const [h0, h1] = this.columnSpan(level, cx, cy, base);
+    const alpha = this.columnAlpha(level, cx, cy, V, engaged);
+    const paint = c.dye ? this.painted(MATERIAL_BY_ID.get(c.material) as MaterialDef, c.dye).color : undefined;
+    let cuts: Cut[] | undefined;
+    if (engaged > 0) {
+      // Worked out once a frame, though a pilaster is laid and its foot laid again.
+      const key = `${level},${cx},${cy}`;
+      cuts = this.frameCuts.get(key);
+      if (!cuts) this.frameCuts.set(key, (cuts = this.pilasterCuts(level, cx, cy, base, h1, engaged + PILASTER_PROUD, V)));
+    }
+    drawColumn(this.canvas.ctx, this.camera, cx, cy, h0, h1, c.material, progressOf(c), alpha, PLAN_COLOR, paint, this.canvas.dpr, level === 0, engaged, cuts);
+  }
+
+  /** How far a column is let go to be seen through, as `columnOn` lays it. */
+  private columnAlpha(level: number, cx: number, cy: number, V: View, engaged: number): number {
+    const [ox, oy] = this.cornerOrder(V)[engaged > 0 ? 3 : 2];
+    const p = this.game.player;
+    const inFront = depthOf(V, cx + ox, cy + oy) > depthOf(V, p.tileX, p.tileY);
+    const mine = !!this.roomTiles && [[cx - 1, cy - 1], [cx, cy - 1], [cx - 1, cy], [cx, cy]].some(([tx, ty]) => this.roomTiles?.has(`${tx},${ty}`));
+    return mine && (inFront || level !== p.level) ? 0.35 : 1;
+  }
+
+  /** The pilasters' cuts of the frame being drawn (`columnOn`). */
+  private readonly frameCuts = new Map<string, Cut[]>();
+
+  /**
+   * The foot of the column on the corner this tile is the last of the four
+   * round, laid again over this tile's ground or floor: the column went up
+   * before this tile was drawn (`drawColumnsAt`), and what of its foot stands
+   * on this tile the ground laid since had covered.
+   */
+  private columnFootOn(x: number, y: number, V: View, level: number): void {
+    const bld = this.game.buildings;
+    const order = this.cornerOrder(V);
+    const cx = x - order[3][0], cy = y - order[3][1];
+    if (!bld.hasColumnAt(cx, cy)) return;
+    const c = bld.column(level, cx, cy);
+    const viewLevel = this.seenLevel();
+    if (!c || (viewLevel !== null && level > viewLevel) || this.cut.has(c.building)) return;
+    // The tile that put it up: a pilaster goes up at the end of its line, which is after this tile when this tile is on it.
+    const engaged = this.engagedIn(level, cx, cy);
+    if (engaged > 0 && depthOf(V, x, y) <= depthOf(V, cx + order[2][0], cy + order[2][1])) return;
+    const w = this.game.world;
+    const cam = this.camera;
+    const ctx = this.canvas.ctx;
+    const floorTop = this.buildingBase(c.building) + level * WALL_HEIGHT + 0.5;
+    ctx.save();
+    ctx.beginPath();
+    for (const [px, py] of [[x, y], [x + 1, y], [x + 1, y + 1], [x, y + 1]]) {
+      ctx.lineTo(cam.worldToScreenX(px, py), cam.worldToScreenY(px, py, level ? floorTop : w.getHeight(px, py)));
+    }
+    ctx.closePath();
+    ctx.clip();
+    this.columnOn(c, level, cx, cy, V, engaged);
+    ctx.restore();
+  }
+
+  /**
+   * How a finished wall running toward the camera from a pilaster's corner on
+   * its storey is drawn when its tile is on a later line than the pilaster's
+   * (on the diagonal turns). Inside the pilaster it is hidden, so it is drawn
+   * from the pilaster's face on, as a railing's rails stop there
+   * (`railEnds`): on the screen, on the `side` of `x` that the run goes, `x`
+   * being where the face it shows meets the pilaster's face -- a true
+   * vertical, put on a whole device pixel (`guardedWall`). Nearer the corner
+   * than that it shows over the pilaster's head, and that stretch of it,
+   * inside the box `over` on the screen, is laid just before the pilaster is,
+   * which then covers what of the box is under its head (`overHeads`). Null
+   * for any other wall, and for a railing, whose rails stop at the face
+   * anyway.
+   */
+  private pilasterGuard(wall: Wall, border: Border, base: number, V: View, x: number, y: number): PilasterGuard | null {
+    const bld = this.game.buildings;
+    if (!bld.columns.size || !isDone(wall) || wall.type === 'railing') return null;
+    const cam = this.camera;
+    const [ax, ay, bx, by] = borderPoints(border);
+    const [ox, oy] = this.cornerClaim(V);
+    for (const [cx, cy, dx, dy] of [[ax, ay, bx - ax, by - ay], [bx, by, ax - bx, ay - by]]) {
+      if (cam.rotateX(dx, dy) + cam.rotateY(dx, dy) <= 1e-6) continue;
+      const c = bld.column(wall.level, cx, cy);
+      if (!c || !isDone(c)) continue;
+      // Drawn after the pilaster only if on a later line than the tile that lays it.
+      if (depthOf(V, x, y) <= depthOf(V, cx + ox, cy + oy)) continue;
+      const engaged = this.engagedIn(wall.level, cx, cy);
+      if (!engaged) continue;
+      // Which way the run goes across the screen. Seen end on, the pilaster's face is no line to stop at.
+      const side = Math.sign(cam.worldToScreenX(cx + dx, cy + dy) - cam.worldToScreenX(cx, cy));
+      if (!side) return null;
+      // A point on the face the camera sees, `t` along from the corner and `s` faces out from the wall's line, as `drawWall` has it.
+      const half = Renderer.halfOf(wall);
+      const nx = -(by - ay) * half, ny = (bx - ax) * half;
+      const toward = cam.nearSide(nx, ny);
+      const at = (t: number, h: number, s = 1): [number, number] => {
+        const wx = cx + dx * t + nx * toward * s, wy = cy + dy * t + ny * toward * s;
+        return [cam.worldToScreenX(wx, wy), cam.worldToScreenY(wx, wy, h)];
+      };
+      const r = engaged + PILASTER_PROUD;
+      const dpr = this.canvas.dpr;
+      const edge = Math.round(at(r, 0)[0] * dpr) / dpr;
+      const top = base + wall.level * WALL_HEIGHT + WALL_HEIGHT * this.standing(wall, border);
+      const [, head] = this.columnSpan(wall.level, cx, cy, this.buildingBase(c.building));
+      if (top <= head) return { x: edge, side, over: null, head: null };
+      /*
+       * From the face's edge back past the corner as far as the face can run
+       * on round it (`faceEnd`), from as low as the head's line along the
+       * face goes there up to the back of the wall's top -- or past what
+       * grows over the top, where nothing stands on it -- on whole device
+       * pixels: a box, which costs a clip nothing.
+       */
+      let e = 0;
+      for (const [b] of Renderer.arms(cx, cy)) {
+        const w = bld.wallOnBorder(wall.level, b);
+        if (w && isDone(w)) e = Math.max(e, Renderer.halfOf(w));
+      }
+      const far = -e - 0.02;
+      const upper = bld.wallOnBorder(wall.level + 1, border);
+      const crest = upper && isDone(upper) ? 0 : 6;
+      const [hx, hy] = at(r, head), [fx, fy] = at(far, head);
+      const low = Math.max(hy, fy);
+      const high = Math.min(at(r, top + crest, -1.5)[1], at(far, top + crest, -1.5)[1]) - 1;
+      const out = (v: number, up: boolean): number => (up ? Math.ceil(v * dpr) : Math.floor(v * dpr)) / dpr;
+      const x0 = side > 0 ? out(fx, false) : edge, x1 = side > 0 ? edge : out(fx, true);
+      // The head's line along the face, at either side of the box.
+      const lineAt = (sx: number): number => hy + ((fy - hy) * (sx - hx)) / (fx - hx);
+      return { x: edge, side, over: [x0, out(high, false), x1, out(low, true)], head: [lineAt(x0), lineAt(x1)] };
+    }
+    return null;
+  }
+
+  /**
+   * A wall run toward the camera out of a pilaster laid before it, as its
+   * guard says (`pilasterGuard`): from the pilaster's face on. What of it
+   * stands over the pilaster's head nearer the corner went on before the
+   * pilaster did (`overHeads`), and the two meet on a whole device pixel, so
+   * nothing of the pilaster shows between them and nothing is laid twice.
+   */
+  private guardedWall(wall: Wall, border: Border, base: number, alpha: number, g: PilasterGuard): void {
+    const ctx = this.canvas.ctx;
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(g.side > 0 ? g.x : g.x - 1e5, -1e5, 1e5, 2e5);
+    ctx.clip();
+    this.drawWall(wall, border, base, alpha);
+    ctx.restore();
+  }
+
+  /**
+   * Where `drawStructures` draws the wall on a border on a storey, and how:
+   * from the tile it is a back edge of, at that tile's base, let go to be
+   * seen through in front of you in your room. Null where it is not drawn: on
+   * a storey above the one looked at, past its tile's storeys, or cut away.
+   */
+  private wallAsDrawn(b: Border, level: number, V: View): { wall: Wall; base: number; alpha: number; x: number; y: number } | null {
+    const bld = this.game.buildings;
+    const wall = bld.wallOnBorder(level, b);
+    if (!wall) return null;
+    const { cutaway } = this.game.settings;
+    const viewLevel = this.seenLevel();
+    if (viewLevel !== null && level > viewLevel) return null;
+    const [tx, ty] = b.dir === 'h' ? (V.back.includes('n') ? [b.x, b.y] : [b.x, b.y - 1]) : (V.back.includes('w') ? [b.x, b.y] : [b.x - 1, b.y]);
+    const building = bld.buildingAt(tx, ty);
+    if (level >= (building ? building.levels : Math.max(1, this.maxLevelsAround(tx, ty)))) return null;
+    const jetty = building ? undefined : bld.jettyAt(tx, ty);
+    const own = building ?? (level > 0 && jetty && bld.floor(level, tx, ty)?.building === jetty.id ? jetty : undefined);
+    if (cutaway && own?.id !== wall.building && wall.type !== 'railing' && !this.edgeOn(b)) return null;
+    if (this.cut.has(wall.building)) return null;
+    const p = this.game.player;
+    const dim = depthOf(V, tx, ty) > depthOf(V, p.tileX, p.tileY) && this.wallsMyRoom(b);
+    // On its building's deck, on piers, as `drawStructures` stands it.
+    const base = this.jettyWallBase(wall, b, (wall.building ? bld.list.get(wall.building)?.deck : undefined) ?? this.game.world.getHeight(tx, ty));
+    return { wall, base, alpha: dim ? (wall.type === 'railing' ? 0.7 : 0.3) : 1, x: tx, y: ty };
+  }
+
+  /**
+   * What stands over a pilaster's head of the walls running toward the
+   * camera from it whose tile draws them after it (`pilasterGuard`): the
+   * back edges of the last tile round its corner, in the order that tile
+   * draws them. Laid just before the pilaster, after every wall of its line,
+   * so that the pilaster, and the column on its corner a storey up, which
+   * stand over it, go on over it. A column standing free up there went up
+   * with its tile, before this, and goes on again over it. Where the
+   * pilaster is let go to be seen through, what of the wall is under its
+   * head would show through it, so the box is cut along the head's line.
+   */
+  private overHeads(level: number, cx: number, cy: number, V: View, engaged: number): void {
+    const ctx = this.canvas.ctx;
+    const [ox, oy] = this.cornerOrder(V)[3];
+    const ghost = this.columnAlpha(level, cx, cy, V, engaged) < 1;
+    for (const b of [borderOf(cx + ox, cy + oy, V.back[0]), borderOf(cx + ox, cy + oy, V.back[1])]) {
+      const d = this.wallAsDrawn(b, level, V);
+      const g = d && this.pilasterGuard(d.wall, b, d.base, V, d.x, d.y);
+      if (!d || !g?.over) continue;
+      const [x0, y0, x1, y1] = g.over;
+      ctx.save();
+      ctx.beginPath();
+      if (ghost && g.head) {
+        ctx.moveTo(x0, y0); ctx.lineTo(x1, y0); ctx.lineTo(x1, g.head[1]); ctx.lineTo(x0, g.head[0]);
+        ctx.closePath();
+      } else ctx.rect(x0, y0, x1 - x0, y1 - y0);
+      ctx.clip();
+      this.drawWall(d.wall, b, d.base, d.alpha);
+      const up = this.game.buildings.column(level + 1, cx, cy);
+      const viewLevel = this.seenLevel();
+      if (up && (viewLevel === null || level + 1 <= viewLevel) && !this.engagedIn(level + 1, cx, cy)) this.columnOn(up, level + 1, cx, cy, V, 0);
+      ctx.restore();
+    }
+  }
+
+  /**
+   * What stands at each end of a section of railing: a post, drawn once at
+   * each corner by the first finished railing round it, or a wall or a column
+   * that is the post there and that the rails stop at. A section still going
+   * up stands its own post where no finished railing has one.
+   */
+  private railEnds(wall: Wall, border: Border): RailEnds {
+    const bld = this.game.buildings;
+    const ends: RailEnds = { post: [false, false], cut: [0, 0] };
+    const [ax, ay, bx, by] = borderPoints(border);
+    ([[ax, ay], [bx, by]] as Array<[number, number]>).forEach(([cx, cy], i) => {
+      const round: Border[] = [{ dir: 'h', x: cx, y: cy }, { dir: 'v', x: cx, y: cy }, { dir: 'h', x: cx - 1, y: cy }, { dir: 'v', x: cx, y: cy - 1 }];
+      let owner: Border | undefined;
+      let stop = -1;
+      for (const b of round) {
+        const w = bld.wallOnBorder(wall.level, b);
+        if (!w || !isDone(w)) continue;
+        if (w.type === 'railing') {
+          owner ??= b;
+          continue;
+        }
+        // A wall meeting it: in line, the rails run to its end; square to it, to its face.
+        const half = WALL_TYPE_BY_ID.get(w.type)?.railed ? FENCE_THICK : WALL_THICK * (WALL_TYPE_BY_ID.get(w.type)?.thick ?? 1);
+        stop = Math.max(stop, b.dir === border.dir ? 0 : half);
+      }
+      const col = bld.column(wall.level, cx, cy);
+      // A column the rails stop at: at its shaft, or at a pilaster's face.
+      if (col && isDone(col)) {
+        const engaged = this.engagedIn(wall.level, cx, cy);
+        stop = Math.max(stop, engaged > 0 ? engaged + PILASTER_PROUD : 0.05);
+      }
+      if (stop >= 0) ends.cut[i] = stop;
+      else if (!isDone(wall)) ends.post[i] = !owner;
+      else ends.post[i] = !!owner && owner.dir === border.dir && owner.x === border.x && owner.y === border.y;
+    });
+    return ends;
+  }
+
   /** Storeys of any building touching a tile's borders, for tiles just outside a footprint. */
   private maxLevelsAround(x: number, y: number): number {
     let m = 0;
@@ -6437,7 +7135,7 @@ export class Renderer {
       [1, 0],
       [0, 1],
     ]) {
-      const b = this.game.buildings.buildingAt(x + dx, y + dy);
+      const b = this.game.buildings.buildingAt(x + dx, y + dy) ?? this.game.buildings.jettyAt(x + dx, y + dy);
       if (b && b.levels > m) m = b.levels;
     }
     return m;
@@ -6736,6 +7434,8 @@ export class Renderer {
       ctx.closePath();
       ctx.fillStyle = rgb(fl.mean, 1);
       ctx.fill();
+      // Out on a jetty the plan hangs in front of the wall under it, which a faint line is lost on.
+      if (floor.level > 0 && !this.game.buildings.tileIndex.has(`${x},${y}`)) ctx.globalAlpha = alpha;
       ctx.strokeStyle = PLAN_COLOR;
       ctx.setLineDash([4, 3]);
       ctx.stroke();
@@ -7156,6 +7856,31 @@ export class Renderer {
       return P ? [-1, -line.h / half] : [line.h / half, 1];
     };
     ctx.globalAlpha = alpha;
+    if (!done && wall.type === 'railing') {
+      /*
+       * A railing going up: inside the outline of the whole of it, at its
+       * height, its posts go in first, with the first quarter of the
+       * materials, and then its rails and balusters from one end along to
+       * the other as the rest go in.
+       */
+      quad(0, 1, 0, 1);
+      ctx.fillStyle = rgb(mat.color, lit, 0.08);
+      ctx.fill();
+      ctx.strokeStyle = PLAN_COLOR;
+      ctx.setLineDash([5, 4]);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      const progress = progressOf(wall);
+      if (progress > 0) {
+        const ends = this.railEnds(wall, border);
+        const along = Math.max(0, (progress - 0.25) / 0.75);
+        const c0 = ends.cut[0], c1 = 1 - ends.cut[1];
+        ends.cut = [c0, 1 - (c0 + (c1 - c0) * along)];
+        drawRailing(ctx, cam, border, h0, wall.material, ends, alpha, wall.dye ? mat.color : undefined, this.canvas.dpr);
+      }
+      ctx.globalAlpha = 1;
+      return;
+    }
     if (!done) {
       /*
        * A plan, and then a plan filling. It keeps the thickness — a wall that
@@ -7179,6 +7904,12 @@ export class Renderer {
       ctx.setLineDash([5, 4]);
       ctx.stroke();
       ctx.setLineDash([]);
+      ctx.globalAlpha = 1;
+      return;
+    }
+    // A railing is a run of rail and balusters on posts, in a drawing of its own (`framing.ts`).
+    if (wall.type === 'railing') {
+      drawRailing(ctx, cam, border, h0, wall.material, this.railEnds(wall, border), alpha, wall.dye ? mat.color : undefined, this.canvas.dpr);
       ctx.globalAlpha = 1;
       return;
     }

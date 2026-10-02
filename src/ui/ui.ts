@@ -15,6 +15,7 @@ import {
   isDone,
   MATERIALS,
   progressOf,
+  ROOF_SHAPES,
   roofShapeOf,
   SIDE_NAMES,
   wallBill,
@@ -24,6 +25,7 @@ import {
   CELLAR_DEPTH,
   CELLAR_LEVEL,
   type Building,
+  type RoofShape,
   type Side,
 } from '../game/building';
 import { deckBill, metres, pierDrop } from '../game/piers';
@@ -79,6 +81,7 @@ import { DeedPanel } from './panels/deed';
 import { LedgerPanel } from './panels/ledger';
 import { JournalPanel } from './panels/journal';
 import { ContextMenu, type MenuItem } from './contextmenu';
+import { frameFootprintEntries, frameHoverLines, frameJettyEntries } from './frameMenu';
 import { jobEntry, pinEntry, pinnable } from './beltmenu';
 import { creatureLines } from './creatureinfo';
 import { MARK_COLOURS } from '../game/marks';
@@ -886,6 +889,8 @@ export class UI {
     }
     const counterLine = counterTip(this.game, pick);
     if (counterLine) lines.push(counterLine);
+    // A jetty over the tile, and a column on the corner nearest the pointer (`frameMenu.ts`).
+    lines.push(...frameHoverLines(this.game, pick));
     const pile = this.game.groundAt(pick.x, pick.y);
     if (pile.length === 1) {
       const it = pile[0];
@@ -2559,6 +2564,8 @@ export class UI {
     };
     const b = bld.buildingAt(x, y);
     if (!b) {
+      // Out past a building: the jetty that goes there, or is there (`frameMenu.ts`).
+      entries.push(...frameJettyEntries(g, pick));
       // No building here: a fence or a half wall still goes on any border,
       // and the border is decided by which edge of the tile was clicked.
       const side = nearestSide(x, y, pick.wx, pick.wy);
@@ -2604,6 +2611,8 @@ export class UI {
       return entries;
     }
     const level = workLevel(b);
+    // Every storey job asked from here names the storey it was shown for (`jobLevel`), which is how the island knows it.
+    base.level = level;
     const side = nearestSide(x, y, pick.wx, pick.wy);
     const sideName = SIDE_NAMES[side];
     const withSide: Extract<Target, { kind: 'tile' }> = { ...base, side };
@@ -2626,7 +2635,7 @@ export class UI {
         children: Array.from({ length: b.levels }, (_, i) => ({
           label: i === level ? `Storey ${i + 1} (current)` : `Storey ${i + 1}`,
           onSelect: () => {
-            b.workLevel = i;
+            bld.chooseWorkLevel(b, i);
           },
         })),
       });
@@ -2643,7 +2652,8 @@ export class UI {
       else {
         entries.push({
           label: `Plan wall (${sideName})`,
-          children: WALL_TYPES.map((wt) => ({
+          // A railing only off the ground: up a storey, or on a deck on piers (`frame.ts`).
+          children: WALL_TYPES.filter((wt) => wt.id !== 'railing' || level > 0 || bld.onPiers(x, y)).map((wt) => ({
             label: wt.name,
             children: MATERIALS.map((m) => ({
               label: m.name,
@@ -2656,6 +2666,8 @@ export class UI {
     }
     // Every storey's wall on this side, whichever storey is being worked on.
     entries.push(...ivy(withSide));
+    // Columns on its corners, and the railing round a flat roof (`frameMenu.ts`).
+    entries.push(...frameFootprintEntries(g, pick, b));
     const floor = bld.floor(level, x, y);
     const plan = act('plan_floor');
     // A flight or a ladder down to the cellar is the ground floor's, and has entries of its own (`cellarEntries`).
@@ -2729,27 +2741,39 @@ export class UI {
       const glassOnly = probe === FIELD_GLASS_ONLY;
       if (probe && (!glassOnly || glassWhy)) entries.push({ label: 'Plan roof', hint: (glassOnly ? glassWhy : probe) ?? undefined, disabled: true });
       else {
-        entries.push({
-          label: 'Plan roof',
-          children: [
+        /** A roof's materials, glass among them, in a shape the first tile chooses, or in the building's. */
+        const roofRows = (shape?: RoofShape): MenuItem[] => {
+          const t: Target = shape ? { ...roofTarget, roofShape: shape } : roofTarget;
+          const glassAt: Target = { ...t, material: GLASS_ROOF.id };
+          const glassNo = shape ? cellarReason(g, plan, glassAt) : glassWhy;
+          return [
             ...MATERIALS.map((m) => ({
               label: m.name,
-              note: describeNeeds(floorBill(m.id, 'roof'), materialName),
+              note: describeNeeds(floorBill(m.id, 'roof', shape ?? roofShapeOf(b)), materialName),
               hint: glassOnly ? FIELD_GLASS_ONLY : undefined,
               disabled: glassOnly,
-              onSelect: () => g.requestAction(plan, { ...roofTarget, material: m.id }),
+              onSelect: () => g.requestAction(plan, { ...t, material: m.id }),
             })),
             {
               label: GLASS_ROOF.name,
-              note: describeNeeds(floorBill(GLASS_ROOF.id, 'roof', roofShapeOf(b)), materialName),
-              hint: glassWhy ?? undefined,
-              disabled: !!glassWhy,
-              onSelect: () => g.requestAction(plan, glassTarget),
+              note: describeNeeds(floorBill(GLASS_ROOF.id, 'roof', shape ?? roofShapeOf(b)), materialName),
+              hint: glassNo ?? undefined,
+              disabled: !!glassNo,
+              onSelect: () => g.requestAction(plan, glassAt),
             },
             // What glass is for, in full, where it is chosen: a note is cut to its slot, a line is not.
             { label: 'A glasshouse: one storey, walled all round to full height, roofed wholly in glass', disabled: true },
             { label: `A crop in it grows ${growthWords(GLASSHOUSE_GROWTH)} in every season`, disabled: true },
-          ],
+          ];
+        };
+        entries.push({
+          label: 'Plan roof',
+          /*
+           * The first tile of a roof chooses its shape as well: gabled, hipped,
+           * or flat, which is a terrace, and which glass is not. After that the
+           * shape is the building's.
+           */
+          children: b.roof ? roofRows() : ROOF_SHAPES.map((r) => ({ label: r.name, note: r.note, children: roofRows(r.id as RoofShape) })),
         });
       }
     }

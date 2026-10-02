@@ -1,4 +1,7 @@
-import { CELLAR_DECAY, CELLAR_DEPTH, CELLAR_SOIL, floorBill, GLASS_ROOF, INDOORS_DECAY, MATERIAL_BY_ID, roofShapeDef, roofShapeOf, WALL_TYPE_BY_ID } from '../../game/building';
+import {
+  CELLAR_DECAY, CELLAR_DEPTH, CELLAR_SOIL, COLUMN_SHARE, columnBill, floorBill, GLASS_ROOF, INDOORS_DECAY, INDOORS_REST, JETTY_REACH, MATERIAL_BY_ID, RAILING_HEIGHT,
+  roofShapeDef, roofShapeOf, WALL_HEIGHT, WALL_TYPE_BY_ID, wallBill as typeBill,
+} from '../../game/building';
 import { CELLAR_DAYLIGHT } from '../../game/cellar';
 import { materialName } from '../../game/buildActions';
 import { COUNTER_HOLDS, COUNTER_REACH, COUNTER_WALL } from '../../game/counters';
@@ -860,6 +863,22 @@ export const NEWS: News[] = [
     lines: () => [
       `The last of a trade's ${numberWord(PERK_TIER_AT.length)} tiers of perks opens at ${PERK_TIER_AT[PERK_TIER_AT.length - 1]} in its main skill, where it was 100. After the first, which comes with the trade, the tiers open at ${listed(PERK_TIER_AT.slice(1).map(String))}.`,
     ],
+  },
+  {
+    n: 64,
+    day: '2026-10-02',
+    lines: () => {
+      const bill = (b: { needed: Record<string, number> }): string => billWords(Object.entries(b.needed), true);
+      return [
+        `Jetties: on a storey above the ground, Plan jetty floor lays a floor ${numberWord(JETTY_REACH)} tile out past the footprint, over open ground on your own settlement, resting on a finished full-height wall of the storey below on the side it shares with the building (a door counts; a half wall, a fence or a railing does not). It costs what a floor inside does and may be no heavier than the lightest wall or column under it carries. A storey over a jettied room floors out over the room as far as it goes, on the room's walls. The ground under a jetty stays open: nothing is planned or planted there, no bridge or aqueduct crosses it, its corners are not dug or raised, and you walk under it. Off a building on piers the storeys count from its deck.`,
+        'Open to its storey, a jetty is part of it: walls, railings or columns on its outer sides close the storey in. The roof may go out over it on walls or columns only: every side of it out of the storey wants a finished full-height wall, or at each end a finished column or the end of a finished full-height wall, since a railing carries nothing. The wall a side of it rests on, and a wall whose end is all that carries an end of one, stay up until columns take the roof; a column that is all that carries an end of one stays up until that side is walled or the roof is off. Behind a wall or a door it is a balcony, outside the storey, and takes no roof.',
+        'The jetty and column rows name their storey (Jetty of ‹house› (storey N), Plan column (‹corner› corner, storey N)), and every job on a building goes to the storey you are working on, on the island too, so a storey below the top can be worked from it; stairs asked for on the ground floor of a building with a storey over it say to work on storey 2 or above. A finished full-height wall with a wall of its building\'s storey above on the same side, once any of that wall\'s materials are in, stays up until that wall comes down, or until a finished column at each end carries the side; so does the last wall a jetty rests on.',
+        `Railings: a wall type for the open edges of upper storeys, jetties, balconies, finished decks on piers and finished flat roofs (Plan railing round the roof), never on the ground. ${capital(share(WALL_TYPE_BY_ID.get('railing')?.factor ?? 0))} of a solid wall's bill (${bill(typeBill('log', 'railing'))} in log), ${metres(RAILING_HEIGHT * WALL_HEIGHT)} m high, see-through; a finished one stops anyone crossing it.`,
+        `Columns: Plan column on the corner of a tile of a building, ${share(COLUMN_SHARE)} of a solid wall's bill (${bill(columnBill('log'))} in log, ${bill(columnBill('marble'))} in marble), on the ground, on a finished deck on piers or on a finished floor of its storey; never in glass, and on piers no heavier than the lightest deck, which has to carry the heaviest column as it does the heaviest wall. On the ground it takes the corner spot of each tile round it: no piece of furniture, smelter or kiln is set down in one, and no column goes up over a piece of furniture standing in one. A side with a finished column at each end is closed as a wall closes it: a column on each corner of a tile and a roof over it are an open hall, a row of them a colonnade, and a storey can go up on them. A column counts in what may be raised over it and in how many storeys the building stands, as a wall of its material does. It comes down unless it carries a side on the edge of its storey with no full-height wall, under a floor or a roof; the refusal names that side. Where walls meet on its corner it is drawn as a pilaster.`,
+        `Under a roof on columns, what is left decays at ${share(INDOORS_DECAY)} of the rate in the open, as in a room. A bed there is still in the open: the ×${INDOORS_REST} rest of a bed indoors wants walls all round.`,
+        'Examine on a tile names the jetty or balcony over it, the columns on its corners and what one still going up needs.',
+      ];
+    },
   },
   {
     n: 65,

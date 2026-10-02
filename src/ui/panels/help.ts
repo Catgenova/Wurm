@@ -14,7 +14,10 @@ import { BRIDGES, CLEARANCE, END_SLOP } from '../../game/bridges';
 import { AQUEDUCT } from '../../game/aqueducts';
 import { AQUEDUCT_FLOW, AQUEDUCT_LPS, CHANNEL_DEEP, CHANNEL_WIDE, CORNER_LITRES, FOUNTAIN_RIM, TILE_METRES } from '../../world/aqueducts';
 import { HOARD_LUMPS, HOARD_MORE } from '../../game/butcher';
-import { CELLAR_DECAY, CELLAR_DEPTH, CELLAR_SOIL, floorBill, GLASS_ROOF, HEFT_WORDS, INDOORS_DECAY, INDOORS_REST, MATERIALS as WALL_MATERIALS, MAX_LEVELS, roofShapeDef, roofShapeOf, SIDE_NAMES, wallBill, WALL_TYPE_BY_ID, WALL_TYPES } from '../../game/building';
+import {
+  CELLAR_DECAY, CELLAR_DEPTH, CELLAR_SOIL, COLUMN_SHARE, columnBill, floorBill, GLASS_ROOF, HEFT_WORDS, INDOORS_DECAY, INDOORS_REST, JETTY_REACH, MATERIALS as WALL_MATERIALS,
+  MAX_LEVELS, RAILING_HEIGHT, roofShapeDef, roofShapeOf, SIDE_NAMES, WALL_HEIGHT, wallBill, WALL_TYPE_BY_ID, WALL_TYPES,
+} from '../../game/building';
 import { CELLAR_ACTION_BY_ID, CELLAR_DAYLIGHT, cellarOutdoor } from '../../game/cellar';
 import { materialName } from '../../game/buildActions';
 import { COUNTER_HOLDS, COUNTER_REACH, COUNTER_SEEN, COUNTER_WALL } from '../../game/counters';
@@ -237,6 +240,17 @@ const QL_SPREAD = `${QL_LOW} to ${+(QL_LOW + QL_SPAN).toFixed(2)} times`;
 
 /** Height units as metres, a tenth of a metre each, to one place: 0.3 for three. */
 const metres = (units: number): string => (units / 10).toFixed(1);
+/** The railing's wall type, for its share of a wall's bill. */
+const railing = WALL_TYPE_BY_ID.get('railing') ?? { factor: 0 };
+/** The weight rule in words: each weight of material, what it is, and what has to be under it. */
+const heftGroups = (): string => {
+  const hefts = [...new Set(WALL_MATERIALS.map((m) => m.heft))].sort((a, b) => a - b);
+  const or = (xs: string[]): string => (xs.length < 2 ? (xs[0] ?? '') : `${xs.slice(0, -1).join(', ')} or ${xs[xs.length - 1]}`);
+  return hefts.map((h) => `${HEFT_WORDS[h]} (${listed(WALL_MATERIALS.filter((m) => m.heft === h).map((m) => m.name.toLowerCase()))}) goes over `
+    + `${h === hefts[0] ? 'anything' : h === hefts[hefts.length - 1] ? `${HEFT_WORDS[h]} only` : or(hefts.filter((k) => k >= h).map((k) => HEFT_WORDS[k]))}`).join('; ');
+};
+/** A column's bill in the lightest and the heaviest of the materials. */
+const columnBills = (): string => ['log', 'marble'].map((m) => `${billWords(Object.entries(columnBill(m).needed), true)} in ${m}`).join(', ');
 
 /** The steps of rarity above the ordinary. */
 const RARE_STEPS = RARITIES.map((_, i) => i).slice(1);
@@ -1007,7 +1021,13 @@ export function helpText(): string {
     there: solid, window, bay window, door or double door, in log, plank, timbercraft, cobblestone,
     slate, marble, sandstone, stone brick, clay adobe, clay bricks, ornate silver or ornate gold. Then
     <b>Build wall</b> feeds it materials one at a time. Floors are planned the same way and laid with
-    the paving skill. Another storey can only be planned once every wall of the storey below is built, up to ${numberWord(MAX_LEVELS)} in all.
+    the paving skill. Another storey can only be planned once every side of the storey below has a finished wall,
+    or a finished column at each end, up to ${numberWord(MAX_LEVELS)} in all. Every job on a building goes to the
+    storey you are working on (<b>Work on storey N</b> on its menu). A finished full-height wall with a wall of its
+    building's storey above on the same side, once any of that wall's materials are in, stays up until that wall
+    comes down, or until a finished column stands at each end of it to carry the side, and so does the last wall a
+    jetty rests on: so to make such a wall a door, raise a column at each end, take the wall down, and build the
+    door in its place.
     On an upper storey, plan a <b>staircase</b> or <b>ladder</b> instead of a plain floor to climb up:
     walk onto it from below and you are upstairs, step off it toward the ground and you are down again.
     Once the top storey's walls are done you can <b>Plan roof</b> tile by tile; neighbouring roof tiles
@@ -1035,7 +1055,8 @@ export function helpText(): string {
     yourself included, which is how a paddock holds a Roxxen; a <b>fence gate</b> is the one kind you
     can walk through. Feed them materials with <b>Build fence</b> exactly as you would a wall, and take
     them down again from the same menu. Nothing rests on waist-high work: a storey cannot be planned
-    over a run of fence or half wall, so if you want a floor above, the wall below has to be a wall.</p>
+    over a run of fence, half wall or railing, so if you want a floor above, the side below needs a wall,
+    or a finished column at each end.</p>
     <p><b>Piers and stilts.</b> A tile that is not level and dry at a building's floor height &mdash; one
     that slopes, one lower than the floor, or one under at most ${metres(PIER_WATER)} m of water &mdash; takes
     the building on piers: its ground floor is a <b>deck</b>, level with the building's floor and carried
@@ -1101,6 +1122,61 @@ export function helpText(): string {
     again: <b>${CELLAR_ACTION_BY_ID.get('fill_cellar')?.label}</b> packs a dirt, clay or sand back in a slice a go, from the
     pack or from something beside you, once what lies or stands down there is carried out and
     the way down that stands on the tile is taken out.</p>
+    <h3>Jetties, balconies, railings and columns</h3>
+    <p>A storey above the ground can be floored out <b>${numberWord(JETTY_REACH)} tile past the footprint</b>: a
+    <b>jetty</b>. Right-click the open tile beside the building and choose <b>Jetty of &hellip; (storey N)</b>
+    &rarr; <b>Plan jetty floor</b>: N is the storey you are working on (<b>Work on storey N</b> on the building's
+    menu), or the storey over the ground floor while you work on that, and every job on the menu goes to the
+    storey it names.
+    The floor costs what a floor inside does. The tile must
+    share a side with the building where the storey below has a <b>finished full-height wall</b> (a solid
+    wall, a window, a bay or a door; not a half wall, a fence or a railing), be open ground on your own
+    settlement with no tree or bush on it, and have no corner higher than the floor of the storey below.
+    It is held to the weight rule of anything raised up there, which the lightest wall or column in the
+    storeys under it sets: ${heftGroups()}. Stairs and ladders stay
+    inside the footprint. A storey over a jettied room floors out over the room as far as it goes, resting on
+    the room's walls, so a jettied house goes up storey on storey. Nothing can be planned or planted on the
+    ground under a jetty, no bridge or aqueduct crosses it, and its corners are not dug or raised; the last wall it rests on
+    stays up until the jetty is torn up or a finished column stands at each end of that wall to carry the side;
+    and the jetty comes up only once the walls, railings and columns on it, the floor of the storey over it and
+    the roof over it are down.</p>
+    <p>With nothing between it and its storey a jetty <b>is part of that storey</b>: its open sides want a
+    wall, a railing or columns before the storey counts as closed in for another storey or a roof. The roof
+    may go out over it (<b>Plan roof over the jetty</b>) only on <b>walls or columns</b>: every side of it out of
+    the storey wants a finished full-height wall, or at each end a finished column or the end of a finished
+    full-height wall, because a railing carries nothing, and the refusal names the corner that still wants a column. The wall a roof over a jetty rests on
+    stays up until a column at each end of it takes the roof, a wall whose end is all that carries an end of
+    such a side stays up until a finished column stands on that corner, a column that is all that carries one
+    stays up until that side is walled or the roof is off, and no wall or door goes between a storey and its
+    roofed jetty. Shut off behind a wall or a door a jetty is a <b>balcony</b>: outside the storey, so the storey
+    above asks nothing of its railings, and it takes no roof.</p>
+    <p>A <b>railing</b> is a wall type for the open edges up there: ${share(railing.factor)} of a solid wall's bill
+    (in log, ${numberWord(wallBill('log', 'railing').needed.log)} logs where a wall is ${numberWord(wallBill('log', 'solid').needed.log)}),
+    ${metres(RAILING_HEIGHT * WALL_HEIGHT)} m high against a wall's ${metres(WALL_HEIGHT)} m, and see-through. A finished one stops anyone
+    crossing it, as any wall does. It goes on the edges of a storey above the ground, a jetty, a balcony or a
+    finished deck on piers &mdash; never on the ground, where a fence does the job &mdash; and round a finished <b>flat roof</b>,
+    which is a terrace you can walk out on: <b>Plan railing round the roof</b> on its edge. A roof tile with a
+    railing on it is not taken off until the railing is down. Up a storey, an edge with nothing built past it
+    stops you whether or not it is railed, so a railing is there to close a storey in, not to catch you.</p>
+    <p>A <b>column</b> stands on the corner of a tile: right-click near the corner and choose <b>Plan column
+    (&hellip; corner, storey N)</b>, on the storey you are working on.
+    It costs ${share(COLUMN_SHARE)} of a solid wall's bill in its material (${columnBills()}) and is built a unit
+    at a time like a wall. On the ground floor it stands on the footprint, or on a finished deck where the
+    footprint is on piers; higher up on a finished floor of its storey. It is held to the same weight rule as
+    a wall there, and on piers to the deck's: no column heavier than the lightest deck under the building, and
+    no deck lighter than its heaviest wall or column. Glass is for roofs, not columns. On the ground a
+    column takes the corner spot of every tile round it: no piece of furniture, smelter or kiln is set down
+    in one, and no column is planned over a piece of furniture standing in one. A side of a storey with a <b>finished
+    column at each end</b> is closed as a wall closes it, so a column on each corner of a tile and a roof over it are an open hall,
+    a row of them a colonnade, and a storey can be planned over them. A column counts toward how many storeys its
+    material lets the building stand. A roof on columns keeps what lies under it as a room does: it decays
+    at ${share(INDOORS_DECAY)} of the rate in the open. A bed under it is still a bed in the open: the
+    &times;${INDOORS_REST} rest of a bed indoors wants walls all round. A column that carries a side &mdash; a side at its
+    corner on the edge of the storey with no full-height wall, closed by it and the column at the other end, with a
+    floor or a roof over it &mdash; does not come down until that side is walled or what is over it is off; one whose
+    sides are walled or inside the storey comes down whenever you like. Where walls meet on its corner it is drawn
+    as a pilaster standing out from them. The floor under one comes up only while another finished floor round the
+    corner holds it.</p>
     <h3>Nails, furniture and storage</h3>
     <p>Anything that is nailed together needs <b>nails</b>, and nails need metal. Fire a <b>nail mould</b>
     from sand at a smelter: it is a gang mould with ${numberWord(NAILS_PER_LUMP)} channels in it, so one lump of metal

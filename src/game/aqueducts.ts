@@ -166,6 +166,8 @@ export function aqueductPlan(g: Game, sx: number, sy: number, tx: number, ty: nu
   for (const [x, y] of span) {
     if (g.bridgeAt(x, y)) return 'Something is already bridged across there.';
     if (g.buildings.buildingAt(x, y)) return 'Not over a building.';
+    // Nor through a building's jetty, as a bridge is not (`frame.ts`).
+    if (g.buildings.jettyAt(x, y)) return "Not over a building's jetty.";
     const ground = w.getTile(x, y);
     if (ground === TileType.Tree || ground === TileType.Bush) return aqGrowing(x, y, ground === TileType.Tree ? 'tree' : 'bush');
     if (top - CHANNEL_DEEP - g.surfaceHeight(x, y) < CLEARANCE) {

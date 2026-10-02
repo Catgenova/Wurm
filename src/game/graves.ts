@@ -164,7 +164,8 @@ export function graveSpot(g: Game, x: number, y: number): { x: number; y: number
         if (g.occupiedSubtile(tx, ty, sx + dx, sy + dy) || g.trapAt(tx, ty, sx + dx, sy + dy)) return true;
       }
     }
-    return false;
+    // Nor in the corner a column stands in (`Game.columnInBlock`).
+    return g.columnInBlock(tx, ty, sx, sy, w, h);
   };
   let best: [number, number] = [ax, ay];
   let bestD = Infinity;

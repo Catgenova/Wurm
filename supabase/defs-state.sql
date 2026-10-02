@@ -1235,6 +1235,9 @@ insert into action_def (id, label, verb, skill, tool, corner, range, stamina, ba
 insert into action_def (id, label, verb, skill, tool, corner, range, stamina, base_time, difficulty, instant, repeatable) values ('dig_cellar', 'Dig out the cellar', 'digging out the cellar', 'digging', 'shovel', false, null, 0.05, 6, 8, false, true);
 insert into action_def (id, label, verb, skill, tool, corner, range, stamina, base_time, difficulty, instant, repeatable) values ('mine_cellar', 'Mine out the cellar', 'cutting out the cellar', 'mining', 'pickaxe', false, null, 0.06, 8, 12, false, true);
 insert into action_def (id, label, verb, skill, tool, corner, range, stamina, base_time, difficulty, instant, repeatable) values ('fill_cellar', 'Fill in the cellar', 'filling in the cellar', 'digging', 'shovel', false, null, 0.03, 3, null, false, true);
+insert into action_def (id, label, verb, skill, tool, corner, range, stamina, base_time, difficulty, instant, repeatable) values ('plan_column', 'Plan column', 'planning a column', null, null, true, null, 0.02, 2, null, false, false);
+insert into action_def (id, label, verb, skill, tool, corner, range, stamina, base_time, difficulty, instant, repeatable) values ('build_column', 'Build column', 'building', null, null, true, null, 0.03, 5, null, false, true);
+insert into action_def (id, label, verb, skill, tool, corner, range, stamina, base_time, difficulty, instant, repeatable) values ('remove_column', 'Remove column', 'taking down the column', null, null, true, null, 0.04, 4, null, false, false);
 insert into action_def (id, label, verb, skill, tool, corner, range, stamina, base_time, difficulty, instant, repeatable) values ('examine_creature', 'Examine', 'examining', null, null, false, null, 0, 0, null, true, false);
 insert into action_def (id, label, verb, skill, tool, corner, range, stamina, base_time, difficulty, instant, repeatable) values ('tame', 'Tame', 'coaxing it closer', 'taming', null, false, null, 0.03, 3.5, null, false, false);
 insert into action_def (id, label, verb, skill, tool, corner, range, stamina, base_time, difficulty, instant, repeatable) values ('shear', 'Shear', 'shearing', 'tailoring', 'carving_knife', false, null, 0.04, 6, null, false, false);
@@ -4197,6 +4200,8 @@ create or replace function cellar_level() returns double precision language sql 
 create or replace function cellar_depth() returns double precision language sql immutable as $fn$ select 30::double precision $fn$;
 create or replace function cellar_decay() returns double precision language sql immutable as $fn$ select 0.05::double precision $fn$;
 create or replace function cellar_least_soil() returns double precision language sql immutable as $fn$ select 3::double precision $fn$;
+create or replace function column_share() returns double precision language sql immutable as $fn$ select 0.25::double precision $fn$;
+create or replace function jetty_reach() returns double precision language sql immutable as $fn$ select 1::double precision $fn$;
 create or replace function wall_height() returns double precision language sql immutable as $fn$ select 30::double precision $fn$;
 create or replace function class_at() returns double precision language sql immutable as $fn$ select 50::double precision $fn$;
 create or replace function class_change_cost() returns double precision language sql immutable as $fn$ select 500::double precision $fn$;
@@ -4300,6 +4305,7 @@ insert into wall_fitting values ('iron_gate', 'bracket', 8);
 insert into wall_type_def values ('half_wall', 'Half wall', 0.5, false, 0.5, true, false, true);
 insert into wall_type_def values ('counter', 'Shop counter', 0.75, false, null, false, false, false);
 insert into wall_fitting values ('counter', 'hinge', 2);
+insert into wall_type_def values ('railing', 'Railing', 0.35, false, 0.36, true, true, false);
 insert into roof_shape_def values ('gable', 'Gabled', 1, 0.3, false, 'One ridge down the length of it, falling to the eaves on the long sides; the ends are wall carried up in a triangle rather than roof. A tile of it takes three tenths of what a solid wall of the same stuff does.');
 insert into roof_shape_def values ('hip', 'Hipped', 1, 0.5, false, 'Falling away on every side, with no gable ends to raise, and it sheds weather off every wall. A tile of it takes half of what a solid wall of the same stuff does.');
 insert into roof_shape_def values ('flat', 'Flat', 0, 0.85, true, 'A deck rather than a roof: laid heavy enough to walk out onto, and what you get for it is a terrace. A tile of it takes 85% of what a solid wall of the same stuff does.');

@@ -19,7 +19,8 @@ import { DROWN_RATE, DROWN_WARN, EXHAUSTED, HEAL_FED, HEAL_RATE, HUNGER_RATE, SW
 import { markName, MARK_CAP, MARK_COLOURS, type Marker } from './marks';
 import { acrossSide, Buildings, CELLAR_DECAY, CELLAR_FLOOR, CELLAR_LEVEL, connectsDown, floorKind, floorOf, INDOORS_DECAY, isDone, progressOf, roofShapeDef, TOP_LEVELS, WALL_HEIGHT, walkableKind, type BuildingsJSON, type Building, type Wall, type Side } from './building';
 import { CELLAR_DAYLIGHT, cellarGate, cellarPieceOk, targetFloor } from './cellar';
-import { crateCentre, crateName, crateCapacity, crateUnits, STORE_REACH, subtileOf, type CrateKind, type PlacedCrate } from './crates';
+import { jettyBase } from './frame';
+import { crateCentre, crateName, crateCapacity, crateUnits, STORE_REACH, SUBTILES, subtileOf, type CrateKind, type PlacedCrate } from './crates';
 import { anvilAnchor, anvilCovers, ANVIL_SUBTILES, type PlacedAnvil } from './anvil';
 import { fireAnchor, fireCentre, fireCovers, FIRE_SUBTILES, type PlacedCampfire } from './campfire';
 import { smelterAnchor, smelterCentre, smelterCovers, SMELTER_H, SMELTER_W, type PlacedSmelter, type SmeltJob } from './smelter';
@@ -1557,8 +1558,11 @@ export class Game {
 
   /** Height of the player's feet, storeys included: in a building on piers, from its deck. */
   playerHeight(): number {
-    const base = this.deckBase(this.player.tileX, this.player.tileY, this.player.level);
-    return (base ?? this.world.heightAt(this.player.x, this.player.y)) + this.player.visualLevel * 30;
+    // Out on a jetty the floor is the building's, whatever the ground under it does (`jettyBase`).
+    const p = this.player;
+    const jetty = p.level > 0 && this.buildings.jettyAt(p.tileX, p.tileY);
+    const base = jetty ? jettyBase(this, jetty, p.tileX, p.tileY) : this.deckBase(p.tileX, p.tileY, p.level);
+    return (base ?? this.world.heightAt(p.x, p.y)) + p.visualLevel * 30;
   }
 
   /**
@@ -3365,7 +3369,8 @@ export class Game {
   decayMultiplier(x: number, y: number, level = 0): number {
     const out = this.onDeed(x, y) ? DEED_DECAY : 1;
     if (level < 0) return out * CELLAR_DECAY;
-    return this.buildings.indoors(0, x, y) ? out * INDOORS_DECAY : out;
+    // Under a roof on walls, or on columns: an open hall keeps as a room does (`Buildings.sheltered`).
+    return this.buildings.sheltered(0, x, y) ? out * INDOORS_DECAY : out;
   }
 
   private updateAction(dt: number): void {
@@ -4617,6 +4622,7 @@ export class Game {
     for (const [x, y] of span) {
       if (this.bridgeAt(x, y)) return 'Something is already bridged across there.';
       if (this.buildings.buildingAt(x, y)) return 'Not over a building.';
+      if (this.buildings.jettyAt(x, y)) return 'Not over a building\'s jetty.';
       if (height - this.surfaceHeight(x, y) < CLEARANCE) return 'That is not a gap, it is ground. Walk it.';
     }
     return null;
@@ -6989,6 +6995,8 @@ export class Game {
         if (this.occupiedSubtile(x, y, ax + dx, ay + dy)) return 'Something is already standing there.';
       }
     }
+    // Nor in the corner a column stands in (`columnInBlock`).
+    if (this.columnInBlock(x, y, ax, ay, SMELTER_W, SMELTER_H)) return 'Something is already standing there.';
     return null;
   }
 
@@ -7024,6 +7032,8 @@ export class Game {
         if (this.occupiedSubtile(x, y, ax + dx, ay + dy)) return 'Something is already standing there.';
       }
     }
+    // Nor in the corner a column stands in (`columnInBlock`).
+    if (this.columnInBlock(x, y, ax, ay, KILN_SUBTILES, KILN_SUBTILES)) return 'Something is already standing there.';
     return null;
   }
 
@@ -7103,6 +7113,8 @@ export class Game {
         if (this.occupiedSubtile(x, y, ax + dx, ay + dy, except)) return 'Something is already standing there.';
       }
     }
+    // Nor in the corner a column stands in (`columnInBlock`).
+    if (this.columnInBlock(x, y, ax, ay, fw, fh)) return 'Something is already standing there.';
     // And a lantern post's arm not into a wall (`lamps.ts`).
     return lampArmRefusal(this, kind, x, y, ax, ay, facing);
   }
@@ -7373,6 +7385,24 @@ export class Game {
     for (const f of this.placed.furniture.at(x, y)) if ((f.level ?? 0) >= 0 && f.id !== exceptFurniture && furnitureCovers(f, sx, sy)) return true;
     for (const a of this.placed.anvils.at(x, y)) if (anvilCovers(a, sx, sy)) return true;
     for (const p of this.placed.posts.at(x, y)) if (p.sx === sx && p.sy === sy) return true;
+    return false;
+  }
+
+  /**
+   * Whether a column of the ground floor stands in a corner spot of a block
+   * of spots on a tile: a column takes the corner spot of every tile round
+   * its corner (`frame.ts`). Asked wherever the island's `block_taken` is --
+   * a piece, a smelter or a kiln set down or turned, a grave dug -- which asks
+   * it as `frame_column_corner`.
+   */
+  columnInBlock(x: number, y: number, sx: number, sy: number, w: number, h: number): boolean {
+    const bld = this.buildings;
+    if (!bld.columns.size) return false;
+    for (const [cx, at] of [[x, sx === 0], [x + 1, sx + w === SUBTILES]] as Array<[number, boolean]>) {
+      for (const [cy, on] of [[y, sy === 0], [y + 1, sy + h === SUBTILES]] as Array<[number, boolean]>) {
+        if (at && on && bld.column(0, cx, cy)) return true;
+      }
+    }
     return false;
   }
 

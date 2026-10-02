@@ -114,7 +114,7 @@ psql(`delete from wall where world_id = ${W} and level = 0 and dir = 'v' and x =
 const oneOut = gapText(b.levels, bld.levelGaps(b, 0, game.player.x, game.player.y));
 const theirOneOut = psql(`select coalesce(level_gap(${W}, 1, 0, 30.5, 30.5), 'CLOSED IN')`);
 check('one wall taken out and the answer says which side it was',
-  oneOut === 'Storey 1 is not closed in: 1 side with no wall, nearest the east side of 31,30.'
+  oneOut === 'Storey 1 is not closed in: 1 side with no wall or columns, nearest the east side of 31,30.'
     && theirOneOut === oneOut, `browser "${oneOut}", island "${theirOneOut}"`);
 
 /* ---- a wall planned and not paid for counts as still going up ---- */
@@ -127,7 +127,7 @@ psql(`delete from wall where world_id = ${W} and level = 0 and dir = 'h' and x =
 const both = gapText(b.levels, bld.levelGaps(b, 0, game.player.x, game.player.y));
 const theirBoth = psql(`select coalesce(level_gap(${W}, 1, 0, 30.5, 30.5), 'CLOSED IN')`);
 check('a hole and a half-built wall are counted apart, and the nearer one named',
-  both === 'Storey 1 is not closed in: 1 side with no wall and 1 still going up, nearest the north side of 30,30.'
+  both === 'Storey 1 is not closed in: 1 side with no wall or columns and 1 still going up, nearest the north side of 30,30.'
     && theirBoth === both, `browser "${both}", island "${theirBoth}"`);
 
 /* ---- and the storey it names is the one that is short ---- */
@@ -136,7 +136,7 @@ psql(`update building set levels = 2 where world_id = ${W} and id = 1;`);
 const upstairs = gapText(b.levels, bld.levelGaps(b, 1, game.player.x, game.player.y));
 const theirUpstairs = psql(`select coalesce(level_gap(${W}, 1, 1, 30.5, 30.5), 'CLOSED IN')`);
 check('a second storey with no walls at all names itself, not the room below',
-  upstairs === 'Storey 2 is not closed in: 6 sides with no wall, nearest the north side of 30,30.'
+  upstairs === 'Storey 2 is not closed in: 6 sides with no wall or columns, nearest the north side of 30,30.'
     && theirUpstairs === upstairs, `browser "${upstairs}", island "${theirUpstairs}"`);
 
 for (const line of [...ok, ...bad]) console.log(line);

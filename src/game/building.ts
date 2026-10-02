@@ -6,7 +6,13 @@
 import { fill } from './words';
 
 export type WallType = 'solid' | 'window' | 'bay' | 'door' | 'double_door' | 'arch' | 'fence' | 'fence_gate' | 'half_wall' | 'iron_gate'
-  | 'counter';
+  | 'counter' | 'railing';
+
+/**
+ * How high a railing stands, as a share of a storey: waist-high, a little
+ * under a fence, because it is leant on rather than climbed.
+ */
+export const RAILING_HEIGHT = 0.36;
 
 export interface WallTypeDef {
   id: WallType;
@@ -91,6 +97,14 @@ export const WALL_TYPES: WallTypeDef[] = [
    * `counters.ts`.
    */
   { id: 'counter', name: 'Shop counter', factor: 0.75, passable: false, fittings: [['hinge', 2]] },
+  /*
+   * The edge of a balcony or a terrace: a rail and its balusters, waist-high
+   * and seen through. It stops anybody walking off, as every wall does, and it
+   * is low, so nothing is ever built on it. Only on a storey above the ground,
+   * a deck on piers or round a flat roof: on the ground it would be a fence,
+   * and there are fences for that. See `frame.ts` and `railing.ts`.
+   */
+  { id: 'railing', name: 'Railing', factor: 0.35, passable: false, height: RAILING_HEIGHT, low: true, railed: true },
 ];
 export const WALL_TYPE_BY_ID = new Map(WALL_TYPES.map((w) => [w.id, w]));
 /** Whether a wall type is waist-high work that nothing can be built over. */
@@ -461,6 +475,17 @@ export interface Building {
 
 /** The storey being worked on, clamped to what exists. */
 export const workLevel = (b: Building): number => Math.min(b.workLevel ?? b.levels - 1, b.levels - 1);
+/**
+ * The storey a job on a building is for: the one the job names (`level` in
+ * its target, which the menus fill in from the storey being worked), when the
+ * building has it, or else the storey being worked. The island reads the same
+ * field the same way (`frame_job_level`), so a job asked from a menu lands on
+ * the storey the menu said, whatever the island last took to be worked.
+ */
+export function jobLevel(b: Building, t: { level?: number }): number {
+  const l = t.level;
+  return typeof l === 'number' && Number.isInteger(l) && l >= 0 && l <= b.levels - 1 ? l : workLevel(b);
+}
 
 export const isDone = (b: Bill): boolean => Object.values(b.needed).every((n) => n <= 0);
 
@@ -482,7 +507,7 @@ export interface LevelGap {
 export function gapText(storey: number, gap: LevelGap): string | null {
   if (!gap.bare && !gap.unfinished) return null;
   const parts: string[] = [];
-  if (gap.bare) parts.push(`${gap.bare} side${gap.bare === 1 ? '' : 's'} with no wall`);
+  if (gap.bare) parts.push(`${gap.bare} side${gap.bare === 1 ? '' : 's'} with no wall or columns`);
   if (gap.unfinished) parts.push(`${gap.unfinished} still going up`);
   const where = gap.at ? `, nearest the ${SIDE_NAMES[gap.at.side]} side of ${gap.at.x},${gap.at.y}` : '';
   return `Storey ${storey} is not closed in: ${parts.join(' and ')}${where}.`;
@@ -533,9 +558,39 @@ export function floorBill(material: string, kind: FloorKind = 'floor', roof: Roo
   return scaledBill(material, kind === 'stairs' ? 0.75 : 0.5);
 }
 
+/**
+ * How far out past its footprint a storey above the ground may be floored:
+ * a jetty is one tile, sharing an edge with the building, and never more.
+ */
+export const JETTY_REACH = 1;
+/** What a column takes of a solid wall's bill in the same material. */
+export const COLUMN_SHARE = 0.25;
+
+/**
+ * A column: a squared post in timber, a pillar in stone, standing on a tile
+ * corner of a storey and carrying what is over it as a wall does. `x` and `y`
+ * are the corner.
+ */
+export interface Column extends Bill {
+  building: number;
+  level: number;
+  x: number;
+  y: number;
+  material: string;
+  dye?: string;
+}
+
+/** What a column of a material takes to build: `COLUMN_SHARE` of a solid wall of it, rounded up. */
+export const columnBill = (material: string): Bill => scaledBill(material, COLUMN_SHARE);
+
 export const tileKey = (x: number, y: number): string => `${x},${y}`;
 const wallKey = (level: number, b: Border): string => `${level}:${b.dir}:${b.x},${b.y}`;
 const floorKey = (level: number, x: number, y: number): string => `${level}:${x},${y}`;
+const columnKey = (level: number, x: number, y: number): string => `${level}:${x},${y}`;
+/** A corner as one number, for an index the drawing asks of every tile: no island is 65536 corners across. */
+const cornerNumber = (x: number, y: number): number => x * 65536 + y;
+/** The four sides of a tile and the step across each, in the order the island asks them. */
+const STEPS: ReadonlyArray<readonly [Side, number, number]> = [['n', 0, -1], ['e', 1, 0], ['s', 0, 1], ['w', -1, 0]];
 
 export interface BuildingsJSON {
   nextId: number;
@@ -544,6 +599,8 @@ export interface BuildingsJSON {
   floors: FloorTile[];
   /** The tiles dug out under them, whole or in part; absent from a save made before there were cellars. */
   cellars?: CellarTile[];
+  /** The columns standing on its corners, where there are any. */
+  columns?: Column[];
 }
 
 export class Buildings {
@@ -557,7 +614,30 @@ export class Buildings {
   pierStamp = 0;
   /** What has been dug out under the ground floors, by tile (`tileKey`). */
   readonly cellars = new Map<string, CellarTile>();
+  /** Columns, by storey and corner. */
+  readonly columns = new Map<string, Column>();
+  /**
+   * The tiles out past every footprint that carry a floor of a storey, and
+   * whose: a jetty's, a balcony's, or the roof over one (`jettyAt`). Kept as
+   * floors come and go, because the drawing asks it of every tile it draws.
+   */
+  private readonly jettyIndex = new Map<string, number>();
+  /** How many columns stand on each corner, whatever the storey, by `cornerNumber`: what the drawing asks first. */
+  private readonly cornerIndex = new Map<number, number>();
+  /**
+   * The storey this browser chose to work on, by building, and how many
+   * storeys the building had then. The island sends its own work level with
+   * every ground read; a choice made here stands over it until the building
+   * gains or loses a storey, since jobs name their storey (`jobLevel`).
+   */
+  private readonly chosen = new Map<number, { level: number; levels: number }>();
   nextId = 1;
+
+  /** Work on a storey of a building, and keep to it across what the island sends. */
+  chooseWorkLevel(b: Building, level: number): void {
+    b.workLevel = Math.max(0, Math.min(level, b.levels - 1));
+    this.chosen.set(b.id, { level: b.workLevel, levels: b.levels });
+  }
 
   buildingAt(x: number, y: number): Building | undefined {
     const id = this.tileIndex.get(tileKey(x, y));
@@ -613,10 +693,11 @@ export class Buildings {
     return best;
   }
 
-  /** The heaviest wall planned or standing in a building, as a heft; nought for none. */
+  /** The heaviest wall planned or standing in a building, as a heft, its columns counted as the walls they stand for (`frame.ts`); nought for none. */
   heaviestWall(b: Building): number {
     let most = 0;
     for (const w of this.walls.values()) if (w.building === b.id) most = Math.max(most, MATERIAL_BY_ID.get(w.material)?.heft ?? 0);
+    for (const c of this.columns.values()) if (c.building === b.id) most = Math.max(most, MATERIAL_BY_ID.get(c.material)?.heft ?? 0);
     return most;
   }
 
@@ -701,7 +782,14 @@ export class Buildings {
    * was laid out around it. Either way there is nothing up there to build on.
    */
   hasLowWall(b: Building, level: number): boolean {
-    for (const w of this.walls.values()) if (w.building === b.id && w.level === level && isLowWall(w.type)) return true;
+    // Up a storey, only what touches the storey the next one stands on: a
+    // railing round a balcony shut off behind a door carries nothing.
+    const area = level > 0 && this.jettyIndex.size ? this.storeyArea(b, level) : null;
+    for (const w of this.walls.values()) {
+      if (w.building !== b.id || w.level !== level || !isLowWall(w.type)) continue;
+      if (area && !bordersRoom(area, w)) continue;
+      return true;
+    }
     if (level === 0) {
       for (const border of this.exteriorBorders(b)) {
         const w = this.wallOnBorder(level, border);
@@ -722,6 +810,7 @@ export class Buildings {
   setFloor(b: Building, level: number, x: number, y: number, material: string, kind: FloorKind = 'floor', facing?: Side): FloorTile {
     const f: FloorTile = { building: b.id, level, x, y, material, kind, facing, ...floorBill(material, kind, roofShapeOf(b)) };
     this.floors.set(floorKey(level, x, y), f);
+    if (level > 0 && !this.tileIndex.has(tileKey(x, y))) this.jettyIndex.set(tileKey(x, y), b.id);
     return f;
   }
 
@@ -738,6 +827,7 @@ export class Buildings {
 
   removeFloor(level: number, x: number, y: number): void {
     this.floors.delete(floorKey(level, x, y));
+    if (this.jettyIndex.has(tileKey(x, y))) this.reindexJetty(x, y);
   }
 
   /** What has been dug out under a tile, if anything. */
@@ -825,7 +915,14 @@ export class Buildings {
   levelGaps(b: Building, level: number, fromX: number, fromY: number): LevelGap {
     const gap: LevelGap = { bare: 0, unfinished: 0 };
     const holes: Array<{ x: number; y: number; side: Side }> = [];
-    for (const key of b.tiles) {
+    /*
+     * The storey is its footprint and every jetty open to it (`storeyArea`),
+     * and a side with no wall on it is closed all the same when a finished
+     * column stands at both ends of it (`carried`): that is a colonnade.
+     */
+    const area = this.storeyArea(b, level);
+    const outline = new Set<string>();
+    for (const key of area) {
       const [xs, ys] = key.split(',');
       const x = Number(xs);
       const y = Number(ys);
@@ -836,9 +933,12 @@ export class Buildings {
         ['w', x - 1, y],
       ];
       for (const [side, nx, ny] of sides) {
-        if (this.tileIndex.get(tileKey(nx, ny)) === b.id) continue;
-        const w = this.wallOnBorder(level, borderOf(x, y, side));
+        if (area.has(tileKey(nx, ny))) continue;
+        const border = borderOf(x, y, side);
+        outline.add(wallKey(level, border));
+        const w = this.wallOnBorder(level, border);
         if (w && isDone(w)) continue;
+        if (!w && this.carried(level, border)) continue;
         if (w) gap.unfinished++;
         else gap.bare++;
         holes.push({ x, y, side });
@@ -855,7 +955,7 @@ export class Buildings {
     // a storey being closed in just as surely as a hole in the outside wall.
     for (const w of this.walls.values()) {
       if (w.building !== b.id || w.level !== level || isDone(w)) continue;
-      if (this.exteriorBorders(b).some((e) => e.dir === w.dir && e.x === w.x && e.y === w.y)) continue;
+      if (outline.has(wallKey(level, w))) continue;
       gap.unfinished++;
     }
     return gap;
@@ -876,15 +976,26 @@ export class Buildings {
       const m = MATERIAL_BY_ID.get(w.material);
       if (m) least = Math.min(least, m.heft);
     }
+    // A column carries what is over it as a wall does, and no more than its stuff will.
+    for (const c of this.columns.values()) {
+      if (c.building !== b.id || c.level >= level) continue;
+      const m = MATERIAL_BY_ID.get(c.material);
+      if (m) least = Math.min(least, m.heft);
+    }
     return least;
   }
 
-  /** Every build material standing in a building, whatever storey it is on. */
+  /** Every build material standing in a building, whatever storey it is on: its walls and its columns. */
   materialsIn(b: Building): MaterialDef[] {
     const out = new Map<string, MaterialDef>();
     for (const w of this.walls.values()) {
       if (w.building !== b.id) continue;
       const m = MATERIAL_BY_ID.get(w.material);
+      if (m) out.set(m.id, m);
+    }
+    for (const c of this.columns.values()) {
+      if (c.building !== b.id) continue;
+      const m = MATERIAL_BY_ID.get(c.material);
       if (m) out.set(m.id, m);
     }
     return [...out.values()];
@@ -912,8 +1023,14 @@ export class Buildings {
       if (w.building !== b.id || w.level !== level) continue;
       seen.set(w.material, (seen.get(w.material) ?? 0) + 1);
     }
+    // A column counts as a wall does: a hall on columns is raised on in their trade.
+    for (const c of this.columns.values()) {
+      if (c.building !== b.id || c.level !== level) continue;
+      seen.set(c.material, (seen.get(c.material) ?? 0) + 1);
+    }
     let best: string | undefined;
-    for (const [id, n] of seen) if (!best || n > (seen.get(best) ?? 0)) best = id;
+    // A tie goes to the first by name, as `storey_material` breaks it on the island.
+    for (const [id, n] of seen) if (!best || n > (seen.get(best) ?? 0) || (n === seen.get(best) && id < best)) best = id;
     return best ? MATERIAL_BY_ID.get(best) : undefined;
   }
 
@@ -952,7 +1069,8 @@ export class Buildings {
    * a plain flood fill with no index behind it.
    */
   room(level: number, x: number, y: number): Room | undefined {
-    const b = this.buildingAt(x, y);
+    // Up a storey a room runs out onto its jetties, which are its floor as much as the footprint is.
+    const b = this.buildingAt(x, y) ?? (level > 0 ? this.jettyAt(x, y) : undefined);
     if (!b) return undefined;
     if (level < 0) return this.cellarRoom(b, x, y);
     if (level > 0 && !this.floor(level, x, y)) return undefined;
@@ -966,7 +1084,7 @@ export class Buildings {
         if (seen.has(tileKey(nx, ny))) continue;
         const w = this.wallOnBorder(level, borderOf(tx, ty, side));
         if (w && isDone(w)) continue;
-        if (this.tileIndex.get(tileKey(nx, ny)) !== b.id) continue;
+        if (this.tileIndex.get(tileKey(nx, ny)) !== b.id && !(level > 0 && this.jettyAt(nx, ny)?.id === b.id)) continue;
         if (level > 0 && !this.floor(level, nx, ny)) continue;
         seen.add(tileKey(nx, ny));
         queue.push([nx, ny]);
@@ -1022,6 +1140,181 @@ export class Buildings {
     if (!this.coveredAt(level, x, y)) return false;
     const r = this.room(level, x, y);
     return !!r && r.enclosed && r.covered;
+  }
+
+  /**
+   * Under a roof: indoors, or a room covered all over whose every open side
+   * stands between two finished columns -- an open hall, a colonnade, a
+   * market roof on posts. What lies there rots as it would indoors
+   * (`INDOORS_DECAY`); a bed there is still a bed in the open air, because
+   * a room is closed by its walls (`indoors`, `INDOORS_REST`).
+   */
+  sheltered(level: number, x: number, y: number): boolean {
+    if (!this.buildingAt(x, y)) return false;
+    if (!this.coveredAt(level, x, y)) return false;
+    const r = this.room(level, x, y);
+    if (!r || !r.covered) return false;
+    if (r.enclosed) return true;
+    if (!this.columns.size) return false;
+    const tiles = new Set(r.tiles);
+    for (const key of r.tiles) {
+      const [xs, ys] = key.split(',');
+      const tx = Number(xs);
+      const ty = Number(ys);
+      for (const [side, dx, dy] of STEPS) {
+        if (tiles.has(tileKey(tx + dx, ty + dy))) continue;
+        const border = borderOf(tx, ty, side);
+        const w = this.wallOnBorder(level, border);
+        if (w && isDone(w)) continue;
+        if (!w && this.carried(level, border)) continue;
+        return false;
+      }
+    }
+    return true;
+  }
+
+  // -------------------------------------------------------------------------
+  // Jetties and balconies, and columns.
+  // -------------------------------------------------------------------------
+
+  /**
+   * The building whose jetty a tile is: a tile out past every footprint that
+   * carries a floor, or the roof over one, of a storey of it.
+   */
+  jettyAt(x: number, y: number): Building | undefined {
+    if (!this.jettyIndex.size) return undefined;
+    const key = tileKey(x, y);
+    const id = this.jettyIndex.get(key);
+    if (id === undefined || this.tileIndex.has(key)) return undefined;
+    return this.list.get(id);
+  }
+
+  /** Work that out again for one tile, after a floor on it has gone. */
+  private reindexJetty(x: number, y: number): void {
+    const key = tileKey(x, y);
+    this.jettyIndex.delete(key);
+    if (this.tileIndex.has(key)) return;
+    for (let level = 1; level <= TOP_LEVELS; level++) {
+      const f = this.floors.get(floorKey(level, x, y));
+      if (f) {
+        this.jettyIndex.set(key, f.building);
+        return;
+      }
+    }
+  }
+
+  /**
+   * The building `id`, when a tile could be a jetty of it: out past every
+   * footprint and sharing an edge with this one's. What a job on a tile
+   * that is not a building's own is done for, when it names the building
+   * (`buildingId` in the target).
+   */
+  jettyHost(x: number, y: number, id: number | undefined): Building | undefined {
+    if (id === undefined || this.tileIndex.has(tileKey(x, y))) return undefined;
+    const b = this.list.get(id);
+    if (!b) return undefined;
+    for (const [, dx, dy] of STEPS) if (this.tileIndex.get(tileKey(x + dx, y + dy)) === id) return b;
+    return undefined;
+  }
+
+  /**
+   * What a jetty on a storey rests on: a finished full-height wall of the
+   * storey below, of this building, on a border the tile shares with its
+   * footprint -- its joists or its corbels go into that wall. The first of
+   * them going round the tile from the north, or none.
+   */
+  jettyBearer(b: Building, level: number, x: number, y: number): { wall: Wall; side: Side } | undefined {
+    if (level < 1) return undefined;
+    for (const [side, dx, dy] of STEPS) {
+      if (this.tileIndex.get(tileKey(x + dx, y + dy)) !== b.id) continue;
+      const w = this.wallOnBorder(level - 1, borderOf(x, y, side));
+      if (w && w.building === b.id && isDone(w) && !isLowWall(w.type)) return { wall: w, side };
+    }
+    return undefined;
+  }
+
+  /**
+   * A storey's floor as far as what stands over it is concerned: the
+   * footprint, and every jetty of that storey reached from it without
+   * crossing a finished full-height wall. A jetty behind a door is a
+   * balcony, outside the storey: nothing rests on its railing, and it is
+   * walled or roofed as nothing.
+   */
+  storeyArea(b: Building, level: number, shut?: Border): Set<string> {
+    const area = new Set(b.tiles);
+    if (level <= 0 || !this.jettyIndex.size) return area;
+    const queue = [...b.tiles];
+    while (queue.length) {
+      const key = queue.pop() as string;
+      const [xs, ys] = key.split(',');
+      const x = Number(xs);
+      const y = Number(ys);
+      for (const [side, dx, dy] of STEPS) {
+        const nk = tileKey(x + dx, y + dy);
+        if (area.has(nk) || this.tileIndex.has(nk)) continue;
+        const f = this.floors.get(floorKey(level, x + dx, y + dy));
+        if (!f || f.building !== b.id) continue;
+        const border = borderOf(x, y, side);
+        // `shut`: as it would be with a wall on that border, which is what a wall planned there is asked.
+        if (shut && shut.dir === border.dir && shut.x === border.x && shut.y === border.y) continue;
+        const w = this.wallOnBorder(level, border);
+        if (w && isDone(w) && !isLowWall(w.type)) continue;
+        area.add(nk);
+        queue.push(nk);
+      }
+    }
+    return area;
+  }
+
+  column(level: number, x: number, y: number): Column | undefined {
+    return this.columns.get(columnKey(level, x, y));
+  }
+
+  setColumn(b: Building, level: number, x: number, y: number, material: string): Column {
+    const c: Column = { building: b.id, level, x, y, material, ...columnBill(material) };
+    if (!this.columns.has(columnKey(level, x, y))) this.cornerIndex.set(cornerNumber(x, y), (this.cornerIndex.get(cornerNumber(x, y)) ?? 0) + 1);
+    this.columns.set(columnKey(level, x, y), c);
+    return c;
+  }
+
+  removeColumn(level: number, x: number, y: number): void {
+    if (!this.columns.delete(columnKey(level, x, y))) return;
+    const n = (this.cornerIndex.get(cornerNumber(x, y)) ?? 1) - 1;
+    if (n > 0) this.cornerIndex.set(cornerNumber(x, y), n);
+    else this.cornerIndex.delete(cornerNumber(x, y));
+  }
+
+  /** Whether any column stands on a corner, on any storey. */
+  hasColumnAt(x: number, y: number): boolean {
+    return this.cornerIndex.size > 0 && this.cornerIndex.has(cornerNumber(x, y));
+  }
+
+  /**
+   * Every tile a building's roof covers: its footprint's, and its jetties'
+   * where the roof goes out over them. What a pitched roof is laid over.
+   */
+  roofTiles(b: Building): Array<[number, number]> {
+    const out: Array<[number, number]> = [];
+    for (const key of b.tiles) {
+      const [xs, ys] = key.split(',');
+      out.push([Number(xs), Number(ys)]);
+    }
+    for (const [key, id] of this.jettyIndex) {
+      if (id !== b.id || this.tileIndex.has(key)) continue;
+      const [xs, ys] = key.split(',');
+      const f = this.floors.get(floorKey(b.levels, Number(xs), Number(ys)));
+      if (f && f.building === b.id && floorKind(f) === 'roof') out.push([Number(xs), Number(ys)]);
+    }
+    return out;
+  }
+
+  /** Whether a finished column stands at both ends of a border on a storey, carrying it with no wall on it. */
+  carried(level: number, b: Border): boolean {
+    if (!this.columns.size || !this.hasColumnAt(b.x, b.y)) return false;
+    const [ax, ay, bx, by] = borderPoints(b);
+    const c0 = this.column(level, ax, ay);
+    const c1 = this.column(level, bx, by);
+    return !!c0 && !!c1 && isDone(c0) && isDone(c1);
   }
 
   /** The bounding box of a footprint, for the shapes that need to know which way is long. */
@@ -1097,7 +1390,7 @@ export class Buildings {
   toJSON(): BuildingsJSON {
     return {
       nextId: this.nextId, list: [...this.list.values()], walls: [...this.walls.values()], floors: [...this.floors.values()],
-      cellars: [...this.cellars.values()],
+      cellars: [...this.cellars.values()], columns: [...this.columns.values()],
     };
   }
 
@@ -1117,14 +1410,31 @@ export class Buildings {
     this.walls.clear();
     this.floors.clear();
     this.cellars.clear();
+    this.columns.clear();
+    this.jettyIndex.clear();
     this.nextId = data.nextId ?? 1;
+    // A choice for a building that is gone goes with it: a new one given its number starts on its own top storey.
+    const still = new Set((data.list ?? []).map((bl) => bl.id));
+    for (const id of [...this.chosen.keys()]) if (!still.has(id)) this.chosen.delete(id);
     for (const bl of data.list ?? []) {
       this.list.set(bl.id, bl);
       for (const t of bl.tiles) this.tileIndex.set(t, bl.id);
       for (const t of bl.piers ?? []) this.pierTiles.add(t);
+      // The storey chosen here stands while the building has as many storeys as it had then.
+      const c = this.chosen.get(bl.id);
+      if (c && c.levels === bl.levels) bl.workLevel = c.level;
+      else this.chosen.delete(bl.id);
     }
     for (const w of data.walls ?? []) this.walls.set(wallKey(w.level, w), w);
-    for (const f of data.floors ?? []) this.floors.set(floorKey(f.level, f.x, f.y), f);
+    for (const f of data.floors ?? []) {
+      this.floors.set(floorKey(f.level, f.x, f.y), f);
+      if (f.level > 0 && !this.tileIndex.has(tileKey(f.x, f.y))) this.jettyIndex.set(tileKey(f.x, f.y), f.building);
+    }
+    this.cornerIndex.clear();
+    for (const c of data.columns ?? []) {
+      this.columns.set(columnKey(c.level, c.x, c.y), c);
+      this.cornerIndex.set(cornerNumber(c.x, c.y), (this.cornerIndex.get(cornerNumber(c.x, c.y)) ?? 0) + 1);
+    }
     for (const c of data.cellars ?? []) if (c.dug > 0) this.cellars.set(tileKey(c.x, c.y), c);
   }
 
