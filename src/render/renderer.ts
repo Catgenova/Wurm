@@ -314,6 +314,24 @@ interface HitRect {
  * photograph of the place rather than the place at midnight.
  */
 const FOG_COLOR = 'rgba(30, 30, 32, 0.46)';
+
+/** The indices of the points on the convex hull of a handful of points, in order round it (Andrew's monotone chain). */
+function convexHull(xs: readonly number[], ys: readonly number[]): number[] {
+  const idx = xs.map((_, i) => i).sort((a, b) => xs[a] - xs[b] || ys[a] - ys[b]);
+  const cross = (o: number, a: number, b: number): number => (xs[a] - xs[o]) * (ys[b] - ys[o]) - (ys[a] - ys[o]) * (xs[b] - xs[o]);
+  const lower: number[] = [];
+  for (const i of idx) {
+    while (lower.length >= 2 && cross(lower[lower.length - 2], lower[lower.length - 1], i) <= 0) lower.pop();
+    lower.push(i);
+  }
+  const upper: number[] = [];
+  for (let k = idx.length - 1; k >= 0; k--) {
+    const i = idx[k];
+    while (upper.length >= 2 && cross(upper[upper.length - 2], upper[upper.length - 1], i) <= 0) upper.pop();
+    upper.push(i);
+  }
+  return lower.slice(0, -1).concat(upper.slice(0, -1));
+}
 /** How much of its own colour remembered ground keeps. */
 const MEMORY_SATURATION = 0.22;
 const GRID_COLOR = 'rgba(0,0,0,0.16)';
@@ -1278,6 +1296,12 @@ export class Renderer {
    * size is the sort of thing that costs a night's frame rate.
    */
   private night: HTMLCanvasElement | null = null;
+  /**
+   * The layer the cold wash over remembered ground is moved onto while a floor
+   * raised over its ground is in sight (`fogLayer`). Kept between frames at the
+   * canvas's own size, as the night is.
+   */
+  private fogMask: HTMLCanvasElement | null = null;
 
   /**
    * What the lights do to the night, worked out apart from the night itself:
@@ -1400,6 +1424,71 @@ export class Renderer {
     holes(ctxOf(mask), live);
     casts(ctxOf(warm), live);
     return { mask, warm, box: cover(live, this.lit.box) };
+  }
+
+  /**
+   * The wash's layer for this frame: the canvas's own pixels, cleared, drawn
+   * on as the world is and in an opaque ink, so ground gathered on it twice is
+   * washed once (`FOG_COLOR` goes on at the end, over what was gathered).
+   */
+  private fogLayer(drawnAt: DOMMatrix): HTMLCanvasElement {
+    const { width, height } = this.canvas.el;
+    if (!this.fogMask || this.fogMask.width !== width || this.fogMask.height !== height) {
+      this.fogMask = document.createElement('canvas');
+      this.fogMask.width = width;
+      this.fogMask.height = height;
+    }
+    const fc = this.fogMask.getContext('2d') as CanvasRenderingContext2D;
+    fc.setTransform(1, 0, 0, 1, 0, 0);
+    fc.globalCompositeOperation = 'source-over';
+    fc.clearRect(0, 0, width, height);
+    fc.setTransform(drawnAt);
+    fc.fillStyle = '#000';
+    // The wash goes on in batches, one at each raised floor in sight, and where two batches meet a
+    // seam would show: a pixel's stroke round each closes it, and an opaque ink laid twice is laid once.
+    fc.strokeStyle = '#000';
+    fc.lineWidth = 1;
+    return this.fogMask;
+  }
+
+  /**
+   * The top of a floor raised over a tile's ground on its ground floor -- the
+   * deck of a building on piers, a poured slab -- or null where its ground is
+   * all there is.
+   */
+  private raisedTop(x: number, y: number): number | null {
+    const deck = this.game.buildings.buildingAt(x, y)?.deck;
+    if (deck != null) return deck;
+    return this.game.foundations.size ? (this.game.foundationAt(x, y)?.top ?? null) : null;
+  }
+
+  /**
+   * The screen a tile's ground floor covers, onto a path: its ground, and
+   * where a floor is raised over it to `top`, everything between the two --
+   * the hull of the tile's four corners at both heights. `pts` is the ground's
+   * diamond as drawn, `c` its corners' heights and `hs` the screen's pixels
+   * to a unit of height.
+   */
+  private tileColumn(path: Path2D, pts: ArrayLike<number>, c: ArrayLike<number>, top: number | null, hs: number): void {
+    const low = Math.min(c[0], c[1], c[2], c[3]);
+    if (top === null || top <= low) {
+      path.moveTo(pts[0], pts[1]);
+      path.lineTo(pts[2], pts[3]);
+      path.lineTo(pts[4], pts[5]);
+      path.lineTo(pts[6], pts[7]);
+      path.closePath();
+      return;
+    }
+    const xs: number[] = [];
+    const ys: number[] = [];
+    for (let i = 0; i < 4; i++) {
+      xs.push(pts[i * 2], pts[i * 2]);
+      ys.push(pts[i * 2 + 1], pts[i * 2 + 1] - Math.max(0, top - c[i]) * hs);
+    }
+    const hull = convexHull(xs, ys);
+    path.moveTo(xs[hull[0]], ys[hull[0]]);
+    for (let k = 1; k < hull.length; k++) path.lineTo(xs[hull[k]], ys[hull[k]]);
+    path.closePath();
   }
 
   private nightLayer(res = 1): HTMLCanvasElement {
@@ -2422,7 +2511,26 @@ export class Renderer {
     const grid = this.game.settings.grid && zoom >= 0.7;
     const vision = this.game.vision;
     const fogged = this.game.settings.fog;
-    const fogPath = new Path2D();
+    /*
+     * The wash over remembered ground, gathered a line at a time and laid over
+     * the world once at the end, so a remembered wood goes cold with its
+     * ground. A floor raised over its ground -- a deck on piers, a poured slab
+     * -- stands in front of the ground behind it lower down, and the wash of
+     * that ground, laid last, would darken the floor in front of it. So the
+     * first raised floor in sight moves the wash gathered so far onto a layer
+     * of its own (`fogLayer`), and every raised floor in sight takes off it
+     * what it was drawn over before anything in front of it goes on. With no
+     * raised floor in sight the wash is the one fill it always was.
+     */
+    const raising = fogged && (this.game.buildings.pierTiles.size > 0 || this.game.foundations.size > 0);
+    const drawnAt = ctx.getTransform();
+    let wash: HTMLCanvasElement | null = null;
+    let fogPath = new Path2D();
+    let lineFog = raising ? new Path2D() : fogPath;
+    let liftPath = new Path2D();
+    let gathered = false;
+    let lineAny = false;
+    let lineLift = false;
     this.seaPath = new Path2D();
     this.drewWater = false;
     this.pierFeet.clear();
@@ -2709,6 +2817,14 @@ export class Renderer {
         ctx.closePath();
         ctx.fillStyle = color;
         ctx.fill();
+        if (!lit) lineAny = fogged;
+        else if (raising && (gathered || wash)) {
+          const top = this.raisedTop(x, y);
+          if (top !== null && top > Math.min(c[0], c[1], c[2], c[3])) {
+            this.tileColumn(liftPath, pts, c, top, hs);
+            lineLift = true;
+          }
+        }
         // Under the sea where a corner is below nothing, and under a pond where its water has risen over a corner of the tile.
         const sea = c[0] < 0 || c[1] < 0 || c[2] < 0 || c[3] < 0;
         const pond = water !== null && water.wet(x, y) && this.pondsOn(water, x, y, c, co);
@@ -2733,8 +2849,8 @@ export class Renderer {
         this.groundEdge = ctx.lineWidth;
         // Weed on the bottom goes under the water rather than over it.
         if (grassy && wet && DROWNS.has(here)) this.strewTile(here, x, y, pts, paveRot, zoom, lit);
-        if (sea) this.drawWater(V, x, y, c, fogged && !lit ? fogPath : undefined);
-        if (pond) this.drawPonds(V, x, y, c, fogged && !lit ? fogPath : undefined);
+        if (sea) this.drawWater(V, x, y, c, fogged && !lit ? lineFog : undefined);
+        if (pond) this.drawPonds(V, x, y, c, fogged && !lit ? lineFog : undefined);
         // The water lapping round the feet of piers this tile is in front of, now its water is down (`piers.ts`).
         if (wet && this.game.buildings.pierTiles.size && this.game.buildings.onPiers(x, y)) this.pierFeetHere(x, y, V);
         if (this.pierFeet.size) {
@@ -2828,11 +2944,7 @@ export class Renderer {
           }
           if (this.game.buildings.list.size || this.game.buildings.walls.size) this.drawStructures(x, y, V, d > playerDepth);
           if (this.hingeTiles.has(x * 65536 + y)) this.drawGateAt(x, y, V);
-          fogPath.moveTo(pts[0], pts[1]);
-          fogPath.lineTo(pts[2], pts[3]);
-          fogPath.lineTo(pts[4], pts[5]);
-          fogPath.lineTo(pts[6], pts[7]);
-          fogPath.closePath();
+          this.tileColumn(lineFog, pts, c, raising ? this.raisedTop(x, y) : null, hs);
           continue;
         }
         if (t === TileType.Tree || t === TileType.Bush || t === TileType.Stump) {
@@ -3113,6 +3225,34 @@ export class Renderer {
       // And whatever small thing is in the air over it, sorted in with everything standing on it.
       for (const m of this.life.aloft(d)) this.take('life', m.tx, m.ty, m.sx, m.sy, null).mote = m;
       if (this.ents.length) this.drawEntities(ctx, zoom);
+      // A raised floor in sight takes the wash off what it was drawn over; then the line's own remembered ground goes on.
+      if (lineLift) {
+        wash ??= this.fogLayer(drawnAt);
+        const fc = wash.getContext('2d') as CanvasRenderingContext2D;
+        if (gathered) {
+          fc.globalCompositeOperation = 'source-over';
+          fc.fill(fogPath);
+          fc.stroke(fogPath);
+          fogPath = new Path2D();
+          gathered = false;
+        }
+        fc.globalCompositeOperation = 'destination-out';
+        fc.fill(liftPath);
+        // Two floors taking the wash off either side of their edge would each leave a soft sliver of it.
+        fc.lineWidth = 2;
+        fc.stroke(liftPath);
+        fc.lineWidth = 1;
+        liftPath = new Path2D();
+        lineLift = false;
+      }
+      if (lineAny) {
+        if (lineFog !== fogPath) {
+          fogPath.addPath(lineFog);
+          lineFog = new Path2D();
+        }
+        gathered = true;
+        lineAny = false;
+      }
     }
     // The surface and then what crossed it, both clipped to the water, so
     // neither washes up over a beach standing in front of them.
@@ -3123,7 +3263,22 @@ export class Renderer {
     this.drawFloaters(ctx, zoom);
 
     // One pass for all of it, so a remembered wood goes cold with its ground.
-    if (fogged) {
+    if (wash) {
+      const fc = wash.getContext('2d') as CanvasRenderingContext2D;
+      if (gathered) {
+        fc.globalCompositeOperation = 'source-over';
+        fc.fill(fogPath);
+        fc.stroke(fogPath);
+      }
+      fc.setTransform(1, 0, 0, 1, 0, 0);
+      fc.globalCompositeOperation = 'source-in';
+      fc.fillStyle = FOG_COLOR;
+      fc.fillRect(0, 0, wash.width, wash.height);
+      ctx.save();
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      ctx.drawImage(wash, 0, 0);
+      ctx.restore();
+    } else if (gathered) {
       ctx.fillStyle = FOG_COLOR;
       ctx.fill(fogPath);
     }
