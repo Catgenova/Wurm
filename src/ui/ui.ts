@@ -21,10 +21,13 @@ import {
   WALL_TYPE_BY_ID,
   WALL_TYPES,
   workLevel,
+  CELLAR_DEPTH,
+  CELLAR_LEVEL,
   type Building,
   type Side,
 } from '../game/building';
 import { deckBill, metres, pierDrop } from '../game/piers';
+import { cellarGate, targetFloor } from '../game/cellar';
 import { baitHint, CREATURE_ACTION_BY_ID } from '../game/creatureActions';
 import { FIELD_GLASS_ONLY, glassDone, glazing, isGlasshouse, underGlass } from '../game/glasshouse';
 import { GLASSHOUSE_GROWTH } from '../game/growth';
@@ -119,6 +122,63 @@ export interface UICallbacks {
 }
 
 /** Builds and updates every HTML overlay above the canvas. */
+/** Why a job cannot be done just now, as the game will answer it: down in a cellar or up top first (`cellarGate`), then the job's own say. */
+const cellarReason = (g: Game, def: ActionDef, t: Target): string | null => cellarGate(g, def.id, t) ?? def.check?.(t, g) ?? null;
+
+/**
+ * The way down to the cellar under a tile, from its ground floor: planned
+ * (a staircase in any material, or a ladder, the side to climb from turned
+ * with Q and E, `place` starting it), built, and taken out. Only over a
+ * cellar tile.
+ */
+function cellarEntries(g: Game, base: Extract<Target, { kind: 'tile' }>, side: Side, place: (material: string, kind: 'stairs' | 'ladder') => void): MenuItem[] {
+  const bld = g.buildings;
+  if (!bld.cellar(base.x, base.y)) return [];
+  const entries: MenuItem[] = [];
+  // As every other building job is offered: once, barred with the refusal where it is barred.
+  const item = (def: ActionDef | undefined, t: Target, label: string): MenuItem[] => {
+    if (!def) return [];
+    const reason = cellarReason(g, def, t);
+    return [{ label, hint: reason ?? undefined, disabled: !!reason, onSelect: () => g.requestAction(def, t) }];
+  };
+  const flight = bld.floor(0, base.x, base.y);
+  const kind = flight ? floorKind(flight) : null;
+  if (flight && (kind === 'stairs' || kind === 'ladder')) {
+    const t: Target = { ...base, floorKind: kind, down: true };
+    const what = `${FLOOR_KIND_NAMES[kind]} down`;
+    if (!isDone(flight)) entries.push(...item(ACTION_BY_ID.get('build_floor'), t, `Build ${what} · needs ${describeNeeds(flight, materialName)}`));
+    entries.push(...item(ACTION_BY_ID.get('remove_floor'), t, `Remove ${what}`));
+    return entries;
+  }
+  const plan = ACTION_BY_ID.get('plan_floor');
+  if (!plan) return [];
+  // Which side it is climbed from is chosen as it is placed: barred only when no side will do, with the
+  // refusal for the side the cursor is nearest unless another side's says more.
+  const said = (['n', 'e', 's', 'w'] as Side[]).map((sd) => cellarReason(g, plan, { ...base, side: sd, material: 'log', floorKind: 'stairs', down: true }));
+  if (said.every((r) => r !== null)) {
+    const foot = (r: string | null): boolean => !!r && /^Its foot would come down/.test(r);
+    const here = said[['n', 'e', 's', 'w'].indexOf(side)];
+    const why = (foot(here) ? said.find((r) => !foot(r)) : undefined) ?? here ?? '';
+    entries.push({ label: 'Plan staircase down', hint: why, disabled: true });
+    entries.push({ label: 'Plan ladder down', hint: why, disabled: true });
+    return entries;
+  }
+  entries.push({
+    label: 'Plan staircase down',
+    children: MATERIALS.map((m) => ({
+      label: m.name,
+      note: `${describeNeeds(floorBill(m.id, 'stairs'), materialName)} · Q and E choose the side`,
+      onSelect: () => place(m.id, 'stairs'),
+    })),
+  });
+  entries.push({
+    label: 'Plan ladder down',
+    note: `${describeNeeds(floorBill('plank', 'ladder'), materialName)} · Q and E choose the side`,
+    onSelect: () => place('plank', 'ladder'),
+  });
+  return entries;
+}
+
 /**
  * Something on its way to the ground. A piece of furniture follows the cursor
  * until it is clicked down; a staircase or a ladder sits on its tile until
@@ -126,7 +186,7 @@ export interface UICallbacks {
  */
 type Placing =
   | { kind: 'furniture'; itemUid: number; piece: string; material?: string; facing: Side }
-  | { kind: 'stairs'; x: number; y: number; cx: number; cy: number; level: number; material: string; floorKind: 'stairs' | 'ladder'; side: Side };
+  | { kind: 'stairs'; x: number; y: number; cx: number; cy: number; level: number; material: string; floorKind: 'stairs' | 'ladder'; side: Side; down?: boolean };
 
 /**
  * Where a stack at hand is, on its menu row, when it is not on you: "in the
@@ -532,7 +592,7 @@ export class UI {
    */
   selectTile(pick: Pick | null): void {
     this.tilePanel.select(pick, this.game.settings.tileWindow);
-    this.renderer.selected = pick ? { x: pick.x, y: pick.y } : null;
+    this.renderer.selected = pick ? { x: pick.x, y: pick.y, down: pick.down } : null;
   }
 
   focusChat(): void {
@@ -542,7 +602,7 @@ export class UI {
 
   update(fps: number): void {
     this.hud.update(this.renderer, fps);
-    this.renderer.selected = this.tilePanel.target ? { x: this.tilePanel.target.x, y: this.tilePanel.target.y } : null;
+    this.renderer.selected = this.tilePanel.target ? { x: this.tilePanel.target.x, y: this.tilePanel.target.y, down: this.tilePanel.target.down } : null;
     this.minimap.update();
     this.settings.refresh();
     this.wildermon.update(performance.now());
@@ -624,10 +684,10 @@ export class UI {
     this.game.logMsg(`The ${itemName(item).toLowerCase()} follows the cursor: Q and E turn it, a click sets it down, Escape keeps it.`, 'info');
   }
 
-  /** Plan a staircase or a ladder on a tile: the side to climb from turns with Q and E. */
-  startPlacingStairs(base: Target, level: number, material: string, floorKind: 'stairs' | 'ladder', side: Side): void {
+  /** Plan a staircase or a ladder on a tile, up to the storey over it or down to the cellar under it (`down`): the side to climb from turns with Q and E. */
+  startPlacingStairs(base: Target, level: number, material: string, floorKind: 'stairs' | 'ladder', side: Side, down = false): void {
     if (base.kind !== 'tile') return;
-    this.placing = { kind: 'stairs', x: base.x, y: base.y, cx: base.cx, cy: base.cy, level, material, floorKind, side };
+    this.placing = { kind: 'stairs', x: base.x, y: base.y, cx: base.cx, cy: base.cy, level, material, floorKind, side, down };
     this.game.logMsg('Q and E choose the side to climb from, a click plans it, Escape lets it go.', 'info');
   }
 
@@ -653,7 +713,7 @@ export class UI {
     }
     if (p.kind === 'stairs') {
       const plan = ACTION_BY_ID.get('plan_floor');
-      const target: Target = { kind: 'tile', x: p.x, y: p.y, cx: p.cx, cy: p.cy, side: p.side, material: p.material, floorKind: p.floorKind };
+      const target: Target = { kind: 'tile', x: p.x, y: p.y, cx: p.cx, cy: p.cy, side: p.side, material: p.material, floorKind: p.floorKind, down: p.down };
       this.renderer.ghost = { kind: 'stairs', x: p.x, y: p.y, level: p.level, material: p.material, floorKind: p.floorKind, side: p.side, ok: !(plan?.check?.(target, this.game) ?? null) };
       return;
     }
@@ -676,7 +736,7 @@ export class UI {
     }
     if (p.kind === 'stairs') {
       const plan = ACTION_BY_ID.get('plan_floor');
-      const target: Target = { kind: 'tile', x: p.x, y: p.y, cx: p.cx, cy: p.cy, side: p.side, material: p.material, floorKind: p.floorKind };
+      const target: Target = { kind: 'tile', x: p.x, y: p.y, cx: p.cx, cy: p.cy, side: p.side, material: p.material, floorKind: p.floorKind, down: p.down };
       const reason = plan?.check?.(target, this.game) ?? null;
       if (reason) {
         this.game.logMsg(reason, 'error');
@@ -941,6 +1001,8 @@ export class UI {
     if (trapHere) return { title: `${trapName(trapHere)} (${trapState(trapHere, this.game)})`, entries: [...this.trapEntries(trapHere), ...this.nameEntry({ kind: 'trap', id: trapHere.id })] };
     const bridgeHere = pick.bridge !== undefined ? this.game.bridges.get(pick.bridge) : undefined;
     if (bridgeHere) return { title: `${bridgeName(bridgeHere)} (${bridgeState(bridgeHere)})`, entries: this.bridgeEntries(bridgeHere) };
+    // Picked on a cellar's floor, looking into it: the cellar's own list.
+    if (pick.down) return this.cellarMenu(pick);
     const target = { kind: 'tile' as const, x: pick.x, y: pick.y, cx: pick.cx, cy: pick.cy };
     const entries: MenuItem[] = [];
     entries.push(...this.settlementEntry(pick));
@@ -1347,6 +1409,65 @@ export class UI {
       ...(reading ? [reading] : []),
     ];
     return { title, facts, entries };
+  }
+
+  /**
+   * The floor of a cellar, picked while looking into it: what lies there and
+   * can be picked up, a crate or a piece to set down, and the jobs on the
+   * tile that are done from down there -- digging out, mining out or filling
+   * in the next tile of it, and looking at it. Everything else on a tile is
+   * work on the ground up top.
+   */
+  private cellarMenu(pick: Pick): { title: string; facts?: string[]; entries: MenuItem[] } {
+    const g = this.game;
+    const { x, y } = pick;
+    const target = { kind: 'tile' as const, x, y, cx: pick.cx, cy: pick.cy };
+    const entries: MenuItem[] = [];
+    const crateItems = g.inventory.items.filter((it) => crateKindOfItem(it.id));
+    const placeDef = ACTION_BY_ID.get('place_crate');
+    if (crateItems.length && placeDef) {
+      const [sx0, sy0] = subtileOf(x, y, pick.wx, pick.wy);
+      for (const it of crateItems) {
+        const pt: Target = { ...target, sx: sx0, sy: sy0, itemUid: it.uid };
+        const reason = cellarReason(g, placeDef, pt);
+        entries.push({ label: `Place ${itemName(it).toLowerCase()} here (spot ${sx0 + 1},${sy0 + 1})`, hint: reason ?? undefined, disabled: !!reason, onSelect: () => g.requestAction(placeDef, pt) });
+      }
+    }
+    const carried = g.inventory.items.filter((it) => isFurniture(it.id));
+    if (ACTION_BY_ID.get('place_furniture') && carried.length) {
+      entries.push({
+        label: 'Set furniture down',
+        children: carried.map((it) => ({
+          label: it.count > 1 ? `${itemName(it)} (${it.count})` : itemName(it),
+          note: 'follows the cursor · Q and E turn it · click to set down',
+          onSelect: () => this.startPlacing(it),
+        })),
+      });
+    }
+    const pile = g.groundAt(x, y, CELLAR_LEVEL);
+    const pickUp = ACTION_BY_ID.get('pick_up');
+    if (pile.length && pickUp) {
+      const children: MenuItem[] = pile.map((it) => {
+        const t: Target = { kind: 'ground', x, y, uid: it.uid, down: true };
+        const reason = cellarReason(g, pickUp, t);
+        return {
+          label: (it.count > 1 ? `${itemName(it)} (${it.count})` : itemName(it)) + (it.dmg >= 1 ? ` · dmg ${Math.round(it.dmg)}` : ''),
+          hint: reason ?? undefined,
+          disabled: !!reason,
+          onSelect: () => g.requestAction(pickUp, t),
+        };
+      });
+      if (pile.length > 1) children.push({ label: 'Everything', onSelect: () => g.requestAction(pickUp, { kind: 'ground', x, y, uid: null, down: true }) });
+      entries.push({ label: 'Pick up', children });
+    }
+    for (const { def, reason } of g.actionsFor(target)) {
+      if (targetFloor(g, def.id, target) !== null) continue;
+      entries.push(this.jobEntry(def, target, reason, def.labelFor?.(target, g) ?? def.label));
+    }
+    const building = g.buildings.buildingAt(x, y);
+    const c = g.buildings.cellar(x, y);
+    const facts = c ? [`Cellar · ${c.dug} of ${CELLAR_DEPTH} dug out · ${pile.length ? `${pile.reduce((n, it) => n + it.count, 0)} lying here` : 'nothing lying here'}`] : [];
+    return { title: `${building ? `Cellar of ${building.name}` : 'Cellar'} (${x}, ${y})`, facts, entries };
   }
 
   /** Feeding, lighting and cooking at a campfire. */
@@ -2406,8 +2527,9 @@ export class UI {
       return def;
     };
     const base: Extract<Target, { kind: 'tile' }> = { kind: 'tile', x, y, cx: pick.cx, cy: pick.cy };
+    // Each barred the way the game will bar it: from down in a cellar first, where nothing up top is worked on (`cellarReason`).
     const item = (def: ActionDef, target: Target, label = def.label): MenuItem => {
-      const reason = def.check?.(target, g) ?? null;
+      const reason = cellarReason(g, def, target);
       return { label, hint: reason ?? undefined, disabled: !!reason, onSelect: () => g.requestAction(def, target) };
     };
     // A Mason's Repoint: a finished wall of stone laid again in another stone, one entry to each.
@@ -2418,7 +2540,7 @@ export class UI {
         label,
         children: MATERIALS.filter((m) => m.kind === 'stone' && m.id !== standing.material).map((m) => {
           const to: Extract<Target, { kind: 'tile' }> = { ...target, material: m.id };
-          const why = def.check?.(to, g) ?? null;
+          const why = cellarReason(g, def, to);
           return {
             label: m.name,
             note: describeNeeds(layingBill(m.id, standing.type), materialName),
@@ -2450,7 +2572,7 @@ export class UI {
         entries.push(...ivy(withSide));
       } else {
         const fence = act('plan_fence');
-        const probe = fence.check?.({ ...withSide, wallType: 'fence', material: 'log' }, g) ?? null;
+        const probe = cellarReason(g, fence, { ...withSide, wallType: 'fence', material: 'log' });
         if (probe) entries.push({ label: `Plan fence (${SIDE_NAMES[side]})`, hint: probe, disabled: true });
         else {
           entries.push({
@@ -2516,7 +2638,7 @@ export class UI {
       entries.push(...repoint(wall, withSide, `Repoint wall (${sideName})`));
     } else {
       const plan = act('plan_wall');
-      const probe = plan.check?.({ ...withSide, wallType: 'solid', material: 'log' }, g) ?? null;
+      const probe = cellarReason(g, plan, { ...withSide, wallType: 'solid', material: 'log' });
       if (probe) entries.push({ label: `Plan wall (${sideName})`, hint: probe, disabled: true });
       else {
         entries.push({
@@ -2536,9 +2658,13 @@ export class UI {
     entries.push(...ivy(withSide));
     const floor = bld.floor(level, x, y);
     const plan = act('plan_floor');
+    // A flight or a ladder down to the cellar is the ground floor's, and has entries of its own (`cellarEntries`).
+    const flightDown = level === 0 && !!floor && (floorKind(floor) === 'stairs' || floorKind(floor) === 'ladder');
     // The ground floor of a tile on piers is its deck, and the piers under it go on its bill (`piers.ts`).
     const deck = level === 0 && bld.onPiers(x, y);
-    if (floor) {
+    if (flightDown) {
+      // Below.
+    } else if (floor) {
       const what = deck ? 'deck' : floorKind(floor) === 'floor' && level === 0 ? 'flooring' : FLOOR_KIND_NAMES[floorKind(floor)];
       if (!isDone(floor)) entries.push(item(act('build_floor'), base, `Build ${what} · needs ${describeNeeds(floor, materialName)}`));
       entries.push(item(act('remove_floor'), base, `Remove ${what}`));
@@ -2552,14 +2678,14 @@ export class UI {
        * offered its stone decks and shown why not the rest.
        */
       const heaviest = MATERIALS.reduce((a, m) => (m.heft > a.heft ? m : a));
-      const probe = plan.check?.({ ...base, material: heaviest.id }, g) ?? null;
+      const probe = cellarReason(g, plan, { ...base, material: heaviest.id });
       if (probe) entries.push({ label: `Plan ${floorLabel}`, hint: probe, disabled: true });
       else {
         entries.push({
           label: `Plan ${floorLabel}`,
           children: MATERIALS.map((m) => {
             const t: Target = { ...base, material: m.id, floorKind: 'floor' };
-            const why = plan.check?.(t, g) ?? null;
+            const why = cellarReason(g, plan, t);
             if (why) return { label: m.name, hint: why, disabled: true };
             const bill = describeNeeds(deck ? deckBill(m.id, g.pierDropAt(x, y)) : floorBill(m.id), materialName);
             // A deck carries what it is laid in (`deckCarries`), and says so.
@@ -2567,7 +2693,7 @@ export class UI {
           }),
         });
         if (level > 0) {
-          const stairs = plan.check?.({ ...withSide, material: 'log', floorKind: 'stairs' }, g) ?? null;
+          const stairs = cellarReason(g, plan, { ...withSide, material: 'log', floorKind: 'stairs' });
           if (stairs) entries.push({ label: `Plan staircase (up from the ${sideName})`, hint: stairs, disabled: true });
           else {
             // The side to climb from is chosen on the tile: Q and E turn it, a click plans it.
@@ -2588,16 +2714,17 @@ export class UI {
         }
       }
     }
+    entries.push(...cellarEntries(g, base, side, (material, kind) => this.startPlacingStairs(base, 0, material, kind, side, true)));
     const roof = bld.floor(b.levels, x, y);
     const roofTarget: Target = { ...base, floorKind: 'roof' };
     if (roof) {
       if (!isDone(roof)) entries.push(item(act('build_floor'), roofTarget, `Build roof · needs ${describeNeeds(roof, materialName)}`));
       entries.push(item(act('remove_floor'), roofTarget, 'Remove roof'));
     } else {
-      const probe = plan.check?.({ ...roofTarget, material: 'log' }, g) ?? null;
+      const probe = cellarReason(g, plan, { ...roofTarget, material: 'log' });
       // And glass, which roofs and does nothing else: panes on timber bars, and a glasshouse when all of a one-storey roof is glass.
       const glassTarget: Target = { ...roofTarget, material: GLASS_ROOF.id };
-      const glassWhy = plan.check?.(glassTarget, g) ?? null;
+      const glassWhy = cellarReason(g, plan, glassTarget);
       // Over a field it is the one roof there is (`glasshouse.ts`): the rest are offered, and say why not.
       const glassOnly = probe === FIELD_GLASS_ONLY;
       if (probe && (!glassOnly || glassWhy)) entries.push({ label: 'Plan roof', hint: (glassOnly ? glassWhy : probe) ?? undefined, disabled: true });

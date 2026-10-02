@@ -313,7 +313,7 @@ const MINER: Seed[] = [
   {
     num: 7, name: 'Ore Sense',
     fx: { 'ore:below': 10 },
-    note: (fx) => `Mine and Chip corner work every ore at ${fx['ore:below']} less mining than it wants: ${oresAt(fx['ore:below'])} `
+    note: (fx) => `Mine, Chip corner and Mine out the cellar work every ore at ${fx['ore:below']} less mining than it wants: ${oresAt(fx['ore:below'])} `
       + `(now ${oresAt(0)}).`,
   },
   {

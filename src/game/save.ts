@@ -3,7 +3,7 @@ import { needsIron, oreKindFor, ORE_DENSITY, stoneKindAt } from '../world/ore';
 import type { LandBlob } from '../net/protocol';
 import { World } from '../world/world';
 import { settingsStored } from './settings';
-import type { BuildingsJSON } from './building';
+import { CELLAR_LEVEL, type BuildingsJSON } from './building';
 import type { PlacedAnvil } from './anvil';
 import type { PlacedCampfire } from './campfire';
 import type { PlacedSmelter } from './smelter';
@@ -217,6 +217,8 @@ interface SaveData {
   inventory: Item[];
   nextUid?: number;
   ground?: Record<string, Item[]>;
+  /** What lies on the floors of cellars, by tile; a save from before there were cellars has none. */
+  cellarGround?: Record<string, Item[]>;
   skills: Record<string, number>;
   time: number;
   /** When the woods were last turned over, in real seconds. */
@@ -313,6 +315,7 @@ function meta(game: Game): SaveMeta {
     inventory: game.inventory.items,
     nextUid: game.inventory.nextUid,
     ground: game.groundToJSON(),
+    cellarGround: game.groundToJSON(CELLAR_LEVEL),
     skills: game.skills.toJSON(),
     time: game.time,
     treesAt: game.treesAt,
@@ -596,6 +599,7 @@ function finish(world: World, m: SaveMeta): Game {
     inventory: m.inventory,
     nextUid: m.nextUid,
     ground: m.ground,
+    cellarGround: m.cellarGround,
     skills: m.skills,
     time: m.time,
     deed: m.deed ?? null,
@@ -649,6 +653,7 @@ function finish(world: World, m: SaveMeta): Game {
   };
   restake(game.inventory.items);
   for (const pile of game.ground.values()) restake(pile);
+  for (const pile of game.cellarGround.values()) restake(pile);
   for (const crate of game.crates.values()) restake(crate.items);
   if (game.deed && !game.deedCrate()) game.placeDeedCrate();
   // Nothing is kept at the token any more: what was, is put in creature crates.

@@ -12,6 +12,8 @@
 export interface Placed {
   x: number;
   y: number;
+  /** The storey it stands on, for the few things that can stand in a cellar; absent is the ground. */
+  level?: number;
 }
 
 /** Handed back when a tile holds nothing, so the common answer costs nothing. */
@@ -112,8 +114,14 @@ export class TileIndex<T extends Placed> {
     return this.byTile.get(this.key(x, y)) ?? NONE;
   }
 
-  /** Everything on the tiles within `r` of a point, nearest tiles included. */
-  around(wx: number, wy: number, r: number, fn: (item: T) => void): void {
+  /**
+   * Everything on the tiles within `r` of a point, nearest tiles included, on
+   * one side of the ground floor: down in a cellar for a `level` under nought,
+   * and up top otherwise -- so whatever asks about the ground round it sees
+   * nothing in a cellar under it unless it is asking from down there.
+   */
+  around(wx: number, wy: number, r: number, fn: (item: T) => void, level = 0): void {
+    const down = level < 0;
     const x0 = Math.floor(wx - r);
     const x1 = Math.floor(wx + r);
     const y0 = Math.floor(wy - r);
@@ -122,7 +130,7 @@ export class TileIndex<T extends Placed> {
       for (let x = x0; x <= x1; x++) {
         const at = this.byTile.get(this.key(x, y));
         if (!at) continue;
-        for (const item of at) fn(item);
+        for (const item of at) if ((item.level ?? 0) < 0 === down) fn(item);
       }
     }
   }

@@ -55,6 +55,8 @@ export function lanternState(it: Item): string {
 export function flameNear(g: Game, except?: Item): string | null {
   const alight = g.inventory.items.find((o) => o !== except && o.lit && (o.charges ?? 0) > 0 && (HELD_LIGHTS as readonly string[]).includes(o.id));
   if (alight) return itemName(alight).toLowerCase();
+  // Down in a cellar nothing burns but what you carried down: every fire is up top.
+  if (g.player.level < 0) return null;
   const near = (x: number, y: number): boolean => Math.hypot(x + 0.5 - g.player.x, y + 0.5 - g.player.y) <= 2.6;
   for (const f of g.campfires.values()) if (f.lit && near(f.x, f.y)) return 'campfire';
   for (const s of g.smelters.values()) if (s.lit && near(s.x, s.y)) return 'smelter';

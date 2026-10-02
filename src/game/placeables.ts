@@ -674,7 +674,8 @@ export const PLACEABLE_ACTIONS: ActionDef[] = [
       // A well-made bed is a better night than a cot with a thin mattress —
       // and a bed under a roof, in a room with walls all round it, is a better
       // night again than the same bed standing in a field in the weather.
-      const inside = g.buildings.indoors(0, Math.floor(f.x), Math.floor(f.y));
+      // A bed down in a cellar is in a room too: a cellar is always indoors.
+      const inside = g.buildings.indoors(f.level ?? 0, Math.floor(f.x), Math.floor(f.y));
       const rest = (def.bed ?? 1) * (0.6 + f.ql / 250) * (inside ? INDOORS_REST : 1);
       g.note('slept');
       g.sleepUntilMorning(rest, furnitureName(f).toLowerCase());

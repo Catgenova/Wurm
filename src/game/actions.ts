@@ -5,6 +5,7 @@ import { isSeam } from '../world/tiles';
 import type { World } from '../world/world';
 import { bedrockAt, oreAt } from '../world/ore';
 import { BUILD_ACTIONS } from './buildActions';
+import { CELLAR_ACTIONS, cellarFloorSaid, dropRefusal } from './cellar';
 import { ANVIL_ACTIONS } from './anvil';
 import { POST_ACTIONS } from './posts';
 import { FISHING_ACTIONS, fishJournal } from './fishing';
@@ -49,7 +50,7 @@ import { MEDITATION_ACTIONS } from './meditation';
 import { SPECIES, type Stance } from './creatures';
 import { BOTANIZE_TABLE, BOTANIZE_WATER_TABLE, EMPTY_CHANCE, FIND_CHECK, FORAGE_TABLE, listOf, rollsAt, rollTable } from './forage';
 import { atWaterEdge, WATER_GARDEN_ACTIONS } from './watergarden';
-import type { FloorKind, RoofShape, Side, WallType } from './building';
+import { CELLAR_DEPTH, CELLAR_LEVEL, floorOf, type FloorKind, type RoofShape, type Side, type WallType } from './building';
 import { DEED_RADIUS, rankAtLeast, type Game } from './game';
 import { materialOfItem } from './materials';
 import { boonOf, boonTime, clockLeft } from './boons';
@@ -92,6 +93,12 @@ export type Target =
       spell?: string;
       /** The tile an aqueduct is led from, when one is being set out to pour into this one. */
       head?: [number, number];
+      /**
+       * The ground floor's slot over a cellar, for a flight or a ladder down:
+       * storey nought whatever storey the building is being worked on
+       * (`cellar.ts`).
+       */
+      down?: boolean;
     }
   | { kind: 'crate'; id: number }
   /** Somebody else on the island, by who they are (a Naturalist's Field Medic dressing their wounds). */
@@ -143,7 +150,8 @@ export type Target =
       /** The mote going into this thing, for `absorb_mote`: the thing is the target, and the mote this. */
       mote?: number;
     }
-  | { kind: 'ground'; x: number; y: number; uid: number | null }
+  /** What is lying on a tile; `down` for what lies on the cellar's floor under it. */
+  | { kind: 'ground'; x: number; y: number; uid: number | null; down?: boolean }
   | { kind: 'creature'; id: number; stance?: Stance; itemUid?: number; job?: string; sex?: string };
 
 /**
@@ -351,12 +359,26 @@ const tile = (t: Target, g: Game): TileType => (t.kind === 'tile' ? g.world.getT
 const unpacked = (t: Target, g: Game): string | null =>
   tile(t, g) === TileType.PackedDirt ? null : 'The ground has to be packed flat before anything is laid on it.';
 
-/** Terraforming is not allowed under a building. */
-const underBuilding = (g: Game, x: number, y: number): string | null => (g.buildings.buildingAt(x, y) ? 'You cannot do that inside a building.' : null);
+/**
+ * Terraforming is not allowed under a building, and the ground over a cellar
+ * is left as it is while the cellar is there: said first, since it is the
+ * reason that outlasts the other. The island's `under_building` and
+ * `corner_under_building` say the same.
+ */
+export const CELLAR_UNDER = 'There is a cellar dug out under that ground. The ground over a cellar is not dug, raised or levelled while the cellar is there.';
+const underBuilding = (g: Game, x: number, y: number): string | null =>
+  (g.buildings.cellar(x, y) ? CELLAR_UNDER : g.buildings.buildingAt(x, y) ? 'You cannot do that inside a building.' : null);
 const cornerUnderBuilding = (g: Game, cx: number, cy: number): string | null => {
+  for (let y = cy - 1; y <= cy; y++) for (let x = cx - 1; x <= cx; x++) if (g.buildings.cellar(x, y)) return CELLAR_UNDER;
   for (let y = cy - 1; y <= cy; y++) for (let x = cx - 1; x <= cx; x++) if (g.buildings.buildingAt(x, y)) return 'You cannot dig under a building.';
   return null;
 };
+
+/**
+ * The storey a sweep of the ground gathers on: the pile's own for a pile, and
+ * wherever you are standing for a tile -- a cellar's floor from down there.
+ */
+const sweepFloor = (g: Game, t: Target): number => (t.kind === 'ground' ? (t.down ? CELLAR_LEVEL : 0) : floorOf(g.player.level));
 
 /** The four corners of a tile, north-west first and going clockwise. */
 export const tileCorners = (x: number, y: number): Array<[number, number]> => [
@@ -430,15 +452,17 @@ export function spoilFrom(g: Game, want: string[], uid?: number): { id: string; 
     }
     return whole();
   };
+  // And only what stands on your own side of the ground floor: nothing up top is within reach of a cellar,
+  // nor anything in the cellar next door (`onMySide`).
   for (const id of want) {
     for (const c of g.crates.values()) {
-      const it = near(crateCentre(c)) ? c.items.find((o) => o.id === id) : undefined;
+      const it = near(crateCentre(c)) && g.onMySide(c.level, c.x, c.y) ? c.items.find((o) => o.id === id) : undefined;
       if (it) return { id, take: () => one(it, () => !!g.crateTake(c, it.uid)) };
     }
     for (const f of g.furniture.values()) {
       // Not out of a grave, whoever's it is: what is in one is taken out through its own doors or not at all.
       if (f.grave) continue;
-      const it = near(furnitureCentre(f)) ? f.items.find((o) => o.id === id) : undefined;
+      const it = near(furnitureCentre(f)) && g.onMySide(f.level, f.x, f.y) ? f.items.find((o) => o.id === id) : undefined;
       if (it) return { id, take: () => one(it, () => !!g.furnitureTake(f, it.uid)) };
     }
   }
@@ -778,6 +802,12 @@ export const ACTIONS: ActionDef[] = [
     applies: (t) => t.kind === 'tile',
     perform: (t, g) => {
       if (t.kind !== 'tile') return;
+      // From down in a cellar, a tile of it is its floor, and not the ground up top.
+      const below = g.player.level < 0 ? cellarFloorSaid(g, t.x, t.y) : null;
+      if (below) {
+        g.logMsg(below, 'event');
+        return;
+      }
       const w = g.world;
       const type = w.getTile(t.x, t.y);
       const c = w.corners(t.x, t.y, [0, 0, 0, 0]);
@@ -815,6 +845,12 @@ export const ACTIONS: ActionDef[] = [
       extra += glassSays(g.buildings, b);
       // And its deck, if the tile stands on piers (`pier_says`).
       if (b) extra += g.pierSays(t.x, t.y);
+      // And what is dug out under it: the island's `examine_tile_text` says the same.
+      const under = g.buildings.cellar(t.x, t.y);
+      if (under) {
+        extra += under.dug >= CELLAR_DEPTH ? ` A cellar is dug out under it, ${CELLAR_DEPTH} deep.`
+          : ` The ground under it is dug out ${under.dug} of ${CELLAR_DEPTH} down, for a cellar.`;
+      }
       const crates = g.cratesOnTile(t.x, t.y);
       if (crates.length) extra += ` ${crates.length === 1 ? 'A crate stands' : `${crates.length} crates stand`} here.`;
       g.logMsg(`${text} Height ${avg.toFixed(1)}, slope ${w.slope(t.x, t.y)}.${water}${extra}`, 'event');
@@ -2602,16 +2638,16 @@ export const ACTIONS: ActionDef[] = [
     verb: 'gathering up',
     stamina: 0.02,
     baseTime: 2,
-    applies: (t, g) => t.kind === 'ground' || (t.kind === 'tile' && g.sweepable(t.x, t.y) > 0),
+    applies: (t, g) => t.kind === 'ground' || (t.kind === 'tile' && g.sweepable(t.x, t.y, sweepFloor(g, t)) > 0),
     check: (t, g) => {
       const x = t.kind === 'ground' || t.kind === 'tile' ? t.x : g.player.tileX;
       const y = t.kind === 'ground' || t.kind === 'tile' ? t.y : g.player.tileY;
-      return g.sweepable(x, y) ? null : 'There is nothing lying about here.';
+      return g.sweepable(x, y, sweepFloor(g, t)) ? null : 'There is nothing lying about here.';
     },
     perform: (t, g) => {
       const x = t.kind === 'ground' || t.kind === 'tile' ? t.x : g.player.tileX;
       const y = t.kind === 'ground' || t.kind === 'tile' ? t.y : g.player.tileY;
-      const got = g.sweep(x, y);
+      const got = g.sweep(x, y, sweepFloor(g, t));
       if (!got.length) {
         g.logMsg('There is nothing lying about here.', 'error');
         return;
@@ -2681,6 +2717,7 @@ export const ACTIONS: ActionDef[] = [
       const item = g.inventory.get(t.uid);
       return !!item && !item.locked;
     },
+    check: (_t, g) => dropRefusal(g),
     perform: (t, g) => {
       if (t.kind !== 'item') return;
       const item = g.inventory.take(t.uid, t.count ?? 1);
@@ -2689,9 +2726,11 @@ export const ACTIONS: ActionDef[] = [
       const cool = (itemDef(item.id).category === 'food' ? g.perk('cool:food', 1) : 1) * g.perk(`cool:${item.id}`, 1);
       if (cool !== 1) item.cool = cool;
       else delete item.cool;
-      g.dropOnGround(g.player.tileX, g.player.tileY, item);
+      // Down in a cellar, onto its floor, where things keep longest (`CELLAR_DECAY`).
+      const floor = floorOf(g.player.level);
+      g.dropOnGround(g.player.tileX, g.player.tileY, item, floor);
       const what = item.count > 1 ? `${item.count} × ${itemName(item).toLowerCase()}` : `the ${itemName(item).toLowerCase()}`;
-      g.logMsg(`You drop ${what} on the ground.`, 'event');
+      g.logMsg(`You drop ${what} on the ${floor < 0 ? 'cellar floor' : 'ground'}.`, 'event');
     },
   },
   {
@@ -2701,10 +2740,10 @@ export const ACTIONS: ActionDef[] = [
     stamina: 0.01,
     baseTime: 1,
     applies: (t) => t.kind === 'ground',
-    check: (t, g) => (t.kind === 'ground' && g.groundAt(t.x, t.y).length ? null : 'There is nothing there any more.'),
+    check: (t, g) => (t.kind === 'ground' && g.groundAt(t.x, t.y, t.down ? CELLAR_LEVEL : 0).length ? null : 'There is nothing there any more.'),
     perform: (t, g) => {
       if (t.kind !== 'ground') return;
-      const taken = g.takeFromGround(t.x, t.y, t.uid);
+      const taken = g.takeFromGround(t.x, t.y, t.uid, t.down ? CELLAR_LEVEL : 0);
       if (!taken.length) return;
       for (const item of taken) g.inventory.addItem(item);
       const names = taken.map((it) => (it.count > 1 ? `${it.count} × ${itemName(it).toLowerCase()}` : itemName(it).toLowerCase()));
@@ -2931,6 +2970,7 @@ export const ACTIONS: ActionDef[] = [
     },
   },
   ...BUILD_ACTIONS,
+  ...CELLAR_ACTIONS,
   ...CREATURE_ACTIONS,
   ...CREATURE_CRATE_ACTIONS,
   ...HUSBANDRY_ACTIONS,

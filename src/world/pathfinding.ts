@@ -11,6 +11,17 @@ export interface PathOptions {
   cost: (x: number, y: number) => number;
   /** How many storeys the search may use; 1 keeps everything on the ground. */
   levels?: number;
+  /**
+   * How many storeys under the ground it may use as well: one where there
+   * are cellars (`CELLAR_LEVEL`), none otherwise.
+   */
+  below?: number;
+  /**
+   * The storey the goal has to be reached on, when it matters which: a crate
+   * down in the cellar is not reached by standing on the floor over it.
+   * Unset, the goal is reached on whichever storey the search arrives first.
+   */
+  goalLevel?: number;
   maxNodes?: number;
 }
 
@@ -87,11 +98,15 @@ function getBuffers(cap: number): Buffers {
 export function findPath(world: World, sx: number, sy: number, sl: number, tx: number, ty: number, opts: PathOptions): PathPoint[] | null {
   if (!world.inBounds(sx, sy) || !world.inBounds(tx, ty)) return null;
   if (!opts.passable(tx, ty)) return null;
-  if (sx === tx && sy === ty) return [];
+  if (sx === tx && sy === ty && (opts.goalLevel === undefined || opts.goalLevel === sl)) return [];
 
   const w = world.w;
   const layer = w * world.h;
   const levels = Math.max(1, opts.levels ?? 1);
+  // Storeys under the ground come first in the index, so every slot is still
+  // a whole number: a node on storey `l` is filed at `l + below`.
+  const below = Math.max(0, opts.below ?? 0);
+  const goalAt = opts.goalLevel;
   const maxNodes = opts.maxNodes ?? 30000;
   // One for the start and eight per expansion is every slot the search can
   // possibly want, and it is the ceiling whatever the size of the island.
@@ -162,7 +177,7 @@ export function findPath(world: World, sx: number, sy: number, sl: number, tx: n
     return Math.max(dx, dy) + (Math.SQRT2 - 1) * Math.min(dx, dy);
   };
 
-  const start = slotOf(Math.min(levels - 1, sl) * layer + sy * w + sx);
+  const start = slotOf((Math.max(-below, Math.min(levels - 1, sl)) + below) * layer + sy * w + sx);
   const goalTile = ty * w + tx;
   let goal = -1;
   b.g[start] = 0;
@@ -175,14 +190,15 @@ export function findPath(world: World, sx: number, sy: number, sl: number, tx: n
     const cur = pop();
     if (b.state[cur] === CLOSED) continue;
     const curIdx = b.node[cur];
-    if (curIdx % layer === goalTile) {
+    if (curIdx % layer === goalTile && (goalAt === undefined || Math.floor(curIdx / layer) - below === goalAt)) {
       goal = cur;
       break;
     }
     b.state[cur] = CLOSED;
     if (++expanded > maxNodes) return null;
-    const cl = Math.floor(curIdx / layer);
-    const tileIdx = curIdx - cl * layer;
+    const filed = Math.floor(curIdx / layer);
+    const cl = filed - below;
+    const tileIdx = curIdx - filed * layer;
     const cx = tileIdx % w;
     const cy = (tileIdx - cx) / w;
     for (let k = 0; k < 8; k++) {
@@ -194,8 +210,8 @@ export function findPath(world: World, sx: number, sy: number, sl: number, tx: n
         if (!opts.passable(cx + DIRS[k][0], cy) || !opts.passable(cx, cy + DIRS[k][1])) continue;
       }
       const nl = opts.step(cx, cy, cl, nx, ny);
-      if (nl === null || nl < 0 || nl >= levels) continue;
-      const n = slotOf(nl * layer + ny * w + nx);
+      if (nl === null || nl < -below || nl >= levels) continue;
+      const n = slotOf((nl + below) * layer + ny * w + nx);
       if (n < 0 || b.state[n] === CLOSED) continue;
       const stepCost = (k >= 4 ? Math.SQRT2 : 1) * opts.cost(nx, ny);
       const ng = b.g[cur] + stepCost;
@@ -214,10 +230,10 @@ export function findPath(world: World, sx: number, sy: number, sl: number, tx: n
   let slot = goal;
   while (slot !== -1 && slot !== start) {
     const idx = b.node[slot];
-    const level = Math.floor(idx / layer);
-    const t = idx - level * layer;
+    const filed = Math.floor(idx / layer);
+    const t = idx - filed * layer;
     const x = t % w;
-    path.push({ x, y: (t - x) / w, level });
+    path.push({ x, y: (t - x) / w, level: filed - below });
     slot = b.parent[slot];
   }
   path.reverse();

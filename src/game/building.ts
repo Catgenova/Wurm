@@ -225,6 +225,44 @@ export const INDOORS_DECAY = 0.1;
 /** How much more of a night a bed indoors banks than the same bed in a field. */
 export const INDOORS_REST = 1.35;
 
+/**
+ * A cellar: the storey under the ground floor, dug out of the ground a tile at
+ * a time under a finished building (`cellar.ts` holds its rules).
+ *
+ * It is storey `CELLAR_LEVEL`, one below the ground floor's nought, and it is
+ * `CELLAR_DEPTH` deep -- one storey -- so its floor lies that far under the
+ * ground floor over it. The ground floor stays where it is: a cellar is dug
+ * *under* it, and the way down is a flight or a ladder on the ground floor.
+ */
+export const CELLAR_LEVEL = -1;
+export const CELLAR_DEPTH = WALL_HEIGHT;
+/**
+ * What a cellar is worth to everything left lying in it: a twentieth of the
+ * rate out of doors, in place of the tenth a room above ground is worth
+ * (`INDOORS_DECAY`), and on top of whatever the deed is worth -- so the
+ * slowest anything rots anywhere.
+ */
+export const CELLAR_DECAY = 0.05;
+/** Where a crate or a piece goes that is set down from down in a cellar: on that cellar's own floor. */
+export const CELLAR_FLOOR = 'Set it down on the floor of the cellar you are in.';
+/**
+ * The least soil over the rock, at every corner of a tile, for a cellar to be
+ * started under it: a cellar is begun with a shovel, and where the rock comes
+ * nearer the ground floor than this there is nothing to begin in.
+ */
+export const CELLAR_SOIL = 3;
+/** The storey a thing or a body counts as for reach: the cellar, or the ground and everything over it. */
+export const floorOf = (level: number | undefined): number => ((level ?? 0) < 0 ? CELLAR_LEVEL : 0);
+
+/** One tile of a cellar, dug or being dug. */
+export interface CellarTile {
+  building: number;
+  x: number;
+  y: number;
+  /** How far down it has been dug, in terrain units; a cellar at `CELLAR_DEPTH`. */
+  dug: number;
+}
+
 export type Side = 'n' | 'e' | 's' | 'w';
 export const SIDE_NAMES: Record<Side, string> = { n: 'north', e: 'east', s: 'south', w: 'west' };
 export type Dir = 'h' | 'v';
@@ -246,6 +284,20 @@ export function borderOf(x: number, y: number, side: Side): Border {
       return { x, y, dir: 'v' };
     default:
       return { x: x + 1, y, dir: 'v' };
+  }
+}
+
+/** Whether a step from one tile to its neighbour goes square across the tile's `side`: across that border, not round a corner. */
+export function acrossSide(side: Side, x0: number, y0: number, x1: number, y1: number): boolean {
+  switch (side) {
+    case 'n':
+      return x1 === x0 && y1 === y0 - 1;
+    case 's':
+      return x1 === x0 && y1 === y0 + 1;
+    case 'w':
+      return x1 === x0 - 1 && y1 === y0;
+    default:
+      return x1 === x0 + 1 && y1 === y0;
   }
 }
 
@@ -490,6 +542,8 @@ export interface BuildingsJSON {
   list: Building[];
   walls: Wall[];
   floors: FloorTile[];
+  /** The tiles dug out under them, whole or in part; absent from a save made before there were cellars. */
+  cellars?: CellarTile[];
 }
 
 export class Buildings {
@@ -501,6 +555,8 @@ export class Buildings {
   readonly pierTiles = new Set<string>();
   /** Counts every change to which tiles stand on piers, for what is worked out from them and kept (`Renderer.wetPiers`). */
   pierStamp = 0;
+  /** What has been dug out under the ground floors, by tile (`tileKey`). */
+  readonly cellars = new Map<string, CellarTile>();
   nextId = 1;
 
   buildingAt(x: number, y: number): Building | undefined {
@@ -684,6 +740,45 @@ export class Buildings {
     this.floors.delete(floorKey(level, x, y));
   }
 
+  /** What has been dug out under a tile, if anything. */
+  cellar(x: number, y: number): CellarTile | undefined {
+    return this.cellars.size ? this.cellars.get(tileKey(x, y)) : undefined;
+  }
+
+  /** Whether a tile is dug out the whole storey down: a cellar tile, somewhere to stand at `CELLAR_LEVEL`. */
+  cellarDone(x: number, y: number): boolean {
+    const c = this.cellar(x, y);
+    return !!c && c.dug >= CELLAR_DEPTH;
+  }
+
+  /**
+   * Whether a tile is a finished tile of the given building's cellar. Two
+   * buildings side by side have two cellars, with the ground between them:
+   * nothing walks, sees or reaches from one into the other.
+   */
+  sameCellar(building: number | undefined, x: number, y: number): boolean {
+    const c = this.cellar(x, y);
+    return !!c && c.building === building && c.dug >= CELLAR_DEPTH;
+  }
+
+  /** Dig a tile down to `dug`, or fill it back in to nothing. */
+  setCellar(building: number, x: number, y: number, dug: number): void {
+    if (dug <= 0) this.cellars.delete(tileKey(x, y));
+    else this.cellars.set(tileKey(x, y), { building, x, y, dug: Math.min(CELLAR_DEPTH, dug) });
+  }
+
+  /** Whether any of a building's ground has been dug out under it. */
+  hasCellar(b: Building): boolean {
+    for (const c of this.cellars.values()) if (c.building === b.id) return true;
+    return false;
+  }
+
+  /** A finished staircase or ladder down from the ground floor to the cellar, on a tile. */
+  flightDown(x: number, y: number): FloorTile | undefined {
+    const f = this.floor(0, x, y);
+    return f && connectsDown(floorKind(f)) && isDone(f) && this.cellarDone(x, y) ? f : undefined;
+  }
+
   /** Any wall on the tile's borders or floor on the tile, at any level. */
   tileHasStructures(x: number, y: number): boolean {
     for (const w of this.walls.values()) {
@@ -859,6 +954,7 @@ export class Buildings {
   room(level: number, x: number, y: number): Room | undefined {
     const b = this.buildingAt(x, y);
     if (!b) return undefined;
+    if (level < 0) return this.cellarRoom(b, x, y);
     if (level > 0 && !this.floor(level, x, y)) return undefined;
     const seen = new Set<string>([tileKey(x, y)]);
     const queue: Array<[number, number]> = [[x, y]];
@@ -894,12 +990,34 @@ export class Buildings {
   }
 
   /**
+   * A cellar's room: every finished cellar tile of the building that can be
+   * walked to from this one, square to square. It needs no walls -- the
+   * ground round it is its walls -- and the ground floor is over every tile of
+   * it, so it is always shut in and always covered.
+   */
+  private cellarRoom(b: Building, x: number, y: number): Room | undefined {
+    if (!this.cellarDone(x, y)) return undefined;
+    const seen = new Set<string>([tileKey(x, y)]);
+    const queue: Array<[number, number]> = [[x, y]];
+    while (queue.length) {
+      const [tx, ty] = queue.shift() as [number, number];
+      for (const [nx, ny] of [[tx, ty - 1], [tx + 1, ty], [tx, ty + 1], [tx - 1, ty]] as Array<[number, number]>) {
+        if (seen.has(tileKey(nx, ny)) || this.cellar(nx, ny)?.building !== b.id || !this.cellarDone(nx, ny)) continue;
+        seen.add(tileKey(nx, ny));
+        queue.push([nx, ny]);
+      }
+    }
+    return { building: b.id, level: CELLAR_LEVEL, tiles: [...seen], enclosed: true, covered: true };
+  }
+
+  /**
    * Indoors: a room with walls all round it and something over it.
    *
    * The whole of what a roof is worth. Asked on the hot path by everything
-   * that rots, so it stops at the first no.
+   * that rots, so it stops at the first no. A cellar is always indoors.
    */
   indoors(level: number, x: number, y: number): boolean {
+    if (level < 0) return this.cellarDone(x, y);
     if (!this.buildingAt(x, y)) return false;
     if (!this.coveredAt(level, x, y)) return false;
     const r = this.room(level, x, y);
@@ -977,7 +1095,10 @@ export class Buildings {
   }
 
   toJSON(): BuildingsJSON {
-    return { nextId: this.nextId, list: [...this.list.values()], walls: [...this.walls.values()], floors: [...this.floors.values()] };
+    return {
+      nextId: this.nextId, list: [...this.list.values()], walls: [...this.walls.values()], floors: [...this.floors.values()],
+      cellars: [...this.cellars.values()],
+    };
   }
 
   /**
@@ -995,6 +1116,7 @@ export class Buildings {
     this.pierStamp++;
     this.walls.clear();
     this.floors.clear();
+    this.cellars.clear();
     this.nextId = data.nextId ?? 1;
     for (const bl of data.list ?? []) {
       this.list.set(bl.id, bl);
@@ -1003,6 +1125,7 @@ export class Buildings {
     }
     for (const w of data.walls ?? []) this.walls.set(wallKey(w.level, w), w);
     for (const f of data.floors ?? []) this.floors.set(floorKey(f.level, f.x, f.y), f);
+    for (const c of data.cellars ?? []) if (c.dug > 0) this.cellars.set(tileKey(c.x, c.y), c);
   }
 
   static fromJSON(data: BuildingsJSON | undefined): Buildings {

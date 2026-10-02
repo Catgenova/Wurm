@@ -1,4 +1,5 @@
-import { floorBill, GLASS_ROOF, INDOORS_DECAY, MATERIAL_BY_ID, roofShapeDef, roofShapeOf, WALL_TYPE_BY_ID } from '../../game/building';
+import { CELLAR_DECAY, CELLAR_DEPTH, CELLAR_SOIL, floorBill, GLASS_ROOF, INDOORS_DECAY, MATERIAL_BY_ID, roofShapeDef, roofShapeOf, WALL_TYPE_BY_ID } from '../../game/building';
+import { CELLAR_DAYLIGHT } from '../../game/cellar';
 import { materialName } from '../../game/buildActions';
 import { COUNTER_HOLDS, COUNTER_REACH, COUNTER_WALL } from '../../game/counters';
 import { candleBurn, lanternReach } from '../../game/light';
@@ -871,6 +872,14 @@ export const NEWS: News[] = [
         `A deck is walked at its height once it is built, never in the water under it: you step onto or off it from ground up to ${metres(MAX_STEP)} m above or below it, and ${(CLIMB_PER_LEVEL / 10).toFixed(2)} m more for each level of climbing; a bridge lands on it as on a bank. Walls, stairs, furniture and crates go on it; no creature, cart, mount or boat goes onto it or under it. On an island, as offline, the ground under any building cannot now be dug at a corner, raised, mined, cut back, packed, cultivated, paved or planted.`,
       ];
     },
+  },
+  {
+    n: 66,
+    day: '2026-10-02',
+    lines: () => [
+      `A building whose ground-floor walls are all built can have a cellar dug out under it, a tile at a time, ${numberWord(CELLAR_DEPTH)} slices down to a storey, by somebody on its ground floor or down in its cellar: the soil with a shovel and Digging, a dirt a slice, and the rock under it with a pickaxe and Mining, a slice of that stone's own shards or the ore where a vein runs under the building. It is begun where there are ${numberWord(CELLAR_SOIL)} or more of soil at every corner of the tile, and its floor has to lie above the sea; not under a poured foundation or a deck on piers.`,
+      `What lies on a cellar's floor rots at ${share(CELLAR_DECAY)} of the rate out of doors, against ${share(INDOORS_DECAY)} in a closed room, and a bed down there rests you as one in a closed room does. Every piece of furniture goes down but what burns an open fire, what is on wheels or afloat, and the pieces the help names. A staircase down or a ladder down from the ground floor is the way in, climbed from its foot and from no other side, and nothing in tow and no mount goes down it; the cellar of the building next door is another room, with the ground between. It is dark down there at every hour but for what you carry alight and, by day, ${numberWord(CELLAR_DAYLIGHT)} tiles of daylight round the way in. The ground over a cellar is not dug while it is there, and the building is taken off the plan only once its cellar is filled in again.`,
+    ],
   },
   {
     n: 67,

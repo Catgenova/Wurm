@@ -14,7 +14,8 @@ import { BRIDGES, CLEARANCE, END_SLOP } from '../../game/bridges';
 import { AQUEDUCT } from '../../game/aqueducts';
 import { AQUEDUCT_FLOW, AQUEDUCT_LPS, CHANNEL_DEEP, CHANNEL_WIDE, CORNER_LITRES, FOUNTAIN_RIM, TILE_METRES } from '../../world/aqueducts';
 import { HOARD_LUMPS, HOARD_MORE } from '../../game/butcher';
-import { floorBill, GLASS_ROOF, HEFT_WORDS, INDOORS_DECAY, MATERIALS as WALL_MATERIALS, MAX_LEVELS, roofShapeDef, roofShapeOf, SIDE_NAMES, wallBill, WALL_TYPE_BY_ID, WALL_TYPES } from '../../game/building';
+import { CELLAR_DECAY, CELLAR_DEPTH, CELLAR_SOIL, floorBill, GLASS_ROOF, HEFT_WORDS, INDOORS_DECAY, INDOORS_REST, MATERIALS as WALL_MATERIALS, MAX_LEVELS, roofShapeDef, roofShapeOf, SIDE_NAMES, wallBill, WALL_TYPE_BY_ID, WALL_TYPES } from '../../game/building';
+import { CELLAR_ACTION_BY_ID, CELLAR_DAYLIGHT, cellarOutdoor } from '../../game/cellar';
 import { materialName } from '../../game/buildActions';
 import { COUNTER_HOLDS, COUNTER_REACH, COUNTER_SEEN, COUNTER_WALL } from '../../game/counters';
 import { flameSources } from '../../game/lantern';
@@ -26,7 +27,7 @@ import {
   CHANNELS, CLASS_AT, CLASS_CHANGE_COST, CLASS_COLUMNS, CLASS_NODES, CLASSES, channelSays, NODES_PER_TRADE, PERK_CLASSES, PERK_TIER_AT,
   PERKS_PER_TIER, riteDef, RITES, type Channel,
 } from '../../game/classes';
-import { perksOf } from '../../game/perks';
+import { PERKS, perksOf } from '../../game/perks';
 import { CREATURE_CRATE } from '../../game/creaturecrate';
 import { CRATE_DEFS, SUBTILES } from '../../game/crates';
 import {
@@ -112,6 +113,14 @@ import { BOARD_RULES, REFRESH as BOARD_REFRESH } from './boards';
 import { LETTER_MAX } from '../../net/island';
 import { KEYS as NUMBER_KEYS } from './tile';
 import { HUNGRY_AT, HURT_AT } from './wildermon';
+
+/** What a cellar's rock gives, by the stone: every stone's own shards. */
+const CELLAR_SHARDS = listed(ROCK_VARIANTS.filter((r) => r.yields.endsWith('_shards')).map((r) => itemDef(r.yields).name.toLowerCase()));
+/** The perk that lowers what a vein wants of a miner (`ore:below`). */
+const ORE_SENSE = PERKS.find((p) => 'ore:below' in p.fx);
+/** The pieces that do not go down into a cellar, by name: what burns an open fire, and `cellarOutdoor` but the grave nobody makes. */
+const CELLAR_BURNS = FURNITURE.filter((d) => d.hearth).map((d) => article(d.name) + ' ' + d.name.toLowerCase());
+const CELLAR_NOT_DOWN = FURNITURE.filter((d) => cellarOutdoor().includes(d.id) && d.bill.length).map((d) => article(d.name) + ' ' + d.name.toLowerCase());
 
 /** The Farmer's perk that holds an effect, by name. */
 const farmerPerk = (key: string): string => perksOf('farmer').find((p) => key in p.fx)?.name ?? key;
@@ -980,7 +989,10 @@ export function helpText(): string {
     <b>storey you are looking at</b>: the ceilings above it are lifted off so you can see straight down
     into that floor, and everything above it goes with them. The label reads <i>1st</i>, <i>2nd</i> and
     so on, and clicking it returns to <i>Auto</i>, which simply follows whichever storey you are
-    standing on. <kbd>Page Up</kbd> and <kbd>Page Down</kbd> do the same as the arrows.</p>
+    standing on. <kbd>Page Up</kbd> and <kbd>Page Down</kbd> do the same as the arrows. Once anybody
+    has dug a cellar, the arrows go one further down, to <i>Cellar</i>: the shape of every cellar
+    near you, dug out as far as it is, with the buildings over them taken off. What is in a cellar,
+    and who, shows only to somebody down in it, as far as they can see.</p>
     <p>The <b>◪</b> button beside them, <kbd>X</kbd>, or the matching box in Settings, <b>cuts away the
     walls facing you</b> &mdash; the ones standing between your eye and the inside of a building &mdash;
     leaving the far walls in place so the rooms still read. Together they let you look into any
@@ -1051,6 +1063,44 @@ export function helpText(): string {
     nor tilled unless the building is a glasshouse.</p>
     <p>Materials: saw logs into planks and timbers, bundle cut grass into thatch, mix clay and sand
     into mortar, press clay and grass into adobe, and chip silver and gold from veins in the mountains.</p>
+    <h3>Cellars</h3>
+    <p>Under a building whose ground-floor walls are all built, a <b>cellar</b> is dug out a tile at
+    a time, ${numberWord(CELLAR_DEPTH)} slices down, a whole storey, by somebody inside that building: on its ground
+    floor or down in its cellar, and not through a wall from outside or from the cellar of the
+    building next door. <b>${CELLAR_ACTION_BY_ID.get('dig_cellar')?.label}</b> takes the soil a slice a go with a
+    shovel and Digging, and gives a dirt a slice; once the shovel is down to the rock,
+    <b>${CELLAR_ACTION_BY_ID.get('mine_cellar')?.label}</b> takes the rest with a pickaxe and Mining, and every
+    slice gives what mining that rock gives: ${CELLAR_SHARDS}, by the stone it is, or the ore where a
+    vein runs under the building. A vein wants its own Mining to work, ${ORE_SENSE ? `${ORE_SENSE.fx['ore:below']} less with ${ORE_SENSE.name}` : 'as a face of it does'}.
+    A cellar is begun only where there is ${numberWord(CELLAR_SOIL)} or more of soil at every corner of the tile,
+    and only where its floor, ${numberWord(CELLAR_DEPTH)} under the ground floor, is above the sea; never under a poured
+    foundation or a deck on piers.</p>
+    <p>The way down is a <b>staircase down</b> or a <b>ladder down</b>, planned on a dug-out tile from
+    the ground floor, with <kbd>Q</kbd> and <kbd>E</kbd> choosing the side it is climbed from; where
+    the tile is floored it takes the flooring up, and where it is a glasshouse's field the field is
+    cleared first. Its foot comes down on the cellar tile on that
+    side, which has to be dug out as well. Walk off it that way and you are down; walk onto it from
+    its foot and you are up. Its sides and its back are as solid as the ground, and so is the
+    ground between a cellar and the cellar of the building next door: each is reached by its own
+    way down. A tile with a
+    way down has no staircase up to the next storey, and one with a staircase up has no way down.
+    Nothing in tow, no cart you are driving and no mount goes down a flight or a ladder: let go of
+    the cart, or get down, first. Nothing is dropped standing on the head of one, up top: step off
+    it first.</p>
+    <p>A cellar needs no walls and is always indoors, roof or none over the ground floor: what lies
+    on its floor rots at ${share(CELLAR_DECAY)} of the rate out of doors, against ${share(INDOORS_DECAY)} in a closed room up
+    top, which makes it the slowest place there is; and a night in a bed down there is worth
+    ${percent(INDOORS_REST - 1)} more rest than the same bed out of doors, as in a closed room up top. Every piece of furniture goes down there but ${listed(CELLAR_BURNS)}, which burn an open fire;
+    anything on wheels or afloat; and ${listed(CELLAR_NOT_DOWN)}. It is dark at every hour, and counts as
+    the dead of night for what a fight in it teaches of Awareness: you see what a lantern or a torch
+    you carry lights, and a lantern or a torch is lit down there only off another alight in your
+    hands, since every fire is up top. By day the daylight down the way in lights ${numberWord(CELLAR_DAYLIGHT)} tiles
+    round its foot.</p>
+    <p>The ground over a cellar is not dug, raised or levelled while the cellar is there, and a
+    building with a cellar under it is not taken off the plan until every tile of it is filled in
+    again: <b>${CELLAR_ACTION_BY_ID.get('fill_cellar')?.label}</b> packs a dirt, clay or sand back in a slice a go, from the
+    pack or from something beside you, once what lies or stands down there is carried out and
+    the way down that stands on the tile is taken out.</p>
     <h3>Nails, furniture and storage</h3>
     <p>Anything that is nailed together needs <b>nails</b>, and nails need metal. Fire a <b>nail mould</b>
     from sand at a smelter: it is a gang mould with ${numberWord(NAILS_PER_LUMP)} channels in it, so one lump of metal

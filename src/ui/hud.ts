@@ -7,7 +7,7 @@ import { WOUND_KINDS, woundText } from '../game/wounds';
 import { sailWord, windFrom, windWord } from '../game/wind';
 import { FAITH, favourCap } from '../game/faith';
 import { FURNITURE_BY_ID } from '../game/furniture';
-import { TOP_LEVELS } from '../game/building';
+import { CELLAR_LEVEL, TOP_LEVELS } from '../game/building';
 import { groundRoll, TILE_DEFS } from '../world/tiles';
 import { seasonLine } from '../world/calendar';
 import type { Game } from '../game/game';
@@ -514,11 +514,16 @@ export class Hud {
     }
   }
 
-  /** Move the view a storey up or down, starting from where the player stands. */
+  /** Move the view a storey up or down, starting from where the player stands: down to a cellar, where there is one. */
   stepStorey(step: number): void {
     const s = this.game.settings;
     const from = s.viewLevel ?? this.game.player.level;
-    s.viewLevel = Math.max(0, Math.min(TOP_LEVELS - 1, from + step));
+    s.viewLevel = Math.max(this.lowestStorey(), Math.min(TOP_LEVELS - 1, from + step));
+  }
+
+  /** The lowest storey there is to look at: a cellar's, once anybody has dug one, and otherwise the ground floor. */
+  private lowestStorey(): number {
+    return this.game.buildings.cellars.size ? CELLAR_LEVEL : 0;
   }
 
   toggleCutaway(): void {
@@ -555,10 +560,10 @@ export class Hud {
     this.storeyEl.hidden = this.game.buildings.list.size === 0 && s.viewLevel === null;
     if (this.storeyEl.hidden) return;
     const level = s.viewLevel;
-    this.storeyLabel.textContent = level === null ? 'Auto' : ordinal(level + 1);
+    this.storeyLabel.textContent = level === null ? 'Auto' : level < 0 ? 'Cellar' : ordinal(level + 1);
     this.storeyLabel.classList.toggle('pinned', level !== null);
     this.storeyUp.disabled = level !== null && level >= TOP_LEVELS - 1;
-    this.storeyDown.disabled = level === 0;
+    this.storeyDown.disabled = level !== null && level <= this.lowestStorey();
     this.cutBtn.classList.toggle('active', s.cutaway);
   }
 

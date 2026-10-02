@@ -29,6 +29,9 @@ import {
   floorBill,
   roofShapeOf,
   TOP_LEVELS,
+  CELLAR_DEPTH,
+  CELLAR_LEVEL,
+  type CellarTile,
 } from '../game/building';
 import { foundationDone } from '../game/foundations';
 import { DYE_BY_ID } from '../game/dyestuffs';
@@ -122,6 +125,10 @@ import { wildermonTop } from './wildermon';
 import { SmallLife, type Mote } from './life';
 import { lookStep, yearAt } from './foliage';
 import { FIGURE_TOP } from './figure';
+import {
+  CELLAR_DARK, CELLAR_DARK_INK, CELLAR_FALL, CELLAR_VEIL, cellarFloor, cellarFloorHeight, cellarOrder, cutFace, earthEnd, earthFace, faceOn, KERB, OUT, UNDER,
+  flightShade, SHAFT_STOPS, shaftAlpha, shaftShade, sidesOf, type CellarCanvas,
+} from './cellar';
 
 /** Result of picking a screen point: the tile, the approximate world position and the nearest corner. */
 /**
@@ -169,6 +176,8 @@ export interface Pick {
   kiln?: number;
   /** A piece of furniture under the cursor, when one is. */
   furniture?: number;
+  /** Picked on the floor of a cellar, looking into it, rather than on the ground over it. */
+  down?: boolean;
 }
 
 interface Entity {
@@ -217,6 +226,8 @@ interface Entity {
   mote?: Mote;
   /** A piece of an aqueduct: a bay's insides or its face and water, the spout at its foot, or the cut at its head (`./aqueducts`). */
   aq?: AqueductPart;
+  /** The part of the screen a body shows in, for one down a hole: the ground in front of the hole hides the rest (`onFlight`). */
+  clip?: Array<[number, number]>;
 }
 
 /**
@@ -286,6 +297,8 @@ const DEED_SHADOW = 'rgba(0, 40, 0, 0.6)';
 const PLAN_COLOR = 'rgba(120, 220, 140, 0.95)';
 /** The shade a wall throws on the ground at its foot: cool, as the shade on a wall's own turned face is. */
 const SHADE_INK = 'rgba(50, 44, 70, 0.26)';
+/** Steps to a storey's flight: six made every step half a metre, and a flight a pile of blocks. */
+const FLIGHT_STEPS = 8;
 /**
  * Concrete, and the shadow line down a shutter board.
  *
@@ -502,6 +515,17 @@ function hash4(a: number, b: number, c: number, d: number): number {
   return ((k ^ (k >>> 15)) >>> 0) / 4294967296;
 }
 
+/** Whether a screen point is inside a polygon of screen points. */
+function inOutline(p: ReadonlyArray<readonly [number, number]>, sx: number, sy: number): boolean {
+  let inside = false;
+  for (let i = 0, j = p.length - 1; i < p.length; j = i++) {
+    const [xi, yi] = p[i];
+    const [xj, yj] = p[j];
+    if (yi > sy !== yj > sy && sx < ((xj - xi) * (sy - yi)) / (yj - yi) + xi) inside = !inside;
+  }
+  return inside;
+}
+
 /** Which way is out through a piece's front, and which way its width runs, in the world, by the side it faces. */
 const FRONT_OF: Record<Side, [number, number]> = { s: [0, 1], e: [1, 0], n: [0, -1], w: [-1, 0] };
 const ACROSS_OF: Record<Side, [number, number]> = { s: [1, 0], e: [0, -1], n: [-1, 0], w: [0, 1] };
@@ -663,6 +687,9 @@ function inHull(pts: number[], x: number, y: number): boolean {
   return hull.length >= 6 && inPolygon(hull, hull.length, x, y);
 }
 
+/** A piece of a cellar's drawing laid into a canvas of its own (`Renderer.layOut`), and where it was laid against. */
+type CellarLaid = { cv: HTMLCanvasElement; x0: number; y0: number; ax: number; ay: number; w: number; h: number };
+
 export class Renderer {
   readonly camera = new Camera();
   time = 0;
@@ -670,7 +697,7 @@ export class Renderer {
   /** What is being set down, drawn after everything that stands. */
   ghost: Ghost | null = null;
   /** The tile the tile window is looking at, outlined so you can see which it is. */
-  selected: { x: number; y: number } | null = null;
+  selected: { x: number; y: number; down?: boolean } | null = null;
   fps = 0;
   private colors: ColourPages;
   /** Which step of the sun's walk the ground was last shaded for. */
@@ -768,6 +795,7 @@ export class Renderer {
     e.layer = undefined;
     e.mote = undefined;
     e.aq = undefined;
+    e.clip = undefined;
     this.ents.push(e);
     return e;
   }
@@ -972,6 +1000,37 @@ export class Renderer {
   private shades = new Map<string, Float64Array | null>();
   /** The pitched roofs to lay this frame, by the line of the ground after whose walls each goes on. */
   private roofQueue = new Map<number, Building[]>();
+  /**
+   * Looking into a cellar this frame (`Game.cellarView`); the buildings over
+   * the cellars, which are taken off while you are; every tile of every
+   * cellar in the order it was laid; and each one's outline on the screen,
+   * from its floor to the ground floor over it, for the dark and for a click.
+   */
+  private cellarFrame = false;
+  private cut = new Set<number>();
+  private cellarTiles: CellarTile[] = [];
+  private cellarHulls: Array<{ x: number; y: number; hull: Array<[number, number]>; floor: Array<[number, number]> }> = [];
+  /** While a cellar's own things are being laid, so a ghost over one is drawn then and not with the ground over it. */
+  private inCellarPass = false;
+  /** Names and what is said, held back while a cellar is laid line by line and put over it after (`overCellar`). */
+  private cellarWords: Array<() => void> = [];
+  /**
+   * Each cellar tile's own drawing -- its floor and the sides of the dig
+   * round it, and the cut across its near sides -- laid once into a canvas
+   * of its own and put down again every frame after (`cellarLayer`), until
+   * the view turns or zooms or a cellar changes (`cellarStamp`).
+   */
+  private cellarCache = new Map<string, CellarLaid>();
+  private cellarStamp = '';
+  /**
+   * The inside of each hole a flight or a ladder goes down through, seen from
+   * up top -- the dark, the far sides, the floor at the bottom, the way down
+   * as far as the ground floor, each shaded by how deep it is -- laid once
+   * and put down every frame after (`drawOpening`), until something it was
+   * laid from changes: the view's turn or zoom, the dig, the flight, a wall
+   * on its edge. Each keeps the stamp it was laid at.
+   */
+  private holeCache = new Map<string, CellarLaid & { stamp: string }>();
   /** Each building's roof, worked out once for the tiles it covers and kept until they change. */
   private roofShapes = new Map<number, { sig: string; model: RoofModel }>();
   /** A covering with the hour's light for one face laid into it, as a pattern: see `drawPitchedRoof`. */
@@ -1535,6 +1594,49 @@ export class Renderer {
    * the tread under it, a riser higher at a time, and on stepping stones the
    * stones' tops, however deep the water round them is.
    */
+  /**
+   * A body on the head of a way down, up top, stands in the hole on the tread
+   * under its feet, and not on the air over it at the ground floor: how high
+   * that is, and the part of the screen it shows in -- the hole and what is
+   * over it, and not the ground in front of the hole, which hides the rest.
+   * Null anywhere else.
+   */
+  private onFlight(px: number, py: number): { h: number; clip: Array<[number, number]> } | null {
+    const tx = Math.floor(px), ty = Math.floor(py);
+    const f = this.game.buildings.flightDown(tx, ty);
+    if (!f) return null;
+    const w = this.game.world;
+    const cam = this.camera;
+    const base = w.getHeight(tx, ty);
+    const facing = f.facing ?? 's';
+    // How far up the flight from its foot, as `stairPoint` lays it; a ladder is climbed the whole way, a flight a tread at a time.
+    const u = px - tx, v = py - ty;
+    const s = Math.max(0, Math.min(1, facing === 'n' ? v : facing === 's' ? 1 - v : facing === 'w' ? u : 1 - u));
+    const h = floorKind(f) === 'ladder' ? base - WALL_HEIGHT * (1 - s)
+      : base - WALL_HEIGHT + (Math.min(FLIGHT_STEPS - 1, Math.floor(s * FLIGHT_STEPS)) + 1) * (WALL_HEIGHT / FLIGHT_STEPS);
+    // The hole's corners on the screen, and the run of its edge nearest the camera, from its leftmost corner to its rightmost.
+    const hole = ([[tx, ty], [tx + 1, ty], [tx + 1, ty + 1], [tx, ty + 1]] as Array<[number, number]>)
+      .map(([cx, cy]): [number, number] => [cam.worldToScreenX(cx, cy), cam.worldToScreenY(cx, cy, w.getHeight(cx, cy))]);
+    let left = 0, right = 0;
+    for (let i = 1; i < 4; i++) {
+      if (hole[i][0] < hole[left][0] - 1e-6 || (Math.abs(hole[i][0] - hole[left][0]) <= 1e-6 && hole[i][1] > hole[left][1])) left = i;
+      if (hole[i][0] > hole[right][0] + 1e-6 || (Math.abs(hole[i][0] - hole[right][0]) <= 1e-6 && hole[i][1] > hole[right][1])) right = i;
+    }
+    const run = (step: number): Array<[number, number]> => {
+      const out: Array<[number, number]> = [hole[left]];
+      for (let i = left; i !== right;) {
+        i = (i + step + 4) % 4;
+        out.push(hole[i]);
+      }
+      return out;
+    };
+    const mean = (pts: Array<[number, number]>): number => pts.reduce((n, p) => n + p[1], 0) / pts.length;
+    const a = run(1), b = run(-1);
+    const near = mean(a) >= mean(b) ? a : b;
+    const clip: Array<[number, number]> = [[-1e5, near[0][1]], ...near, [1e5, near[near.length - 1][1]], [1e5, -1e5], [-1e5, -1e5]];
+    return { h, clip };
+  }
+
   private footAt(x: number, y: number): number {
     const world = this.game.world;
     const tx = Math.floor(x);
@@ -2263,6 +2365,13 @@ export class Renderer {
     const eStep = V.staggered ? 2 : 1;
     const dLo = Math.floor((b.top + world.minHeight * HEIGHT_SCALE) / stepH) - 2;
     const dHi = Math.ceil((b.bottom + world.maxHeight * HEIGHT_SCALE) / stepH) + 1;
+    // Looking into a cellar, the building over it is taken off, roof and all: see `drawCellarView`.
+    this.cellarFrame = this.game.cellarView();
+    this.cut.clear();
+    if (this.cellarFrame) {
+      for (const cel of this.game.buildings.cellars.values()) this.cut.add(cel.building);
+      this.cutInFront();
+    }
     this.queueRoofs(V, dLo, dHi);
     const grid = this.game.settings.grid && zoom >= 0.7;
     const vision = this.game.vision;
@@ -2660,6 +2769,8 @@ export class Renderer {
         }
 
         const t = here;
+        // A building over a cellar you are looking into is taken off, and everything in it with it.
+        const cutHere = this.cut.size > 0 && this.cut.has(this.game.buildings.buildingAt(x, y)?.id ?? -1);
         if (!lit) {
           // Remembered ground keeps its shape and its trees and nothing else:
           // no creatures, no piles, no detail, and a cold wash over the lot.
@@ -2683,7 +2794,7 @@ export class Renderer {
           const avg = (c[0] + c[1] + c[2] + c[3]) / 4;
           this.take(t === TileType.Tree ? 'tree' : t === TileType.Bush ? 'bush' : 'stump', x, y, baseX, baseY + hh - avg * hs, spr);
         }
-        if (this.game.ground.size && this.game.groundAt(x, y).length) {
+        if (!cutHere && this.game.ground.size && this.game.groundAt(x, y).length) {
           const avg = (this.game.buildings.pierTiles.size ? this.game.pierDeckAt(x, y) : null) ?? (c[0] + c[1] + c[2] + c[3]) / 4;
           const pile = this.take('pile', x, y, baseX, baseY + hh - avg * hs, pileSprite());
           // A heap shines for the best thing in it: one fantastic hatchet under
@@ -2778,7 +2889,7 @@ export class Renderer {
          * lookup, and the eight are opened only where there is anything in
          * them.
          */
-        if (this.game.anythingPlaced(x, y)) {
+        if (!cutHere && this.game.anythingPlaced(x, y)) {
           for (const sm of this.game.smeltersOnTile(x, y)) {
             const [wx, wy] = smelterCentre(sm);
             const se = this.take('smelter', x, y, cam.worldToScreenX(wx, wy), cam.worldToScreenY(wx, wy, this.standTop(wx, wy)), null);
@@ -2792,6 +2903,8 @@ export class Renderer {
             if (kl.rare) ke.rare = kl.rare;
           }
           for (const fu of this.game.furnitureOnTile(x, y)) {
+            // A piece down in a cellar is drawn with the cellar (`drawCellarView`), and not at all from up top.
+            if ((fu.level ?? 0) < 0) continue;
             // A hull somebody else is steering is where their hands are, which is read a dozen times a second; where
             // she was set down is read once.
             const [wx, wy] = fu.helm ? this.game.hullCentre(fu) : furnitureCentre(fu);
@@ -2822,8 +2935,8 @@ export class Renderer {
           for (const crate of this.game.cratesOnTile(x, y)) {
             // A crate standing on a rack is drawn by the rack, up on its deck
             // where it actually is. Drawn here as well it would be a second
-            // crate on the floor underneath the first.
-            if (this.game.rackAt(crate.x, crate.y, crate.sx, crate.sy)) continue;
+            // crate on the floor underneath the first. And one down in a cellar is drawn with the cellar.
+            if ((crate.level ?? 0) < 0 || this.game.rackAt(crate.x, crate.y, crate.sx, crate.sy, crate.level)) continue;
             const [wx, wy] = crateCentre(crate);
             const ce = this.take('crate', x, y, cam.worldToScreenX(wx, wy), cam.worldToScreenY(wx, wy, this.standTop(wx, wy)), crateSprite(crate.kind));
             ce.crateId = crate.id;
@@ -2831,15 +2944,19 @@ export class Renderer {
           }
         }
         // Other people on the island stand on tiles like anything else does.
-        if (this.game.roster.size) {
+        if (!cutHere && this.game.roster.size) {
           for (const peer of this.game.roster.atTile(x, y)) {
-            if (peer.uid && this.seated.has(peer.uid)) continue;
+            // Down in a cellar: drawn with it, from down there, and not from up top.
+            if (peer.level < 0 || (peer.uid && this.seated.has(peer.uid))) continue;
             const [px, py] = this.game.roster.drawnAt(peer);
-            this.take('peer', x, y, cam.worldToScreenX(px, py),
-              cam.worldToScreenY(px, py, (this.game.deckBase(Math.floor(px), Math.floor(py), peer.level) ?? this.footAt(px, py)) + peer.level * WALL_HEIGHT), null).peer = peer;
+            const flight = peer.level === 0 ? this.onFlight(px, py) : null;
+            const pe = this.take('peer', x, y, cam.worldToScreenX(px, py),
+              cam.worldToScreenY(px, py, flight ? flight.h : (this.game.deckBase(Math.floor(px), Math.floor(py), peer.level) ?? this.footAt(px, py)) + peer.level * WALL_HEIGHT), null);
+            pe.peer = peer;
+            if (flight) pe.clip = flight.clip;
           }
         }
-        if (this.game.creatures.list.size) {
+        if (!cutHere && this.game.creatures.list.size) {
           // Anything standing on a tile with a bridge's deck or a slab over it stands on that. No
           // creature goes onto a tile on piers (`Creatures.tileOk`), so the ground is all there is.
           const deckHere = this.game.laidOver(x, y);
@@ -2854,19 +2971,22 @@ export class Renderer {
         if (this.game.buildings.list.size || this.game.buildings.walls.size) this.drawStructures(x, y, V, d > playerDepth);
       }
 
-      if (d === playerDepth && player.aboard === null && !this.helming) {
+      // Down in a cellar you are drawn with it (`drawCellarView`), and from up top not at all.
+      if (d === playerDepth && player.aboard === null && !this.helming && player.level >= 0) {
         // On a bridge you stand on the deck, not in whatever is under it.
         // On the deck unless you are in a hull passing under it.
         // In a building on piers, on its deck and the storeys over it (`piers.ts`).
         const piered = this.game.afloat() ? null : this.game.deckBase(player.tileX, player.tileY, player.level);
         const deck = this.game.afloat() || piered !== null ? null : this.game.laidOver(player.tileX, player.tileY);
-        // Afloat in deep water, at the top of it: the sea's surface, or a pond's; on stepping stones, on their tops.
-        const ph = piered !== null ? piered + player.visualLevel * WALL_HEIGHT
-          : deck !== null ? deck : this.footAt(player.x, player.y) + player.visualLevel * WALL_HEIGHT;
         // A driver is drawn on the seat, which is a lift in screen pixels
         // rather than in world height: the cart is under them, not the ground.
         const drivenBy = this.game.driving();
         const up = this.game.mounted();
+        // On the head of a way down, in the hole on its tread.
+        const flight = piered === null && deck === null && player.level === 0 && !drivenBy && !up ? this.onFlight(player.x, player.y) : null;
+        // Afloat in deep water, at the top of it: the sea's surface, or a pond's; on stepping stones, on their tops.
+        const ph = piered !== null ? piered + player.visualLevel * WALL_HEIGHT
+          : deck !== null ? deck : flight ? flight.h : this.footAt(player.x, player.y) + player.visualLevel * WALL_HEIGHT;
         // A driver sorts with the vehicle rather than with their own feet, a
         // hair behind it, so the figure is drawn onto the seat and not under
         // the box it is sitting on.
@@ -2877,6 +2997,7 @@ export class Renderer {
         const sy = drivenBy || up ? cam.worldToScreenY(vx, vy, drivenBy ? this.pieceBase(drivenBy, vx, vy) : world.heightAt(vx, vy)) + 0.01 : cam.worldToScreenY(player.x, player.y, ph);
         const pe = this.take('player', player.tileX, player.tileY, cam.worldToScreenX(vx, vy), sy, null);
         pe.lift = this.driverSeat() * zoom;
+        if (flight) pe.clip = flight.clip;
         // At a helm on a deck of its own the driver stands there, not in her middle.
         if (drivenBy && furnitureDef(drivenBy.kind).boat?.helm) this.onDeck(pe, drivenBy, this.game.helmSpot(drivenBy), pe.lift, true);
       }
@@ -3152,6 +3273,16 @@ export class Renderer {
     return facingOf((du - dv) * HALF_W, (du + dv) * HALF_H, was);
   }
 
+  /** Save the context and clip it to `clip`, when there is one: the caller restores it after drawing. */
+  private clipTo(ctx: CanvasRenderingContext2D, clip: Array<[number, number]> | undefined): void {
+    if (!clip) return;
+    ctx.save();
+    ctx.beginPath();
+    clip.forEach(([cx, cy], i) => (i ? ctx.lineTo(cx, cy) : ctx.moveTo(cx, cy)));
+    ctx.closePath();
+    ctx.clip();
+  }
+
   private drawEntities(ctx: CanvasRenderingContext2D, zoom: number): void {
     const ents = this.ents;
     // Within a diagonal, whatever stands lower on screen is nearer the viewer.
@@ -3169,6 +3300,7 @@ export class Renderer {
       if (ent.kind === 'player') {
         const struck = this.flashOf(player.attackedAt);
         const ex = ent.sx + (ent.drawDx ?? 0), ey = ent.sy + (ent.drawDy ?? 0);
+        this.clipTo(ctx, ent.clip);
         this.paint(ctx, zoom, struck > 0 ? 'flash' : 'none', struck * 0.75, ex, ey - (ent.lift ?? 0), (g, px, py) =>
           drawPlayer(g, px, py, zoom, {
             id: 'player',
@@ -3189,10 +3321,11 @@ export class Renderer {
             emoteT: emoteAt(player.emote, player.emoteAt, performance.now() / 1000) ?? undefined,
           }),
         );
+        if (ent.clip) ctx.restore();
         // What this body last said, over its own head. No name drawn under it,
         // so the bubble sits where a peer's name would be.
         const mine = this.game.saidAloud;
-        if (mine) this.speechBubble(ctx, zoom, ex, ey - (ent.lift ?? 0) - FIGURE_TOP * zoom, mine.text, mine.at);
+        if (mine) this.overCellar(() => this.speechBubble(ctx, zoom, ex, ey - (ent.lift ?? 0) - FIGURE_TOP * zoom, mine.text, mine.at));
         continue;
       }
       if (ent.kind === 'peer' && ent.peer) {
@@ -3206,6 +3339,7 @@ export class Renderer {
           this.peerHits.push({ x: ent.x, y: ent.y, left: ex - 10 * zoom, top: ey - (FIGURE_TOP - 2) * zoom, w: 20 * zoom, h: FIGURE_TOP * zoom, peer: peer.uid });
         }
         peer.facing = this.facingOnScreen(peer.dirX, peer.dirY, peer.facing);
+        this.clipTo(ctx, ent.clip);
         this.paint(ctx, zoom, hovering ? 'hover' : 'none', 0, ex, ey, (g, px, py) =>
           drawPlayer(g, px, py, zoom, {
             id: 'o' + peer.id,
@@ -3224,8 +3358,9 @@ export class Renderer {
             emoteT: emoteAt(peer.emote, peer.emoteAt, performance.now() / 1000) ?? undefined,
           }),
         );
+        if (ent.clip) ctx.restore();
         // Somebody else is only somebody else if you can tell which one.
-        if (zoom >= 0.5) {
+        if (zoom >= 0.5) this.overCellar(() => {
           ctx.textAlign = 'center';
           ctx.textBaseline = 'alphabetic';
           const ty = ey - (FIGURE_TOP + 1) * zoom;
@@ -3257,11 +3392,12 @@ export class Renderer {
           }
           ctx.lineWidth = 1;
           ctx.textAlign = 'left';
-        }
+        });
         // Over the name and over whatever they are at, so a person talking
         // while they dig reads top to bottom: what they said, what they are
         // doing, who they are.
-        if (peer.said) this.speechBubble(ctx, zoom, ex, ey - (FIGURE_TOP + 17) * zoom, peer.said, peer.saidAt ?? 0);
+        const said = peer.said;
+        if (said) this.overCellar(() => this.speechBubble(ctx, zoom, ex, ey - (FIGURE_TOP + 17) * zoom, said, peer.saidAt ?? 0));
         continue;
       }
       if (ent.kind === 'creature' && ent.creature) {
@@ -3614,13 +3750,22 @@ export class Renderer {
         this.crateHits.push({ x: ent.x, y: ent.y, left: left + dw * 0.15, top: top + dh * 0.2, w: dw * 0.7, h: dh * 0.75, crate: ent.crateId });
       }
     }
-    if (this.ghost) this.drawGhost(ctx, zoom, this.ghost);
+    // Down a cellar it goes on once, over the whole of the cellar (`drawCellarView`).
+    if (this.ghost && !this.inCellarPass) this.drawGhost(ctx, zoom, this.ghost);
   }
 
   /** The ghost of what is being set down, over everything, and washed red where it will not go. */
   private drawGhost(ctx: CanvasRenderingContext2D, zoom: number, ghost: Ghost): void {
     const cam = this.camera;
     const world = this.game.world;
+    /*
+     * Over a cellar you are looking into, a piece goes down on its floor and
+     * a way down stands in it, and both are drawn with the cellar; from up
+     * top, a way down is the hole it would go down through.
+     */
+    const below = this.cellarFrame && this.game.buildings.cellarDone(ghost.x, ghost.y)
+      && (ghost.kind === 'furniture' || ghost.level === 0);
+    if (below !== this.inCellarPass) return;
     ctx.save();
     ctx.globalAlpha = 0.6;
     if (ghost.kind === 'furniture') {
@@ -3628,7 +3773,7 @@ export class Renderer {
       const wx = ghost.x + (ghost.sx + w / 2) / SUBTILES;
       const wy = ghost.y + (ghost.sy + h / 2) / SUBTILES;
       const px = cam.worldToScreenX(wx, wy);
-      const py = cam.worldToScreenY(wx, wy, this.pieceBase({ kind: ghost.piece }, wx, wy));
+      const py = cam.worldToScreenY(wx, wy, below ? cellarFloorHeight(this.game, ghost.x, ghost.y) : this.pieceBase({ kind: ghost.piece }, wx, wy));
       drawFurniture(ctx, px, py, zoom, ghost.piece, false, undefined, undefined, pieceView(ghost.facing, cam.rotation), ghost.material);
       if (!ghost.ok) {
         const [W, D] = furnitureSpan(ghost.piece);
@@ -3640,8 +3785,9 @@ export class Renderer {
     } else {
       const tile: FloorTile = { building: 0, level: ghost.level, x: ghost.x, y: ghost.y, material: ghost.material, kind: ghost.floorKind, facing: ghost.side, ...floorBill(ghost.material, ghost.floorKind) };
       const base = this.game.buildings.buildingAt(ghost.x, ghost.y)?.deck ?? world.getHeight(ghost.x, ghost.y);
-      if (ghost.floorKind === 'stairs') this.drawStairs(tile, ghost.x, ghost.y, base, 0.6);
-      else this.drawLadder(tile, ghost.x, ghost.y, base, 0.6);
+      if (ghost.level === 0 && !below && this.game.buildings.cellarDone(ghost.x, ghost.y)) this.drawOpening(tile, ghost.x, ghost.y, base, 0.6);
+      else if (ghost.floorKind === 'stairs') this.drawStairs(tile, ghost.x, ghost.y, base, 0.6);
+      else this.drawLadder(tile, ghost.x, ghost.y, base, 0.6, ghost.level > 0);
       if (!ghost.ok) {
         const px = cam.worldToScreenX(ghost.x + 0.5, ghost.y + 0.5);
         const py = cam.worldToScreenY(ghost.x + 0.5, ghost.y + 0.5, base + (ghost.level - 1) * WALL_HEIGHT);
@@ -3705,7 +3851,11 @@ export class Renderer {
     const backB: Border = borderOf(x, y, V.back[1]);
     const playerLevel = this.game.player.level;
     const maxLevels = building ? building.levels : Math.max(1, this.maxLevelsAround(x, y));
-    const { cutaway, viewLevel } = this.game.settings;
+    const { cutaway } = this.game.settings;
+    // Looking into a cellar, a building with none under it is looked at as its ground floor is.
+    const viewLevel = this.game.settings.viewLevel === null ? null : Math.max(0, this.game.settings.viewLevel);
+    // And one over a cellar is taken off, all of it: only another building's wall on this tile's borders stands.
+    const gone = !!building && this.cut.has(building.id);
     // Floors, stairs and ladders for each storey, walls of each storey, then the roof one level up.
     for (let level = 0; level <= maxLevels; level++) {
       /*
@@ -3715,8 +3865,8 @@ export class Renderer {
        */
       let late: (() => void) | null = null;
       // Under the ground floor of a tile on piers, the piers: see `piers.ts`.
-      if (level === 0 && building && bld.pierTiles.size && bld.onPiers(x, y)) this.drawPiers(x, y, V);
-      if (building) {
+      if (level === 0 && building && !gone && bld.pierTiles.size && bld.onPiers(x, y)) this.drawPiers(x, y, V);
+      if (building && !gone) {
         const floor = bld.floor(level, x, y);
         /*
          * Looking at one storey means lifting the ceilings above it off, but
@@ -3731,7 +3881,14 @@ export class Renderer {
           // only of that room: the far end of a longhouse keeps its own.
           const dim = level > playerLevel && !!this.roomTiles?.has(`${x},${y}`);
           const alpha = dim ? 0.35 : 1;
-          switch (floorKind(floor)) {
+          // A way down from the ground floor is a hole in it, and only the top of the way down shows: see `drawOpening`.
+          // Under a finished roof drawn whole over it -- you are not standing under it, nor looking into the storey --
+          // it is not seen, and not drawn.
+          const down = level === 0 && climb && !!bld.cellar(x, y);
+          const lid = down && viewLevel === null && !this.roomTiles?.has(`${x},${y}`) ? bld.roofAt(building.levels, x, y) : undefined;
+          if (down) {
+            if (!lid || !isDone(lid)) this.drawOpening(floor, x, y, base, alpha);
+          } else switch (floorKind(floor)) {
             case 'stairs':
               this.drawStairs(floor, x, y, base, alpha);
               break;
@@ -3758,7 +3915,7 @@ export class Renderer {
       // of the storey, before any wall of the storey stands on it -- on a
       // floor, that is: a hatch or a flight has none to take it.
       const slot = level ? bld.floor(level, x, y) : undefined;
-      if (level === 0 || (slot && (floorKind(slot) === 'floor' || floorKind(slot) === 'roof'))) this.groundShade(x, y, level, V);
+      if (!gone && (level === 0 || (slot && (floorKind(slot) === 'floor' || floorKind(slot) === 'roof')))) this.groundShade(x, y, level, V);
       for (const border of [backA, backB]) {
         const wall = bld.wallOnBorder(level, border);
         if (!wall) {
@@ -3768,7 +3925,7 @@ export class Renderer {
            * a footprint still looks like one.
            */
           const plan = bld.edgeOf(border);
-          if (plan && !(cutaway && building?.id !== plan.id)) {
+          if (plan && !(cutaway && building?.id !== plan.id) && !this.cut.has(plan.id)) {
             const [tx, ty] = border.dir === 'h'
               ? [border.x, bld.buildingAt(border.x, border.y) === plan ? border.y : border.y - 1]
               : [bld.buildingAt(border.x, border.y) === plan ? border.x : border.x - 1, border.y];
@@ -3789,6 +3946,7 @@ export class Renderer {
          * cutaway takes away.
          */
         if (cutaway && building?.id !== wall.building && !this.edgeOn(border)) continue;
+        if (this.cut.has(wall.building)) continue;
         const dim = inFront && this.wallsMyRoom(border);
         this.drawWall(wall, border, (wall.building ? bld.list.get(wall.building)?.deck : undefined) ?? ground, dim ? 0.3 : 1);
       }
@@ -3902,6 +4060,561 @@ export class Renderer {
     }
   }
 
+  /**
+   * A name, or what somebody said, over a body: at once up top, and down in a
+   * cellar once the whole of it is laid. A cellar is laid a line of the ground
+   * at a time, and a flight standing in a nearer line went on over a name
+   * that stood up into it.
+   */
+  private overCellar(draw: () => void): void {
+    if (this.inCellarPass) this.cellarWords.push(draw);
+    else draw();
+  }
+
+  /**
+   * The cellar, from down in it, over everything: the country laid back
+   * under a veil, then every tile of every cellar a line at a time, back to
+   * front -- its floor, the far sides of the dig, the way up, the near sides
+   * cut down to a kerb, and what is down there, standing and lying -- and
+   * the cellar's own dark over the lot, with what burns down there and the
+   * daylight down the way in taken out of it. What the eye down there does
+   * not reach (`Vision.cellarState`) is drawn as it is remembered: the room,
+   * and nothing in it.
+   */
+  private drawCellarView(ctx: CanvasRenderingContext2D, zoom: number): void {
+    const g = this.game;
+    const bld = g.buildings;
+    const cam = this.camera;
+    const V = cam.view;
+    const W = this.canvas.width;
+    const H = this.canvas.height;
+    ctx.fillStyle = CELLAR_VEIL;
+    ctx.fillRect(0, 0, W, H);
+    const tiles = cellarOrder(g, V, this.cellarTiles);
+    const { back, front } = sidesOf(V);
+    const fogged = g.settings.fog;
+    this.cellarHulls.length = 0;
+    // What the cellars' own drawing was laid for: the view, and every tile of every cellar as it is dug.
+    let stamp = `${cam.rotation}|${zoom}|${this.canvas.dpr}`;
+    for (const t of tiles) {
+      stamp += `;${t.x},${t.y},${t.dug},${t.building}`;
+      // And the flight standing in it, for the shade it throws on the floor.
+      const f = bld.floor(0, t.x, t.y);
+      if (f && floorKind(f) === 'stairs') stamp += f.facing ?? 's';
+    }
+    if (stamp !== this.cellarStamp) {
+      this.cellarStamp = stamp;
+      this.cellarCache.clear();
+    }
+    /*
+     * Ground standing in front of any of a cellar, within the three lines of
+     * the screen a storey of it covers, is cut down to the cellar's floor and
+     * a hand over it, so the room behind it shows: its sides there are drawn
+     * cut (`cutFace`). Ground with nothing of a cellar behind it keeps its
+     * full height, the dig's far sides standing up to the ground floor.
+     */
+    const eOf = (x: number, y: number): number => V.e[0] + V.e[1] * x + V.e[2] * y;
+    const span = V.staggered ? 2 : 1;
+    const cuts = new Map<string, number | null>();
+    const cutTo = (ex: number, ey: number, building: number): number | null => {
+      const key = `${ex},${ey},${building}`;
+      const had = cuts.get(key);
+      if (had !== undefined) return had;
+      let out: number | null = null;
+      if (!bld.cellar(ex, ey)) {
+        const d0 = depthOf(V, ex, ey);
+        const e0 = eOf(ex, ey);
+        for (let dy = -3; dy <= 3 && out === null; dy++) {
+          for (let dx = -3; dx <= 3; dx++) {
+            // Only the same cellar: another one behind is another room, and its own sides are its own.
+            const behind = bld.cellar(ex + dx, ey + dy);
+            if (!behind || behind.building !== building) continue;
+            const dd = d0 - depthOf(V, behind.x, behind.y);
+            if (dd > 0 && dd <= 3 && Math.abs(eOf(behind.x, behind.y) - e0) < span) {
+              out = g.world.getHeight(behind.x, behind.y) - CELLAR_DEPTH + KERB;
+              break;
+            }
+          }
+        }
+      }
+      cuts.set(key, out);
+      return out;
+    };
+    // What was hit-boxed up top before the cellar went over it: whatever the cellar covers is not there to click.
+    const hitLists = [this.creatureHits, this.peerHits, this.crateHits, this.fireHits, this.smelterHits, this.kilnHits,
+      this.furnitureHits, this.anvilHits, this.postHits, this.trapHits, this.deckHits];
+    const upTop = hitLists.map((l) => l.length);
+    this.inCellarPass = true;
+    for (let i = 0; i < tiles.length;) {
+      const d = depthOf(V, tiles[i].x, tiles[i].y);
+      this.ents.length = 0;
+      this.entN = 0;
+      for (; i < tiles.length && depthOf(V, tiles[i].x, tiles[i].y) === d; i++) {
+        const t = tiles[i];
+        const { x, y } = t;
+        const top = g.world.getHeight(x, y);
+        const F = top - t.dug;
+        // The floor of the dig at its deepest: what a tile only part dug stands on, cut.
+        const deep = Math.min(F, top - CELLAR_DEPTH);
+        const sx = cam.worldToScreenX(x + 0.5, y + 0.5);
+        if (sx < -HALF_W * 2 * zoom || sx > W + HALF_W * 2 * zoom) continue;
+        if (cam.worldToScreenY(x + 0.5, y + 0.5, deep) < -HALF_H * 2 * zoom || cam.worldToScreenY(x + 0.5, y + 0.5, top + 12) > H + HALF_H * 2 * zoom) continue;
+        const hull = this.cellarHull(x, y, deep - UNDER, top);
+        const floor = ([[x, y], [x + 1, y], [x + 1, y + 1], [x, y + 1]] as Array<[number, number]>)
+          .map(([px, py]): [number, number] => [cam.worldToScreenX(px, py), cam.worldToScreenY(px, py, F)]);
+        this.cellarHulls.push({ x, y, hull, floor });
+        // Which sides are the ground, and which go on into more of the same cellar.
+        const same = (side: Side): CellarTile | undefined => {
+          const n = bld.cellar(x + OUT[side][0], y + OUT[side][1]);
+          return n && n.building === t.building ? n : undefined;
+        };
+        const against = (['n', 'e', 's', 'w'] as Side[]).filter((side) => !same(side));
+        const anchor: [number, number] = [cam.worldToScreenX(x, y), cam.worldToScreenY(x, y, top)];
+        const flight = bld.floor(0, x, y);
+        this.cellarLayer(`${x},${y}:under`, hull, anchor, (c) => {
+          cellarFloor(c, g, x, y, F, against);
+          // Under a staircase, the floor in its shade: a flight seen from its head end stands up off the floor and not on it.
+          if (flight && floorKind(flight) === 'stairs') flightShade(c, x, y, F, flight.facing ?? 's');
+          for (const side of back) {
+            const n = same(side);
+            if (!n) {
+              const cut = cutTo(x + OUT[side][0], y + OUT[side][1], t.building);
+              if (cut === null) earthFace(c, faceOn(g, x, y, side, F, 1, true));
+              else cutFace(c, g, x, y, side, F, cut, false);
+              // The next building's cellar across it: square on, the earth between the two is edge on.
+              if (bld.cellar(x + OUT[side][0], y + OUT[side][1])) earthEnd(c, x, y, side, F, top);
+              continue;
+            }
+            // More of the cellar, not dug so deep: the face of what is left standing, up to its floor.
+            const nF = cellarFloorHeight(g, x + OUT[side][0], y + OUT[side][1]);
+            if (nF > F + 0.01) {
+              const face = faceOn(g, x, y, side, F, 1, false);
+              face.hi0 = nF;
+              face.hi1 = nF;
+              earthFace(c, face);
+            }
+          }
+        });
+        // The way up out of it, from its floor to the ground floor, standing in this tile: cut where everything over
+        // the ground floor is, its rails and a ladder's head with it.
+        if (flight && (floorKind(flight) === 'stairs' || floorKind(flight) === 'ladder')) {
+          ctx.save();
+          ctx.beginPath();
+          ctx.moveTo(hull[0][0], hull[0][1]);
+          for (let k = 1; k < hull.length; k++) ctx.lineTo(hull[k][0], hull[k][1]);
+          ctx.closePath();
+          ctx.clip();
+          if (floorKind(flight) === 'ladder') this.drawLadder(flight, x, y, top, 1, false);
+          else this.drawStairs(flight, x, y, top, 1);
+          ctx.restore();
+        }
+        const cutNear = front.filter((side) => !same(side));
+        if (cutNear.length) this.cellarLayer(`${x},${y}:over`, hull, anchor, (c) => {
+          for (const side of cutNear) cutFace(c, g, x, y, side, deep - UNDER, F + KERB, true);
+        });
+        // A tile only part dug is seen when the room beside it is: its face and its top are what you see of it.
+        const seen = !fogged || g.vision.cellarState(x, y) === VISIBLE
+          || (t.dug < CELLAR_DEPTH && (['n', 'e', 's', 'w'] as Side[]).some((side) => !!same(side) && g.vision.cellarState(x + OUT[side][0], y + OUT[side][1]) === VISIBLE));
+        if (seen) this.takeCellarThings(x, y, F);
+        else {
+          // Remembered: the room as it was, and nothing in it -- its floor under the cold wash remembered ground has.
+          ctx.beginPath();
+          ctx.moveTo(floor[0][0], floor[0][1]);
+          for (let k = 1; k < 4; k++) ctx.lineTo(floor[k][0], floor[k][1]);
+          ctx.closePath();
+          ctx.fillStyle = FOG_COLOR;
+          ctx.fill();
+        }
+      }
+      if (this.ents.length) this.drawEntities(ctx, zoom);
+    }
+    // The names over everybody down here, over everything in the cellar.
+    for (const draw of this.cellarWords) draw();
+    this.cellarWords.length = 0;
+    // What is being set down down here, over the whole of it, once.
+    if (this.ghost) this.drawGhost(ctx, zoom, this.ghost);
+    this.inCellarPass = false;
+    hitLists.forEach((list, n) => {
+      let k = 0;
+      for (let i = 0; i < list.length; i++) {
+        const h = list[i];
+        if (i < upTop[n] && this.cellarHulls.some((c) => inOutline(c.hull, h.left + h.w / 2, h.top + h.h / 2))) continue;
+        list[k++] = h;
+      }
+      list.length = k;
+    });
+    this.cellarDark(ctx, zoom);
+  }
+
+  /**
+   * Lay a cellar tile's own drawing through the cache: drawn into a canvas
+   * of its own the first time it is wanted, over the box of the tile's
+   * outline, and put down every frame after at the same place against the
+   * tile's corner, on a whole pixel so it stays sharp. What a cellar costs a
+   * frame is then a few blits and what moves in it.
+   */
+  private cellarLayer(key: string, hull: Array<[number, number]>, anchor: [number, number], draw: (c: CellarCanvas) => void): void {
+    let had = this.cellarCache.get(key);
+    if (!had) {
+      had = this.layOut(hull, anchor, draw);
+      this.cellarCache.set(key, had);
+    }
+    this.putDown(had, anchor, 1);
+  }
+
+  /** A drawing laid into a canvas of its own, over the box round `hull` and a margin, against `anchor`. */
+  private layOut(hull: Array<[number, number]>, anchor: [number, number], draw: (c: CellarCanvas) => void): CellarLaid {
+    const dpr = this.canvas.dpr;
+    let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+    for (const [hx, hy] of hull) {
+      if (hx < x0) x0 = hx;
+      if (hx > x1) x1 = hx;
+      if (hy < y0) y0 = hy;
+      if (hy > y1) y1 = hy;
+    }
+    x0 = Math.floor(x0) - 4;
+    y0 = Math.floor(y0) - 4;
+    const w = Math.ceil(x1) + 4 - x0, h = Math.ceil(y1) + 4 - y0;
+    const cv = document.createElement('canvas');
+    cv.width = Math.max(1, Math.ceil(w * dpr));
+    cv.height = Math.max(1, Math.ceil(h * dpr));
+    const lay = cv.getContext('2d') as CanvasRenderingContext2D;
+    lay.setTransform(dpr, 0, 0, dpr, -x0 * dpr, -y0 * dpr);
+    lay.lineJoin = 'round';
+    draw({ ctx: lay, cam: this.camera, zoom: this.camera.zoom, light: (ux, uy) => this.faceLight(ux, uy) });
+    return { cv, x0, y0, ax: anchor[0], ay: anchor[1], w, h };
+  }
+
+  /** Put a laid drawing down where its anchor has gone since, as the camera moved: on a whole pixel, so it stays sharp. */
+  private putDown(had: CellarLaid, anchor: [number, number], alpha: number): void {
+    const dpr = this.canvas.dpr;
+    const dx = Math.round((anchor[0] - had.ax) * dpr) / dpr;
+    const dy = Math.round((anchor[1] - had.ay) * dpr) / dpr;
+    const ctx = this.canvas.ctx;
+    if (alpha < 1) ctx.globalAlpha = alpha;
+    ctx.drawImage(had.cv, had.x0 + dx, had.y0 + dy, had.w, had.h);
+    if (alpha < 1) ctx.globalAlpha = 1;
+  }
+
+  /**
+   * A cellar tile's outline on the screen, from its floor to the ground
+   * floor over it: the box it is, a hair wider than the tile so the kerb
+   * round it is in it too, as the hull of its eight corners.
+   */
+  private cellarHull(x: number, y: number, floor: number, top: number): Array<[number, number]> {
+    const cam = this.camera;
+    const pts: Array<[number, number]> = [];
+    for (const [u, v] of [[-0.1, -0.1], [1.1, -0.1], [1.1, 1.1], [-0.1, 1.1]]) pts.push([cam.worldToScreenX(x + u, y + v), cam.worldToScreenY(x + u, y + v, floor - 0.6)]);
+    for (const [u, v] of [[0, 0], [1, 0], [1, 1], [0, 1]]) pts.push([cam.worldToScreenX(x + u, y + v), cam.worldToScreenY(x + u, y + v, top + 1)]);
+    pts.sort((a, b) => a[0] - b[0] || a[1] - b[1]);
+    const cross = (o: [number, number], a: [number, number], b: [number, number]): number => (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0]);
+    const lower: Array<[number, number]> = [];
+    for (const p of pts) {
+      while (lower.length >= 2 && cross(lower[lower.length - 2], lower[lower.length - 1], p) <= 0) lower.pop();
+      lower.push(p);
+    }
+    const upper: Array<[number, number]> = [];
+    for (let i = pts.length - 1; i >= 0; i--) {
+      const p = pts[i];
+      while (upper.length >= 2 && cross(upper[upper.length - 2], upper[upper.length - 1], p) <= 0) upper.pop();
+      upper.push(p);
+    }
+    return [...lower.slice(0, -1), ...upper.slice(0, -1)];
+  }
+
+  /** What is down in a cellar on one tile, stood on its floor at `floor`: things lying, pieces, crates, people. */
+  private takeCellarThings(x: number, y: number, floor: number): void {
+    const g = this.game;
+    const cam = this.camera;
+    const pile = g.groundAt(x, y, CELLAR_LEVEL);
+    if (pile.length) {
+      const e = this.take('pile', x, y, cam.worldToScreenX(x + 0.5, y + 0.5), cam.worldToScreenY(x + 0.5, y + 0.5, floor), pileSprite());
+      let best = 0;
+      for (const it of pile) if ((it.rare ?? 0) > best) best = it.rare ?? 0;
+      if (best) e.rare = best;
+    }
+    if (g.anythingPlaced(x, y)) {
+      for (const fu of g.furnitureOnTile(x, y)) {
+        if ((fu.level ?? 0) >= 0) continue;
+        const [wx, wy] = furnitureCentre(fu);
+        const fe = this.take('furniture', x, y, cam.worldToScreenX(wx, wy), cam.worldToScreenY(wx, wy, floor), null);
+        fe.piece = fu;
+        fe.view = this.viewOf(fu);
+        if (fu.rare) fe.rare = fu.rare;
+      }
+      for (const crate of g.cratesOnTile(x, y)) {
+        if ((crate.level ?? 0) >= 0 || g.rackAt(crate.x, crate.y, crate.sx, crate.sy, crate.level)) continue;
+        const [wx, wy] = crateCentre(crate);
+        const ce = this.take('crate', x, y, cam.worldToScreenX(wx, wy), cam.worldToScreenY(wx, wy, floor), crateSprite(crate.kind));
+        ce.crateId = crate.id;
+        if (crate.rare) ce.rare = crate.rare;
+      }
+    }
+    if (g.roster.size) {
+      for (const peer of g.roster.atTile(x, y)) {
+        if (peer.level >= 0) continue;
+        const [px, py] = g.roster.drawnAt(peer);
+        this.take('peer', x, y, cam.worldToScreenX(px, py), cam.worldToScreenY(px, py, this.footAt(px, py) + peer.level * WALL_HEIGHT), null).peer = peer;
+      }
+    }
+    const p = g.player;
+    if (p.level < 0 && p.tileX === x && p.tileY === y) {
+      this.take('player', x, y, cam.worldToScreenX(p.x, p.y), cam.worldToScreenY(p.x, p.y, this.footAt(p.x, p.y) + p.visualLevel * WALL_HEIGHT), null);
+    }
+  }
+
+  /**
+   * A cellar's dark: laid over every tile of it that was drawn, at every
+   * hour, with what burns down there and the daylight down the way in taken
+   * out of it, as the night's wash has the lights taken out of it up top,
+   * and a warm cast where a flame's light falls.
+   */
+  private cellarDark(ctx: CanvasRenderingContext2D, zoom: number): void {
+    if (!this.cellarHulls.length) return;
+    const g = this.game;
+    const cam = this.camera;
+    const room = new Path2D();
+    // And the box round all of it on the screen: the dark is laid in that and no more, so it costs what the cellar covers.
+    let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+    for (const { hull } of this.cellarHulls) {
+      room.moveTo(hull[0][0], hull[0][1]);
+      for (let k = 1; k < hull.length; k++) room.lineTo(hull[k][0], hull[k][1]);
+      room.closePath();
+      for (const [hx, hy] of hull) {
+        if (hx < x0) x0 = hx;
+        if (hx > x1) x1 = hx;
+        if (hy < y0) y0 = hy;
+        if (hy > y1) y1 = hy;
+      }
+    }
+    const lights = g.cellarLights();
+    const at = (l: { x: number; y: number }): [number, number] => {
+      const h = cellarFloorHeight(g, Math.floor(l.x), Math.floor(l.y)) + 8;
+      return [cam.worldToScreenX(l.x, l.y), cam.worldToScreenY(l.x, l.y, h)];
+    };
+    const layer = this.nightLayer();
+    const bx = Math.max(0, Math.floor(x0) - 2), by = Math.max(0, Math.floor(y0) - 2);
+    const bw = Math.min(layer.width, Math.ceil(x1) + 2) - bx, bh = Math.min(layer.height, Math.ceil(y1) + 2) - by;
+    if (bw <= 0 || bh <= 0) return;
+    const nc = layer.getContext('2d') as CanvasRenderingContext2D;
+    nc.setTransform(1, 0, 0, 1, 0, 0);
+    nc.globalCompositeOperation = 'source-over';
+    nc.clearRect(bx, by, bw, bh);
+    nc.save();
+    nc.beginPath();
+    nc.rect(bx, by, bw, bh);
+    nc.clip();
+    nc.fillStyle = `rgba(${CELLAR_DARK_INK}, ${CELLAR_DARK})`;
+    nc.fill(room, 'nonzero');
+    nc.globalCompositeOperation = 'destination-out';
+    for (const l of lights) {
+      const [sx, sy] = at(l);
+      const r = Math.max(8, l.radius * HALF_W * zoom * this.flicker(l));
+      // Falling off fast from the flame: what you carry lights what is round you, and leaves the far side of a room in the dark.
+      const grad = nc.createRadialGradient(sx, sy, 0, sx, sy, r);
+      for (const [at, k] of CELLAR_FALL) grad.addColorStop(at, `rgba(0,0,0,${(l.strength * k).toFixed(3)})`);
+      nc.fillStyle = grad;
+      nc.beginPath();
+      nc.arc(sx, sy, r, 0, Math.PI * 2);
+      nc.fill();
+    }
+    nc.restore();
+    nc.globalCompositeOperation = 'source-over';
+    ctx.drawImage(layer, bx, by, bw, bh, bx, by, bw, bh);
+    if (!lights.length) return;
+    ctx.save();
+    ctx.clip(room);
+    ctx.globalCompositeOperation = 'lighter';
+    for (const l of lights) {
+      const [sx, sy] = at(l);
+      const r = Math.max(8, l.radius * HALF_W * zoom * this.flicker(l));
+      const cast = l.cast ?? '255, 186, 92';
+      const warm = ctx.createRadialGradient(sx, sy, 0, sx, sy, r);
+      warm.addColorStop(0, `rgba(${cast}, ${(l.castAlpha ?? 0.16 * l.strength).toFixed(3)})`);
+      warm.addColorStop(1, `rgba(${cast}, 0)`);
+      ctx.fillStyle = warm;
+      ctx.beginPath();
+      ctx.arc(sx, sy, r, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.restore();
+  }
+
+  /**
+   * A way down into a cellar, from up top: a hole in the ground floor, and
+   * what can be seen down it -- the far sides of the hole going down out of
+   * the light, the cellar floor at the bottom where it shows, and the flight
+   * or the ladder going down. Everything below the ground floor shows only
+   * through the hole; what stands up out of it, a rail or a ladder's head,
+   * shows over it.
+   */
+  private drawOpening(floor: FloorTile, x: number, y: number, base: number, alpha: number): void {
+    const ctx = this.canvas.ctx;
+    const cam = this.camera;
+    const g = this.game;
+    const w = g.world;
+    const bld = g.buildings;
+    const hole: Array<[number, number]> = ([[x, y], [x + 1, y], [x + 1, y + 1], [x, y + 1]] as Array<[number, number]>)
+      .map(([cx, cy]) => [cam.worldToScreenX(cx, cy), cam.worldToScreenY(cx, cy, w.getHeight(cx, cy))]);
+    const holePath = (): void => {
+      ctx.beginPath();
+      ctx.moveTo(hole[0][0], hole[0][1]);
+      for (let i = 1; i < 4; i++) ctx.lineTo(hole[i][0], hole[i][1]);
+      ctx.closePath();
+    };
+    // The sides of the hole that are the ground, and the walls standing on its edges.
+    const own = bld.cellar(x, y)?.building;
+    const against: Side[] = [];
+    let walls = '';
+    for (const side of ['n', 'e', 's', 'w'] as Side[]) {
+      const [ox, oy] = OUT[side];
+      if (!bld.sameCellar(own, x + ox, y + oy)) against.push(side);
+      const wall = bld.wall(0, x, y, side);
+      walls += wall && isDone(wall) ? side : '-';
+      const next = bld.floor(0, x + ox, y + oy);
+      if (next && floorKind(next) === 'stairs') walls += next.facing ?? 's';
+    }
+    // Inside the hole, laid once: everything under the ground floor's plane, each part shaded by how deep it is.
+    const stamp = `${cam.rotation}|${cam.zoom}|${this.canvas.dpr}|${bld.cellar(x, y)?.dug}|${floor.kind}${floor.facing}${floor.material}`
+      + `${floor.dye ?? ''}${isDone(floor) ? 1 : 0}|${against.join('')}|${walls}`;
+    const key = `${x},${y}`;
+    const anchor: [number, number] = hole[0];
+    let had = this.holeCache.get(key);
+    if (!had || had.stamp !== stamp) {
+      if (this.holeCache.size > 256) this.holeCache.clear();
+      had = { ...this.layOut(hole, anchor, (c) => this.holeInside(c, floor, x, y, base, hole, against)), stamp };
+      this.holeCache.set(key, had);
+    }
+    this.putDown(had, anchor, alpha);
+    // What stands up out of it, over the screen above the hole and not in it: the rails, and a ladder's head.
+    // The hole's upper edges: from its leftmost corner over its top one to its rightmost, the higher of two level with each other.
+    let hi = 0, left = 0, right = 0;
+    for (let i = 1; i < 4; i++) {
+      const [hx, hy] = hole[i];
+      if (hy < hole[hi][1]) hi = i;
+      if (hx < hole[left][0] - 1e-6 || (Math.abs(hx - hole[left][0]) <= 1e-6 && hy < hole[left][1])) left = i;
+      if (hx > hole[right][0] + 1e-6 || (Math.abs(hx - hole[right][0]) <= 1e-6 && hy < hole[right][1])) right = i;
+    }
+    ctx.save();
+    ctx.beginPath();
+    ctx.moveTo(hole[left][0], -1e5);
+    ctx.lineTo(hole[left][0], hole[left][1]);
+    ctx.lineTo(hole[hi][0], hole[hi][1]);
+    ctx.lineTo(hole[right][0], hole[right][1]);
+    ctx.lineTo(hole[right][0], -1e5);
+    ctx.closePath();
+    ctx.clip();
+    if (floorKind(floor) === 'ladder') this.drawLadder(floor, x, y, base, alpha, false);
+    else this.drawStairs(floor, x, y, base, alpha, 'over');
+    ctx.restore();
+    // And the rim of the hole.
+    holePath();
+    ctx.strokeStyle = 'rgba(40, 30, 32, 0.85)';
+    ctx.lineWidth = Math.max(0.8, cam.zoom);
+    ctx.stroke();
+  }
+
+  /**
+   * The inside of a hole down to a cellar, laid into `c` (`drawOpening`): the
+   * dark, the floor at the bottom, the far sides going down, and the way down
+   * as far as the ground floor -- each darker the deeper it is
+   * (`shaftShade`), by its height under the ground floor rather than by where
+   * it falls on the screen, so the top of a flight is in the light at every
+   * turn of the view, whichever way it goes down.
+   */
+  private holeInside(c: CellarCanvas, floor: FloorTile, x: number, y: number, base: number, hole: Array<[number, number]>, against: readonly Side[]): void {
+    const g = this.game;
+    const bld = g.buildings;
+    const cam = this.camera;
+    const lay = c.ctx;
+    const bottom = cellarFloorHeight(g, x, y);
+    const deep = Math.max(1, base - bottom);
+    const { back } = sidesOf(cam.view);
+    const P = (wx: number, wy: number, h: number): [number, number] => [cam.worldToScreenX(wx, wy), cam.worldToScreenY(wx, wy, h)];
+    lay.save();
+    lay.beginPath();
+    lay.moveTo(hole[0][0], hole[0][1]);
+    for (let i = 1; i < 4; i++) lay.lineTo(hole[i][0], hole[i][1]);
+    lay.closePath();
+    lay.clip();
+    lay.fillStyle = 'rgb(26, 20, 22)';
+    lay.fillRect(-1e5, -1e5, 2e5, 2e5);
+    // The floor at the bottom, as deep as the hole goes.
+    cellarFloor(c, g, x, y, bottom, against, true);
+    lay.save();
+    lay.beginPath();
+    const fl = [P(x, y, bottom), P(x + 1, y, bottom), P(x + 1, y + 1, bottom), P(x, y + 1, bottom)];
+    lay.moveTo(fl[0][0], fl[0][1]);
+    for (let i = 1; i < 4; i++) lay.lineTo(fl[i][0], fl[i][1]);
+    lay.closePath();
+    lay.fillStyle = `rgba(12, 9, 12, ${shaftAlpha((base - bottom) / deep).toFixed(3)})`;
+    lay.fill();
+    lay.restore();
+    // The far sides, each shaded down its own height.
+    for (const side of back) {
+      const [ox, oy] = OUT[side];
+      const open = !against.includes(side);
+      const face = faceOn(g, x, y, side, bottom, 0.7, true);
+      face.plain = true;
+      // The cellar going on under the floor beside the hole: dark, with the floor's timbers over it.
+      if (open) {
+        face.lo0 = face.hi0 - 3.6;
+        face.lo1 = face.hi1 - 3.6;
+        face.rock0 = face.lo0 - 1;
+        face.rock1 = face.lo1 - 1;
+      }
+      // A wall standing on the edge of the hole stands on the ground floor's edge: the hole's side is its inner face.
+      const wall = bld.wall(0, x, y, side);
+      if (wall && isDone(wall)) {
+        face.ax -= ox * WALL_THICK;
+        face.bx -= ox * WALL_THICK;
+        face.ay -= oy * WALL_THICK;
+        face.by -= oy * WALL_THICK;
+      }
+      earthFace(c, face);
+      // Shaded by depth: along the face's own up and down, from its head at the ground floor to the floor of the hole.
+      const a0 = P(face.ax, face.ay, face.hi0), a1 = P(face.bx, face.by, face.hi1), b0 = P(face.ax, face.ay, bottom);
+      lay.save();
+      lay.beginPath();
+      lay.moveTo(a0[0], a0[1]);
+      lay.lineTo(a1[0], a1[1]);
+      const b1 = P(face.bx, face.by, Math.min(face.lo1, face.hi1));
+      const b0f = P(face.ax, face.ay, Math.min(face.lo0, face.hi0));
+      lay.lineTo(b1[0], b1[1]);
+      lay.lineTo(b0f[0], b0f[1]);
+      lay.closePath();
+      lay.fillStyle = shaftShade(lay, a0, a1, b0);
+      lay.fill();
+      lay.restore();
+    }
+    // The way down, as far as the ground floor, laid on a sheet of its own and shaded from its foot to its head.
+    const sheet = document.createElement('canvas');
+    sheet.width = lay.canvas.width;
+    sheet.height = lay.canvas.height;
+    const way = sheet.getContext('2d') as CanvasRenderingContext2D;
+    way.setTransform(lay.getTransform());
+    way.lineJoin = 'round';
+    const ladder = floorKind(floor) === 'ladder';
+    if (ladder) this.drawLadder(floor, x, y, base, 1, false, way);
+    else this.drawStairs(floor, x, y, base, 1, 'whole', way);
+    const [foot, head] = Renderer.wayEnds(x, y, floor.facing ?? 's', ladder);
+    const f0 = P(foot[0], foot[1], bottom), f1 = P(head[0], head[1], base);
+    const grad = way.createLinearGradient(f0[0], f0[1], f1[0], f1[1]);
+    for (const [k, at] of SHAFT_STOPS) grad.addColorStop(1 - at, `rgba(12, 9, 12, ${k})`);
+    way.globalCompositeOperation = 'source-atop';
+    way.fillStyle = grad;
+    way.fillRect(-1e5, -1e5, 2e5, 2e5);
+    lay.setTransform(1, 0, 0, 1, 0, 0);
+    lay.drawImage(sheet, 0, 0);
+    lay.restore();
+  }
+
+  /** Where a flight's foot and its head are, in the world: the middle of the tile's edge it is climbed from, and of the far one. */
+  private static wayEnds(x: number, y: number, facing: Side, ladder: boolean): [[number, number], [number, number]] {
+    const s0 = ladder ? 0.4 : 0, s1 = ladder ? 0.985 : 1;
+    return [Renderer.stairPoint(x, y, facing, 0.5, s0), Renderer.stairPoint(x, y, facing, 0.5, s1)];
+  }
+
   /** World point on a tile from a coordinate across (t) and away from the climbing side (s). */
   private static stairPoint(x: number, y: number, facing: Side, t: number, s: number): [number, number] {
     switch (facing) {
@@ -4002,7 +4715,8 @@ export class Renderer {
     const world = this.game.world;
     const found = (bb: Border): Wall | undefined => {
       const w = bld.wallOnBorder(level, bb);
-      return w && isDone(w) ? w : undefined;
+      // A wall taken off over a cellar you are looking into throws nothing.
+      return w && isDone(w) && !this.cut.has(w.building) ? w : undefined;
     };
     const halfOf = (w: Wall): number => {
       const k = WALL_TYPE_BY_ID.get(w.type);
@@ -4098,8 +4812,9 @@ export class Renderer {
    * stands clear of a wall it runs up beside, against the wall's face, not
    * in it.
    */
-  private drawStairs(floor: FloorTile, x: number, y: number, base: number, alpha: number): void {
-    const main = this.canvas.ctx;
+  private drawStairs(floor: FloorTile, x: number, y: number, base: number, alpha: number, part: 'whole' | 'over' = 'whole',
+    into?: CanvasRenderingContext2D): void {
+    const main = into ?? this.canvas.ctx;
     const cam = this.camera;
     const bld = this.game.buildings;
     const bare = MATERIAL_BY_ID.get(floor.material);
@@ -4107,8 +4822,7 @@ export class Renderer {
     const facing = floor.facing ?? 's';
     const h0 = base + (floor.level - 1) * WALL_HEIGHT;
     const h1 = base + floor.level * WALL_HEIGHT;
-    // Eight to a storey: six made every step half a metre, and a flight a pile of blocks.
-    const N = 8;
+    const N = FLIGHT_STEPS;
     const rise = (h1 - h0) / N;
     const done = isDone(floor);
     const zoom = cam.zoom;
@@ -4137,7 +4851,7 @@ export class Renderer {
      * box it stands in, rails and all.
      */
     let box: [number, number, number, number] | null = null;
-    if (alpha < 1) {
+    if (alpha < 1 && !into) {
       const dpr = this.canvas.dpr;
       const xs: number[] = [], ys: number[] = [];
       for (const t of [-0.2, 1.2]) for (const u of [-0.2, 1.2]) for (const h of [h0, h1 + 20]) {
@@ -4341,6 +5055,12 @@ export class Renderer {
           ctx.fillStyle = C(st.string, riserLit);
           ctx.fill();
           ctx.stroke();
+        } else {
+          // Seen from its head: the round back of the log under the tread, each one a step higher than the one beyond it.
+          poly([P(tLo, sB - 0.01, ht), P(tHi, sB - 0.01, ht), P(tHi, sm + 0.04, ht - r), P(tLo, sm + 0.04, ht - r)]);
+          ctx.fillStyle = C(st.string, riserLit * 0.84);
+          ctx.fill();
+          ctx.stroke();
         }
         // Its end, where the saw cut it: rings in a half round.
         const [ex, ey] = P(tNear, sm, ht - 0.2);
@@ -4421,8 +5141,24 @@ export class Renderer {
     // What stands beyond the steps from the camera: the far string, the far rail.
     const far: 0 | 1 = near ? 0 : 1;
     const farOpen = open(far), nearOpen = open(near);
-    if ((st.build === 'string' || st.build === 'closed') && !joined(far)) string(tFar);
-    if (st.build === 'log' && !joined(far)) stringer(tFar + (near ? 0.08 : -0.08));
+    // Only what stands up over the ground floor, for a flight down whose hole is laid already (`drawOpening`).
+    const whole = part === 'whole';
+    if (whole && (st.build === 'string' || st.build === 'closed') && !joined(far)) string(tFar);
+    /*
+     * Under the split logs, between the stringers, the backs of the logs in
+     * their own shade, laid along the pitch of the flight: through the gaps
+     * between its steps a log flight shows the underside of the steps beyond,
+     * and not the floor and the wall behind it, which is what a ladder shows.
+     */
+    if (whole && st.build === 'log') {
+      poly([P(tLo, 0.02, h0), P(tHi, 0.02, h0), P(tHi, 1, h1 - rise * 0.55), P(tLo, 1, h1 - rise * 0.55)]);
+      ctx.fillStyle = C(st.string, sideLit * 0.46);
+      ctx.fill();
+    }
+    if (whole && st.build === 'log' && !joined(far)) stringer(tFar + (near ? 0.08 : -0.08));
+    // And the near one under the split logs too: they lie across the two and stand out past them, so each step's end,
+    // stacked up the flight, is laid over its stringer -- which seen from the head end is what says it climbs.
+    if (whole && st.build === 'log' && !joined(near)) stringer(tNear + (near ? -0.08 : 0.08));
     if (farOpen) {
       if (st.rail === 'parapet') side(tFar, true);
       else rail(tFar);
@@ -4433,9 +5169,9 @@ export class Renderer {
       const [bx, by] = W(0.5, (b + 0.5) / N);
       return cam.rotateX(ax, ay) + cam.rotateY(ax, ay) - (cam.rotateX(bx, by) + cam.rotateY(bx, by));
     });
-    for (const i of order) step(i);
+    if (whole) for (const i of order) step(i);
     // A solid flight seen from behind shows the end of it under the landing.
-    if (st.build === 'solid' && !risersShow) {
+    if (whole && st.build === 'solid' && !risersShow) {
       const pts: Array<[number, number]> = [P(tLo, 1, h0), P(tHi, 1, h0), P(tHi, 1, h1), P(tLo, 1, h1)];
       poly(pts);
       if (!pictured(W(tLo, 1), W(tHi, 1), riserLit)) {
@@ -4449,12 +5185,14 @@ export class Renderer {
     }
     // Then the side toward the camera, and its rail.
     if (!joined(near)) {
-      if (st.build === 'solid') side(tNear, st.rail === 'parapet' && nearOpen);
-      else if (st.build === 'log') stringer(tNear + (near ? -0.08 : 0.08));
-      else string(tNear);
+      if (st.build === 'solid') {
+        if (whole || (st.rail === 'parapet' && nearOpen)) side(tNear, st.rail === 'parapet' && nearOpen);
+      } else if (!whole || st.build === 'log') {
+        // Nothing of a string or a stringer stands over the ground floor, and a log flight's stringers went in under its steps.
+      } else string(tNear);
     }
     if (nearOpen && st.rail !== 'parapet') rail(tNear + (near ? -0.05 : 0.05));
-    if (!done) {
+    if (!done && whole) {
       poly([P(0, 0, h1), P(1, 0, h1), P(1, 1, h1), P(0, 1, h1)]);
       ctx.strokeStyle = PLAN_COLOR;
       ctx.lineWidth = 1;
@@ -4490,8 +5228,8 @@ export class Renderer {
    * ladder is not, because it stands in the room with you and is too thin to
    * hide you.
    */
-  private drawLadder(floor: FloorTile, x: number, y: number, base: number, alpha: number, hatch = true): void {
-    const main = this.canvas.ctx;
+  private drawLadder(floor: FloorTile, x: number, y: number, base: number, alpha: number, hatch = true, into?: CanvasRenderingContext2D): void {
+    const main = into ?? this.canvas.ctx;
     const cam = this.camera;
     const bld = this.game.buildings;
     const facing = floor.facing ?? 's';
@@ -4511,8 +5249,8 @@ export class Renderer {
      * overlap would come out darker than either.
      */
     const lay = (a: number, draw: (g: CanvasRenderingContext2D) => void): void => {
-      if (a >= 1) {
-        main.globalAlpha = 1;
+      if (a >= 1 || into) {
+        main.globalAlpha = Math.min(1, a);
         draw(main);
         main.globalAlpha = 1;
         return;
@@ -4662,6 +5400,57 @@ export class Renderer {
   }
 
   /**
+   * Looking into a cellar, take off with the building over it every building
+   * that stands between a cellar and the eye and whose box on the screen falls
+   * over the cellar's: the cellar is laid over the country round it, and a
+   * house in front of it laid under it would read as a house behind it. Asked
+   * of the buildings within a few tiles of a cellar, and only while one is
+   * being looked into.
+   */
+  private cutInFront(): void {
+    const g = this.game;
+    const bld = g.buildings;
+    const cam = this.camera;
+    const V = cam.view;
+    type Box = { x0: number; x1: number; y0: number; y1: number; front: number; tx0: number; tx1: number; ty0: number; ty1: number };
+    const boxes = new Map<number, Box>();
+    const grow = (b: Box, px: number, py: number, hTop: number, hLow: number): void => {
+      const sx = cam.worldToScreenX(px, py);
+      b.x0 = Math.min(b.x0, sx);
+      b.x1 = Math.max(b.x1, sx);
+      b.y0 = Math.min(b.y0, cam.worldToScreenY(px, py, hTop));
+      b.y1 = Math.max(b.y1, cam.worldToScreenY(px, py, hLow));
+    };
+    const fresh = (): Box => ({ x0: Infinity, x1: -Infinity, y0: Infinity, y1: -Infinity, front: -Infinity, tx0: Infinity, tx1: -Infinity, ty0: Infinity, ty1: -Infinity });
+    for (const c of bld.cellars.values()) {
+      let b = boxes.get(c.building);
+      if (!b) boxes.set(c.building, (b = fresh()));
+      const top = g.world.getHeight(c.x, c.y);
+      for (const [px, py] of [[c.x, c.y], [c.x + 1, c.y], [c.x + 1, c.y + 1], [c.x, c.y + 1]]) grow(b, px, py, top, top - CELLAR_DEPTH);
+      b.front = Math.max(b.front, depthOf(V, c.x, c.y));
+      b.tx0 = Math.min(b.tx0, c.x);
+      b.tx1 = Math.max(b.tx1, c.x);
+      b.ty0 = Math.min(b.ty0, c.y);
+      b.ty1 = Math.max(b.ty1, c.y);
+    }
+    const NEAR = 8;
+    for (const b of bld.list.values()) {
+      if (this.cut.has(b.id) || !b.tiles.length) continue;
+      const [fx, fy] = b.tiles[0].split(',').map(Number);
+      const near = [...boxes.values()].filter((c) => fx >= c.tx0 - NEAR && fx <= c.tx1 + NEAR && fy >= c.ty0 - NEAR && fy <= c.ty1 + NEAR);
+      if (!near.length) continue;
+      const box = fresh();
+      for (const k of b.tiles) {
+        const [x, y] = k.split(',').map(Number);
+        const ground = g.world.getHeight(x, y);
+        for (const [px, py] of [[x, y], [x + 1, y], [x + 1, y + 1], [x, y + 1]]) grow(box, px, py, ground + b.levels * WALL_HEIGHT + 24, ground);
+        box.front = Math.max(box.front, depthOf(V, x, y));
+      }
+      if (near.some((c) => box.front >= c.front && box.x0 < c.x1 && box.x1 > c.x0 && box.y0 < c.y1 && box.y1 > c.y0)) this.cut.add(b.id);
+    }
+  }
+
+  /**
    * Which pitched roofs are laid this frame, and when.
    *
    * A roof is one surface over its building, and it goes on after every wall
@@ -4679,8 +5468,9 @@ export class Renderer {
     const { viewLevel } = this.game.settings;
     for (const b of bld.list.values()) {
       if (roofShapeOf(b) === 'flat') continue;
-      // Looking at one storey lifts everything over it off, the roof with it.
+      // Looking at one storey lifts everything over it off, the roof with it; and looking into a cellar, the building over it.
       if (viewLevel !== null && b.levels > viewLevel) continue;
+      if (this.cut.has(b.id)) continue;
       let front = -Infinity;
       for (const k of b.tiles) {
         const [x, y] = k.split(',').map(Number);
@@ -9423,14 +10213,17 @@ export class Renderer {
     }
   }
 
-  private tilePath(ctx: CanvasRenderingContext2D, x: number, y: number): void {
+  /** A tile's outline on the screen: on the ground, or on the floor of the cellar under it (`down`). */
+  private tilePath(ctx: CanvasRenderingContext2D, x: number, y: number, down = false): void {
     const w = this.game.world;
     const cam = this.camera;
+    const floor = down ? cellarFloorHeight(this.game, x, y) : 0;
+    const h = (cx: number, cy: number): number => (down ? floor : w.getHeight(cx, cy));
     ctx.beginPath();
-    ctx.moveTo(cam.worldToScreenX(x, y), cam.worldToScreenY(x, y, w.getHeight(x, y)));
-    ctx.lineTo(cam.worldToScreenX(x + 1, y), cam.worldToScreenY(x + 1, y, w.getHeight(x + 1, y)));
-    ctx.lineTo(cam.worldToScreenX(x + 1, y + 1), cam.worldToScreenY(x + 1, y + 1, w.getHeight(x + 1, y + 1)));
-    ctx.lineTo(cam.worldToScreenX(x, y + 1), cam.worldToScreenY(x, y + 1, w.getHeight(x, y + 1)));
+    ctx.moveTo(cam.worldToScreenX(x, y), cam.worldToScreenY(x, y, h(x, y)));
+    ctx.lineTo(cam.worldToScreenX(x + 1, y), cam.worldToScreenY(x + 1, y, h(x + 1, y)));
+    ctx.lineTo(cam.worldToScreenX(x + 1, y + 1), cam.worldToScreenY(x + 1, y + 1, h(x + 1, y + 1)));
+    ctx.lineTo(cam.worldToScreenX(x, y + 1), cam.worldToScreenY(x, y + 1, h(x, y + 1)));
     ctx.closePath();
   }
 
@@ -9448,32 +10241,36 @@ export class Renderer {
     const game = this.game;
     const w = game.world;
     const cam = this.camera;
-    const path = game.player.path;
-    if (path) {
-      ctx.fillStyle = 'rgba(255,255,255,0.55)';
-      for (const p of path) {
-        const sx = cam.worldToScreenX(p.x + 0.5, p.y + 0.5);
-        const sy = cam.worldToScreenY(p.x + 0.5, p.y + 0.5, w.centerHeight(p.x, p.y));
-        ctx.beginPath();
-        ctx.arc(sx, sy, 2.5 * zoom, 0, Math.PI * 2);
-        ctx.fill();
+    // The way you are walking, and the tile you are working: over the cellar when you are looking into one, after it is drawn.
+    const marks = (): void => {
+      const path = game.player.path;
+      if (path) {
+        ctx.fillStyle = 'rgba(255,255,255,0.55)';
+        for (const p of path) {
+          const sx = cam.worldToScreenX(p.x + 0.5, p.y + 0.5);
+          // A step down in a cellar is on its floor.
+          const sy = cam.worldToScreenY(p.x + 0.5, p.y + 0.5, p.level < 0 ? cellarFloorHeight(game, p.x, p.y) : w.centerHeight(p.x, p.y));
+          ctx.beginPath();
+          ctx.arc(sx, sy, 2.5 * zoom, 0, Math.PI * 2);
+          ctx.fill();
+        }
       }
-    }
-
-    const action = game.action;
-    if (action && action.target.kind === 'tile') {
-      const t = action.target;
-      const pulse = 0.55 + 0.45 * Math.sin(this.time * 6);
-      ctx.lineWidth = 2;
-      if (action.def.corner) {
-        this.cornerMarker(ctx, t.cx, t.cy, zoom, `rgba(255,200,70,${pulse.toFixed(2)})`);
-      } else {
-        this.tilePath(ctx, t.x, t.y);
-        ctx.strokeStyle = `rgba(255,200,70,${pulse.toFixed(2)})`;
-        ctx.stroke();
+      const action = game.action;
+      if (action && action.target.kind === 'tile') {
+        const t = action.target;
+        const pulse = 0.55 + 0.45 * Math.sin(this.time * 6);
+        ctx.lineWidth = 2;
+        if (action.def.corner) {
+          this.cornerMarker(ctx, t.cx, t.cy, zoom, `rgba(255,200,70,${pulse.toFixed(2)})`);
+        } else {
+          this.tilePath(ctx, t.x, t.y, this.cellarFrame && game.buildings.cellar(t.x, t.y) !== undefined);
+          ctx.strokeStyle = `rgba(255,200,70,${pulse.toFixed(2)})`;
+          ctx.stroke();
+        }
+        ctx.lineWidth = 1;
       }
-      ctx.lineWidth = 1;
-    }
+    };
+    if (!this.cellarFrame) marks();
 
     /*
      * Night: a cold wash over the whole world, with a hole burnt in it by
@@ -9549,11 +10346,16 @@ export class Renderer {
     }
     // The fireflies, which are lights: over the night, not under it.
     this.life.glow(ctx);
+    // Down in a cellar, the cellar, over all of it; and the marks over that.
+    if (this.cellarFrame) {
+      this.drawCellarView(ctx, zoom);
+      marks();
+    } else this.cellarHulls.length = 0;
 
     // The chosen tile, marked whether or not the cursor is anywhere near it.
     const chosen = this.selected;
     if (chosen && w.inBounds(chosen.x, chosen.y)) {
-      this.tilePath(ctx, chosen.x, chosen.y);
+      this.tilePath(ctx, chosen.x, chosen.y, !!chosen.down && this.cellarFrame);
       ctx.fillStyle = 'rgba(227,182,87,0.14)';
       ctx.fill();
       ctx.lineWidth = 2;
@@ -9566,7 +10368,7 @@ export class Renderer {
     this.drawProspected(ctx);
     if (game.deed && (game.settings.deedBorder || (hover && game.isToken(hover.x, hover.y)))) this.drawDeedBorder(ctx);
     if (hover) {
-      this.tilePath(ctx, hover.x, hover.y);
+      this.tilePath(ctx, hover.x, hover.y, !!hover.down);
       ctx.fillStyle = 'rgba(255,255,255,0.08)';
       ctx.fill();
       ctx.lineWidth = 1.5;
@@ -9575,8 +10377,9 @@ export class Renderer {
       ctx.lineWidth = 1;
       const carryingCrate = game.inventory.items.some((it) => crateKindOfItem(it.id));
       if (carryingCrate && hover.crate === undefined) {
-        // The 4 by 4 snap grid, with the spot a crate would take.
-        const h = (wx: number, wy: number): number => w.heightAt(wx, wy) + 0.3;
+        // The 4 by 4 snap grid, with the spot a crate would take: on the cellar's floor, picked down there.
+        const floor = hover.down ? cellarFloorHeight(game, hover.x, hover.y) : 0;
+        const h = (wx: number, wy: number): number => (hover.down ? floor : w.heightAt(wx, wy)) + 0.3;
         ctx.strokeStyle = 'rgba(255,255,255,0.35)';
         for (let i = 1; i < SUBTILES; i++) {
           const f = i / SUBTILES;
@@ -9597,11 +10400,13 @@ export class Renderer {
         ctx.lineTo(cam.worldToScreenX(x0 + s, y0 + s), cam.worldToScreenY(x0 + s, y0 + s, h(x0 + s, y0 + s)));
         ctx.lineTo(cam.worldToScreenX(x0, y0 + s), cam.worldToScreenY(x0, y0 + s, h(x0, y0 + s)));
         ctx.closePath();
-        ctx.fillStyle = game.crateAt(hover.x, hover.y, sx0, sy0) ? 'rgba(255,90,70,0.35)' : 'rgba(120,255,140,0.35)';
+        ctx.fillStyle = game.crateAt(hover.x, hover.y, sx0, sy0, hover.down ? CELLAR_LEVEL : 0) ? 'rgba(255,90,70,0.35)' : 'rgba(120,255,140,0.35)';
         ctx.fill();
       }
-      const building = game.buildings.buildingAt(hover.x, hover.y);
-      if (building) {
+      const building = hover.down ? undefined : game.buildings.buildingAt(hover.x, hover.y);
+      if (hover.down) {
+        // Nothing is built down in a cellar: the floor is the whole of it.
+      } else if (building) {
         // Show which border a wall would go on, at the storey being worked on.
         const side = nearestSide(hover.x, hover.y, hover.wx, hover.wy);
         const [ax, ay, bx, by] = borderPoints(borderOf(hover.x, hover.y, side));
@@ -9804,6 +10609,17 @@ export class Renderer {
     for (let i = this.fireHits.length - 1; i >= 0; i--) {
       const h = this.fireHits[i];
       if (sx >= h.left && sx <= h.left + h.w && sy >= h.top && sy <= h.top + h.h) return { ...this.makePick(h.x, h.y, sx, sy), fire: h.fire };
+    }
+    // Looking into a cellar: its floor, nearest first; and a side of the dig is nothing to click on.
+    if (this.cellarHulls.length) {
+      const hulls = this.cellarHulls;
+      for (let i = hulls.length - 1; i >= 0; i--) {
+        if (inOutline(hulls[i].floor, sx, sy)) {
+          const { x, y } = hulls[i];
+          return { ...this.makePick(x, y, sx, sy, cellarFloorHeight(this.game, x, y)), down: true };
+        }
+      }
+      for (const h of hulls) if (inOutline(h.hull, sx, sy)) return null;
     }
     const cam = this.camera;
     const world = this.game.world;
@@ -10021,9 +10837,9 @@ export class Renderer {
     return inside;
   }
 
-  private makePick(x: number, y: number, sx: number, sy: number): Pick {
+  private makePick(x: number, y: number, sx: number, sy: number, h?: number): Pick {
     const w = this.game.world;
-    const approx = this.camera.screenToWorld(sx, sy, w.centerHeight(x, y));
+    const approx = this.camera.screenToWorld(sx, sy, h ?? w.centerHeight(x, y));
     const wx = Math.min(x + 0.999, Math.max(x, approx.x));
     const wy = Math.min(y + 0.999, Math.max(y, approx.y));
     return { x, y, wx, wy, cx: Math.round(wx), cy: Math.round(wy) };

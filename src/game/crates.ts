@@ -3,6 +3,7 @@ import type { Game } from './game';
 import { describeFrom, itemName, rarityOf, roomFor, storedLine, type Item } from './items';
 import { matOf } from './materials';
 import { furnitureDef } from './furniture';
+import { CELLAR_FLOOR, floorOf } from './building';
 
 /**
  * Crates are the first placeable objects. Each tile is a 4 by 4 grid of
@@ -45,6 +46,8 @@ export interface PlacedCrate {
   items: Item[];
   /** The settlement's crate: deed workers deliver here. */
   deed?: boolean;
+  /** The storey it stands on: `CELLAR_LEVEL` down in a cellar, absent on the ground. */
+  level?: number;
   /** The wood it was built of. */
   material?: string;
   /** 1 rare, 2 supreme, 3 fantastic; absent for the ordinary run of things. */
@@ -162,16 +165,19 @@ export const CRATE_ACTIONS: ActionDef[] = [
        * deck and asked on bare earth, which is the only difference between the
        * two — a crate on a rack is an ordinary crate at an ordinary subtile.
        */
-      const rack = g.rackAt(t.x, t.y, t.sx, t.sy);
+      // Down in a cellar, on its floor: dug level and dry, so the ground's questions are not asked of it.
+      const level = floorOf(g.player.level);
+      if (level < 0 && !g.buildings.sameCellar(g.myCellar(), t.x, t.y)) return CELLAR_FLOOR;
+      const rack = g.rackAt(t.x, t.y, t.sx, t.sy, level);
       if (rack) {
         if (kind !== 'plank') return `A ${CRATE_DEFS[kind].name.toLowerCase()} will not sit on the runners. The rack takes plank crates.`;
-      } else {
+      } else if (level >= 0) {
         // A deck on piers is dry, level floor whatever is under it, and one not built yet is nothing to stand on.
         const deck = g.deckFooting(t.x, t.y);
         if (deck === false || (deck === null && (!g.world.isPassable(t.x, t.y) || g.world.hasWater(t.x, t.y)))) return 'Crates need dry, open ground.';
         if (deck === null && g.world.slope(t.x, t.y) > 20) return 'The ground is too steep for a crate to stand.';
       }
-      if (g.crateAt(t.x, t.y, t.sx, t.sy)) return 'There is already a crate on that spot.';
+      if (g.crateAt(t.x, t.y, t.sx, t.sy, level)) return 'There is already a crate on that spot.';
       if (g.isToken(t.x, t.y)) return 'Not on the token.';
       return null;
     },
@@ -180,7 +186,7 @@ export const CRATE_ACTIONS: ActionDef[] = [
       const item = g.inventory.get(t.itemUid);
       const kind = item && crateKindOfItem(item.id);
       if (!item || !kind || !g.inventory.remove(item.uid, 1)) return;
-      const crate = g.addCrate(kind, t.x, t.y, t.sx, t.sy, [], false, item.extra, item.ql);
+      const crate = g.addCrate(kind, t.x, t.y, t.sx, t.sy, [], false, item.extra, item.ql, floorOf(g.player.level));
       // A rare crate holds more, so it has to stay rare once it is standing.
       if (item.rare) crate.rare = item.rare;
       g.note('crate');

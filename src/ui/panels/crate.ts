@@ -195,6 +195,10 @@ export class CratePanel {
   withinReach(): boolean {
     const store = this.store();
     if (!store) return false;
+    // A store down in a cellar is out of reach from the floor over it, one up top from down there, and one in
+    // the cellar next door from this one (`onMySide`).
+    const placed = store.kind === 'crate' ? this.game.crates.get(store.id) : store.kind === 'furniture' ? this.game.furniture.get(store.id) : undefined;
+    if (placed && !this.game.onMySide(placed.level, placed.x, placed.y)) return false;
     if (store.near) return store.near();
     const [cx, cy] = store.centre;
     return Math.hypot(cx - this.game.player.x, cy - this.game.player.y) <= STORE_REACH;

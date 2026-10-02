@@ -24,7 +24,9 @@ import { STONES_DEPTH, STONES_SLABS } from '../src/game/watergarden';
 import { WATER_PLANTS, WATER_PLANT_DEEPEST, WATER_PLANT_SHALLOWEST, WATER_ROOTING } from '../src/world/waterplants';
 import { CROP_LIST, glassExamine } from '../src/game/farming';
 import { FISH, BAITS } from '../src/game/fishing';
-import { GLASS_ROOF, WALL_TYPES, MATERIALS as BUILD_MATERIALS, ROOF_SHAPES, STOREY_SKILL, INDOORS_DECAY, INDOORS_REST, WALL_HEIGHT, LADDER_PLANKS, MAX_LEVELS, TOP_LEVELS, WALL_THICK } from '../src/game/building';
+import { GLASS_ROOF, WALL_TYPES, MATERIALS as BUILD_MATERIALS, ROOF_SHAPES, STOREY_SKILL, INDOORS_DECAY, INDOORS_REST, WALL_HEIGHT, LADDER_PLANKS, MAX_LEVELS, TOP_LEVELS, WALL_THICK,
+  CELLAR_DECAY, CELLAR_DEPTH, CELLAR_LEVEL, CELLAR_SOIL } from '../src/game/building';
+import { cellarOutdoor } from '../src/game/cellar';
 import { REPOINT_BACK } from '../src/game/buildActions';
 import { CONCRETE_PER_STEP } from '../src/game/foundations';
 import { PIER_CLEAR, PIER_DROP, PIER_SHOO, PIER_WALL_DROP, PIER_WATER } from '../src/game/piers';
@@ -1457,6 +1459,8 @@ for (const [fn, v] of [
   ['storey_skill', STOREY_SKILL],
   /* And what a roof over your head is worth to what is under it, and to you. */
   ['indoors_decay', INDOORS_DECAY], ['indoors_rest', INDOORS_REST],
+  /* And a cellar: the storey it is, how deep it is dug, what it is worth to what lies in it, and the soil it is begun in. */
+  ['cellar_level', CELLAR_LEVEL], ['cellar_depth', CELLAR_DEPTH], ['cellar_decay', CELLAR_DECAY], ['cellar_least_soil', CELLAR_SOIL],
   /* And how high one storey stands, which a bridge landing on one has to know. */
   ['wall_height', WALL_HEIGHT],
   /* What a trade asks before its card is on the table, and what changing one costs. */
@@ -1834,6 +1838,8 @@ for (const [fn, v] of [
 }
 /* The pieces a crop is sown in, and what one says to being picked up with a crop in it. */
 out.push(`create or replace function is_planter(p_sub text) returns boolean language sql immutable as $fn$ select coalesce(p_sub = any(array[${FURNITURE.filter((f) => f.planter).map((f) => q(f.id)).join(', ')}]::text[]), false) $fn$;`);
+/* The pieces that do not go down into a cellar, though nothing in them burns and nothing about them rolls or floats. */
+out.push(`create or replace function cellar_outdoor(p_sub text) returns boolean language sql immutable as $fn$ select coalesce(p_sub = any(${arr(cellarOutdoor())}), false) $fn$;`);
 out.push(`create or replace function planter_growing_said() returns text language sql immutable as $fn$ select ${q(PLANTER_GROWING)} $fn$;`);
 /*
  * Glasshouses (`src/game/glasshouse.ts`): glass, the roof covering that is no

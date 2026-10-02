@@ -10,14 +10,15 @@ import { packTreeData, TILE_DEFS, TileType, TREE_DEFS, TREE_AGES, TREE_ROOM_ONE,
 import { yearOf } from '../world/calendar';
 import { oreAt } from '../world/ore';
 import { World } from '../world/world';
-import { ACTIONS, ACTION_BY_ID, TEACHES_NOTHING, TRY_LEARN, type ActionDef, type Target } from './actions';
+import { ACTIONS, ACTION_BY_ID, SPOIL_ORDER, spoilFrom, TEACHES_NOTHING, TRY_LEARN, type ActionDef, type Target } from './actions';
 import { aimPin, BELT_MAX, loopsFor, pinLabel, type BeltPin } from './belt';
 import { bodyForward } from '../net/felt';
 import type { ItemRow } from '../net/island';
 import { packed, type Aged } from '../net/packed';
 import { DROWN_RATE, DROWN_WARN, EXHAUSTED, HEAL_FED, HEAL_RATE, HUNGER_RATE, SWIM_LEARN, SWIM_WIND, THIRST_RATE, WIND_PER_LEVEL, WIND_REST, WIND_STARVING, WIND_WALK } from './body';
 import { markName, MARK_CAP, MARK_COLOURS, type Marker } from './marks';
-import { Buildings, connectsDown, floorKind, INDOORS_DECAY, isDone, progressOf, roofShapeDef, TOP_LEVELS, WALL_HEIGHT, walkableKind, type BuildingsJSON, type Building, type Wall, type Side } from './building';
+import { acrossSide, Buildings, CELLAR_DECAY, CELLAR_FLOOR, CELLAR_LEVEL, connectsDown, floorKind, floorOf, INDOORS_DECAY, isDone, progressOf, roofShapeDef, TOP_LEVELS, WALL_HEIGHT, walkableKind, type BuildingsJSON, type Building, type Wall, type Side } from './building';
+import { CELLAR_DAYLIGHT, cellarGate, cellarPieceOk, targetFloor } from './cellar';
 import { crateCentre, crateName, crateCapacity, crateUnits, STORE_REACH, subtileOf, type CrateKind, type PlacedCrate } from './crates';
 import { anvilAnchor, anvilCovers, ANVIL_SUBTILES, type PlacedAnvil } from './anvil';
 import { fireAnchor, fireCentre, fireCovers, FIRE_SUBTILES, type PlacedCampfire } from './campfire';
@@ -36,7 +37,8 @@ import { HOST_ID, type PeerId } from '../net/protocol';
 import { Roster } from './roster';
 import { GameEmitter, type LogEntry, type LogKind } from './events';
 import { bagTake, DEED_DECAY, describeWith, foldInto, groundDecayRate, Inventory, ITEM_DEFS, itemName, type Item, markOf, type Mark, rarityOf, rarityStep, itemDef, sameMark, sameStack, spendOut, unrestored } from './items';
-import { BASE_SPEED, CARRY_CRAWL, CLIMB_LEARN, CLIMB_LEARN_FROM, CLIMB_LEARN_STEEP, CLIMB_PER_LEVEL, groundStep, MAX_STAND, MAX_STEP, Player, readPlayer, standsOn, walkKey, writePlayer, SWIM_DEPTH, SWIM_SPEED } from './player';
+import { BASE_SPEED, CARRY_CRAWL, CLIMB_LEARN, CLIMB_LEARN_FROM, CLIMB_LEARN_STEEP, CLIMB_PER_LEVEL, groundStep, MAX_STAND, MAX_STEP, pathOptions, Player, readPlayer, standsOn, walkKey, writePlayer, SWIM_DEPTH, SWIM_SPEED } from './player';
+import { findPath } from '../world/pathfinding';
 import { randomLook, type Look } from './look';
 import { ACTION_FLOOR, ACTION_PACE, DAY_SECONDS, world } from './pace';
 import { ARMOUR_BY_ID, ARMOUR_CLASSES, HIT_LOCATIONS, pieceBurden, pieceSoak, SHIELDS, WEAPON_BY_ID, type Slot, SLOTS } from './gear';
@@ -298,6 +300,8 @@ export interface GameInit {
   inventory?: Item[];
   nextUid?: number;
   ground?: Record<string, Item[]>;
+  /** What lies on the floors of cellars, the same way: by tile as `"x,y"`. */
+  cellarGround?: Record<string, Item[]>;
   skills?: Record<string, number>;
   time?: number;
   /** The island's guest book: everybody who has visited, and what they had. */
@@ -921,6 +925,12 @@ export class Game {
   get queue(): Array<{ def: ActionDef; target: Target; goes?: number; was?: string }> {
     return this.acting.queue;
   }
+  /**
+   * What lies on the floor of a cellar, by tile, apart from what lies on the
+   * ground over it: everything that looks at `ground` -- a beast after food, a
+   * worker after logs -- is up top and never sees down here, which is right.
+   */
+  readonly cellarGround = new Map<number, Item[]>();
   /** Items lying on tiles, keyed by "x,y". */
   readonly ground = new Map<number, Item[]>();
   /** Game seconds since the world was created. */
@@ -1033,10 +1043,10 @@ export class Game {
       this.unwearWhatIsGone();
       this.events.emit('inventory');
     };
-    if (init.ground) {
-      for (const [key, items] of Object.entries(init.ground)) {
+    for (const [into, from] of [[this.ground, init.ground], [this.cellarGround, init.cellarGround]] as const) {
+      for (const [key, items] of Object.entries(from ?? {})) {
         const [kx, ky] = key.split(',');
-        if (items.length) this.ground.set(tileKey(Number(kx), Number(ky)), items);
+        if (items.length) into.set(tileKey(Number(kx), Number(ky)), items);
         for (const it of items) if (it.uid >= this.inventory.nextUid) this.inventory.nextUid = it.uid + 1;
       }
     }
@@ -1178,6 +1188,8 @@ export class Game {
 
   /** Whether the player can stand on a tile at a storey: the ground, or a finished floor, staircase or ladder. */
   standable(x: number, y: number, level: number): boolean {
+    // Down in a cellar there is the cellar's own floor to stand on, and nothing else.
+    if (level < 0) return this.buildings.cellarDone(x, y);
     // A poured slab is the ground here: flat, dry and solid, over water or
     // bare rock or a hole, which is the whole of what it was poured for.
     if (level <= 0 && this.foundations.size && this.slabAt(x, y)) return true;
@@ -1204,10 +1216,22 @@ export class Game {
    * can take you down, walls of the storey you cross on block you, and on
    * the ground cliffs do too. Returns the storey you arrive on or null.
    */
-  readonly stepRule = (x0: number, y0: number, level: number, x1: number, y1: number): number | null => {
+  readonly stepRule = (x0: number, y0: number, level: number, x1: number, y1: number): number | null => this.step(x0, y0, level, x1, y1, true);
+
+  /**
+   * The same rule with nothing in tow, which is asked only to say so when a
+   * cart taken by the shafts is all that stops a walk into a cellar (`noWay`).
+   */
+  private readonly stepFree = (x0: number, y0: number, level: number, x1: number, y1: number): number | null => this.step(x0, y0, level, x1, y1, false);
+
+  private step(x0: number, y0: number, level: number, x1: number, y1: number, tow: boolean): number | null {
     const b = this.buildings;
     // An aqueduct's piers stand on the ground between its tiles, along its run.
     if (level === 0 && this.bridges.size && this.pierBetween(x0, y0, x1, y1)) return null;
+    if (b.cellars.size) {
+      const under = this.cellarStep(x0, y0, level, x1, y1, tow);
+      if (under !== undefined) return under;
+    }
     if (this.connector(x1, y1, level + 1) && !b.blocksAt(level, x0, y0, x1, y1)) return level + 1;
     // Deck is ground: it is flat, and the drop under it is not your problem.
     if (this.bridges.size) {
@@ -1228,7 +1252,45 @@ export class Game {
       return level - 1;
     }
     return null;
-  };
+  }
+
+  /**
+   * A step that has anything to do with a cellar, or undefined for one that
+   * has not and is the ordinary rule's to decide.
+   *
+   * Down in the cellar you walk its floor and nothing else -- the ground round
+   * it is its walls, and so is the ground between it and the cellar of the
+   * building next door, so a corner is cut only where one of the two ways
+   * round it is the same cellar too -- and a step onto the tile of a flight or
+   * a ladder down, from its foot, is a step up it, to the ground floor; its
+   * sides and its back are as solid as the ground. On the ground floor, a
+   * step off such a tile across the side it is climbed from is a step down
+   * it, onto the cellar tile at its foot; and nobody walks onto one from that
+   * side up top, where the stairwell is open. Not with anything in tow: a
+   * cart does not go down a flight. The island's `cellar_move_ok` holds a
+   * body to the same.
+   */
+  private cellarStep(x0: number, y0: number, level: number, x1: number, y1: number, tow = true): number | null | undefined {
+    const b = this.buildings;
+    if (level < 0) {
+      const own = b.cellar(x0, y0)?.building;
+      if (!b.sameCellar(own, x1, y1)) return null;
+      if (x1 !== x0 && y1 !== y0 && !b.sameCellar(own, x1, y0) && !b.sameCellar(own, x0, y1)) return null;
+      const up = b.flightDown(x1, y1);
+      if (!up) return CELLAR_LEVEL;
+      return acrossSide(up.facing ?? 's', x1, y1, x0, y0) ? 0 : null;
+    }
+    if (level !== 0) return undefined;
+    const from = b.flightDown(x0, y0);
+    if (from && acrossSide(from.facing ?? 's', x0, y0, x1, y1)) {
+      if (!b.sameCellar(from.building, x1, y1)) return null;
+      if (tow) for (const f of this.furniture.values()) if (f.hitched) return null;
+      return CELLAR_LEVEL;
+    }
+    const onto = b.flightDown(x1, y1);
+    if (onto && acrossSide(onto.facing ?? 's', x1, y1, x0, y0)) return null;
+    return undefined;
+  }
 
   /**
    * The rule for driving rather than walking. Wheels keep to the open ground:
@@ -1254,8 +1316,9 @@ export class Game {
     if (this.world.getTile(x1, y1) === TileType.Steps) return null;
     // A door is for a person. Wheels want a double door, an archway or a gate.
     if (this.buildings.blocksVehicle(x0, y0, x1, y1)) return null;
-    // And a staircase or a ladder going up from the tile is no road.
+    // And a staircase or a ladder going up from the tile is no road, nor the stairwell of one going down.
     if (this.connector(x1, y1, 1)) return null;
+    if (this.buildings.cellars.size && this.buildings.flightDown(x1, y1)) return null;
     // Wheels get the bare cap: no team makes a cart stand on a wall.
     return groundStep(this.world, x0, y0, x1, y1, this.vehicleStep(this.driving())) && standsOn(this.world, x1, y1) ? 0 : null;
   };
@@ -1275,6 +1338,8 @@ export class Game {
     // Only the web-footed sort will take a rider into deep water.
     if (!this.creatures.species(up).swims && this.world.bedAt(x1 + 0.5, y1 + 0.5) < this.world.surfaceAt(x1, y1) - SWIM_DEPTH) return null;
     if (this.buildings.blocksAt(0, x0, y0, x1, y1)) return null;
+    // Nor over the open stairwell of a flight down to a cellar.
+    if (this.buildings.cellars.size && this.buildings.flightDown(x1, y1)) return null;
     return groundStep(this.world, x0, y0, x1, y1, this.mountStep(up)) && standsOn(this.world, x1, y1, this.mountStand(up)) ? 0 : null;
   };
 
@@ -1362,10 +1427,8 @@ export class Game {
       }
       case 'recall': {
         if (!this.deed) return 'You have nowhere to be recalled to.';
-        this.player.stop();
-        this.player.x = this.deed.x + 0.5;
-        this.player.y = this.deed.y + 1.5;
-        this.events.emit('world', this.deed.x, this.deed.y);
+        // On the ground at the token, from down in a cellar or up a storey as from anywhere else (`work_ability`).
+        this.putBody(this.deed.x + 0.5, this.deed.y + 1.5, 0);
         return `You are standing at the token of ${this.deed.name}, and the walk is simply not in your legs.`;
       }
       case 'secondwind':
@@ -1439,12 +1502,57 @@ export class Game {
       && !(this.buildings.pierTiles.size > 0 && this.buildings.onPiers(x, y));
   }
 
-  /** How the player may move right now, and how many storeys they may cross. */
-  movement(): { rule: (x0: number, y0: number, level: number, x1: number, y1: number) => number | null; levels: number } {
-    if (this.afloat()) return { rule: this.sailRule, levels: 1 };
-    if (this.driving()) return { rule: this.driveRule, levels: 1 };
-    if (this.mounted()) return { rule: this.rideRule, levels: 1 };
-    return { rule: this.stepRule, levels: TOP_LEVELS };
+  /**
+   * Whether the player stands at a flight or a ladder down to a cellar: on its
+   * tile up top, or on the tile at its foot down there. Those two are said to
+   * the island the moment they are stepped onto (`Island.move`), because it
+   * lets a body change storey only off the one onto the other.
+   */
+  atStairs(): boolean {
+    const b = this.buildings;
+    if (!b.cellars.size) return false;
+    const { tileX: x, tileY: y, level } = this.player;
+    if (level === 0) return !!b.flightDown(x, y);
+    if (level > 0) return false;
+    for (const [dx, dy, side] of [[0, -1, 's'], [1, 0, 'w'], [0, 1, 'n'], [-1, 0, 'e']] as Array<[number, number, Side]>) {
+      const f = b.flightDown(x + dx, y + dy);
+      if (f && (f.facing ?? 's') === side) return true;
+    }
+    return false;
+  }
+
+  /** The building whose cellar the player is down in, or undefined up top. */
+  myCellar(): number | undefined {
+    return this.player.level < 0 ? this.buildings.cellar(this.player.tileX, this.player.tileY)?.building : undefined;
+  }
+
+  /**
+   * Whether the view is down in a cellar: the storey control put on the
+   * cellar, or, following you, you down in one. Never where there is none.
+   */
+  cellarView(): boolean {
+    if (!this.buildings.cellars.size) return false;
+    return floorOf(this.settings.viewLevel ?? this.player.level) < 0;
+  }
+
+  /**
+   * The storey a walk to a clicked tile aims at, when it matters: the cellar
+   * when it is the cellar you are looking at, up top when you are down in one
+   * and looking up top, and otherwise wherever the walk arrives first.
+   */
+  walkFloor(x: number, y: number): number | undefined {
+    if (!this.buildings.cellars.size) return undefined;
+    const view = floorOf(this.settings.viewLevel ?? this.player.level);
+    if (view < 0) return this.buildings.cellarDone(x, y) ? CELLAR_LEVEL : undefined;
+    return this.player.level < 0 ? 0 : undefined;
+  }
+
+  /** How the player may move right now, how many storeys they may cross, and how many under the ground (a cellar). */
+  movement(): { rule: (x0: number, y0: number, level: number, x1: number, y1: number) => number | null; levels: number; below: number } {
+    if (this.afloat()) return { rule: this.sailRule, levels: 1, below: 0 };
+    if (this.driving()) return { rule: this.driveRule, levels: 1, below: 0 };
+    if (this.mounted()) return { rule: this.rideRule, levels: 1, below: 0 };
+    return { rule: this.stepRule, levels: TOP_LEVELS, below: this.buildings.cellars.size ? -CELLAR_LEVEL : 0 };
   }
 
   /** Height of the player's feet, storeys included: in a building on piers, from its deck. */
@@ -2381,10 +2489,11 @@ export class Game {
    * it at them, and nothing else on this island teaches it at all — so the
    * skill that decides how far you see is bought with the hours when you can
    * see least. Weighted by how dark it actually is, so a scuffle at dusk is
-   * worth a fraction of one at the dead of night.
+   * worth a fraction of one at the dead of night -- and down in a cellar it is
+   * the dead of night at every hour, as it is to the eye (`cellar.ts`).
    */
   fought(weight = 1): void {
-    const dark = this.darkness();
+    const dark = this.player.level < 0 ? 1 : this.darkness();
     if (dark <= NIGHT_EYES_FROM) return;
     this.gainSkill(AWARENESS, weight * dark);
   }
@@ -2402,14 +2511,16 @@ export class Game {
     const py = this.player.y;
     const near = (x: number, y: number): boolean => Math.abs(x - px) < 60 && Math.abs(y - py) < 60;
     const lamp = this.litLantern();
-    if (lamp) out.push({ x: px, y: py, radius: lanternReach(lamp.ql), strength: 0.92, steady: true, level: this.player.level });
+    // Carried down into a cellar, it lights the cellar and nothing up here (`cellarLights`).
+    if (lamp && this.player.level >= 0) out.push({ x: px, y: py, radius: lanternReach(lamp.ql), strength: 0.92, steady: true, level: this.player.level });
     for (const f of this.campfires.values()) {
       if (!f.lit || !near(f.x, f.y)) continue;
       const [cx, cy] = fireCentre(f);
       out.push({ x: cx, y: cy, radius: FIRE_REACH, strength: 0.85 });
     }
     for (const f of this.furniture.values()) {
-      if (!near(f.x, f.y)) continue;
+      // A piece down in a cellar lights nothing up here: an altar's glow stays under the floor.
+      if (!near(f.x, f.y) || (f.level ?? 0) < 0) continue;
       const [cx, cy] = furnitureCentre(f);
       // A lantern post throws what its lantern throws, from under the lantern (`lamps.ts`).
       if (isLampPiece(f)) {
@@ -2425,6 +2536,27 @@ export class Game {
     for (const c of this.creatures.list.values()) {
       const glow = this.creatures.species(c).glow;
       if (glow && near(c.x, c.y)) out.push({ x: c.x, y: c.y, radius: glow, strength: 0.7, steady: true });
+    }
+    return out;
+  }
+
+  /**
+   * What lights a cellar, which is dark at every hour: what you carry alight
+   * down there, a lantern or a torch, out to its reach; and by day the
+   * daylight coming down every flight or ladder into one, round its foot
+   * (`CELLAR_DAYLIGHT`), as strong as the day is.
+   */
+  cellarLights(): LightSource[] {
+    const out: LightSource[] = [];
+    const held = this.heldLight();
+    if (held && this.player.level < 0) {
+      out.push({ x: this.player.x, y: this.player.y, radius: heldReach(held.id, held.ql), strength: 0.94, steady: held.id !== 'torch', level: CELLAR_LEVEL });
+    }
+    const day = 1 - this.darkness();
+    if (day <= 0.01) return out;
+    for (const c of this.buildings.cellars.values()) {
+      if (!this.buildings.flightDown(c.x, c.y)) continue;
+      out.push({ x: c.x + 0.5, y: c.y + 0.5, radius: CELLAR_DAYLIGHT, strength: 0.72 * day, steady: true, cast: '222, 232, 255', castAlpha: 0.1 * day, level: CELLAR_LEVEL });
     }
     return out;
   }
@@ -2518,7 +2650,7 @@ export class Game {
       if (this.posts.size) this.runPosts(seconds);
       if (this.traps.size) this.runTraps(seconds);
       if (this.crops.size || this.planted.size) this.growCrops();
-      if (this.ground.size) this.applyDecay(seconds);
+      if (this.ground.size || this.cellarGround.size) this.applyDecay(seconds);
     }
     const s = this.player.stats;
     s.stamina = 1;
@@ -3160,7 +3292,7 @@ export class Game {
     // On an island what is lying about rots on the island's clock, and every
     // ground answer replaces it; rotting it here as well would take a pile off
     // the screen a second before the next answer put it back, and say so.
-    if (this.decayClock >= DECAY_STEP && this.ground.size && !this.bodyFromIsland) {
+    if (this.decayClock >= DECAY_STEP && (this.ground.size || this.cellarGround.size) && !this.bodyFromIsland) {
       this.applyDecay(this.decayClock);
       this.decayClock = 0;
     } else if (this.decayClock >= DECAY_STEP) {
@@ -3175,10 +3307,11 @@ export class Game {
   applyDecay(seconds: number): number {
     const hours = seconds / 3600;
     let lost = 0;
-    for (const [key, pile] of this.ground) {
+    // The ground, and the floors of the cellars under it, each at what its place is worth.
+    for (const [piles, level] of [[this.ground, 0], [this.cellarGround, CELLAR_LEVEL]] as const) for (const [key, pile] of piles) {
       const x = keyX(key);
       const y = keyY(key);
-      const mult = this.decayMultiplier(x, y);
+      const mult = this.decayMultiplier(x, y, level);
       // Only a pile that actually lost something is worth telling anybody
       // about. Every pile on the island raised a `world` event on every decay
       // step whether or not a thing on it had moved, which on a settlement
@@ -3205,11 +3338,11 @@ export class Game {
           lost += item.count;
           changed = true;
           if (seconds < 60 && Math.hypot(x + 0.5 - this.player.x, y + 0.5 - this.player.y) < 16) {
-            this.logMsg(`The ${itemName(item).toLowerCase()} lying on the ground rots away.`, 'event');
+            this.logMsg(`The ${itemName(item).toLowerCase()} lying on the ${level < 0 ? 'cellar floor' : 'ground'} rots away.`, 'event');
           }
         }
       }
-      if (!pile.length) this.ground.delete(key);
+      if (!pile.length) piles.delete(key);
       if (changed) this.events.emit('world', x, y);
     }
     return lost;
@@ -3224,9 +3357,14 @@ export class Game {
    * half a wall, took the same work, and did nothing at all for anything left
    * under it. A crate of planks in a closed room now keeps a hundred times as
    * long as one in a field, which is the reason anybody puts a roof on.
+   *
+   * And on the floor of a cellar, `CELLAR_DECAY` of it in place of the
+   * indoor tenth: the slowest there is. The island's `decay_multiplier` and
+   * `cellar_sweep` say the same.
    */
-  decayMultiplier(x: number, y: number): number {
+  decayMultiplier(x: number, y: number, level = 0): number {
     const out = this.onDeed(x, y) ? DEED_DECAY : 1;
+    if (level < 0) return out * CELLAR_DECAY;
     return this.buildings.indoors(0, x, y) ? out * INDOORS_DECAY : out;
   }
 
@@ -3252,7 +3390,7 @@ export class Game {
       const { def, target, goes } = a;
       this.action = null;
       if (!this.inRange(def, target)) {
-        this.logMsg('You are too far away from that.', 'error');
+        this.logMsg(cellarGate(this, def.id, target) ?? 'You are too far away from that.', 'error');
         this.events.emit('action');
         return;
       }
@@ -3270,7 +3408,8 @@ export class Game {
           // A called wildermon is still on its way over.
         } else {
           const pet = a.target.kind === 'creature' ? this.creatures.get(a.target.id) : undefined;
-          this.logMsg(a.waitUntil !== undefined && pet ? `${pet.name} cannot get to you.` : 'You are too far away from that.', 'error');
+          this.logMsg(a.waitUntil !== undefined && pet ? `${pet.name} cannot get to you.`
+            : cellarGate(this, a.def.id, a.target) ?? 'You are too far away from that.', 'error');
           this.action = null;
           this.nextInQueue();
           this.events.emit('action');
@@ -3289,7 +3428,8 @@ export class Game {
   private beginPerform(): void {
     const a = this.action;
     if (!a) return;
-    const reason = a.def.check?.(a.target, this);
+    // Up top for what is up top and down in the cellar for what is down there, before anything else.
+    const reason = cellarGate(this, a.def.id, a.target) ?? a.def.check?.(a.target, this);
     if (reason) {
       this.logMsg(reason, 'error');
       this.action = null;
@@ -3520,7 +3660,8 @@ export class Game {
       if (occupiedRefusal(this, def.id, target)) continue;
       // Nor at a grave, where there is only taking out and only for its owner.
       if (grave && graveSays(this, grave, def.id)) continue;
-      out.push({ def, reason: def.check?.(target, this) ?? null });
+      // A thing down in a cellar is done from down there, and a thing up top from up top (`cellarGate`).
+      out.push({ def, reason: cellarGate(this, def.id, target) ?? def.check?.(target, this) ?? null });
     }
     return out;
   }
@@ -3700,7 +3841,7 @@ export class Game {
         this.watching = false;
         if (!this.walkToward(def, target)) {
           this.action = null;
-          this.logMsg("You can't find a way to get there.", 'error');
+          this.logMsg(this.noWayTo(def, target), 'error');
           return;
         }
         this.events.emit('action');
@@ -3804,7 +3945,7 @@ export class Game {
       this.player.stop();
       this.logMsg(`You call ${pet.name} over.`, 'info');
     } else if (!this.walkToward(def, target)) {
-      this.logMsg("You can't find a way to get there.", 'error');
+      this.logMsg(this.noWayTo(def, target), 'error');
       this.action = null;
       this.nextInQueue();
     }
@@ -3887,13 +4028,44 @@ export class Game {
     else this.pauseAction();
     const p = this.player;
     if (!this.world.inBounds(x, y)) return false;
-    const { rule, levels } = this.movement();
-    if (this.world.isPassable(x, y) && p.walkTo(this.world, x, y, rule, levels)) return true;
+    const { rule, levels, below } = this.movement();
+    // Clicked in the cellar's view, the cellar is where you mean; up top, the ground (`walkFloor`).
+    const aim = this.walkFloor(x, y);
+    if (this.world.isPassable(x, y) && p.walkTo(this.world, x, y, rule, levels, below, aim)) return true;
     const candidates = this.neighbours(x, y).filter((c) => this.world.isPassable(c.x, c.y));
     candidates.sort((a, b) => this.distanceToPlayer(a.x, a.y) - this.distanceToPlayer(b.x, b.y));
-    for (const c of candidates) if (p.walkTo(this.world, c.x, c.y, rule, levels)) return true;
-    this.logMsg("You can't find a way there.", 'error');
+    for (const c of candidates) if (p.walkTo(this.world, c.x, c.y, rule, levels, below, aim === CELLAR_LEVEL && !this.buildings.cellarDone(c.x, c.y) ? undefined : aim)) return true;
+    this.logMsg(aim === CELLAR_LEVEL ? this.noWay(x, y, "You can't find a way there.") : "You can't find a way there.", 'error');
     return false;
+  }
+
+  /**
+   * What a walk into a cellar that finds no way says, when it is not the way
+   * that stops it but what you have with you: nothing in tow, nothing on
+   * wheels and no mount goes down a flight or a ladder, and on foot with your
+   * hands free the walk is there to be had. Otherwise `plain`.
+   */
+  private noWay(x: number, y: number, plain: string): string {
+    if (this.afloat()) return plain;
+    const towing = [...this.furniture.values()].some((f) => f.hitched);
+    const mount = this.mounted();
+    const seat = this.driving();
+    if (!towing && !mount && !seat) return plain;
+    const p = this.player;
+    const onFoot = findPath(this.world, p.tileX, p.tileY, p.level, x, y,
+      { ...pathOptions(this.world, this.stepFree, TOP_LEVELS), below: -CELLAR_LEVEL, goalLevel: CELLAR_LEVEL });
+    if (!onFoot) return plain;
+    if (mount) return 'Get down first: no mount goes down into a cellar.';
+    if (seat) return 'Get down first: nothing on wheels goes down into a cellar.';
+    return 'Let go of the cart first: nothing in tow goes down into a cellar.';
+  }
+
+  /** `noWay`, for a job whose target is down in a cellar. */
+  private noWayTo(def: ActionDef, target: Target): string {
+    const plain = "You can't find a way to get there.";
+    if (targetFloor(this, def.id, target) !== CELLAR_LEVEL) return plain;
+    const tile = target.kind === 'item' ? this.intoStore(def, target) : this.targetTile(target);
+    return tile ? this.noWay(tile.x, tile.y, plain) : plain;
   }
 
   /** The tile a target occupies right now, or null for inventory items. */
@@ -3980,6 +4152,9 @@ export class Game {
   }
 
   inRange(def: ActionDef, target: Target): boolean {
+    // On the storey the thing is on, first: a crate down in the cellar is not reached from the floor over it,
+    // nor one in the cellar next door from this one (`cellarGate`).
+    if ((this.buildings.cellars.size || this.player.level < 0) && cellarGate(this, def.id, target)) return false;
     if (target.kind === 'item') {
       const into = this.intoStore(def, target);
       if (!into) return true;
@@ -4015,9 +4190,13 @@ export class Game {
     }
     candidates = candidates.filter((c) => this.world.isPassable(c.x, c.y));
     candidates.sort((a, b) => this.distanceToPlayer(a.x, a.y) - this.distanceToPlayer(b.x, b.y));
-    const { rule, levels } = this.movement();
+    const { rule, levels, below } = this.movement();
+    // To the storey the thing is on: down to a crate in the cellar, up to a tree out of one.
+    const at = below || this.player.level < 0 ? targetFloor(this, def.id, target) : null;
     for (const c of candidates) {
-      if (!this.player.walkTo(this.world, c.x, c.y, rule, levels)) continue;
+      if (at === CELLAR_LEVEL && !this.buildings.cellarDone(c.x, c.y)) continue;
+      const aim = at === CELLAR_LEVEL ? CELLAR_LEVEL : at === 0 && this.player.level < 0 ? 0 : undefined;
+      if (!this.player.walkTo(this.world, c.x, c.y, rule, levels, below, aim)) continue;
       // Already on the tile, but in the corner of it furthest from the store:
       // to the middle of it, which every tile beside a store is near enough from.
       if (target.kind === 'item' && !this.player.path && !this.inRange(def, target)) {
@@ -4245,6 +4424,8 @@ export class Game {
 
   /** Whether the player stands on or next to a tile with water. */
   nearWater(): boolean {
+    // The sea and the ponds are up top, not down in a cellar.
+    if (this.player.level < 0) return false;
     const px = this.player.tileX;
     const py = this.player.tileY;
     for (let y = py - 1; y <= py + 1; y++) {
@@ -4882,8 +5063,10 @@ export class Game {
     }
   }
 
-  addCrate(kind: CrateKind, x: number, y: number, sx: number, sy: number, items: Item[] = [], deed = false, material?: string, ql = 20): PlacedCrate {
+  addCrate(kind: CrateKind, x: number, y: number, sx: number, sy: number, items: Item[] = [], deed = false, material?: string, ql = 20, level = 0): PlacedCrate {
     const crate: PlacedCrate = { id: this.nextCrateId++, x, y, sx, sy, kind, items, deed, material, ql };
+    // Set down in a cellar, it is down there: see `cellar.ts`.
+    if (level < 0) crate.level = CELLAR_LEVEL;
     this.crates.set(crate.id, crate);
     this.placed.crates.add(crate);
     return crate;
@@ -4896,8 +5079,10 @@ export class Game {
     this.events.emit('crate');
   }
 
-  crateAt(x: number, y: number, sx: number, sy: number): PlacedCrate | undefined {
-    return this.placed.crates.at(x, y).find((c) => c.sx === sx && c.sy === sy);
+  /** The crate on a spot of a tile, on a storey: a cellar's floor and the ground over it are two spots. */
+  crateAt(x: number, y: number, sx: number, sy: number, level = 0): PlacedCrate | undefined {
+    const down = level < 0;
+    return this.placed.crates.at(x, y).find((c) => c.sx === sx && c.sy === sy && (c.level ?? 0) < 0 === down);
   }
 
   cratesOnTile(x: number, y: number): readonly PlacedCrate[] {
@@ -4908,6 +5093,18 @@ export class Game {
   deedCrate(): PlacedCrate | undefined {
     for (const c of this.crates.values()) if (c.deed) return c;
     return undefined;
+  }
+
+  /** Whether anybody -- you, or somebody else on the island -- is down in a building's cellar. */
+  cellarOccupied(b: Building): boolean {
+    const under = (x: number, y: number): boolean => this.buildings.cellar(x, y)?.building === b.id;
+    if (this.player.level < 0 && under(this.player.tileX, this.player.tileY)) return true;
+    return this.roster.list().some((p) => p.level < 0 && under(Math.floor(p.x), Math.floor(p.y)));
+  }
+
+  /** A spadeful of dirt, clay or sand to fill in with: from the pack, or a store beside you (`spoilFrom`). */
+  spoilToHand(): { id: string; take: () => boolean } | undefined {
+    return spoilFrom(this, SPOIL_ORDER);
   }
 
   /** The crate closest to the player. */
@@ -4921,7 +5118,7 @@ export class Game {
         bestD = d;
         best = c;
       }
-    });
+    }, this.player.level);
     return best;
   }
 
@@ -4972,7 +5169,7 @@ export class Game {
    * Crates and the chests and barrels that hold things are shown through the
    * same window, and had the same hole in them, so both are looked in.
    */
-  storeWith(uid: number): { what: string; at: [number, number]; take: (id: number) => Item | null; piece?: PlacedFurniture } | null {
+  storeWith(uid: number): { what: string; at: [number, number]; take: (id: number) => Item | null; piece?: PlacedFurniture; level?: number } | null {
     /*
      * A bag on your back is the third of these, and was missing.
      *
@@ -4996,7 +5193,7 @@ export class Game {
     }
     for (const c of this.crates.values()) {
       if (!c.items.some((it) => it.uid === uid)) continue;
-      return { what: crateName(c).toLowerCase(), at: crateCentre(c), take: (id) => this.crateTake(c, id) };
+      return { what: crateName(c).toLowerCase(), at: crateCentre(c), take: (id) => this.crateTake(c, id), level: c.level ?? 0 };
     }
     for (const f of this.furniture.values()) {
       if (!f.items.some((it) => it.uid === uid)) continue;
@@ -5005,6 +5202,7 @@ export class Game {
         at: [f.x + 0.5, f.y + 0.5],
         take: (id) => this.furnitureTake(f, id),
         piece: f,
+        level: f.level ?? 0,
       };
     }
     return null;
@@ -5127,7 +5325,7 @@ export class Game {
       if (!c.items.length || !within(c.x, c.y) || c.mine === false || this.lockRefusal(c)) return;
       const [cx, cy] = crateCentre(c);
       found.push({ items: c.items, name: crateName(c), d: far(cx, cy), order: c.id });
-    });
+    }, this.player.level);
     this.placed.furniture.around(tx + 0.5, ty + 0.5, reach, (f) => {
       if (!f.items.length || !within(f.x, f.y)) return;
       const def = furnitureDef(f.kind);
@@ -5138,7 +5336,7 @@ export class Game {
       const [cx, cy] = furnitureCentre(f);
       // After the crates at the same distance, to the same rule as the island.
       found.push({ items: f.items, name: furnitureName(f), d: far(cx, cy), order: 1e9 + f.id });
-    });
+    }, this.player.level);
     return found.sort((a, b) => a.d - b.d || a.order - b.order);
   }
 
@@ -5267,7 +5465,7 @@ export class Game {
         bestD = d;
         best = f;
       }
-    });
+    }, this.player.level);
     return best;
   }
 
@@ -5285,7 +5483,7 @@ export class Game {
       if (best || f.kind !== kind) return;
       const [cx, cy] = furnitureCentre(f);
       if (Math.hypot(cx - this.player.x, cy - this.player.y) <= range) best = f;
-    });
+    }, this.player.level);
     return best;
   }
 
@@ -5296,7 +5494,7 @@ export class Game {
       if (best || !s.lit) return;
       const [cx, cy] = smelterCentre(s);
       if (Math.hypot(cx - this.player.x, cy - this.player.y) <= range) best = s;
-    });
+    }, this.player.level);
     return best;
   }
 
@@ -5307,7 +5505,7 @@ export class Game {
       if (best || !f.lit || !furnitureDef(f.kind).hearth) return;
       const [cx, cy] = furnitureCentre(f);
       if (Math.hypot(cx - this.player.x, cy - this.player.y) <= range) best = f;
-    });
+    }, this.player.level);
     return best;
   }
 
@@ -6253,14 +6451,15 @@ export class Game {
      * answer has been picked up, has rotted, or is out of range. Ids are the
      * island's, so a pile clicked is the row the island will be asked about.
      */
-    if (ground.lying) {
-      this.ground.clear();
-      for (const row of ground.lying) {
+    for (const [rows, piles] of [[ground.lying, this.ground], [ground.cellarLying, this.cellarGround]] as const) {
+      if (!rows) continue;
+      piles.clear();
+      for (const row of rows) {
         if (row.gx === null || row.gy === null) continue;
         const key = tileKey(row.gx, row.gy);
-        const pile = this.ground.get(key) ?? [];
+        const pile = piles.get(key) ?? [];
         pile.push(packed(row, aged));
-        this.ground.set(key, pile);
+        piles.set(key, pile);
       }
     }
     this.crates.clear();
@@ -6285,6 +6484,8 @@ export class Game {
        * there is only you.
        */
       const at = { id: r.id, x: r.x, y: r.y, sx: r.sx, sy: r.sy, mine: r.mine };
+      // Down in a cellar: only furniture goes down there, and says so.
+      const down = (r.level ?? 0) < 0 ? { level: CELLAR_LEVEL } : {};
       if (r.kind === 'campfire' || r.kind === 'fire') {
         this.campfires.set(r.id, { ...at, fuel: r.fuel ?? 0, lit: !!r.lit, ash: r.ash ?? 0 });
       } else if (r.kind === 'smelter') {
@@ -6324,7 +6525,7 @@ export class Game {
         this.counters.saw(r as unknown as CounterWire);
       } else if (r.kind === 'furniture') {
         this.furniture.set(r.id, {
-          ...at, kind: r.sub ?? 'chest', ql: r.ql ?? 20,
+          ...at, ...down, kind: r.sub ?? 'chest', ql: r.ql ?? 20,
           // What the island says is in it, and empty for one too far off to
           // reach into, which is the only reason this is ever short.
           items: (r.things ?? []).map((it) => ({
@@ -6486,6 +6687,7 @@ export class Game {
          * same two questions the island asks.
          */
         lock: c.lock ?? undefined, mine: c.mine,
+        ...((c.level ?? 0) < 0 ? { level: CELLAR_LEVEL } : {}),
       });
     }
     /*
@@ -6658,6 +6860,7 @@ export class Game {
         name: c.name ?? undefined, deed: c.deed ?? undefined, material: c.material ?? undefined,
         rare: rarityStep(c.rare), ql: c.ql ?? 20,
         lock: c.lock ?? undefined, mine: c.mine,
+        ...((c.level ?? 0) < 0 ? { level: CELLAR_LEVEL } : {}),
       });
     }
     this.placed.crates.reset(this.crates.values());
@@ -6824,9 +7027,11 @@ export class Game {
     return null;
   }
 
-  addFurniture(kind: string, x: number, y: number, sx: number, sy: number, ql: number, items: Item[] = [], material?: string, facing: Side = 's'): PlacedFurniture {
+  addFurniture(kind: string, x: number, y: number, sx: number, sy: number, ql: number, items: Item[] = [], material?: string, facing: Side = 's', level = 0): PlacedFurniture {
     const [ax, ay] = furnitureAnchor(kind, sx, sy, facing);
     const f: PlacedFurniture = { id: this.nextFurnitureId++, x, y, sx: ax, sy: ay, kind, ql, items, material, facing };
+    // Set down in a cellar, it is down there: see `cellar.ts`.
+    if (level < 0) f.level = CELLAR_LEVEL;
     // A statue set down is bare stone: the moss starts from here (`greening.ts`).
     if (mossyPiece(f)) f.greenSince = greenNow();
     this.furniture.set(f.id, f);
@@ -6852,11 +7057,32 @@ export class Game {
     return this.placed.furniture.at(x, y);
   }
 
-  /** Why a piece of furniture cannot stand on this block of subtiles, or null. */
-  furniturePlaceReason(kind: string, x: number, y: number, sx: number, sy: number, facing: Side = 's', except?: number): string | null {
+  /**
+   * Why a piece of furniture cannot stand on this block of subtiles, or null.
+   * `level` is the storey it goes on: where you are standing, for a piece
+   * being set down, and where it stands, for one being turned.
+   */
+  furniturePlaceReason(kind: string, x: number, y: number, sx: number, sy: number, facing: Side = 's', except?: number,
+    level = floorOf(this.player.level)): string | null {
     const def = furnitureDef(kind);
     const [fw, fh] = furnitureFootprint(kind, facing);
     const [ax, ay] = furnitureAnchor(kind, sx, sy, facing);
+    /*
+     * Down in a cellar: on the floor of the cellar you are in, and only what
+     * may go down there (`cellarPieceReason`). The floor is dug level and
+     * dry, so none of the ground's questions are asked of it.
+     */
+    if (level < 0) {
+      if (!this.buildings.sameCellar(this.myCellar(), x, y)) return CELLAR_FLOOR;
+      const why = cellarPieceOk(kind);
+      if (why) return why;
+      for (let dy = 0; dy < fh; dy++) {
+        for (let dx = 0; dx < fw; dx++) {
+          if (this.occupiedSubtile(x, y, ax + dx, ay + dy, except, level)) return 'Something is already standing there.';
+        }
+      }
+      return null;
+    }
     if (def.boat) {
       // A hull goes in the water and nowhere else, and you have to be able to
       // reach the water you are putting it in.
@@ -6906,11 +7132,24 @@ export class Game {
     return best;
   }
 
-  /** Every piece of furniture on the tiles within reach of the player. */
+  /** Every piece of furniture on the tiles within reach of the player: on the player's own storey, and down in a cellar, in that cellar. */
   furnitureWithin(range: number): PlacedFurniture[] {
     const out: PlacedFurniture[] = [];
-    this.placed.furniture.around(this.player.x, this.player.y, range, (f) => out.push(f));
+    const own = this.myCellar();
+    this.placed.furniture.around(this.player.x, this.player.y, range,
+      (f) => (own === undefined || this.buildings.sameCellar(own, f.x, f.y)) && out.push(f), this.player.level);
     return out;
+  }
+
+  /**
+   * Whether a thing standing on a tile, on a storey, is on the player's own
+   * side of the ground floor: up top from up top, and from down in a cellar,
+   * in that same cellar -- the cellar of the building next door is the far
+   * side of solid ground.
+   */
+  onMySide(level: number | undefined, x: number, y: number): boolean {
+    if (floorOf(level) !== floorOf(this.player.level)) return false;
+    return this.player.level >= 0 || this.buildings.sameCellar(this.myCellar(), Math.floor(x), Math.floor(y));
   }
 
   /**
@@ -7080,9 +7319,9 @@ export class Game {
    * so this is the one question everything about it turns on: whether the spot
    * somebody is pointing at is a rack's deck or bare ground.
    */
-  rackAt(x: number, y: number, sx: number, sy: number): PlacedFurniture | undefined {
+  rackAt(x: number, y: number, sx: number, sy: number, level = 0): PlacedFurniture | undefined {
     for (const f of this.placed.furniture.at(x, y)) {
-      if (rackSpots(f) && furnitureCovers(f, sx, sy)) return f;
+      if ((f.level ?? 0) < 0 === level < 0 && rackSpots(f) && furnitureCovers(f, sx, sy)) return f;
     }
     return undefined;
   }
@@ -7120,12 +7359,18 @@ export class Game {
   }
 
   /** Whether a spot is taken, leaving out one piece of furniture when it is that piece asking about its own turn. */
-  occupiedSubtile(x: number, y: number, sx: number, sy: number, exceptFurniture?: number): boolean {
+  occupiedSubtile(x: number, y: number, sx: number, sy: number, exceptFurniture?: number, level = 0): boolean {
+    // Down in a cellar only what is down there takes up room: crates and furniture, the two that go down.
+    if (level < 0) {
+      if (this.crateAt(x, y, sx, sy, level)) return true;
+      for (const f of this.placed.furniture.at(x, y)) if ((f.level ?? 0) < 0 && f.id !== exceptFurniture && furnitureCovers(f, sx, sy)) return true;
+      return false;
+    }
     if (this.crateAt(x, y, sx, sy)) return true;
     if (this.campfireAt(x, y, sx, sy)) return true;
     for (const s of this.placed.smelters.at(x, y)) if (smelterCovers(s, sx, sy)) return true;
     for (const k of this.placed.kilns.at(x, y)) if (kilnCovers(k, sx, sy)) return true;
-    for (const f of this.placed.furniture.at(x, y)) if (f.id !== exceptFurniture && furnitureCovers(f, sx, sy)) return true;
+    for (const f of this.placed.furniture.at(x, y)) if ((f.level ?? 0) >= 0 && f.id !== exceptFurniture && furnitureCovers(f, sx, sy)) return true;
     for (const a of this.placed.anvils.at(x, y)) if (anvilCovers(a, sx, sy)) return true;
     for (const p of this.placed.posts.at(x, y)) if (p.sx === sx && p.sy === sy) return true;
     return false;
@@ -7339,13 +7584,19 @@ export class Game {
    * array rather than a fresh one, because the renderer asks this of every
    * tile it draws and nearly every answer is nothing.
    */
-  groundAt(x: number, y: number): readonly Item[] {
-    return this.ground.get(tileKey(x, y)) ?? NO_ITEMS;
+  groundAt(x: number, y: number, level = 0): readonly Item[] {
+    return this.pilesOn(level).get(tileKey(x, y)) ?? NO_ITEMS;
   }
 
-  dropOnGround(x: number, y: number, item: Item): void {
+  /** The piles on a storey: a cellar's floor, or the ground and everything over it. */
+  pilesOn(level: number): Map<number, Item[]> {
+    return level < 0 ? this.cellarGround : this.ground;
+  }
+
+  dropOnGround(x: number, y: number, item: Item, level = 0): void {
     const key = tileKey(x, y);
-    const pile = this.ground.get(key) ?? [];
+    const piles = this.pilesOn(level);
+    const pile = piles.get(key) ?? [];
     const def = ITEM_DEFS[item.id];
     // Onto a pile of the same thing, by the one rule for what shares a stack
     // (a maker's mark and a rarity are part of it), and rotting at the same pace.
@@ -7354,7 +7605,7 @@ export class Game {
       stack.ql = (stack.ql * stack.count + item.ql * item.count) / (stack.count + item.count);
       stack.count += item.count;
     } else pile.push(item);
-    this.ground.set(key, pile);
+    piles.set(key, pile);
     this.events.emit('world', x, y);
   }
 
@@ -7362,23 +7613,30 @@ export class Game {
   /** How far a sweep of the ground reaches: the tile you are on and its neighbours. */
   static readonly SWEEP = 1;
 
-  /** How many loose things are lying within reach of a spot. */
-  sweepable(x: number, y: number): number {
+  /** How many loose things are lying within reach of a spot, on a storey. */
+  sweepable(x: number, y: number, level = 0): number {
     let n = 0;
     for (let dy = -Game.SWEEP; dy <= Game.SWEEP; dy++) {
-      for (let dx = -Game.SWEEP; dx <= Game.SWEEP; dx++) n += this.groundAt(x + dx, y + dy).length;
+      for (let dx = -Game.SWEEP; dx <= Game.SWEEP; dx++) if (this.sweeps(x + dx, y + dy, level)) n += this.groundAt(x + dx, y + dy, level).length;
     }
     return n;
   }
 
-  /** Gather up everything lying within reach of a spot, nearest first. */
-  sweep(x: number, y: number): Item[] {
+  /** Whether a sweep on a storey takes up what lies on a tile: anywhere up top, and down in a cellar, in the player's own cellar. */
+  private sweeps(x: number, y: number, level: number): boolean {
+    return level >= 0 || this.buildings.sameCellar(this.myCellar(), x, y);
+  }
+
+  /** Gather up everything lying within reach of a spot, nearest first, on a storey. */
+  sweep(x: number, y: number, level = 0): Item[] {
     const got: Item[] = [];
     const spots: Array<[number, number]> = [];
-    for (let dy = -Game.SWEEP; dy <= Game.SWEEP; dy++) for (let dx = -Game.SWEEP; dx <= Game.SWEEP; dx++) spots.push([x + dx, y + dy]);
+    for (let dy = -Game.SWEEP; dy <= Game.SWEEP; dy++) {
+      for (let dx = -Game.SWEEP; dx <= Game.SWEEP; dx++) if (this.sweeps(x + dx, y + dy, level)) spots.push([x + dx, y + dy]);
+    }
     spots.sort((a, b) => Math.hypot(a[0] - x, a[1] - y) - Math.hypot(b[0] - x, b[1] - y));
     for (const [sx, sy] of spots) {
-      for (const it of this.takeFromGround(sx, sy, null)) {
+      for (const it of this.takeFromGround(sx, sy, null, level)) {
         this.inventory.addItem(it);
         got.push(it);
       }
@@ -7386,9 +7644,10 @@ export class Game {
     return got;
   }
 
-  takeFromGround(x: number, y: number, uid: number | null): Item[] {
+  takeFromGround(x: number, y: number, uid: number | null, level = 0): Item[] {
     const key = tileKey(x, y);
-    const pile = this.ground.get(key);
+    const piles = this.pilesOn(level);
+    const pile = piles.get(key);
     if (!pile) return [];
     let taken: Item[];
     if (uid === null) {
@@ -7400,15 +7659,15 @@ export class Game {
     // Nothing rots off the ground, so what kept a thing from rotting on it
     // (a Cook's Cool Pack) goes when it is taken up.
     for (const it of taken) delete it.cool;
-    if (!pile.length) this.ground.delete(key);
+    if (!pile.length) piles.delete(key);
     this.events.emit('world', x, y);
     return taken;
   }
 
-  /** Out to a save, which has always written the tile as `"x,y"` and still does. */
-  groundToJSON(): Record<string, Item[]> {
+  /** Out to a save, which has always written the tile as `"x,y"` and still does; a cellar's floor the same way. */
+  groundToJSON(level = 0): Record<string, Item[]> {
     const out: Record<string, Item[]> = {};
-    for (const [k, v] of this.ground) out[`${keyX(k)},${keyY(k)}`] = v;
+    for (const [k, v] of this.pilesOn(level)) out[`${keyX(k)},${keyY(k)}`] = v;
     return out;
   }
 
@@ -7862,6 +8121,8 @@ export interface IslandPlaced {
   sub: string | null;
   x: number;
   y: number;
+  /** The storey it stands on: -1 down in a cellar; absent from older islands, and 0 on the ground. */
+  level?: number | null;
   sx: number;
   sy: number;
   ql: number | null;
@@ -7939,6 +8200,8 @@ export interface IslandPlaced {
 export interface IslandCrate {
   id: number;
   kind: string;
+  /** The storey it stands on: -1 down in a cellar; absent from older islands, and 0 on the ground. */
+  level?: number | null;
   /** The padlock fitted to it, by the number it shares with its key. */
   lock?: number | null;
   /** Whether it is yours: the island's `crate_yours`. */
@@ -7990,6 +8253,12 @@ export interface IslandGround {
    * Left out means nothing said; an empty list means nothing is there.
    */
   lying?: ItemRow[];
+  /**
+   * And what is lying on the floors of the cellars in range, the same way
+   * (the rows held as `cellar` on the island): with the fast half, whenever
+   * it is sent.
+   */
+  cellarLying?: ItemRow[];
   /**
    * What is growing, and how far along.
    *

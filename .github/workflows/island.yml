@@ -719,6 +719,50 @@ jobs:
           npx esbuild supabase/test/indoors.ts --bundle --platform=node --format=esm \
             --outfile=node_modules/.cache/indoors.mjs --log-level=error
           node node_modules/.cache/indoors.mjs
+      - name: A cellar under the ground floor
+        run: |
+          # Nothing went under a building: the ground floor was the bottom of
+          # it, and the coolest place to keep food was a room, at a tenth of
+          # the rot. A finished building's ground-floor tile is dug out now,
+          # the soil with a shovel and the rock under it with a pick, a storey
+          # down, giving what digging and mining that ground would, by
+          # somebody inside the building; a staircase or a ladder from the
+          # ground floor is the way down, climbed from its foot and no other
+          # side; nothing walks, reaches or digs from one cellar into the
+          # cellar of the building next door; what lies down there rots at a
+          # twentieth, and a bed down there rests as one indoors does; the
+          # ground over it is left as it was, and the building comes down
+          # only once it is filled in; and Recall the way from down there
+          # stands the body at the token on the ground floor, free to walk.
+          # Where it meets the rest of a building: no cellar under a deck on
+          # piers, no way down over a glasshouse's field, no lantern post
+          # down there, no shop counter tended from down there, and no altar
+          # down there glowing on the floor over it.
+          npx esbuild supabase/test/cellar.ts --bundle --platform=node --format=esm \
+            --outfile=node_modules/.cache/cellar.mjs --log-level=error
+          node node_modules/.cache/cellar.mjs
+      - name: Where the body is, told to the island in order
+        run: |
+          # The island takes a change of storey only from the tile it heard of
+          # last: down from a flight's head onto its foot, up from the foot
+          # onto the head. Both steps are said as they happen, and when a word
+          # before them was slow to be answered the two went together, the
+          # storey change could land first and be refused, and the two sides
+          # had the body on different storeys. Against a keeper stubbed on
+          # fetch with rpc_move's pull-back and cellar_move_ok: every word
+          # waits for the answer to the one before; a word about walking still
+          # waiting gives way to a newer one, so a slow link hears a word a
+          # round trip and never a backlog; a word on the stairs that the
+          # island pulled short of them, or that went unanswered, is said again
+          # before the storey change off them, and a storey change that went
+          # unanswered before the next word on its storey; an answer on
+          # another storey puts the body where the island has it; a late
+          # answer changes nothing; a job waits only for a word at the stairs;
+          # and a call that never comes back holds the next up for `MOVE_LOST`
+          # and no longer.
+          npx esbuild supabase/test/told.ts --bundle --platform=node --format=esm \
+            --outfile=node_modules/.cache/told.mjs --log-level=error
+          node node_modules/.cache/told.mjs
       - name: Glass in the window, and a colour on the wall
         run: |
           # Every window on the island has had glass in it since the first day

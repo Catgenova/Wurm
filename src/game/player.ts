@@ -212,10 +212,14 @@ export class Player {
     return Math.floor(this.y);
   }
 
-  /** Path to a tile; returns false when unreachable. */
-  walkTo(world: World, tx: number, ty: number, rule?: StepRule, levels = 1): boolean {
+  /**
+   * Path to a tile; returns false when unreachable. `below` is how many
+   * storeys under the ground the walk may use (a cellar), and `goalLevel` the
+   * storey it has to arrive on, when that matters.
+   */
+  walkTo(world: World, tx: number, ty: number, rule?: StepRule, levels = 1, below = 0, goalLevel?: number): boolean {
     const path = findPath(world, this.tileX, this.tileY, this.level, tx, ty,
-      pathOptions(world, rule, levels, this.wheelLoad, this.speedMul === 1 ? this.tilePace : undefined));
+      { ...pathOptions(world, rule, levels, this.wheelLoad, this.speedMul === 1 ? this.tilePace : undefined), below, goalLevel });
     if (!path) return false;
     this.path = path.length ? path : null;
     return true;

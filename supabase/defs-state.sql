@@ -1232,6 +1232,9 @@ insert into action_def (id, label, verb, skill, tool, corner, range, stamina, ba
 insert into action_def (id, label, verb, skill, tool, corner, range, stamina, base_time, difficulty, instant, repeatable) values ('remove_floor', 'Remove floor', 'tearing up the floor', null, null, false, null, 0.04, 4, null, false, false);
 insert into action_def (id, label, verb, skill, tool, corner, range, stamina, base_time, difficulty, instant, repeatable) values ('remove_storey', 'Remove top storey', 'removing the storey', null, null, false, null, 0.02, 2, null, false, false);
 insert into action_def (id, label, verb, skill, tool, corner, range, stamina, base_time, difficulty, instant, repeatable) values ('rename_building', 'Rename building', 'renaming', null, null, false, null, 0, 0, null, true, false);
+insert into action_def (id, label, verb, skill, tool, corner, range, stamina, base_time, difficulty, instant, repeatable) values ('dig_cellar', 'Dig out the cellar', 'digging out the cellar', 'digging', 'shovel', false, null, 0.05, 6, 8, false, true);
+insert into action_def (id, label, verb, skill, tool, corner, range, stamina, base_time, difficulty, instant, repeatable) values ('mine_cellar', 'Mine out the cellar', 'cutting out the cellar', 'mining', 'pickaxe', false, null, 0.06, 8, 12, false, true);
+insert into action_def (id, label, verb, skill, tool, corner, range, stamina, base_time, difficulty, instant, repeatable) values ('fill_cellar', 'Fill in the cellar', 'filling in the cellar', 'digging', 'shovel', false, null, 0.03, 3, null, false, true);
 insert into action_def (id, label, verb, skill, tool, corner, range, stamina, base_time, difficulty, instant, repeatable) values ('examine_creature', 'Examine', 'examining', null, null, false, null, 0, 0, null, true, false);
 insert into action_def (id, label, verb, skill, tool, corner, range, stamina, base_time, difficulty, instant, repeatable) values ('tame', 'Tame', 'coaxing it closer', 'taming', null, false, null, 0.03, 3.5, null, false, false);
 insert into action_def (id, label, verb, skill, tool, corner, range, stamina, base_time, difficulty, instant, repeatable) values ('shear', 'Shear', 'shearing', 'tailoring', 'carving_knife', false, null, 0.04, 6, null, false, false);
@@ -4190,6 +4193,10 @@ create or replace function drown_warn() returns double precision language sql im
 create or replace function storey_skill() returns double precision language sql immutable as $fn$ select 10::double precision $fn$;
 create or replace function indoors_decay() returns double precision language sql immutable as $fn$ select 0.1::double precision $fn$;
 create or replace function indoors_rest() returns double precision language sql immutable as $fn$ select 1.35::double precision $fn$;
+create or replace function cellar_level() returns double precision language sql immutable as $fn$ select -1::double precision $fn$;
+create or replace function cellar_depth() returns double precision language sql immutable as $fn$ select 30::double precision $fn$;
+create or replace function cellar_decay() returns double precision language sql immutable as $fn$ select 0.05::double precision $fn$;
+create or replace function cellar_least_soil() returns double precision language sql immutable as $fn$ select 3::double precision $fn$;
 create or replace function wall_height() returns double precision language sql immutable as $fn$ select 30::double precision $fn$;
 create or replace function class_at() returns double precision language sql immutable as $fn$ select 50::double precision $fn$;
 create or replace function class_change_cost() returns double precision language sql immutable as $fn$ select 500::double precision $fn$;
@@ -4868,7 +4875,7 @@ insert into class_perk values ('terraformer_dig_out_the_tile', 'terraformer', 5,
 insert into class_perk values ('terraformer_clean_earth', 'terraformer', 6, 5, 'Clean Earth', 'Dirt, sand, clay, peat and tar you dig, dredge, collect or flatten off come up at +10% QL.', '{"ql:dig":1.1,"ql:dredge":1.1,"ql:collect":1.1,"ql:flatten":1.1}');
 insert into class_perk values ('terraformer_rare_earth', 'terraformer', 6, 6, 'Rare Earth', '1 in 100 goes of Dig, Dredge and Collect bring the material up rare, rolling on to supreme and fantastic at the odds crafting has. Nothing gathered is rare without it.', '{"rare:dig":0.01,"rare:dredge":0.01,"rare:collect":0.01}');
 insert into class_perk values ('terraformer_treasure_nose', 'terraformer', 6, 20, 'Treasure Nose', 'Digging turns up a treasure map in 1 in 200 goes (now 1 in 1000).', '{"map:dig":0.005,"map:dig_tile":0.005}');
-insert into class_perk values ('miner_ore_sense', 'miner', 1, 7, 'Ore Sense', 'Mine and Chip corner work every ore at 10 less mining than it wants: copper, iron and tin at any mining, zinc at 10, lead at 20, silver at 30, gold at 40, adamantine at 50, glimmersteel at 60, mithril at 70 and seryll at 80 (now copper at 1, iron at 5, tin at 10, zinc at 20, lead at 30, silver at 40, gold at 50, adamantine at 60, glimmersteel at 70, mithril at 80 and seryll at 90).', '{"ore:below":10}');
+insert into class_perk values ('miner_ore_sense', 'miner', 1, 7, 'Ore Sense', 'Mine, Chip corner and Mine out the cellar work every ore at 10 less mining than it wants: copper, iron and tin at any mining, zinc at 10, lead at 20, silver at 30, gold at 40, adamantine at 50, glimmersteel at 60, mithril at 70 and seryll at 80 (now copper at 1, iron at 5, tin at 10, zinc at 20, lead at 30, silver at 40, gold at 50, adamantine at 60, glimmersteel at 70, mithril at 80 and seryll at 90).', '{"ore:below":10}');
 insert into class_perk values ('miner_coal_hand', 'miner', 1, 8, 'Coal Hand', 'Mine on a coal seam brings up two coal a go (now one).', '{"count:coal":2}');
 insert into class_perk values ('miner_chipper', 'miner', 1, 9, 'Chipper', 'Chip corner takes the corner down in 1 in 2 goes (now 1 in 4).', '{"chip:chance":0.5}');
 insert into class_perk values ('miner_rock_slide', 'miner', 2, 13, 'Rock Slide', 'When the face drops of its own accord as you mine (1 in 30 goes), three more of what you are mining come down with it.', '{"slide:more":3}');
@@ -6307,6 +6314,7 @@ create or replace function season_seconds() returns double precision language sq
 create or replace function year_seconds() returns double precision language sql immutable as $fn$ select 432000::double precision $fn$;
 create or replace function year_growth() returns double precision language sql immutable as $fn$ select 324000::double precision $fn$;
 create or replace function is_planter(p_sub text) returns boolean language sql immutable as $fn$ select coalesce(p_sub = any(array['planter']::text[]), false) $fn$;
+create or replace function cellar_outdoor(p_sub text) returns boolean language sql immutable as $fn$ select coalesce(p_sub = any(array['stall', 'mailbox', 'creature_crate', 'planter', 'hive', 'fish_pond', 'lamp_post', 'lamp_pillar', 'flagpole', 'rose_arch', 'stone_rose_arch', 'well', 'fountain', 'trash_crate', 'grave']::text[]), false) $fn$;
 create or replace function planter_growing_said() returns text language sql immutable as $fn$ select 'Something is growing in it. Harvest it, or pull it up, first.' $fn$;
 insert into build_material_def (id, name, kind, tool, skill, storeys, heft) values ('glass', 'Glass', 'wood', 'mallet', 'carpentry', 10, 1);
 insert into build_material_bill values ('glass', 0, 'glass', 24);

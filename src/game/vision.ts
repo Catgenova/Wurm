@@ -1,5 +1,6 @@
 import { TileType } from '../world/tiles';
 import { isDone, WALL_TYPE_BY_ID } from './building';
+import { CELLAR_DAYLIGHT } from './cellar';
 import { bloodMul } from './creatures';
 import type { Game } from './game';
 import { heldReach } from './light';
@@ -112,6 +113,15 @@ export class Vision {
    * doubled what a look cost among a dozen houses.
    */
   private readonly shut = new Map<number, Set<number>>();
+  /**
+   * The cellar tiles in sight, by tile index, while you are down in a cellar.
+   *
+   * Kept apart from `visible`, which is the ground's: a cellar tile is under a
+   * building on a deed, and a deed watches all of its own ground whoever is
+   * standing where -- which says nothing about whether anybody can see into
+   * the dark under the floor. Down there you see what your own eyes do.
+   */
+  readonly cellarSeen = new Set<number>();
 
   constructor(private readonly game: Game) {
     this.w = game.world.w;
@@ -134,6 +144,12 @@ export class Vision {
 
   isVisible(x: number, y: number): boolean {
     return !this.game.settings.fog || this.visible[y * this.w + x] === 1;
+  }
+
+  /** Whether a tile of a cellar is in sight: from down in it, by your own eyes; a cellar you are not in, only as remembered. */
+  cellarState(x: number, y: number): number {
+    if (!this.game.settings.fog) return VISIBLE;
+    return this.cellarSeen.has(y * this.w + x) ? VISIBLE : KNOWN;
   }
 
   /** Whether a point in the world is being watched, for creatures and the like. */
@@ -168,7 +184,9 @@ export class Vision {
    */
   sightRange(): number {
     const g = this.game;
-    const up = Math.max(0, g.world.heightAt(g.player.x, g.player.y));
+    // Down in a cellar the hour is the dead of night, whatever it is up top, and there is no hill to stand on.
+    const down = g.player.level < 0;
+    const up = down ? 0 : Math.max(0, g.world.heightAt(g.player.x, g.player.y));
     // What you would see in broad daylight, given how much you notice.
     const open = (BASE_SIGHT + up / HEIGHT_PER_TILE) * awarenessReach(g.skills.get(AWARENESS));
     /*
@@ -178,7 +196,7 @@ export class Vision {
      * as the thing you are carrying throws.
      */
     const lamp = g.heldLight();
-    const day = 1 - NIGHT_LOSS * g.darkness() * (lamp ? 1 - LIGHT_GIVES_BACK : 1);
+    const day = 1 - NIGHT_LOSS * (down ? 1 : g.darkness()) * (lamp ? 1 - LIGHT_GIVES_BACK : 1);
     // The reader's path sees further than anybody else.
     const keen = g.walks('knowledge', 5) ? KEEN_SIGHT : 1;
     const seen = Math.max(3, Math.min(MAX_SIGHT * keen, open * day * keen));
@@ -210,7 +228,10 @@ export class Vision {
       if (y > y1) y1 = y;
     };
 
-    this.cast(next, g.player.x, g.player.y, this.sightRange(), mark, g.player.level);
+    // Down in a cellar your eyes are down there: they see its tiles, and nothing up top.
+    this.cellarSeen.clear();
+    if (g.player.level < 0) this.castCellar(g.player.x, g.player.y, this.sightRange());
+    else this.cast(next, g.player.x, g.player.y, this.sightRange(), mark, g.player.level);
     // Your own creatures are eyes as well, and a settlement is watched by the
     // people in it whether or not you are standing in the middle of it.
     for (const c of g.creatures.list.values()) {
@@ -294,6 +315,79 @@ export class Vision {
     } else {
       this.dirty = null;
     }
+  }
+
+  /**
+   * What an eye down in a cellar sees: every tile of the same cellar within
+   * `range` along a line that stays in the cellar -- the ground round it stops
+   * the eye as a wall does -- and, by day, the ground round the foot of every
+   * flight or ladder down, which the daylight coming down it shows
+   * (`CELLAR_DAYLIGHT` of it at noon, less as the light goes).
+   */
+  private castCellar(ex: number, ey: number, range: number): void {
+    const g = this.game;
+    const b = g.buildings;
+    const eyeX = Math.floor(ex);
+    const eyeY = Math.floor(ey);
+    const own = b.cellar(eyeX, eyeY)?.building;
+    if (own === undefined) return;
+    const see = (fx: number, fy: number, r: number): void => {
+      const reach = Math.ceil(r);
+      for (let dy = -reach; dy <= reach; dy++) {
+        for (let dx = -reach; dx <= reach; dx++) {
+          const tx = fx + dx;
+          const ty = fy + dy;
+          if (dx * dx + dy * dy > r * r || !b.sameCellar(own, tx, ty)) continue;
+          if (this.inCellarLine(own, fx, fy, tx, ty)) this.cellarSeen.add(ty * this.w + tx);
+        }
+      }
+    };
+    see(eyeX, eyeY, range);
+    const daylight = CELLAR_DAYLIGHT * (1 - g.darkness());
+    if (daylight < 1) return;
+    for (const c of b.cellars.values()) {
+      if (c.building !== own || !b.flightDown(c.x, c.y)) continue;
+      // The daylight comes down the flight and lies round its foot, which is the flight's own tile at the bottom.
+      if (this.inCellarLine(own, eyeX, eyeY, c.x, c.y) || this.cellarSeen.has(c.y * this.w + c.x)) see(c.x, c.y, daylight);
+    }
+  }
+
+  /**
+   * Whether the line between two tiles of a cellar stays in that cellar,
+   * border by border, as `wallInTheWay` follows one: through the corner of a
+   * tile of ground only when one of the two ways round it is the same cellar.
+   * The cellar of the building next door is ground to it.
+   */
+  private inCellarLine(own: number, ex: number, ey: number, tx: number, ty: number): boolean {
+    const b = this.game.buildings;
+    const open = (x: number, y: number): boolean => b.sameCellar(own, x, y);
+    const dx = tx - ex;
+    const dy = ty - ey;
+    const sx = Math.sign(dx);
+    const sy = Math.sign(dy);
+    const everyX = dx ? 1 / Math.abs(dx) : Infinity;
+    const everyY = dy ? 1 / Math.abs(dy) : Infinity;
+    let nextX = everyX / 2;
+    let nextY = everyY / 2;
+    let x = ex;
+    let y = ey;
+    while (x !== tx || y !== ty) {
+      if (Math.abs(nextX - nextY) < 1e-9) {
+        if (!open(x + sx, y) && !open(x, y + sy)) return false;
+        x += sx;
+        y += sy;
+        nextX += everyX;
+        nextY += everyY;
+      } else if (nextX < nextY) {
+        x += sx;
+        nextX += everyX;
+      } else {
+        y += sy;
+        nextY += everyY;
+      }
+      if (!open(x, y)) return false;
+    }
+    return true;
   }
 
   /**

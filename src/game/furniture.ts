@@ -487,6 +487,8 @@ export interface PlacedFurniture {
   /** Which of the twenty it is. */
   kind: string;
   ql: number;
+  /** The storey it stands on: `CELLAR_LEVEL` down in a cellar, absent on the ground. */
+  level?: number;
   /**
    * 1 rare, 2 supreme, 3 fantastic; absent for the ordinary run of things.
    *
@@ -966,7 +968,7 @@ export const FURNITURE_ACTIONS: ActionDef[] = [
       if (t.kind !== 'tile' || t.itemUid === undefined || t.sx === undefined || t.sy === undefined) return;
       const item = g.inventory.get(t.itemUid);
       if (!item || !isFurniture(item.id) || !g.inventory.remove(item.uid, 1)) return;
-      const f = g.addFurniture(item.id, t.x, t.y, t.sx, t.sy, item.ql, [], item.extra, t.facing ?? 's');
+      const f = g.addFurniture(item.id, t.x, t.y, t.sx, t.sy, item.ql, [], item.extra, t.facing ?? 's', g.player.level);
       if (item.dye) f.dye = item.dye;
       // Roses planted at its feet grow from now, on the wall clock (`roses.ts`).
       if (furnitureDef(item.id).roses) f.setAt = Date.now() / 1000;
@@ -1009,7 +1011,7 @@ export const FURNITURE_ACTIONS: ActionDef[] = [
       // A quarter turn, or on round past a facing a lantern post's arm would go into a wall (`lamps.ts`).
       const facing = g.pieceTurnsTo(f);
       const [ax, ay] = furnitureAnchor(f.kind, f.sx, f.sy, facing);
-      const why = g.furniturePlaceReason(f.kind, f.x, f.y, ax, ay, facing, f.id);
+      const why = g.furniturePlaceReason(f.kind, f.x, f.y, ax, ay, facing, f.id, f.level ?? 0);
       return why ? 'Something is in the way of turning it.' : null;
     },
     perform: (t, g) => {
@@ -1017,7 +1019,7 @@ export const FURNITURE_ACTIONS: ActionDef[] = [
       if (!f) return;
       const facing = g.pieceTurnsTo(f);
       const [ax, ay] = furnitureAnchor(f.kind, f.sx, f.sy, facing);
-      if (g.furniturePlaceReason(f.kind, f.x, f.y, ax, ay, facing, f.id)) return;
+      if (g.furniturePlaceReason(f.kind, f.x, f.y, ax, ay, facing, f.id, f.level ?? 0)) return;
       f.facing = facing;
       f.sx = ax;
       f.sy = ay;

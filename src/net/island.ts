@@ -60,7 +60,44 @@ const UPLOAD_BATCH = 32;
  * thing we try to do. Other people see us move through the channel below,
  * which costs nothing and is allowed to be wrong for a moment.
  */
-const MOVE_EVERY = 1.0;
+export const MOVE_EVERY = 1.0;
+
+/**
+ * How long a word about where the body is waits for the answer to the one
+ * before it (`Island.tellWhere`), and a job for the last word at a cellar's
+ * stairs (`Island.act`).
+ *
+ * The client gives up on a call only when the browser does, which can be
+ * minutes on a link that has gone quiet without closing. One call that never
+ * comes back would hold up every move and every job behind it, so past this
+ * many seconds it is taken as lost and the next goes without it.
+ */
+export const MOVE_LOST = 5;
+
+/**
+ * The most times the word on a cellar's stairs is said again before a change
+ * of storey off them, while the island's answer does not have the body there
+ * (`Island.tellWhere`). Each goes a round trip after the last, and the island
+ * lets it make up that much more ground, so a word it pulled short of the
+ * stairs gets there in one or two.
+ */
+export const STAIRS_AGAIN = 3;
+
+/** What `rpc_move` answers: where the island has the body, and its bars and wounds. */
+type MoveAnswer = {
+  x?: number; y?: number; level?: number;
+  stats?: Record<string, number> | null; wounds?: unknown[];
+};
+
+/** Where a body is, and on which storey. */
+type Spot = { x: number; y: number; level: number };
+
+/** True once `p` has settled, false if `secs` went by first; never a rejection. */
+const waitAtMost = (p: Promise<unknown>, secs: number): Promise<boolean> => {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const lost = new Promise<boolean>((done) => { timer = setTimeout(() => done(false), secs * 1000); });
+  return Promise.race([p.then(() => true, () => true), lost]).finally(() => clearTimeout(timer));
+};
 
 /**
  * An answer, read as the rows it was meant to be.
@@ -812,6 +849,65 @@ export class Island {
   private lastGround = 0;
   private lastSprings = 0;
   private lastSaid = '';
+  /**
+   * The storey the island was last told. A change of storey -- down into a
+   * cellar, or up out of one -- is said at once rather than at the next
+   * second's move.
+   */
+  private lastLevel = 0;
+  /**
+   * The last word said about where the body is, settled once it and every
+   * word before it are answered; null when nothing is on its way. The next
+   * word waits for it (`tellWhere`).
+   */
+  private telling: Promise<unknown> | null = null;
+  /**
+   * The last word said at a cellar's stairs -- on a flight's head, at its
+   * foot, or a change of storey -- settled the same way; null when none is on
+   * its way. A job waits for it (`act`): the island puts a thing down on the
+   * storey it believes you are on, and a drop on the stairs is the moment it
+   * matters. A word about walking holds no job up.
+   */
+  private turning: Promise<unknown> | null = null;
+  /** The newest word about walking still waiting its turn, which any newer word replaces. */
+  private unsent: { overtaken: boolean } | null = null;
+  /**
+   * How many times the island has put the body somewhere itself: an answer
+   * that disagreed (`tellWhere`), or a keeper's move (`heardMoved`). A word
+   * still waiting from before is about where the body was, and is not sent.
+   */
+  private putGen = 0;
+  /**
+   * Where the island had the body in its last answer; null when that is not
+   * known, before the first answer and once a word went unanswered and the
+   * next went without it.
+   */
+  private islandHas: Spot | null = null;
+  /**
+   * The last word said on the stairs of a cellar's way down: on a flight's
+   * head up top, or on the tile at its foot below (`Game.atStairs`). Said
+   * again before a change of storey off them when the island's last answer
+   * did not have the body there (`tellWhere`).
+   */
+  private stairsSaid: Spot | null = null;
+  /**
+   * The last change of storey into or out of a cellar, until an answer has
+   * the island on the storey it went to: the word on the stairs it was taken
+   * off, and the word that took it. Said again, both, before the next word on
+   * that storey when a word went unanswered and so it is not known whether
+   * the island ever took them (`tellWhere`).
+   */
+  private crossed: { from: Spot | null; to: Spot } | null = null;
+  /** The word that went to the island last: the answer to any other is late, and out of date (`sayTo`). */
+  private newest: object | null = null;
+  /**
+   * The tile and storey last said, for the two places a body is said to be
+   * at once: on a flight or a ladder down, up top, and on the tile at its
+   * foot, down in the cellar (`Game.atStairs`). The island lets a body change
+   * storey only off the one onto the other (`cellar_move_ok`), so it has to
+   * have heard of the first before the second.
+   */
+  private lastTile = '';
   /** Where the body was and what it was at, the last time that went out over Broadcast. */
   private lastShown = '';
   /** The highest tile change we have taken in, so catching up never doubles back. */
@@ -2019,6 +2115,11 @@ export class Island {
     const lvl = typeof level === 'number' ? level : 0;
     if (this.me) this.me = { ...this.me, x, y, level: lvl };
     this.lastSaid = '';
+    // A word still waiting to go claims the old ground too, and goes unsaid.
+    this.putGen += 1;
+    this.islandHas = { x, y, level: lvl };
+    this.stairsSaid = null;
+    this.crossed = null;
     this.hooks.moved?.(x, y, lvl, true);
     // What was in hand and what was queued are gone too, which the beat says.
     this.armBeat(0.5);
@@ -2258,7 +2359,7 @@ export class Island {
    * back rather than refusing when the claim is too large. So this is not
    * where we are, it is what the island will let us have been.
    */
-  async move(x: number, y: number, level: number, now: number, wearing?: WornWire): Promise<void> {
+  async move(x: number, y: number, level: number, now: number, wearing?: WornWire, stairs = false): Promise<void> {
     if (!this.info) return;
     void this.reconcile(now);
     void this.refreshMobs(now);
@@ -2304,39 +2405,25 @@ export class Island {
     if (said === this.lastSaid) return;
     // Feet have moved, so the ground round them is worth asking about again.
     this.restless = now;
-    if (now - this.lastMove < MOVE_EVERY) return;
+    const tile = `${Math.floor(x)},${Math.floor(y)},${level}`;
+    const atStairs = stairs && tile !== this.lastTile;
+    if (now - this.lastMove < MOVE_EVERY && level === this.lastLevel && !atStairs) return;
+    const turned = level !== this.lastLevel || atStairs;
+    // A change of storey into or out of a cellar, and the word on the stairs it is taken off.
+    const crossing = level !== this.lastLevel && (level < 0 || this.lastLevel < 0);
+    const off = crossing && this.stairsSaid?.level === this.lastLevel ? this.stairsSaid : null;
     this.lastMove = now;
     this.lastSaid = said;
-    const { data } = await supabase().rpc('rpc_move', {
-      p_world: this.info.id, p_x: x, p_y: y, p_level: level,
-    });
-    /*
-     * And what the island made of it, which nothing has ever read.
-     *
-     * The bars and the wounds first: they used to ride the heartbeat and
-     * nothing else, so a fight that takes ten seconds happened entirely
-     * between two answers and you watched a full bar the whole way down. A
-     * walk is half a second apart at worst.
-     *
-     * Then where it says the body is. Normally its word and ours are the same
-     * word — it is generous about a walking pace and only tugs a link that
-     * hiccups. `SNAP_GAP` is past any tug; what is left is dying, which puts
-     * you back at the spawn. A beat is asked for straight after, because the
-     * rest of what death did — the emptied hands, the cleared queue — is the
-     * beat's to say.
-     */
-    const went = data as {
-      x?: number; y?: number; level?: number;
-      stats?: Record<string, number> | null; wounds?: unknown[];
-    } | null;
+    this.lastLevel = level;
+    this.lastTile = tile;
+    if (atStairs) this.stairsSaid = { x, y, level };
+    if (crossing) this.crossed = { from: off, to: { x, y, level } };
+    const asked = this.tellWhere(x, y, level, turned, off);
+    const went = await asked;
+    if (this.telling === asked) this.telling = null;
+    if (this.turning === asked) this.turning = null;
+    // Not sent, because a newer word went in its place, or not answered.
     if (!went) return;
-    if (went.stats || went.wounds) this.hooks.mine?.({ stats: went.stats, wounds: went.wounds });
-    if (typeof went.x === 'number' && typeof went.y === 'number'
-        && Math.hypot(went.x - x, went.y - y) > SNAP_GAP) {
-      this.hooks.moved?.(went.x, went.y, went.level ?? level);
-      this.lastSaid = '';
-      this.armBeat(0.5);
-    }
 
     // Walked out of the square of country the channel is listening to: take a
     // new one, and read whatever was dug in the blocks that are new to us.
@@ -2362,6 +2449,136 @@ export class Island {
         .catch(() => undefined)
         .finally(() => { this.reading = false; });
     }
+  }
+
+  /**
+   * Tell the island where the body is, once everything said before is answered.
+   *
+   * In order, because the island takes a change of storey only from the tile
+   * it heard of last (`cellar_move_ok`): down from a flight onto its foot, up
+   * from the foot onto the flight. Two words on their way at once can land in
+   * either order, and a storey change that lands first is refused while the
+   * browser goes on below. So each word waits for the answer to the one
+   * before, and takes its place in the line before anything is waited on.
+   *
+   * Without a line that grows. On a link slower than a word a second, waiting
+   * every word out would leave the island further behind with every step; so
+   * a word about walking that is still waiting when a newer word is said is
+   * dropped, and the island hears the newest place once a round trip. The
+   * words at a flight are never dropped for a newer one: the island needs
+   * each of them, in turn.
+   *
+   * Nothing is held up for longer than `MOVE_LOST` by a word that never comes
+   * back. If it lands after all, the answer's storey below puts things right.
+   *
+   * And a change of storey goes only once the island has the body on the
+   * stairs it is taken off (`off`): the flight's head going down, the tile at
+   * its foot coming up. The word that put it there can have been pulled short
+   * -- a word the link held up lands just before it, and the island measures
+   * the walk between the two against the moment between them -- or have gone
+   * unanswered. Every answer is back before the next word goes, so this side
+   * knows where the island has the body, and says the word on the stairs
+   * again until the island has it there, `STAIRS_AGAIN` times at most. When
+   * the word that went unanswered was the change of storey itself, the next
+   * word on the storey it went to says the change again first (`crossed`).
+   */
+  private tellWhere(x: number, y: number, level: number, mustGo: boolean, off: Spot | null = null): Promise<MoveAnswer | null> {
+    const world = this.info?.id;
+    const before = this.telling;
+    const gen = this.putGen;
+    const word = { overtaken: false };
+    if (this.unsent) this.unsent.overtaken = true;
+    this.unsent = mustGo ? null : word;
+    const asked = (async (): Promise<MoveAnswer | null> => {
+      // Given up on: whether the island ever took it is not known, and so nor is where it has the body.
+      if (before && !(await waitAtMost(before, MOVE_LOST))) this.islandHas = null;
+      if (this.unsent === word) this.unsent = null;
+      if (word.overtaken || gen !== this.putGen || !world || this.info?.id !== world) return null;
+      // A word gone unanswered may have been the change of storey itself: before a word on the storey it went to, said
+      // again, stairs and all, since whether the island took it is not known.
+      const again = !off && this.islandHas === null && this.crossed?.to.level === level ? this.crossed : null;
+      const stairs = off ?? again?.from ?? null;
+      for (let k = 0; stairs && k < STAIRS_AGAIN && this.shortOf(stairs); k++) {
+        await this.sayTo(world, stairs.x, stairs.y, stairs.level);
+        if (gen !== this.putGen || this.info?.id !== world) return null;
+      }
+      if (again) {
+        await this.sayTo(world, again.to.x, again.to.y, again.to.level);
+        if (gen !== this.putGen || this.info?.id !== world) return null;
+      }
+      const went = await this.sayTo(world, x, y, level);
+      /*
+       * And what the island made of it, which nothing has ever read.
+       *
+       * The bars and the wounds first: they used to ride the heartbeat and
+       * nothing else, so a fight that takes ten seconds happened entirely
+       * between two answers and you watched a full bar the whole way down. A
+       * walk is half a second apart at worst.
+       *
+       * Then where it says the body is. Normally its word and ours are the
+       * same word — it is generous about a walking pace and only tugs a link
+       * that hiccups. `SNAP_GAP` is past any tug; what is left is dying, which
+       * puts you back at the spawn. A beat is asked for straight after,
+       * because the rest of what death did — the emptied hands, the cleared
+       * queue — is the beat's to say.
+       *
+       * The storey at any distance. A change of storey the island refused
+       * leaves the body where it was, up top or below, and a body left on the
+       * other storey in the browser is refused every job where it stands. The
+       * words still waiting were said from where it was, and go unsaid.
+       */
+      if (!went) return null;
+      if (went.stats || went.wounds) this.hooks.mine?.({ stats: went.stats, wounds: went.wounds });
+      const there = typeof went.level === 'number' ? went.level : level;
+      if (typeof went.x === 'number' && typeof went.y === 'number' && gen === this.putGen
+          && (Math.hypot(went.x - x, went.y - y) > SNAP_GAP || there !== level)) {
+        this.putGen += 1;
+        this.hooks.moved?.(went.x, went.y, there);
+        this.lastSaid = '';
+        this.lastLevel = there;
+        this.lastTile = `${Math.floor(went.x)},${Math.floor(went.y)},${there}`;
+        this.stairsSaid = null;
+        this.crossed = null;
+        this.armBeat(0.5);
+      }
+      return went;
+    })();
+    this.telling = asked;
+    if (mustGo) this.turning = asked;
+    return asked;
+  }
+
+  /**
+   * One word to the island, and its answer, which is where the island now
+   * has the body (`islandHas`). Null for no answer, and for the answer to a
+   * word that a newer one went after, unanswered: it says where the island
+   * had the body before the newer one, and changes nothing.
+   */
+  private async sayTo(world: string, x: number, y: number, level: number): Promise<MoveAnswer | null> {
+    const word = {};
+    this.newest = word;
+    const { data } = await supabase().rpc('rpc_move', { p_world: world, p_x: x, p_y: y, p_level: level });
+    if (this.newest !== word) return null;
+    const went = data as MoveAnswer | null;
+    if (went && typeof went.x === 'number' && typeof went.y === 'number') {
+      this.islandHas = { x: went.x, y: went.y, level: typeof went.level === 'number' ? went.level : level };
+      if (this.crossed?.to.level === this.islandHas.level) this.crossed = null;
+    }
+    return went;
+  }
+
+  /**
+   * Whether the word on the stairs wants saying again: the island's last
+   * answer had the body short of the stairs tile, or it is not known where the
+   * island has it. Not when the island has it somewhere else altogether --
+   * another storey, or further off than `SNAP_GAP`, which is a death or a
+   * keeper's move -- where a word on the stairs would only walk it back.
+   */
+  private shortOf(stairs: Spot): boolean {
+    const h = this.islandHas;
+    if (!h) return true;
+    if (h.level !== stairs.level || Math.hypot(h.x - stairs.x, h.y - stairs.y) > SNAP_GAP) return false;
+    return Math.floor(h.x) !== Math.floor(stairs.x) || Math.floor(h.y) !== Math.floor(stairs.y);
   }
 
   /** Ask to do something. What comes back is a refusal or a promise, never a result. */
@@ -2865,6 +3082,8 @@ export class Island {
 
   async act(action: string, target: Record<string, unknown>, times = 1): Promise<ActResult> {
     if (!this.info) return { started: false, why: 'You are not on an island.' };
+    // A word at a cellar's stairs still on its way lands first, so the job is judged on the storey the body is on.
+    if (this.turning) await waitAtMost(this.turning, MOVE_LOST);
     const { data, error } = await supabase().rpc('rpc_act', {
       p_world: this.info.id, p_action: action, p_target: target, p_times: times,
     });
