@@ -24,6 +24,8 @@ import { pathOptions } from '../../src/game/player';
 import { TRIAL_ISLAND_LASTS } from '../../src/game/keep';
 import { LIQUID_NAME, type LiquidKind } from '../../src/game/furniture';
 import { drinkable } from '../../src/game/brewing';
+import { BRIDGES } from '../../src/game/bridges';
+import { numberWord } from '../../src/game/words';
 import { findPath } from '../../src/world/pathfinding';
 import type { World } from '../../src/world/world';
 
@@ -512,8 +514,11 @@ async function main(): Promise<void> {
      * cannot be played from out here either. The rulebook, and the refusals.
      */
     const { data: decks, error: deckErr } = await supabase().from('bridge_def').select('id,name,span,carts');
-    const spans = (decks ?? []) as Array<{ name: string; span: number; carts: boolean }>;
-    check('the three kinds of bridge are on the project', !deckErr && spans.length === 3,
+    const spans = (decks ?? []) as Array<{ id: string; name: string; span: number; carts: boolean }>;
+    const kinds = Object.values(BRIDGES);
+    check(`the ${numberWord(kinds.length)} kinds of bridge are on the project, as the browser has them`,
+      !deckErr && spans.length === kinds.length
+        && kinds.every((k) => spans.some((b) => b.id === k.id && b.span === k.span && b.carts === k.carts)),
       deckErr ? deckErr.message
         : spans.map((b) => `${b.name.toLowerCase()} spans ${b.span}${b.carts ? ', carts cross' : ', foot only'}`).join(', '));
     const { data: brews, error: brewErr } = await supabase().from('brew_def').select('id,name,input,seconds');
