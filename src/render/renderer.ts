@@ -3963,7 +3963,7 @@ export class Renderer {
       if (level >= maxLevels || (viewLevel !== null && level > viewLevel)) {
         late?.();
         // A railing round a flat roof stands on the roof's own level (`frame.ts`).
-        if (level === maxLevels && !gone && (viewLevel === null || level <= viewLevel)) this.drawTerrace(x, y, level, [backA, backB], building ?? jetty, base, inFront);
+        if (level === maxLevels && !gone && (viewLevel === null || level <= viewLevel)) this.drawTerrace(x, y, level, [backA, backB], building ?? jetty, inFront);
         if (level >= maxLevels) break;
         continue;
       }
@@ -3996,7 +3996,7 @@ export class Renderer {
             // storey goes on out over its own jetty, open to it (`frame.ts`).
             const [ox, oy] = border.dir === 'h' ? [tx, ty === border.y ? border.y - 1 : border.y] : [tx === border.x ? border.x - 1 : border.x, ty];
             if ((level === 0 || bld.floor(level, tx, ty)) && !(level > 0 && bld.floor(level, ox, oy)?.building === plan.id)) {
-              this.drawScaffold(border, plan.deck ?? ground, level, inside?.id === plan.id && inFront ? 0.35 : 1);
+              this.drawScaffold(border, plan.deck ?? this.edgeGround(border), level, inside?.id === plan.id && inFront ? 0.35 : 1);
             }
           }
           // Two columns with no wall between them carry a beam (`framing.ts`).
@@ -4018,7 +4018,7 @@ export class Renderer {
         // A railing hides little, and the edge you stand at reads as railed: it is let go no further than this.
         const alpha = dim ? (wall.type === 'railing' ? 0.7 : 0.3) : 1;
         // A building on piers stands its walls on its deck; a jetty's stand at its building's floor (`jettyWallBase`).
-        const at = this.jettyWallBase(wall, border, (wall.building ? bld.list.get(wall.building)?.deck : undefined) ?? ground);
+        const at = this.jettyWallBase(wall, border, (wall.building ? bld.list.get(wall.building)?.deck : undefined) ?? this.edgeGround(border));
         // Drawn after a pilaster it runs out from, it is drawn from the pilaster's face on.
         const guard = this.pilasterGuard(wall, border, at, V, x, y);
         if (guard) this.guardedWall(wall, border, at, alpha, guard);
@@ -6561,6 +6561,20 @@ export class Renderer {
     return this.footAt(x, y);
   }
 
+  /**
+   * The ground a wall, a railing or a plan's outline on a border stands on:
+   * the corner the border starts from, which the tiles on both sides of it
+   * share. Taken from the border and never from the tile that happens to draw
+   * it, because which tile that is turns with the view: on a slope the other
+   * tile's own corner is a tile away, and a wall drawn from it stood in the
+   * air or down the face of a cliff. In the two views whose back edges are
+   * the north and the west, the drawing tile's corner was this one already,
+   * so those draw exactly as they did.
+   */
+  private edgeGround(border: Border): number {
+    return this.game.world.getHeight(border.x, border.y);
+  }
+
   /** The height a wall stands from: a jetty's at its building's floor, whatever the ground under it does. */
   private jettyWallBase(wall: Wall, border: Border, base: number): number {
     if (!wall.building) return base;
@@ -6661,7 +6675,7 @@ export class Renderer {
   }
 
   /** The railings round a flat roof that this tile draws: on its back borders, on the roof's own level. */
-  private drawTerrace(x: number, y: number, level: number, backs: Border[], own: Building | undefined, base: number, inFront: boolean): void {
+  private drawTerrace(x: number, y: number, level: number, backs: Border[], own: Building | undefined, inFront: boolean): void {
     const bld = this.game.buildings;
     const { cutaway } = this.game.settings;
     for (const border of backs) {
@@ -6669,7 +6683,7 @@ export class Renderer {
       if (!wall || this.cut.has(wall.building)) continue;
       if (cutaway && own?.id !== wall.building && wall.type !== 'railing') continue;
       const dim = inFront && this.wallsMyRoom(border);
-      const at = (wall.building ? bld.list.get(wall.building)?.deck : undefined) ?? base;
+      const at = (wall.building ? bld.list.get(wall.building)?.deck : undefined) ?? this.edgeGround(border);
       this.drawWall(wall, border, this.jettyWallBase(wall, border, at), dim ? (wall.type === 'railing' ? 0.7 : 0.3) : 1);
     }
   }
@@ -7049,7 +7063,7 @@ export class Renderer {
     const p = this.game.player;
     const dim = depthOf(V, tx, ty) > depthOf(V, p.tileX, p.tileY) && this.wallsMyRoom(b);
     // On its building's deck, on piers, as `drawStructures` stands it.
-    const base = this.jettyWallBase(wall, b, (wall.building ? bld.list.get(wall.building)?.deck : undefined) ?? this.game.world.getHeight(tx, ty));
+    const base = this.jettyWallBase(wall, b, (wall.building ? bld.list.get(wall.building)?.deck : undefined) ?? this.edgeGround(b));
     return { wall, base, alpha: dim ? (wall.type === 'railing' ? 0.7 : 0.3) : 1, x: tx, y: ty };
   }
 
