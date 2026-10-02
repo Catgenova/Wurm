@@ -1168,6 +1168,27 @@ jobs:
             --outfile=node_modules/.cache/seasons.mjs --log-level=error
           node node_modules/.cache/seasons.mjs
 
+      - name: A glasshouse grows its crops the year round, the same on both sides
+        run: |
+          # A roof laid in glass, on a pitched roof and nowhere else; a building
+          # of one storey under nothing but finished glass is a glasshouse,
+          # whose ground is tilled and sown like a field, and what grows there
+          # grows at the whole of its pace in every season, winter included, on
+          # a glass clock of its own. Both sides are held to each other on that
+          # clock bit for bit, on crops settled across every turn of the year
+          # and held in each season, and on a stage start carried onto the glass
+          # clock and back to the microsecond without losing a second of what
+          # it had grown; and a glasshouse is built, tilled, sown, tended,
+          # unroofed and roofed again, brought on by Bounty, slept through and
+          # harvested through the doors on both sides, refused in the same words;
+          # Examine says what it is; a building with a field in it takes no
+          # roof but glass and no storey until the field is cleared; a wall
+          # down, or a fence in its place, unmakes a glasshouse; and a poured
+          # slab under one is not tilled.
+          npx esbuild supabase/test/glasshouse.ts --bundle --platform=node --format=esm \
+            --outfile=node_modules/.cache/glasshouse.mjs --log-level=error
+          node node_modules/.cache/glasshouse.mjs
+
       - name: A team stays in the traces until it is taken out
         run: |
           # "hitching wildermon to the wagon doesn't seem to be working". On an

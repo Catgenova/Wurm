@@ -24,6 +24,8 @@ export interface LightSource {
   cast?: string;
   /** How strong that colour is at its middle at full dark; a fire's is a sixth of its strength. */
   castAlpha?: number;
+  /** The storey it burns on, for a light carried upstairs; absent is the ground floor, where everything set down stands. */
+  level?: number;
 }
 
 /** Seconds of burning in one candle, at a lantern made perfectly. */

@@ -1665,8 +1665,8 @@ const frosted = (c: string, into: string, k: number): string => {
  * the tile. `dormant` is a field waiting out a winter, which grows nothing:
  * its green gone dull and a rime on the furrows.
  */
-export function cropSprite(cropId: string, stage: number, look: string, leaf: string, fruit: string, dormant = false): Sprite {
-  const key = `${SPRITE_SCALE}|crop:${cropId}:${stage}${dormant ? ':dormant' : ''}`;
+export function cropSprite(cropId: string, stage: number, look: string, leaf: string, fruit: string, dormant = false, rect = false): Sprite {
+  const key = `${SPRITE_SCALE}|crop:${cropId}:${stage}${dormant ? ':dormant' : ''}${rect ? ':rect' : ''}`;
   let spr = cache.get(key);
   if (spr) return spr;
   if (dormant) {
@@ -1681,7 +1681,15 @@ export function cropSprite(cropId: string, stage: number, look: string, leaf: st
   spr = makeSprite(96, 72, 48, 54, (ctx) => {
     const cx = 48;
     const cy = 52;
-    const iso = (u: number, v: number): [number, number] => [cx + (u - v) * 44, cy + (u + v) * 22];
+    /*
+     * The tile as it lies on the screen: a diamond at the four cardinal turns,
+     * and at the four diagonals a rectangle root two wide to root two tall
+     * (`VIEWS`), which the field is laid out in as it is in the diamond --
+     * its furrows across it and its plants inside it.
+     */
+    const iso = rect
+      ? (u: number, v: number): [number, number] => [cx + u * 44 * Math.SQRT2, cy + v * 22 * Math.SQRT2]
+      : (u: number, v: number): [number, number] => [cx + (u - v) * 44, cy + (u + v) * 22];
     ctx.lineCap = 'round';
     /*
      * Furrows run across the field under the plants. The ground they have to
@@ -1693,11 +1701,12 @@ export function cropSprite(cropId: string, stage: number, look: string, leaf: st
     ctx.strokeStyle = 'rgba(70,50,32,0.45)';
     ctx.lineWidth = 2;
     for (let i = -2; i <= 2; i++) {
-      const f = i * 0.19;
-      const half = EDGE - Math.abs(f);
+      // Across a rectangle every furrow is the whole width of it, and no wider: the sides of one are edges, not corners.
+      const f = i * (rect ? 0.17 : 0.19);
+      const half = rect ? 0.36 : EDGE - Math.abs(f);
       if (half <= 0.03) continue;
-      const [ax, ay] = iso(f - half, f + half);
-      const [bx, by] = iso(f + half, f - half);
+      const [ax, ay] = rect ? iso(-half, f) : iso(f - half, f + half);
+      const [bx, by] = rect ? iso(half, f) : iso(f + half, f - half);
       ctx.beginPath();
       ctx.moveTo(ax, ay);
       ctx.lineTo(bx, by);
@@ -1728,7 +1737,8 @@ export function cropSprite(cropId: string, stage: number, look: string, leaf: st
     }
     const plants: Array<[number, number]> = [];
     for (let u = -1; u <= 1; u++) for (let v = -1; v <= 1; v++) plants.push([u * 0.26 + (rng() - 0.5) * 0.08, v * 0.26 + (rng() - 0.5) * 0.08]);
-    plants.sort((a, b) => a[0] + a[1] - (b[0] + b[1]));
+    // Back to front: down the diamond, or down the rectangle.
+    plants.sort((a, b) => (rect ? a[1] - b[1] : a[0] + a[1] - (b[0] + b[1])));
     for (const [u, v] of plants) {
       const [px, py] = iso(u, v);
       cropPlant(ctx, px, py, look, stage, leaf, fruit, u);

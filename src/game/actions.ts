@@ -16,7 +16,7 @@ import { FURNITURE_ACTIONS, furnitureCentre } from './furniture';
 import { crateCentre } from './crates';
 import { GEAR_ACTIONS } from './gear';
 import { IMPROVE_ACTIONS, improvable } from './improve';
-import { FARM_ACTIONS } from './farming';
+import { FARM_ACTIONS, glassSays } from './farming';
 import { BUTCHER_ACTIONS } from './butcher';
 import { ARCHAEOLOGY_ACTIONS } from './archaeology';
 import { CIRCLET, CIRCLET_SET, CIRCLET_STONES, circletSays, circletWithRoom, gemOf, maybeGem, stonesOf } from './gems';
@@ -806,6 +806,8 @@ export const ACTIONS: ActionDef[] = [
       else if (here) extra += ` This is part of ${here.name}.`;
       const b = g.buildings.buildingAt(t.x, t.y);
       if (b) extra += ` It belongs to ${b.name}, ${b.levels === 1 ? 'a single-storey building' : `${b.levels} storeys tall`}.`;
+      // And a glasshouse says what it is for (`glasshouse.ts`).
+      extra += glassSays(g.buildings, b);
       const crates = g.cratesOnTile(t.x, t.y);
       if (crates.length) extra += ` ${crates.length === 1 ? 'A crate stands' : `${crates.length} crates stand`} here.`;
       g.logMsg(`${text} Height ${avg.toFixed(1)}, slope ${w.slope(t.x, t.y)}.${water}${extra}`, 'event');

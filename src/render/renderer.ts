@@ -37,6 +37,9 @@ import { HALF_H, HALF_W, HEIGHT_SCALE, UNITS_PER_TILE } from './iso';
 import { depthOf, type View } from './view';
 import { FALLS, roofModel, type Fall, type RoofGable, type RoofModel, type RoofPt } from './roofshape';
 import { COVER_PPT, covering } from './roofing';
+import { glass, glassBack, glassFace, glassReflects } from './glazing';
+import { GLASS } from '../game/glasshouse';
+import type { LightSource } from '../game/light';
 import { FLOOR_PPT, FLOOR_TILES, concrete, flooring, slabbing } from './flooring';
 import { LADDER, stairStyle } from './stairing';
 import { drawSteps, stepsFootAt } from './steps';
@@ -785,6 +788,12 @@ export class Renderer {
   private lean = { x: 0, y: 0, force: 0 };
   /** The light this frame, kept so anything needing a ground colour can ask for one. */
   private sunNow: [number, number, number] = [0, 0, 1];
+  /** Everything burning this frame, after dark, for what glows under glass: read once a frame. */
+  private lightsNow: LightSource[] = [];
+  /** Glass with a light under it, laid over the night once the night is down: see `drawGlassGlow`. */
+  private glassNight: Array<{ faces: Array<{ path: Path2D; m: DOMMatrix }>; lights: Array<{ x: number; y: number; r: number; a: number }>; box: [number, number, number, number] }> = [];
+  /** The layer a glass roof's glow is made on, at half the screen's size (`drawGlassGlow`). */
+  private glowLayer: CanvasRenderingContext2D | null = null;
   /** The sky this frame, which the haze over the distance is drawn in. */
   private sky: Sky = skyAt(0, 0);
   /** The season this frame, for the pots on a flight of steps and the roses on an arch. */
@@ -1977,6 +1986,9 @@ export class Renderer {
     this.dormant = this.game.crops.size > 0 && fieldRate(this.game.wallNow()) <= 0;
     this.roomTiles = this.myRoom();
     this.shades.clear();
+    // What is burning, for glass to glow with at night, and last frame's glow gone.
+    this.lightsNow = this.game.darkness() > 0.02 ? this.game.lights() : [];
+    this.glassNight.length = 0;
     // Other people are walked along between one word about them and the next,
     // on the drawing clock rather than the world's: it is smoothing, not
     // simulation, and should stay smooth even when nothing is being simulated.
@@ -2424,8 +2436,16 @@ export class Renderer {
           if (crop) {
             const def = cropDef(crop.id);
             const avg = (c[0] + c[1] + c[2] + c[3]) / 4;
-            this.take('crop', x, y, baseX, baseY + hh - avg * hs,
-              cropSprite(crop.id, Math.min(3, crop.stage), def.look, def.colors[0], def.colors[1], this.dormant));
+            /*
+             * A field waits out a winter; what grows under glass does not
+             * (`glasshouse.ts`). Stood at the tile's middle: the top corner and
+             * a tile's height down on a diamond, and half across and half down
+             * a rectangle -- where it used to stand on the rectangle's corner,
+             * and a glasshouse's crops stood half out through its walls.
+             */
+            const [mx, my] = V.staggered ? [baseX, baseY + hh] : [baseX + hw / 2, baseY + hh / 2];
+            this.take('crop', x, y, mx, my - avg * hs,
+              cropSprite(crop.id, Math.min(3, crop.stage), def.look, def.colors[0], def.colors[1], this.dormant && !crop.glass, !V.staggered));
           }
         }
         /*
@@ -4344,6 +4364,14 @@ export class Renderer {
      * every place two of its pieces overlap came out darker than the rest.
      */
     const under = !!this.roomTiles && roofs.some((f) => this.roomTiles?.has(`${f.x},${f.y}`));
+    /*
+     * Glass is seen through already (`glazing.ts`), so out of doors a roof of
+     * it is laid straight on. Standing under one it goes on that layer as any
+     * roof over you does: the frame and the panes of all of it ghosted over the
+     * room at a third, so you can see where the glass is without it hiding
+     * what you are working on.
+     */
+    const glassy = (f: FloorTile): boolean => f.material === GLASS;
     const ctx = under ? this.seeThroughCtx() : main;
     /*
      * How a face of it is lit, on the scale the walls are: the light from the
@@ -4424,6 +4452,29 @@ export class Renderer {
       const [fx, fy] = FALLS[fall];
       return slope * ((fx * gx + fy * gy) / gl) + down > 0;
     };
+    /** Whether a slope turned away is turned far enough to show at all, through the glass in front of it: edge on, it is a hairline. */
+    const showsBehind = (fall: Fall): boolean => {
+      if (fall === 4) return false;
+      const [fx, fy] = FALLS[fall];
+      return slope * ((fx * gx + fy * gy) / gl) + down < -0.05;
+    };
+    /*
+     * The far slopes seen through glass, and the glint on it, are detail: none
+     * below the level-of-detail line at 0.6, all of it from 0.7, and faded in
+     * between, so zooming across the line does not switch them on in a frame.
+     */
+    const behind = Math.max(0, Math.min(1, (zoom - 0.6) / 0.1));
+    /**
+     * How much of a face is laid: one turned to the eye, all of it; a far slope
+     * of finished glass, seen through the near one, as much as `behind` gives;
+     * anything else, none. The creases go by the same answer, so none is drawn
+     * without a face beside it.
+     */
+    const shown = (f: (typeof model.faces)[number]): number => {
+      if (facing(f.fall)) return 1;
+      const tile = roofs[f.tile];
+      return glassy(tile) && isDone(tile) && showsBehind(f.fall) ? behind : 0;
+    };
     const planeOf = (f: (typeof model.faces)[number]): string => {
       const tile = roofs[f.tile];
       if (!isDone(tile)) return `plan:${tile.material}`;
@@ -4446,21 +4497,11 @@ export class Renderer {
       });
       ctx.closePath();
     };
-    /** Fill what has been outlined with the face's picture, laid on its plane. */
-    const fillAs = (f: (typeof model.faces)[number]): void => {
-      const tile = roofs[f.tile];
-      if (!isDone(tile)) {
-        const cov = covering(tile.material);
-        ctx.fillStyle = `rgba(${cov.fascia.body[0]}, ${cov.fascia.body[1]}, ${cov.fascia.body[2]}, 0.28)`;
-        ctx.fill();
-        return;
-      }
-      const pat = patternOf(tile.material, lightOf(f.fall));
-      if (!pat) return;
-      /*
-       * The picture laid on the plane: across it along the eave, and down it
-       * from the eave's edge, so a course's tail lies along every eave.
-       */
+    /*
+     * The picture laid on a face's plane: across it along the eave, and down
+     * it from the eave's edge, so a course's tail lies along every eave.
+     */
+    const planeMatrix = (f: (typeof model.faces)[number]): DOMMatrix => {
       const [nx, ny] = FALLS[f.fall === 4 ? 1 : f.fall];
       const ex = -ny, ey = nx;
       const k = 1 / ppt;
@@ -4473,19 +4514,74 @@ export class Renderer {
         ox = nx * (c + ROOF_OVER); oy = ny * (c + ROOF_OVER); h0 = eave - pitch * ROOF_OVER; rise = 1;
       }
       const sx = cam.worldToScreenX(ox, oy), sy = cam.worldToScreenY(ox, oy, h0);
-      pat.setTransform(new DOMMatrix([
+      return new DOMMatrix([
         cam.worldToScreenX(ox + ex * k, oy + ey * k) - sx, cam.worldToScreenY(ox + ex * k, oy + ey * k, h0) - sy,
         cam.worldToScreenX(ox + nx * k, oy + ny * k) - sx, cam.worldToScreenY(ox + nx * k, oy + ny * k, h0 - pitch * rise * k) - sy,
         sx, sy,
-      ]));
+      ]);
+    };
+    /*
+     * How hard a slope of glass throws the sun back into the eye: the sun off
+     * the face's plane, against the way the camera looks down, as a specular
+     * glint that moves from slope to slope with the hour and the turn of the
+     * view, and nothing in the dark.
+     */
+    const sun = this.sunNow;
+    const upward = Math.sin(Math.atan(down));
+    const across = Math.cos(Math.atan(down));
+    const eye: [number, number, number] = [(gx / gl) * across, (gy / gl) * across, upward];
+    const glintOf = (fall: Fall): number => {
+      const [fx, fy] = fall === 4 ? [0, 0] : FALLS[fall];
+      const nl = Math.hypot(slope * fx, slope * fy, 1);
+      const n = [(slope * fx) / nl, (slope * fy) / nl, 1 / nl];
+      const sn = sun[0] * n[0] + sun[1] * n[1] + sun[2] * n[2];
+      if (sn <= 0 || sun[2] <= 0) return 0;
+      const rv = (2 * sn * n[0] - sun[0]) * eye[0] + (2 * sn * n[1] - sun[1]) * eye[1] + (2 * sn * n[2] - sun[2]) * eye[2];
+      return rv <= 0 ? 0 : Math.min(1, rv ** 6 * 1.2) * (1 - this.game.darkness());
+    };
+    // A light burning under the glass, for the glow the night lays on it.
+    const burning = this.lightsUnder(b);
+    /** Fill what has been outlined with the face's picture, laid on its plane. */
+    const fillAs = (f: (typeof model.faces)[number]): void => {
+      const tile = roofs[f.tile];
+      if (!isDone(tile)) {
+        const cov = covering(tile.material);
+        ctx.fillStyle = `rgba(${cov.fascia.body[0]}, ${cov.fascia.body[1]}, ${cov.fascia.body[2]}, 0.28)`;
+        ctx.fill();
+        return;
+      }
+      if (glassy(tile)) {
+        this.glaze(ctx, planeMatrix(f), lightOf(f.fall), facing(f.fall), glintOf(f.fall), behind);
+        return;
+      }
+      const pat = patternOf(tile.material, lightOf(f.fall));
+      if (!pat) return;
+      pat.setTransform(planeMatrix(f));
       ctx.fillStyle = pat;
       ctx.fill();
     };
     const plan: FloorTile[] = [];
+    // The faces of glass a light burns under, for the glow the night lays on them, and the box round them: see `drawGlassGlow`.
+    const glowing: Array<{ path: Path2D; m: DOMMatrix }> = [];
+    const glowBox: [number, number, number, number] = [Infinity, Infinity, -Infinity, -Infinity];
     model.faces.forEach((f, i) => {
-      if (!facing(f.fall)) return;
+      const tile = roofs[f.tile];
+      // Glass shows the slopes beyond it, from under them; anything else only what faces the eye.
+      if (shown(f) <= 0) return;
       items.push({ d: faceDepth[i], plane: planeOf(f), face: i, draw: () => { ctx.beginPath(); outlineOf(f); fillAs(f); } });
+      if (burning.length && facing(f.fall) && glassy(tile) && isDone(tile)) {
+        const path = new Path2D();
+        f.pts.forEach((p, k) => {
+          const px = X(p), py = Y(p);
+          if (k) path.lineTo(px, py); else path.moveTo(px, py);
+          glowBox[0] = Math.min(glowBox[0], px); glowBox[1] = Math.min(glowBox[1], py);
+          glowBox[2] = Math.max(glowBox[2], px); glowBox[3] = Math.max(glowBox[3], py);
+        });
+        path.closePath();
+        glowing.push({ path, m: planeMatrix(f) });
+      }
     });
+    if (glowing.length) this.noteGlassGlow(glowing, glowBox, burning, eave + pitch * 0.5, under);
     for (const f of roofs) if (!isDone(f)) plan.push(f);
     // The creases and the edges go on after the faces they lie along.
     const byPoint = new Map<string, number[]>();
@@ -4518,14 +4614,23 @@ export class Renderer {
       }
       return out;
     };
-    /** Whether any face along a crease from `a` to `b` is one the camera sees. */
-    const seen = (a: RoofPt, bq: RoofPt): boolean => {
+    /** How much of the faces along a crease from `a` to `b` is laid (`shown`): a crease is drawn as strongly as the most of them, and not at all with none. */
+    const seen = (a: RoofPt, bq: RoofPt): number => {
       const B = new Set(byPoint.get(`${bq[0]},${bq[1]}`) ?? []);
-      return (byPoint.get(`${a[0]},${a[1]}`) ?? []).some((i) => B.has(i) && facing(model.faces[i].fall));
+      let most = 0;
+      for (const i of byPoint.get(`${a[0]},${a[1]}`) ?? []) if (B.has(i)) most = Math.max(most, shown(model.faces[i]));
+      return most;
     };
     for (const c of model.creases) {
-      if (!isDone(roofs[c.tile]) || !seen(c.a, c.b)) continue;
+      const strength = isDone(roofs[c.tile]) ? seen(c.a, c.b) : 0;
+      if (strength <= 0) continue;
       items.push({ d: after(c.a, c.b) + 0.001, draw: () => {
+        const was = ctx.globalAlpha;
+        ctx.globalAlpha = was * strength;
+        drawCrease();
+        ctx.globalAlpha = was;
+      } });
+      const drawCrease = (): void => {
         const cov = covering(roofs[c.tile].material);
         let ax = X(c.a), ay = Y(c.a), bx = X(c.b), by = Y(c.b);
         const len = Math.hypot(bx - ax, by - ay);
@@ -4579,16 +4684,36 @@ export class Renderer {
           }
         }
         ctx.lineWidth = 1;
-      } });
+      };
     }
     for (const e of model.edges) {
       if (!isDone(roofs[e.tile])) continue;
       const [ox, oy] = FALLS[e.out];
       if (cam.nearSide(ox, oy) < 0) continue;
       const cov = covering(roofs[e.tile].material);
+      /*
+       * Where glass stops at a hole in the roof -- the next tile of the
+       * building has no finished roof yet, or none at all -- it is a cut edge,
+       * not an eave: its last bar along it, and no gutter.
+       */
+      const edgeTile = roofs[e.tile];
+      if (glassy(edgeTile) && bld.buildingAt(edgeTile.x + ox, edgeTile.y + oy)?.id === b.id) {
+        items.push({ d: after(e.a, e.b) + 0.002, draw: () => {
+          ctx.lineCap = 'round';
+          ctx.strokeStyle = cov.cap.dark;
+          ctx.lineWidth = Math.max(1.4, 2 * zoom);
+          ctx.beginPath(); ctx.moveTo(X(e.a), Y(e.a) + 0.5); ctx.lineTo(X(e.b), Y(e.b) + 0.5); ctx.stroke();
+          ctx.strokeStyle = cov.cap.body;
+          ctx.lineWidth = Math.max(0.8, 1.2 * zoom);
+          ctx.beginPath(); ctx.moveTo(X(e.a), Y(e.a)); ctx.lineTo(X(e.b), Y(e.b)); ctx.stroke();
+          ctx.lineCap = 'butt';
+          ctx.lineWidth = 1;
+        } });
+        continue;
+      }
       const fl = this.faceLight(-oy, ox);
-      // The shade the eave throws down the wall under it, under everything.
-      if (e.wall) {
+      // The shade the eave throws down the wall under it, under everything: glass lets the light through.
+      if (e.wall && !glassy(roofs[e.tile])) {
         const [wa, wb] = e.wall;
         const off = (p: RoofPt): RoofPt => [p[0] + ox * WALL_THICK, p[1] + oy * WALL_THICK, 0];
         const A = off(wa), B = off(wb);
@@ -4650,7 +4775,9 @@ export class Renderer {
     }
     for (const g of model.gables) {
       const [ox, oy] = FALLS[g.out];
-      if (cam.nearSide(ox, oy) < 0) continue;
+      // A gable end under a glass roof is glazed, and seen through from either side.
+      const glazed = g.borders.every((bb) => glassy(roofs[bb.tile]));
+      if (cam.nearSide(ox, oy) < 0 && !glazed) continue;
       // Before everything along its edge: the verge over it stands further out.
       const d = Math.min(...g.line.map((p) => deep(p[0], p[1]))) - 0.001;
       // It goes up with the roof over it: under a roof only planned, it is only planned too.
@@ -4658,7 +4785,8 @@ export class Renderer {
       items.push({ d, draw: () => {
         const was = ctx.globalAlpha;
         if (!built) ctx.globalAlpha = was * 0.3;
-        this.drawGable(ctx, g, level, eave, pitch, roofs);
+        if (glazed) this.drawGlassGable(ctx, g, eave, pitch);
+        else this.drawGable(ctx, g, level, eave, pitch, roofs);
         ctx.globalAlpha = was;
       } });
     }
@@ -4688,13 +4816,267 @@ export class Renderer {
       ctx.setLineDash([]);
     }
     ctx.globalAlpha = 1;
-    if (under) {
+    if (under && ctx !== main) {
       main.save();
       main.setTransform(1, 0, 0, 1, 0, 0);
       main.globalAlpha = 0.35;
       main.drawImage(ctx.canvas, 0, 0);
       main.restore();
     }
+  }
+
+
+  /**
+   * Lay a face of glass (`glazing.ts`) over what has been outlined: its panes
+   * as thick as its light lays them and its frame in that light; a slope seen
+   * from under it, through the glass in front, as its frame alone in shade;
+   * and over a face that throws the sun at the eye, the glint, as strongly as
+   * it does.
+   */
+  private glaze(ctx: CanvasRenderingContext2D, m: DOMMatrix, lit: number, front: boolean, shine: number, detail: number): void {
+    const mip = this.roofMip();
+    const pat = this.glassPattern(front ? 'face' : 'back', lit, mip, ctx);
+    if (!pat) return;
+    pat.setTransform(m);
+    const was = ctx.globalAlpha;
+    if (!front) ctx.globalAlpha = was * 0.4 * detail;
+    ctx.fillStyle = pat;
+    ctx.fill();
+    ctx.globalAlpha = was;
+    // No glint where a face is a few pixels across: from that far off a roof is its shape and its colour. It fades in with `detail`.
+    if (front && shine > 0.02 && detail > 0) {
+      const glint = this.glassPattern('glint', 1, mip, ctx);
+      if (glint) {
+        // The band of sun slides along the slope as the hours go, a picture's width over a third of a day.
+        glint.setTransform(m.translate(((this.game.hourOfDay() / 8) % 1) * (COVER_PPT >> mip) * 2, 0));
+        ctx.globalAlpha = was * shine * detail;
+        ctx.fillStyle = glint;
+        ctx.fill();
+        ctx.globalAlpha = was;
+      }
+    }
+  }
+
+  /** Glass's patterns, made once for each size and each step of light, and kept with the roofs'. */
+  private glassPattern(kind: 'face' | 'back' | 'glint' | 'glow', lit: number, mip: number, ctx: CanvasRenderingContext2D): CanvasPattern | null {
+    const q = Math.round(lit * 50) / 50;
+    const k = `glass:${kind}:${mip}${kind === 'face' || kind === 'back' ? `:${q}` : ''}`;
+    let pat = this.roofPatterns.get(k);
+    if (pat) {
+      this.roofPatterns.delete(k);
+      this.roofPatterns.set(k, pat);
+      return pat;
+    }
+    const src = kind === 'face' ? glassFace(q, mip) : kind === 'back' ? glassBack(q, mip) : kind === 'glint' ? glass().glint[mip] : glass().glow[mip];
+    pat = ctx.createPattern(src, 'repeat') ?? undefined;
+    if (!pat) return null;
+    this.roofPatterns.set(k, pat);
+    while (this.roofPatterns.size > 48) {
+      const first = this.roofPatterns.keys().next().value;
+      if (first === undefined) break;
+      this.roofPatterns.delete(first);
+    }
+    return pat;
+  }
+
+  /**
+   * What is burning under a building's roof after dark with nothing finished
+   * between it and the roof: the lights a glass roof glows with. A fire on the
+   * ground floor of a house of two storeys has a ceiling over it.
+   */
+  private lightsUnder(b: Building): LightSource[] {
+    if (!this.lightsNow.length) return [];
+    const bld = this.game.buildings;
+    return this.lightsNow.filter((l) => {
+      const x = Math.floor(l.x), y = Math.floor(l.y);
+      if (bld.buildingAt(x, y)?.id !== b.id) return false;
+      for (let k = l.level ?? 0; k < b.levels - 1; k++) if (bld.coveredAt(k, x, y)) return false;
+      return true;
+    });
+  }
+
+  /**
+   * A roof's faces of glass with lights under them, kept for the night to lay
+   * the glow on after the dark has gone over everything: the faces' outlines
+   * and pictures, and each light where it stands under the roof, how far its
+   * glow carries across the glass -- half again its own reach, falling to
+   * nothing there -- and how strong it is. Over your head, at the third the
+   * roof itself is laid at.
+   */
+  private noteGlassGlow(faces: Array<{ path: Path2D; m: DOMMatrix }>, box: [number, number, number, number], lights: LightSource[], height: number, under: boolean): void {
+    const cam = this.camera;
+    const zoom = cam.zoom;
+    const [x0, y0, x1, y1] = box;
+    const lit = lights.map((l) => ({
+      x: cam.worldToScreenX(l.x, l.y),
+      y: cam.worldToScreenY(l.x, l.y, height),
+      r: Math.max(8, 1.5 * l.radius * HALF_W * zoom),
+      a: l.strength * (under ? 0.35 : 1),
+    }));
+    this.glassNight.push({ faces, lights: lit, box: [x0 - 2, y0 - 2, x1 + 2, y1 + 2] });
+  }
+
+  /**
+   * The glow of glass with a light under it, over the night: its panes warm
+   * and bright, its bars dark across them, brightest over a light and gone at
+   * half again its reach. One pass a roof, however many lights burn under it,
+   * on one layer at half the screen's size -- a glow is soft, and half the size
+   * is a quarter of the work:
+   *
+   *   * every light's reach is added into the layer as a mask, each drawn over
+   *     its own reach and no further;
+   *   * the lit faces are laid in the glow's picture over that mask, `source-atop`,
+   *     so a face takes the picture as strongly as the lights reach it, and
+   *     what lies between faces keeps only the mask, which is black and adds
+   *     nothing to the night;
+   *   * and the lot goes onto the night once, as light is, so the dark under it
+   *     is lifted rather than painted over.
+   *
+   * All of it in the part of the roof's box some light reaches: for a big roof
+   * with one lamp in a corner, the corner.
+   */
+  private drawGlassGlow(ctx: CanvasRenderingContext2D, dark: number): void {
+    const layer = this.glowCtx();
+    const pat = this.glassPattern('glow', 1, this.roofMip(), layer);
+    if (!pat) return;
+    const t = layer.getTransform();
+    const k = layer.canvas.width / Math.max(1, ctx.canvas.width);
+    for (const roof of this.glassNight) {
+      let bx0 = roof.box[0], by0 = roof.box[1], bx1 = roof.box[2], by1 = roof.box[3];
+      let rx0 = Infinity, ry0 = Infinity, rx1 = -Infinity, ry1 = -Infinity;
+      for (const l of roof.lights) {
+        rx0 = Math.min(rx0, l.x - l.r); ry0 = Math.min(ry0, l.y - l.r);
+        rx1 = Math.max(rx1, l.x + l.r); ry1 = Math.max(ry1, l.y + l.r);
+      }
+      bx0 = Math.max(bx0, rx0); by0 = Math.max(by0, ry0); bx1 = Math.min(bx1, rx1); by1 = Math.min(by1, ry1);
+      if (bx1 <= bx0 || by1 <= by0) continue;
+      // The box on the layer, in its own pixels, and where that lands on the screen.
+      const p0 = t.transformPoint(new DOMPoint(bx0, by0));
+      const p1 = t.transformPoint(new DOMPoint(bx1, by1));
+      const lx = Math.max(0, Math.floor(Math.min(p0.x, p1.x))), ly = Math.max(0, Math.floor(Math.min(p0.y, p1.y)));
+      const lw = Math.min(layer.canvas.width, Math.ceil(Math.max(p0.x, p1.x))) - lx;
+      const lh = Math.min(layer.canvas.height, Math.ceil(Math.max(p0.y, p1.y))) - ly;
+      if (lw <= 0 || lh <= 0) continue;
+      layer.save();
+      layer.setTransform(1, 0, 0, 1, 0, 0);
+      layer.clearRect(lx, ly, lw, lh);
+      layer.restore();
+      layer.save();
+      layer.beginPath();
+      layer.rect(bx0, by0, bx1 - bx0, by1 - by0);
+      layer.clip();
+      // Every light's reach, added together.
+      layer.globalCompositeOperation = 'lighter';
+      for (const l of roof.lights) {
+        const reach = layer.createRadialGradient(l.x, l.y, 0, l.x, l.y, l.r);
+        reach.addColorStop(0, `rgba(0, 0, 0, ${l.a.toFixed(3)})`);
+        reach.addColorStop(0.45, `rgba(0, 0, 0, ${(l.a * 0.62).toFixed(3)})`);
+        reach.addColorStop(1, 'rgba(0, 0, 0, 0)');
+        layer.fillStyle = reach;
+        layer.fillRect(l.x - l.r, l.y - l.r, 2 * l.r, 2 * l.r);
+      }
+      // The lit faces over it, as strongly as it reaches them.
+      layer.globalCompositeOperation = 'source-atop';
+      layer.fillStyle = pat;
+      for (const f of roof.faces) {
+        pat.setTransform(f.m);
+        layer.fill(f.path);
+      }
+      layer.restore();
+      // And onto the night, once.
+      ctx.save();
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      ctx.globalCompositeOperation = 'lighter';
+      ctx.globalAlpha = Math.min(1, dark * 0.55);
+      ctx.drawImage(layer.canvas, lx, ly, lw, lh, lx / k, ly / k, lw / k, lh / k);
+      ctx.restore();
+    }
+  }
+
+  /** The layer a glass roof's glow is made on (`drawGlassGlow`): half the screen's size each way, kept. */
+  private glowCtx(): CanvasRenderingContext2D {
+    const el = this.canvas.el;
+    const w = Math.max(1, Math.ceil(el.width / 2)), h = Math.max(1, Math.ceil(el.height / 2));
+    if (!this.glowLayer || this.glowLayer.canvas.width !== w || this.glowLayer.canvas.height !== h) {
+      const c = document.createElement('canvas');
+      c.width = w;
+      c.height = h;
+      this.glowLayer = c.getContext('2d') as CanvasRenderingContext2D;
+    }
+    const g = this.glowLayer;
+    const m = this.canvas.ctx.getTransform();
+    const k = w / el.width;
+    g.setTransform(m.a * k, m.b * k, m.c * k, m.d * k, m.e * k, m.f * k);
+    g.globalAlpha = 1;
+    g.globalCompositeOperation = 'source-over';
+    return g;
+  }
+
+  /**
+   * A gable end under a roof of glass: glazed, the wall carried up in panes
+   * between mullions a sixth of a tile apart with a transom across, pale where
+   * the light takes it -- and seen through, so a far one shows past the near
+   * side of the roof. The verge over it is the roof's.
+   */
+  private drawGlassGable(ctx: CanvasRenderingContext2D, gable: RoofGable, eave: number, pitch: number): void {
+    const cam = this.camera;
+    const zoom = cam.zoom;
+    const [ox, oy] = FALLS[gable.out];
+    const along = gable.out === 0 || gable.out === 2 ? 'y' : 'x';
+    const at = (x: number, y: number, h: number): [number, number] => [
+      cam.worldToScreenX(x + ox * WALL_THICK, y + oy * WALL_THICK),
+      cam.worldToScreenY(x + ox * WALL_THICK, y + oy * WALL_THICK, eave + h),
+    ];
+    const line = gable.line;
+    const first = line[0], last = line[line.length - 1];
+    const outline = (): void => {
+      ctx.beginPath();
+      ctx.moveTo(...at(first[0], first[1], 0));
+      for (const p of line) ctx.lineTo(...at(p[0], p[1], pitch * p[2]));
+      ctx.lineTo(...at(last[0], last[1], 0));
+      ctx.closePath();
+    };
+    const lit = this.faceLight(along === 'x' ? 1 : 0, along === 'y' ? 1 : 0);
+    outline();
+    ctx.fillStyle = `rgba(214, 238, 236, ${(glassReflects(lit) * 0.9).toFixed(3)})`;
+    ctx.fill();
+    ctx.save();
+    outline();
+    ctx.clip();
+    /** The roof's height over the eaves at a place along the end, off its line. */
+    const riseAt = (u: number): number => {
+      for (let i = 1; i < line.length; i++) {
+        const a = line[i - 1], b = line[i];
+        const ua = along === 'x' ? a[0] : a[1], ub = along === 'x' ? b[0] : b[1];
+        if ((u - ua) * (u - ub) <= 0 && ua !== ub) return pitch * (a[2] + ((u - ua) / (ub - ua)) * (b[2] - a[2]));
+      }
+      return 0;
+    };
+    const u0 = along === 'x' ? Math.min(first[0], last[0]) : Math.min(first[1], last[1]);
+    const u1 = along === 'x' ? Math.max(first[0], last[0]) : Math.max(first[1], last[1]);
+    const fixed = along === 'x' ? first[1] : first[0];
+    const pt = (u: number, h: number): [number, number] => (along === 'x' ? at(u, fixed, h) : at(fixed, u, h));
+    const ink = rgb([112, 116, 112], lit);
+    const body = rgb([239, 236, 227], lit);
+    const bar = (a: [number, number], b: [number, number], w: number): void => {
+      ctx.lineCap = 'butt';
+      ctx.strokeStyle = ink;
+      ctx.lineWidth = w + Math.max(0.8, 0.9 * zoom);
+      ctx.beginPath(); ctx.moveTo(...a); ctx.lineTo(...b); ctx.stroke();
+      ctx.strokeStyle = body;
+      ctx.lineWidth = w;
+      ctx.beginPath(); ctx.moveTo(...a); ctx.lineTo(...b); ctx.stroke();
+    };
+    const top = Math.max(...line.map((p) => p[2])) * pitch;
+    // A transom a third of the way up, then a mullion every sixth of a tile.
+    bar(pt(u0 - 0.1, top / 3), pt(u1 + 0.1, top / 3), Math.max(1, 1.6 * zoom));
+    for (let u = Math.ceil(u0 * 6) / 6; u <= u1 + 1e-9; u += 1 / 6) {
+      const h = riseAt(u);
+      if (h <= 0.5) continue;
+      bar(pt(u, 0), pt(u, h + 1), Math.max(1, 1.8 * zoom));
+    }
+    ctx.restore();
+    ctx.lineWidth = 1;
   }
 
   /**
@@ -8535,6 +8917,8 @@ export class Renderer {
           ctx.fill();
         }
         ctx.globalCompositeOperation = 'source-over';
+        // And glass with a light burning under it, glowing through the dark (`glazing.ts`).
+        if (this.glassNight.length) this.drawGlassGlow(ctx, dark);
       }
     }
     // The fireflies, which are lights: over the night, not under it.

@@ -777,6 +777,25 @@ function build(material: string): Covering | null {
         valley: 'rgba(110, 84, 50, 0.6)',
         fascia: { kind: 'gutter', body: [222, 196, 138], edge: [140, 110, 66], deep: EAVE_DEEP * 1.15 },
       };
+    case 'glass': {
+      /*
+       * Glass is laid pane by pane by `glazing.ts`, over whatever is under it,
+       * and never as a picture of its own: what is here is its frame. The ridge
+       * and the hips in painted board, the valleys leaded, and a painted gutter
+       * along the eaves. The pictures are blanks that nothing lays.
+       */
+      const [blank] = canvas(S, S);
+      return {
+        mips: [blank],
+        deck: [blank],
+        shade: [52, 64, 82],
+        shadow: shadowOf(0.5),
+        // The dark line under the white, as slate's and every roof's eave has one.
+        cap: { kind: 'board', body: '#eeebe2', dark: '#474c55', hi: '#ffffff', w: 4, joint: 0 },
+        valley: 'rgba(72, 80, 92, 0.8)',
+        fascia: { kind: 'gutter', body: [236, 234, 226], edge: [66, 70, 80], deep: EAVE_DEEP * 0.8 },
+      };
+    }
     default:
       return null;
   }
@@ -787,7 +806,7 @@ function build(material: string): Covering | null {
  * before it a half at a time, with a margin of the picture's own repeat
  * round it so its edges are averaged with what they repeat into.
  */
-function mipsOf(img: HTMLCanvasElement): HTMLCanvasElement[] {
+export function mipsOf(img: HTMLCanvasElement): HTMLCanvasElement[] {
   const out = [img];
   let src = img;
   for (let k = 0; k < 2; k++) {

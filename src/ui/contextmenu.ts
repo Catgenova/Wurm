@@ -107,6 +107,8 @@ function buildMenuRow(item: MenuItem, depth: number, hooks: RowHooks, path: stri
     note.className = 'ctx-note';
     note.textContent = item.note;
     row.append(note);
+    // A note is cut to its slot; the whole of it is there under the pointer, as a hint's is.
+    row.title = item.note;
   }
   row.addEventListener('click', (e) => {
     e.stopPropagation();

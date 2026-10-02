@@ -12,7 +12,8 @@ import { TINCTURE_NAMES } from '../../game/remedies';
 import { BREW_BY_ID, BREWS } from '../../game/brewing';
 import { BRIDGES, CLEARANCE, END_SLOP } from '../../game/bridges';
 import { HOARD_LUMPS, HOARD_MORE } from '../../game/butcher';
-import { INDOORS_DECAY, MATERIALS as WALL_MATERIALS, MAX_LEVELS, SIDE_NAMES, wallBill, WALL_TYPE_BY_ID } from '../../game/building';
+import { floorBill, GLASS_ROOF, INDOORS_DECAY, MATERIALS as WALL_MATERIALS, MAX_LEVELS, roofShapeDef, roofShapeOf, SIDE_NAMES, wallBill, WALL_TYPE_BY_ID, WALL_TYPES } from '../../game/building';
+import { materialName } from '../../game/buildActions';
 import { GREEN_ACTIONS, GREEN_DAY, GREEN_DAYS, GREEN_SHADE, GREEN_SUN, GREEN_WET, GREEN_WET_REACH } from '../../game/greening';
 import { FIRE_COST, FIRE_SUBTILES } from '../../game/campfire';
 import {
@@ -29,7 +30,7 @@ import {
 import { DEED_UPGRADES } from '../../game/deed';
 import { DYE_BY_ID, DYES } from '../../game/dyestuffs';
 import { CROP_BY_SEED, CROPS, cropYield, growthWords, PATCH_TIME, RIPE, STAGE_NAMES } from '../../game/farming';
-import { PLANTER_GROWTH, SEASON_GROWTH, SEASON_SECONDS, YEAR_SECONDS, YEARLESS_GROWTH } from '../../game/growth';
+import { GLASSHOUSE_GROWTH, PLANTER_GROWTH, SEASON_GROWTH, SEASON_SECONDS, YEAR_SECONDS, YEARLESS_GROWTH } from '../../game/growth';
 import { CASTS, FAITH, FAVOUR_CEILING, favourCap, PRAYER_BASE, PRAYER_LIFT, PRAYER_PEAKS, PRAYER_REST, PRAYER_TAPER } from '../../game/faith';
 import { ANCIENT_EFFECTS, ANCIENT_PLUS, BAUBLE_HIGH, BAUBLE_KINDS, BAUBLE_LOW, BAUBLE_SHARE, BAUBLE_TIERS, baubleTimes, MAJOR_SKILLS, MINOR_SKILLS, REGRET_SHARE, YIELD_TIMES } from '../../game/baubles';
 import { MOTE_CHANCE } from '../../game/sacrifice';
@@ -107,6 +108,15 @@ import { HUNGRY_AT, HURT_AT } from './wildermon';
 
 /** The Farmer's perk that holds an effect, by name. */
 const farmerPerk = (key: string): string => perksOf('farmer').find((p) => key in p.fx)?.name ?? key;
+/** What a tile of glass roof of a shape takes: "12 glass panes and 4 timbers". */
+/** The wall types too low to close in a glasshouse, from their own `low`: "a fence, a fence gate, an iron-bound gate or a half wall". */
+const lowWalls = (): string => {
+  const names = WALL_TYPES.filter((w) => w.low).map((w) => w.name.toLowerCase()).map((n) => `${article(n)} ${n}`);
+  return names.length < 2 ? (names[0] ?? '') : `${names.slice(0, -1).join(', ')} or ${names[names.length - 1]}`;
+};
+/** What a tile of glass roof takes, on the shape Plan roof lays: "12 glass panes and 4 timbers". */
+const glassTile = (): string =>
+  listed(Object.entries(floorBill(GLASS_ROOF.id, 'roof', roofShapeOf(undefined)).total).map(([id, n]) => `${n} ${materialName(id, n)}`));
 /** The Farmer's perks that work on a planter as on a field: whatever a sowing or a harvest reads, but for Crop Rotation, which a planter keys to itself. */
 const planterPerks = () => perksOf('farmer').filter((p) => !('rotate:plant_seed' in p.fx)
   && Object.keys(p.fx).some((k) => /:(plant_seed|harvest_crop)$/.test(k) || k.startsWith('plus:')));
@@ -980,6 +990,22 @@ export function helpText(): string {
     walk onto it from below and you are upstairs, step off it toward the ground and you are down again.
     Once the top storey's walls are done you can <b>Plan roof</b> tile by tile; neighbouring roof tiles
     join into ridges and hips.</p>
+    <p>A roof can be laid in <b>glass</b>: <b>Plan roof</b> offers it beside the building materials, panes on timber
+    glazing bars, ${glassTile()} to a tile of the ${roofShapeDef(undefined).name.toLowerCase()} roof Plan roof lays,
+    built with a mallet and trained as carpentry. Glass goes on a roof and nowhere else: not on a wall, a floor, a fence or
+    a stair. A building of one storey, <b>walled all round to full height</b> (a door, a window or an arch is a wall;
+    ${lowWalls()} is too low), with every tile of its footprint under finished glass is a <b>glasshouse</b>, and its
+    menu says what it still wants. Its ground-floor tiles with no floor planned on them and no slab poured under them
+    <b>Till</b> with a rake into fields, which are sown, tended and harvested as any field is, a Farmer's patches and
+    perks and Bounty included. While a building has a field in it, no floor is planned over
+    the field, no roof but glass on the building and no storey over it: <b>Clear the field</b> first, which packs the
+    ground flat again. A crop in a glasshouse grows <b>${growthWords(GLASSHOUSE_GROWTH)} in every season</b>, winter too,
+    where a field in the open grows ${listed(SEASONS.map((s) => `${growthWords(SEASON_GROWTH[s])} in ${s}`))}: a stage
+    of cotton takes ${spanWords(CROPS.cotton.stageSeconds / GLASSHOUSE_GROWTH)} in one all year. When the last pane or
+    the last wall goes in, whatever is already growing in the building carries on from as far into its stage as it had
+    grown, at the glasshouse's pace; take a tile of the roof or a wall down, or add a tile to the footprint, and it
+    carries on at a field's pace from there. Walled all round and roofed over, a glasshouse is indoors, and whatever is
+    left lying in it rots at ${share(INDOORS_DECAY)} of the rate in the open.</p>
     <p><b>Fences, gates and half walls</b> are the same work at a fraction of the cost, and they do not
     need a building around them: point at the edge of any tile &mdash; on your deed or a mile from it,
     on packed ground or in the long grass &mdash; and choose <b>Plan fence</b>. A log fence is ${numberWord(wallBill('log', 'fence').needed.log)} logs

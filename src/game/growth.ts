@@ -27,7 +27,9 @@
  *
  * A crop's stage start is kept on the clock it grows on and a stage is due
  * when that clock has run its stage's length past it: added on, never
- * restarted from now. A planter's clock is the plain one at `PLANTER_GROWTH`.
+ * restarted from now. A planter's clock is the plain one at `PLANTER_GROWTH`,
+ * and a glasshouse's the plain one at `GLASSHOUSE_GROWTH`; a crop moved from a
+ * field's onto a glasshouse's, or back, is carried across by `rebaseStage`.
  *
  * Data in, numbers out; nothing here reads the time for itself.
  */
@@ -46,6 +48,38 @@ export const WINTER_GROWTH = 0;
 export const YEARLESS_GROWTH = 1;
 /** A planter's growth, in every season and wherever it stands, as a share of the crop's own pace. */
 export const PLANTER_GROWTH = 0.25;
+/**
+ * A glasshouse's growth, in every season, winter included, as a share of the
+ * crop's own pace: the whole of it, a spring field's (`glasshouse.ts`).
+ */
+export const GLASSHOUSE_GROWTH = SPRING_GROWTH;
+
+/**
+ * Which clock a crop grows on: a field's (`fieldClock`), a planter's
+ * (`PLANTER_GROWTH` of the plain clock) or a glasshouse's (`GLASSHOUSE_GROWTH`
+ * of it). A crop keeps its stage start on its own clock.
+ */
+export type CropClock = 'field' | 'planter' | 'glass';
+/** The clock a crop grows on: in a planter, under glass, or in a field. */
+export const cropClockOf = (c: { planter?: number; glass?: boolean }): CropClock =>
+  c.planter !== undefined ? 'planter' : c.glass ? 'glass' : 'field';
+/** A clock named the old way, a planter's or not, or by name. */
+export const clockNamed = (k: boolean | CropClock): CropClock => (k === true ? 'planter' : k === false ? 'field' : k);
+/** A share of the plain clock a clock runs at, for the two that run steadily; a field's has none. */
+export const steadyRate = (k: CropClock): number => (k === 'planter' ? PLANTER_GROWTH : k === 'glass' ? GLASSHOUSE_GROWTH : NaN);
+
+/** The glass clock: the growing seconds under glass up to a moment, `GLASSHOUSE_GROWTH` of the plain clock. */
+export const glassClock = (t: number): number => GLASSHOUSE_GROWTH * t;
+/** And back: the moment the glass clock reads `g`. */
+export const glassMoment = (g: number): number => g / GLASSHOUSE_GROWTH;
+
+/**
+ * A crop's stage start carried from one clock onto another: `from` and `to`
+ * are the two clocks' readings now, and it goes onto the new one exactly as
+ * far into its stage as it had grown on the old -- what the ground read calls
+ * `grown`, carried across. What the island's `crop_rebased` works out.
+ */
+export const rebaseStage = (stageAt: number, from: number, to: number): number => to - (from - stageAt);
 
 /** Each season's growth in a field. */
 export const SEASON_GROWTH: Record<Season, number> = {

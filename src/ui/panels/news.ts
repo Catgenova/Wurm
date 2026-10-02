@@ -1,4 +1,5 @@
-import { MATERIAL_BY_ID } from '../../game/building';
+import { floorBill, GLASS_ROOF, INDOORS_DECAY, MATERIAL_BY_ID, roofShapeDef, roofShapeOf } from '../../game/building';
+import { materialName } from '../../game/buildActions';
 import { TILE_DEFS, TileType, TREE_AGES, TREE_DAWN_UTC, TREE_DEFS } from '../../world/tiles';
 import { SEASON_DAYS, seasonLine, YEAR_DAYS, YEAR_FROM } from '../../world/calendar';
 import { BLOOMS, BUSH_FLOWER_FROM, evergreen, LEAF_DAYS, SHED_DAYS, TURN_DAYS } from '../../render/foliage';
@@ -56,7 +57,7 @@ import { GREEN_ACTIONS, GREEN_DAYS, GREEN_SHADE, GREEN_SUN, GREEN_WET } from '..
 import { FURNITURE, WELL_TRICKLE, WELL_TRICKLE_QL } from '../../game/furniture';
 import { BRIDGES } from '../../game/bridges';
 import { CROPS, growthWords } from '../../game/farming';
-import { PLANTER_GROWTH, SEASON_GROWTH, SEASON_SECONDS, YEAR_SECONDS } from '../../game/growth';
+import { GLASSHOUSE_GROWTH, PLANTER_GROWTH, SEASON_GROWTH, SEASON_SECONDS, YEAR_SECONDS } from '../../game/growth';
 import { SEASONS } from '../../world/calendar';
 import { STONES_DEPTH, STONES_SLABS, yearSays } from '../../game/watergarden';
 import { WATER_PLANT_BY_ID, WATER_PLANT_DEEPEST, WATER_PLANT_SHALLOWEST, WATER_ROOTING, type WaterPlantDef } from '../../world/waterplants';
@@ -846,6 +847,19 @@ export const NEWS: News[] = [
     lines: () => [
       `The last of a trade's ${numberWord(PERK_TIER_AT.length)} tiers of perks opens at ${PERK_TIER_AT[PERK_TIER_AT.length - 1]} in its main skill, where it was 100. After the first, which comes with the trade, the tiers open at ${listed(PERK_TIER_AT.slice(1).map(String))}.`,
     ],
+  },
+  {
+    n: 67,
+    day: '2026-10-02',
+    lines: () => {
+      const shape = roofShapeOf(undefined);
+      const tile = listed(Object.entries(floorBill(GLASS_ROOF.id, 'roof', shape).total).map(([id, n]) => `${n} ${materialName(id, n)}`));
+      return [
+        `A roof can be laid in glass: Plan roof offers it, panes on timber glazing bars, ${tile} to a tile of the ${roofShapeDef(undefined).name.toLowerCase()} roof Plan roof lays, built with a mallet and trained as carpentry. It goes on a roof and on nothing else.`,
+        `A building of one storey, walled all round to full height, with every tile of its footprint under finished glass is a glasshouse. Till its ground-floor tiles where no floor is planned and no slab is poured, and sow, tend and harvest them as fields, a Farmer's patches and perks and Bounty included. A crop in one grows ${growthWords(GLASSHOUSE_GROWTH)} in every season, winter too: a stage of cotton takes ${spanWords(CROPS.cotton.stageSeconds / GLASSHOUSE_GROWTH)} in one all year, where a field in winter waits for spring. While a building has a field in it, it takes no floor over the field, no roof but glass and no storey over it until Clear the field packs the ground flat again.`,
+        `When the last pane or the last wall goes in, whatever already grows in the building carries on from as far into its stage as it had grown, at the glasshouse's pace; take a tile of the roof or a wall down, or add a tile to the footprint, and it carries on at a field's pace from there. A glasshouse is indoors, and what is left lying in it rots at ${share(INDOORS_DECAY)} of the rate in the open.`,
+      ];
+    },
   },
 ];
 

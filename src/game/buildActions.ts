@@ -26,6 +26,7 @@ import type { PlacedCrate } from './crates';
 import { pickDye } from './dyes';
 import type { Game } from './game';
 import { greenNow } from './greening';
+import { glassPlanRefusal, glassResync } from './glasshouse';
 import { itemDef, spendOut, type Item } from './items';
 
 type TileTarget = Extract<Target, { kind: 'tile' }>;
@@ -241,6 +242,8 @@ export const BUILD_ACTIONS: ActionDef[] = [
       const b = g.buildings.neighbourBuilding(t.x, t.y);
       if (!b) return;
       g.buildings.addTile(b, t.x, t.y);
+      // A tile with no glass over it: a glasshouse is one no longer, and what grows in it goes back on the field's clock.
+      glassResync(g);
       g.logMsg(`You add the tile to ${b.name}.`, 'event');
       g.events.emit('world', t.x, t.y);
     },
@@ -266,6 +269,7 @@ export const BUILD_ACTIONS: ActionDef[] = [
       const b = buildingOf(g, t);
       if (!b) return;
       g.buildings.removeTile(b, t.x, t.y);
+      glassResync(g);
       g.logMsg(b.tiles.length ? `You remove the tile from ${b.name}.` : `You remove the last of ${b.name}'s plan.`, 'event');
       g.events.emit('world', t.x, t.y);
     },
@@ -280,6 +284,9 @@ export const BUILD_ACTIONS: ActionDef[] = [
     applies: (t, g) => isTile(t) && !!buildingOf(g, t),
     check: (t, g) => {
       if (!isTile(t) || !t.side || !t.wallType || !t.material) return 'Choose a side, a wall type and a material.';
+      // Glass goes on a roof and nowhere else (`glasshouse.ts`).
+      const glass = glassPlanRefusal(g, t, 'plan_wall');
+      if (glass) return glass;
       const tool = needTool(g, 'mallet');
       if (tool) return tool;
       const b = buildingOf(g, t);
@@ -309,6 +316,8 @@ export const BUILD_ACTIONS: ActionDef[] = [
       if (!b) return;
       // A fence type stood in a building is still a fence, to a Carpenter's Fence Builder.
       const wall = g.buildings.setWall(b, topLevel(b), t.x, t.y, t.side, t.wallType, t.material, fenceScale(g, t.wallType));
+      // A glasshouse is walled all round (`glasshouse.ts`).
+      glassResync(g);
       const type = WALL_TYPE_BY_ID.get(t.wallType)?.name.toLowerCase() ?? t.wallType;
       g.logMsg(`You plan a ${type} ${material(t.material)?.name.toLowerCase()} wall on the ${SIDE_NAMES[t.side]} side. It needs ${needsText(wall)}.`, 'event');
       g.events.emit('world', t.x, t.y);
@@ -324,6 +333,8 @@ export const BUILD_ACTIONS: ActionDef[] = [
     applies: (t, g) => isTile(t) && !buildingOf(g, t),
     check: (t, g) => {
       if (!isTile(t) || !t.side || !t.wallType || !t.material) return 'Choose a side, a kind and a material.';
+      const glass = glassPlanRefusal(g, t, 'plan_fence');
+      if (glass) return glass;
       const type = WALL_TYPE_BY_ID.get(t.wallType);
       if (!type?.standalone) return 'Only fences and half walls stand on their own.';
       const mat = material(t.material);
@@ -381,6 +392,8 @@ export const BUILD_ACTIONS: ActionDef[] = [
       if (isDone(wall)) {
         // Finished, and bare: the ivy starts from here (`greening.ts`).
         wall.greenSince = greenNow();
+        // The last wall round a building roofed in glass makes a glasshouse of it (`glasshouse.ts`).
+        glassResync(g);
         const what = WALL_TYPE_BY_ID.get(wall.type)?.low ? WALL_TYPE_BY_ID.get(wall.type)?.name.toLowerCase() : 'wall';
         g.logMsg(`You finish the ${mat.name.toLowerCase()} ${what}.`, 'event');
         return false;
@@ -559,6 +572,8 @@ export const BUILD_ACTIONS: ActionDef[] = [
       if (!wall) return;
       const what = WALL_TYPE_BY_ID.get(wall.type)?.low ? (WALL_TYPE_BY_ID.get(wall.type)?.name.toLowerCase() ?? 'fence') : 'wall';
       g.buildings.removeWall(wallLevel(g, t), t.x, t.y, t.side);
+      // A glasshouse with a wall down is open to the weather (`glasshouse.ts`).
+      glassResync(g);
       g.logMsg(`You take down the ${what} on the ${SIDE_NAMES[t.side]} side.`, 'event');
       g.events.emit('world', t.x, t.y);
     },
@@ -573,6 +588,9 @@ export const BUILD_ACTIONS: ActionDef[] = [
     applies: (t, g) => isTile(t) && !!buildingOf(g, t),
     check: (t, g) => {
       if (!isTile(t)) return null;
+      // No storey over a field (`glasshouse.ts`).
+      const glass = glassPlanRefusal(g, t, 'add_floor');
+      if (glass) return glass;
       const tool = needTool(g, 'mallet');
       if (tool) return tool;
       const b = buildingOf(g, t);
@@ -611,6 +629,7 @@ export const BUILD_ACTIONS: ActionDef[] = [
       if (!b) return;
       b.levels += 1;
       b.workLevel = b.levels - 1;
+      glassResync(g);
       g.logMsg(`You plan storey ${b.levels} of ${b.name}. Plan and build its floor tiles, then raise walls on them.`, 'event');
       g.events.emit('world', t.x, t.y);
     },
@@ -625,6 +644,9 @@ export const BUILD_ACTIONS: ActionDef[] = [
     applies: (t, g) => isTile(t) && !!buildingOf(g, t),
     check: (t, g) => {
       if (!isTile(t) || !t.material) return 'Choose a material.';
+      // Glass on a pitched roof and nowhere else, no floor over a field, and no roof but glass on a building with one (`glasshouse.ts`).
+      const glass = glassPlanRefusal(g, t, 'plan_floor');
+      if (glass) return glass;
       const tool = needTool(g, 'mallet');
       if (tool) return tool;
       const b = buildingOf(g, t);
@@ -658,6 +680,7 @@ export const BUILD_ACTIONS: ActionDef[] = [
        */
       if (kind === 'roof' && !b.roof) b.roof = t.roofShape ?? 'hip';
       const floor = g.buildings.setFloor(b, level, t.x, t.y, t.material, kind, kind === 'stairs' || kind === 'ladder' ? t.side : undefined);
+      glassResync(g);
       const shape = kind === 'roof' ? `${roofShapeDef(b).name.toLowerCase()} ` : '';
       const what = kind === 'ladder' ? 'ladder' : `${shape}${material(t.material)?.name.toLowerCase()} ${FLOOR_KIND_NAMES[kind]}`;
       g.logMsg(`You plan a ${what}. It needs ${needsText(floor)}.`, 'event');
@@ -692,6 +715,8 @@ export const BUILD_ACTIONS: ActionDef[] = [
       if (!floor || isDone(floor)) return false;
       const used = consumeUnit(g, floor, t);
       if (!used) return false;
+      // The last pane of a glass roof makes a glasshouse, and what grows in it goes onto the glass clock.
+      glassResync(g);
       const kind = floorKind(floor);
       const mat = material(floor.material);
       // Floors are paving; stairs, ladders and roofs are carpentry or masonry by material.
@@ -734,6 +759,8 @@ export const BUILD_ACTIONS: ActionDef[] = [
       const floor = g.buildings.floor(level, t.x, t.y);
       if (!floor) return;
       g.buildings.removeFloor(level, t.x, t.y);
+      // Glass taken off a glasshouse: what grows in it goes back on the field's clock.
+      glassResync(g);
       const p = g.player;
       if (p.tileX === t.x && p.tileY === t.y && p.level >= level && level > 0) p.level = level - 1;
       g.logMsg(`You remove the ${FLOOR_KIND_NAMES[floorKind(floor)]}.`, 'event');
@@ -764,6 +791,7 @@ export const BUILD_ACTIONS: ActionDef[] = [
       if (!b || b.levels <= 1) return;
       b.levels -= 1;
       b.workLevel = b.levels - 1;
+      glassResync(g);
       g.logMsg(`${b.name} is back to ${b.levels === 1 ? 'a single storey' : `${b.levels} storeys`}.`, 'event');
       g.events.emit('world', t.x, t.y);
     },

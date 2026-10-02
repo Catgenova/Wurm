@@ -10,9 +10,11 @@ import {
   FLOOR_KIND_NAMES,
   floorBill,
   floorKind,
+  GLASS_ROOF,
   isDone,
   MATERIALS,
   progressOf,
+  roofShapeOf,
   SIDE_NAMES,
   wallBill,
   WALL_TYPE_BY_ID,
@@ -21,6 +23,8 @@ import {
   type Side,
 } from '../game/building';
 import { baitHint, CREATURE_ACTION_BY_ID } from '../game/creatureActions';
+import { FIELD_GLASS_ONLY, glassDone, glazing, isGlasshouse, underGlass } from '../game/glasshouse';
+import { GLASSHOUSE_GROWTH } from '../game/growth';
 import { crateLine, crateOf, CREATURE_CRATE, CREATURE_CRATE_ACTION_BY_ID, occupiedRefusal } from '../game/creaturecrate';
 import { graveLine, graveName, graveSays, graveUnits, isGrave } from '../game/graves';
 import { isBaitFor, SPECIES, STANCE_HINTS, STANCE_NAMES, STANCES, GATHER_VERB, GATHER_DO } from '../game/creatures';
@@ -787,7 +791,7 @@ export class UI {
     const b = this.game.buildings.buildingAt(pick.x, pick.y);
     if (b) {
       const level = workLevel(b);
-      lines.push(`${b.name} · ${b.levels === 1 ? 'one storey' : `${b.levels} storeys, working on storey ${level + 1}`}`);
+      lines.push(`${b.name} · ${b.levels === 1 ? 'one storey' : `${b.levels} storeys, working on storey ${level + 1}`}${isGlasshouse(this.game.buildings, b) ? ' · a glasshouse' : ''}`);
       const side = nearestSide(pick.x, pick.y, pick.wx, pick.wy);
       const wall = this.game.buildings.wall(level, pick.x, pick.y, side);
       if (wall) {
@@ -804,7 +808,7 @@ export class UI {
         lines.push(`${k === 'ladder' ? 'ladder' : `${mat} ${FLOOR_KIND_NAMES[k]}`}${isDone(floor) ? '' : ` · ${Math.round(progressOf(floor) * 100)}% built`}`);
       }
       const roof = this.game.buildings.floor(b.levels, pick.x, pick.y);
-      if (roof) lines.push(`roof${isDone(roof) ? '' : ` · ${Math.round(progressOf(roof) * 100)}% built`}`);
+      if (roof) lines.push(`${roof.material === GLASS_ROOF.id ? 'glass roof' : 'roof'}${isDone(roof) ? '' : ` · ${Math.round(progressOf(roof) * 100)}% built`}`);
     }
     const pile = this.game.groundAt(pick.x, pick.y);
     if (pile.length === 1) {
@@ -1098,7 +1102,9 @@ export class UI {
     const sowDef = ACTION_BY_ID.get('plant_seed');
     if (sowDef && sowDef.applies(target, this.game) && !this.game.cropAt(pick.x, pick.y)) {
       // At the pace this sowing would grow at: a Farmer's Fast Growth and Crop Rotation.
-      sowMenu(sowDef, 'Sow', (crop) => stageNote(crop.name, crop.stageSeconds * sownPace(this.game, pick.x, pick.y, crop.id), false, this.game.wallNow()));
+      // Under glass at the glasshouse's share in any season, and in the open at the season's (`glasshouse.ts`).
+      const clock = underGlass(this.game.buildings, pick.x, pick.y) ? 'glass' : 'field';
+      sowMenu(sowDef, 'Sow', (crop) => stageNote(crop.name, crop.stageSeconds * sownPace(this.game, pick.x, pick.y, crop.id), clock, this.game.wallNow()));
     }
     const patchDef = ACTION_BY_ID.get('sow_patch');
     if (patchDef && patchDef.applies(target, this.game)) {
@@ -2420,6 +2426,19 @@ export class UI {
     const side = nearestSide(x, y, pick.wx, pick.wy);
     const sideName = SIDE_NAMES[side];
     const withSide: Extract<Target, { kind: 'tile' }> = { ...base, side };
+    // How near a building roofed in glass is to being a glasshouse (`glasshouse.ts`).
+    if (glazing(bld, b)) {
+      entries.push({
+        label: isGlasshouse(bld, b)
+          ? `A glasshouse: its ground is tilled, and a crop in it grows ${growthWords(GLASSHOUSE_GROWTH)} in every season`
+          : b.levels !== 1
+            ? `Roofed in glass over ${b.levels} storeys: a glasshouse is one storey`
+            : glassDone(bld, b) < b.tiles.length
+              ? `${glassDone(bld, b)} of ${b.tiles.length} tiles under finished glass: a glasshouse when all ${b.tiles.length} are`
+              : 'Roofed in glass, with a wall down, unfinished or low: a glasshouse is walled all round to full height',
+        disabled: true,
+      });
+    }
     if (b.levels > 1) {
       entries.push({
         label: `Work on storey ${level + 1}`,
@@ -2504,15 +2523,34 @@ export class UI {
       entries.push(item(act('remove_floor'), roofTarget, 'Remove roof'));
     } else {
       const probe = plan.check?.({ ...roofTarget, material: 'log' }, g) ?? null;
-      if (probe) entries.push({ label: 'Plan roof', hint: probe, disabled: true });
+      // And glass, which roofs and does nothing else: panes on timber bars, and a glasshouse when all of a one-storey roof is glass.
+      const glassTarget: Target = { ...roofTarget, material: GLASS_ROOF.id };
+      const glassWhy = plan.check?.(glassTarget, g) ?? null;
+      // Over a field it is the one roof there is (`glasshouse.ts`): the rest are offered, and say why not.
+      const glassOnly = probe === FIELD_GLASS_ONLY;
+      if (probe && (!glassOnly || glassWhy)) entries.push({ label: 'Plan roof', hint: (glassOnly ? glassWhy : probe) ?? undefined, disabled: true });
       else {
         entries.push({
           label: 'Plan roof',
-          children: MATERIALS.map((m) => ({
-            label: m.name,
-            note: describeNeeds(floorBill(m.id, 'roof'), materialName),
-            onSelect: () => g.requestAction(plan, { ...roofTarget, material: m.id }),
-          })),
+          children: [
+            ...MATERIALS.map((m) => ({
+              label: m.name,
+              note: describeNeeds(floorBill(m.id, 'roof'), materialName),
+              hint: glassOnly ? FIELD_GLASS_ONLY : undefined,
+              disabled: glassOnly,
+              onSelect: () => g.requestAction(plan, { ...roofTarget, material: m.id }),
+            })),
+            {
+              label: GLASS_ROOF.name,
+              note: describeNeeds(floorBill(GLASS_ROOF.id, 'roof', roofShapeOf(b)), materialName),
+              hint: glassWhy ?? undefined,
+              disabled: !!glassWhy,
+              onSelect: () => g.requestAction(plan, glassTarget),
+            },
+            // What glass is for, in full, where it is chosen: a note is cut to its slot, a line is not.
+            { label: 'A glasshouse: one storey, walled all round to full height, roofed wholly in glass', disabled: true },
+            { label: `A crop in it grows ${growthWords(GLASSHOUSE_GROWTH)} in every season`, disabled: true },
+          ],
         });
       }
     }

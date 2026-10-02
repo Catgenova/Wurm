@@ -27,7 +27,8 @@ import { WELL_TRICKLE, WELL_TRICKLE_AT, WELL_TRICKLE_QL, ACROSS_OF, DEED_PLACE, 
 import { emptyCrate, occupiedRefusal, shutIn } from './creaturecrate';
 import { bury, crumble, graveAt, graveRefusal, graveSays, GRAVE_MARK } from './graves';
 import { cropStageSeconds, RIPE, settleCrop, type Crop } from './farming';
-import { fieldClock, fieldRate, PLANTER_GROWTH } from './growth';
+import { fieldClock, fieldRate, GLASSHOUSE_GROWTH, PLANTER_GROWTH } from './growth';
+import { underGlass } from './glasshouse';
 import { ageDef, bloodMul, CALL_WINDOW, Creatures, setLocalKept, FIGHT_BACK_GOES, HAUL_SKILL, isBaitFor, isShod, PLAYER_ATTACKER, PULL_DEFAULT, SHOE_PACE, SHOE_STEP, SPECIES, tackSpeed, type Creature, type CreatureJSON, type Stance } from './creatures';
 import { CRAFT_REACH, knackable, type CraftStock, type Station } from './recipes';
 import { Actor, type ActiveAction, type GuestSave } from './actor';
@@ -2241,7 +2242,7 @@ export class Game {
     const py = this.player.y;
     const near = (x: number, y: number): boolean => Math.abs(x - px) < 60 && Math.abs(y - py) < 60;
     const lamp = this.litLantern();
-    if (lamp) out.push({ x: px, y: py, radius: lanternReach(lamp.ql), strength: 0.92, steady: true });
+    if (lamp) out.push({ x: px, y: py, radius: lanternReach(lamp.ql), strength: 0.92, steady: true, level: this.player.level });
     for (const f of this.campfires.values()) {
       if (!f.lit || !near(f.x, f.y)) continue;
       const [cx, cy] = fireCentre(f);
@@ -6329,12 +6330,15 @@ export class Game {
     if (ground.crops !== undefined) {
       this.crops.clear();
       const field = this.fieldNow();
+      // A crop in a glasshouse, on the glass clock: the island says which it is on (`glass`).
+      const glass = this.glassNow();
       for (const c of ground.crops) {
         this.crops.set(tileKey(c.x, c.y), {
           x: c.x, y: c.y, id: c.id, stage: c.stage,
-          stageAt: field - into(c),
+          stageAt: (c.glass ? glass : field) - into(c),
           tended: c.tended, tendedNow: c.tendedNow, ql: c.ql,
           ...(c.pace !== undefined && c.pace !== 1 ? { pace: c.pace } : {}),
+          ...(c.glass ? { glass: true } : {}),
         });
       }
     }
@@ -6950,8 +6954,11 @@ export class Game {
   }
 
   plantCrop(x: number, y: number, id: string, seedQl: number, pace = 1): Crop {
-    const c: Crop = { x, y, id, stage: 0, stageAt: this.fieldNow(), tended: 0, tendedNow: false, ql: seedQl };
+    // Under glass it begins on the glass clock, and anywhere else on the field's (`glasshouse.ts`).
+    const glass = underGlass(this.buildings, x, y);
+    const c: Crop = { x, y, id, stage: 0, stageAt: glass ? this.glassNow() : this.fieldNow(), tended: 0, tendedNow: false, ql: seedQl };
     if (pace !== 1) c.pace = pace;
+    if (glass) c.glass = true;
     this.crops.set(tileKey(x, y), c);
     this.sown.set(tileKey(x, y), id);
     this.events.emit('world', x, y);
@@ -7007,9 +7014,14 @@ export class Game {
     return PLANTER_GROWTH * (this.islandClock ? this.wallNow() : this.time);
   }
 
-  /** The clock a crop grows on, read now. */
-  growNow(c: { planter?: number }): number {
-    return c.planter !== undefined ? this.planterNow() : this.fieldNow();
+  /** The glass clock now: `GLASSHOUSE_GROWTH` of the plain one -- the wall clock on an island, the game's own by yourself. */
+  glassNow(): number {
+    return GLASSHOUSE_GROWTH * (this.islandClock ? this.wallNow() : this.time);
+  }
+
+  /** The clock a crop grows on, read now: a planter's, a glasshouse's or a field's. */
+  growNow(c: { planter?: number; glass?: boolean }): number {
+    return c.planter !== undefined ? this.planterNow() : c.glass ? this.glassNow() : this.fieldNow();
   }
 
   /**
@@ -7040,13 +7052,15 @@ export class Game {
   /**
    * Move every crop on to its next stage once its time is up, on the clock it
    * grows on: a field's, which the season sets the pace of and a winter
-   * stops, and a planter's, which runs the same in every season.
+   * stops, and a planter's and a glasshouse's, which run the same in every
+   * season.
    */
   private growCrops(): void {
     const field = this.fieldNow();
+    const glass = this.glassNow();
     const box = this.planterNow();
     for (const c of this.crops.values()) {
-      if (c.stage < RIPE && settleCrop(c, this.cropPer(c), field)) this.events.emit('world', c.x, c.y);
+      if (c.stage < RIPE && settleCrop(c, this.cropPer(c), c.glass ? glass : field)) this.events.emit('world', c.x, c.y);
     }
     for (const c of this.planted.values()) {
       if (c.stage < RIPE && settleCrop(c, this.cropPer(c), box)) this.events.emit('world', c.x, c.y);
@@ -7718,7 +7732,7 @@ export interface IslandGround {
    * hour somewhere a field clock never stood. `ago` is the wall seconds since
    * it began, which is all an island from before the year sent.
    */
-  crops?: Array<{ x: number; y: number; id: string; stage: number; ago?: number; grown?: number; tended: number; tendedNow: boolean; ql: number; pace?: number }>;
+  crops?: Array<{ x: number; y: number; id: string; stage: number; ago?: number; grown?: number; tended: number; tendedNow: boolean; ql: number; pace?: number; glass?: boolean }>;
   /** What grows in the planters within reach, by the planter's id and tile, on the slow half beside `crops`. */
   planted?: Array<{ planter: number; x: number; y: number; id: string; stage: number; ago?: number; grown?: number; tended: number; tendedNow: boolean; ql: number; pace?: number }>;
   /** The island's wall clock as it answered, in epoch seconds: what `wallSkew` is set by. */

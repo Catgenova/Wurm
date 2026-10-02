@@ -6,7 +6,9 @@ import type { PlacedFurniture } from './furniture';
 import { describeFrom, itemDef, itemName, type Item } from './items';
 import { world } from './pace';
 import { ABUNDANCE } from './meditation';
-import { fieldClock, fieldMoment, fieldRate, fieldStops, fieldWakes, PLANTER_GROWTH } from './growth';
+import { clockNamed, cropClockOf, fieldClock, fieldMoment, fieldRate, fieldStops, fieldWakes, GLASSHOUSE_GROWTH, PLANTER_GROWTH, steadyRate, type CropClock } from './growth';
+import { clearedSaid, clearedTo, glassTillRefusal, glazing, isGlasshouse } from './glasshouse';
+import type { Building, Buildings } from './building';
 import { capital, share, timeWords, times } from './words';
 
 /**
@@ -108,10 +110,25 @@ export interface Crop {
   pace?: number;
   /** The planter it grows in, by the piece's id; a crop in a field has none. `x` and `y` are the planter's tile. */
   planter?: number;
+  /**
+   * A field under glass: its tile is in a glasshouse, so it grows on the
+   * glass clock (`GLASSHOUSE_GROWTH` in every season) and `stageAt` is a
+   * reading of that. Absent for a field in the open and for a planter.
+   */
+  glass?: boolean;
 }
 
 /** Tiles a field can be raked out of. */
 export const TILLABLE = new Set<number>([TileType.Grass, TileType.Dirt, TileType.Lawn, TileType.Steppe, TileType.Tundra, TileType.Moss]);
+
+/**
+ * Whether Till is offered on a building's packed floor: in one roofed, or
+ * being roofed, in glass, where no floor is planned. Whether it goes is
+ * `glassTillRefusal`'s to say -- only a finished glasshouse's does.
+ */
+export const glassTillable = (g: Game, x: number, y: number): boolean =>
+  g.world.getTile(x, y) === TileType.PackedDirt && !g.buildings.floor(0, x, y) && !g.foundationAt(x, y)
+  && glazing(g.buildings, g.buildings.buildingAt(x, y));
 
 /**
  * What a harvest gives. An untended field returns the seed it was sown from
@@ -159,14 +176,15 @@ export const cropGrowthLeft = (c: Crop, per: number, now: number): number => Mat
 /**
  * Real seconds until a crop moves on, from the moment `wall` (epoch seconds),
  * or null once it is ripe: what is left of its stage, `per` growing seconds
- * long with its clock reading `now`, at a planter's steady `PLANTER_GROWTH`,
- * or over the year for a field -- whose winter adds its whole length to a
- * stage that runs into one.
+ * long with its clock reading `now`, at a planter's steady `PLANTER_GROWTH`
+ * or a glasshouse's steady `GLASSHOUSE_GROWTH`, or over the year for a field
+ * -- whose winter adds its whole length to a stage that runs into one.
  */
 export function cropTimeLeft(c: Crop, per: number, now: number, wall: number): number | null {
   if (cropReady(c)) return null;
   const left = cropGrowthLeft(c, per, now);
-  if (c.planter !== undefined) return left / PLANTER_GROWTH;
+  const clock = cropClockOf(c);
+  if (clock !== 'field') return left / steadyRate(clock);
   return left > 0 ? fieldMoment(fieldClock(wall) + left) - wall : 0;
 }
 
@@ -176,10 +194,13 @@ export function cropTimeLeft(c: Crop, per: number, now: number, wall: number): n
  * minutes"; for a field's stage that runs into a winter, "sprouting in 7
  * days and 2 hours, after the winter"; and for a field in one, "waiting for
  * spring, in 3 days and 4 hours, then sprouting 5 minutes after". A planter's
- * never waits. The island's `crop_when` says the same, in the same words.
+ * and a glasshouse's never wait. `clock` is the crop's (`CropClock`), or true
+ * for a planter's and false for a field's. The island's `crop_when` and
+ * `crop_when_on` say the same, in the same words.
  */
-export function cropWhen(next: string, left: number, planter: boolean, wall: number): string {
-  if (planter) return `${next} in ${timeWords(left / PLANTER_GROWTH)}`;
+export function cropWhen(next: string, left: number, clock: boolean | CropClock, wall: number): string {
+  const k = clockNamed(clock);
+  if (k !== 'field') return `${next} in ${timeWords(left / steadyRate(k))}`;
   const wakes = fieldWakes(wall);
   if (!Number.isFinite(wakes)) return `${next} when a field grows again`;
   const end = fieldMoment(fieldClock(wall) + left);
@@ -191,11 +212,14 @@ export function cropWhen(next: string, left: number, planter: boolean, wall: num
 /**
  * What a seed offered for sowing says about its stage, in real seconds at the
  * moment `wall`: `per` growing seconds a stage (the crop's, at the pace this
- * sowing would grow at), at a planter's share of it in any season, or at the
- * field's share the season gives -- and none in a field's winter.
+ * sowing would grow at), at a planter's or a glasshouse's share of it in any
+ * season, or at the field's share the season gives -- and none in a field's
+ * winter. `clock` as `cropWhen` takes it.
  */
-export function stageNote(name: string, per: number, planter: boolean, wall: number): string {
-  if (planter) return `${name}, ${Math.round(per / PLANTER_GROWTH)}s a stage in any season`;
+export function stageNote(name: string, per: number, clock: boolean | CropClock, wall: number): string {
+  const k = clockNamed(clock);
+  if (k === 'planter') return `${name}, ${Math.round(per / PLANTER_GROWTH)}s a stage in any season`;
+  if (k === 'glass') return `${name}, ${Math.round(per / steadyRate(k))}s a stage in any season`;
   const rate = fieldRate(wall);
   const season = seasonAt(wall).season;
   if (rate <= 0) return `${name}, nothing until ${seasonAt(fieldWakes(wall)).season}: a field does not grow in ${season}`;
@@ -211,9 +235,28 @@ export function growthWords(r: number): string {
   return part === 'half' ? 'at half its pace' : `at ${part} of its pace`;
 }
 
-/** What a sowing says: "You sow wheat. Sprouting in 5 minutes.", in a planter "You sow wheat in the planter. ...". The island's is `sown_said`. */
-export const sownSaid = (name: string, planter: boolean, when: string): string =>
-  `You sow ${name.toLowerCase()}${planter ? ' in the planter' : ''}. ${capital(when)}.`;
+/**
+ * What Examine adds on a tile of a glasshouse (`glasshouse.ts`), after the
+ * building it belongs to: what it is and what it does for a crop. The island
+ * says it in the same words (`glass_examine_said`, written by the
+ * definitions, and `glass_examine`).
+ */
+export const glassExamine = (): string =>
+  ` It is a glasshouse, walled all round to full height and roofed wholly in glass: its ground tills into fields, and a crop in it grows ${growthWords(GLASSHOUSE_GROWTH)} in every season, winter too.`;
+
+/** Examine's line for a building: `glassExamine` for a glasshouse, nothing for any other. */
+export const glassSays = (bld: Buildings, b: Building | undefined): string => (isGlasshouse(bld, b) ? glassExamine() : '');
+
+/**
+ * What a sowing says: "You sow wheat. Sprouting in 5 minutes.", in a planter
+ * "You sow wheat in the planter. ...", in a glasshouse "You sow wheat under
+ * glass. ...". `clock` as `cropWhen` takes it. The island's is `sown_said`,
+ * and `sown_said_on` for a clock by name.
+ */
+export const sownSaid = (name: string, clock: boolean | CropClock, when: string): string => {
+  const k = clockNamed(clock);
+  return `You sow ${name.toLowerCase()}${k === 'planter' ? ' in the planter' : k === 'glass' ? ' under glass' : ''}. ${capital(when)}.`;
+};
 
 /**
  * Look on a crop, in a field or in a planter: its stage, when the next one
@@ -224,9 +267,9 @@ export const sownSaid = (name: string, planter: boolean, when: string): string =
  */
 export function describeCrop(c: Crop, per: number, now: number, wall: number, bumper = 0): string {
   const def = cropDef(c.id);
-  const when = cropReady(c) ? 'ready to harvest' : cropWhen(STAGE_NAMES[c.stage + 1], cropGrowthLeft(c, per, now), c.planter !== undefined, wall);
+  const when = cropReady(c) ? 'ready to harvest' : cropWhen(STAGE_NAMES[c.stage + 1], cropGrowthLeft(c, per, now), cropClockOf(c), wall);
   const y = cropYield(c.tended, bumper);
-  return `${def.name}, ${cropStageName(c)} · ${when} · tended ${c.tended} of ${RIPE} times, for ${y.produce} ${itemDef(def.produce).name.toLowerCase()} and ${y.seeds} seed${y.seeds > 1 ? 's' : ''}`;
+  return `${def.name}${c.glass ? ' under glass' : ''}, ${cropStageName(c)} · ${when} · tended ${c.tended} of ${RIPE} times, for ${y.produce} ${itemDef(def.produce).name.toLowerCase()} and ${y.seeds} seed${y.seeds > 1 ? 's' : ''}`;
 }
 
 // The planter says what it grows at, off the rule.
@@ -347,12 +390,15 @@ export const FARM_ACTIONS: ActionDef[] = [
     tool: 'rake',
     stamina: 0.04,
     baseTime: 5,
-    applies: (t, g) => t.kind === 'tile' && TILLABLE.has(g.world.getTile(t.x, t.y)),
+    // Bare ground, or a glasshouse's packed floor (`glasshouse.ts`).
+    applies: (t, g) => t.kind === 'tile' && (TILLABLE.has(g.world.getTile(t.x, t.y)) || glassTillable(g, t.x, t.y)),
     check: (t, g) => {
       if (t.kind !== 'tile') return null;
       if (!g.inventory.has('rake')) return 'You need a rake to till the ground.';
+      // In a building, only a glasshouse's ground, and only where no floor is planned on it.
+      const inside = glassTillRefusal(g, t.x, t.y, TILLABLE);
+      if (inside) return inside;
       if (g.world.hasWater(t.x, t.y)) return 'You cannot till underwater.';
-      if (g.buildings.buildingAt(t.x, t.y)) return 'Not inside a building.';
       if (g.world.slope(t.x, t.y) > 20) return 'The ground is too steep to work.';
       return null;
     },
@@ -398,9 +444,10 @@ export const FARM_ACTIONS: ActionDef[] = [
       const sown = sowOne(g, box ?? { x: t.kind === 'tile' ? t.x : 0, y: t.kind === 'tile' ? t.y : 0 }, seed, def);
       if (!sown) return;
       const c = box ? g.planted.get(box.id) : t.kind === 'tile' ? g.cropAt(t.x, t.y) : undefined;
-      // When it will be sprouting, in real time, from the season it was sown in.
-      const when = c ? cropWhen(STAGE_NAMES[1], g.cropPer(c), !!box, g.wallNow()) : `${STAGE_NAMES[1]} soon`;
-      g.logMsg(`${sownSaid(def.name, !!box, when)}${sown === 'kept' ? ' It cost you no seed.' : ''}`, 'event');
+      // When it will be sprouting, in real time, from the season it was sown in -- or in any, in a planter or under glass.
+      const clock: CropClock = c ? cropClockOf(c) : box ? 'planter' : 'field';
+      const when = c ? cropWhen(STAGE_NAMES[1], g.cropPer(c), clock, g.wallNow()) : `${STAGE_NAMES[1]} soon`;
+      g.logMsg(`${sownSaid(def.name, clock, when)}${sown === 'kept' ? ' It cost you no seed.' : ''}`, 'event');
     },
   },
   {
@@ -485,8 +532,10 @@ export const FARM_ACTIONS: ActionDef[] = [
       if (c) g.removeCrop(t.x, t.y);
       // Broken up, it is not a field any more, and has no last crop.
       g.forgetSown(t.x, t.y);
-      g.world.setTile(t.x, t.y, TileType.Dirt);
-      g.logMsg(c ? `You turn the ${cropDef(c.id).name.toLowerCase()} back into the soil.` : 'You break the field back up into plain dirt.', 'event');
+      // Inside a footprint, packed flat again as the rest of it is (`glasshouse.ts`).
+      const to = clearedTo(g.buildings, t.x, t.y);
+      g.world.setTile(t.x, t.y, to);
+      g.logMsg(clearedSaid(c ? cropDef(c.id).name.toLowerCase() : null, to === TileType.PackedDirt), 'event');
     },
   },
   // ---- A Farmer's patch jobs: the three by three around a tile, as one job. ----

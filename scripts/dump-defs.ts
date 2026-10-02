@@ -22,9 +22,9 @@ import { FURNITURE } from '../src/game/furniture';
 import { FORAGE_TABLE, BOTANIZE_TABLE, BOTANIZE_WATER_TABLE, EMPTY_CHANCE, FIND_CHECK, PER_ROLL } from '../src/game/forage';
 import { STONES_DEPTH, STONES_SLABS } from '../src/game/watergarden';
 import { WATER_PLANTS, WATER_PLANT_DEEPEST, WATER_PLANT_SHALLOWEST, WATER_ROOTING } from '../src/world/waterplants';
-import { CROP_LIST } from '../src/game/farming';
+import { CROP_LIST, glassExamine } from '../src/game/farming';
 import { FISH, BAITS } from '../src/game/fishing';
-import { WALL_TYPES, MATERIALS as BUILD_MATERIALS, ROOF_SHAPES, STOREY_SKILL, INDOORS_DECAY, INDOORS_REST, WALL_HEIGHT, LADDER_PLANKS, MAX_LEVELS, TOP_LEVELS } from '../src/game/building';
+import { GLASS_ROOF, WALL_TYPES, MATERIALS as BUILD_MATERIALS, ROOF_SHAPES, STOREY_SKILL, INDOORS_DECAY, INDOORS_REST, WALL_HEIGHT, LADDER_PLANKS, MAX_LEVELS, TOP_LEVELS } from '../src/game/building';
 import { REPOINT_BACK } from '../src/game/buildActions';
 import { CONCRETE_PER_STEP } from '../src/game/foundations';
 import { COAX_LAPSE, COAX_STEP, HERD_REACH, HUNT_HOME, HUNT_LEASH, HUNT_REST, OLD_AT, YOUNG_FOR, SITE_LOOKS, WILD_RANGE, WILD_REACH, WILD_REST, WILD_REST_SPREAD, SHOE_DAYS, SHOE_PACE, SHOE_STEP, SHOES_PER_MOUNT,
@@ -117,9 +117,10 @@ import { spanWords } from '../src/game/words';
 import { DARK_HIT, DARK_SHOT, DARK_SWING, HEAVY_SKILLS, NIGHT_EYES_FROM, WORK_BACK, WORK_HAND, WORK_WIND, WORK_WIND_SPENT } from '../src/game/learn';
 import { ANCIENT_EFFECTS, ANCIENT_PLUS, BAUBLE_HIGH, BAUBLE_KINDS, BAUBLE_LOW, BAUBLE_SHARE, BAUBLE_TIERS, MAJOR_SKILLS, MINOR_SKILLS, REGRET_SHARE, YIELD_TIMES } from '../src/game/baubles';
 import { MOTE_CHANCE } from '../src/game/sacrifice';
-import { PLANTER_GROWTH, SEASON_GROWTH, SEASON_SECONDS, YEAR_GROWTH, YEAR_SECONDS, YEARLESS_GROWTH } from '../src/game/growth';
+import { GLASSHOUSE_GROWTH, PLANTER_GROWTH, SEASON_GROWTH, SEASON_SECONDS, YEAR_GROWTH, YEAR_SECONDS, YEARLESS_GROWTH } from '../src/game/growth';
 import { SEASON_DAYS, SEASONS, YEAR_DAYS, YEAR_FROM } from '../src/world/calendar';
 import { PLANTER_GROWING } from '../src/game/furniture';
+import { FIELD_GLASS_ONLY, FIELD_NO_STOREY, FIELD_PACKED, GLASS, GLASS_FLOORED, GLASS_PITCHED, GLASS_ROOF_ONLY, GLASS_SLAB, FIELD_UNFLOORED, NOT_A_GLASSHOUSE, NOT_TILLABLE } from '../src/game/glasshouse';
 
 const q = (v: unknown): string => {
   if (v === undefined || v === null) return 'null';
@@ -1812,4 +1813,23 @@ for (const [fn, v] of [
 /* The pieces a crop is sown in, and what one says to being picked up with a crop in it. */
 out.push(`create or replace function is_planter(p_sub text) returns boolean language sql immutable as $fn$ select coalesce(p_sub = any(array[${FURNITURE.filter((f) => f.planter).map((f) => q(f.id)).join(', ')}]::text[]), false) $fn$;`);
 out.push(`create or replace function planter_growing_said() returns text language sql immutable as $fn$ select ${q(PLANTER_GROWING)} $fn$;`);
+/*
+ * Glasshouses (`src/game/glasshouse.ts`): glass, the roof covering that is no
+ * other kind of material, with its bill a solid wall's worth as every
+ * material's is; the share of a crop's pace that grows under it in every
+ * season; what the doors say when glass or a field is asked for where it
+ * does not go; and what Examine says of a glasshouse.
+ */
+out.push(`insert into build_material_def (id, name, kind, tool, skill, storeys, heft) values (${q(GLASS_ROOF.id)}, ${q(GLASS_ROOF.name)}, ${q(GLASS_ROOF.kind)}, ${q(GLASS_ROOF.tool)}, ${q(GLASS_ROOF.skill)}, ${q(GLASS_ROOF.storeys)}, ${q(GLASS_ROOF.heft)});`);
+GLASS_ROOF.bill.forEach(([item, n], ord) => out.push(`insert into build_material_bill values (${q(GLASS_ROOF.id)}, ${q(ord)}, ${q(item)}, ${q(n)});`));
+out.push(`create or replace function glass_material() returns text language sql immutable as $fn$ select ${q(GLASS)} $fn$;`);
+out.push(`create or replace function glasshouse_growth() returns double precision language sql immutable as $fn$ select ${q(GLASSHOUSE_GROWTH)}::double precision $fn$;`);
+for (const [fn, v] of [
+  ['glass_roof_only_said', GLASS_ROOF_ONLY], ['glass_pitched_said', GLASS_PITCHED], ['field_unfloored_said', FIELD_UNFLOORED],
+  ['not_a_glasshouse_said', NOT_A_GLASSHOUSE], ['glass_floored_said', GLASS_FLOORED], ['not_tillable_said', NOT_TILLABLE],
+  ['field_glass_only_said', FIELD_GLASS_ONLY], ['field_no_storey_said', FIELD_NO_STOREY], ['glass_examine_said', glassExamine()],
+  ['field_packed_said', FIELD_PACKED], ['glass_slab_said', GLASS_SLAB],
+] as Array<[string, string]>) {
+  out.push(`create or replace function ${fn}() returns text language sql immutable as $fn$ select ${q(v)} $fn$;`);
+}
 console.log(out.join('\n'));
