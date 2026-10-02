@@ -70,6 +70,8 @@ export const OCCUPIED_CRATE_ACTIONS: ReadonlySet<string> = new Set([
   'examine_item', 'place_furniture', 'crate_follow', 'crate_work', 'lock_item', 'unlock_item', 'name_thing',
   // On a stall, to be sold, and back off it; the store itself takes a creature crate nowhere else.
   'store_in_furniture', 'take_from_store',
+  // And on a shop counter, the same (`counters.ts`).
+  'set_out_goods', 'take_off_counter',
 ]);
 
 /** Why this cannot be asked of the thing aimed at, when that is a crate with a wildermon in it; null otherwise. */

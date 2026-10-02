@@ -1,7 +1,9 @@
 import type { ActionDef, Target } from './actions';
 import type { Game } from './game';
-import { itemDef, itemName, type Item } from './items';
-import { candleBurn, heldReach, HELD_LIGHTS, torchBurn } from './light';
+import { billWords, itemDef, itemName, type Item } from './items';
+import { FURNITURE, furnitureDef } from './furniture';
+import { CANDLE_DRAWN, candleBurn, heldReach, HELD_LIGHTS, torchBurn } from './light';
+import { NumberWord } from './words';
 
 /**
  * A light you carry: a lantern with a candle in it, or a torch.
@@ -57,8 +59,30 @@ export function flameNear(g: Game, except?: Item): string | null {
   for (const f of g.campfires.values()) if (f.lit && near(f.x, f.y)) return 'campfire';
   for (const s of g.smelters.values()) if (s.lit && near(s.x, s.y)) return 'smelter';
   for (const k of g.kilns.values()) if (k.lit && near(k.x, k.y)) return 'kiln';
-  for (const f of g.furniture.values()) if (f.lit && near(f.x, f.y)) return 'oven';
+  // A piece alight by what it is: an oven, a brazier, a lantern post.
+  for (const f of g.furniture.values()) if (f.lit && near(f.x, f.y)) return furnitureDef(f.kind).name.toLowerCase();
   return null;
+}
+
+/** No candle to put in a lantern, in your hand or on a post: and what one is drawn from, off its own recipe (`CANDLE_DRAWN`). */
+export function noCandleLine(): string {
+  const from = billWords(CANDLE_DRAWN.inputs.map((i): [string, number] => [i.item, i.count ?? 1]));
+  return `You have no candles. ${NumberWord(CANDLE_DRAWN.count)} ${CANDLE_DRAWN.count === 1 ? 'is' : 'are'} drawn from ${from}.`;
+}
+
+/**
+ * Everything a light is taken off, as `flameNear` looks for it: a campfire,
+ * a kiln, a smelter, and every piece that burns, which is a piece with a
+ * hearth or a lantern in it. Said as "a, b or c".
+ */
+export function flameSources(): string {
+  const at = ['campfire', 'kiln', 'smelter', ...FURNITURE.filter((d) => d.hearth || d.lamp).map((d) => d.name.toLowerCase())];
+  return `${at.slice(0, -1).join(', ')} or ${at[at.length - 1]}`;
+}
+
+/** Nothing burning to take a light off: and what would do. */
+export function noFlameLine(): string {
+  return `Nothing here is burning. Light it at a burning ${flameSources()} — or off something already alight in your hand.`;
 }
 
 export const LANTERN_ACTIONS: ActionDef[] = [
@@ -75,7 +99,7 @@ export const LANTERN_ACTIONS: ActionDef[] = [
       if (!it) return 'It is gone.';
       if (it.id !== 'lantern') return 'Nothing goes in a torch.';
       if (candleLeft(it) > 0) return 'There is still a candle in it.';
-      if (!g.inventory.has('candle')) return 'You have no candles. Two are drawn from two beeswax and a yarn.';
+      if (!g.inventory.has('candle')) return noCandleLine();
       return null;
     },
     perform: (t, g) => {
@@ -104,9 +128,7 @@ export const LANTERN_ACTIONS: ActionDef[] = [
       const it = lightOf(g, t);
       if (!it) return 'It is gone.';
       if (it.id === 'lantern' && !candleLeft(it)) return 'There is no candle in it.';
-      if (!flameNear(g, it)) {
-        return 'Nothing here is burning. Light it at a campfire, a kiln, a smelter or an oven — or off something already alight in your hand.';
-      }
+      if (!flameNear(g, it)) return noFlameLine();
       return null;
     },
     perform: (t, g) => {

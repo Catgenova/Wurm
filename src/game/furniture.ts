@@ -7,6 +7,7 @@ import { describeFrom, describeWith, isWorked, ITEM_DEFS, itemDef, itemName, mar
 import { fill, numberWord } from './words';
 import { matOf } from './materials';
 import { roseSays, ROSES_RULE } from './roses';
+import type { Lamp } from './lamps';
 
 /**
  * What a store takes, for the five that take one sort of thing: raw materials,
@@ -162,6 +163,11 @@ export interface FurnitureDef {
    * it stands (`farming.ts`). The island's `is_planter` names the same pieces.
    */
   planter?: boolean;
+  /**
+   * A place a lantern is fitted and burns for everybody (`lamps.ts`): hung off
+   * an iron arm (`arm`), or standing in the top of a pillar (`top`).
+   */
+  lamp?: 'arm' | 'top';
 }
 
 /**
@@ -345,6 +351,18 @@ export const FURNITURE: FurnitureDef[] = [
    * burns.
    */
   piece('brazier', 'Brazier', 1, 1, [['stone_brick', 24], ['mortar', 8], ['ribbon', 4]], 20, 12, 'You lay a shallow bowl of brick and band it with iron. A brazier.', undefined, { skill: 'masonry', tool: 'trowel', hearth: true }),
+  /*
+   * And two that burn a lantern rather than a fire (`lamps.ts`): a squared
+   * post with an iron arm off its head for the lantern to hang from, and a
+   * coursed pillar with an iron cage in its top for it to stand in. Neither
+   * comes with a lantern: the one fitted is the one you carry.
+   */
+  piece('lamp_post', 'Lantern post', 1, 1, [['timber', 1], ['ribbon', 2], ['nail', 6]], 14, 10,
+    'You stand the post up, bolt the iron arm across its head and hang a hook off the end. Hang a lantern on it.', undefined,
+    { skill: 'carpentry', lamp: 'arm' }),
+  piece('lamp_pillar', 'Lantern pillar', 1, 1, [['stone_brick', 8], ['mortar', 4], ['ribbon', 2]], 20, 16,
+    'You lay the courses up to a capital and band an iron cage into its top. Set a lantern in it.', undefined,
+    { skill: 'masonry', tool: 'trowel', lamp: 'top' }),
   piece('altar', 'Altar', 2, 2, [['stone_brick', 64], ['mortar', 32], ['stone_slab', 4]], 40, 40, 'You lay the courses and bed the slab on top. Kneel here at dawn.', undefined, { skill: 'masonry', tool: 'trowel', altar: true, deed: true }),
   piece('banner', 'Banner', 1, 1, [['cloth', 16], ['shaft', 2], ['rope', 1], ['nail', 12]], 10, 10, 'You hem the cloth, lash it to the staff and run it up. Dye it and it is your colour.', undefined, { skill: 'tailoring' }),
   /*
@@ -488,7 +506,10 @@ export interface PlacedFurniture {
   name?: string;
   /** What is stored in it, for the pieces that store anything. */
   items: Item[];
-  /** Seconds of fuel left and whether it is alight, for the oven. */
+  /**
+   * Seconds of fuel left and whether it is alight, for the oven; and for a
+   * lantern post, seconds of candle left in its lantern and whether it burns.
+   */
   fuel?: number;
   lit?: boolean;
   ash?: number;
@@ -578,6 +599,8 @@ export interface PlacedFurniture {
    * field broken up does; on an island it is `state.sown` on the placed row.
    */
   sown?: string;
+  /** The lantern fitted to a lantern post or pillar (`lamps.ts`); on the island `state -> lamp`. */
+  lamp?: Lamp;
 }
 
 /** Whether a piece is a planter: a box of earth a crop is sown in (`FurnitureDef.planter`). */
@@ -587,6 +610,11 @@ export const isPlanter = (f: { kind: string }): boolean => !!furnitureDef(f.kind
  * island says the same (`planter_growing_said`, off this).
  */
 export const PLANTER_GROWING = 'Something is growing in it. Harvest it, or pull it up, first.';
+/**
+ * Why a lantern post or pillar with its lantern in will not be picked up: the
+ * lantern comes down first (`lamps.ts`). The island says the same.
+ */
+export const LAMP_TAKE_FIRST = 'Take the lantern down first.';
 
 /** The two liquids worth keeping a barrel for. */
 export type LiquidKind = 'water' | 'lye' | 'milk' | 'ale' | 'cider' | 'mead' | 'wine' | 'juice' | 'spirit';
@@ -978,7 +1006,8 @@ export const FURNITURE_ACTIONS: ActionDef[] = [
       if (f.driven) return 'Get down off it first.';
       if (ridersOf(f).length) return 'There are people aboard her.';
       if (rackSpots(f) && g.cratesOn(f).length) return 'Take the crates off it first.';
-      const facing = turnedFacing(facingOf(f), 1);
+      // A quarter turn, or on round past a facing a lantern post's arm would go into a wall (`lamps.ts`).
+      const facing = g.pieceTurnsTo(f);
       const [ax, ay] = furnitureAnchor(f.kind, f.sx, f.sy, facing);
       const why = g.furniturePlaceReason(f.kind, f.x, f.y, ax, ay, facing, f.id);
       return why ? 'Something is in the way of turning it.' : null;
@@ -986,7 +1015,7 @@ export const FURNITURE_ACTIONS: ActionDef[] = [
     perform: (t, g) => {
       const f = pieceOf(g, t);
       if (!f) return;
-      const facing = turnedFacing(facingOf(f), 1);
+      const facing = g.pieceTurnsTo(f);
       const [ax, ay] = furnitureAnchor(f.kind, f.sx, f.sy, facing);
       if (g.furniturePlaceReason(f.kind, f.x, f.y, ax, ay, facing, f.id)) return;
       f.facing = facing;
@@ -1010,6 +1039,9 @@ export const FURNITURE_ACTIONS: ActionDef[] = [
       // down somewhere else is taking it, padlock and all.
       const shut = g.lockRefusal(f);
       if (shut) return shut;
+      // A lantern post with its lantern still in it: that comes down first,
+      // lit or not -- the island asks this next, after the lock (`lamp_lift_refusal`).
+      if (f.lamp) return LAMP_TAKE_FIRST;
       if (f.items.length) return 'Empty it first.';
       // A crop is not carried about in a box of earth: it is harvested, or turned back into the soil.
       if (g.planted.has(f.id)) return PLANTER_GROWING;
@@ -1030,7 +1062,7 @@ export const FURNITURE_ACTIONS: ActionDef[] = [
     },
     perform: (t, g) => {
       const f = pieceOf(g, t);
-      if (!f || f.items.length || f.lit || litresIn(f) > 0 || f.hitched || f.driven || teamOf(f).length || ridersOf(f).length) return;
+      if (!f || f.items.length || f.lit || f.lamp || litresIn(f) > 0 || f.hitched || f.driven || teamOf(f).length || ridersOf(f).length) return;
       if (rackSpots(f) && g.cratesOn(f).length) return;
       if (g.planted.has(f.id)) return;
       g.removeFurniture(f.id);

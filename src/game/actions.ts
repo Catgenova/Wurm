@@ -39,6 +39,8 @@ import { STEPS_ACTIONS } from './steps';
 import { GREEN_ACTIONS, greenNow } from './greening';
 import { NAMING_ACTIONS } from './naming';
 import { LANTERN_ACTIONS } from './lantern';
+import { COUNTER_ACTIONS } from './counters';
+import { LAMP_ACTIONS } from './lamps';
 import { FAITH_ACTIONS } from './faith';
 import { BAUBLE_ACTIONS } from './baubles';
 import { SACRIFICE_ACTIONS } from './sacrifice';
@@ -2922,6 +2924,8 @@ export const ACTIONS: ActionDef[] = [
   ...TRAP_ACTIONS,
   ...NAMING_ACTIONS,
   ...LANTERN_ACTIONS,
+  ...LAMP_ACTIONS,
+  ...COUNTER_ACTIONS,
   ...BRIDGE_ACTIONS,
   ...SPRING_ACTIONS,
   ...FLOWER_ACTIONS,

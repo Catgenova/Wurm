@@ -9,6 +9,7 @@ import type { PlacedCampfire } from './campfire';
 import type { PlacedSmelter } from './smelter';
 import type { PlacedKiln } from './kiln';
 import type { PlacedFurniture } from './furniture';
+import type { CountersJSON } from './counters';
 import type { PlacedPost } from './posts';
 import type { PlacedTrap } from './traps';
 import type { Bridge } from './bridges';
@@ -266,6 +267,8 @@ interface SaveData {
   fieldTime?: number;
   /** The water lilies and lotus planted here. A save from before them has none. */
   waterPlants?: WaterPlant[];
+  /** What is set out on each shop counter. A save from before counters has none. */
+  counters?: CountersJSON;
   crate?: { x: number; y: number; items: Item[] } | null;
   /**
    * Everybody who has ever visited, and what they had when they left.
@@ -355,6 +358,7 @@ function meta(game: Game): SaveMeta {
     planted: [...game.planted.values()],
     fieldTime: game.fieldTime,
     waterPlants: [...game.waterPlants.values()],
+    counters: game.counters.toJSON(),
     guests: game.guestRecords(),
   };
 }
@@ -620,6 +624,7 @@ function finish(world: World, m: SaveMeta): Game {
     planted: m.planted,
     fieldTime: m.fieldTime,
     waterPlants: m.waterPlants,
+    counters: m.counters,
     marks: m.marks,
     hoards: m.hoards,
     crate: m.crate ?? null,

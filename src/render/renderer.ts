@@ -65,6 +65,10 @@ import { fieldRate } from '../game/growth';
 import { dyeOf } from '../game/dyestuffs';
 import { sailTrim } from '../game/wind';
 import { FURNITURE_BY_ID, isPlanter, rackDeck, rackSpots } from '../game/furniture';
+import { isLampPiece, lampBurning } from '../game/lamps';
+import { drawLampBloom } from './furniture';
+import { COUNTER_HOLDS, counterHeld, counterSeat, streetOf } from '../game/counters';
+import { counterHole, counterWares, drawCounterDaylight, drawCounterFrontKept, drawCounterInside, drawCounterReveal, stripeOf, type CounterLook } from './counter';
 import { cropDef, type CropLook } from '../game/farming';
 import { crateCentre, crateKindOfItem, subtileOf, SUBTILES } from '../game/crates';
 import { maxHealth, SPECIES, type Creature } from '../game/creatures';
@@ -334,6 +338,9 @@ const hexRgb = (hex: string): [number, number, number] => {
  * of that, because nothing reaches the underside of an arch.
  */
 const JAMB_LIT = 0.86;
+/** The timber of a shop counter's board on a wall drawn in flat colours, and its ink (`counter.ts`). */
+const COUNTER_OAK: readonly [number, number, number] = [178, 138, 84];
+const COUNTER_OAK_INK: readonly [number, number, number] = [112, 82, 46];
 const SOFFIT_LIT = 0.7;
 /** The inside of a sill is the one surface in a wall turned up at the sky. */
 const SILL_LIT = 1.02;
@@ -500,6 +507,12 @@ interface WallGeom {
 const GRAIN_SPECKS = 14;
 /** How far in from the eaves a roof goes on rising, in tiles: past that it is a flat top. */
 const ROOF_CAP = 2.5;
+/** What nothing that grows on a wall goes over on a shop counter's face: its opening, the board under it and the awning over it. */
+const COUNTER_KEEP = { t0: BAY.t0 - 0.06, t1: BAY.t1 + 0.06, k0: BAY.k0 - 0.2, k1: BAY.k1 + 0.14 } as const;
+/** The share of the screen's size the lights' holes in the night and their casts are worked out at: soft enough not to show it. */
+const LIGHT_RES = 0.5;
+/** A rectangle: x, y, width, height. */
+type Box = [number, number, number, number];
 /** How far the eaves hang out past the wall's line, and the verge past a gable end, in tiles. */
 const ROOF_OVER = 0.14;
 const ROOF_VERGE = 0.1;
@@ -1088,9 +1101,132 @@ export class Renderer {
    */
   private night: HTMLCanvasElement | null = null;
 
-  private nightLayer(): HTMLCanvasElement {
-    const w = this.canvas.width;
-    const h = this.canvas.height;
+  /**
+   * What the lights do to the night, worked out apart from the night itself:
+   * `mask`, whose alpha is how much of the wash each spot keeps -- every
+   * light's soft hole taken out of it, as the wash used to have them taken
+   * out of it directly -- and `warm`, black but for each light's cast, where
+   * two overlap the warmer of the two rather than both added, so that a row
+   * of lamps lights a street and does not bleach it white. Both are worked
+   * out at `LIGHT_RES` of the screen, which their soft edges do not show,
+   * and laid over it scaled back up.
+   *
+   * And kept: what steady lights do -- a lantern, a lamp on a post, an
+   * altar, a glowing wildermon -- is kept from one frame to the next while
+   * the view, the size of the screen and those lights stand still, and only
+   * the ones that flicker, the fires, are worked out again each frame, over a
+   * copy of it. How dark it is goes on at the end, so the hour moving does
+   * not undo any of it.
+   */
+  private lit: { mask: HTMLCanvasElement; warm: HTMLCanvasElement; key: string; box: Box } | null = null;
+  private litNow: { mask: HTMLCanvasElement; warm: HTMLCanvasElement } | null = null;
+
+  private lightLayers(lights: LightSource[], w: number, h: number): { mask: HTMLCanvasElement; warm: HTMLCanvasElement; box: Box } {
+    const cam = this.camera;
+    const world = this.game.world;
+    const zoom = cam.zoom;
+    const lw = Math.max(1, Math.ceil(w * LIGHT_RES)), lh = Math.max(1, Math.ceil(h * LIGHT_RES));
+    const sheet = (had: HTMLCanvasElement | undefined): HTMLCanvasElement => {
+      const c = had ?? document.createElement('canvas');
+      if (c.width !== lw || c.height !== lh) { c.width = lw; c.height = lh; }
+      return c;
+    };
+    /** Each light where it falls on the screen this frame, and how far it reaches there. */
+    const placed = (l: LightSource): { sx: number; sy: number; r: number } | null => {
+      const sx = cam.worldToScreenX(l.x, l.y);
+      const sy = cam.worldToScreenY(l.x, l.y, world.heightAt(l.x, l.y));
+      // A flame is never steady; a candle behind cloth very nearly is.
+      const r = Math.max(8, l.radius * HALF_W * zoom * this.flicker(l));
+      return sx < -r || sy < -r || sx > w + r || sy > h + r ? null : { sx, sy, r };
+    };
+    const holes = (g: CanvasRenderingContext2D, ls: LightSource[]): void => {
+      g.globalCompositeOperation = 'destination-out';
+      for (const l of ls) {
+        const p = placed(l);
+        if (!p) continue;
+        const grad = g.createRadialGradient(p.sx, p.sy, 0, p.sx, p.sy, p.r);
+        grad.addColorStop(0, `rgba(0,0,0,${l.strength.toFixed(2)})`);
+        grad.addColorStop(0.55, `rgba(0,0,0,${(l.strength * 0.55).toFixed(2)})`);
+        grad.addColorStop(1, 'rgba(0,0,0,0)');
+        g.fillStyle = grad;
+        g.beginPath();
+        g.arc(p.sx, p.sy, p.r, 0, Math.PI * 2);
+        g.fill();
+      }
+      g.globalCompositeOperation = 'source-over';
+    };
+    /** The part of the layers the casts cover, in their own whole pixels: x, y, width, height. */
+    const cover = (ls: LightSource[], into: Box = [0, 0, 0, 0]): Box => {
+      let [x0, y0, x1, y1] = into[2] > 0 ? [into[0], into[1], into[0] + into[2], into[1] + into[3]] : [Infinity, Infinity, -Infinity, -Infinity];
+      for (const l of ls) {
+        const p = placed(l);
+        if (!p) continue;
+        x0 = Math.min(x0, Math.max(0, Math.floor((p.sx - p.r) * LIGHT_RES)));
+        y0 = Math.min(y0, Math.max(0, Math.floor((p.sy - p.r) * LIGHT_RES)));
+        x1 = Math.max(x1, Math.min(lw, Math.ceil((p.sx + p.r) * LIGHT_RES)));
+        y1 = Math.max(y1, Math.min(lh, Math.ceil((p.sy + p.r) * LIGHT_RES)));
+      }
+      return x1 > x0 && y1 > y0 ? [x0, y0, x1 - x0, y1 - y0] : [0, 0, 0, 0];
+    };
+    const casts = (g: CanvasRenderingContext2D, ls: LightSource[]): void => {
+      // Opaque on black, so 'lighten' keeps the larger of what is there and what comes: the warmest light, not the sum.
+      g.globalCompositeOperation = 'lighten';
+      for (const l of ls) {
+        const p = placed(l);
+        if (!p) continue;
+        const a = l.castAlpha ?? 0.16 * l.strength;
+        const [r0, g0, b0] = (l.cast ?? '255, 186, 92').split(',').map((v) => Math.round(Number(v) * a));
+        const grad = g.createRadialGradient(p.sx, p.sy, 0, p.sx, p.sy, p.r);
+        grad.addColorStop(0, `rgb(${r0}, ${g0}, ${b0})`);
+        grad.addColorStop(1, 'rgb(0, 0, 0)');
+        g.fillStyle = grad;
+        g.beginPath();
+        g.arc(p.sx, p.sy, p.r, 0, Math.PI * 2);
+        g.fill();
+      }
+      g.globalCompositeOperation = 'source-over';
+    };
+    const ctxOf = (c: HTMLCanvasElement): CanvasRenderingContext2D => {
+      const g = c.getContext('2d') as CanvasRenderingContext2D;
+      g.setTransform(LIGHT_RES, 0, 0, LIGHT_RES, 0, 0);
+      return g;
+    };
+    const steady = lights.filter((l) => l.steady);
+    const live = lights.filter((l) => !l.steady);
+    const key = `${lw}x${lh}|${cam.cx.toFixed(2)},${cam.cy.toFixed(2)},${zoom},${cam.rotation}|`
+      + steady.map((l) => `${l.x.toFixed(3)},${l.y.toFixed(3)},${world.heightAt(l.x, l.y)},${l.radius},${l.strength},${l.cast ?? ''},${l.castAlpha ?? ''}`).join(';');
+    if (!this.lit || this.lit.key !== key) {
+      const mask = sheet(this.lit?.mask), warm = sheet(this.lit?.warm);
+      const m = ctxOf(mask), c = ctxOf(warm);
+      m.globalCompositeOperation = 'source-over';
+      m.fillStyle = '#000';
+      m.fillRect(0, 0, w, h);
+      holes(m, steady);
+      c.globalCompositeOperation = 'source-over';
+      c.fillStyle = '#000';
+      c.fillRect(0, 0, w, h);
+      casts(c, steady);
+      this.lit = { mask, warm, key, box: cover(steady) };
+    }
+    if (!live.length) return this.lit;
+    // The fires, over a copy of what the steady lights left.
+    const now = this.litNow ?? (this.litNow = { mask: sheet(undefined), warm: sheet(undefined) });
+    const mask = sheet(now.mask), warm = sheet(now.warm);
+    for (const [to, from] of [[mask, this.lit.mask], [warm, this.lit.warm]] as const) {
+      const g = to.getContext('2d') as CanvasRenderingContext2D;
+      g.setTransform(1, 0, 0, 1, 0, 0);
+      g.globalCompositeOperation = 'copy';
+      g.drawImage(from, 0, 0);
+      g.globalCompositeOperation = 'source-over';
+    }
+    holes(ctxOf(mask), live);
+    casts(ctxOf(warm), live);
+    return { mask, warm, box: cover(live, this.lit.box) };
+  }
+
+  private nightLayer(res = 1): HTMLCanvasElement {
+    const w = Math.max(1, Math.ceil(this.canvas.width * res));
+    const h = Math.max(1, Math.ceil(this.canvas.height * res));
     if (!this.night || this.night.width !== w || this.night.height !== h) {
       this.night = document.createElement('canvas');
       this.night.width = w;
@@ -3070,6 +3206,8 @@ export class Renderer {
           // What on it moves -- an altar's stars, a banner's cloth -- over it, and outside the
           // ring under the pointer: a ring round a bloom of light is a blot.
           drawFurnitureLive(ctx, ent.sx, ent.sy, zoom, piece.kind, view, this.game.darkness(), clothInWind(piece.kind) ? this.airOf(piece) : undefined);
+          // A lantern burning on a post or a pillar blooms as the dark comes on (`lamps.ts`).
+          if (lampBurning(piece)) drawLampBloom(ctx, ent.sx, ent.sy, zoom, piece.kind, view, this.game.darkness());
           // Not indoors: a roof or a wall stands in front of it there, and the night cut away at its stars would be cut out of that.
           if (glowsAtNight(piece.kind) && !this.game.buildings.buildingAt(Math.floor(piece.x), Math.floor(piece.y))) {
             this.glows.push({ sx: ent.sx, sy: ent.sy, kind: piece.kind, view });
@@ -3437,12 +3575,27 @@ export class Renderer {
          * stands between the viewer and the inside: those are the ones a
          * cutaway takes away.
          */
-        if (cutaway && building?.id !== wall.building) continue;
+        if (cutaway && building?.id !== wall.building && !this.edgeOn(border)) continue;
         const dim = inFront && this.wallsMyRoom(border);
         this.drawWall(wall, border, base, dim ? 0.3 : 1);
       }
       late?.();
     }
+  }
+
+  /**
+   * Whether a border runs straight away from the camera, so that a wall on it
+   * has no face on the screen: at four of the eight turns, half the walls.
+   * Such a wall stands between the viewer and nothing, so the cutaway leaves
+   * it -- which side of its own line it is drawn from is a tie the sums
+   * break either way, and the one it broke toward the street was taken away
+   * with everything standing out of it, a shop counter's board and awning
+   * among them.
+   */
+  private edgeOn(border: Border): boolean {
+    const cam = this.camera;
+    const [nx, ny] = border.dir === 'h' ? [0, 1] : [-1, 0];
+    return Math.abs(cam.rotateX(nx, ny) + cam.rotateY(nx, ny)) < 1e-6;
   }
 
   /** World point on a tile from a coordinate across (t) and away from the climbing side (s). */
@@ -3564,8 +3717,8 @@ export class Renderer {
     const wall = found(b);
     if (!wall) return done(null);
     const [fx, fy] = from(b);
-    // A wall the cutaway has taken away takes its shade with it.
-    if (this.game.settings.cutaway && bld.buildingAt(fx, fy)?.id !== wall.building) return done(null);
+    // A wall the cutaway has taken away takes its shade with it: not one seen edge on, which it leaves (`edgeOn`).
+    if (this.game.settings.cutaway && bld.buildingAt(fx, fy)?.id !== wall.building && !this.edgeOn(b)) return done(null);
     const reach = reachOf(wall);
     if (!reach) return done(null);
     const low = !!WALL_TYPE_BY_ID.get(wall.type)?.low;
@@ -6607,7 +6760,9 @@ export class Renderer {
       const windowed = wall.type === 'window';
       const doored = wall.type === 'door';
       const gated = wall.type === 'double_door';
-      const bayed = wall.type === 'bay';
+      // A shop counter is cut and dressed as a bay is, and is a shop rather than a window (`counter.ts`).
+      const countered = wall.type === 'counter';
+      const bayed = wall.type === 'bay' || countered;
       const cut = arched || windowed || doored || gated || bayed;
       /** Whichever hole this section has, added to the path that is open. */
       const hole = (s: number): void => {
@@ -6760,7 +6915,8 @@ export class Renderer {
        * clipped to the hole out there: what fills the hole is the inside of
        * the box, and the box stands in front of the stone.
        */
-      if (bayed) {
+      if (countered) this.drawCounterPart('inside', wall, border, { px, py, quad }, zoom, lit, { line: cob.line, reveal: cob.reveal, wood: cob.beam, woodLine: cob.beamLine });
+      if (bayed && !countered) {
         ctx.save();
         ctx.beginPath();
         hole(1);
@@ -6783,8 +6939,14 @@ export class Renderer {
         if (cob.growth && arched) blit(cob.base[v], 0, 1);
         offStone();
         // Anywhere else it is one picture and goes on whole: a bush that has
-        // grown up in front of a window stands in front of it, glass and all.
-        if (cob.growth && !arched) blit(cob.base[v], 0, 1);
+        // grown up in front of a window stands in front of it, glass and all --
+        // but not up into a shop counter's opening, where the board and the
+        // goods stand (`counter.ts`).
+        if (cob.growth && !arched) {
+          if (countered) this.counterCut({ px, py });
+          blit(cob.base[v], 0, 1);
+          if (countered) ctx.restore();
+        }
         if (cob.growth && arched) blit(cob.archWeed[v], 0, 1);
       }
       // After the foot, and down to it: the sole it lays along the footing runs into the post.
@@ -6891,7 +7053,10 @@ export class Renderer {
        * behind it is turned.
        */
       if (cob.growth && !roofed && !indoors) {
+        // Round a shop counter's opening, board and awning, as its hedge goes (`counterCut`).
+        if (countered) this.counterCut({ px, py });
         blit(cob.spill[v], 0, 1 + cob.pad / cob.h);
+        if (countered) ctx.restore();
         // And the tongue of it that hangs into the opening, on the variants
         // whose curtain reaches that far along the wall.
         if (arched) blit(cob.archIvy[v], 0, 1);
@@ -6901,7 +7066,8 @@ export class Renderer {
       }
       // And the ivy it has grown since it was built (`greening.ts`): after the painted ivy, and unlit, as that is.
       this.wallIvy(wall, px, py, tall, nx * toward, ny * toward, roofed, indoors);
-      if (bayed && !indoors) this.paintedBay(cob, { px, py, quad }, zoom, this.lampBehind(wall, border));
+      if (bayed && !indoors && !countered) this.paintedBay(cob, { px, py, quad }, zoom, this.lampBehind(wall, border));
+      if (countered) this.drawCounterPart('front', wall, border, { px, py, quad }, zoom, lit, { line: cob.line, reveal: cob.reveal, wood: cob.beam, woodLine: cob.beamLine });
       if (!cut) this.wallOpenings(wall, mat, lit, { px, py, quad }, zoom, border);
       ctx.globalAlpha = 1;
       return;
@@ -7013,6 +7179,8 @@ export class Renderer {
       case 'arch': keep.push({ t0: ARCH.t0, t1: ARCH.t1, k0: 0, k1: 0.8 }); break;
       case 'window': keep.push({ t0: WINDOW.t0, t1: WINDOW.t1, k0: WINDOW.k0 - 0.05, k1: WINDOW.k1 + 0.1 }); break;
       case 'bay': keep.push({ t0: BAY.t0, t1: BAY.t1, k0: BAY.k0 - 0.05, k1: BAY.k1 + 0.08 }); break;
+      // A counter's opening, its board and the awning over it (`counter.ts`).
+      case 'counter': keep.push(COUNTER_KEEP); break;
       case 'door': keep.push({ t0: DOOR.t0, t1: DOOR.t1, k0: 0, k1: DOOR.k1 + 0.08 }); break;
       case 'double_door': keep.push({ t0: DOUBLE.t0, t1: DOUBLE.t1, k0: 0, k1: DOUBLE.k1 + 0.08 }); break;
       case 'fence_gate': case 'iron_gate': keep.push({ t0: FENCE_GAP.t0, t1: FENCE_GAP.t1, k0: 0, k1: 1 }); break;
@@ -7031,6 +7199,13 @@ export class Renderer {
     });
     if (!strands.length) return;
     const ctx = this.canvas.ctx;
+    /*
+     * And on a shop counter, never over its opening, its board or the awning
+     * over it: a strand rooted clear of `keep` still spreads its picture
+     * across them, so the face is cut to everything but that box.
+     */
+    const cutOut = wall.type === 'counter';
+    if (cutOut) this.counterCut({ px, py });
     // The face's two axes on the screen: a metre along it, and a metre up it.
     const ax = (px(1, 0) - px(0, 0)) / 4, ay = (py(1, 0) - py(0, 0)) / 4;
     const kx = (px(0, 1) - px(0, 0)) / height, ky = (py(0, 1) - py(0, 0)) / height;
@@ -7058,6 +7233,29 @@ export class Renderer {
       ctx.drawImage(img, 0, 0);
       ctx.restore();
     }
+    if (cutOut) ctx.restore();
+  }
+
+  /**
+   * Clip what is drawn next to a shop counter's face to everything but its
+   * opening, its board and its awning (`COUNTER_KEEP`): what grows on the
+   * wall goes round a shop, not across it. Saves the context; the caller
+   * restores it.
+   */
+  private counterCut(g: { px: (t: number, k: number, s?: number) => number; py: (t: number, k: number, s?: number) => number }): void {
+    const ctx = this.canvas.ctx;
+    const quadAt = (t0: number, t1: number, k0: number, k1: number): void => {
+      ctx.moveTo(g.px(t0, k0), g.py(t0, k0));
+      ctx.lineTo(g.px(t1, k0), g.py(t1, k0));
+      ctx.lineTo(g.px(t1, k1), g.py(t1, k1));
+      ctx.lineTo(g.px(t0, k1), g.py(t0, k1));
+      ctx.closePath();
+    };
+    ctx.save();
+    ctx.beginPath();
+    quadAt(-1, 2, -1, 2);
+    quadAt(COUNTER_KEEP.t0, COUNTER_KEEP.t1, COUNTER_KEEP.k0, COUNTER_KEEP.k1);
+    ctx.clip('evenodd');
   }
 
   /** How near water a tile stands, nought to one, for what greens beside it: kept a few seconds, so a pond dug is seen. */
@@ -7082,6 +7280,67 @@ export class Renderer {
     return v;
   }
 
+  /**
+   * A shop counter in its wall (`counter.ts`), a half at a time: `inside`,
+   * the opening, in the hole before the hour's light goes over the wall --
+   * the shop from the street, or the reveal from within it; `front`, the
+   * board, the goods and the awning, over everything on the face once the
+   * wall is done -- from within, only as far as they are seen through the
+   * opening; and `flat`, both on a wall drawn in flat colours, which has no
+   * hole to see through.
+   *
+   * At the four turns where a wall runs straight away from the camera its
+   * face has no width on the screen and neither has the opening, so nothing
+   * is clipped to it: the board and the awning stand out of the wall to the
+   * street's side, and are seen from either side of it.
+   */
+  private drawCounterPart(stage: 'inside' | 'front' | 'flat', wall: Wall, border: Border, g: WallGeom, zoom: number, lit: number,
+    paint: { line: CounterLook['line']; reveal: CounterLook['reveal']; wood: CounterLook['wood']; woodLine: CounterLook['woodLine'] }): void {
+    const ctx = this.canvas.ctx;
+    const game = this.game;
+    const cam = this.camera;
+    const c = game.counters.onBorder(border);
+    const seat = c ?? counterSeat(game, wall);
+    const st = streetOf(seat);
+    // The tile on the camera's side of the border, as `drawWall` works it out.
+    const [bx, by] = border.dir === 'h' ? [1, 0] : [0, 1];
+    const toward = cam.nearSide(-by, bx);
+    const edgeOn = this.edgeOn(border);
+    const seenX = border.dir === 'h' ? border.x : (toward > 0 ? border.x - 1 : border.x);
+    const seenY = border.dir === 'h' ? (toward > 0 ? border.y : border.y - 1) : border.y;
+    // A room with a floor or a roof over it is dim behind the opening; one open to the sky is daylit.
+    const over = game.buildings.floor(wall.level + 1, seat.x, seat.y);
+    const look: CounterLook = {
+      zoom, lit, ...paint,
+      street: seenX === st.x && seenY === st.y ? 1 : -1,
+      stripe: stripeOf(seat.x, seat.y, seat.side),
+      wares: c ? counterWares(c) : [],
+      full: c ? Math.min(1, counterHeld(c) / COUNTER_HOLDS) : 0,
+      // Only the room behind the opening is lit from within, and only from the street is it seen.
+      alight: stage !== 'front' ? this.lampBehind(wall, border) : 0,
+      sky: !over || !isDone(over),
+    };
+    /** From within, what lies beyond the wall is seen through the far side of the opening and no further: edge on, there is no opening to see it through. */
+    const beyond = look.street < 0 && !edgeOn;
+    const dpr = this.canvas.dpr;
+    if (stage === 'inside') {
+      ctx.save();
+      counterHole(ctx, g, 1);
+      ctx.clip();
+      if (look.street > 0) drawCounterInside(ctx, g, look);
+      else drawCounterReveal(ctx, g, look);
+      ctx.restore();
+    } else if (stage === 'front') {
+      drawCounterFrontKept(ctx, g, look, beyond, dpr);
+    } else if (look.street > 0) {
+      drawCounterInside(ctx, g, look);
+      drawCounterFrontKept(ctx, g, look, false, dpr);
+    } else {
+      drawCounterDaylight(ctx, g, look);
+      drawCounterFrontKept(ctx, g, look, beyond, dpr);
+    }
+  }
+
   /** The hole in a wall, whatever the wall is made of. */
   private wallOpenings(wall: Wall, mat: MaterialDef, lit: number, g: WallGeom, zoom: number, border: Border): void {
     switch (wall.type) {
@@ -7090,6 +7349,9 @@ export class Renderer {
         break;
       case 'bay':
         this.wallOpening(mat, lit, g, BAY.t0, BAY.t1, BAY.k0, BAY.k1, 'glass', zoom, this.lampBehind(wall, border));
+        break;
+      case 'counter':
+        this.drawCounterPart('flat', wall, border, g, zoom, lit, { line: mat.trim, reveal: mat.color, wood: COUNTER_OAK, woodLine: COUNTER_OAK_INK });
         break;
       case 'door':
         this.wallOpening(mat, lit, g, DOOR.t0, DOOR.t1, 0, DOOR.k1, 'door', zoom);
@@ -8858,7 +9120,16 @@ export class Renderer {
           ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
         }
       } else {
-        const night = this.nightLayer();
+        const W = this.canvas.width, H = this.canvas.height;
+        const lit = this.lightLayers(lights, W, H);
+        /*
+         * The wash is one colour, so the night is mixed at the size its holes
+         * were worked out at and laid over the screen scaled up -- unless
+         * something with a light of its own is in view, whose holes are fine
+         * work (an altar's stars and lines), and then at full size.
+         */
+        const res = this.glows.length ? 1 : LIGHT_RES;
+        const night = this.nightLayer(res);
         const nc = night.getContext('2d') as CanvasRenderingContext2D;
         nc.setTransform(1, 0, 0, 1, 0, 0);
         nc.globalCompositeOperation = 'source-over';
@@ -8867,23 +9138,11 @@ export class Renderer {
           nc.fillStyle = `rgba(${wash.colour}, ${wash.alpha.toFixed(3)})`;
           nc.fillRect(0, 0, night.width, night.height);
         }
+        // What the lights leave of it (`lightLayers`).
+        nc.globalCompositeOperation = 'destination-in';
+        if (res === LIGHT_RES) nc.drawImage(lit.mask, 0, 0);
+        else nc.drawImage(lit.mask, 0, 0, lit.mask.width / LIGHT_RES, lit.mask.height / LIGHT_RES);
         nc.globalCompositeOperation = 'destination-out';
-        for (const l of lights) {
-          const h = w.heightAt(l.x, l.y);
-          const sx = cam.worldToScreenX(l.x, l.y);
-          const sy = cam.worldToScreenY(l.x, l.y, h);
-          // A flame is never steady; a candle behind cloth very nearly is.
-          const r = Math.max(8, l.radius * HALF_W * zoom * this.flicker(l));
-          if (sx < -r || sy < -r || sx > night.width + r || sy > night.height + r) continue;
-          const grad = nc.createRadialGradient(sx, sy, 0, sx, sy, r);
-          grad.addColorStop(0, `rgba(0,0,0,${l.strength.toFixed(2)})`);
-          grad.addColorStop(0.55, `rgba(0,0,0,${(l.strength * 0.55).toFixed(2)})`);
-          grad.addColorStop(1, 'rgba(0,0,0,0)');
-          nc.fillStyle = grad;
-          nc.beginPath();
-          nc.arc(sx, sy, r, 0, Math.PI * 2);
-          nc.fill();
-        }
         // And off whatever has a light of its own, where it was drawn this frame.
         for (const n of this.glows) {
           for (const h of furnitureHoles(n.sx, n.sy, zoom, n.kind, n.view)) {
@@ -8898,23 +9157,16 @@ export class Renderer {
           }
         }
         nc.globalCompositeOperation = 'source-over';
-        ctx.drawImage(night, 0, 0);
-        // A warm cast where the firelight actually falls, over the cold.
-        ctx.globalCompositeOperation = 'lighter';
-        for (const l of lights) {
-          const h = w.heightAt(l.x, l.y);
-          const sx = cam.worldToScreenX(l.x, l.y);
-          const sy = cam.worldToScreenY(l.x, l.y, h);
-          const r = Math.max(8, l.radius * HALF_W * zoom * this.flicker(l));
-          if (sx < -r || sy < -r || sx > this.canvas.width + r || sy > this.canvas.height + r) continue;
-          const cast = l.cast ?? '255, 186, 92';
-          const warm = ctx.createRadialGradient(sx, sy, 0, sx, sy, r);
-          warm.addColorStop(0, `rgba(${cast}, ${((l.castAlpha ?? 0.16 * l.strength) * dark).toFixed(3)})`);
-          warm.addColorStop(1, `rgba(${cast}, 0)`);
-          ctx.fillStyle = warm;
-          ctx.beginPath();
-          ctx.arc(sx, sy, r, 0, Math.PI * 2);
-          ctx.fill();
+        ctx.drawImage(night, 0, 0, night.width / res, night.height / res);
+        // A warm cast where the firelight actually falls, over the cold: the warmest light's at each spot, as dark as
+        // it is, and only over the part of the screen any light reaches -- the rest of the layer is black.
+        const [bx, by, bw, bh] = lit.box;
+        if (bw > 0 && bh > 0) {
+          ctx.globalCompositeOperation = 'lighter';
+          ctx.globalAlpha = dark;
+          ctx.drawImage(lit.warm, bx, by, bw, bh, bx / LIGHT_RES, by / LIGHT_RES, bw / LIGHT_RES, bh / LIGHT_RES);
+          ctx.globalAlpha = 1;
+          ctx.globalCompositeOperation = 'source-over';
         }
         ctx.globalCompositeOperation = 'source-over';
         // And glass with a light burning under it, glowing through the dark (`glazing.ts`).
@@ -9026,6 +9278,8 @@ export class Renderer {
   }
 
   private pieceTrim(f: PlacedFurniture): number | undefined {
+    // A lantern post or pillar, with its lantern in it or without (`lamps.ts`).
+    if (isLampPiece(f)) return f.lamp ? 1 : 0;
     // An arch's roses: their variety, which is its place's, and how far they have grown (`roses.ts`).
     if (FURNITURE_BY_ID.get(f.kind)?.roses) {
       const r = roseStage(f.setAt, this.game.wallNow());

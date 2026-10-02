@@ -14,6 +14,10 @@ import { BRIDGES, CLEARANCE, END_SLOP } from '../../game/bridges';
 import { HOARD_LUMPS, HOARD_MORE } from '../../game/butcher';
 import { floorBill, GLASS_ROOF, INDOORS_DECAY, MATERIALS as WALL_MATERIALS, MAX_LEVELS, roofShapeDef, roofShapeOf, SIDE_NAMES, wallBill, WALL_TYPE_BY_ID, WALL_TYPES } from '../../game/building';
 import { materialName } from '../../game/buildActions';
+import { COUNTER_HOLDS, COUNTER_REACH, COUNTER_SEEN, COUNTER_WALL } from '../../game/counters';
+import { flameSources } from '../../game/lantern';
+import { LAMP_INTO_WALL } from '../../game/lamps';
+import { STORE_REACH } from '../../game/crates';
 import { GREEN_ACTIONS, GREEN_DAY, GREEN_DAYS, GREEN_SHADE, GREEN_SUN, GREEN_WET, GREEN_WET_REACH } from '../../game/greening';
 import { FIRE_COST, FIRE_SUBTILES } from '../../game/campfire';
 import {
@@ -184,6 +188,9 @@ const STEPS_A_TRIP = 2;
 const TRIPS_A_DAY = [1, 2] as const;
 /** How much of one of the four a thing feeds. */
 const feeds = (id: string, nutrient: string): number => (itemDef(id).feeds as Record<string, number> | undefined)?.[nutrient] ?? 0;
+/** A shop counter's wall type, and the hinges it is hung with (`counters.ts`). */
+const COUNTER_TYPE = WALL_TYPE_BY_ID.get(COUNTER_WALL) ?? { factor: 1, fittings: [] as Array<[string, number]> };
+const counterHinges = COUNTER_TYPE.fittings?.find(([id]) => id === 'hinge')?.[1] ?? 0;
 /** The best anything can be made, and the roughest. */
 const TOP_QL = 100;
 const LOW_QL = 1;
@@ -1039,6 +1046,39 @@ export function helpText(): string {
     <p>A stack <b>dragged</b> out of the inventory window and let go over a crate, a cart, a wagon or a
     piece that holds things goes into it whole, under the same rules as <b>Put away</b>. If it is out of
     reach you walk to it first. A trash crate and a market stall do not take a drop.</p>
+    <h3>Shop counters</h3>
+    <p>A <b>shop counter</b> is a wall with a market stall in it. Plan it as any wall &mdash; <b>Plan wall</b>,
+    <b>Shop counter</b>, in any of the ${numberWord(WALL_MATERIALS.length)} materials &mdash; and build it with ${share(COUNTER_TYPE.factor ?? 1)} of a solid wall's
+    material and ${countOf('hinge', counterHinges)}: in log, ${numberWord(wallBill('log', 'counter').needed.log ?? 0)} logs where a solid log wall takes ${numberWord(wallBill('log', 'solid').needed.log ?? 0)}.
+    It goes only in a wall of the <b>ground floor</b> with no building across it: that side is its <b>street</b>, and once
+    a counter is planned there no building is planned or added onto that tile. Nothing walks through it, a storey stands on it as on
+    any wall, and it does not block sight.</p>
+    <p>Whoever planned it keeps it. Within <b>${COUNTER_REACH} tiles</b> of the middle of its wall, on either side, choose
+    <b>Set out on the counter</b> on a thing in your pack or drag the stack onto the counter: it holds
+    <b>${numberWord(COUNTER_HOLDS)} things</b>, as a stall does, and a creature crate is the one piece of furniture that goes on it.
+    Price each thing on the <b>Stall</b> tab of the <b>Market</b> window; a thing set out is not for sale until it has a price.
+    Anybody else buys from the <b>street only</b>, within the same ${COUNTER_REACH} tiles: on the far side of the wall's line from the
+    house, and not inside any building, the shop's other rooms and the house next door included. Right-click beside the counter and
+    choose <b>Buy</b> (<b>Buy from</b> its keeper's counter, where more than one counter sells onto the tile), or <b>Look at</b> it and press <b>Buy</b>
+    on a thing. What is on it, and at what price, is seen from within <b>${numberWord(COUNTER_SEEN)} tiles</b>; from further off,
+    only how many things. The silver goes into its <b>till</b>, which its
+    keeper empties from either side with <b>Take the takings</b>, and things come back off it with <b>Take</b>. The wall cannot
+    be taken down while anything is on it or in its till.</p>
+    <h3>Lantern posts</h3>
+    <p>A <b>lantern post</b> (${bill('make_lamp_post')} &mdash; ${workedAt('make_lamp_post')}) is a timber post with an iron arm to
+    hang a lantern on; a <b>lantern pillar</b> (${bill('make_lamp_pillar')} &mdash; ${workedAt('make_lamp_pillar')}) is a stone one
+    that takes the lantern in its top. Each is set down like furniture and gives no light of its own.</p>
+    <p>Within <b>${STORE_REACH} tiles</b> of one, choose <b>Hang a lantern on it</b> or <b>Set a lantern in it</b> to fit a lantern from your pack &mdash;
+    the best you carry, or the one you choose &mdash; and from then on it is that lantern to every rule: <b>Put a candle in</b>
+    when it has none, <b>Strike a light</b> at a fire or off something alight in your hand, <b>Put it out</b>, and it burns its
+    candle only while lit, <b>${spanWords(candleBurn(LOW_QL))}</b> to a candle in the roughest lantern and <b>${spanWords(candleBurn(TOP_QL))}</b>
+    in the best. Lit, at night it lights the ground round it out to the lantern's reach, <b>${numberWord(lanternReach(LOW_QL))} to
+    ${numberWord(lanternReach(TOP_QL))} tiles</b>, for everybody, and that ground is in sight from as far off as you can see.
+    <b>Take the lantern down</b> and it comes back to your pack with the candle it had left, alight if it was. A post with its
+    lantern in it cannot be picked up.</p>
+    <p>A <b>padlock</b> on a post or a pillar keeps its lantern: without the key nobody fits one, takes it down, puts a candle in,
+    puts it out or picks the piece up. Anybody may <b>strike a light</b> in it. A post is not set down with its arm and lantern
+    reaching into a wall beside it: <i>${LAMP_INTO_WALL}</i> <b>Turn it</b> goes on round past such a facing.</p>
     <h3>Calling things by name</h3>
     <p>A settlement of any age has bins, crates and a row of chests, and every one of them is
     called <i>Raw material bin (oak)</i>. Any crate, bin, chest, cart, piece of furniture, work post or trap
@@ -1483,11 +1523,11 @@ export function helpText(): string {
     done it is gone &mdash; there is nothing left to refill. What it has over a lantern is that anybody
     can wind one in the first hour of a new island, which is exactly when the dark is worst.</p>
     <p>A <b>lantern</b> (${bill('make_lantern')} &mdash; ${workedAt('make_lantern')}) takes a <b>candle</b>
-    drawn from beeswax and yarn. A better one keeps the draught off the flame and throws further:
+    (${bill('make_candle')} &mdash; ${workedAt('make_candle')}). A better one keeps the draught off the flame and throws further:
     <b>${numberWord(lanternReach(LOW_QL))} tiles and ${spanWords(candleBurn(LOW_QL))}</b> to a candle at the roughest,
     <b>${numberWord(lanternReach(TOP_QL))} tiles and ${spanWords(candleBurn(TOP_QL))}</b> at the best.</p>
-    <p>Either is <b>lit at a fire</b> &mdash; a campfire, a kiln, a smelter or an oven you are standing
-    at, or off something already alight in your own hand. Both burn <b>only while lit</b>, so carrying a
+    <p>Either is <b>lit at anything burning</b> you are standing at &mdash; a ${flameSources()} &mdash;
+    or off something already alight in your own hand. Both burn <b>only while lit</b>, so carrying a
     dark lantern costs nothing but its weight, and both say so when they go out.</p>
     <p>Carrying one lit gives back <b>${share(LIGHT_GIVES_BACK)}</b> of what the dark takes from your sight, and its
     own reach is a <b>floor</b> under your sight however black it gets: you can always see as far as the
@@ -1497,6 +1537,8 @@ export function helpText(): string {
     light of their own as far as it reaches &mdash; ${listed(GLOWING.map((s) => `a ${s.name.toLowerCase()} ${numberWord(s.glow ?? 0)}`))}.
     Each one burns a soft-edged hole in the night with a little firelight in it. None of this is worked
     out at all while the sun is up.</p>
+    <p>A lantern hung on a <b>lantern post</b> or set in a <b>lantern pillar</b> stays where it is put and lights the ground round
+    it for everybody, as far as it throws from your hand: see <i>Lantern posts</i>.</p>
     <h3>Night, and a bed to wake in</h3>
     <p>The island keeps a clock, shown beside your position: a full day and night passes in
     <b>${spanWords(DAY_SECONDS)}</b> of real time, ${spanWords(DAY_SECONDS / 24)} to the game hour. The sun goes down at

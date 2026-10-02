@@ -5,7 +5,8 @@
  */
 import { fill } from './words';
 
-export type WallType = 'solid' | 'window' | 'bay' | 'door' | 'double_door' | 'arch' | 'fence' | 'fence_gate' | 'half_wall' | 'iron_gate';
+export type WallType = 'solid' | 'window' | 'bay' | 'door' | 'double_door' | 'arch' | 'fence' | 'fence_gate' | 'half_wall' | 'iron_gate'
+  | 'counter';
 
 export interface WallTypeDef {
   id: WallType;
@@ -82,6 +83,14 @@ export const WALL_TYPES: WallTypeDef[] = [
   // Bound in iron: it swings for a person and holds against everything else.
   { id: 'iron_gate', name: 'Iron-bound gate', factor: 0.5, passable: true, wide: true, height: 0.6, low: true, railed: true, standalone: true, beastProof: true, fittings: [['hinge', 4], ['bracket', 8]] },
   { id: 'half_wall', name: 'Half wall', factor: 0.5, passable: false, height: 0.5, low: true, standalone: true, thick: 1.25 },
+  /*
+   * A shop counter: a board at waist height in an opening in the wall, the
+   * wall carried over it on a lintel so a storey still stands on it, and an
+   * awning over the opening on two arms that swing on the hinges. Nobody goes
+   * through it and the eye goes over it. What it sells and who may buy is
+   * `counters.ts`.
+   */
+  { id: 'counter', name: 'Shop counter', factor: 0.75, passable: false, fittings: [['hinge', 2]] },
 ];
 export const WALL_TYPE_BY_ID = new Map(WALL_TYPES.map((w) => [w.id, w]));
 /** Whether a wall type is waist-high work that nothing can be built over. */

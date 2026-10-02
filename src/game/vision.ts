@@ -3,6 +3,7 @@ import { isDone, WALL_TYPE_BY_ID } from './building';
 import { bloodMul } from './creatures';
 import type { Game } from './game';
 import { heldReach } from './light';
+import { isLampPiece, lampAt, lampBurning, lampReach } from './lamps';
 import { KEEN_SIGHT } from './meditation';
 
 /**
@@ -235,7 +236,12 @@ export class Vision {
     for (const f of g.campfires.values()) if (f.lit) this.cast(next, f.x + 0.5, f.y + 0.5, FIRE_SIGHT, mark);
     for (const s of g.smelters.values()) if (s.lit) this.cast(next, s.x + 0.5, s.y + 0.5, FIRE_SIGHT, mark);
     for (const k of g.kilns.values()) if (k.lit) this.cast(next, k.x + 0.5, k.y + 0.5, FIRE_SIGHT, mark);
-    for (const f of g.furniture.values()) if (f.lit) this.cast(next, f.x + 0.5, f.y + 0.5, FIRE_SIGHT, mark);
+    for (const f of g.furniture.values()) {
+      // A lantern post shows the ground out to its lantern's reach (`lamps.ts`); anything else alight, a fire's.
+      if (isLampPiece(f)) {
+        if (lampBurning(f)) this.cast(next, ...lampAt(f), lampReach(f), mark);
+      } else if (f.lit) this.cast(next, f.x + 0.5, f.y + 0.5, FIRE_SIGHT, mark);
+    }
 
     // Only the ground that was in sight last time or is in sight now can have
     // changed, so the work stays the size of a viewshed however big the map

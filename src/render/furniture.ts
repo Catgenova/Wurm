@@ -9,6 +9,7 @@ import { star } from './shine';
 import { ROSE_BUD, ROSE_FLOWER, ROSE_LEAFY } from '../game/roses';
 import { VIEWS } from './view';
 import { MOSS, hashOf } from './ivy';
+import { LAMP_ARM, LAMP_GLASS, LAMP_HANG } from '../game/lamps';
 
 /**
  * Furniture, built rather than drawn.
@@ -2223,6 +2224,32 @@ const LIVE: Record<string, typeof drawSky> = { altar: drawSky };
 const HOLES: Record<string, typeof skyHoles> = { altar: skyHoles };
 
 /**
+ * The bloom round a lantern burning on a post or a pillar, drawn over its
+ * bake as the dark comes on (`dark`, 0 to 1): warm light round the panes, in
+ * the scene rather than over it, so a roof or a wall in front of the lantern
+ * hides it as it hides the lantern. The ground round it is the light's own
+ * (`lampLight`), and the lantern itself stands in that.
+ */
+export function drawLampBloom(ctx: CanvasRenderingContext2D, sx: number, sy: number, zoom: number, kind: string, view: PieceView, dark: number): void {
+  const at = furnitureDef(kind).lamp;
+  if (!at || dark <= 0.02) return;
+  const out = at === 'arm' ? LAMP_ARM : 0, up = LAMP_HANG[at];
+  const x = sx + out * view.vx * zoom, y = sy + (out * view.vy - up * HEIGHT_SCALE) * zoom;
+  const R = 26 * zoom;
+  const g = ctx.createRadialGradient(x, y, 0, x, y, R);
+  g.addColorStop(0, `rgba(255, 220, 150, ${(0.62 * dark).toFixed(3)})`);
+  g.addColorStop(0.28, `rgba(255, 204, 128, ${(0.22 * dark).toFixed(3)})`);
+  g.addColorStop(1, 'rgba(255, 196, 120, 0)');
+  const was = ctx.globalCompositeOperation;
+  ctx.globalCompositeOperation = 'lighter';
+  ctx.fillStyle = g;
+  ctx.beginPath();
+  ctx.arc(x, y, R, 0, TAU);
+  ctx.fill();
+  ctx.globalCompositeOperation = was;
+}
+
+/**
  * Whatever on a piece moves, drawn over its bake as it is this frame -- for
  * most pieces, nothing. `drawFurniture` draws it too unless it is told not
  * to, which the renderer does when it wants the piece's ring under the
@@ -2342,6 +2369,72 @@ const mossTop = (sc: Scene, m: Mossed, salt: number) => (F: FaceAt, w: number, h
 /** Two decorations one after the other, the first what the face already had. */
 const both = (a: ((F: FaceAt, w: number, h: number) => void) | null | undefined, b: ((F: FaceAt, w: number, h: number) => void) | null | undefined) =>
   (F: FaceAt, w: number, h: number): void => { a?.(F, w, h); b?.(F, w, h); };
+
+/* ---- a lantern that stays where it is put (`lamps.ts`) ---------------------------- */
+
+/** The panes of a lantern that is burning, and of one that is not. */
+const PANE_LIT = paintOf(hex('#ffdc85'), 0.45);
+const PANE_DARK: Paint = { body: hex('#9db3bc'), ink: hex('#34323b') };
+
+/**
+ * A street lantern with its middle at `at`, `k` times the size of the one on
+ * a post: a square iron frame with a pane in each side, standing on a plate,
+ * under a pyramid cap with a ring on it to hang it by. Lit, its panes are the
+ * candle's colour, with a candle flame in the middle of them that leans with
+ * `frame`, and a halo round the whole of it. One part, drawn in the one order,
+ * so nothing of the post sorts into the middle of it.
+ */
+/** How far the top of a street lantern's ring stands over its middle, `k` times the post's: what it is hung from. */
+const lanternTop = (k: number): number => 1.7 * k + 1.7 * k + 1 * k;
+
+function streetLantern(sc: Scene, at: V3, k: number, lit: boolean, frame: number): void {
+  const [cx, cy, cz] = at;
+  const r = 1.2 * k, h = 3.4 * k, z0 = cz - h / 2, z1 = cz + h / 2;
+  const capTop = z1 + 1.7 * k, ring = 0.5 * k;
+  sc.part(cx - r - 0.2, cx + r + 0.2, cy - r - 0.2, cy + r + 0.2, z0 - 0.4 * k, capTop + ring * 2, () => {
+    const g = sc.g;
+    if (lit) {
+      // The light round it: drawn first, so the frame and the panes stand in it.
+      const [hx, hy] = sc.P(cx, cy, cz);
+      const R = 9 * k;
+      const halo = g.createRadialGradient(hx, hy, 0, hx, hy, R);
+      halo.addColorStop(0, 'rgba(255, 214, 140, 0.55)');
+      halo.addColorStop(0.45, 'rgba(255, 196, 110, 0.18)');
+      halo.addColorStop(1, 'rgba(255, 190, 100, 0)');
+      g.fillStyle = halo;
+      g.beginPath(); g.arc(hx, hy, R, 0, TAU); g.fill();
+    }
+    // The plate it stands on, and the panes in their frame.
+    sc.drawBox(cx - r - 0.2, cx + r + 0.2, cy - r - 0.2, cy + r + 0.2, z0 - 0.4 * k, z0, IRON);
+    const bars = (F: FaceAt, w: number, hh: number): void => {
+      // A bar up the middle of each pane and one across, in the frame's iron.
+      sc.line(F(w / 2, 0), F(w / 2, hh), rgb(IRON.body, lit ? 0.7 : 1), sc.ink * 0.9);
+      sc.line(F(0, hh * 0.62), F(w, hh * 0.62), rgb(IRON.body, lit ? 0.7 : 1), sc.ink * 0.9);
+      if (lit) {
+        // And the candle behind it, a bright drop low in the pane.
+        const lean = [0, 0.12, -0.08, 0.05][frame % 4];
+        const [fx, fy] = F(w / 2 + lean, hh * 0.32);
+        const fl = g.createRadialGradient(fx, fy, 0, fx, fy, 1.6 * k * HEIGHT_SCALE);
+        fl.addColorStop(0, 'rgba(255, 252, 228, 0.95)');
+        fl.addColorStop(1, 'rgba(255, 236, 170, 0)');
+        g.fillStyle = fl;
+        g.beginPath(); g.arc(fx, fy, 1.6 * k * HEIGHT_SCALE, 0, TAU); g.fill();
+      }
+    };
+    const glass = lit ? PANE_LIT : PANE_DARK;
+    sc.drawBox(cx - r, cx + r, cy - r, cy + r, z0, z1, glass, { front: bars, back: bars, left: bars, right: bars, top: () => undefined });
+    // The cap: four faces up to a point, overhanging the panes a little, and the ring on its top.
+    const o = r + 0.35 * k;
+    const apex: V3 = [cx, cy, capTop];
+    const corners: V3[] = [[cx - o, cy - o, z1], [cx + o, cy - o, z1], [cx + o, cy + o, z1], [cx - o, cy + o, z1]];
+    const faces = corners.map((c, i) => ({ q: [c, corners[(i + 1) % 4], apex] as V3[], n: [[0, -1], [1, 0], [0, 1], [-1, 0]][i] }));
+    for (const f of faces) if (sc.faces(f.n[0], f.n[1], 0.8)) sc.drawPanel(f.q, IRON);
+    const [rx, ry] = sc.P(cx, cy, capTop + ring);
+    g.strokeStyle = rgb(IRON.ink);
+    g.lineWidth = Math.max(0.9, sc.ink * 1.1);
+    g.beginPath(); g.ellipse(rx, ry, ring * 1.3, ring * HEIGHT_SCALE * 0.9, 0, 0, TAU); g.stroke();
+  });
+}
 
 /* ---- the pieces --------------------------------------------------------------- */
 
@@ -3545,6 +3638,51 @@ const MODELS: Record<string, Model> = {
       },
     });
     if (lit) sc.fire([0, 0, 7.7], 5.6, 7.6, frame);
+  },
+  /*
+   * A lantern post (`lamps.ts`): a square timber post set in a dressed stone
+   * foot, a cap on its head, and an iron arm bolted across the head toward
+   * its front with a brace under it and a hook off the end. On the hook, once
+   * one is fitted (`trim` 1), the lantern -- where the light falls from,
+   * `LAMP_ARM` out and `LAMP_HANG.arm` up -- and with none, or set down new
+   * from the hand, the empty hook.
+   */
+  lamp_post: ({ sc, wood, lit, trim, frame }) => {
+    sc.shadows = [[-1.9, 1.9, -1.9, 1.9]];
+    // The arm just over the lantern's ring, and the post's head just over the arm: under the eaves of one storey (`LAMP_HANG`).
+    const ringTop = LAMP_HANG.arm + lanternTop(LAMP_GLASS);
+    const post = 0.8, armZ = ringTop + 0.3, head = armZ + 0.6;
+    sc.box(-1.7, 1.7, -1.7, 1.7, 0, 1.5, STONE, { top: grain(sc, STONE, 1, true, 0.15) });
+    sc.box(-post, post, -post, post, 1.5, head, wood, {
+      front: grain(sc, wood, 2, false), back: grain(sc, wood, 2, false), left: grain(sc, wood, 2, false), right: grain(sc, wood, 2, false),
+    });
+    // The cap over the end grain, so the rain runs off it.
+    sc.box(-post - 0.25, post + 0.25, -post - 0.25, post + 0.25, head, head + 0.7, wood);
+    // The arm, the brace under it, and the hook down to the lantern's ring.
+    const out = LAMP_ARM + 0.4;
+    sc.rod([0, post, armZ], [0, out, armZ], 0.3, IRON);
+    sc.rod([0, post, armZ - 3.6], [0, LAMP_ARM * 0.62, armZ - 0.1], 0.2, IRON);
+    sc.rod([0, LAMP_ARM, armZ], [0, LAMP_ARM, ringTop - 0.2], 0.14, IRON);
+    if (trim === 1) streetLantern(sc, [0, LAMP_ARM, LAMP_HANG.arm], LAMP_GLASS, lit, frame);
+  },
+  /*
+   * A lantern pillar: a square shaft of coursed stone on a plinth, under a
+   * capital, and on its top an iron socket the lantern stands in -- a larger
+   * one than a post's, its middle `LAMP_HANG.top` up, over the middle of the
+   * pillar where the light falls from.
+   */
+  lamp_pillar: ({ sc, lit, trim, frame }) => {
+    sc.shadows = [[-2.7, 2.7, -2.7, 2.7]];
+    const coursed = bricks(sc, STONE, 2.5);
+    const k = 1.3, foot = LAMP_HANG.top - (3.4 * k) / 2 - 0.4 * k;
+    sc.box(-2.5, 2.5, -2.5, 2.5, 0, 2, STONE, { front: coursed, back: coursed, left: coursed, right: coursed });
+    sc.box(-2.15, 2.15, -2.15, 2.15, 2, 2.7, STONE);
+    sc.box(-1.7, 1.7, -1.7, 1.7, 2.7, foot - 2, STONE, { front: coursed, back: coursed, left: coursed, right: coursed });
+    sc.box(-2.3, 2.3, -2.3, 2.3, foot - 2, foot - 1, STONE);
+    sc.box(-1.95, 1.95, -1.95, 1.95, foot - 1, foot - 0.5, STONE);
+    // The socket: an iron collar on the stone, which holds the lantern or stands empty.
+    sc.box(-1.4, 1.4, -1.4, 1.4, foot - 0.5, foot, IRON);
+    if (trim === 1) streetLantern(sc, [0, 0, LAMP_HANG.top], k, lit, frame);
   },
   altar: ({ sc }) => {
     // The dressed stone of the step, capital and slab, a shade off white and inked like the rest of the masonry.

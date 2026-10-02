@@ -32,6 +32,17 @@ export interface LightSource {
 export const CANDLE_BURN = world(22 * 60);
 
 /**
+ * What candles are drawn from, and how many to a go: the recipe's numbers
+ * (`make_candle` reads them), kept here beside how long one burns so that
+ * a lantern can say what one is made of without the recipes, which come
+ * round to the lantern's own file through the actions.
+ */
+export const CANDLE_DRAWN: { count: number; inputs: Array<{ item: string; count?: number }> } = {
+  count: 2,
+  inputs: [{ item: 'wax', count: 2 }, { item: 'yarn' }],
+};
+
+/**
  * How long a candle lasts in this lantern. A well-made lantern keeps the
  * draught off the flame, so the same candle goes half again as far in a good
  * one as in a rough one.

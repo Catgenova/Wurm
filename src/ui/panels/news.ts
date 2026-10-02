@@ -1,11 +1,16 @@
-import { floorBill, GLASS_ROOF, INDOORS_DECAY, MATERIAL_BY_ID, roofShapeDef, roofShapeOf } from '../../game/building';
+import { floorBill, GLASS_ROOF, INDOORS_DECAY, MATERIAL_BY_ID, roofShapeDef, roofShapeOf, WALL_TYPE_BY_ID } from '../../game/building';
 import { materialName } from '../../game/buildActions';
+import { COUNTER_HOLDS, COUNTER_REACH, COUNTER_WALL } from '../../game/counters';
+import { candleBurn, lanternReach } from '../../game/light';
+import { flameSources } from '../../game/lantern';
+import { WORLD_PACE } from '../../game/pace';
+import { SKILL_BY_ID } from '../../game/skills';
 import { TILE_DEFS, TileType, TREE_AGES, TREE_DAWN_UTC, TREE_DEFS } from '../../world/tiles';
 import { SEASON_DAYS, seasonLine, YEAR_DAYS, YEAR_FROM } from '../../world/calendar';
 import { BLOOMS, BUSH_FLOWER_FROM, evergreen, LEAF_DAYS, SHED_DAYS, TURN_DAYS } from '../../render/foliage';
 import { lifeSeasons } from '../../render/life';
 import { furnitureDef, liquidCapacity, POND_EVERY, type PlacedFurniture } from '../../game/furniture';
-import { billWords, type Item } from '../../game/items';
+import { billWords, countOf, type Item } from '../../game/items';
 import { INGOT_LUMPS, INGOT_WEIGHT, MOULD_BY_ID } from '../../game/metal';
 import { meltLumps } from '../../game/melt';
 import { ORDER_LIFE } from '../../game/orders';
@@ -104,6 +109,10 @@ const pct = (k: number): string => `${Math.round(k * 100)}%`;
 /** "a, b or c". */
 const either = (parts: string[]): string =>
   parts.length > 1 ? `${parts.slice(0, -1).join(', ')} or ${parts[parts.length - 1]}` : (parts[0] ?? '');
+/** A shop counter's wall type (`counters.ts`), for what entry 70 says it costs. */
+const counterType = () => WALL_TYPE_BY_ID.get(COUNTER_WALL);
+/** The skill a recipe is worked at, by name. */
+const skillOf = (id: string): string => (SKILL_BY_ID.get(RECIPE_BY_ID.get(id)?.skill ?? '')?.name ?? '').toLowerCase();
 
 export const NEWS: News[] = [
   {
@@ -860,6 +869,16 @@ export const NEWS: News[] = [
         `When the last pane or the last wall goes in, whatever already grows in the building carries on from as far into its stage as it had grown, at the glasshouse's pace; take a tile of the roof or a wall down, or add a tile to the footprint, and it carries on at a field's pace from there. A glasshouse is indoors, and what is left lying in it rots at ${share(INDOORS_DECAY)} of the rate in the open.`,
       ];
     },
+  },
+  {
+    n: 70,
+    day: '2026-10-02',
+    lines: () => [
+      `Shop counters: a wall type with a market stall in it, planned and built like any wall at ${share(counterType()?.factor ?? 1)} of a solid wall's material and ${countOf('hinge', counterType()?.fittings?.find(([id]) => id === 'hinge')?.[1] ?? 0)}. It goes in an outside wall of the ground floor with no building across it, holds ${numberWord(COUNTER_HOLDS)} things priced on the Market window's Stall tab, and sells to the street only, within ${COUNTER_REACH} tiles of its middle and not to anybody inside a building; the silver waits in its till for whoever planned it.`,
+      `Lantern posts and lantern pillars: a lantern hung on a timber post (${skillOf('make_lamp_post')}) or set in a stone pillar (${skillOf('make_lamp_pillar')}) stays where it is put, takes candles, is lit and put out as it is in your hand, and at night lights the ground round it out to the lantern's reach, ${numberWord(lanternReach(1))} to ${numberWord(lanternReach(100))} tiles, for everybody. A padlock on one keeps its lantern for the key; lighting it is anybody's.`,
+      `On an island a candle in a lantern burned ${times(WORLD_PACE)} too fast. It lasts what it does here now, ${spanWords(candleBurn(1))} to ${spanWords(candleBurn(100))} by the lantern's quality. A light taken off a brazier or a lit lantern post says which it came off, where it said an oven, and a lantern with nothing burning near it names what it can be lit at: a burning ${flameSources()}.`,
+      `Where the warm glow of two lights overlaps at night, the stronger of the two is drawn there rather than both added together.`,
+    ],
   },
 ];
 

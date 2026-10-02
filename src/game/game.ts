@@ -67,6 +67,8 @@ import { blessBonus, favourCap, FAITH, FAVOUR_TRICKLE } from './faith';
 import { ATTENTIVE, FURY_MULT, FURY_SECS, GREEN_THUMB, hasStep, IRONHIDE, MEDITATION, MEND_FLESH, SENSE_REACH, STRONG_BACK, type PathId } from './meditation';
 import { ledgerTotals, record, type Ledger } from './ledger';
 import { ALTAR_CAST, ALTAR_CAST_ALPHA, ALTAR_GLOW, ALTAR_REACH, FIRE_REACH, heldReach, HELD_LIGHTS, lanternReach, OVEN_REACH, type LightSource } from './light';
+import { counterFinished, counterInto, counterMiddle, Counters, type CountersJSON, type CounterWire } from './counters';
+import { burnLamps, isLampPiece, lampArmRefusal, lampBurning, lampFrom, lampLight, lampTurnsTo } from './lamps';
 import { helpingOf, NUTRIENTS, NUTRIENT_DECAY, NUTRIENT_NAMES, TABLE_BEST, tableMul, upkeepMul, type Nutrient } from './nutrition';
 import { strokeOf } from '../audio/sound';
 import { lockRefusal, type Lockable } from './locks';
@@ -283,6 +285,8 @@ export interface GameInit {
   fieldTime?: number;
   /** The water lilies and lotus planted here. */
   waterPlants?: WaterPlant[];
+  /** The stores behind the shop counters (`counters.ts`). */
+  counters?: CountersJSON;
   marks?: Marker[];
   hoards?: Hoard[];
   player?: { x: number; y: number; name: string; stats: Player['stats']; level?: number; equipped?: Record<string, number | null>; rested?: number; boons?: Boon[]; knacks?: Record<string, number>; nutrition?: Record<Nutrient, number>;
@@ -796,6 +800,8 @@ export class Game {
   /** Furniture by id; each covers the block of subtiles its kind takes. */
   readonly furniture = new Map<number, PlacedFurniture>();
   nextFurnitureId = 1;
+  /** What is set out on each shop counter, and its till (`counters.ts`). */
+  readonly counters = new Counters();
   /** Anvils by id; each covers four subtiles. */
   readonly anvils = new Map<number, PlacedAnvil>();
   nextAnvilId = 1;
@@ -1088,6 +1094,7 @@ export class Game {
       this.furniture.set(f.id, f);
       if (f.id >= this.nextFurnitureId) this.nextFurnitureId = f.id + 1;
     }
+    this.counters.load(init.counters);
     Object.assign(this.tally, init.tally ?? {});
     Object.assign(this.ledger, init.ledger ?? {});
     for (const id of init.ticked ?? []) this.ticked.add(id);
@@ -2251,6 +2258,11 @@ export class Game {
     for (const f of this.furniture.values()) {
       if (!near(f.x, f.y)) continue;
       const [cx, cy] = furnitureCentre(f);
+      // A lantern post throws what its lantern throws, from under the lantern (`lamps.ts`).
+      if (isLampPiece(f)) {
+        if (lampBurning(f)) out.push(lampLight(f));
+        continue;
+      }
       if (f.lit) out.push({ x: cx, y: cy, radius: OVEN_REACH, strength: 0.8 });
       else if (furnitureDef(f.kind).altar) out.push({ x: cx, y: cy, radius: ALTAR_REACH, strength: ALTAR_GLOW, steady: true, cast: ALTAR_CAST, castAlpha: ALTAR_CAST_ALPHA });
     }
@@ -2282,7 +2294,8 @@ export class Game {
       out.push({ x: cx, y: cy, heat: 0.7 });
     }
     for (const f of this.furniture.values()) {
-      if (!f.lit || !near(f.x, f.y)) continue;
+      // A candle behind glass is not a fire, and sends up no smoke.
+      if (!f.lit || isLampPiece(f) || !near(f.x, f.y)) continue;
       const [cx, cy] = furnitureCentre(f);
       out.push({ x: cx, y: cy, heat: 0.62 });
     }
@@ -2348,6 +2361,7 @@ export class Game {
       if (this.smelters.size) this.runSmelters(seconds);
       if (this.kilns.size) this.runKilns(seconds);
       if (this.furniture.size) this.runPlaceables(seconds);
+      if (this.furniture.size) burnLamps(this, seconds, true);
       if (this.posts.size) this.runPosts(seconds);
       if (this.traps.size) this.runTraps(seconds);
       if (this.crops.size || this.planted.size) this.growCrops();
@@ -2979,6 +2993,8 @@ export class Game {
     if (this.smelters.size) this.runSmelters(dt);
     if (this.kilns.size) this.runKilns(dt);
     if (this.furniture.size) this.runPlaceables(dt);
+    // A lantern post's candle, which on an island is the island's to say has gone out.
+    if (this.furniture.size) burnLamps(this, dt, !this.ask);
     if (this.posts.size) this.runPosts(dt);
     if (this.traps.size) this.runTraps(dt);
     if (this.crops.size || this.planted.size) this.growCrops();
@@ -3800,6 +3816,11 @@ export class Game {
     if (def.id === 'store_in_furniture') {
       const f = this.furniture.get(target.into);
       return f ? { x: f.x, y: f.y, centre: furnitureCentre(f) } : null;
+    }
+    // Goods set out on a counter walk to the counter first, to its keeper's side of it or the other.
+    if (def.id === 'set_out_goods') {
+      const c = counterInto(this, target);
+      return c ? { x: c.x, y: c.y, centre: counterMiddle(c) } : null;
     }
     return null;
   }
@@ -5580,6 +5601,8 @@ export class Game {
     wall.needed[item] -= 1;
     // The last of it, and the ivy starts from bare stone (`greening.ts`).
     if (isDone(wall)) wall.greenSince = greenNow();
+    // And a shop counter's store opens behind it, as it does for a builder (`counters.ts`).
+    counterFinished(this, wall);
     this.events.emit('world', wall.x, wall.y);
   }
 
@@ -6022,6 +6045,7 @@ export class Game {
     this.smelters.clear();
     this.kilns.clear();
     this.furniture.clear();
+    this.counters.clear();
     this.anvils.clear();
     this.posts.clear();
     this.traps.clear();
@@ -6072,6 +6096,9 @@ export class Game {
         };
         this.traps.set(r.id, t);
         this.placed.traps.add(t);
+      } else if (r.kind === 'counter') {
+        // What is set out on a shop counter, and for whom (`counters.ts`).
+        this.counters.saw(r as unknown as CounterWire);
       } else if (r.kind === 'furniture') {
         this.furniture.set(r.id, {
           ...at, kind: r.sub ?? 'chest', ql: r.ql ?? 20,
@@ -6102,6 +6129,8 @@ export class Game {
           creature: r.creature ?? undefined,
           // A planter's last crop, which Crop Rotation reads as it reads a field's.
           ...(typeof r.state?.sown === 'string' ? { sown: r.state.sown } : {}),
+          // A lantern post's lantern (`lamps.ts`).
+          ...lampFrom(r.state),
           /*
            * The reins and the shafts, which the island has always sent and
            * this dropped: somebody who took the reins on an island walked
@@ -6618,7 +6647,13 @@ export class Game {
         if (this.occupiedSubtile(x, y, ax + dx, ay + dy, except)) return 'Something is already standing there.';
       }
     }
-    return null;
+    // And a lantern post's arm not into a wall (`lamps.ts`).
+    return lampArmRefusal(this, kind, x, y, ax, ay, facing);
+  }
+
+  /** Which way a piece faces after a quarter turn to the right: on round past a facing a lantern post's arm would go into a wall (`lampTurnsTo`). */
+  pieceTurnsTo(f: PlacedFurniture): Side {
+    return lampTurnsTo(this, f);
   }
 
   /** The piece of storage furniture closest to the player. */

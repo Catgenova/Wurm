@@ -24,7 +24,7 @@ import { STONES_DEPTH, STONES_SLABS } from '../src/game/watergarden';
 import { WATER_PLANTS, WATER_PLANT_DEEPEST, WATER_PLANT_SHALLOWEST, WATER_ROOTING } from '../src/world/waterplants';
 import { CROP_LIST, glassExamine } from '../src/game/farming';
 import { FISH, BAITS } from '../src/game/fishing';
-import { GLASS_ROOF, WALL_TYPES, MATERIALS as BUILD_MATERIALS, ROOF_SHAPES, STOREY_SKILL, INDOORS_DECAY, INDOORS_REST, WALL_HEIGHT, LADDER_PLANKS, MAX_LEVELS, TOP_LEVELS } from '../src/game/building';
+import { GLASS_ROOF, WALL_TYPES, MATERIALS as BUILD_MATERIALS, ROOF_SHAPES, STOREY_SKILL, INDOORS_DECAY, INDOORS_REST, WALL_HEIGHT, LADDER_PLANKS, MAX_LEVELS, TOP_LEVELS, WALL_THICK } from '../src/game/building';
 import { REPOINT_BACK } from '../src/game/buildActions';
 import { CONCRETE_PER_STEP } from '../src/game/foundations';
 import { COAX_LAPSE, COAX_STEP, HERD_REACH, HUNT_HOME, HUNT_LEASH, HUNT_REST, OLD_AT, YOUNG_FOR, SITE_LOOKS, WILD_RANGE, WILD_REACH, WILD_REST, WILD_REST_SPREAD, SHOE_DAYS, SHOE_PACE, SHOE_STEP, SHOES_PER_MOUNT,
@@ -121,6 +121,14 @@ import { GLASSHOUSE_GROWTH, PLANTER_GROWTH, SEASON_GROWTH, SEASON_SECONDS, YEAR_
 import { SEASON_DAYS, SEASONS, YEAR_DAYS, YEAR_FROM } from '../src/world/calendar';
 import { PLANTER_GROWING } from '../src/game/furniture';
 import { FIELD_GLASS_ONLY, FIELD_NO_STOREY, FIELD_PACKED, GLASS, GLASS_FLOORED, GLASS_PITCHED, GLASS_ROOF_ONLY, GLASS_SLAB, FIELD_UNFLOORED, NOT_A_GLASSHOUSE, NOT_TILLABLE } from '../src/game/glasshouse';
+import {
+  COUNTER_BOUGHT_NOT_TAKEN, COUNTER_EMPTY_FIRST, COUNTER_FROM_STREET, COUNTER_FULL, COUNTER_GROUND, COUNTER_HOLDS, COUNTER_NO_PIECES,
+  COUNTER_NOT_KEEPER, COUNTER_REACH, COUNTER_SEEN, COUNTER_STREET_ONLY, COUNTER_STREET_TAKEN, sellsTooFar,
+} from '../src/game/counters';
+import {
+  LAMP_ARM_CROSSES, LAMP_ARM_REACH, LAMP_HAS_ONE, LAMP_INTO_WALL, LAMP_NO_LANTERN, LAMP_NONE, LAMP_TAKE_FIRST, lampTooFar, noCandleLine, noFlameLine,
+} from '../src/game/lamps';
+import { CANDLE_BURN } from '../src/game/light';
 
 const q = (v: unknown): string => {
   if (v === undefined || v === null) return 'null';
@@ -1829,6 +1837,42 @@ for (const [fn, v] of [
   ['not_a_glasshouse_said', NOT_A_GLASSHOUSE], ['glass_floored_said', GLASS_FLOORED], ['not_tillable_said', NOT_TILLABLE],
   ['field_glass_only_said', FIELD_GLASS_ONLY], ['field_no_storey_said', FIELD_NO_STOREY], ['glass_examine_said', glassExamine()],
   ['field_packed_said', FIELD_PACKED], ['glass_slab_said', GLASS_SLAB],
+] as Array<[string, string]>) {
+  out.push(`create or replace function ${fn}() returns text language sql immutable as $fn$ select ${q(v)} $fn$;`);
+}
+/*
+ * Shop counters and lantern posts (`counters.ts`, `lamps.ts`): how far a
+ * counter is reached from, how many things it holds and from how near what is
+ * on it is sent, the candle a lantern burns at its best (the world's pace
+ * already in it, which the island's `candle_burn` had never had), how far a
+ * post's arm and its lantern reach from its middle and how thick a wall is
+ * either side of its line, and every sentence either says to somebody, so
+ * that the island says them in the browser's words.
+ */
+for (const [fn, v] of [
+  ['counter_reach', COUNTER_REACH], ['counter_holds', COUNTER_HOLDS], ['counter_seen', COUNTER_SEEN], ['candle_burn_full', CANDLE_BURN],
+  ['lamp_arm_reach', LAMP_ARM_REACH], ['wall_half_thick', WALL_THICK],
+] as Array<[string, number]>) {
+  out.push(`create or replace function ${fn}() returns double precision language sql immutable as $fn$ select ${q(v)}::double precision $fn$;`);
+}
+/* The two sentences with a word in them -- the stall's or the counter's, the post's or the pillar's -- around the word the island puts in. */
+for (const [fn, said] of [['sells_too_far_said', sellsTooFar], ['lamp_too_far_said', lampTooFar]] as Array<[string, (w: string) => string]>) {
+  const [head, tail] = said('\u0000').split('\u0000');
+  out.push(`create or replace function ${fn}(p_word text) returns text language sql immutable as $fn$ select ${q(head)} || p_word || ${q(tail)} $fn$;`);
+}
+/* The pieces a lantern is fitted to, and where it goes on each: 'arm' or 'top' (`FurnitureDef.lamp`). */
+out.push(`create or replace function lamp_kind(p_sub text) returns text language sql immutable as $fn$ select case p_sub ${
+  FURNITURE.filter((f) => f.lamp).map((f) => `when ${q(f.id)} then ${q(f.lamp)}`).join(' ')} end $fn$;`);
+for (const [fn, v] of [
+  ['counter_ground_said', COUNTER_GROUND], ['counter_street_only_said', COUNTER_STREET_ONLY],
+  ['counter_from_street_said', COUNTER_FROM_STREET], ['counter_full_said', COUNTER_FULL],
+  ['counter_not_keeper_said', COUNTER_NOT_KEEPER], ['counter_no_pieces_said', COUNTER_NO_PIECES],
+  ['counter_empty_first_said', COUNTER_EMPTY_FIRST], ['counter_bought_said', COUNTER_BOUGHT_NOT_TAKEN],
+  ['counter_street_taken_said', COUNTER_STREET_TAKEN],
+  ['lamp_no_lantern_said', LAMP_NO_LANTERN], ['lamp_has_one_said', LAMP_HAS_ONE], ['lamp_none_said', LAMP_NONE],
+  ['lamp_take_first_said', LAMP_TAKE_FIRST], ['lamp_into_wall_said', LAMP_INTO_WALL], ['lamp_arm_crosses_said', LAMP_ARM_CROSSES],
+  // A carried lantern's and a post's alike (`lantern.ts`).
+  ['no_candle_said', noCandleLine()], ['no_flame_said', noFlameLine()],
 ] as Array<[string, string]>) {
   out.push(`create or replace function ${fn}() returns text language sql immutable as $fn$ select ${q(v)} $fn$;`);
 }

@@ -430,6 +430,8 @@ export interface Stall {
   /** Silver in the till, for your own stalls only. */
   till: number | null;
   goods: Good[];
+  /** Which it is: a market stall, or the store behind a shop counter (`counters.ts`). */
+  what?: 'stall' | 'counter';
 }
 
 /**
@@ -2756,6 +2758,17 @@ export class Island {
 
   async takings(placed: number): Promise<string | null> {
     return this.asked('rpc_takings', { p_id: placed });
+  }
+
+  /**
+   * Buy off a shop counter, or take its takings, where you stand -- and read
+   * the ground again at the quick pace, because what is on the counter and in
+   * its till rides on the ground read, and the counter is drawn from that.
+   */
+  async atCounter(go: 'buy' | 'takings', id: number): Promise<string | null> {
+    const why = go === 'buy' ? await this.buy(id) : await this.takings(id);
+    this.stirred = true;
+    return why;
   }
 
   /**

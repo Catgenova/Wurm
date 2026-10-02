@@ -11,6 +11,8 @@ import type { UIWindow } from '../windows';
 import { orderBy, sortSelect, type SortKey } from '../sorting';
 import { damageCell, nameCell, qualityCell } from '../itemcells';
 import { occupantOf } from '../../game/creaturecrate';
+import { priceWords } from '../../game/money';
+import { counterStore } from '../counterMenu';
 
 /** A crate or a piece of storage furniture, seen through the same window. */
 export interface Store {
@@ -50,7 +52,19 @@ export interface Store {
    * since the bag work — a bag on your back are the island's, and a drag has
    * to ask: `take_from_store` knows about all three.
    */
-  kind: 'crate' | 'furniture' | 'bag' | 'carried';
+  kind: 'crate' | 'furniture' | 'bag' | 'carried' | 'counter';
+  /**
+   * The two doors a store has of its own, where it has them: a shop
+   * counter's goods go out on it by `set_out_goods` and come back by
+   * `take_off_counter`, on an island and off one alike (`counters.ts`).
+   */
+  doors?: { in: string; out: string };
+  /** Whether you are close enough to reach it, where that is not a step from its middle: a counter is reached from its border. */
+  near?: () => boolean;
+  /** Whether what is in it carries a price, said beside each thing. */
+  priced?: boolean;
+  /** Somebody else's goods: bought rather than taken, with why not or the purchase. */
+  sell?: { why: (item: Item) => string | null; go: (item: Item) => void };
   take: (uid: number) => Item | null;
   /** Why it will not take this at all, or null. */
   refuses: (item: Item) => string | null;
@@ -80,11 +94,17 @@ export class CratePanel {
   private furnitureId: number | null = null;
   private creatureId: number | null = null;
   private bagUid: number | null = null;
+  /** A shop counter's store, by id (`counters.ts`). */
+  private counterId: number | null = null;
+  /** How a thing on somebody else's counter is bought, on an island. */
+  buyer?: (item: Item) => void;
   private search: HTMLInputElement;
   private query = '';
   private sort: SortKey = 'name';
   /** The two buttons that put things in, which a grave does not offer. */
   private waysIn: HTMLButtonElement[] = [];
+  /** And the one that takes everything out, which somebody else's counter does not offer. */
+  private wayOut: HTMLButtonElement | null = null;
 
   constructor(
     private readonly win: UIWindow,
@@ -128,6 +148,7 @@ export class CratePanel {
     putKind.title = 'Put in only the kinds already in it — top the store up without emptying your pack';
     putKind.addEventListener('click', () => this.putAll(true));
     this.waysIn = [putAll, putKind];
+    this.wayOut = takeAll;
     this.bar.append(takeAll, putAll, putKind, sortSelect('How to order what is inside', (key) => {
       this.sort = key;
       this.render();
@@ -174,11 +195,14 @@ export class CratePanel {
   withinReach(): boolean {
     const store = this.store();
     if (!store) return false;
+    if (store.near) return store.near();
     const [cx, cy] = store.centre;
     return Math.hypot(cx - this.game.player.x, cy - this.game.player.y) <= STORE_REACH;
   }
 
   private store(): Store | undefined {
+    const counter = this.counterId !== null ? this.game.counters.list.get(this.counterId) : undefined;
+    if (counter) return counterStore(this.game, counter, this.buyer);
     const crate = this.crateId !== null ? this.game.crates.get(this.crateId) : undefined;
     if (crate) {
       return {
@@ -291,6 +315,7 @@ export class CratePanel {
    * caught up.
    */
   private door(store: Store, what: 'in' | 'out'): ActionDef | undefined {
+    if (store.doors) return ACTION_BY_ID.get(what === 'in' ? store.doors.in : store.doors.out);
     if (!this.game.ask || store.kind === 'carried') return undefined;
     const id = what === 'out'
       ? store.kind === 'crate' ? 'crate_take_all' : store.kind === 'bag' ? 'empty_bag' : 'furniture_take_all'
@@ -307,6 +332,11 @@ export class CratePanel {
       return;
     }
     const door = this.door(store, 'out');
+    // A counter comes off a thing at a time, by its own door.
+    if (door && store.doors) {
+      for (const it of [...store.items]) this.game.requestAction(door, { kind: 'item', uid: it.uid, count: it.count });
+      return;
+    }
     if (door) {
       // A bag is emptied by naming the bag; a crate and a chest by naming
       // themselves. The island says what came out.
@@ -421,7 +451,8 @@ export class CratePanel {
     this.win.titleText.textContent = store.title + (!store.lock?.lock ? ''
       : shut ? ' \u2014 locked' : ' \u2014 unlocked');
     this.bar.hidden = false;
-    for (const b of this.waysIn) b.hidden = store.grave !== undefined;
+    for (const b of this.waysIn) b.hidden = store.grave !== undefined || !!store.sell;
+    if (this.wayOut) this.wayOut.hidden = !!store.sell;
     if (!store.items.length || !store.items.some((it) => this.matches(it))) {
       const empty = document.createElement('div');
       empty.className = 'inv-empty';
@@ -443,16 +474,25 @@ export class CratePanel {
        * the one list that told you least about what was in it.
        */
       const name = nameCell(item, { worn: this.game.isEquipped(item.uid), occupant: occupantOf(this.game, item) });
+      if (store.priced) name.textContent += ` — ${item.price !== undefined ? priceWords(item.price) : 'not for sale'}`;
       const ql = qualityCell(this.game, item);
       const dmg = damageCell(item);
       const take = document.createElement('button');
       take.type = 'button';
       take.className = 'tb-btn tb-small';
-      take.textContent = 'Take';
+      take.textContent = store.sell ? 'Buy' : 'Take';
+      const sell = store.sell;
+      if (sell) take.title = sell.why(item) ?? `For ${item.price !== undefined ? priceWords(item.price) : 'nothing'}, the lot`;
       take.addEventListener('click', (e) => {
         e.stopPropagation();
-        const [cx, cy] = store.centre;
-        if (Math.hypot(cx - this.game.player.x, cy - this.game.player.y) > STORE_REACH) {
+        // Somebody else's goods on a counter: bought, at its price, or said why not.
+        if (sell) {
+          const why = sell.why(item);
+          if (why) this.game.logMsg(why, 'error');
+          else sell.go(item);
+          return;
+        }
+        if (!this.withinReach()) {
           this.game.logMsg(`Stand next to the ${store.what} to take things out.`, 'error');
           return;
         }
@@ -461,8 +501,8 @@ export class CratePanel {
          * own copy and told nobody, so on an island the next answer put it
          * back — "it still rubber bands from crate to inventory".
          */
-        const def = ACTION_BY_ID.get('take_from_store');
-        if (this.game.ask && def && store.kind !== 'carried') {
+        const def = ACTION_BY_ID.get(store.doors?.out ?? 'take_from_store');
+        if ((this.game.ask || store.doors) && def && store.kind !== 'carried') {
           this.game.requestAction(def, { kind: 'item', uid: item.uid, count: item.count });
           return;
         }
@@ -526,6 +566,7 @@ export class CratePanel {
 
   open(id: number): void {
     this.crateId = id;
+    this.counterId = null;
     this.furnitureId = null;
     this.creatureId = null;
     this.bagUid = null;
@@ -543,6 +584,18 @@ export class CratePanel {
     }
     this.furnitureId = id;
     this.crateId = null;
+    this.counterId = null;
+    this.creatureId = null;
+    this.bagUid = null;
+    this.render();
+    this.win.open();
+  }
+
+  /** The store behind a shop counter, with its goods and their prices (`counters.ts`). */
+  openCounter(id: number): void {
+    this.counterId = id;
+    this.crateId = null;
+    this.furnitureId = null;
     this.creatureId = null;
     this.bagUid = null;
     this.render();
@@ -553,6 +606,7 @@ export class CratePanel {
   /** Open a bag carried in the pack. */
   openBag(uid: number): void {
     this.bagUid = uid;
+    this.counterId = null;
     this.crateId = null;
     this.furnitureId = null;
     this.creatureId = null;
@@ -562,6 +616,7 @@ export class CratePanel {
 
   openPannier(id: number): void {
     this.creatureId = id;
+    this.counterId = null;
     this.crateId = null;
     this.furnitureId = null;
     this.bagUid = null;

@@ -60,6 +60,10 @@ import { CRAFT_REACH, reachFor, recipeNeeds, recipeReason, recipeStatus, RECIPES
 import { CraftPanel } from './panels/craft';
 import { NewsPanel, unseenNews } from './panels/news';
 import { CratePanel } from './panels/crate';
+import { counterEntries, counterTip, dropOnCounter, type CounterWays } from './counterMenu';
+import { lampEntries } from './lampMenu';
+import { isLampPiece, lampState } from '../game/lamps';
+import { boughtLine } from '../game/counters';
 import { TilePanel } from './panels/tile';
 import type { DragPayload } from './dragdrop';
 import { WildermonPanel } from './panels/wildermon';
@@ -229,6 +233,8 @@ export class UI {
     const crate = this.windows.create({ id: 'crate', title: 'Deed crate', x: 364, y: 56, width: 320, height: 260, anchor: 'tr', open: false });
     this.cratePanel = new CratePanel(crate, game, (p) => this.moveDragged(p, 'store'),
       (x, y, title, items) => this.menu.show(x, y, title, items));
+    // Somebody else's shop counter: what is on it is bought, on an island.
+    if (this.island) this.cratePanel.buyer = (it) => void this.buyOffCounter(it);
     const journal = this.windows.create({ id: 'journal', title: 'Journal', x: 12, y: 56, width: 330, height: 420, anchor: 'tr', open: false });
     new JournalPanel(journal, game);
     // "The rest of it" on the first-steps card opens the whole list.
@@ -412,6 +418,7 @@ export class UI {
    */
   dropOnWorld(p: DragPayload, pick: Pick | null): boolean {
     const g = this.game;
+    if (dropOnCounter(g, p, pick)) return true;
     const at = this.storeAt(pick);
     if (!at || p.from !== 'inventory') return false;
     const held = g.inventory.get(p.uid);
@@ -460,8 +467,9 @@ export class UI {
      * doors. Panniers have none of their own and are still carried here, which
      * is right: they are a beast's and travel with it.
      */
-    if (g.ask && store.kind !== 'carried') {
-      const id = to === 'inventory' ? 'take_from_store'
+    if ((g.ask || store.doors) && store.kind !== 'carried') {
+      const id = store.doors ? (to === 'inventory' ? store.doors.out : store.doors.in)
+        : to === 'inventory' ? 'take_from_store'
         : store.kind === 'crate' ? 'store_in_crate'
         : store.kind === 'bag' ? 'stow_item' : 'store_in_furniture';
       const def = ACTION_BY_ID.get(id);
@@ -717,6 +725,8 @@ export class UI {
     if (fu) {
       lines.push(furnitureName(fu));
       lines.push(furnitureState(fu));
+      // A lantern post's lantern, what it throws and its candle, as its menu says them (`lamps.ts`).
+      if (isLampPiece(fu)) lines.push(lampState(fu));
       if (rackSpots(fu)) lines.push(this.rackLine(fu));
       if (furnitureHolds(fu)) lines.push('Stand next to it to put things away.');
       if (isPlanter(fu)) lines.push(this.planterLine(fu));
@@ -810,6 +820,8 @@ export class UI {
       const roof = this.game.buildings.floor(b.levels, pick.x, pick.y);
       if (roof) lines.push(`${roof.material === GLASS_ROOF.id ? 'glass roof' : 'roof'}${isDone(roof) ? '' : ` · ${Math.round(progressOf(roof) * 100)}% built`}`);
     }
+    const counterLine = counterTip(this.game, pick);
+    if (counterLine) lines.push(counterLine);
     const pile = this.game.groundAt(pick.x, pick.y);
     if (pile.length === 1) {
       const it = pile[0];
@@ -1192,6 +1204,8 @@ export class UI {
         });
       }
     }
+    // A shop counter on a border of this tile: looked at, bought from, and its till.
+    entries.push(...counterEntries(this.game, pick, this.counterWays()));
     const building = this.game.buildings.buildingAt(pick.x, pick.y);
     if (building) entries.push(...this.buildingEntries(pick));
     for (const { def, reason } of this.game.actionsFor(target)) {
@@ -1802,6 +1816,8 @@ export class UI {
         }),
       });
     }
+    // A lantern post: its lantern, its candle and its light.
+    entries.push(...lampEntries(g, f));
     for (const id of ['light_oven', 'put_out_oven', 'take_ashes_oven', 'sleep', 'set_home', 'pull_cart', 'drop_cart', 'board_vehicle', 'board_passenger', 'leave_vehicle', 'leave_passenger', 'unhitch_team', 'drink_from_vessel', 'empty_vessel', 'furniture_take_all', 'crate_follow', 'crate_work', 'scrub_moss', 'pick_up_furniture']) {
       const def = ACTION_BY_ID.get(id);
       if (!def || !def.applies(ft, g)) continue;
@@ -2342,6 +2358,30 @@ export class UI {
     const def = ACTION_BY_ID.get('name_thing');
     if (!def || !def.applies(t, this.game)) return [];
     return [{ label: def.labelFor?.(t, this.game) ?? def.label, onSelect: () => this.game.requestAction(def, t) }];
+  }
+
+  /** What the tile menu can do at a shop counter: the store window, and on an island buying, the till and the prices. */
+  private counterWays(): CounterWays {
+    const isle = this.island;
+    return {
+      open: (id) => this.cratePanel.openCounter(id),
+      ...(isle ? {
+        buy: (it: Item) => void this.buyOffCounter(it),
+        takings: (id: number) => void (async () => {
+          const why = await isle.atCounter('takings', id);
+          if (why) this.game.logMsg(why, 'error');
+        })(),
+        prices: () => this.market.openStall(),
+      } : {}),
+    };
+  }
+
+  /** Buy one thing off somebody's counter on the island, and say what came of it. */
+  private async buyOffCounter(it: Item): Promise<void> {
+    if (!this.island || it.price === undefined) return;
+    const price = it.price;
+    const why = await this.island.atCounter('buy', it.uid);
+    this.game.logMsg(why ?? boughtLine(it.count, itemName(it), price), why ? 'error' : 'event');
   }
 
   /** Planning and construction entries for a tile: footprint, walls on the nearest side, floors, storeys. */

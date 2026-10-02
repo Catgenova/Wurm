@@ -27,6 +27,8 @@ import { pickDye } from './dyes';
 import type { Game } from './game';
 import { greenNow } from './greening';
 import { glassPlanRefusal, glassResync } from './glasshouse';
+import { counterFinished, counterGone, counterPlanRefusal, counterRemoveRefusal, counterStreetRefusal } from './counters';
+import { lampWallRefusal } from './lamps';
 import { itemDef, spendOut, type Item } from './items';
 
 type TileTarget = Extract<Target, { kind: 'tile' }>;
@@ -211,7 +213,8 @@ export const BUILD_ACTIONS: ActionDef[] = [
     stamina: 0.02,
     baseTime: 3,
     applies: (t, g) => isTile(t) && !g.buildings.buildingAt(t.x, t.y),
-    check: (t, g) => (isTile(t) ? (needTool(g, 'mallet') ?? g.planReason(t.x, t.y)) : null),
+    // Nor on the street a shop counter sells onto (`counters.ts`).
+    check: (t, g) => (isTile(t) ? (needTool(g, 'mallet') ?? g.planReason(t.x, t.y) ?? counterStreetRefusal(g, t.x, t.y)) : null),
     perform: (t, g) => {
       if (!isTile(t)) return;
       const name = ((t as { name?: string }).name ?? '').trim();
@@ -235,7 +238,7 @@ export const BUILD_ACTIONS: ActionDef[] = [
       const b = g.buildings.neighbourBuilding(t.x, t.y);
       if (!b) return 'There is no building next to this tile.';
       if (b.levels > 1) return 'The footprint cannot change once upper floors are planned.';
-      return g.planReason(t.x, t.y);
+      return g.planReason(t.x, t.y) ?? counterStreetRefusal(g, t.x, t.y);
     },
     perform: (t, g) => {
       if (!isTile(t)) return;
@@ -297,6 +300,14 @@ export const BUILD_ACTIONS: ActionDef[] = [
         if (!floor || !isDone(floor)) return 'Build the floor of this storey first.';
       }
       if (g.buildings.wall(level, t.x, t.y, t.side)) return 'There is already a wall on that side.';
+      // A shop counter faces the street from the ground floor (`counters.ts`).
+      if (t.wallType === 'counter') {
+        const street = counterPlanRefusal(g, b, level, t.x, t.y, t.side);
+        if (street) return street;
+      }
+      // Nor does a wall close over a lantern post's arm (`lamps.ts`).
+      const arm = lampWallRefusal(g, level, t.x, t.y, t.side, t.wallType);
+      if (arm) return arm;
       /*
        * And what is underneath has to carry it. A storey of cut stone raised
        * over a log one is a roof looking for somewhere to fall; the courses
@@ -374,6 +385,9 @@ export const BUILD_ACTIONS: ActionDef[] = [
       const wall = wallAt(g, t);
       if (!wall) return 'There is no wall planned there.';
       if (isDone(wall)) return 'That wall is finished.';
+      // Nor is one raised over a lantern post's arm (`lamps.ts`).
+      const arm = lampWallRefusal(g, wall.level, t.x, t.y, t.side, wall.type);
+      if (arm) return arm;
       const mat = material(wall.material);
       const tool = mat ? needTool(g, mat.tool) : null;
       if (tool) return tool;
@@ -394,6 +408,8 @@ export const BUILD_ACTIONS: ActionDef[] = [
         wall.greenSince = greenNow();
         // The last wall round a building roofed in glass makes a glasshouse of it (`glasshouse.ts`).
         glassResync(g);
+        // A shop counter's store opens as it is finished (`counters.ts`).
+        counterFinished(g, wall);
         const what = WALL_TYPE_BY_ID.get(wall.type)?.low ? WALL_TYPE_BY_ID.get(wall.type)?.name.toLowerCase() : 'wall';
         g.logMsg(`You finish the ${mat.name.toLowerCase()} ${what}.`, 'event');
         return false;
@@ -564,12 +580,16 @@ export const BUILD_ACTIONS: ActionDef[] = [
     applies: (t, g) => isTile(t) && (!!buildingOf(g, t) || !!wallAt(g, t)),
     check: (t, g) => {
       if (!isTile(t) || !t.side) return 'Choose a side.';
-      return wallAt(g, t) ? null : 'There is no wall there.';
+      const wall = wallAt(g, t);
+      if (!wall) return 'There is no wall there.';
+      // A shop counter comes down empty, till and all (`counters.ts`).
+      return counterRemoveRefusal(g, wall);
     },
     perform: (t, g) => {
       if (!isTile(t) || !t.side) return;
       const wall = wallAt(g, t);
-      if (!wall) return;
+      if (!wall || counterRemoveRefusal(g, wall)) return;
+      counterGone(g, wall);
       const what = WALL_TYPE_BY_ID.get(wall.type)?.low ? (WALL_TYPE_BY_ID.get(wall.type)?.name.toLowerCase() ?? 'fence') : 'wall';
       g.buildings.removeWall(wallLevel(g, t), t.x, t.y, t.side);
       // A glasshouse with a wall down is open to the weather (`glasshouse.ts`).

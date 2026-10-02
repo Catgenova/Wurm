@@ -139,6 +139,8 @@ export const HUSHED: ReadonlySet<string> = new Set([
   'tame', 'take_catch', 'pair_creature',
   // Ceremony. A stake going in has already made the noise of a stake going in.
   'found_settlement', 'upgrade_deed',
+  // A lantern post's wick pinched out between finger and thumb (`lamps.ts`).
+  'douse_lamp',
 ]);
 
 export const STROKE_BY_ID: Record<string, Stroke> = {
@@ -168,6 +170,8 @@ export const STROKE_BY_ID: Record<string, Stroke> = {
   // Metal on metal, which is the loudest thing anybody does here.
   smith: 'metal', strike_coins: 'metal', improve_item: 'metal', shoe_creature: 'metal', ring_bell: 'metal',
   fit_lock: 'metal', take_off_lock: 'metal',
+  // A lantern hung on a post's iron hook or set in a pillar's iron cage, and lifted off it (`lamps.ts`).
+  fit_lamp: 'metal', take_lamp: 'metal',
   // Water, poured or drawn.
   fish: 'water', fill_bucket: 'water', fill_skin: 'water',
   empty_vessel: 'water', pour_into_barrel: 'water', empty_creel: 'water',
@@ -175,10 +179,10 @@ export const STROKE_BY_ID: Record<string, Stroke> = {
   // Hot metal going into it (a Smith's Temper Bath).
   quench_item: 'water',
   // A fire being got going, or kept going.
-  light_oven: 'fire', light_campfire: 'fire', light_smelter: 'fire', light_kiln: 'fire',
+  light_oven: 'fire', light_campfire: 'fire', light_smelter: 'fire', light_kiln: 'fire', light_lamp: 'fire',
   fuel_oven: 'fire', fuel_campfire: 'fire', fuel_smelter: 'fire', fuel_kiln: 'fire',
   // And handling: things going into a pack and straps going onto an animal.
-  pick_up: 'cloth', pick_up_all: 'cloth', feed: 'cloth',
+  pick_up: 'cloth', pick_up_all: 'cloth', feed: 'cloth', candle_lamp: 'cloth',
   tack_creature: 'cloth', untack_creature: 'cloth', hitch_creature: 'cloth',
   groom: 'cloth', make_brush: 'cloth', patch_item: 'cloth', apply_salve: 'cloth', mend_kit: 'cloth', seal_item: 'cloth',
   crate_take_all: 'cloth', smelter_take_all: 'cloth', kiln_take_all: 'cloth', furniture_take_all: 'cloth',

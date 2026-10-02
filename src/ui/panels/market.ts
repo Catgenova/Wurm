@@ -6,6 +6,7 @@ import { SPECIES } from '../../game/creatures';
 import { priceWords, purse } from '../../game/money';
 import { couldBring, ORDER_LIFE, orderWords } from '../../game/orders';
 import { awayFor } from '../../game/away';
+import { COUNTER_BUY_FROM, sellsTooFar } from '../../game/counters';
 import { spanWords } from '../../game/words';
 import type { UIWindow } from '../windows';
 
@@ -102,6 +103,12 @@ export class MarketPanel {
     win.body.append(this.bar, this.page);
     win.onOpen = () => void this.refresh();
     this.draw();
+  }
+
+  /** Open on the Stall tab, where your stalls' and counters' goods are priced. */
+  openStall(): void {
+    this.show('stall');
+    this.win.open();
   }
 
   private show(id: Tab): void {
@@ -280,14 +287,14 @@ export class MarketPanel {
       return;
     }
     for (const st of stalls) {
-      this.head(`Stall at ${st.x},${st.y}${st.deed ? ` on ${st.deed}` : ''}`);
+      this.head(`${st.what === 'counter' ? 'Shop counter' : 'Stall'} at ${st.x},${st.y}${st.deed ? ` on ${st.deed}` : ''}`);
       const till = st.till ?? 0;
       const row = document.createElement('div');
       row.className = 'skill-row';
       const text = document.createElement('span');
       text.textContent = till > 0 ? `The till holds ${priceWords(till)}.` : 'The till is empty.';
       row.append(text);
-      if (till > 0) row.append(this.button('Take the takings', 'Stand at the counter', () => void this.act(this.island!.takings(st.id))));
+      if (till > 0) row.append(this.button('Take the takings', sellsTooFar(st.what === 'counter' ? 'counter' : 'stall'), () => void this.act(this.island!.takings(st.id))));
       this.page.append(row);
       if (!st.goods.length) this.say('Nothing on the counter. Put something in it, then set a price.');
       for (const good of st.goods) {
@@ -327,13 +334,14 @@ export class MarketPanel {
     if (!theirs.length) this.say('Nobody has anything for sale.');
     for (const st of theirs) {
       const far = Math.round(Math.hypot(st.x + 0.5 - me.x, st.y + 0.5 - me.y));
-      this.head(`${st.owner}'s stall at ${st.x},${st.y}${st.deed ? ` on ${st.deed}` : ''} — ${far} ${far === 1 ? 'tile' : 'tiles'} away`);
+      this.head(`${st.owner}'s ${st.what === 'counter' ? 'shop counter' : 'stall'} at ${st.x},${st.y}${st.deed ? ` on ${st.deed}` : ''} — ${far} ${far === 1 ? 'tile' : 'tiles'} away`);
       for (const good of st.goods) {
         const row = document.createElement('div');
         row.className = 'skill-row';
         const text = document.createElement('span');
         text.textContent = `${goodName(good)} — ${priceWords(good.price ?? 0)}`;
-        row.append(text, this.button('Buy', 'Stand at the counter of this stall', () => void this.act(this.island!.buy(good.id))));
+        row.append(text, this.button('Buy', st.what === 'counter' ? COUNTER_BUY_FROM : sellsTooFar('stall'),
+          () => void this.act(this.island!.buy(good.id))));
         this.page.append(row);
       }
     }

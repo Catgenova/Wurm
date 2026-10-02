@@ -1505,6 +1505,36 @@ jobs:
             --outfile=node_modules/.cache/market.mjs --log-level=error
           node node_modules/.cache/market.mjs
 
+      - name: A shop counter, on both sides
+        run: |
+          # Asked for: a wall with a counter in it, the shop's goods on the
+          # inside and its customers in the street. Planned only in a ground
+          # floor wall with open ground beyond it; nobody walks through it and
+          # it hides nothing; its keeper sets goods out on it and prices them
+          # as on a stall; a buyer buys from the street side and within reach
+          # only, refused in the same words on both sides; the till and the
+          # takings, the board at a mailbox, a creature crate on it, the wall
+          # not taken out while there are goods or takings in it, and its store
+          # opened the same when a hod worker lays its last piece.
+          npx esbuild supabase/test/counter.ts --bundle --platform=node --format=esm \
+            --outfile=node_modules/.cache/counter.mjs --log-level=error
+          node node_modules/.cache/counter.mjs
+
+      - name: A lantern post, on both sides
+        run: |
+          # Asked for: a timber post with a lantern on an iron arm and a stone
+          # pillar with one in its top, each taking a fitted lantern and its
+          # candles as a carried lantern does. Fitted, candled, lit, burned
+          # down, put out and taken down with the same refusals, sentences and
+          # numbers on both sides; the candle the same length at every
+          # quality; at night a light of the lantern's reach, where it hangs,
+          # that the ground round it is seen by from far off; a padlock that
+          # keeps the lantern for the key; and no post set down with its arm
+          # into a wall, nor a wall planned or raised across a post's arm.
+          npx esbuild supabase/test/lamp.ts --bundle --platform=node --format=esm \
+            --outfile=node_modules/.cache/lamp.mjs --log-level=error
+          node node_modules/.cache/lamp.mjs
+
       - name: While you were away
         run: |
           # The island counts, for somebody who has gone, the loads their
