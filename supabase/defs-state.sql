@@ -2501,9 +2501,9 @@ update item_def set description = 'Ten grams of metal apiece. Nothing is nailed 
 update item_def set description = 'A shackle, a body and a mechanism, and no key until it is fitted to something. Fit it to a crate, a cupboard, a cart or a chest and it cuts a key to itself as it closes.' where id = 'padlock';
 update item_def set description = 'Cut to one lock and no other. Hand it over and you have handed over what it opens; lose it and the settlement’s founder is the only way back in.' where id = 'key';
 update item_def set description = 'Shaft, head and feather. A bow spends one with every shot.' where id = 'arrow';
-update item_def set description = 'Two heads beaten into one wide, barbed one. A shot that lands leaves it bleeding 15% of the shot a second for 6 seconds, never the last of it.' where id = 'broadhead_arrow';
-update item_def set description = 'A narrow tempered point. A shot lands 25% harder on anything with a thick hide, a shell or scales.' where id = 'bodkin_arrow';
-update item_def set description = 'A knob of the shaft left on in place of a head. A shot crushes rather than goes in, and one that lands knocks a heavy blow off its stroke and puts the next blow back 1 second.' where id = 'blunt_arrow';
+update item_def set description = 'A shot that lands leaves it bleeding 15% of the shot a second for 6 seconds, never the last of it.' where id = 'broadhead_arrow';
+update item_def set description = 'A shot lands 25% harder on anything with a thick hide, a shell or scales.' where id = 'bodkin_arrow';
+update item_def set description = 'Made with no arrow heads. A shot crushes rather than goes in, and one that lands knocks a heavy blow off its stroke and puts the next blow back 1 second.' where id = 'blunt_arrow';
 update item_def set description = 'Fletching for arrows, and only a bird carries them.' where id = 'feather';
 update item_def set description = 'Spun on a spindle. Woven on a loom it becomes cloth.' where id = 'yarn';
 update item_def set description = 'Cut off a rose bush with a sickle. Boiled, they give a pink that nothing else on the island gives.' where id = 'rose_petals';
