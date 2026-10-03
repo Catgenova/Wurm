@@ -908,7 +908,11 @@ export const BUILD_ACTIONS: ActionDef[] = [
       // A railing round a flat roof stands on it (`frame.ts`).
       if (floorKind(floor) === 'roof' && terraceRailed(g, b, t.x, t.y)) return 'Take down the railing standing on it first.';
       if (floorKind(floor) !== 'roof') {
-        for (const side of ['n', 'e', 's', 'w'] as const) if (g.buildings.wall(level, t.x, t.y, side)) return 'Take down the walls standing on it first.';
+        // A wall stands on a floor only where it may not go up without a finished one (`plan_wall`): a storey up, or a
+        // deck on piers. On the ground floor it stands on the ground, and a floor still planned carries nothing.
+        if (isDone(floor) && (level > 0 || g.buildings.onPiers(t.x, t.y))) {
+          for (const side of ['n', 'e', 's', 'w'] as const) if (g.buildings.wall(level, t.x, t.y, side)) return 'Take down the walls standing on it first.';
+        }
         // A column on it, or the roof over a jetty (`frame.ts`).
         const holds = floorHolds(g, b, level, t.x, t.y);
         if (holds) return holds;

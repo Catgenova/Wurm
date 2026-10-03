@@ -687,6 +687,20 @@ same('but with a wall gone for a column at its far end, the side they close is t
 for (const [cx, cy] of [[21, 28], [21, 29], [22, 29]]) uncolumn(0, cx, cy);
 
 /*
+ * ---- a floor beside a wall ------------------------------------------------------
+ *
+ *   (20,28)  walled on three sides. A wall stands on a floor only where it may
+ *   not go up without a finished one (`plan_wall`), a storey up or on a deck;
+ *   on the ground floor it stands on the ground. So a floor planned beside a
+ *   wall can be called off again, and a finished one there taken up.
+ */
+floor(7, 0, 20, 28, 'plank', 'floor', 2);
+same('a floor still planned beside a wall is called off without the wall coming down', 'remove_floor', { x: 20, y: 28, level: 0 }, 'ALLOWED');
+floor(7, 0, 20, 28, 'plank');
+same('and a finished one on the ground floor comes up too: its walls stand on the ground', 'remove_floor', { x: 20, y: 28, level: 0 }, 'ALLOWED');
+unfloor(0, 20, 28);
+
+/*
  * ---- the storey a job names ------------------------------------------------
  *
  *   (23,31) (24,31)  three storeys, the third being worked: every ordinary
