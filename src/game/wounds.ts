@@ -149,5 +149,6 @@ export const WOUND_BY_WEAPON: Record<string, WoundKind> = {
   knives: 'cut',
   polearms: 'pierce',
   archery: 'pierce',
+  throwing: 'pierce',
   mauls: 'crush',
 };

@@ -64,7 +64,7 @@ import { deckOver, floorNear, levelGround, pierDrop, pierGround, pierRefusal, pi
 import { greenNow, mossyPiece } from './greening';
 import { WATER_PLANT_BY_ID, type WaterPlant, type WaterPlantKind } from '../world/waterplants';
 import { liveSettings, type Settings } from './settings';
-import { armsRefusal, FIGHT_BACK_STILL, FIGHT_STANCE_NAMES, FIGHT_TRIES, fightBase, fightWind, FOLLOW_RANGE, inFightReach, isFightJob, nextStance, STANCE_TAKEN, stanceSays, TARGET_RANGE } from './fight';
+import { ARMOUR_VS, armsRefusal, CROWD_BLOCK, FIGHT_QUIET, skillLine, type FightRecord, FIGHT_BACK_STILL, FIGHT_STANCE_NAMES, FLANK_HIT, legPace, FIGHT_TRIES, fightBase, fightWind, FOLLOW_RANGE, inFightReach, isFightJob, nextStance, STANCE_TAKEN, stanceSays, TARGET_RANGE } from './fight';
 import { Skills, SKILL_DEFS, isQuiet } from './skills';
 import { jewelGain } from './gems';
 import { earnedBy, knackBonus, knackLands, KNACK_CAP, KNACK_ODDS, TITLE_BY_ID } from './titles';
@@ -2316,12 +2316,14 @@ export class Game {
    * it aside and wears a little for doing so, and the armour learns from it.
    * A shield in the off hand may stop the whole thing first.
    */
-  absorb(raw: number): { taken: number; part: Slot; worn: Item | null; blocked: boolean } {
+  absorb(raw: number, kind: WoundKind = 'bite'): { taken: number; part: Slot; worn: Item | null; blocked: boolean } {
     // The shield, first of all.
     const shield = this.worn('offhand');
     const sh = shield && SHIELDS[shield.id];
     if (sh) {
-      const chance = Math.min(0.6, sh.block * (0.6 + shield.ql / 160) + this.skills.get('shields') / 400);
+      // Less of a chance for every other thing on you than the one that struck (`CROWD_BLOCK`).
+      const crowd = Math.max(0, 1 - CROWD_BLOCK * this.othersOnYou());
+      const chance = Math.min(0.6, sh.block * (0.6 + shield.ql / 160) + this.skills.get('shields') / 400) * crowd;
       this.gainSkill('shields', 0.12);
       if (this.rand() < chance) {
         // Less for a Mender's Armour Care, as `hurt_player` has it.
@@ -2356,7 +2358,17 @@ export class Game {
     }
     this.events.emit('inventory');
     const hide = this.walks('power', 5) ? IRONHIDE : 1;
-    return { taken: raw * (1 - Math.min(0.92, soak * hide)), part, worn: item, blocked: false };
+    // And what this class of armour makes of this kind of blow (`ARMOUR_VS`).
+    return { taken: raw * (1 - Math.min(0.92, soak * hide * ARMOUR_VS[def.cls][kind])), part, worn: item, blocked: false };
+  }
+
+  /** Every wild thing after you but the one that last struck you: what a crowd takes off your shield (`CROWD_BLOCK`). */
+  othersOnYou(): number {
+    let n = 0;
+    for (const c of this.creatures.list.values()) {
+      if (c.mode === 'wild' && c.health > 0 && c.enemy === PLAYER_ATTACKER && c.id !== this.player.attackedBy) n++;
+    }
+    return n;
   }
 
   /**
@@ -2367,8 +2379,15 @@ export class Game {
   hurtPlayer(raw: number, what: string, kind: WoundKind = 'bite'): void {
     // Being hit in the dark teaches more about watching than hitting does.
     this.fought(DARK_HIT);
-    // Harder or softer for the way you stand (`fight.ts`), before the armour has its say.
-    const hit = this.absorb(raw * STANCE_TAKEN[this.settings.fightStance]);
+    /*
+     * Harder or softer for the way you stand, and harder from something on
+     * you that is not what you are fighting: it is at your back (`fight.ts`).
+     * Both before the armour has its say.
+     */
+    const a = this.action;
+    const by = this.player.attackedBy;
+    const flank = a && isFightJob(a.def.id) && a.target.kind === 'creature' && by !== null && by !== PLAYER_ATTACKER && a.target.id !== by;
+    const hit = this.absorb(raw * STANCE_TAKEN[this.settings.fightStance] * (flank ? FLANK_HIT : 1), kind);
     if (hit.blocked) {
       this.player.attackedAt = this.time;
       this.events.emit('hit', this.player.x, this.player.y, 0, 'taken');
@@ -2524,6 +2543,56 @@ export class Game {
     this.fightNext = this.time + 1;
     this.fightTries += 1;
     this.requestAction(def, { kind: 'creature', id });
+  }
+
+  /** The fight going on, from its first blow to `FIGHT_QUIET` seconds after its last; null between fights. */
+  fightRec: FightRecord | null = null;
+
+  /** A blow given or taken: a fight begins, or goes on. */
+  private fightGoing(): void {
+    const id = this.fightTarget ?? this.marked ?? (this.player.attackedBy !== PLAYER_ATTACKER ? this.player.attackedBy : null);
+    const c = id !== null ? this.creatures.get(id) : undefined;
+    if (!this.fightRec) {
+      this.fightRec = {
+        foe: c ? c.id : null,
+        foeName: c ? this.creatures.species(c).name.toLowerCase() : 'it',
+        foeAt: c ? c.health : 0,
+        youAt: this.player.stats.health,
+        started: this.time,
+        last: this.time,
+        skills: new Map(),
+      };
+    } else if (this.fightRec.foe === null && c) {
+      this.fightRec.foe = c.id;
+      this.fightRec.foeName = this.creatures.species(c).name.toLowerCase();
+      this.fightRec.foeAt = c.health;
+    }
+    this.fightRec.last = this.time;
+  }
+
+  /** Once `FIGHT_QUIET` seconds pass without a blow, or what it was with is dead: one line for the whole of it. */
+  private fightEnding(): void {
+    const rec = this.fightRec;
+    if (!rec) return;
+    const c = rec.foe !== null ? this.creatures.get(rec.foe) : undefined;
+    const dead = rec.foe !== null && (!c || c.health <= 0);
+    if (!dead && this.time - rec.last < FIGHT_QUIET) return;
+    this.fightRec = null;
+    const secs = Math.max(1, Math.round(rec.last - rec.started));
+    const parts: string[] = [`${secs} second${secs === 1 ? '' : 's'}`];
+    if (rec.foe !== null) {
+      const dealt = Math.max(0, rec.foeAt - (dead ? 0 : (c?.health ?? 0)));
+      parts.push(`${Math.round(dealt)} dealt`);
+    }
+    const taken = Math.max(0, rec.youAt - this.player.stats.health);
+    parts.push(`${Math.round(taken * 100)}% of your health taken`);
+    const learned = [...rec.skills].map(([k, v]) => `${k} +${v.toFixed(2)}`);
+    // Nothing given, nothing taken, nothing learned: a scent and a walk away is not a fight to report.
+    if (!dead && taken === 0 && !learned.length && (rec.foe === null || Math.abs(rec.foeAt - (c?.health ?? rec.foeAt)) < 1e-9)) return;
+    const how = rec.foe === null ? 'The fight is over' : dead ? `The ${rec.foeName} is dead` : `The fight with the ${rec.foeName} is over`;
+    this.write(`${how}: ${parts.join(', ')}.${learned.length ? ` Learned: ${learned.join(', ')}.` : ''}`, 'fight');
+    // That line is the fight's last word, not the start of another.
+    this.fightRec = null;
   }
 
   /** Asks in a row that came to nothing, and how many of them end a fight (`FIGHT_TRIES`). */
@@ -3112,6 +3181,17 @@ export class Game {
    * sixty lines all said at once, at the second somebody opened the page.
    */
   write(text: string, kind: LogKind = 'info', at?: number): void {
+    // A fight is going on from its first blow until `FIGHT_QUIET` seconds pass without one.
+    if (kind === 'fight') this.fightGoing();
+    // And what is learned in one is folded into the line at its end (`compactFight`).
+    const rec = this.fightRec;
+    if (kind === 'skill' && rec && this.settings.compactFight) {
+      const line = skillLine(text);
+      if (line) {
+        rec.skills.set(line.skill, (rec.skills.get(line.skill) ?? 0) + line.gain);
+        return;
+      }
+    }
     const entry: LogEntry = { time: at ?? Date.now(), text, kind };
     this.log.push(entry);
     if (this.log.length > MAX_LOG) this.log.splice(0, this.log.length - MAX_LOG);
@@ -3241,6 +3321,8 @@ export class Game {
     const up = this.mounted();
     const boat = this.afloat();
     p.speedMul = boat ? this.boatSpeed(boat) / BASE_SPEED : driven ? this.vehicleSpeed(driven) / BASE_SPEED : up ? this.mountSpeed(up) / BASE_SPEED : 1;
+    // And on your own feet, what a wound to a leg or a foot leaves of your pace (`legPace`).
+    p.legPace = legPace(p.wounds);
     // Only wheels feel the ground: a boat is on water and feet are feet.
     p.wheelLoad = driven ? this.vehicleLoad(driven) : 0;
     // And whether your own feet are in the water at all, which is the whole of
@@ -3463,6 +3545,7 @@ export class Game {
 
     if (this.player.moving) this.movedAt = this.time;
     this.updateFight();
+    this.fightEnding();
     if (this.action) this.updateAction(dt);
   }
 

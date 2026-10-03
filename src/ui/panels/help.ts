@@ -58,7 +58,7 @@ import {
   footing, Game, goSeconds, hullSpeed, kitQl, MAX_DEED_LEVEL, MAX_MOUNT_SPEED, ORDINARY_GAIN, overDrag, QL_BARE, QL_LOW,
   QL_SPAN, QUEUE_PER_MIND, TWILIGHT, WAKE_AFTER_DAWN, wearPerUse,
 } from '../../game/game';
-import { ARMOUR, ARMOUR_CLASSES, BANE_BONUS, WEAPONS } from '../../game/gear';
+import { ARMOUR, ARMOUR_CLASSES, BANE_BONUS, WEAPONS, type ArmourClass } from '../../game/gear';
 import { PAIR_RANGE, TIER_LEVEL } from '../../game/husbandry';
 import { IMPROVE_DAMAGE, IMPROVE_FLOOR } from '../../game/improve';
 import { billWords, countOf, DEED_DECAY, HOARD_METALS, itemDef, ITEM_DEFS, RARITIES, RARITY_ROOM, rarityChance, roomFor } from '../../game/items';
@@ -92,7 +92,7 @@ import { CLEAR_OF_BUILDINGS, CONCRETE_PER_STEP, LIFT_PER_MASONRY, POOL_FILL } fr
 import { AWARENESS, awarenessReach, BASE_SIGHT, LIGHT_GIVES_BACK, NIGHT_LOSS, TREE_OPACITY } from '../../game/vision';
 import { NO_GO, pointAt, windWord, windWorth } from '../../game/wind';
 import { article, capital, listed, NumberWord, numberWord, percent, share, spanWords, times } from '../../game/words';
-import { BLOW_DEFENSIVE, BLOW_HUNTER, BLOW_PREY, FIGHT_BACK_STILL, FIGHT_GIVE_UP, FIGHT_LEASH, FIGHT_STANCE_NAMES, FIGHT_STANCES, FIST, FOLLOW_RANGE, stanceSays, SWING_WIND, SWING_WIND_KG, TARGET_RANGE, TIRED_AT, TIRED_SLOW } from '../../game/fight';
+import { FIGHT_QUIET, ARM_SLOW, ARM_SLOW_MOST, armourSays, BLINDSIDE, blowSays, CROWD_BLOCK, FLANK_HIT, HEAVY_EVERY, HEAVY_HIT, HIDE_NAMES, HIDES, hideSays, LEG_SLOW_MOST, sideOf, WIND_UP, BLOW_DEFENSIVE, BLOW_HUNTER, BLOW_PREY, FIGHT_BACK_STILL, FIGHT_GIVE_UP, FIGHT_LEASH, FIGHT_STANCE_NAMES, FIGHT_STANCES, FIST, FOLLOW_RANGE, stanceSays, SWING_WIND, SWING_WIND_KG, TARGET_RANGE, TIRED_AT, TIRED_SLOW } from '../../game/fight';
 import { BIND_BY_ID, keyName } from '../../game/keybinds';
 import {
   CLOSE_BARE, CLOSE_CLOTH, CLOSE_PACE, CLOSE_PER_SKILL, CLOSE_RIGHT, CLOSE_WRONG, FESTER_CLOTH, FESTER_WRONG, WOUND_KINDS,
@@ -2105,6 +2105,26 @@ export function helpText(): string {
     seconds, and bare hands ${FIST.swing}. A bow's draw is its own the same way. Every swing or draw costs
     ${percent(SWING_WIND)} of your stamina and ${percent(SWING_WIND_KG)} more for every kilogram in your hand, before body stamina
     and armour have their say; below ${percent(TIRED_AT)} stamina every swing is slower, up to ${percent(TIRED_SLOW)} slower with none left.</p>
+    <p>${capital(listed(Object.values(SPECIES).filter((d) => d.heavy).map((d) => `${d.name.toLowerCase()}s`)))} <b>draw back for a heavy blow</b>
+    every ${numberWord(HEAVY_EVERY)} blows: a red ring on the ground shows its reach for ${WIND_UP} second, and the blow lands
+    ${times(HEAVY_HIT)} as hard on anything still inside it. Step out of the ring and it falls short.</p>
+    <p>Every blow is a <b>cut</b>, a <b>puncture</b> or a <b>crush</b>: ${blowSays('cut')} cut, ${blowSays('pierce')} go in,
+    ${blowSays('crush')} crush. A hide makes more or less of each: ${HIDES.map((h) => `a ${HIDE_NAMES[h].toLowerCase()} (${listed(Object.values(SPECIES).filter((d) => d.hide === h).map((d) => d.name.toLowerCase()))}) ${hideSays(h)}`).join('; ')}.
+    Armour turns each kind differently too: ${(Object.keys(ARMOUR_CLASSES) as ArmourClass[]).map((c) => `${ARMOUR_CLASSES[c].name.toLowerCase()} ${armourSays(c)}`).join('; ')}.</p>
+    <p>What a weapon does besides its damage, when it lands: ${listed(['mauls', 'polearms', 'knives'].map((k) => { const w = WEAPONS.find((x) => x.kind === k); return w ? `${k === 'polearms' ? 'a spear' : k === 'mauls' ? 'a maul' : 'a knife'} ${sideOf(w)}` : ''; }).filter(Boolean))}.
+    Bleeding never takes the last of it: what finishes a thing is a blow.</p>
+    <p>A <b>wound</b> to an arm or a hand slows every swing by ${times(ARM_SLOW)} the share of your health it took, up to
+    ${percent(ARM_SLOW_MOST)} slower; to a leg or a foot, your walking the same way, up to ${percent(LEG_SLOW_MOST)} slower.
+    A blow from something on you that is <b>not what you are fighting</b> lands ${percent(FLANK_HIT - 1)} harder: it is at your back.
+    Every other thing on you takes ${percent(CROWD_BLOCK)} off your shield's chance of a block, and your own blow at something
+    fighting somebody else lands ${percent(BLINDSIDE - 1)} harder.</p>
+    <p>In a fight, the panel at the top of the screen shows what you are fighting or have marked: its health, what it is
+    about this moment, and what its hide makes of the blow in your hand. A bar over everything after you shows its health,
+    a ring at your feet fills as your swing or draw comes, an arrow at the edge of the view points at anything after you
+    that is out of it, and the edge of the view reddens when you are struck. With the cursor on a hunter not yet after
+    you, a dashed ring shows how far off it will notice you: ${HUNT_SIGHT} tiles, or for ${listed(Object.values(SPECIES).filter((d) => d.hunter && d.notice !== undefined).map((d) => `${d.name.toLowerCase()}s ${d.notice}`))}.
+    With <b>One line for a whole fight</b> on in Settings, what you learn in a fight is said once, ${FIGHT_QUIET} seconds
+    after its last blow, with how long it lasted, what you dealt and what you took.</p>
     <p>Every weapon belongs to a kind, and each kind is its own subskill: ${listed(WEAPON_KINDS.map((k) => `<b>${k}</b>`))}.
     Swinging trains the weapon's own subskill and the <b>fighting</b> skill behind it, and both decide
     whether a blow lands and how hard. A weapon's own numbers matter as much: a hunting knife is quick

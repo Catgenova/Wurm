@@ -49,10 +49,10 @@ import { SHOT_ARCHERY, SHOT_FIGHT, SWING_ARM, SWING_BODY, SWING_FIGHT, TAME_GAIN
 import { BAIT_PULL, BAIT_SHY, HOOK_BAIT, HOOK_BASE, HOOK_MOST, NET_GAIN, NET_HAUL, NET_LEAST, ROD_GAIN } from '../src/game/fishing';
 import { BREED_GAIN } from '../src/game/husbandry';
 import { WEAPONS, ARMOUR, ARMOUR_CLASSES, SHIELDS, HIT_LOCATIONS } from '../src/game/gear';
-import { WOUND_KINDS } from '../src/game/wounds';
+import { WOUND_BY_WEAPON, WOUND_KINDS } from '../src/game/wounds';
 import { BUTCHER_PARTS, HOARD_METALS } from '../src/game/butcher';
 import { CRATE_DEFS } from '../src/game/crates';
-import { BLOW_DEFENSIVE, BLOW_HUNTER, BLOW_PREY, FIGHT_BACK_STILL, FIGHT_GIVE_UP, FIGHT_LEASH, FIGHT_STANCES, STANCE_DEALT, STANCE_TAKEN, SWING_WIND, SWING_WIND_KG, TIRED_AT, TIRED_SLOW } from '../src/game/fight';
+import { ARM_SLOW, ARM_SLOW_MOST, ARMOUR_VS, BLINDSIDE, BLOW_DEFENSIVE, BLOW_HUNTER, BLOW_KINDS, BLOW_PREY, CROWD_BLOCK, FIGHT_BACK_STILL, FIGHT_GIVE_UP, FIGHT_LEASH, FIGHT_STANCES, FIST, FLANK_HIT, HEAVY_EVERY, HEAVY_HIT, HIDE_TAKES, HIDES, HUNT_REACH, KNIFE_BLEED, KNIFE_BLEED_SECS, STAGGER_MAUL, STAGGER_POLE, STANCE_DEALT, STANCE_TAKEN, SWING_WIND, SWING_WIND_KG, TIRED_AT, TIRED_SLOW, WIND_UP } from '../src/game/fight';
 import { METALS, MOULDS, ORE_PER_LUMP, RARE_LUMP_FACTOR, RARE_METALS } from '../src/game/metal';
 import { POTTERY } from '../src/game/kiln';
 import { MATERIALS as IMPROVE_MATERIALS, improvable, canImprove } from '../src/game/improve';
@@ -462,6 +462,9 @@ out.push(`alter table species_def add column if not exists swims boolean not nul
 /* Kept on a settlement, it fills a hive standing there with honey and wax: a Vesp. */
 out.push(`alter table species_def add column if not exists hives boolean not null default false;`);
 out.push(`alter table species_def add column if not exists pannier real;`);
+/* What it wears against a blow, and whether it hits heavy (`fight.ts`). */
+out.push(`alter table species_def add column if not exists hide text;`);
+out.push(`alter table species_def add column if not exists heavy boolean not null default false;`);
 /* A cart is pulled by hand; a vehicle is driven from a seat with a team in
  * front of it; a boat is neither and wants water under it. */
 out.push(`alter table furniture_def add column if not exists cart boolean not null default false;`);
@@ -1118,6 +1121,8 @@ for (const d of Object.values(SPECIES) as unknown as S[]) {
   if (d.draught) out.push(`update species_def set draught = true where id = ${q(d.id)};`);
   if (d.swims) out.push(`update species_def set swims = true where id = ${q(d.id)};`);
   if (d.hives) out.push(`update species_def set hives = true where id = ${q(d.id)};`);
+  if (d.hide) out.push(`update species_def set hide = ${q(d.hide)} where id = ${q(d.id)};`);
+  if (d.heavy) out.push(`update species_def set heavy = true where id = ${q(d.id)};`);
   for (const item of d.diet as string[]) out.push(`insert into species_diet values (${q(d.id)}, ${q(item)});`);
   const trades = (d as unknown as { trades?: string[] }).trades;
   if (trades) out.push(`update species_def set trades = array[${trades.map(q).join(', ')}]::text[] where id = ${q(d.id)};`);
@@ -1255,6 +1260,26 @@ ${FIGHT_STANCES.map((st) => `    when ${q(st)} then ${q(table[st])}`).join('\n')
   end, 1)::double precision
 $fn$;`);
 }
+/*
+ * What a blow is and what it meets: the kind of blow each kind of weapon
+ * strikes (bare hands crush), what each hide makes of each kind, and what
+ * each class of armour makes of each kind of blow it is struck with.
+ */
+out.push(`create or replace function blow_of(p_weapon text, p_kind text) returns text language sql immutable as $fn$
+  select case when p_weapon = ${q(FIST.id)} then 'crush' else coalesce(case p_kind
+${Object.entries(WOUND_BY_WEAPON).map(([k, v]) => `    when ${q(k)} then ${q(v)}`).join('\n')}
+  end, 'crush') end
+$fn$;`);
+out.push(`create or replace function hide_takes(p_hide text, p_blow text) returns double precision language sql immutable as $fn$
+  select coalesce(case p_hide
+${HIDES.map((h) => `    when ${q(h)} then case p_blow ${BLOW_KINDS.map((b) => `when ${q(b)} then ${q(HIDE_TAKES[h][b])}`).join(' ')} end`).join('\n')}
+  end, 1)::double precision
+$fn$;`);
+out.push(`create or replace function armour_vs(p_cls text, p_kind text) returns double precision language sql immutable as $fn$
+  select coalesce(case p_cls
+${Object.entries(ARMOUR_VS).map(([cls, t]) => `    when ${q(cls)} then case p_kind ${Object.entries(t).map(([k, v]) => `when ${q(k)} then ${q(v)}`).join(' ')} end`).join('\n')}
+  end, 1)::double precision
+$fn$;`);
 /* And how many places each leaderboard has. */
 out.push(`create or replace function board_top() returns int language sql immutable as $fn$ select ${q(BOARD_TOP)}::int $fn$;`);
 /* A gap worth bridging, two banks that will carry one deck, and a pair that
@@ -1333,6 +1358,17 @@ for (const [fn, v] of [
      this much slower with none left, and each swing or draw takes this much
      wind for the arm and this much more for every kilogram in the hand. */
   ['tired_at', TIRED_AT], ['tired_slow', TIRED_SLOW], ['swing_wind', SWING_WIND], ['swing_wind_kg', SWING_WIND_KG],
+  /* A heavy blow: every how many a kind that hits heavy draws one back, how
+     long it stands drawing back, what it lands for, and how near a blow
+     reaches (which the hand-written hunt_reach said the same of). */
+  ['heavy_every', HEAVY_EVERY], ['wind_up', WIND_UP], ['heavy_hit', HEAVY_HIT], ['hunt_reach', HUNT_REACH],
+  /* Wounds that slow a swing, and how far; a blow at your back, a crowd on
+     your shield, and a blow at something whose mind is elsewhere. */
+  ['arm_slow', ARM_SLOW], ['arm_slow_most', ARM_SLOW_MOST],
+  ['flank_hit', FLANK_HIT], ['crowd_block', CROWD_BLOCK], ['blindside', BLINDSIDE],
+  /* What a weapon does besides its damage: a maul's stagger, a spear's, and a
+     knife's bleeding, as a share of the blow a second and how long. */
+  ['stagger_maul', STAGGER_MAUL], ['stagger_pole', STAGGER_POLE], ['knife_bleed', KNIFE_BLEED], ['knife_bleed_secs', KNIFE_BLEED_SECS],
   /* A knack: what one is worth, how many a trade holds, how often a go leaves
      one behind, and how often it lands on the trade you were working rather
      than a neighbour. */

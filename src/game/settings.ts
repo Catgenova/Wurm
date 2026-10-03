@@ -97,6 +97,8 @@ export const SETTING_DEFAULTS = {
    * you set out to fight. Kept on the island's copy too.
    */
   fightBack: true,
+  /** Skill lines in a fight folded into one line at its end, rather than one after every swing. */
+  compactFight: true,
 };
 
 export type Settings = typeof SETTING_DEFAULTS & {

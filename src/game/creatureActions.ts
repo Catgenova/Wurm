@@ -1,6 +1,6 @@
 import { DARK_SHOT, DARK_SWING, tryGain } from './learn';
 import type { ActionDef, Target } from './actions';
-import { isShod, SHOES_PER_MOUNT, TACK, AGES, ageDef, ageOf, attackOf, bloodMul, careWord, coaxBonus, COAX_STEP, creatureLevel, forgetCoaxing, isBaitFor, maxHealth, raritySays, SEX_NAMES, SPECIES, STANCE_NAMES, workRangeOf, type Creature, type Stance, type GatherKind } from './creatures';
+import { isShod, SHOES_PER_MOUNT, TACK, AGES, ageDef, ageOf, attackOf, bloodMul, careWord, PLAYER_ATTACKER, coaxBonus, COAX_STEP, creatureLevel, forgetCoaxing, isBaitFor, maxHealth, raritySays, SEX_NAMES, SPECIES, STANCE_NAMES, workRangeOf, type Creature, type Stance, type GatherKind } from './creatures';
 import { studBook } from './husbandry';
 import { numberWord } from './words';
 import { GENTLE_HAND } from './meditation';
@@ -10,7 +10,7 @@ import { furnitureCentre, furnitureName, vehicleOf } from './furniture';
 import { deedJobLine, emptyCrate, letOut, shutIn } from './creaturecrate';
 import { itemDef, itemName, rarityOf, type Mark } from './items';
 import { BANE_BONUS, banes, bowRange, hitChance, isBow, WEAPON_BY_ID, weaponDamage } from './gear';
-import { armsRefusal, DRAW_CLOSEST, meleeReach, STANCE_DEALT, swungWith } from './fight';
+import { armsRefusal, BLINDSIDE, blowOf, DRAW_CLOSEST, FIST, hideTakes, KNIFE_BLEED, KNIFE_BLEED_SECS, meleeReach, STAGGER_MAUL, STAGGER_POLE, STANCE_DEALT, swungWith } from './fight';
 import { matOfItem } from './materials';
 
 /**
@@ -131,6 +131,27 @@ export const SHEAR_FROM = 0.35;
 export const SHEAR_WOOL = 3;
 export const SHEAR_FEATHERS = 6;
 
+
+/** Harder at something whose mind is on another fight: a companion's, or somebody else's (`BLINDSIDE`). */
+const blindside = (c: Creature): number => (c.enemy !== null && c.enemy !== PLAYER_ATTACKER ? BLINDSIDE : 1);
+
+/**
+ * What a landed blow does besides its damage, by the kind of weapon it was:
+ * a maul knocks a heavy blow off its stroke and staggers it, a spear puts its
+ * next blow back, a knife leaves it bleeding. The island does the same in
+ * `perform_fight`.
+ */
+function sideBlow(g: Game, c: Creature, kind: string, dmg: number): void {
+  if (kind === 'mauls') {
+    if (c.windup > 0) g.logMsg(`You knock the ${SPECIES[c.species]?.name.toLowerCase() ?? 'thing'} off its stroke.`, 'fight');
+    c.windup = 0;
+    c.cooldown = Math.max(0, c.cooldown) + STAGGER_MAUL;
+  } else if (kind === 'polearms') c.cooldown = Math.max(0, c.cooldown) + STAGGER_POLE;
+  else if (kind === 'knives') {
+    c.bleedRate = Math.max(c.bleedRate, dmg * KNIFE_BLEED);
+    c.bleedUntil = g.time + KNIFE_BLEED_SECS;
+  }
+}
 
 export const CREATURE_ACTIONS: ActionDef[] = [
   {
@@ -452,9 +473,16 @@ export const CREATURE_ACTIONS: ActionDef[] = [
       } else {
         // Silver's old virtue: what carries its own light hates a silver edge.
         const bane = banes(item) && def.glow ? BANE_BONUS : 1;
-        // And harder or softer for the way you stand (`fight.ts`).
-        const dmg = weaponDamage(g, usable, item) * bane * STANCE_DEALT[g.settings.fightStance] * (0.75 + g.rand() * 0.5);
+        /*
+         * And harder or softer for the way you stand, for what its hide makes
+         * of an edge, a point or a weight, and harder at something whose mind is
+         * on another fight (`fight.ts`).
+         */
+        const dmg = weaponDamage(g, usable, item) * bane * STANCE_DEALT[g.settings.fightStance]
+          * hideTakes(def.hide, blowOf(usable)) * blindside(c) * (0.75 + g.rand() * 0.5);
         g.creatures.hurt(g, c, dmg, 'player');
+        // And what the weapon does besides: a maul staggers, a spear holds it off, a knife opens it up (a fist none of these).
+        if (c.health > 0 && usable.id !== FIST.id) sideBlow(g, c, usable.kind, dmg);
         // Less for a Mender's Armour Care, as `perform_fight` has it.
         if (item) g.damageItem(item, 0.35 * g.perk('worn:weapon', 1));
         g.logMsg(
@@ -527,7 +555,8 @@ export const CREATURE_ACTIONS: ActionDef[] = [
         // The stave throws it; the head is what goes in. Both have a say.
         const head = matOfItem(arrow);
         const bane = head.bane && def.glow ? BANE_BONUS : 1;
-        const dmg = weaponDamage(g, bow, held) * head.edge * bane * STANCE_DEALT[g.settings.fightStance] * (0.6 + arrow.ql / 140) * (0.8 + g.rand() * 0.4);
+        const dmg = weaponDamage(g, bow, held) * head.edge * bane * STANCE_DEALT[g.settings.fightStance]
+          * hideTakes(def.hide, blowOf(bow)) * blindside(c) * (0.6 + arrow.ql / 140) * (0.8 + g.rand() * 0.4);
         g.creatures.hurt(g, c, dmg, 'player');
         g.damageItem(held, 0.25 * g.perk('worn:weapon', 1));
         g.logMsg(`Your arrow goes home. The ${def.name.toLowerCase()} is down to ${Math.max(0, Math.ceil(c.health))} of ${maxHealth(c, def)}.`, 'fight');

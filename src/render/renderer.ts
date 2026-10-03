@@ -39,6 +39,7 @@ import { DYE_BY_ID } from '../game/dyestuffs';
 import { hash2 } from '../world/noise';
 import { bareRock, DAMP_SAND, dustiness, FLAT, growth, oreWash, PAVED, ROCK_VARIANTS, SLAB_VARIANTS, STREWN, TileType, TILE_DEFS, COVERED, bushSpecies, slabVariant, trailGround, stonesBed, treeSpecies, treeVariant } from '../world/tiles';
 import { HALF_H, HALF_W, HEIGHT_SCALE, UNITS_PER_TILE } from './iso';
+import { HUNT_REACH, isFightJob, WIND_UP } from '../game/fight';
 import { depthOf, type View } from './view';
 import { FALLS, roofModel, type Fall, type RoofGable, type RoofModel, type RoofPt } from './roofshape';
 import { COVER_PPT, covering } from './roofing';
@@ -78,7 +79,7 @@ import { COUNTER_HOLDS, counterHeld, counterSeat, streetOf } from '../game/count
 import { counterHole, counterWares, drawCounterDaylight, drawCounterFrontKept, drawCounterInside, drawCounterReveal, stripeOf, type CounterLook } from './counter';
 import { cropDef, type CropLook } from '../game/farming';
 import { crateCentre, crateKindOfItem, subtileOf, SUBTILES } from '../game/crates';
-import { maxHealth, SPECIES, type Creature } from '../game/creatures';
+import { HUNT_SIGHT, maxHealth, PLAYER_ATTACKER, SPECIES, type Creature } from '../game/creatures';
 import { rarityOf } from '../game/items';
 import { CREST_ALPHA, FOAM_WIDTH, foamAlpha, LONG_WAVE, SHORT_WAVE, SPRING_EDGE, SPRING_PALETTE, springLevel, SWELL_SPEED, swellAt, swellShow, TROUGH_ALPHA, WATER_LIT, WATER_PALETTE, waterLevel } from './water';
 import { Wakes } from './wake';
@@ -3462,6 +3463,115 @@ export class Renderer {
     }
 
     this.drawOverlays(ctx, zoom);
+    this.drawFight(ctx, zoom);
+  }
+
+  /** Where your feet were drawn this frame, on the screen. */
+  private feetAt: { x: number; y: number } | null = null;
+
+  /**
+   * The fight, over everything else: a bar over whatever is after you and
+   * over what you are fighting or have marked, the swing in hand as a ring
+   * filling at your feet, an arrow at the edge of the view for each thing
+   * after you out of it, how far a hunter under the cursor notices you from,
+   * and the edge of the view reddening when you are struck.
+   */
+  private drawFight(ctx: CanvasRenderingContext2D, zoom: number): void {
+    const game = this.game;
+    const cam = this.camera;
+    const w = game.world;
+    const W = this.canvas.width;
+    const H = this.canvas.height;
+    const marked = game.fightTarget ?? game.marked;
+    ctx.save();
+    for (const hit of this.creatureHits) {
+      if (hit.creature === undefined) continue;
+      const c = game.creatures.get(hit.creature);
+      if (!c || c.mode !== 'wild' || c.health <= 0 || (c.enemy !== PLAYER_ATTACKER && c.id !== marked)) continue;
+      const k = Math.max(0, Math.min(1, c.health / maxHealth(c, game.creatures.species(c))));
+      const bw = 34 * zoom;
+      const bh = Math.max(3, 4 * zoom);
+      const bx = hit.left + hit.w / 2 - bw / 2;
+      const by = hit.top - bh - 3 * zoom;
+      ctx.fillStyle = 'rgba(12, 8, 6, 0.75)';
+      ctx.fillRect(bx - 1, by - 1, bw + 2, bh + 2);
+      ctx.fillStyle = k > 0.5 ? '#7cc46a' : k > 0.25 ? '#e0b44a' : '#e2553c';
+      ctx.fillRect(bx, by, bw * k, bh);
+      if (c.id === marked) {
+        ctx.strokeStyle = 'rgba(255, 220, 140, 0.9)';
+        ctx.lineWidth = 1;
+        ctx.strokeRect(bx - 2.5, by - 2.5, bw + 5, bh + 5);
+      }
+    }
+    // The swing or the draw in hand, filling round your feet as it comes.
+    const a = game.action;
+    if (a && isFightJob(a.def.id) && a.state === 'performing' && this.feetAt) {
+      const k = Math.max(0, Math.min(1, a.elapsed / Math.max(0.001, a.duration)));
+      const rx = 0.5 * Math.SQRT2 * HALF_W * zoom;
+      const ry = 0.5 * Math.SQRT2 * HALF_H * zoom;
+      ctx.lineWidth = Math.max(2, 3 * zoom);
+      ctx.strokeStyle = 'rgba(0, 0, 0, 0.35)';
+      ctx.beginPath();
+      ctx.ellipse(this.feetAt.x, this.feetAt.y, rx, ry, 0, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.strokeStyle = 'rgba(255, 214, 120, 0.95)';
+      ctx.beginPath();
+      ctx.ellipse(this.feetAt.x, this.feetAt.y, rx, ry, 0, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * k);
+      ctx.stroke();
+    }
+    // How far a hunter under the cursor will notice you from.
+    const hc = this.hover?.creature !== undefined ? game.creatures.get(this.hover.creature) : undefined;
+    if (hc && hc.mode === 'wild' && hc.enemy !== PLAYER_ATTACKER && game.creatures.species(hc).hunter) {
+      const r = game.creatures.species(hc).notice ?? HUNT_SIGHT;
+      const sx = cam.worldToScreenX(hc.x, hc.y);
+      const sy = cam.worldToScreenY(hc.x, hc.y, w.heightAt(hc.x, hc.y));
+      ctx.setLineDash([6 * zoom, 5 * zoom]);
+      ctx.lineWidth = Math.max(1.5, 2 * zoom);
+      ctx.strokeStyle = 'rgba(232, 150, 60, 0.85)';
+      ctx.beginPath();
+      ctx.ellipse(sx, sy, r * Math.SQRT2 * HALF_W * zoom, r * Math.SQRT2 * HALF_H * zoom, 0, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.setLineDash([]);
+    }
+    // An arrow at the edge of the view for everything after you that is out of it.
+    const m = 26;
+    for (const c of game.creatures.list.values()) {
+      if (c.mode !== 'wild' || c.health <= 0 || c.enemy !== PLAYER_ATTACKER) continue;
+      const sx = cam.worldToScreenX(c.x, c.y);
+      const sy = cam.worldToScreenY(c.x, c.y, w.heightAt(c.x, c.y));
+      if (sx >= m && sx <= W - m && sy >= m && sy <= H - m) continue;
+      const dx = sx - W / 2;
+      const dy = sy - H / 2;
+      const t = Math.min((W / 2 - m) / Math.max(1e-6, Math.abs(dx)), (H / 2 - m) / Math.max(1e-6, Math.abs(dy)));
+      const ax = W / 2 + dx * t;
+      const ay = H / 2 + dy * t;
+      const ang = Math.atan2(dy, dx);
+      ctx.save();
+      ctx.translate(ax, ay);
+      ctx.rotate(ang);
+      ctx.fillStyle = 'rgba(226, 70, 50, 0.92)';
+      ctx.strokeStyle = 'rgba(20, 8, 6, 0.8)';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(14, 0);
+      ctx.lineTo(-8, -9);
+      ctx.lineTo(-4, 0);
+      ctx.lineTo(-8, 9);
+      ctx.closePath();
+      ctx.stroke();
+      ctx.fill();
+      ctx.restore();
+    }
+    // Struck: the edge of the view reddens for the length of the flash.
+    const struck = this.flashOf(game.player.attackedAt);
+    if (struck > 0) {
+      const glow = ctx.createRadialGradient(W / 2, H / 2, Math.min(W, H) * 0.32, W / 2, H / 2, Math.max(W, H) * 0.72);
+      glow.addColorStop(0, 'rgba(190, 28, 18, 0)');
+      glow.addColorStop(1, `rgba(190, 28, 18, ${(0.42 * struck).toFixed(3)})`);
+      ctx.fillStyle = glow;
+      ctx.fillRect(0, 0, W, H);
+    }
+    ctx.restore();
   }
 
   /** The stepping stones of the line of the ground just drawn, over its water, each one out in the sea cut out of the sea the swell goes over. */
@@ -3717,6 +3827,8 @@ export class Renderer {
       if (ent.kind === 'player') {
         const struck = this.flashOf(player.attackedAt);
         const ex = ent.sx + (ent.drawDx ?? 0), ey = ent.sy + (ent.drawDy ?? 0);
+        // Where your feet are on the screen, for the ring the swing in hand is drawn as (`drawFight`).
+        this.feetAt = { x: ex, y: ey - (ent.lift ?? 0) };
         this.clipTo(ctx, ent.clip);
         this.paint(ctx, zoom, struck > 0 ? 'flash' : 'none', struck * 0.75, ex, ey - (ent.lift ?? 0), (g, px, py) =>
           drawPlayer(g, px, py, zoom, {
@@ -3833,6 +3945,8 @@ export class Renderer {
         // Its age, and how rare it came into the world: a fantastic one stands three times the height of its kind.
         const big = ageDef(cr, this.game.time).scale * rarityOf(cr).size;
         const hit = this.flashOf(cr.attackedAt);
+        // Drawing back for a heavy blow: its reach on the ground under it, filling as the blow comes (`WIND_UP`).
+        if (cr.windup > 0) this.drawWindupReach(ctx, ent.sx, ent.sy, zoom, cr.windup);
         this.paint(ctx, zoom, hit > 0 ? 'flash' : hovering ? 'hover' : 'none', hit * 0.92, ent.sx, ent.sy, (g, px, py) =>
           drawCreature(g, px, py, zoom, {
             species: def.id,
@@ -3854,6 +3968,8 @@ export class Renderer {
         const size = rarityOf(cr).size;
         const tall = Math.max(22 * size, (wildermonTop(def.id) ?? 0) * big);
         const wide = 10 * size;
+        // And a mark over it, for the second it has to be seen in.
+        if (cr.windup > 0) this.drawWindupMark(ctx, ent.sx, ent.sy - (tall + 16) * zoom, zoom);
         this.creatureHits.push({ x: ent.x, y: ent.y, left: ent.sx - wide * zoom, top: ent.sy - tall * zoom, w: 2 * wide * zoom, h: (tall + 2) * zoom, creature: cr.id });
         continue;
       }
@@ -11122,6 +11238,43 @@ export class Renderer {
    * — long enough to see, short enough that a run of blows reads as a run of
    * blows rather than one long glow.
    */
+  /**
+   * The ground a heavy blow will land on: a ring of `HUNT_REACH` tiles round
+   * the one drawing back for it, as the view draws a circle, filling as the
+   * blow comes. Out of it by the time it is full is out of it.
+   */
+  private drawWindupReach(ctx: CanvasRenderingContext2D, sx: number, sy: number, zoom: number, left: number): void {
+    const k = Math.max(0, Math.min(1, 1 - left / WIND_UP));
+    const rx = HUNT_REACH * Math.SQRT2 * HALF_W * zoom;
+    const ry = HUNT_REACH * Math.SQRT2 * HALF_H * zoom;
+    ctx.save();
+    ctx.fillStyle = `rgba(214, 62, 44, ${0.1 + 0.2 * k})`;
+    ctx.beginPath();
+    ctx.ellipse(sx, sy, Math.max(1, rx * k), Math.max(1, ry * k), 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = `rgba(232, 74, 52, ${0.55 + 0.4 * k})`;
+    ctx.lineWidth = Math.max(1.5, 2.2 * zoom);
+    ctx.beginPath();
+    ctx.ellipse(sx, sy, rx, ry, 0, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  /** A mark over the head of something drawing back for a heavy blow. */
+  private drawWindupMark(ctx: CanvasRenderingContext2D, sx: number, sy: number, zoom: number): void {
+    const size = Math.max(11, Math.round(18 * zoom));
+    ctx.save();
+    ctx.font = `bold ${size}px sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'bottom';
+    ctx.lineWidth = Math.max(2, 3 * zoom);
+    ctx.strokeStyle = 'rgba(20, 10, 8, 0.75)';
+    ctx.strokeText('!', sx, sy);
+    ctx.fillStyle = '#ff5a3c';
+    ctx.fillText('!', sx, sy);
+    ctx.restore();
+  }
+
   private flashOf(at: number): number {
     const since = this.game.time - at;
     if (since < 0 || since > Renderer.FLASH) return 0;

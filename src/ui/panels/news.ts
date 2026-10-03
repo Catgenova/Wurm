@@ -1,4 +1,4 @@
-import { BLOW_DEFENSIVE, BLOW_HUNTER, BLOW_PREY, FIGHT_BACK_STILL, FIGHT_GIVE_UP, FIGHT_LEASH, FIGHT_STANCE_NAMES, FIGHT_STANCES, FIST, FOLLOW_RANGE, stanceSays, SWING_WIND, SWING_WIND_KG, TARGET_RANGE, TIRED_AT, TIRED_SLOW } from '../../game/fight';
+import { FIGHT_QUIET, ARM_SLOW_MOST, ARMOUR_VS, armourSays, BLINDSIDE, blowSays, CROWD_BLOCK, FLANK_HIT, HEAVY_EVERY, HEAVY_HIT, HIDE_NAMES, HIDES, hideSays, LEG_SLOW_MOST, sideOf, WIND_UP, BLOW_DEFENSIVE, BLOW_HUNTER, BLOW_PREY, FIGHT_BACK_STILL, FIGHT_GIVE_UP, FIGHT_LEASH, FIGHT_STANCE_NAMES, FIGHT_STANCES, FIST, FOLLOW_RANGE, stanceSays, SWING_WIND, SWING_WIND_KG, TARGET_RANGE, TIRED_AT, TIRED_SLOW } from '../../game/fight';
 import {
   CELLAR_DECAY, CELLAR_DEPTH, CELLAR_SOIL, COLUMN_SHARE, columnBill, floorBill, GLASS_ROOF, INDOORS_DECAY, INDOORS_REST, JETTY_REACH, MATERIAL_BY_ID, MATERIALS as WALL_MATERIALS, RAILING_HEIGHT,
   roofShapeDef, roofShapeOf, WALL_HEIGHT, WALL_TYPE_BY_ID, wallBill as typeBill,
@@ -43,7 +43,7 @@ import { defaultKey } from '../../game/keybinds';
 import { guidePages } from '../../game/guide';
 import { MUTE_FOR, MUTE_SHUTS } from '../../game/keeper';
 import { awayFor } from '../../game/away';
-import { ARMOUR, SHIELDS, WEAPONS } from '../../game/gear';
+import { ARMOUR, SHIELDS, WEAPON_BY_ID, WEAPONS } from '../../game/gear';
 import { JEWEL_PIECES } from '../../game/gems';
 import { itemDef, RARITIES, rarityChance } from '../../game/items';
 import { weaponCarry } from '../../render/figure';
@@ -964,6 +964,22 @@ export const NEWS: News[] = [
       `Stances, on the button beside your health bar or the \` key: ${FIGHT_STANCES.map((st) => `${FIGHT_STANCE_NAMES[st]}, ${stanceSays(st).toLowerCase()}`).join(' ')}`,
       `Left-click something that is after you, or a kind that hunts on sight, to fight it, and you follow it up to ${FOLLOW_RANGE} tiles when it steps away. Tab marks the nearest foe within ${TARGET_RANGE} tiles and Space attacks what is marked. A fight never waits behind work: the job in hand goes to the front of the line.`,
       `Walking leaves a fight: a click on the ground no longer keeps the swing-back for later, and a bite while you walk does not turn you round. A bite turns you on what bit you once your feet have been still ${FIGHT_BACK_STILL} seconds, and Settings, Fighting turns that off.`,
+    ],
+  },
+  {
+    n: 72,
+    day: '2026-10-03',
+    lines: () => [
+      `Heavy blows: ${Object.values(SPECIES).filter((d) => d.heavy).map((d) => `${d.name.toLowerCase()}s`).join(', ')} draw back every ${HEAVY_EVERY} blows. A red ring shows the reach for ${WIND_UP} second; anything still inside it takes ${HEAVY_HIT} times the blow.`,
+      `Blows cut, puncture or crush: ${blowSays('cut')} cut, ${blowSays('pierce')} puncture, ${blowSays('crush')} crush. ${HIDES.map((h) => `A ${HIDE_NAMES[h].toLowerCase()} (${Object.values(SPECIES).filter((d) => d.hide === h).map((d) => d.name.toLowerCase()).join(', ')}) ${hideSays(h)}.`).join(' ')}`,
+      `Armour against each kind: ${(Object.keys(ARMOUR_VS) as Array<keyof typeof ARMOUR_VS>).map((c) => `${c} ${armourSays(c)}`).join('; ')}.`,
+      `A landed maul ${sideOf(WEAPON_BY_ID.get('maul')!)}; a spear ${sideOf(WEAPON_BY_ID.get('spear')!)}; a knife ${sideOf(WEAPON_BY_ID.get('hunting_knife')!)}, never taking the last of it.`,
+      `Wounds to an arm or a hand slow every swing, up to ${pct(ARM_SLOW_MOST)}; wounds to a leg or a foot slow your walking, up to ${pct(LEG_SLOW_MOST)}.`,
+      `A blow from something that is not what you are fighting lands ${pct(FLANK_HIT - 1)} harder; each other thing on you takes ${pct(CROWD_BLOCK)} off a shield's chance to block; and your blow at something fighting somebody else lands ${pct(BLINDSIDE - 1)} harder.`,
+      'A panel at the top of the screen shows what you are fighting or have marked: its health, what it is doing, and what its hide makes of the blow in your hand.',
+      'A health bar over everything after you, a ring at your feet that fills as your swing comes, arrows at the edge of the view pointing at anything after you out of sight, and a red edge to the view when you are struck.',
+      `With the cursor on a hunter not yet after you, a dashed ring shows how far off it will notice you.`,
+      `Settings, Fighting, One line for a whole fight: skill gains in a fight are said once, ${FIGHT_QUIET} seconds after the last blow, with how long it lasted, what you dealt and what you took. On by default.`,
     ],
   },
 ];

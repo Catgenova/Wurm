@@ -17,7 +17,9 @@ import { BELT_MAX, pinLabel } from '../game/belt';
 import type { Renderer } from '../render/renderer';
 import { ashore, JOURNAL, nextGoals } from '../game/journal';
 import { VERSION } from '../version';
-import { FIGHT_STANCE_NAMES, stanceSays } from '../game/fight';
+import { blowOf, blowWords, FIGHT_STANCE_NAMES, HEAVY_EVERY, HIDE_NAMES, hideSays, hideTakes, HUNT_REACH, stanceSays, swungWith, TARGET_RANGE } from '../game/fight';
+import { HUNT_SIGHT, maxHealth, PLAYER_ATTACKER } from '../game/creatures';
+import { percent } from '../game/words';
 
 export interface HudCallbacks {
   toggle: (id: string) => void;
@@ -140,6 +142,14 @@ export class Hud {
   private gearEl: HTMLDivElement;
   private eatBtn!: HTMLButtonElement;
   private stanceBtn!: HTMLButtonElement;
+  /** What you are fighting or have marked: its name, its health, what it is about, and what it is weak to. */
+  private targetEl = document.createElement('div');
+  private targetName = document.createElement('div');
+  private targetFill = document.createElement('div');
+  private targetValue = document.createElement('span');
+  private targetIntent = document.createElement('div');
+  private targetNote = document.createElement('div');
+  private targetSaid = '';
   private feedBtn!: HTMLButtonElement;
   private companionText = document.createElement('span');
   private boonEl: HTMLDivElement;
@@ -362,6 +372,23 @@ export class Hud {
     this.actionEl.append(this.actionLabel, track, this.queueEl, this.goBtn, this.stopBtn, this.hintEl);
     root.append(this.actionEl);
 
+    // The target panel, top and middle, for what you are fighting or have marked.
+    this.targetEl.className = 'hud-target';
+    this.targetEl.hidden = true;
+    this.targetName.className = 'hud-target-name';
+    const targetTrack = document.createElement('div');
+    targetTrack.className = 'hud-bar hud-target-bar';
+    this.targetFill.className = 'hud-bar-fill bar-health';
+    targetTrack.append(this.targetFill);
+    this.targetValue.className = 'hud-bar-value';
+    const targetRow = document.createElement('div');
+    targetRow.className = 'hud-target-row';
+    targetRow.append(targetTrack, this.targetValue);
+    this.targetIntent.className = 'hud-target-intent';
+    this.targetNote.className = 'hud-target-note';
+    this.targetEl.append(this.targetName, targetRow, this.targetIntent, this.targetNote);
+    root.append(this.targetEl);
+
     /*
      * What to do next, for somebody who came ashore ninety seconds ago.
      *
@@ -508,6 +535,48 @@ export class Hud {
       el.classList.toggle('belt-barred', !!aim.reason);
       el.title = aim.reason ? `${label} — ${aim.reason}` : `${label}. Press ${(i + 1) % 10}, or right-click to take it off the belt.`;
     }
+  }
+
+  /**
+   * What you are fighting, or else what you have marked: its health, what it
+   * is about this moment, and what its hide makes of the blow in your hand.
+   * Gone once it is dead, tame, or twice `TARGET_RANGE` off.
+   */
+  private drawTarget(): void {
+    const g = this.game;
+    const id = g.fightTarget ?? g.marked;
+    const c = id !== null ? g.creatures.get(id) : undefined;
+    const p = g.player;
+    const d = c ? Math.hypot(c.x - p.x, c.y - p.y) : Infinity;
+    if (!c || c.health <= 0 || c.mode !== 'wild' || d > TARGET_RANGE * 2) {
+      this.targetEl.hidden = true;
+      return;
+    }
+    this.targetEl.hidden = false;
+    const def = g.creatures.species(c);
+    const top = maxHealth(c, def);
+    this.targetFill.style.width = `${Math.max(0, Math.min(1, c.health / top)) * 100}%`;
+    this.targetValue.textContent = `${Math.ceil(c.health)}/${top}`;
+    const intent = c.windup > 0 ? 'Drawing back for a heavy blow: step out of its reach'
+      : c.enemy === PLAYER_ATTACKER ? (d <= HUNT_REACH ? 'On you' : 'Coming for you')
+        : c.state === 'flee' ? 'Running from you'
+          : def.hunter || def.monster ? `Hunts on sight within ${def.notice ?? HUNT_SIGHT} tiles`
+            : 'Not after you';
+    const bleeding = c.bleedUntil > g.time ? ', bleeding' : '';
+    const blow = blowOf(swungWith(g).def);
+    const yours = hideTakes(def.hide, blow);
+    const note = [
+      def.hide ? `${HIDE_NAMES[def.hide]}: ${hideSays(def.hide)}.` : 'Takes every blow as it comes.',
+      yours !== 1 ? `Your ${blowWords(blow)} land ${percent(Math.abs(yours - 1))} ${yours > 1 ? 'harder' : 'softer'} on it.` : '',
+      def.heavy ? `Draws back for a heavy blow every ${HEAVY_EVERY} blows.` : '',
+    ].filter(Boolean).join(' ');
+    const said = `${def.name}|${intent}${bleeding}|${note}|${c.windup > 0}`;
+    if (said === this.targetSaid) return;
+    this.targetSaid = said;
+    this.targetName.textContent = def.name;
+    this.targetIntent.textContent = `${intent}${bleeding}`;
+    this.targetIntent.classList.toggle('hud-target-warn', c.windup > 0);
+    this.targetNote.textContent = note;
   }
 
   /**
@@ -734,6 +803,7 @@ export class Hud {
       this.companionEl.hidden = false;
     } else this.companionEl.hidden = true;
     this.eatBtn.disabled = !this.game.bestFood();
+    this.drawTarget();
     const stance = this.game.settings.fightStance;
     if (this.stanceBtn.dataset.stance !== stance) {
       this.stanceBtn.dataset.stance = stance;

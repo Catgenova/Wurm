@@ -3,7 +3,7 @@ import { BINDS, BIND_GROUPS, keyName, keyReserved, MAX_KEYS, type Keybinds } fro
 import { whoAmI } from '../../net/accounts';
 import { RARITIES } from '../../game/items';
 import { CRAFT_REACH } from '../../game/recipes';
-import { FIGHT_BACK_STILL } from '../../game/fight';
+import { FIGHT_BACK_STILL, FIGHT_QUIET } from '../../game/fight';
 import type { UIWindow } from '../windows';
 import { setUiSize, UI_SIZE_MAX, UI_SIZE_MIN, uiSizeShown } from '../screen';
 
@@ -258,6 +258,12 @@ export class SettingsPanel {
         game.settings.fightBack = v;
         game.fightPrefsChanged?.();
       },
+    );
+    add(
+      'One line for a whole fight',
+      `What each skill comes up by in a fight is held back and said once, ${FIGHT_QUIET} seconds after the last blow, with how long it lasted, what you dealt and what you took, rather than a line after every swing. Untick to see every gain as it comes.`,
+      () => game.settings.compactFight,
+      (v) => (game.settings.compactFight = v),
     );
 
     /**

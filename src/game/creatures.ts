@@ -22,7 +22,7 @@ import { auraMul, breedTraits, channelOf, CHANNELS, pct, rollTraits, traitList, 
 import { ACTION_FLOOR, ACTION_PACE, WORKER_WEIGHT } from './pace';
 import { world } from './pace';
 import { emptyCrate, shutIn, standingCrate } from './creaturecrate';
-import { blowEvery, FIGHT_GIVE_UP, FIGHT_LEASH } from './fight';
+import { blowEvery, FIGHT_GIVE_UP, FIGHT_LEASH, HEAVY_EVERY, HEAVY_HIT, HUNT_REACH, KNIFE_BLEED_SECS, WIND_UP, type Hide } from './fight';
 
 /**
  * Wildermon: creatures that roam the wild, can be tamed with the taming
@@ -349,6 +349,10 @@ export interface SpeciesDef {
   monster?: boolean;
   /** How far off it notices you, in tiles; a monster sees a long way. */
   notice?: number;
+  /** What it wears against a blow (`HIDE_TAKES`); a soft one takes every blow as it comes. */
+  hide?: Hide;
+  /** Big enough to draw back for a heavy blow every `HEAVY_EVERY` (`fight.ts`). */
+  heavy?: boolean;
 }
 
 export const SPECIES: Record<string, SpeciesDef> = {
@@ -429,6 +433,7 @@ export const SPECIES: Record<string, SpeciesDef> = {
   },
   crawler: {
     id: 'crawler',
+    hide: 'shell',
     wound: 'cut',
     name: 'Crawler',
     description: 'A broad sand-coloured crab that goes at everything sideways. It shovels sand with its claws, and it has never once been sorry for pinching anybody.',
@@ -510,6 +515,7 @@ export const SPECIES: Record<string, SpeciesDef> = {
   },
   quarra: {
     id: 'quarra',
+    hide: 'shell',
     wound: 'crush',
     name: 'Quarra',
     description: 'A low, broad creature with a jaw like a chisel and a hide the colour of the rock it sits on. It eats clay by the mouthful and spends the rest of the day taking the mountain apart a piece at a time.',
@@ -670,6 +676,8 @@ export const SPECIES: Record<string, SpeciesDef> = {
   },
   roxxen: {
     id: 'roxxen',
+    hide: 'thick',
+    heavy: true,
     wound: 'crush',
     name: 'Roxxen',
     description: 'A great slab-shouldered ox with horns that sweep forward and a head it holds low. It will not start anything, and it will finish most things that start with it. Nothing but a Shaggan pulls a loaded wagon like a pair of them.',
@@ -959,6 +967,7 @@ export const SPECIES: Record<string, SpeciesDef> = {
   },
   cobbe: {
     id: 'cobbe',
+    hide: 'thick',
     name: 'Cobbe',
     description: 'A squat, hard-headed hauler with shoulders like a wall itself. It carries brick and mortar to whatever you have planned and fits it, one piece at a time, unasked.',
     health: 40,
@@ -1033,6 +1042,7 @@ export const SPECIES: Record<string, SpeciesDef> = {
   // ---- Backs and saddles. ----
   bura: {
     id: 'bura',
+    hide: 'thick',
     wound: 'crush',
     name: 'Bura',
     description: 'A broad, slow, endlessly patient creature that was clearly made to have things strapped to it. {pannier:W} things ride on its back, and it neither hurries nor complains.',
@@ -1120,6 +1130,8 @@ export const SPECIES: Record<string, SpeciesDef> = {
   },
   shaggan: {
     id: 'shaggan',
+    hide: 'thick',
+    heavy: true,
     wound: 'crush',
     name: 'Shaggan',
     description: 'A mountain of hair, slower than anything else that pulls and stronger than all of them: in the traces it adds {pull:pct} to its team\'s pace, where most beasts add {pullDefault:pct}.',
@@ -1345,6 +1357,7 @@ export const SPECIES: Record<string, SpeciesDef> = {
   },
   orc: {
     id: 'orc',
+    heavy: true,
     monster: true,
     notice: 13,
     wound: 'cut',
@@ -1374,6 +1387,8 @@ export const SPECIES: Record<string, SpeciesDef> = {
   },
   ogre: {
     id: 'ogre',
+    hide: 'thick',
+    heavy: true,
     monster: true,
     notice: 12,
     wound: 'crush',
@@ -1403,6 +1418,8 @@ export const SPECIES: Record<string, SpeciesDef> = {
   },
   dragon: {
     id: 'dragon',
+    hide: 'scaled',
+    heavy: true,
     monster: true,
     notice: 20,
     wound: 'burn',
@@ -1842,6 +1859,8 @@ export interface IslandCreature {
   sex?: string;
   traits?: string[];
   hunting?: boolean;
+  /** Seconds left of a heavy blow it is drawing back for, when it is. */
+  windup?: number;
   mine?: boolean;
   /** How rare it is, as the island words it ('rare', 'supreme', 'fantastic'); absent for an ordinary one. */
   rare?: string | null;
@@ -1962,6 +1981,13 @@ export interface Creature {
   attackedBy: number | null;
   attackedAt: number;
   cooldown: number;
+  /** Seconds left of a heavy blow it is drawing back for; nought when it is not. */
+  windup: number;
+  /** Blows it has landed or loosed in this fight, which is what brings the heavy one round. */
+  blows: number;
+  /** Health it is bleeding a second from a knife, and the game time it stops. */
+  bleedRate: number;
+  bleedUntil: number;
   busyUntil: number;
   searchAt: number;
   /** Where it first had your scent, which is what the leash is tied to. */
@@ -2407,6 +2433,10 @@ export class Creatures {
       attackedBy: null,
       attackedAt: -1e9,
       cooldown: 0,
+      windup: 0,
+      blows: 0,
+      bleedRate: 0,
+      bleedUntil: 0,
       busyUntil: 0,
       searchAt: 0,
       huntX: 0,
@@ -2491,6 +2521,7 @@ export class Creatures {
       c.pedigree = r.pedigree ?? null;
       // The island says `hunting` only of one that is after you (`rpc_creatures`), and that is what `PLAYER_ATTACKER` means here.
       c.enemy = r.hunting ? PLAYER_ATTACKER : null;
+      c.windup = r.windup ?? 0;
       // Whose it is, which the island says and the journal has to know.
       c.mine = r.mine;
       // And what it was set to, if that is not what its kind does anyway.
@@ -2914,6 +2945,8 @@ export class Creatures {
     this.clearTiles();
     if (this.fromIsland) {
       this.walkLegs();
+      // A heavy blow the island said one is drawing back for runs down here between answers, for the tell.
+      for (const c of this.list.values()) if (c.windup > 0) c.windup = Math.max(0, c.windup - dt);
       return;
     }
     this.respawnClock += dt;
@@ -3123,6 +3156,17 @@ export class Creatures {
   private body(game: Game, c: Creature, elapsed: number): SpeciesDef {
     const def = this.species(c);
     c.cooldown = Math.max(0, c.cooldown - elapsed);
+    /*
+     * A knife's bleeding, for the part of the time banked that it ran, and
+     * never the last of it: what finishes a thing is a blow (`KNIFE_BLEED`).
+     */
+    const from = Math.max(game.time - elapsed, c.bleedUntil - KNIFE_BLEED_SECS);
+    const secs = Math.min(game.time, c.bleedUntil) - from;
+    if (secs > 0) {
+      if (c.health > 1) c.health = Math.max(1, c.health - c.bleedRate * secs);
+      // And while it bleeds it is hurt, so it mends nothing.
+      c.attackedAt = Math.max(c.attackedAt, from + secs);
+    }
     c.moving = false;
     const top = maxHealth(c, def);
     if (c.health > top) c.health = top;
@@ -4427,6 +4471,8 @@ export class Creatures {
     c.enemy = PLAYER_ATTACKER;
     c.huntX = c.x;
     c.huntY = c.y;
+    c.blows = 0;
+    c.windup = 0;
     // Whatever it was about, it is about you now.
     if (c.state !== 'flee') {
       c.state = 'idle';
@@ -4459,6 +4505,7 @@ export class Creatures {
     if (hunting && (d > giveUp || spent
                     || (def.hunter && c.health < maxHealth(c, def) * (def.monster ? 0.08 : 0.3)))) {
       c.enemy = null;
+      c.windup = 0;
       if (spent) {
         c.huntRest = game.time + HUNT_REST;
         // And back to its own country, rather than standing wherever it
@@ -4479,14 +4526,42 @@ export class Creatures {
       c.enemy = PLAYER_ATTACKER;
       c.huntX = c.x;
       c.huntY = c.y;
+      c.blows = 0;
+      c.windup = 0;
       game.logMsg(`A ${def.name.toLowerCase()} has your scent.`, 'fight');
     }
-    if (d <= 1.1) {
+    const name = def.name.toLowerCase();
+    /*
+     * Drawing back for a heavy blow: it stands where it is for `WIND_UP`, and
+     * lands it on whatever is still in its reach. Stepping out of it is the
+     * whole of the answer.
+     */
+    if (c.windup > 0) {
+      c.windup -= dt;
+      if (c.windup > 0) return true;
+      c.windup = 0;
+      c.blows += 1;
+      c.cooldown = blowEvery(def) / this.mul(c, 'haste');
+      if (d <= HUNT_REACH) {
+        p.attackedBy = c.id;
+        p.attackedAt = game.time;
+        game.hurtPlayer(attackOf(c, def) * BLOW_SHARE * HEAVY_HIT, `The ${name}'s heavy blow lands`, def.wound ?? 'bite');
+      } else game.logMsg(`The ${name}'s heavy blow falls short.`, 'fight');
+      return true;
+    }
+    if (d <= HUNT_REACH) {
       if (c.cooldown <= 0) {
+        // Every `HEAVY_EVERY`th blow of a kind that hits heavy is drawn back for first.
+        if (def.heavy && (c.blows + 1) % HEAVY_EVERY === 0) {
+          c.windup = WIND_UP;
+          game.logMsg(`The ${name} draws back for a heavy blow. Step out of its reach.`, 'fight');
+          return true;
+        }
+        c.blows += 1;
         c.cooldown = blowEvery(def) / this.mul(c, 'haste');
         p.attackedBy = c.id;
         p.attackedAt = game.time;
-        game.hurtPlayer(attackOf(c, def) * BLOW_SHARE, `The ${def.name.toLowerCase()} is on you`, def.wound ?? 'bite');
+        game.hurtPlayer(attackOf(c, def) * BLOW_SHARE, `The ${name} is on you`, def.wound ?? 'bite');
       }
       return true;
     }

@@ -1771,6 +1771,57 @@ kbd {
   background: #3a3024;
 }
 
+/* What you are fighting or have marked, top and middle, out of the way of the status and the windows. */
+.hud-target {
+  position: absolute;
+  top: 62px;
+  left: 50%;
+  width: 280px;
+  transform: translateX(-50%);
+  padding: 7px 10px 8px;
+  background: var(--ui-bg);
+  border: 1px solid var(--ui-border);
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.6);
+  font-size: 11px;
+  pointer-events: none;
+}
+
+.hud-target-name {
+  margin-bottom: 4px;
+  color: var(--ui-accent);
+  font-weight: bold;
+}
+
+.hud-target-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 6px;
+  align-items: center;
+}
+
+.hud-target-intent {
+  margin-top: 4px;
+  color: var(--ui-text);
+}
+
+.hud-target-intent.hud-target-warn {
+  color: #ff6a4d;
+  font-weight: bold;
+}
+
+.hud-target-note {
+  margin-top: 2px;
+  color: var(--ui-dim);
+  line-height: 1.35;
+}
+
+/* On a narrow screen the toolbar and the status take the top, so it sits over the action bar instead. */
+#ui.narrow .hud-target {
+  top: auto;
+  bottom: 150px;
+  width: 240px;
+}
+
 /* The stance beside the health bar keeps one width whichever of the three it says. */
 .hud-stance {
   min-width: 62px;

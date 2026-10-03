@@ -1544,6 +1544,18 @@ jobs:
             --outfile=node_modules/.cache/clock.mjs --log-level=error
           node node_modules/.cache/clock.mjs
 
+      - name: Heavy blows, hides and wounds
+        run: |
+          # A kind that hits heavy draws back and lands it on you standing
+          # there, and falls short once you have stepped out of its reach; a
+          # cut, a puncture or a crush, and what each hide and each class of
+          # armour makes of it; a wounded arm that slows a swing; a maul that
+          # staggers, a knife that bleeds and never takes the last of it; and a
+          # blow from what you are not fighting landing harder. Both sides.
+          npx esbuild supabase/test/blows.ts --bundle --platform=node --format=esm \
+            --outfile=node_modules/.cache/blows.mjs --log-level=error
+          node node_modules/.cache/blows.mjs
+
       - name: A stone, and what you can get out of it
         run: |
           # The arcane, which has no mana in it. A focus is a cut gem in a

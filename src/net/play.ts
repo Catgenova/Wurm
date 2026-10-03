@@ -357,7 +357,11 @@ export async function startIsland(params: URLSearchParams, tell: Telling): Promi
         if (typeof what.stats[k] === 'number') s[k] = what.stats[k];
       }
       const took = tookOff(was, s.health);
-      if (took) game.events.emit('hit', game.player.x, game.player.y, took, 'taken');
+      if (took) {
+        game.events.emit('hit', game.player.x, game.player.y, took, 'taken');
+        // And the flash of being struck, and the edge of the view reddening, as a blow here has it.
+        game.player.attackedAt = game.time;
+      }
       game.events.emit('stats');
     }
     if (what.skills) {

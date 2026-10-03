@@ -186,6 +186,8 @@ alter table species_def add column if not exists trades text[];
 alter table species_def add column if not exists swims boolean not null default false;
 alter table species_def add column if not exists hives boolean not null default false;
 alter table species_def add column if not exists pannier real;
+alter table species_def add column if not exists hide text;
+alter table species_def add column if not exists heavy boolean not null default false;
 alter table furniture_def add column if not exists cart boolean not null default false;
 create table if not exists vehicle_def (
   id text primary key, yokes int not null, needs int not null, seat real not null
@@ -1935,6 +1937,7 @@ insert into species_diet values ('bevere', 'wheat');
 insert into species_diet values ('bevere', 'acorn');
 insert into species_diet values ('bevere', 'nuts');
 insert into species_def values ('crawler', 'Crawler', 'A broad sand-coloured crab that goes at everything sideways. It shovels sand with its claws, and it has never once been sorry for pinching anybody.', 24, 5, 1.6, 1, 0.1, 'a vegetable', false, 'sand', 8, 'takes the {food} in one claw, waves the other at you, and backs off sideways', 'scuttles off sideways and buries itself in the sand', 4, false, false, false, true, false, false, false, false, false, false, true, false, null, 0.12, 'defensive', null, 'cut', null, null);
+update species_def set hide = 'shell' where id = 'crawler';
 insert into species_diet values ('crawler', 'potato');
 insert into species_diet values ('crawler', 'carrot');
 insert into species_diet values ('crawler', 'cabbage');
@@ -1953,6 +1956,7 @@ insert into species_diet values ('embra', 'berry_compote');
 insert into species_diet values ('embra', 'stew');
 insert into species_diet values ('embra', 'pottage');
 insert into species_def values ('quarra', 'Quarra', 'A low, broad creature with a jaw like a chisel and a hide the colour of the rock it sits on. It eats clay by the mouthful and spends the rest of the day taking the mountain apart a piece at a time.', 34, 5, 1.2, 1, 0.09, 'a lump of clay', false, 'quarry', 8, 'takes the {food} in one bite, considers you, and goes back to the rock', 'lumbers off and settles against the nearest stone face', 4, false, false, false, false, false, false, true, false, false, false, false, false, null, null, null, null, 'crush', null, null);
+update species_def set hide = 'shell' where id = 'quarra';
 insert into species_diet values ('quarra', 'clay');
 insert into species_def values ('woola', 'Woola', 'A round, mild grazer under a deep fleece, which it grows back as fast as you can take it off. It has no opinion about anything and no job worth speaking of, and everyone keeps one anyway.', 26, 2, 1.3, 1, 0.2, 'grass or greens', true, null, 6, 'eats the {food} without appearing to notice you at all', 'wanders off grazing and does not look back', 4, false, false, false, false, false, false, false, false, false, false, false, false, 0.0011111111111111111, null, null, null, null, null, null);
 insert into species_diet values ('woola', 'mixed_grass');
@@ -1982,6 +1986,8 @@ insert into species_diet values ('seavic', 'nuts');
 insert into species_def values ('roxxen', 'Roxxen', 'A great slab-shouldered ox with horns that sweep forward and a head it holds low. It will not start anything, and it will finish most things that start with it. Nothing but a Shaggan pulls a loaded wagon like a pair of them.', 80, 11, 1.1, 25, 0.07, 'grass or grain', false, null, 6, 'chews through the {food} without once looking up, and goes back to the grass', 'walks off at its own pace and does not look back', 4, false, false, false, false, false, false, false, false, false, false, true, false, null, null, null, null, 'crush', null, null);
 update species_def set pull = 0.3 where id = 'roxxen';
 update species_def set draught = true where id = 'roxxen';
+update species_def set hide = 'thick' where id = 'roxxen';
+update species_def set heavy = true where id = 'roxxen';
 insert into species_diet values ('roxxen', 'mixed_grass');
 insert into species_diet values ('roxxen', 'wheat');
 insert into species_diet values ('roxxen', 'corn');
@@ -2050,6 +2056,7 @@ insert into species_diet values ('plucka', 'apricot');
 insert into species_diet values ('plucka', 'quince');
 insert into species_diet values ('plucka', 'nuts');
 insert into species_def values ('cobbe', 'Cobbe', 'A squat, hard-headed hauler with shoulders like a wall itself. It carries brick and mortar to whatever you have planned and fits it, one piece at a time, unasked.', 40, 5, 1.5, 20, 0.09, 'bread or something cooked', false, 'hod', 12, 'eats the {food} in one, looks at you, and goes back to shoving rocks about', 'walks off with its head down and does not look back', 4, false, false, false, false, false, false, false, false, false, false, true, false, null, null, null, null, null, null, null);
+update species_def set hide = 'thick' where id = 'cobbe';
 insert into species_diet values ('cobbe', 'bread');
 insert into species_diet values ('cobbe', 'baked_potato');
 insert into species_diet values ('cobbe', 'mixed_grass');
@@ -2066,6 +2073,7 @@ insert into species_diet values ('middun', 'cabbage');
 insert into species_diet values ('middun', 'corpse');
 insert into species_def values ('bura', 'Bura', 'A broad, slow, endlessly patient creature that was clearly made to have things strapped to it. Two hundred things ride on its back, and it neither hurries nor complains.', 55, 6, 1.5, 22, 0.09, 'grass or grain', false, null, 6, 'accepts the {food}, considers it, and goes back to standing still', 'ambles away at exactly the pace it does everything else', 4, false, false, false, false, false, false, false, false, false, false, true, false, null, null, null, null, 'crush', null, null);
 update species_def set pannier = 200 where id = 'bura';
+update species_def set hide = 'thick' where id = 'bura';
 insert into species_diet values ('bura', 'mixed_grass');
 insert into species_diet values ('bura', 'wheat');
 insert into species_diet values ('bura', 'corn');
@@ -2088,6 +2096,8 @@ insert into species_diet values ('wadd', 'nuts');
 insert into species_def values ('shaggan', 'Shaggan', 'A mountain of hair, slower than anything else that pulls and stronger than all of them: in the traces it adds 45% to its team''s pace, where most beasts add 25%.', 90, 12, 1, 35, 0.06, 'grass or grain', false, null, 6, 'eats the {food}, and the grass around it, and stands there', 'turns and walks into the wind, which is where it was going anyway', 4, false, false, false, false, false, false, false, false, false, false, true, false, null, null, null, null, 'crush', null, null);
 update species_def set pull = 0.45 where id = 'shaggan';
 update species_def set draught = true where id = 'shaggan';
+update species_def set hide = 'thick' where id = 'shaggan';
+update species_def set heavy = true where id = 'shaggan';
 insert into species_diet values ('shaggan', 'mixed_grass');
 insert into species_diet values ('shaggan', 'wheat');
 insert into species_diet values ('shaggan', 'corn');
@@ -2124,9 +2134,14 @@ insert into species_diet values ('lume', 'nuts');
 insert into species_diet values ('lume', 'honey');
 insert into species_def values ('goblin', 'Goblin', 'Knee-high, green-grey and entirely malice, in a jerkin of somebody else’s leather with a notched blade it did not make. The commonest of the bad things, and the only one a careful beginner survives meeting.', 40, 14, 2.3, 999, 0, 'nothing you would offer it', false, null, 0, 'spits at your hand', 'slinks off into the undergrowth', 3, false, false, false, false, false, false, false, true, false, true, true, false, null, null, 'aggressive', null, 'cut', 11, null);
 insert into species_def values ('orc', 'Orc', 'A head taller than you, grey-skinned, tusked, and carrying iron it took the trouble to sharpen. Orcs come down out of the high ground in ones and twos and they do not run from anything.', 95, 22, 2.5, 999, 0, 'nothing you would offer it', false, null, 0, 'laughs at you', 'turns and walks away without hurrying', 3, false, false, false, false, false, false, false, true, false, true, true, false, null, null, 'aggressive', null, 'cut', 13, null);
+update species_def set heavy = true where id = 'orc';
 insert into species_def values ('ogre', 'Ogre', 'A hill of shoulder with a tree in one fist and very little behind the eyes. It is slow, it is stupid, and if it gets a hand on you none of that matters.', 170, 34, 1.8, 999, 0, 'nothing you would offer it', false, null, 0, 'looks at the {food}, then at you', 'lumbers off, flattening everything in its way', 3, false, false, false, false, false, false, false, true, false, true, true, false, null, null, 'aggressive', null, 'crush', 12, null);
+update species_def set hide = 'thick' where id = 'ogre';
+update species_def set heavy = true where id = 'ogre';
 insert into species_def values ('dragon', 'Dragon', 'There is one. Nobody agrees where, everybody agrees it is real, and the few who have seen it and come back describe the same thing: scales like roof slates, a smell of hot metal, and the ground going by underneath very fast.', 700, 70, 2.9, 999, 0, 'nothing in the world', false, null, 0, 'does not appear to have noticed', 'is simply not there any more', 4, false, false, false, false, false, false, false, true, false, true, true, false, null, null, 'aggressive', null, 'burn', 20, null);
 update species_def set glow = 5 where id = 'dragon';
+update species_def set hide = 'scaled' where id = 'dragon';
+update species_def set heavy = true where id = 'dragon';
 insert into item_def values ('altar', 'altar', 'misc', 1, false, null, null);
 insert into item_def values ('bell', 'bell', 'misc', 1, false, null, null);
 insert into item_def values ('brazier', 'brazier', 'misc', 1, false, null, null);
@@ -4028,6 +4043,33 @@ create or replace function stance_taken(p_stance text) returns double precision 
     when 'defensive' then 0.8
   end, 1)::double precision
 $fn$;
+create or replace function blow_of(p_weapon text, p_kind text) returns text language sql immutable as $fn$
+  select case when p_weapon = 'fist' then 'crush' else coalesce(case p_kind
+    when 'swords' then 'cut'
+    when 'axes' then 'cut'
+    when 'knives' then 'cut'
+    when 'polearms' then 'pierce'
+    when 'archery' then 'pierce'
+    when 'throwing' then 'pierce'
+    when 'mauls' then 'crush'
+  end, 'crush') end
+$fn$;
+create or replace function hide_takes(p_hide text, p_blow text) returns double precision language sql immutable as $fn$
+  select coalesce(case p_hide
+    when 'thick' then case p_blow when 'cut' then 0.8 when 'pierce' then 1 when 'crush' then 1.2 end
+    when 'shell' then case p_blow when 'cut' then 0.6 when 'pierce' then 0.8 when 'crush' then 1.4 end
+    when 'scaled' then case p_blow when 'cut' then 0.75 when 'pierce' then 1.25 when 'crush' then 0.9 end
+  end, 1)::double precision
+$fn$;
+create or replace function armour_vs(p_cls text, p_kind text) returns double precision language sql immutable as $fn$
+  select coalesce(case p_cls
+    when 'cloth' then case p_kind when 'cut' then 0.8 when 'pierce' then 1 when 'crush' then 1.2 when 'bite' then 1 when 'burn' then 1 end
+    when 'leather' then case p_kind when 'cut' then 1 when 'pierce' then 0.85 when 'crush' then 1.1 when 'bite' then 1 when 'burn' then 1 end
+    when 'chain' then case p_kind when 'cut' then 1.25 when 'pierce' then 0.75 when 'crush' then 0.7 when 'bite' then 1.1 when 'burn' then 1 end
+    when 'plate' then case p_kind when 'cut' then 1.15 when 'pierce' then 1.1 when 'crush' then 0.85 when 'bite' then 1.1 when 'burn' then 1 end
+    when 'scale' then case p_kind when 'cut' then 1.15 when 'pierce' then 0.9 when 'crush' then 1 when 'bite' then 1 when 'burn' then 1.25 end
+  end, 1)::double precision
+$fn$;
 create or replace function board_top() returns int language sql immutable as $fn$ select 10::int $fn$;
 create or replace function clearance() returns double precision language sql immutable as $fn$ select 3::double precision $fn$;
 create or replace function end_slop() returns double precision language sql immutable as $fn$ select 12::double precision $fn$;
@@ -4074,6 +4116,19 @@ create or replace function tired_at() returns double precision language sql immu
 create or replace function tired_slow() returns double precision language sql immutable as $fn$ select 0.6::double precision $fn$;
 create or replace function swing_wind() returns double precision language sql immutable as $fn$ select 0.03::double precision $fn$;
 create or replace function swing_wind_kg() returns double precision language sql immutable as $fn$ select 0.02::double precision $fn$;
+create or replace function heavy_every() returns double precision language sql immutable as $fn$ select 3::double precision $fn$;
+create or replace function wind_up() returns double precision language sql immutable as $fn$ select 1::double precision $fn$;
+create or replace function heavy_hit() returns double precision language sql immutable as $fn$ select 2.5::double precision $fn$;
+create or replace function hunt_reach() returns double precision language sql immutable as $fn$ select 1.1::double precision $fn$;
+create or replace function arm_slow() returns double precision language sql immutable as $fn$ select 2::double precision $fn$;
+create or replace function arm_slow_most() returns double precision language sql immutable as $fn$ select 0.5::double precision $fn$;
+create or replace function flank_hit() returns double precision language sql immutable as $fn$ select 1.25::double precision $fn$;
+create or replace function crowd_block() returns double precision language sql immutable as $fn$ select 0.25::double precision $fn$;
+create or replace function blindside() returns double precision language sql immutable as $fn$ select 1.25::double precision $fn$;
+create or replace function stagger_maul() returns double precision language sql immutable as $fn$ select 1::double precision $fn$;
+create or replace function stagger_pole() returns double precision language sql immutable as $fn$ select 0.6::double precision $fn$;
+create or replace function knife_bleed() returns double precision language sql immutable as $fn$ select 0.15::double precision $fn$;
+create or replace function knife_bleed_secs() returns double precision language sql immutable as $fn$ select 6::double precision $fn$;
 create or replace function knack_each() returns double precision language sql immutable as $fn$ select 0.1::double precision $fn$;
 create or replace function knack_cap() returns double precision language sql immutable as $fn$ select 5::double precision $fn$;
 create or replace function knack_odds() returns double precision language sql immutable as $fn$ select 5000::double precision $fn$;
