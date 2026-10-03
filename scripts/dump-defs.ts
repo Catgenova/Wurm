@@ -52,6 +52,7 @@ import { WEAPONS, ARMOUR, ARMOUR_CLASSES, SHIELDS, HIT_LOCATIONS } from '../src/
 import { WOUND_BY_WEAPON, WOUND_KINDS } from '../src/game/wounds';
 import { BUTCHER_PARTS, HOARD_METALS } from '../src/game/butcher';
 import { CRATE_DEFS } from '../src/game/crates';
+import { ARROWS, BODKIN_HIDE, BURN_WEAR, CRIT_BASE, CRIT_HIT, CRIT_KNIFE, CRIT_PER_SKILL, DODGE_GAIN, DODGE_MOST, DODGE_PER_CONTROL, DODGE_PER_KG, THREAT_HOLD, VENOM_DRAIN, VENOM_SECS } from '../src/game/fight';
 import { BACK_PACE, BACK_SLACK, CIRCLE_ARC, CIRCLE_R, COWARD_AT, COWARD_DRAG, FALL_BACK, FLEE_PACE, FLEE_SECS, GUARD_RANGE, HUNTER_TURN, KEEP_OFF, MONSTER_TURN, PACK_CALL, PACK_MOST, PACK_RANGE, THROW_HIT, THROW_REACH } from '../src/game/fight';
 import { ARM_SLOW, ARM_SLOW_MOST, ARMOUR_VS, BLINDSIDE, BLOW_DEFENSIVE, BLOW_HUNTER, BLOW_KINDS, BLOW_PREY, CROWD_BLOCK, FIGHT_BACK_STILL, FIGHT_GIVE_UP, FIGHT_LEASH, FIGHT_STANCES, FIST, FLANK_HIT, HEAVY_EVERY, HEAVY_HIT, HIDE_TAKES, HIDES, HUNT_REACH, KNIFE_BLEED, KNIFE_BLEED_SECS, STAGGER_MAUL, STAGGER_POLE, STANCE_DEALT, STANCE_TAKEN, SWING_WIND, SWING_WIND_KG, TIRED_AT, TIRED_SLOW, WIND_UP } from '../src/game/fight';
 import { METALS, MOULDS, ORE_PER_LUMP, RARE_LUMP_FACTOR, RARE_METALS } from '../src/game/metal';
@@ -470,6 +471,8 @@ out.push(`alter table species_def add column if not exists heavy boolean not nul
 out.push(`alter table species_def add column if not exists pack boolean not null default false;`);
 out.push(`alter table species_def add column if not exists throws boolean not null default false;`);
 out.push(`alter table species_def add column if not exists coward boolean not null default false;`);
+/* Its bite leaves venom in the wound (\`fight.ts\`). */
+out.push(`alter table species_def add column if not exists venom boolean not null default false;`);
 /* A cart is pulled by hand; a vehicle is driven from a seat with a team in
  * front of it; a boat is neither and wants water under it. */
 out.push(`alter table furniture_def add column if not exists cart boolean not null default false;`);
@@ -1131,6 +1134,7 @@ for (const d of Object.values(SPECIES) as unknown as S[]) {
   if (d.pack) out.push(`update species_def set pack = true where id = ${q(d.id)};`);
   if (d.throws) out.push(`update species_def set throws = true where id = ${q(d.id)};`);
   if (d.coward) out.push(`update species_def set coward = true where id = ${q(d.id)};`);
+  if (d.venom) out.push(`update species_def set venom = true where id = ${q(d.id)};`);
   for (const item of d.diet as string[]) out.push(`insert into species_diet values (${q(d.id)}, ${q(item)});`);
   const trades = (d as unknown as { trades?: string[] }).trades;
   if (trades) out.push(`update species_def set trades = array[${trades.map(q).join(', ')}]::text[] where id = ${q(d.id)};`);
@@ -1278,6 +1282,12 @@ out.push(`create or replace function blow_of(p_weapon text, p_kind text) returns
 ${Object.entries(WOUND_BY_WEAPON).map(([k, v]) => `    when ${q(k)} then ${q(v)}`).join('\n')}
   end, 'crush') end
 $fn$;`);
+/* What is on the end of an arrow, by the arrow (\`ARROWS\`); null for anything that is not one. */
+out.push(`create or replace function arrow_head_of(p_item text) returns text language sql immutable as $fn$
+  select case p_item
+${Object.entries(ARROWS).map(([k, v]) => `    when ${q(k)} then ${q(v)}`).join('\n')}
+  end
+$fn$;`);
 out.push(`create or replace function hide_takes(p_hide text, p_blow text) returns double precision language sql immutable as $fn$
   select coalesce(case p_hide
 ${HIDES.map((h) => `    when ${q(h)} then case p_blow ${BLOW_KINDS.map((b) => `when ${q(b)} then ${q(HIDE_TAKES[h][b])}`).join(' ')} end`).join('\n')}
@@ -1377,6 +1387,15 @@ for (const [fn, v] of [
   ['keep_off', KEEP_OFF], ['throw_reach', THROW_REACH], ['throw_hit', THROW_HIT], ['back_slack', BACK_SLACK], ['back_pace', BACK_PACE],
   ['hunter_turn', HUNTER_TURN], ['monster_turn', MONSTER_TURN], ['coward_at', COWARD_AT], ['coward_drag', COWARD_DRAG],
   ['flee_pace', FLEE_PACE], ['flee_secs', FLEE_SECS],
+  /* Dodging a blow: per point of body control, less per kilogram of armour,
+     never more than; and what a dodge teaches. A critical blow: its chance,
+     more per point of skill, a knife's share more, and what it lands for. A
+     bodkin through a hide; venom, a second and how long; a burn on armour;
+     and how long what a creature is on holds it. */
+  ['dodge_per_control', DODGE_PER_CONTROL], ['dodge_per_kg', DODGE_PER_KG], ['dodge_most', DODGE_MOST], ['dodge_gain', DODGE_GAIN],
+  ['crit_base', CRIT_BASE], ['crit_per_skill', CRIT_PER_SKILL], ['crit_knife', CRIT_KNIFE], ['crit_hit', CRIT_HIT],
+  ['bodkin_hide', BODKIN_HIDE], ['venom_drain', VENOM_DRAIN], ['venom_secs', VENOM_SECS], ['burn_wear', BURN_WEAR],
+  ['threat_hold', THREAT_HOLD],
   /* A companion's orders: how near a guarding one keeps a fight, and how long one fallen back starts none. */
   ['guard_range', GUARD_RANGE], ['fall_back', FALL_BACK],
   /* Wounds that slow a swing, and how far; a blow at your back, a crowd on

@@ -1,3 +1,7 @@
+import {
+  BODKIN_HIDE, BURN_WEAR, CONSIDER_EASY, CONSIDER_HARD, CRIT_BASE, CRIT_HIT, CRIT_KNIFE, CRIT_PER_SKILL, DODGE_MOST, DODGE_PER_CONTROL, DODGE_PER_KG, KNIFE_BLEED,
+  KNIFE_BLEED_SECS, STAGGER_MAUL, THREAT_HOLD, VENOM_DRAIN, VENOM_SECS,
+} from '../../game/fight';
 import { BACK_PACE, BACK_SLACK, CIRCLE_R, COWARD_AT, COWARD_DRAG, DRAW_WALK, FALL_BACK, GUARD_RANGE, HUNTER_TURN, KEEP_OFF, MONSTER_TURN, PACK_CALL, PACK_MOST, THROW_HIT, THROW_REACH } from '../../game/fight';
 import { FIGHT_QUIET, ARM_SLOW_MOST, ARMOUR_VS, armourSays, BLINDSIDE, blowSays, CROWD_BLOCK, FLANK_HIT, HEAVY_EVERY, HEAVY_HIT, HIDE_NAMES, HIDES, hideSays, LEG_SLOW_MOST, sideOf, WIND_UP, BLOW_DEFENSIVE, BLOW_HUNTER, BLOW_PREY, FIGHT_BACK_STILL, FIGHT_GIVE_UP, FIGHT_LEASH, FIGHT_STANCE_NAMES, FIGHT_STANCES, FIST, FOLLOW_RANGE, stanceSays, SWING_WIND, SWING_WIND_KG, TARGET_RANGE, TIRED_AT, TIRED_SLOW } from '../../game/fight';
 import {
@@ -992,6 +996,18 @@ export const NEWS: News[] = [
       `Nerve: a hunter turns tail below ${pct(HUNTER_TURN)} health, a monster below ${pct(MONSTER_TURN)}, ${listed(Object.values(SPECIES).filter((d) => d.coward).map((d) => `${d.name.toLowerCase()}s`))} below ${pct(COWARD_AT)}, or ${pct(COWARD_DRAG)} once one of their kind nearby has run. Kill or rout the one leading a pack and the whole pack runs.`,
       `Companion orders, from wherever you stand: Attack my target (${defaultKey('pet_attack')}, or Set … on it from a wild one's menu), whatever its stance; Fall back (${defaultKey('pet_back')}), no fight of its own for ${FALL_BACK} seconds; and a Guarding you stance that goes for anything hunting you within ${COMPANION_SIGHT} tiles and stays within ${GUARD_RANGE} tiles of you. A dashed blue line shows what it is fighting.`,
       `Bows on the move: walking keeps a draw going at ${pct(DRAW_WALK)} of your pace, and it keeps loosing while the target is in range. A line to the target fills with the draw, amber in range and grey out of it.`,
+    ],
+  },
+  {
+    n: 74,
+    day: '2026-10-03',
+    lines: () => [
+      `Dodge: every blow a creature lands on you is first rolled against 1% for every ${Math.round(0.01 / DODGE_PER_CONTROL)} points of body control, less 1% for every ${Math.round(0.01 / DODGE_PER_KG)} kilograms of armour you wear, up to ${percent(DODGE_MOST)}. A dodged blow takes nothing and trains body control.`,
+      `Critical hits: a blow or shot that lands is critical ${percent(CRIT_BASE)} of the time plus ${percent(CRIT_PER_SKILL * 10)} for every ten points of the weapon's subskill, ${times(CRIT_KNIFE)} as often with a knife, and lands ${percent(CRIT_HIT - 1)} harder. Its number rises larger and in orange.`,
+      `Arrow heads, fletched like arrows: broadheads bleed ${percent(KNIFE_BLEED)} of the shot a second for ${KNIFE_BLEED_SECS} seconds; bodkins land ${percent(BODKIN_HIDE - 1)} harder on a thick hide, shell or scales; blunts crush, knock a heavy blow off its stroke and put the next back ${STAGGER_MAUL} second. Shoot these first on a stack of arrows picks the kind a shot takes.`,
+      `Venom: ${listed(Object.values(SPECIES).filter((d) => d.venom).map((d) => `${d.name.toLowerCase()}`))} bites take ${percent(VENOM_DRAIN)} of your health a second for ${VENOM_SECS} seconds while the wound is undressed. Burns wear the armour they land on ${times(BURN_WEAR)} as fast.`,
+      `Threat: a creature turns on your companion when it strikes, once you have not hurt it for ${THREAT_HOLD} seconds, or at once for a companion Guarding you, and back to you the same way. While it fights your companion it strikes at your companion and does not count among those on you.`,
+      `Consider: Examine on a wild creature, and the target panel, say about how many of your blows would down it and how many of its would down you, and rate it Easy (it would take it ${times(CONSIDER_EASY)} as long or more to down you), Hard (less than ${percent(CONSIDER_HARD)} as long) or Even.`,
     ],
   },
 ];

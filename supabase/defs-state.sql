@@ -191,6 +191,7 @@ alter table species_def add column if not exists heavy boolean not null default 
 alter table species_def add column if not exists pack boolean not null default false;
 alter table species_def add column if not exists throws boolean not null default false;
 alter table species_def add column if not exists coward boolean not null default false;
+alter table species_def add column if not exists venom boolean not null default false;
 alter table furniture_def add column if not exists cart boolean not null default false;
 create table if not exists vehicle_def (
   id text primary key, yokes int not null, needs int not null, seat real not null
@@ -708,6 +709,9 @@ insert into item_def values ('nail', 'Nails', 'material', 0.01, true, 1, null);
 insert into item_def values ('padlock', 'Padlock', 'tool', 0.6, false, null, null);
 insert into item_def values ('key', 'Key', 'tool', 0.02, false, null, null);
 insert into item_def values ('arrow', 'Arrows', 'material', 0.05, true, 3, null);
+insert into item_def values ('broadhead_arrow', 'Broadhead arrows', 'material', 0.06, true, 3, null);
+insert into item_def values ('bodkin_arrow', 'Bodkin arrows', 'material', 0.05, true, 3, null);
+insert into item_def values ('blunt_arrow', 'Blunt arrows', 'material', 0.04, true, 3, null);
 insert into item_def values ('arrow_head', 'Arrow heads', 'material', 0.02, true, 1, null);
 insert into item_def values ('feather', 'Feathers', 'material', 0.01, true, 20, null);
 update item_def set raw = true where id = 'feather';
@@ -1463,6 +1467,9 @@ insert into action_def (id, label, verb, skill, tool, corner, range, stamina, ba
 insert into action_def (id, label, verb, skill, tool, corner, range, stamina, base_time, difficulty, instant, repeatable) values ('make_javelin', 'Shave a javelin', 'shaving a javelin', 'fletching', 'carving_knife', false, null, 0.03, 7, 10, false, true);
 insert into action_def (id, label, verb, skill, tool, corner, range, stamina, base_time, difficulty, instant, repeatable) values ('fit_throwing_axe', 'Fit a short haft', 'fitting a short haft', 'carpentry', null, false, null, 0.03, 6, null, false, true);
 insert into action_def (id, label, verb, skill, tool, corner, range, stamina, base_time, difficulty, instant, repeatable) values ('make_arrows', 'Fletch arrows', 'fletching', 'fletching', 'carving_knife', false, null, 0.03, 8, 12, false, true);
+insert into action_def (id, label, verb, skill, tool, corner, range, stamina, base_time, difficulty, instant, repeatable) values ('make_broadhead_arrows', 'Fletch broadhead arrows', 'fletching', 'fletching', 'carving_knife', false, null, 0.03, 10, 18, false, true);
+insert into action_def (id, label, verb, skill, tool, corner, range, stamina, base_time, difficulty, instant, repeatable) values ('make_bodkin_arrows', 'Fletch bodkin arrows', 'fletching', 'fletching', 'carving_knife', false, null, 0.03, 10, 26, false, true);
+insert into action_def (id, label, verb, skill, tool, corner, range, stamina, base_time, difficulty, instant, repeatable) values ('make_blunt_arrows', 'Fletch blunt arrows', 'fletching', 'fletching', 'carving_knife', false, null, 0.02, 6, 6, false, true);
 insert into action_def (id, label, verb, skill, tool, corner, range, stamina, base_time, difficulty, instant, repeatable) values ('make_lye', 'Leach into lye', 'making lye', 'alchemy', null, false, null, 0.03, 12, 14, false, true);
 insert into action_def (id, label, verb, skill, tool, corner, range, stamina, base_time, difficulty, instant, repeatable) values ('tan_hide', 'Tan in lye', 'tanning a hide', 'leatherworking', 'carving_knife', false, null, 0.05, 14, 16, false, true);
 insert into action_def (id, label, verb, skill, tool, corner, range, stamina, base_time, difficulty, instant, repeatable) values ('make_papyrus', 'Press into papyrus', 'pressing papyrus', 'papyrusmaking', null, false, null, 0.04, 13, 16, false, true);
@@ -1943,6 +1950,7 @@ insert into species_diet values ('bevere', 'acorn');
 insert into species_diet values ('bevere', 'nuts');
 insert into species_def values ('crawler', 'Crawler', 'A broad sand-coloured crab that goes at everything sideways. It shovels sand with its claws, and it has never once been sorry for pinching anybody.', 24, 5, 1.6, 1, 0.1, 'a vegetable', false, 'sand', 8, 'takes the {food} in one claw, waves the other at you, and backs off sideways', 'scuttles off sideways and buries itself in the sand', 4, false, false, false, true, false, false, false, false, false, false, true, false, null, 0.12, 'defensive', null, 'cut', null, null);
 update species_def set hide = 'shell' where id = 'crawler';
+update species_def set venom = true where id = 'crawler';
 insert into species_diet values ('crawler', 'potato');
 insert into species_diet values ('crawler', 'carrot');
 insert into species_diet values ('crawler', 'cabbage');
@@ -2124,6 +2132,7 @@ insert into species_diet values ('cudda', 'carrot');
 insert into species_diet values ('cudda', 'wheat');
 insert into species_def values ('vesp', 'Vesp', 'Not one creature so much as a small furious cloud of them, which settles where there are flowers. Give the swarm a hive on your deed and it will fill it with honey and wax and defend it from anything foolish.', 12, 3, 2.4, 18, 0.1, 'berries or honey', false, null, 8, 'lifts off the {food} in a body, hangs in the air a moment, and settles again', 'rises all at once and pours away over the hedge', 4, false, false, false, false, false, false, false, false, false, false, true, false, null, null, null, null, 'pierce', null, null);
 update species_def set hives = true where id = 'vesp';
+update species_def set venom = true where id = 'vesp';
 insert into species_diet values ('vesp', 'blueberry');
 insert into species_diet values ('vesp', 'raspberry');
 insert into species_diet values ('vesp', 'strawberry');
@@ -2492,6 +2501,9 @@ update item_def set description = 'Ten grams of metal apiece. Nothing is nailed 
 update item_def set description = 'A shackle, a body and a mechanism, and no key until it is fitted to something. Fit it to a crate, a cupboard, a cart or a chest and it cuts a key to itself as it closes.' where id = 'padlock';
 update item_def set description = 'Cut to one lock and no other. Hand it over and you have handed over what it opens; lose it and the settlement’s founder is the only way back in.' where id = 'key';
 update item_def set description = 'Shaft, head and feather. A bow spends one with every shot.' where id = 'arrow';
+update item_def set description = 'Two heads beaten into one wide, barbed one. A shot that lands leaves it bleeding 15% of the shot a second for 6 seconds, never the last of it.' where id = 'broadhead_arrow';
+update item_def set description = 'A narrow tempered point. A shot lands 25% harder on anything with a thick hide, a shell or scales.' where id = 'bodkin_arrow';
+update item_def set description = 'A knob of the shaft left on in place of a head. A shot crushes rather than goes in, and one that lands knocks a heavy blow off its stroke and puts the next blow back 1 second.' where id = 'blunt_arrow';
 update item_def set description = 'Fletching for arrows, and only a bird carries them.' where id = 'feather';
 update item_def set description = 'Spun on a spindle. Woven on a loom it becomes cloth.' where id = 'yarn';
 update item_def set description = 'Cut off a rose bush with a sickle. Boiled, they give a pink that nothing else on the island gives.' where id = 'rose_petals';
@@ -4064,6 +4076,14 @@ create or replace function blow_of(p_weapon text, p_kind text) returns text lang
     when 'mauls' then 'crush'
   end, 'crush') end
 $fn$;
+create or replace function arrow_head_of(p_item text) returns text language sql immutable as $fn$
+  select case p_item
+    when 'arrow' then 'plain'
+    when 'broadhead_arrow' then 'broadhead'
+    when 'bodkin_arrow' then 'bodkin'
+    when 'blunt_arrow' then 'blunt'
+  end
+$fn$;
 create or replace function hide_takes(p_hide text, p_blow text) returns double precision language sql immutable as $fn$
   select coalesce(case p_hide
     when 'thick' then case p_blow when 'cut' then 0.8 when 'pierce' then 1 when 'crush' then 1.2 end
@@ -4146,6 +4166,19 @@ create or replace function coward_at() returns double precision language sql imm
 create or replace function coward_drag() returns double precision language sql immutable as $fn$ select 0.8::double precision $fn$;
 create or replace function flee_pace() returns double precision language sql immutable as $fn$ select 1.6::double precision $fn$;
 create or replace function flee_secs() returns double precision language sql immutable as $fn$ select 6::double precision $fn$;
+create or replace function dodge_per_control() returns double precision language sql immutable as $fn$ select 0.0025::double precision $fn$;
+create or replace function dodge_per_kg() returns double precision language sql immutable as $fn$ select 0.0025::double precision $fn$;
+create or replace function dodge_most() returns double precision language sql immutable as $fn$ select 0.3::double precision $fn$;
+create or replace function dodge_gain() returns double precision language sql immutable as $fn$ select 0.3::double precision $fn$;
+create or replace function crit_base() returns double precision language sql immutable as $fn$ select 0.02::double precision $fn$;
+create or replace function crit_per_skill() returns double precision language sql immutable as $fn$ select 0.0004::double precision $fn$;
+create or replace function crit_knife() returns double precision language sql immutable as $fn$ select 2::double precision $fn$;
+create or replace function crit_hit() returns double precision language sql immutable as $fn$ select 1.75::double precision $fn$;
+create or replace function bodkin_hide() returns double precision language sql immutable as $fn$ select 1.25::double precision $fn$;
+create or replace function venom_drain() returns double precision language sql immutable as $fn$ select 0.01::double precision $fn$;
+create or replace function venom_secs() returns double precision language sql immutable as $fn$ select 8::double precision $fn$;
+create or replace function burn_wear() returns double precision language sql immutable as $fn$ select 2::double precision $fn$;
+create or replace function threat_hold() returns double precision language sql immutable as $fn$ select 3::double precision $fn$;
 create or replace function guard_range() returns double precision language sql immutable as $fn$ select 4::double precision $fn$;
 create or replace function fall_back() returns double precision language sql immutable as $fn$ select 8::double precision $fn$;
 create or replace function arm_slow() returns double precision language sql immutable as $fn$ select 2::double precision $fn$;
@@ -5628,6 +5661,17 @@ insert into recipe (id, result, count, tool, station, skill, label, verb, base_t
 insert into recipe_input values ('make_arrows', 0, 'shaft', 1);
 insert into recipe_input values ('make_arrows', 1, 'arrow_head', 3);
 insert into recipe_input values ('make_arrows', 2, 'feather', 3);
+insert into recipe (id, result, count, tool, station, skill, label, verb, base_time, stamina, difficulty, consume_on_fail, ql_from_inputs, material, wood, extra, done, fail) values ('make_broadhead_arrows', 'broadhead_arrow', 3, 'carving_knife', null, 'fletching', 'Fletch broadhead arrows', 'fletching', 10, 0.03, 18, true, false, 'metal', null, null, 'You beat the heads out wide in pairs, set them and fletch three broadhead arrows.', 'The heads will not sit square on the shafts and the arrows are spoiled.');
+insert into recipe_input values ('make_broadhead_arrows', 0, 'shaft', 1);
+insert into recipe_input values ('make_broadhead_arrows', 1, 'arrow_head', 6);
+insert into recipe_input values ('make_broadhead_arrows', 2, 'feather', 3);
+insert into recipe (id, result, count, tool, station, skill, label, verb, base_time, stamina, difficulty, consume_on_fail, ql_from_inputs, material, wood, extra, done, fail) values ('make_bodkin_arrows', 'bodkin_arrow', 3, 'carving_knife', null, 'fletching', 'Fletch bodkin arrows', 'fletching', 10, 0.03, 26, true, false, 'metal', null, null, 'You draw the heads down to needle points, set them and fletch three bodkin arrows.', 'The points crack in the drawing and the arrows are spoiled.');
+insert into recipe_input values ('make_bodkin_arrows', 0, 'shaft', 1);
+insert into recipe_input values ('make_bodkin_arrows', 1, 'arrow_head', 3);
+insert into recipe_input values ('make_bodkin_arrows', 2, 'feather', 3);
+insert into recipe (id, result, count, tool, station, skill, label, verb, base_time, stamina, difficulty, consume_on_fail, ql_from_inputs, material, wood, extra, done, fail) values ('make_blunt_arrows', 'blunt_arrow', 3, 'carving_knife', null, 'fletching', 'Fletch blunt arrows', 'fletching', 6, 0.02, 6, true, false, 'wood', null, null, 'You leave a knob on the end of each, split the shaft and fletch three blunt arrows.', 'The fletching will not sit straight and the arrows are spoiled.');
+insert into recipe_input values ('make_blunt_arrows', 0, 'shaft', 1);
+insert into recipe_input values ('make_blunt_arrows', 1, 'feather', 3);
 insert into recipe (id, result, count, tool, station, skill, label, verb, base_time, stamina, difficulty, consume_on_fail, ql_from_inputs, material, wood, extra, done, fail) values ('make_lye', 'lye_bucket', 1, null, null, 'alchemy', 'Leach into lye', 'making lye', 12, 0.03, 14, true, false, null, null, null, 'You stir the ashes into the water and leave it to leach. It comes off sharp and slippery: lye.', 'The ashes settle out again and you are left with dirty water.');
 insert into recipe_input values ('make_lye', 0, 'water_bucket', 1);
 insert into recipe_input values ('make_lye', 1, 'ash', 2);

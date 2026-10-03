@@ -1,7 +1,7 @@
 import type { ActionDef } from './actions';
 import type { Game } from './game';
 import { bowRange, WEAPON_BY_ID, type ArmourClass, type WeaponDef } from './gear';
-import { itemDef, type Item } from './items';
+import { describeWith, itemDef, type Item } from './items';
 import type { SpeciesDef } from './creatures';
 import { listed, percent } from './words';
 import { WOUND_BY_WEAPON, type Wound, type WoundKind } from './wounds';
@@ -145,7 +145,7 @@ export function armsRefusal(g: Game, job: string): string | null {
   const held = g.worn('weapon');
   const bow = held && WEAPON_BY_ID.get(held.id);
   if (!held || !bow?.ammo) return 'You have no bow in your hands.';
-  if (!g.inventory.has(bow.ammo)) return 'You are out of arrows.';
+  if (!nockedArrow(g)) return 'You are out of arrows.';
   return null;
 }
 
@@ -334,6 +334,89 @@ export const FALL_BACK = 8;
 
 /** Drawing a bow you can walk, at this share of your pace, and the draw goes on and looses when it is full. */
 export const DRAW_WALK = 0.6;
+
+/* ---- Dodging ----------------------------------------------------------------- */
+
+/**
+ * Every blow a creature lands on you is first rolled against your dodge: this
+ * share for every point of body control, less this share for every kilogram of
+ * armour you wear, and never more than `DODGE_MOST`. A dodge teaches body
+ * control `DODGE_GAIN`.
+ */
+export const DODGE_PER_CONTROL = 0.0025;
+export const DODGE_PER_KG = 0.0025;
+export const DODGE_MOST = 0.3;
+export const DODGE_GAIN = 0.3;
+/** Your chance of dodging a blow, for your body control and the kilograms of armour on you. */
+export const dodgeChance = (control: number, kg: number): number =>
+  Math.max(0, Math.min(DODGE_MOST, control * DODGE_PER_CONTROL - kg * DODGE_PER_KG));
+
+/* ---- Critical hits ------------------------------------------------------------ */
+
+/**
+ * A blow or a shot that lands is critical one time in `CRIT_BASE`, and that
+ * share more for every point of the skill of what you swing or draw; with a
+ * knife twice as often. A critical one lands `CRIT_HIT` times as hard.
+ */
+export const CRIT_BASE = 0.02;
+export const CRIT_PER_SKILL = 0.0004;
+export const CRIT_KNIFE = 2;
+export const CRIT_HIT = 1.75;
+/** The chance a landed blow of this weapon is critical, at this skill with it. */
+export const critChance = (skill: number, w: WeaponDef): number =>
+  (CRIT_BASE + skill * CRIT_PER_SKILL) * (w.kind === 'knives' && w.id !== FIST.id ? CRIT_KNIFE : 1);
+
+/* ---- Arrow heads -------------------------------------------------------------- */
+
+/** What is on the end of an arrow, by the arrow: a plain head, a broadhead, a bodkin point or a blunt knob. */
+export type ArrowHead = 'plain' | 'broadhead' | 'bodkin' | 'blunt';
+export const ARROWS: Record<string, ArrowHead> = { arrow: 'plain', broadhead_arrow: 'broadhead', bodkin_arrow: 'bodkin', blunt_arrow: 'blunt' };
+export const ARROW_IDS = Object.keys(ARROWS);
+export const isArrow = (id: string): boolean => id in ARROWS;
+/** A bodkin lands this many times as hard on anything with a hide (`HIDES`). */
+export const BODKIN_HIDE = 1.25;
+/** The kind of blow a shot with this head lands: a blunt crushes, the rest go in as the bow's do. */
+export const headBlow = (head: ArrowHead, bow: WeaponDef): BlowKind => (head === 'blunt' ? 'crush' : blowOf(bow));
+/** What a landed shot with this head does besides, as the weapon that does the same (`sideBlow`): a broadhead bleeds as a knife, a blunt staggers as a maul. */
+export const headSide = (head: ArrowHead): string | null => (head === 'broadhead' ? 'knives' : head === 'blunt' ? 'mauls' : null);
+/** And what a hide makes of it besides what it makes of the blow. */
+export const headHide = (head: ArrowHead, hide: Hide | undefined): number => (head === 'bodkin' && hide ? BODKIN_HIDE : 1);
+/** The arrows a shot takes: the kind asked for while there are any, else plain ones, else any at all. */
+export function nockedArrow(g: Game, want?: string | null): Item | undefined {
+  const of = (id: string): Item | undefined => g.inventory.items.filter((it) => it.id === id).sort((a, b) => b.ql - a.ql)[0];
+  return (want && isArrow(want) ? of(want) : undefined) ?? of('arrow') ?? ARROW_IDS.map(of).find((it) => it !== undefined);
+}
+describeWith({ arrowHead: { bleed: KNIFE_BLEED, bleedSecs: KNIFE_BLEED_SECS, hide: BODKIN_HIDE - 1, stagger: STAGGER_MAUL } });
+
+/* ---- Venom and burns ---------------------------------------------------------- */
+
+/**
+ * A venomous bite (`SpeciesDef.venom`) leaves venom in the wound it opens: it
+ * takes this share of your health a second for `VENOM_SECS`, unless the wound
+ * is dressed. A burn wears the armour it lands on `BURN_WEAR` times as fast.
+ */
+export const VENOM_DRAIN = 0.01;
+export const VENOM_SECS = 8;
+export const BURN_WEAR = 2;
+
+/* ---- Threat ------------------------------------------------------------------- */
+
+/**
+ * A creature in a fight turns on whatever hurt it last, once whatever it was
+ * on has not hurt it for this many seconds; a guarding companion pulls it at
+ * once.
+ */
+export const THREAT_HOLD = 3;
+
+/* ---- Consider ----------------------------------------------------------------- */
+
+/**
+ * Easy when it would take it at least this many times as long to down you as
+ * it would take you to down it, hard when less than `CONSIDER_HARD` times, and
+ * even between.
+ */
+export const CONSIDER_EASY = 2;
+export const CONSIDER_HARD = 0.75;
 
 /* ---- A fight, remembered ------------------------------------------------- */
 

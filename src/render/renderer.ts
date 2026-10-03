@@ -11267,7 +11267,8 @@ export class Renderer {
       // overlap is: it has to clear the glyphs, not the ground.
       const sy = cam.worldToScreenY(f.x, f.y, w.heightAt(f.x, f.y))
         - 26 * zoom - lift * zoom - f.lane * (size + 3);
-      ctx.font = `600 ${Math.round(size * scale)}px system-ui, sans-serif`;
+      // A critical blow is written half as large again.
+      ctx.font = `${f.kind === 'crit' ? 800 : 600} ${Math.round(size * scale * (f.kind === 'crit' ? 1.5 : 1))}px system-ui, sans-serif`;
       // Written twice: a dark surround first, so it stays legible over grass,
       // over sand, over water and over a wildermon.
       ctx.strokeStyle = `rgba(12,12,14,${(alpha * 0.85).toFixed(3)})`;

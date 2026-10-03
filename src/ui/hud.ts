@@ -19,6 +19,7 @@ import { ashore, JOURNAL, nextGoals } from '../game/journal';
 import { VERSION } from '../version';
 import { BACK_SLACK, blowOf, blowWords, COWARD_DRAG, FIGHT_STANCE_NAMES, HEAVY_EVERY, HIDE_NAMES, hideSays, hideTakes, HUNT_REACH, KEEP_OFF, PACK_CALL, stanceSays, swungWith, TARGET_RANGE, THROW_HIT, THROW_REACH, turnsAt } from '../game/fight';
 import { HUNT_SIGHT, maxHealth, PLAYER_ATTACKER } from '../game/creatures';
+import { consider } from '../game/consider';
 import { percent } from '../game/words';
 
 export interface HudCallbacks {
@@ -149,6 +150,8 @@ export class Hud {
   private targetValue = document.createElement('span');
   private targetIntent = document.createElement('div');
   private targetNote = document.createElement('div');
+  /** How a fight with it would go (`consider`). */
+  private targetConsider = document.createElement('div');
   private targetSaid = '';
   private feedBtn!: HTMLButtonElement;
   private companionText = document.createElement('span');
@@ -386,7 +389,8 @@ export class Hud {
     targetRow.append(targetTrack, this.targetValue);
     this.targetIntent.className = 'hud-target-intent';
     this.targetNote.className = 'hud-target-note';
-    this.targetEl.append(this.targetName, targetRow, this.targetIntent, this.targetNote);
+    this.targetConsider.className = 'hud-target-consider';
+    this.targetEl.append(this.targetName, targetRow, this.targetIntent, this.targetConsider, this.targetNote);
     root.append(this.targetEl);
 
     /*
@@ -557,7 +561,9 @@ export class Hud {
     const top = maxHealth(c, def);
     this.targetFill.style.width = `${Math.max(0, Math.min(1, c.health / top)) * 100}%`;
     this.targetValue.textContent = `${Math.ceil(c.health)}/${top}`;
+    const brawl = c.brawl !== null ? g.creatures.get(c.brawl) : undefined;
     const intent = c.windup > 0 ? 'Drawing back for a heavy blow: step out of its reach'
+      : brawl ? `Fighting ${brawl.name}`
       : c.enemy === PLAYER_ATTACKER ? (d <= HUNT_REACH ? 'On you' : 'Coming for you')
         : c.state === 'flee' ? 'Running from you'
           : def.hunter || def.monster ? `Hunts on sight within ${def.notice ?? HUNT_SIGHT} tiles`
@@ -573,9 +579,14 @@ export class Hud {
       def.pack ? (c.packLead === c.id ? `Leads its pack: kill it and the rest turn tail.` : `Runs in a pack; each within ${PACK_CALL} tiles comes when one has your scent.`) : '',
       def.hunter ? `Turns tail below ${percent(turnsAt(def))} health${def.coward ? `, or ${percent(COWARD_DRAG)} once one of its kind has run` : ''}.` : '',
     ].filter(Boolean).join(' ');
-    const said = `${def.name}|${intent}${bleeding}|${note}|${c.windup > 0}`;
+    // How a fight with it would go (`consider`), coloured by which way it leans.
+    const k = consider(g, c);
+    const weigh = `About ${k.mine} of your blows to down it, about ${k.its} of its to down you.`;
+    const said = `${def.name}|${intent}${bleeding}|${note}|${c.windup > 0}|${weigh}|${k.rating}`;
     if (said === this.targetSaid) return;
     this.targetSaid = said;
+    this.targetConsider.textContent = weigh;
+    this.targetConsider.dataset.rating = k.rating;
     this.targetName.textContent = def.name;
     this.targetIntent.textContent = `${intent}${bleeding}`;
     this.targetIntent.classList.toggle('hud-target-warn', c.windup > 0);

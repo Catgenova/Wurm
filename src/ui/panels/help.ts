@@ -94,6 +94,10 @@ import { NO_GO, pointAt, windWord, windWorth } from '../../game/wind';
 import { article, capital, listed, NumberWord, numberWord, percent, share, spanWords, times } from '../../game/words';
 import { BACK_PACE, BACK_SLACK, CIRCLE_ARC, CIRCLE_R, COWARD_AT, COWARD_DRAG, DRAW_WALK, FALL_BACK, FLEE_SECS, GUARD_RANGE, HUNTER_TURN, KEEP_OFF, MONSTER_TURN, PACK_CALL, PACK_MOST, PACK_RANGE, THROW_HIT, THROW_REACH } from '../../game/fight';
 import { FIGHT_QUIET, ARM_SLOW, ARM_SLOW_MOST, armourSays, BLINDSIDE, blowSays, CROWD_BLOCK, FLANK_HIT, HEAVY_EVERY, HEAVY_HIT, HIDE_NAMES, HIDES, hideSays, LEG_SLOW_MOST, sideOf, WIND_UP, BLOW_DEFENSIVE, BLOW_HUNTER, BLOW_PREY, FIGHT_BACK_STILL, FIGHT_GIVE_UP, FIGHT_LEASH, FIGHT_STANCE_NAMES, FIGHT_STANCES, FIST, FOLLOW_RANGE, stanceSays, SWING_WIND, SWING_WIND_KG, TARGET_RANGE, TIRED_AT, TIRED_SLOW } from '../../game/fight';
+import {
+  BODKIN_HIDE, BURN_WEAR, CONSIDER_EASY, CONSIDER_HARD, CRIT_BASE, CRIT_HIT, CRIT_KNIFE, CRIT_PER_SKILL, DODGE_MOST, DODGE_PER_CONTROL, DODGE_PER_KG, KNIFE_BLEED,
+  KNIFE_BLEED_SECS, STAGGER_MAUL, THREAT_HOLD, VENOM_DRAIN, VENOM_SECS,
+} from '../../game/fight';
 import { BIND_BY_ID, keyName } from '../../game/keybinds';
 import {
   CLOSE_BARE, CLOSE_CLOTH, CLOSE_PACE, CLOSE_PER_SKILL, CLOSE_RIGHT, CLOSE_WRONG, FESTER_CLOTH, FESTER_WRONG, WOUND_KINDS,
@@ -2148,6 +2152,24 @@ export function helpText(): string {
     <p>A <b>bow is drawn on the move</b>: walking while you draw keeps the draw going, at ${percent(DRAW_WALK)} of your pace, and it
     looses when the draw is full; it keeps loosing while the target is within the bow's range and you have arrows. A line from you
     to the target fills as the draw comes, amber while the target is in range and grey once it is not.</p>
+    <p>Every blow a creature lands on you is first rolled against your <b>dodge</b>: 1% for every
+    ${numberWord(Math.round(0.01 / DODGE_PER_CONTROL))} points of body control, less 1% for every ${numberWord(Math.round(0.01 / DODGE_PER_KG))} kilograms
+    of armour you wear, and never more than ${percent(DODGE_MOST)}. A dodged blow takes nothing, and every dodge trains body control.</p>
+    <p>A blow or a shot that lands is <b>critical</b> ${percent(CRIT_BASE)} of the time, and ${percent(CRIT_PER_SKILL * 10)} more for every ten
+    points of the weapon's own subskill (${percent(CRIT_BASE + 100 * CRIT_PER_SKILL)} at 100), ${times(CRIT_KNIFE)} as often with a knife. A critical
+    one lands ${percent(CRIT_HIT - 1)} harder, the log says so, and its number rises larger and in orange.</p>
+    <p>${capital(listed(Object.values(SPECIES).filter((d) => d.venom).map((d) => `${d.name.toLowerCase()}s`)))} carry <b>venom</b>: the wound
+    their bite opens takes ${percent(VENOM_DRAIN)} of your health a second for ${VENOM_SECS} seconds, and nothing while it is dressed.
+    A <b>burn</b>, from ${listed(BURNERS.map((s) => `the ${s.name.toLowerCase()}`))}, wears the armour it lands on ${times(BURN_WEAR)} as fast as any other blow.</p>
+    <p>A creature fights <b>what hurt it last</b>. When your companion strikes something that is on you, it turns on your companion
+    once you have not hurt it for ${THREAT_HOLD} seconds, and the log says so; a companion in the <b>Guarding you</b> stance takes it at once.
+    It stays on your companion until your companion has not hurt it for ${THREAT_HOLD} seconds, and then your next blow takes it back.
+    While it fights your companion it strikes at your companion on its own clock and does not count among those on you.</p>
+    <p><b>Examine</b> on a wild creature, and the target panel while one is marked, <b>consider</b> it: about how many of your blows
+    would down it and how many of its would down you, from what is in your hand, your skill and stance, the arrows you would
+    loose, its hide, and your dodge, shield and armour. It reads <b>Easy</b> when it would take it at least ${times(CONSIDER_EASY)} as
+    long to down you as it would take you to down it, counting how often each of you strikes and how often you land,
+    <b>Hard</b> when less than ${percent(CONSIDER_HARD)} as long, and <b>Even</b> between.</p>
     <p>Every weapon belongs to a kind, and each kind is its own subskill: ${listed(WEAPON_KINDS.map((k) => `<b>${k}</b>`))}.
     Swinging trains the weapon's own subskill and the <b>fighting</b> skill behind it, and both decide
     whether a blow lands and how hard. A weapon's own numbers matter as much: a hunting knife is quick
@@ -2163,6 +2185,12 @@ export function helpText(): string {
     ${listed(FEATHERED.map((s) => `the ${s.name}`))}. With a bow in hand, <b>Shoot</b> appears on any wild creature
     in range; the far end of the range is a far harder shot than the near end, and every shot spends an
     arrow.</p>
+    <p>Three other heads are fletched the same way. <b>Broadhead arrows</b>, from ${bill('make_broadhead_arrows')}, bleed what they
+    land on as a knife does: ${percent(KNIFE_BLEED)} of the shot a second for ${KNIFE_BLEED_SECS} seconds. <b>Bodkin arrows</b>, from
+    ${bill('make_bodkin_arrows')}, land ${percent(BODKIN_HIDE - 1)} harder on anything with a hide (${listed(HIDES.map((h) => HIDE_NAMES[h].toLowerCase()))}).
+    <b>Blunt arrows</b>, from ${bill('make_blunt_arrows')}, crush rather than pierce, and as a maul does they knock a heavy blow off its
+    stroke and put the next blow back ${STAGGER_MAUL} second${STAGGER_MAUL === 1 ? '' : 's'}. <b>Shoot these first</b> on a stack of arrows in your pack
+    picks the kind a shot takes; when those run out it takes plain arrows, and then whatever arrows are left.</p>
     <h3>Stonecutting</h3>
     <p><b>Stonecutting</b> is the skill that turns what a pickaxe brings out of the rock into something
     square. With a chisel, rock, slate, marble and sandstone shards become <b>bricks</b> &mdash; what

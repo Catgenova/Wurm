@@ -234,6 +234,8 @@ export async function startIsland(params: URLSearchParams, tell: Telling): Promi
   let seeded = false;
 
   game.ask = (def: ActionDef, target: Target, goes?: number) => {
+    // A shot goes with the arrows to loose first (`nockedArrow`), which only this side keeps.
+    if (def.id === 'shoot_creature' && target.kind === 'creature' && !target.arrow) target = { ...target, arrow: game.settings.nock };
     lastTarget = target;
     // gates: a solid wall asked for as a hidden door goes in the one call that keeps the ask with its plan (`gates.ts`).
     // A fight asked for without a count goes on until it is over or out of reach, as it does here.
@@ -298,7 +300,8 @@ export async function startIsland(params: URLSearchParams, tell: Telling): Promi
     // Everything that lost health since the last answer gets its number, which
     // is the half of the fight that happens away from your own body.
     for (const h of game.creatures.sawAll(rows, game.time)) {
-      game.events.emit('hit', h.x, h.y, h.taken, 'dealt');
+      // Larger for one the island has just said was critical (`critPending`).
+      game.events.emit('hit', h.x, h.y, h.taken, game.critPending() ? 'crit' : 'dealt');
     }
     // And which of them are in whose traces, which lives on the vehicle here.
     game.teamsFromCreatures();

@@ -60,6 +60,8 @@ export interface Wound {
   mend?: number;
   /** A salve rubbed in over the dressing: it will not go bad while it is on. */
   salved?: boolean;
+  /** Seconds of venom left in it from a venomous bite, which takes health until it runs out or the wound is dressed (`VENOM_DRAIN`). */
+  venom?: number;
 }
 
 export const PART_NAMES: Record<string, string> = {
@@ -76,7 +78,7 @@ export const PART_NAMES: Record<string, string> = {
 export function woundText(w: Wound): string {
   const k = WOUND_KINDS[w.kind];
   const deep = w.severity > 0.16 ? 'deep ' : w.severity > 0.07 ? '' : 'light ';
-  const state = w.infected ? ', gone bad' : w.bleeding ? ', bleeding' : w.dressing !== null ? ', dressed' : '';
+  const state = w.infected ? ', gone bad' : (w.venom ?? 0) > 0 && w.dressing === null ? ', with venom in it' : w.bleeding ? ', bleeding' : w.dressing !== null ? ', dressed' : '';
   return `a ${deep}${k.name} to the ${PART_NAMES[w.part] ?? w.part}${state}`;
 }
 

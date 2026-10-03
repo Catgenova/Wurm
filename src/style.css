@@ -1809,6 +1809,14 @@ kbd {
   font-weight: bold;
 }
 
+.hud-target-consider {
+  font-size: 12px;
+  font-weight: 600;
+  margin-top: 2px;
+}
+.hud-target-consider[data-rating="easy"] { color: #8fd37a; }
+.hud-target-consider[data-rating="even"] { color: #e8c45a; }
+.hud-target-consider[data-rating="hard"] { color: #f07a62; }
 .hud-target-note {
   margin-top: 2px;
   color: var(--ui-dim);

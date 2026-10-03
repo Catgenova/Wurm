@@ -160,7 +160,7 @@ export type Target =
     }
   /** What is lying on a tile; `down` for what lies on the cellar's floor under it. */
   | { kind: 'ground'; x: number; y: number; uid: number | null; down?: boolean }
-  | { kind: 'creature'; id: number; stance?: Stance; itemUid?: number; job?: string; sex?: string; foe?: number };
+  | { kind: 'creature'; id: number; stance?: Stance; itemUid?: number; job?: string; sex?: string; foe?: number; arrow?: string };
 
 /**
  * A name an action cannot go anywhere without.

@@ -1,3 +1,4 @@
+import { isArrow } from '../../game/fight';
 import { CARRY_STOP, type Game } from '../../game/game';
 import { itemDef, itemName, type Item, type ItemCategory, itemWeight, bagRoom, bagUnits, isBag, RARITIES } from '../../game/items';
 import { damageCell, nameCell, qualityCell } from '../itemcells';
@@ -227,6 +228,19 @@ export class InventoryPanel {
           const why = absorb.check?.(t, this.game) ?? null;
           return { label: itemName(it), note: it.count > 1 ? `one of ${it.count}` : undefined, hint: why ?? undefined, disabled: !!why, onSelect: () => this.game.requestAction(absorb, t) };
         }),
+      });
+    }
+    // Arrows: which kind a bow looses first while there are any (`nockedArrow`).
+    if (isArrow(item.id)) {
+      const first = this.game.settings.nock === item.id;
+      entries.push({
+        label: first ? 'Shot first (now)' : 'Shoot these first',
+        note: first ? 'a bow looses these while there are any' : undefined,
+        disabled: first,
+        onSelect: () => {
+          this.game.settings.nock = item.id;
+          this.game.logMsg(`A bow looses ${itemName(item).toLowerCase()} first now, while you have any.`, 'info');
+        },
       });
     }
     entries.push(...this.game.actionsFor(target).map(({ def, reason }) => {

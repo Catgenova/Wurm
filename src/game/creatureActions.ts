@@ -10,7 +10,7 @@ import { furnitureCentre, furnitureName, vehicleOf } from './furniture';
 import { deedJobLine, emptyCrate, letOut, shutIn } from './creaturecrate';
 import { itemDef, itemName, rarityOf, type Mark } from './items';
 import { BANE_BONUS, banes, bowRange, hitChance, isBow, WEAPON_BY_ID, weaponDamage } from './gear';
-import { armsRefusal, BLINDSIDE, blowOf, DRAW_CLOSEST, FALL_BACK, FIST, hideTakes, KNIFE_BLEED, KNIFE_BLEED_SECS, meleeReach, STAGGER_MAUL, STAGGER_POLE, STANCE_DEALT, swungWith } from './fight';
+import { ARROWS, armsRefusal, BLINDSIDE, blowOf, CRIT_HIT, critChance, DRAW_CLOSEST, FALL_BACK, FIST, headBlow, headHide, headSide, hideTakes, nockedArrow, KNIFE_BLEED, KNIFE_BLEED_SECS, meleeReach, STAGGER_MAUL, STAGGER_POLE, STANCE_DEALT, swungWith } from './fight';
 import { matOfItem } from './materials';
 import { defaultKey } from './keybinds';
 
@@ -530,15 +530,17 @@ export const CREATURE_ACTIONS: ActionDef[] = [
          * of an edge, a point or a weight, and harder at something whose mind is
          * on another fight (`fight.ts`).
          */
+        // And now and then a critical one (`critChance`).
+        const crit = g.rand() < critChance(g.skills.get(usable.kind), usable);
         const dmg = weaponDamage(g, usable, item) * bane * STANCE_DEALT[g.settings.fightStance]
-          * hideTakes(def.hide, blowOf(usable)) * blindside(c) * (0.75 + g.rand() * 0.5);
-        g.creatures.hurt(g, c, dmg, 'player');
+          * hideTakes(def.hide, blowOf(usable)) * blindside(c) * (0.75 + g.rand() * 0.5) * (crit ? CRIT_HIT : 1);
+        g.creatures.hurt(g, c, dmg, 'player', crit);
         // And what the weapon does besides: a maul staggers, a spear holds it off, a knife opens it up (a fist none of these).
         if (c.health > 0 && usable.id !== FIST.id) sideBlow(g, c, usable.kind, dmg);
         // Less for a Mender's Armour Care, as `perform_fight` has it.
         if (item) g.damageItem(item, 0.35 * g.perk('worn:weapon', 1));
         g.logMsg(
-          `You strike the ${def.name.toLowerCase()}${item ? ` with your ${itemName(item).toLowerCase()}` : ''}. ${before > c.health ? `It is down to ${Math.max(0, Math.ceil(c.health))} of ${maxHealth(c, def)}.` : ''}`,
+          `You strike the ${def.name.toLowerCase()}${item ? ` with your ${itemName(item).toLowerCase()}` : ''}${crit ? ', a critical blow' : ''}. ${before > c.health ? `It is down to ${Math.max(0, Math.ceil(c.health))} of ${maxHealth(c, def)}.` : ''}`,
           'fight',
         );
       }
@@ -590,8 +592,10 @@ export const CREATURE_ACTIONS: ActionDef[] = [
       const held = g.worn('weapon');
       const bow = held && WEAPON_BY_ID.get(held.id);
       if (!c || !held || !bow?.ammo) return;
-      const arrow = g.inventory.find(bow.ammo);
+      // The arrows asked for, else plain ones, else any (`nockedArrow`).
+      const arrow = nockedArrow(g, isCreature(t) ? t.arrow ?? g.settings.nock : g.settings.nock);
       if (!arrow || !g.inventory.remove(arrow.uid, 1)) return;
+      const shape = ARROWS[arrow.id];
       const def = SPECIES[c.species];
       const d = Math.hypot(c.x - g.player.x, c.y - g.player.y);
       // Picking a target out of the dark at range is the hardest looking there is.
@@ -607,16 +611,22 @@ export const CREATURE_ACTIONS: ActionDef[] = [
         // The stave throws it; the head is what goes in. Both have a say.
         const head = matOfItem(arrow);
         const bane = head.bane && def.glow ? BANE_BONUS : 1;
+        const crit = g.rand() < critChance(g.skills.get('archery'), bow);
+        // And what the head is: a blunt crushes, a bodkin goes through a hide (`headBlow`, `headHide`).
         const dmg = weaponDamage(g, bow, held) * head.edge * bane * STANCE_DEALT[g.settings.fightStance]
-          * hideTakes(def.hide, blowOf(bow)) * blindside(c) * (0.6 + arrow.ql / 140) * (0.8 + g.rand() * 0.4);
-        g.creatures.hurt(g, c, dmg, 'player');
+          * hideTakes(def.hide, headBlow(shape, bow)) * headHide(shape, def.hide) * blindside(c)
+          * (0.6 + arrow.ql / 140) * (0.8 + g.rand() * 0.4) * (crit ? CRIT_HIT : 1);
+        g.creatures.hurt(g, c, dmg, 'player', crit);
         g.damageItem(held, 0.25 * g.perk('worn:weapon', 1));
-        g.logMsg(`Your arrow goes home. The ${def.name.toLowerCase()} is down to ${Math.max(0, Math.ceil(c.health))} of ${maxHealth(c, def)}.`, 'fight');
+        // A broadhead bleeds it as a knife does, a blunt staggers it as a maul does (`headSide`).
+        const side = headSide(shape);
+        if (side && c.health > 0) sideBlow(g, c, side, dmg);
+        g.logMsg(`Your arrow goes home${crit ? ', a critical hit' : ''}. The ${def.name.toLowerCase()} is down to ${Math.max(0, Math.ceil(c.health))} of ${maxHealth(c, def)}.`, 'fight');
       }
       if (c.health <= 0) return false;
       // Shot at, it comes for you, as anything struck does.
       g.creatures.engage(g, c);
-      return g.inventory.has(bow.ammo) && Math.hypot(c.x - g.player.x, c.y - g.player.y) <= bowRange(bow, held);
+      return !!nockedArrow(g) && Math.hypot(c.x - g.player.x, c.y - g.player.y) <= bowRange(bow, held);
     },
   },
   {

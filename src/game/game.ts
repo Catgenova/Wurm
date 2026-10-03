@@ -64,7 +64,8 @@ import { deckOver, floorNear, levelGround, pierDrop, pierGround, pierRefusal, pi
 import { greenNow, mossyPiece } from './greening';
 import { WATER_PLANT_BY_ID, type WaterPlant, type WaterPlantKind } from '../world/waterplants';
 import { liveSettings, type Settings } from './settings';
-import { ARMOUR_VS, armsRefusal, CROWD_BLOCK, DRAW_WALK, FIGHT_QUIET, skillLine, type FightRecord, FIGHT_BACK_STILL, FIGHT_STANCE_NAMES, FLANK_HIT, legPace, FIGHT_TRIES, fightBase, fightWind, FOLLOW_RANGE, inFightReach, isFightJob, nextStance, STANCE_TAKEN, stanceSays, TARGET_RANGE } from './fight';
+import { considerSays } from './consider';
+import { ARMOUR_VS, armsRefusal, BURN_WEAR, CROWD_BLOCK, DODGE_GAIN, dodgeChance, DRAW_WALK, FIGHT_QUIET, VENOM_DRAIN, VENOM_SECS, skillLine, type FightRecord, FIGHT_BACK_STILL, FIGHT_STANCE_NAMES, FLANK_HIT, legPace, FIGHT_TRIES, fightBase, fightWind, FOLLOW_RANGE, inFightReach, isFightJob, nextStance, STANCE_TAKEN, stanceSays, TARGET_RANGE } from './fight';
 import { Skills, SKILL_DEFS, isQuiet } from './skills';
 import { jewelGain } from './gems';
 import { earnedBy, knackBonus, knackLands, KNACK_CAP, KNACK_ODDS, TITLE_BY_ID } from './titles';
@@ -2350,7 +2351,8 @@ export class Game {
     const soak = pieceSoak(def, item, this.skills.get(skillId));
     // Armour is learned by being hit in it, and worn out the same way.
     this.gainSkill(skillId, 0.4);
-    item.dmg = Math.min(100, item.dmg + raw * 4 * this.perk('worn:armour', 1));
+    // And a burn wears it out `BURN_WEAR` times as fast.
+    item.dmg = Math.min(100, item.dmg + raw * 4 * this.perk('worn:armour', 1) * (kind === 'burn' ? BURN_WEAR : 1));
     if (item.dmg >= 100) {
       this.inventory.remove(item.uid, 1);
       this.player.equipped[part] = null;
@@ -2362,11 +2364,39 @@ export class Game {
     return { taken: raw * (1 - Math.min(0.92, soak * hide * ARMOUR_VS[def.cls][kind])), part, worn: item, blocked: false };
   }
 
+  /** Your chance of dodging a creature's blow just now (`dodgeChance`): body control, less the kilograms of armour on you. */
+  dodge(): number {
+    const kg = this.wornArmour().reduce((n, { item }) => n + itemDef(item.id).weight, 0);
+    return dodgeChance(this.skills.get('body_control'), kg);
+  }
+
+  /**
+   * What a blow of this size and kind would leave you with on average, for
+   * the consider line (`consider.ts`): after your stance, your dodge, your
+   * shield's chance and what your armour turns where it might land. Nothing
+   * is worn or learned by asking.
+   */
+  expectedBlow(raw: number, kind: WoundKind): number {
+    let through = raw * STANCE_TAKEN[this.settings.fightStance] * (1 - this.dodge());
+    const shield = this.worn('offhand');
+    const sh = shield && SHIELDS[shield.id];
+    if (sh) through *= 1 - Math.min(0.6, sh.block * (0.6 + shield.ql / 160) + this.skills.get('shields') / 400);
+    let soaked = 0;
+    for (const [slot, share] of HIT_LOCATIONS) {
+      const item = this.worn(slot);
+      const def = item && ARMOUR_BY_ID.get(item.id);
+      if (!item || !def) continue;
+      const soak = pieceSoak(def, item, this.skills.get(ARMOUR_CLASSES[def.cls].skill)) * (this.walks('power', 5) ? IRONHIDE : 1);
+      soaked += share * Math.min(0.92, soak * ARMOUR_VS[def.cls][kind]);
+    }
+    return through * (1 - soaked);
+  }
+
   /** Every wild thing after you but the one that last struck you: what a crowd takes off your shield (`CROWD_BLOCK`). */
   othersOnYou(): number {
     let n = 0;
     for (const c of this.creatures.list.values()) {
-      if (c.mode === 'wild' && c.health > 0 && c.enemy === PLAYER_ATTACKER && c.id !== this.player.attackedBy) n++;
+      if (c.mode === 'wild' && c.health > 0 && c.enemy === PLAYER_ATTACKER && c.brawl === null && c.id !== this.player.attackedBy) n++;
     }
     return n;
   }
@@ -2377,6 +2407,16 @@ export class Game {
    * in whichever place the blow landed, and that wound has its own life.
    */
   hurtPlayer(raw: number, what: string, kind: WoundKind = 'bite'): void {
+    const by = this.player.attackedBy;
+    const from = by !== null && by !== PLAYER_ATTACKER ? this.creatures.get(by) : undefined;
+    // Dodged, before anything else has its say (`dodgeChance`): your body control, less the armour on you.
+    if (this.rand() < this.dodge()) {
+      this.gainSkill('body_control', DODGE_GAIN);
+      this.player.attackedAt = this.time;
+      this.logMsg(`You dodge the ${from ? this.creatures.species(from).name.toLowerCase() : 'blow'}.`, 'fight');
+      this.fightBack();
+      return;
+    }
     // Being hit in the dark teaches more about watching than hitting does.
     this.fought(DARK_HIT);
     /*
@@ -2385,7 +2425,6 @@ export class Game {
      * Both before the armour has its say.
      */
     const a = this.action;
-    const by = this.player.attackedBy;
     const flank = a && isFightJob(a.def.id) && a.target.kind === 'creature' && by !== null && by !== PLAYER_ATTACKER && a.target.id !== by;
     const hit = this.absorb(raw * STANCE_TAKEN[this.settings.fightStance] * (flank ? FLANK_HIT : 1), kind);
     if (hit.blocked) {
@@ -2399,6 +2438,8 @@ export class Game {
     this.player.attackedAt = this.time;
     this.events.emit('hit', this.player.x, this.player.y, hit.taken, 'taken');
     const wound = this.wound(kind, hit.part, hit.taken);
+    // A venomous bite leaves venom in what it opened (`VENOM_SECS`).
+    if (from && this.creatures.species(from).venom) wound.venom = VENOM_SECS;
     const where = hit.worn ? `, though your ${itemName(hit.worn).toLowerCase()} takes the worst of it` : '';
     this.logMsg(`${what}${where}. You have ${woundText(wound)}.`, 'fight');
     this.fightBack();
@@ -2651,6 +2692,14 @@ export class Game {
         p.stats.health = Math.max(0, p.stats.health - drain * dt);
         bad = true;
       }
+      // Venom, for what is left of it, unless the wound is dressed (`VENOM_DRAIN`).
+      if (w.venom && w.venom > 0) {
+        if (w.dressing === null) {
+          p.stats.health = Math.max(0, p.stats.health - VENOM_DRAIN * Math.min(dt, w.venom));
+          bad = true;
+        }
+        w.venom = Math.max(0, w.venom - dt);
+      }
       w.severity = Math.max(0, w.severity - woundClose(w, aid) * dt);
       if (this.rand() < festerChance(w) * dt) {
         w.infected = true;
@@ -2667,7 +2716,7 @@ export class Game {
 
   /** Whether anything open is still working against you. */
   bleeding(): boolean {
-    return this.player.wounds.some((w) => w.bleeding || w.infected);
+    return this.player.wounds.some((w) => w.bleeding || w.infected || (!!w.venom && w.dressing === null));
   }
 
   /** The lit lantern you are carrying, if you are carrying one. */
@@ -2997,6 +3046,15 @@ export class Game {
   /** The creature marked to fight, by a click or by the key that picks the nearest; null for none. */
   marked: number | null = null;
 
+  /** When the island last said a blow of yours was critical, for the number that follows it. */
+  private critAt = -Infinity;
+  /** Whether the next number dealt is a critical one the island has just told of; asking spends it. */
+  critPending(): boolean {
+    const was = this.time - this.critAt < 2;
+    this.critAt = -Infinity;
+    return was;
+  }
+
   /** Mark the nearest foe within `TARGET_RANGE`, or the next nearest after the one already marked. */
   markNext(): Creature | null {
     const p = this.player;
@@ -3218,6 +3276,8 @@ export class Game {
   write(text: string, kind: LogKind = 'info', at?: number): void {
     // A fight is going on from its first blow until `FIGHT_QUIET` seconds pass without one.
     if (kind === 'fight') this.fightGoing();
+    // And a critical one is drawn larger, when the island's word of it comes before its number (`critPending`).
+    if (kind === 'fight' && / a critical (blow|hit)/.test(text)) this.critAt = this.time;
     // And what is learned in one is folded into the line at its end (`compactFight`).
     const rec = this.fightRec;
     if (kind === 'skill' && rec && this.settings.compactFight) {
@@ -4116,6 +4176,12 @@ export class Game {
   requestAction(def: ActionDef, target: Target, goes?: number): void {
     // gates: a hidden door asked for is kept only while a plan of a wall on its border is in hand or lined up (`keepHiddenAsks`).
     keepHiddenAsks(this);
+    // Examining a wild thing says how a fight with it would go (`consider`), whoever answers the rest.
+    if (def.id === 'examine_creature' && target.kind === 'creature') {
+      const c = this.creatures.get(target.id);
+      const said = c && c.mode === 'wild' ? considerSays(this, c) : null;
+      if (said) this.logMsg(said, 'fight');
+    }
     // A crate with a wildermon in it is carried, set down or opened, and that is all.
     const held = occupiedRefusal(this, def.id, target);
     if (held) {

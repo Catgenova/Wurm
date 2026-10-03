@@ -12,7 +12,7 @@
  * them on top of each other, and a skill that ticks up twenty times in an
  * action shows one total rather than twenty fractions.
  */
-export type FloatKind = 'dealt' | 'taken' | 'skill' | 'note';
+export type FloatKind = 'dealt' | 'taken' | 'skill' | 'note' | 'crit';
 
 export interface Floater {
   x: number;
@@ -159,4 +159,5 @@ export const FLOAT_COLOURS: Record<FloatKind, string> = {
   taken: '255, 110, 96',
   skill: '150, 226, 255',
   note: '236, 236, 232',
+  crit: '255, 160, 48',
 };

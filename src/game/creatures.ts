@@ -22,7 +22,7 @@ import { auraMul, breedTraits, channelOf, CHANNELS, pct, rollTraits, traitList, 
 import { ACTION_FLOOR, ACTION_PACE, WORKER_WEIGHT } from './pace';
 import { world } from './pace';
 import { emptyCrate, shutIn, standingCrate } from './creaturecrate';
-import { BACK_PACE, BACK_SLACK, blowEvery, circlePoint, CIRCLE_ARC, CIRCLE_R, COWARD_DRAG, FIGHT_GIVE_UP, FIGHT_LEASH, FLEE_PACE, FLEE_SECS, GUARD_RANGE, HEAVY_EVERY, HEAVY_HIT, HUNT_REACH, KEEP_OFF, KNIFE_BLEED_SECS, PACK_CALL, PACK_MOST, PACK_RANGE, slotAngle, THROW_HIT, THROW_REACH, turnsAt, turnTo, WIND_UP, type Hide } from './fight';
+import { BACK_PACE, BACK_SLACK, blowEvery, THREAT_HOLD, circlePoint, CIRCLE_ARC, CIRCLE_R, COWARD_DRAG, FIGHT_GIVE_UP, FIGHT_LEASH, FLEE_PACE, FLEE_SECS, GUARD_RANGE, HEAVY_EVERY, HEAVY_HIT, HUNT_REACH, KEEP_OFF, KNIFE_BLEED_SECS, PACK_CALL, PACK_MOST, PACK_RANGE, slotAngle, THROW_HIT, THROW_REACH, turnsAt, turnTo, WIND_UP, type Hide } from './fight';
 
 /**
  * Wildermon: creatures that roam the wild, can be tamed with the taming
@@ -362,6 +362,8 @@ export interface SpeciesDef {
   throws?: boolean;
   /** Turns tail at `COWARD_AT` of its health, and sooner when one of its kind has run (`COWARD_DRAG`). */
   coward?: boolean;
+  /** Its bite leaves venom in the wound (`VENOM_DRAIN`, `VENOM_SECS`). */
+  venom?: boolean;
 }
 
 export const SPECIES: Record<string, SpeciesDef> = {
@@ -444,6 +446,7 @@ export const SPECIES: Record<string, SpeciesDef> = {
     id: 'crawler',
     hide: 'shell',
     wound: 'cut',
+    venom: true,
     name: 'Crawler',
     description: 'A broad sand-coloured crab that goes at everything sideways. It shovels sand with its claws, and it has never once been sorry for pinching anybody.',
     health: 24,
@@ -1253,6 +1256,7 @@ export const SPECIES: Record<string, SpeciesDef> = {
   vesp: {
     id: 'vesp',
     wound: 'pierce',
+    venom: true,
     name: 'Vesp',
     description: 'Not one creature so much as a small furious cloud of them, which settles where there are flowers. Give the swarm a hive on your deed and it will fill it with honey and wax and defend it from anything foolish.',
     health: 12,
@@ -1879,6 +1883,8 @@ export interface IslandCreature {
   lead?: number | null;
   /** What a companion of yours is fighting, said only of your own. */
   enemy?: number | null;
+  /** The tame creature a wild one has turned on, when it has. */
+  brawl?: number | null;
   mine?: boolean;
   /** How rare it is, as the island words it ('rare', 'supreme', 'fantastic'); absent for an ordinary one. */
   rare?: string | null;
@@ -2027,6 +2033,10 @@ export interface Creature {
   packLead: number | null;
   /** A companion told to fall back starts no fight before this game time. */
   heelUntil: number;
+  /** A tame creature a wild one has turned on, for hurting it (`THREAT_HOLD`); null when it is not. */
+  brawl: number | null;
+  /** When whatever it is fighting last hurt it. */
+  threatAt: number;
   /** When it last said it had nowhere to put a load down. */
   noRoomAt: number;
   /** Time banked up while nobody was watching, spent on the next think. */
@@ -2477,6 +2487,8 @@ export class Creatures {
       huntRest: -1e9,
       packLead: null,
       heelUntil: -1e9,
+      brawl: null,
+      threatAt: -1e9,
       noRoomAt: 0,
       owed: 0,
       calledAt: -1e9,
@@ -2556,6 +2568,7 @@ export class Creatures {
       c.enemy = r.hunting ? PLAYER_ATTACKER : (r.enemy ?? null);
       c.windup = r.windup ?? 0;
       c.packLead = r.lead ?? null;
+      c.brawl = r.brawl ?? null;
       // Whose it is, which the island says and the journal has to know.
       c.mine = r.mine;
       // And what it was set to, if that is not what its kind does anyway.
@@ -4464,6 +4477,7 @@ export class Creatures {
       } else if (r === 'blocked') c.state = 'idle';
       return;
     }
+    if (c.brawl !== null && this.brawlStep(game, c, def, dt)) return;
     if ((def.hunter || c.enemy === PLAYER_ATTACKER) && this.huntStep(game, c, def, dt)) return;
     if (kind && c.hunger < GRAZE_HUNGRY && game.time >= c.searchAt) {
       c.searchAt = game.time + 4;
@@ -4501,8 +4515,19 @@ export class Creatures {
    * was struck. A hunter already on you carries on as it was.
    */
   engage(game: Game, c: Creature): void {
-    if (c.mode !== 'wild' || c.health <= 0 || c.enemy === PLAYER_ATTACKER) return;
+    if (c.mode !== 'wild' || c.health <= 0) return;
     if (this.species(c).timid) return;
+    /*
+     * Threat: it goes for whatever hurt it last, once what it is on has not
+     * hurt it for `THREAT_HOLD` seconds. On something else that has, it stays
+     * on that, and comes for you after.
+     */
+    if (c.brawl === null || game.time - c.threatAt >= THREAT_HOLD) {
+      if (c.brawl !== null) game.logMsg(`The ${this.species(c).name.toLowerCase()} turns back on you.`, 'fight');
+      c.brawl = null;
+      c.threatAt = game.time;
+    }
+    if (c.enemy === PLAYER_ATTACKER) return;
     c.enemy = PLAYER_ATTACKER;
     c.huntX = c.x;
     c.huntY = c.y;
@@ -4620,6 +4645,34 @@ export class Creatures {
     return true;
   }
 
+  /**
+   * A wild thing fighting a tame one that hurt it (`brawl`): it goes to it and
+   * lands its blows on its own clock, as it would on you, until the other is
+   * gone, `FIGHT_LEASH` off, or it loses its nerve. Then whatever it was after
+   * before, if anything, it goes back to.
+   */
+  private brawlStep(game: Game, c: Creature, def: SpeciesDef, dt: number): boolean {
+    const e = c.brawl === null ? undefined : this.list.get(c.brawl);
+    if (!e || e.mode === 'wild' || e.mode === 'stored' || e.health <= 0 || e.hitchedTo !== null
+        || Math.hypot(e.x - c.x, e.y - c.y) > FIGHT_LEASH) {
+      c.brawl = null;
+      return false;
+    }
+    if (def.hunter && c.health < maxHealth(c, def) * turnsAt(def)) {
+      this.turnTail(game, c, def, e);
+      return true;
+    }
+    if (Math.hypot(e.x - c.x, e.y - c.y) <= HUNT_REACH) {
+      if (c.cooldown <= 0) {
+        c.cooldown = blowEvery(def) / this.mul(c, 'haste');
+        this.attack(game, c, e);
+      }
+      return true;
+    }
+    if (this.stepToward(game, c, e.x, e.y, dt, 1.15) === 'blocked') c.brawl = null;
+    return true;
+  }
+
   /** What is after you this frame, worked out once a frame for the pack rules to look through. */
   private onYouAt = -1;
   private onYouList: Creature[] = [];
@@ -4713,12 +4766,13 @@ export class Creatures {
     return false;
   }
 
-  /** It runs: away from you at `FLEE_PACE` for `FLEE_SECS`, and takes no interest in you for `HUNT_REST`. */
-  private turnTail(game: Game, c: Creature, def: SpeciesDef): void {
-    const p = game.player;
+  /** It runs: away from you, or from what it was fighting, at `FLEE_PACE` for `FLEE_SECS`, and takes no interest in you for `HUNT_REST`. */
+  private turnTail(game: Game, c: Creature, def: SpeciesDef, from: { x: number; y: number } = game.player): void {
+    const p = from;
     const d = Math.max(0.001, Math.hypot(c.x - p.x, c.y - p.y));
     const run = def.speed * FLEE_PACE * FLEE_SECS;
     c.enemy = null;
+    c.brawl = null;
     c.windup = 0;
     c.huntRest = game.time + HUNT_REST;
     c.state = 'flee';
@@ -5101,15 +5155,34 @@ export class Creatures {
     if (a.skills[FIGHT_SKILL] !== undefined) this.gainSkill(game, a, FIGHT_SKILL, 0.05);
   }
 
+  /**
+   * Threat, from a tame creature's blow: a wild thing turns on it when what it
+   * is on has not hurt it for `THREAT_HOLD` seconds, or at once when it is
+   * guarding you.
+   */
+  private threat(game: Game, t: Creature, by: Creature): void {
+    if (t.brawl === by.id) {
+      t.threatAt = game.time;
+      return;
+    }
+    if (by.stance !== 'guard' && game.time - t.threatAt < THREAT_HOLD) return;
+    t.brawl = by.id;
+    t.threatAt = game.time;
+    t.windup = 0;
+    if (by.mode === 'active') game.logMsg(`The ${this.species(t).name.toLowerCase()} turns on ${by.name}.`, 'fight');
+  }
+
   /** Deal damage from a creature or the player; timid wild creatures bolt, and a kill leaves a corpse. */
-  hurt(game: Game, t: Creature, dmg: number, by: Creature | 'player'): void {
+  hurt(game: Game, t: Creature, dmg: number, by: Creature | 'player', crit = false): void {
     const from = by === 'player' ? game.player : by;
     const before = t.health;
     // What a blow costs it is its blood's to say, and its herd's.
     t.health -= dmg * this.mul(t, 'soak');
     t.attackedBy = by === 'player' ? PLAYER_ATTACKER : by.id;
     t.attackedAt = game.time;
-    game.events.emit('hit', t.x, t.y, Math.max(0, before - Math.max(0, t.health)), 'dealt');
+    game.events.emit('hit', t.x, t.y, Math.max(0, before - Math.max(0, t.health)), crit ? 'crit' : 'dealt');
+    // A wild thing that stands and fights turns on a tame one that hurt it (`THREAT_HOLD`).
+    if (by !== 'player' && t.mode === 'wild' && by.mode !== 'wild' && t.health > 0 && !this.species(t).timid) this.threat(game, t, by);
     // Nothing that has been hit takes food from the hand that hit it.
     if (by === 'player') forgetCoaxing(t);
     if (t.mode === 'wild' && this.species(t).timid) {

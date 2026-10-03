@@ -99,6 +99,8 @@ export const SETTING_DEFAULTS = {
   fightBack: true,
   /** Skill lines in a fight folded into one line at its end, rather than one after every swing. */
   compactFight: true,
+  /** The arrows a bow looses first while there are any (`nockedArrow`); sent with every shot, since it is the island that looses them. */
+  nock: 'arrow',
 };
 
 export type Settings = typeof SETTING_DEFAULTS & {

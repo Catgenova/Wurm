@@ -30,7 +30,7 @@ export type GameEvents = {
    * over it without having to go looking for what changed; the log says what
    * happened in words, this says where to write it.
    */
-  hit: [x: number, y: number, amount: number, kind: 'dealt' | 'taken'];
+  hit: [x: number, y: number, amount: number, kind: 'dealt' | 'taken' | 'crit'];
   /**
    * A turn of work landed somewhere: a swing of the pickaxe, a pass of the
    * file, one of a hundred repetitions. Carried so the renderer can show the

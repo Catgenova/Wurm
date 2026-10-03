@@ -1568,6 +1568,19 @@ jobs:
             --outfile=node_modules/.cache/packs.mjs --log-level=error
           node node_modules/.cache/packs.mjs
 
+      - name: Dodges, criticals, arrow heads, venom and threat
+        run: |
+          # A blow on you is first rolled against your dodge, body control less
+          # the armour you wear; a blow or shot that lands can be critical, a
+          # knife's twice as often; a shot looses the arrows asked for, and a
+          # broadhead bleeds, a bodkin goes through a hide, a blunt staggers; a
+          # venomous bite drains until the wound is dressed and a burn wears
+          # armour faster; a creature turns on the companion that hurts it and
+          # back; and Examine weighs a fight up. Both sides.
+          npx esbuild supabase/test/dodge.ts --bundle --platform=node --format=esm \
+            --outfile=node_modules/.cache/dodge.mjs --log-level=error
+          node node_modules/.cache/dodge.mjs
+
       - name: A stone, and what you can get out of it
         run: |
           # The arcane, which has no mana in it. A focus is a cut gem in a
