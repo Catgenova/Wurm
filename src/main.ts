@@ -245,6 +245,19 @@ input.onClick = (x, y, button) => {
   const pick = renderer.pick(x, y);
   if (!pick) return;
   if (button === 0) {
+    /*
+     * A click on something that is after you, or the kind that hunts on
+     * sight, is a fight rather than a walk: it is marked and gone for
+     * (`engage`). Anything else wild that is clicked is marked, for the key
+     * that attacks, and walked to as any click is.
+     */
+    const beast = pick.creature !== undefined ? game.creatures.get(pick.creature) : undefined;
+    if (beast?.mode === 'wild') game.marked = beast.id;
+    if (beast && game.hostile(beast)) {
+      game.engage(beast.id);
+      ui.selectTile(pick);
+      return;
+    }
     // A left click both walks you there and chooses the tile, so the tile
     // window follows wherever you are looking.
     game.moveTo(pick.x, pick.y);
@@ -352,6 +365,9 @@ const PRESSES: Record<string, () => void> = {
     else player.stop();
   },
   chat: () => ui.focusChat(),
+  fight_mark: () => game.markNext(),
+  fight: () => game.fightMarked(),
+  fight_stance: () => game.cycleStance(),
 };
 
 input.onKey = (code, ev) => {
@@ -376,7 +392,10 @@ input.onKey = (code, ev) => {
     return;
   }
   const id = keys.actionFor(code);
-  if (id) PRESSES[id]?.();
+  if (!id) return;
+  // Tab bound to something is that thing, not a walk of the focus round the page.
+  if (code === 'Tab') ev.preventDefault();
+  PRESSES[id]?.();
 };
 
 const loop = new GameLoop(

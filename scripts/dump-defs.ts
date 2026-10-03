@@ -52,6 +52,7 @@ import { WEAPONS, ARMOUR, ARMOUR_CLASSES, SHIELDS, HIT_LOCATIONS } from '../src/
 import { WOUND_KINDS } from '../src/game/wounds';
 import { BUTCHER_PARTS, HOARD_METALS } from '../src/game/butcher';
 import { CRATE_DEFS } from '../src/game/crates';
+import { BLOW_DEFENSIVE, BLOW_HUNTER, BLOW_PREY, FIGHT_BACK_STILL, FIGHT_GIVE_UP, FIGHT_LEASH, FIGHT_STANCES, STANCE_DEALT, STANCE_TAKEN, SWING_WIND, SWING_WIND_KG, TIRED_AT, TIRED_SLOW } from '../src/game/fight';
 import { METALS, MOULDS, ORE_PER_LUMP, RARE_LUMP_FACTOR, RARE_METALS } from '../src/game/metal';
 import { POTTERY } from '../src/game/kiln';
 import { MATERIALS as IMPROVE_MATERIALS, improvable, canImprove } from '../src/game/improve';
@@ -1242,6 +1243,18 @@ out.push(`create or replace function grade_step(p_tier text) returns double prec
 ${TIERS.map((t) => `    when ${q(t)} then ${q(GRADE_STEP[t])}`).join('\n')}
   end::double precision
 $fn$;`);
+/*
+ * What each stance makes of the damage you deal and the damage you take. The
+ * HUD, the Keys tab and the help all say it off the same two tables
+ * (`stanceSays`), so the island reads the very numbers they print.
+ */
+for (const [fn, table] of [['stance_dealt', STANCE_DEALT], ['stance_taken', STANCE_TAKEN]] as const) {
+  out.push(`create or replace function ${fn}(p_stance text) returns double precision language sql immutable as $fn$
+  select coalesce(case p_stance
+${FIGHT_STANCES.map((st) => `    when ${q(st)} then ${q(table[st])}`).join('\n')}
+  end, 1)::double precision
+$fn$;`);
+}
 /* And how many places each leaderboard has. */
 out.push(`create or replace function board_top() returns int language sql immutable as $fn$ select ${q(BOARD_TOP)}::int $fn$;`);
 /* A gap worth bridging, two banks that will carry one deck, and a pair that
@@ -1307,8 +1320,19 @@ for (const [fn, v] of [
      pace on the way, and how long a blow at it or at you is remembered. */
   ['companion_sight', COMPANION_SIGHT], ['companion_leash', COMPANION_LEASH], ['companion_reach', COMPANION_REACH],
   ['companion_blow', COMPANION_BLOW], ['companion_pace', COMPANION_PACE], ['blow_memory', BLOW_MEMORY],
-  /* And how many swings you turn on something with when it bites you. */
-  ['fight_back_goes', FIGHT_BACK_GOES],
+  /* And how many swings you turn on something with when it bites you, and how
+     long your feet must have been still for a bite to turn you at all. */
+  ['fight_back_goes', FIGHT_BACK_GOES], ['fight_back_still', FIGHT_BACK_STILL],
+  /* A fight on its own clock: how far a creature you strike comes from where
+     it was struck, how far off you must get before it lets you go, and the
+     seconds between its blows for a hunter or monster, a kind that stands up
+     for itself, and anything else. */
+  ['fight_leash', FIGHT_LEASH], ['fight_give_up', FIGHT_GIVE_UP],
+  ['blow_hunter', BLOW_HUNTER], ['blow_defensive', BLOW_DEFENSIVE], ['blow_prey', BLOW_PREY],
+  /* And what a swing costs: arms tire below this much wind and swing up to
+     this much slower with none left, and each swing or draw takes this much
+     wind for the arm and this much more for every kilogram in the hand. */
+  ['tired_at', TIRED_AT], ['tired_slow', TIRED_SLOW], ['swing_wind', SWING_WIND], ['swing_wind_kg', SWING_WIND_KG],
   /* A knack: what one is worth, how many a trade holds, how often a go leaves
      one behind, and how often it lands on the trade you were working rather
      than a neighbour. */

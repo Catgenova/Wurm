@@ -4014,6 +4014,20 @@ create or replace function grade_step(p_tier text) returns double precision lang
     when 'fantastic' then 7
   end::double precision
 $fn$;
+create or replace function stance_dealt(p_stance text) returns double precision language sql immutable as $fn$
+  select coalesce(case p_stance
+    when 'aggressive' then 1.2
+    when 'balanced' then 1
+    when 'defensive' then 0.8
+  end, 1)::double precision
+$fn$;
+create or replace function stance_taken(p_stance text) returns double precision language sql immutable as $fn$
+  select coalesce(case p_stance
+    when 'aggressive' then 1.2
+    when 'balanced' then 1
+    when 'defensive' then 0.8
+  end, 1)::double precision
+$fn$;
 create or replace function board_top() returns int language sql immutable as $fn$ select 10::int $fn$;
 create or replace function clearance() returns double precision language sql immutable as $fn$ select 3::double precision $fn$;
 create or replace function end_slop() returns double precision language sql immutable as $fn$ select 12::double precision $fn$;
@@ -4050,6 +4064,16 @@ create or replace function companion_blow() returns double precision language sq
 create or replace function companion_pace() returns double precision language sql immutable as $fn$ select 1.3::double precision $fn$;
 create or replace function blow_memory() returns double precision language sql immutable as $fn$ select 8::double precision $fn$;
 create or replace function fight_back_goes() returns double precision language sql immutable as $fn$ select 100::double precision $fn$;
+create or replace function fight_back_still() returns double precision language sql immutable as $fn$ select 1.5::double precision $fn$;
+create or replace function fight_leash() returns double precision language sql immutable as $fn$ select 8::double precision $fn$;
+create or replace function fight_give_up() returns double precision language sql immutable as $fn$ select 6::double precision $fn$;
+create or replace function blow_hunter() returns double precision language sql immutable as $fn$ select 1.4::double precision $fn$;
+create or replace function blow_defensive() returns double precision language sql immutable as $fn$ select 2.5::double precision $fn$;
+create or replace function blow_prey() returns double precision language sql immutable as $fn$ select 3.5::double precision $fn$;
+create or replace function tired_at() returns double precision language sql immutable as $fn$ select 0.3::double precision $fn$;
+create or replace function tired_slow() returns double precision language sql immutable as $fn$ select 0.6::double precision $fn$;
+create or replace function swing_wind() returns double precision language sql immutable as $fn$ select 0.03::double precision $fn$;
+create or replace function swing_wind_kg() returns double precision language sql immutable as $fn$ select 0.02::double precision $fn$;
 create or replace function knack_each() returns double precision language sql immutable as $fn$ select 0.1::double precision $fn$;
 create or replace function knack_cap() returns double precision language sql immutable as $fn$ select 5::double precision $fn$;
 create or replace function knack_odds() returns double precision language sql immutable as $fn$ select 5000::double precision $fn$;

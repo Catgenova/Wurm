@@ -22,6 +22,7 @@ import { auraMul, breedTraits, channelOf, CHANNELS, pct, rollTraits, traitList, 
 import { ACTION_FLOOR, ACTION_PACE, WORKER_WEIGHT } from './pace';
 import { world } from './pace';
 import { emptyCrate, shutIn, standingCrate } from './creaturecrate';
+import { blowEvery, FIGHT_GIVE_UP, FIGHT_LEASH } from './fight';
 
 /**
  * Wildermon: creatures that roam the wild, can be tamed with the taming
@@ -2488,7 +2489,8 @@ export class Creatures {
       c.rare = rarityStep(r.rare) ?? 0;
       // The island sends a pedigree with anything bred and with nothing else.
       c.pedigree = r.pedigree ?? null;
-      c.enemy = r.hunting ? 0 : null;
+      // The island says `hunting` only of one that is after you (`rpc_creatures`), and that is what `PLAYER_ATTACKER` means here.
+      c.enemy = r.hunting ? PLAYER_ATTACKER : null;
       // Whose it is, which the island says and the journal has to know.
       c.mine = r.mine;
       // And what it was set to, if that is not what its kind does anyway.
@@ -4384,7 +4386,7 @@ export class Creatures {
       } else if (r === 'blocked') c.state = 'idle';
       return;
     }
-    if (def.hunter && this.huntStep(game, c, def, dt)) return;
+    if ((def.hunter || c.enemy === PLAYER_ATTACKER) && this.huntStep(game, c, def, dt)) return;
     if (kind && c.hunger < GRAZE_HUNGRY && game.time >= c.searchAt) {
       c.searchAt = game.time + 4;
       const t = this.findForageTile(game, c.x, c.y, 3, kind, c);
@@ -4414,14 +4416,35 @@ export class Creatures {
   }
 
   /**
-   * A hunter closing on the player. It gives up when you get far enough away
-   * or when it has been badly enough hurt to think better of it.
+   * A wild thing you have struck, that does not bolt, turns on you: it comes
+   * at you and lands its own blows on its own clock (`blowEvery`) until you
+   * are `FIGHT_GIVE_UP` tiles off or it has come `FIGHT_LEASH` from where it
+   * was struck. A hunter already on you carries on as it was.
+   */
+  engage(game: Game, c: Creature): void {
+    if (c.mode !== 'wild' || c.health <= 0 || c.enemy === PLAYER_ATTACKER) return;
+    if (this.species(c).timid) return;
+    c.enemy = PLAYER_ATTACKER;
+    c.huntX = c.x;
+    c.huntY = c.y;
+    // Whatever it was about, it is about you now.
+    if (c.state !== 'flee') {
+      c.state = 'idle';
+      c.until = game.time;
+    }
+  }
+
+  /**
+   * A hunter closing on the player, or anything else you have struck that
+   * stands and fights. A hunter gives up when you get far enough away or when
+   * it has been badly enough hurt to think better of it; the rest on the
+   * shorter leash a fight it did not go looking for is worth.
    */
   private huntStep(game: Game, c: Creature, def: SpeciesDef, dt: number): boolean {
     const p = game.player;
     const d = Math.hypot(p.x - c.x, p.y - c.y);
     const hunting = c.enemy === PLAYER_ATTACKER;
-    const giveUp = def.monster ? HUNT_GIVE_UP * 2.2 : HUNT_GIVE_UP;
+    const giveUp = !def.hunter ? FIGHT_GIVE_UP : def.monster ? HUNT_GIVE_UP * 2.2 : HUNT_GIVE_UP;
     /*
      * Two measures, and the first to run out ends it. How far it has come
      * from where the chase began is the one that grows while it chases — the
@@ -4432,9 +4455,9 @@ export class Creatures {
      */
     const came = Math.hypot(c.x - c.huntX, c.y - c.huntY);
     const out = Math.hypot(c.x - c.homeX, c.y - c.homeY);
-    const spent = came > HUNT_LEASH || out > HUNT_HOME;
+    const spent = came > (def.hunter ? HUNT_LEASH : FIGHT_LEASH) || out > HUNT_HOME;
     if (hunting && (d > giveUp || spent
-                    || c.health < maxHealth(c, def) * (def.monster ? 0.08 : 0.3))) {
+                    || (def.hunter && c.health < maxHealth(c, def) * (def.monster ? 0.08 : 0.3)))) {
       c.enemy = null;
       if (spent) {
         c.huntRest = game.time + HUNT_REST;
@@ -4448,6 +4471,8 @@ export class Creatures {
       return false;
     }
     if (!hunting) {
+      // Only a hunter goes looking for a fight.
+      if (!def.hunter) return false;
       if (d > (def.notice ?? HUNT_SIGHT) || game.time < c.searchAt || game.time < c.huntRest) return false;
       c.searchAt = game.time + 2;
       if (!this.tileOk(game, Math.floor(p.x), Math.floor(p.y))) return false;
@@ -4458,7 +4483,7 @@ export class Creatures {
     }
     if (d <= 1.1) {
       if (c.cooldown <= 0) {
-        c.cooldown = 1.4 / this.mul(c, 'haste');
+        c.cooldown = blowEvery(def) / this.mul(c, 'haste');
         p.attackedBy = c.id;
         p.attackedAt = game.time;
         game.hurtPlayer(attackOf(c, def) * BLOW_SHARE, `The ${def.name.toLowerCase()} is on you`, def.wound ?? 'bite');

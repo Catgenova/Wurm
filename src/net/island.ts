@@ -2855,6 +2855,15 @@ export class Island {
     if (error && !quiet) this.hooks.say(`The island did not hear that (${error.message}).`, 'error');
   }
 
+  /** The two fighting settings, kept on the body: the island lands the blows (`rpc_fight_prefs`). */
+  async fightPrefs(stance: string, fightBack: boolean, quiet = false): Promise<void> {
+    if (!this.info) return;
+    const { error } = await supabase().rpc('rpc_fight_prefs', {
+      p_world: this.info.id, p_stance: stance, p_fight_back: fightBack,
+    });
+    if (error && !quiet) this.hooks.say(`The island did not hear that (${error.message}).`, 'error');
+  }
+
   /** Ask somebody to come and live on your land. */
   async invite(uid: string): Promise<string | null> {
     return this.door('rpc_invite', { p_uid: uid });

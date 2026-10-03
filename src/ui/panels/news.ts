@@ -1,3 +1,4 @@
+import { BLOW_DEFENSIVE, BLOW_HUNTER, BLOW_PREY, FIGHT_BACK_STILL, FIGHT_GIVE_UP, FIGHT_LEASH, FIGHT_STANCE_NAMES, FIGHT_STANCES, FIST, FOLLOW_RANGE, stanceSays, SWING_WIND, SWING_WIND_KG, TARGET_RANGE, TIRED_AT, TIRED_SLOW } from '../../game/fight';
 import {
   CELLAR_DECAY, CELLAR_DEPTH, CELLAR_SOIL, COLUMN_SHARE, columnBill, floorBill, GLASS_ROOF, INDOORS_DECAY, INDOORS_REST, JETTY_REACH, MATERIAL_BY_ID, MATERIALS as WALL_MATERIALS, RAILING_HEIGHT,
   roofShapeDef, roofShapeOf, WALL_HEIGHT, WALL_TYPE_BY_ID, wallBill as typeBill,
@@ -951,6 +952,18 @@ export const NEWS: News[] = [
       `Lantern posts and lantern pillars: a lantern hung on a timber post (${skillOf('make_lamp_post')}) or set in a stone pillar (${skillOf('make_lamp_pillar')}) stays where it is put, takes candles, is lit and put out as it is in your hand, and at night lights the ground round it out to the lantern's reach, ${numberWord(lanternReach(1))} to ${numberWord(lanternReach(100))} tiles, for everybody. A padlock on one keeps its lantern for the key; lighting it is anybody's.`,
       `On an island a candle in a lantern burned ${times(WORLD_PACE)} too fast. It lasts what it does here now, ${spanWords(candleBurn(1))} to ${spanWords(candleBurn(100))} by the lantern's quality. A light taken off a brazier or a lit lantern post says which it came off, where it said an oven, and a lantern with nothing burning near it names what it can be lit at: a burning ${flameSources()}.`,
       `Where the warm glow of two lights overlaps at night, the stronger of the two is drawn there rather than both added together.`,
+    ],
+  },
+  {
+    n: 71,
+    day: '2026-10-03',
+    lines: () => [
+      `A swing takes its weapon's own time before skill, ${[...WEAPONS].filter((w) => !w.ammo).sort((a, b) => a.swing - b.swing).map((w) => `${itemDef(w.id).name.toLowerCase()} ${w.swing}`).join(', ')} seconds and bare hands ${FIST.swing}. A bow draws at its own pace the same way.`,
+      `Every swing or draw costs ${pct(SWING_WIND)} of your stamina and ${pct(SWING_WIND_KG)} more for every kilogram in your hand. Below ${pct(TIRED_AT)} stamina every swing is slower, up to ${pct(TIRED_SLOW)} slower with none left.`,
+      `What you strike that does not run fights back on its own clock, swinging or not: a hunter or a monster every ${BLOW_HUNTER} seconds, a kind that stands up for itself every ${BLOW_DEFENSIVE}, anything else every ${BLOW_PREY}. It follows you up to ${FIGHT_LEASH} tiles from where it was struck and lets you go ${FIGHT_GIVE_UP} tiles off. It no longer answers each of your swings with a roll.`,
+      `Stances, on the button beside your health bar or the \` key: ${FIGHT_STANCES.map((st) => `${FIGHT_STANCE_NAMES[st]}, ${stanceSays(st).toLowerCase()}`).join(' ')}`,
+      `Left-click something that is after you, or a kind that hunts on sight, to fight it, and you follow it up to ${FOLLOW_RANGE} tiles when it steps away. Tab marks the nearest foe within ${TARGET_RANGE} tiles and Space attacks what is marked. A fight never waits behind work: the job in hand goes to the front of the line.`,
+      `Walking leaves a fight: a click on the ground no longer keeps the swing-back for later, and a bite while you walk does not turn you round. A bite turns you on what bit you once your feet have been still ${FIGHT_BACK_STILL} seconds, and Settings, Fighting turns that off.`,
     ],
   },
 ];

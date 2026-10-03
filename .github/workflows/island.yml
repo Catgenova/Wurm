@@ -1532,6 +1532,18 @@ jobs:
             --outfile=node_modules/.cache/fight.mjs --log-level=error
           node node_modules/.cache/fight.mjs
 
+      - name: A fight on its own clock
+        run: |
+          # A swing at the weapon's own pace and for its own wind, slower on
+          # tired arms; three stances; a struck beast that comes after you and
+          # lands its blows on its own clock; a bite that turns you only with
+          # the setting on and your feet still; a walk that leaves a fight;
+          # and a fight asked for mid-work that goes in hand at once. Every
+          # one asked of both sides off the same names.
+          npx esbuild supabase/test/clock.ts --bundle --platform=node --format=esm \
+            --outfile=node_modules/.cache/clock.mjs --log-level=error
+          node node_modules/.cache/clock.mjs
+
       - name: A stone, and what you can get out of it
         run: |
           # The arcane, which has no mana in it. A focus is a cut gem in a

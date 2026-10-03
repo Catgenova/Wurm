@@ -17,6 +17,7 @@ import { BELT_MAX, pinLabel } from '../game/belt';
 import type { Renderer } from '../render/renderer';
 import { ashore, JOURNAL, nextGoals } from '../game/journal';
 import { VERSION } from '../version';
+import { FIGHT_STANCE_NAMES, stanceSays } from '../game/fight';
 
 export interface HudCallbacks {
   toggle: (id: string) => void;
@@ -138,6 +139,7 @@ export class Hud {
   private companionEl: HTMLDivElement;
   private gearEl: HTMLDivElement;
   private eatBtn!: HTMLButtonElement;
+  private stanceBtn!: HTMLButtonElement;
   private feedBtn!: HTMLButtonElement;
   private companionText = document.createElement('span');
   private boonEl: HTMLDivElement;
@@ -185,6 +187,14 @@ export class Hud {
       const value = document.createElement('span');
       value.className = 'hud-bar-value';
       row.append(name, track, value);
+      // The way you stand in a fight, beside what it is spending: a click changes it, as the key does.
+      if (id === 'health') {
+        this.stanceBtn = document.createElement('button');
+        this.stanceBtn.type = 'button';
+        this.stanceBtn.className = 'hud-mini hud-stance';
+        this.stanceBtn.addEventListener('click', () => this.game.cycleStance());
+        row.append(this.stanceBtn);
+      }
       if (id === 'hunger') {
         this.eatBtn = document.createElement('button');
         this.eatBtn.type = 'button';
@@ -724,6 +734,12 @@ export class Hud {
       this.companionEl.hidden = false;
     } else this.companionEl.hidden = true;
     this.eatBtn.disabled = !this.game.bestFood();
+    const stance = this.game.settings.fightStance;
+    if (this.stanceBtn.dataset.stance !== stance) {
+      this.stanceBtn.dataset.stance = stance;
+      this.stanceBtn.textContent = FIGHT_STANCE_NAMES[stance];
+      this.stanceBtn.title = `${FIGHT_STANCE_NAMES[stance]} stance: ${stanceSays(stance)} Click to change it.`;
+    }
     if (this.gridBtn) this.gridBtn.classList.toggle('active', this.game.settings.grid);
 
     // The belt is cheap to draw but not free, so it is looked over four times a second.

@@ -86,6 +86,17 @@ export const SETTING_DEFAULTS = {
    * crafting". Kept on the island's copy too.
    */
   spareRare: false,
+  /**
+   * Which way you stand in a fight (`fight.ts`): aggressive, balanced or
+   * defensive. Kept on the island's copy of your body as well, as the two
+   * crafting ones are, since it is the island that settles the blows.
+   */
+  fightStance: 'balanced' as 'aggressive' | 'balanced' | 'defensive',
+  /**
+   * Whether a creature biting you turns you on it. Off, you fight only what
+   * you set out to fight. Kept on the island's copy too.
+   */
+  fightBack: true,
 };
 
 export type Settings = typeof SETTING_DEFAULTS & {
@@ -120,6 +131,8 @@ function read(): Partial<typeof SETTING_DEFAULTS> {
     // a browser's store is whatever was in a browser's store, including an
     // older build's idea of what these were.
     for (const k of KEPT) if (typeof got[k] === typeof SETTING_DEFAULTS[k]) out[k] = got[k];
+    // A stance is one of three words, not any word.
+    if (!['aggressive', 'balanced', 'defensive'].includes(out.fightStance as string)) delete out.fightStance;
     return out as Partial<typeof SETTING_DEFAULTS>;
   } catch {
     return {};

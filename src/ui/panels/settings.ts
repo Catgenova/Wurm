@@ -3,6 +3,7 @@ import { BINDS, BIND_GROUPS, keyName, keyReserved, MAX_KEYS, type Keybinds } fro
 import { whoAmI } from '../../net/accounts';
 import { RARITIES } from '../../game/items';
 import { CRAFT_REACH } from '../../game/recipes';
+import { FIGHT_BACK_STILL } from '../../game/fight';
 import type { UIWindow } from '../windows';
 import { setUiSize, UI_SIZE_MAX, UI_SIZE_MIN, uiSizeShown } from '../screen';
 
@@ -238,6 +239,24 @@ export class SettingsPanel {
       (v) => {
         game.settings.spareRare = v;
         game.craftPrefsChanged?.();
+      },
+    );
+
+    /*
+     * Fighting: whether a bite turns you on what bit you. Kept on the island as
+     * well (`fightPrefsChanged`), which is where the bite lands.
+     */
+    const fightHead = document.createElement('h4');
+    fightHead.className = 'keys-group';
+    fightHead.textContent = 'Fighting';
+    display.append(fightHead);
+    add(
+      'Turn on what bites you',
+      `When something wild bites you and your feet have been still for ${FIGHT_BACK_STILL} seconds, you swing back at it until it is dead or out of reach, and the job in hand waits at the front of the line. A bite while you walk never turns you round. Untick to fight only what you attack yourself.`,
+      () => game.settings.fightBack,
+      (v) => {
+        game.settings.fightBack = v;
+        game.fightPrefsChanged?.();
       },
     );
 

@@ -1771,6 +1771,20 @@ kbd {
   background: #3a3024;
 }
 
+/* The stance beside the health bar keeps one width whichever of the three it says. */
+.hud-stance {
+  min-width: 62px;
+  text-align: center;
+}
+
+.hud-stance[data-stance='aggressive'] {
+  color: #e8846a;
+}
+
+.hud-stance[data-stance='defensive'] {
+  color: #8fb7d8;
+}
+
 .hud-mini:disabled {
   opacity: 0.4;
   cursor: default;

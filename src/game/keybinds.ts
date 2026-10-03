@@ -22,6 +22,7 @@ import { SIDE_NAMES } from './building';
 import { NODES_PER_TRADE, PERK_TIER_AT, PERKS_PER_TIER } from './classes';
 import { TURNS } from '../render/view';
 import { capital, numberWord, share } from './words';
+import { FIGHT_STANCE_NAMES, FIGHT_STANCES, FOLLOW_RANGE, stanceSays, TARGET_RANGE } from './fight';
 
 /** What a turn key turns by: the view one of its viewpoints, a piece being set down one of its sides. */
 const VIEW_TURN = share(1 / TURNS);
@@ -99,6 +100,10 @@ export const BINDS: BindDef[] = [
   { id: 'stop', label: 'Stop', hint: 'Drop the current job and forget what is queued behind it. Closes an open menu first.', group: 'Doing things', keys: ['Escape'] },
   { id: 'carry_on', label: 'Carry on', hint: 'Take up the jobs a walk put down. Walking no longer forgets them; this is how you get them back.', group: 'Doing things', keys: ['KeyB'] },
   { id: 'chat', label: 'Talk', hint: 'Put the cursor in the box at the bottom of the event log.', group: 'Doing things', keys: ['Enter'] },
+  // Tab and Space are nobody else's, and a key a hand finds without looking is what a fight wants.
+  { id: 'fight_mark', label: 'Mark the nearest foe', hint: `The nearest wild thing within ${TARGET_RANGE} tiles that is after you or hunts on sight; again for the next nearest.`, group: 'Doing things', keys: ['Tab'] },
+  { id: 'fight', label: 'Attack', hint: `Fight what you marked or last clicked, or else the nearest foe: a swing, or a shot with a bow in hand. When it steps out of reach you go after it, up to ${FOLLOW_RANGE} tiles.`, group: 'Doing things', keys: ['Space'] },
+  { id: 'fight_stance', label: 'Change stance', hint: `${FIGHT_STANCES.map((s) => `${FIGHT_STANCE_NAMES[s]}: ${stanceSays(s)}`).join(' ')}`, group: 'Doing things', keys: ['Backquote'] },
 ];
 
 export const BIND_BY_ID = new Map(BINDS.map((b) => [b.id, b]));

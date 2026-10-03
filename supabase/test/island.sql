@@ -1100,11 +1100,12 @@ select '170. ' || (select string_agg(text, ' | ' order by n) from event where ui
 select '171. it is gone: ' || (select count(*) from creature where id = :'prey')
      || ', and there is a corpse at 8,8: ' || (select count(*) from item where def = 'corpse' and gx = 8 and gy = 8)
      || ' — the sword has taken ' || (select round(dmg::numeric, 2) from item where id = :'sword') || ' damage';
--- Some things always get their swipe in, rather than one swing in three.
+-- Struck, a thing that does not bolt comes after you, and bites on its own clock rather than at your swing.
 select creature_spawn(:'world2', 'crawler', 8.7, 8.6, 'wild', now() - interval '2 hours') as biter \gset
 delete from event where uid = :'ivar';
 select act_perform(:'world2', :'ivar', 'attack_creature', ('{"kind":"creature","id":' || :'biter' || '}')::jsonb) \g /dev/null
-select '172. a crawler is a defensive sort: ' || (select string_agg(text, ' | ' order by n) from event where uid = :'ivar');
+select '172. a crawler struck: ' || (select string_agg(text, ' | ' order by n) from event where uid = :'ivar')
+     || ' — and it is after him now: ' || coalesce((select (hunting = :'ivar')::text from creature where world_id = :'world2' and id = :'biter'), 'gone');
 
 \echo ''
 -- A body rests between one subject and the next. This suite runs hundreds of

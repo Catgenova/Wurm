@@ -64,6 +64,7 @@ import { deckOver, floorNear, levelGround, pierDrop, pierGround, pierRefusal, pi
 import { greenNow, mossyPiece } from './greening';
 import { WATER_PLANT_BY_ID, type WaterPlant, type WaterPlantKind } from '../world/waterplants';
 import { liveSettings, type Settings } from './settings';
+import { armsRefusal, FIGHT_BACK_STILL, FIGHT_STANCE_NAMES, FIGHT_TRIES, fightBase, fightWind, FOLLOW_RANGE, inFightReach, isFightJob, nextStance, STANCE_TAKEN, stanceSays, TARGET_RANGE } from './fight';
 import { Skills, SKILL_DEFS, isQuiet } from './skills';
 import { jewelGain } from './gems';
 import { earnedBy, knackBonus, knackLands, KNACK_CAP, KNACK_ODDS, TITLE_BY_ID } from './titles';
@@ -2366,7 +2367,8 @@ export class Game {
   hurtPlayer(raw: number, what: string, kind: WoundKind = 'bite'): void {
     // Being hit in the dark teaches more about watching than hitting does.
     this.fought(DARK_HIT);
-    const hit = this.absorb(raw);
+    // Harder or softer for the way you stand (`fight.ts`), before the armour has its say.
+    const hit = this.absorb(raw * STANCE_TAKEN[this.settings.fightStance]);
     if (hit.blocked) {
       this.player.attackedAt = this.time;
       this.events.emit('hit', this.player.x, this.player.y, 0, 'taken');
@@ -2401,6 +2403,12 @@ export class Game {
     const id = this.player.attackedBy;
     if (id === null || id === PLAYER_ATTACKER || this.player.stats.health <= 0) return;
     if (this.player.stats.stamina < EXHAUSTED) return;
+    /*
+     * Not with the setting off, and not while you are walking: walking is how
+     * you leave a fight, and a bite on the way out used to turn you round and
+     * put you back in it. The island asks the same two things in `fight_back`.
+     */
+    if (!this.settings.fightBack || this.time - this.movedAt < FIGHT_BACK_STILL) return;
     const c = this.creatures.get(id);
     if (!c || c.mode !== 'wild' || c.health <= 0) return;
     if (this.action?.def.id === 'attack_creature' && this.action.target.kind === 'creature' && this.action.target.id === id) return;
@@ -2410,7 +2418,128 @@ export class Game {
     if (this.action) this.queue.unshift({ def: this.action.def, target: this.action.target, goes: this.action.left });
     this.action = null;
     this.logMsg(`You turn on the ${this.creatures.species(c).name.toLowerCase()}.`, 'fight');
+    this.fightTarget = id;
     this.startAction(def, target, FIGHT_BACK_GOES);
+  }
+
+  /** When your feet last moved, which is what `fightBack` asks of a bite. */
+  private movedAt = -Infinity;
+
+  /**
+   * The creature you are fighting, or null.
+   *
+   * A fight follows it: when it steps out of reach and is still within
+   * `FOLLOW_RANGE` you go after it and swing again, rather than standing there
+   * until you click it a second time. Walking off, `Esc` and its death are
+   * what end it.
+   */
+  fightTarget: number | null = null;
+  /** And not before this, so an ask on its way to the island is not asked twice. */
+  private fightNext = 0;
+
+  /** The fight a weapon in hand makes: a shot for a bow, a swing for anything else. */
+  fightJob(): ActionDef | undefined {
+    const held = this.worn('weapon');
+    return ACTION_BY_ID.get(held && WEAPON_BY_ID.get(held.id)?.ammo ? 'shoot_creature' : 'attack_creature');
+  }
+
+  /** Whether this one is a fight to be had: wild, alive, and either coming for you or the kind that does. */
+  hostile(c: Creature): boolean {
+    if (c.mode !== 'wild' || c.health <= 0) return false;
+    const def = this.creatures.species(c);
+    return c.enemy === PLAYER_ATTACKER || c.attackedBy === PLAYER_ATTACKER || !!def.hunter || !!def.monster;
+  }
+
+  /**
+   * Go for it: the fight a weapon in hand makes, now, and the fight follows it
+   * when it steps away (`fightTarget`). Work in hand is put to the front of the
+   * line to be picked up after, as a bite puts it.
+   */
+  engage(id: number): boolean {
+    const c = this.creatures.get(id);
+    if (!c || c.mode !== 'wild' || c.health <= 0) return false;
+    const def = this.fightJob();
+    if (!def) return false;
+    this.fightTarget = id;
+    this.fightNext = this.time + 1;
+    const a = this.action;
+    if (a && isFightJob(a.def.id) && a.target.kind === 'creature' && a.target.id === id) return true;
+    this.requestAction(def, { kind: 'creature', id });
+    return true;
+  }
+
+  /** The nearest thing within `TARGET_RANGE` that is a fight to be had, for the key that picks one. */
+  nearestHostile(): Creature | null {
+    const p = this.player;
+    let best: Creature | null = null;
+    let bestD = TARGET_RANGE;
+    for (const c of this.creatures.list.values()) {
+      if (!this.hostile(c)) continue;
+      const d = Math.hypot(c.x - p.x, c.y - p.y);
+      if (d <= bestD) {
+        best = c;
+        bestD = d;
+      }
+    }
+    return best;
+  }
+
+  /**
+   * Keep after what you are fighting: with nothing in hand and the fight not
+   * over, swing at it again where it stands, or walk to it first while it is
+   * still within `FOLLOW_RANGE`. Past that it has got away.
+   */
+  private updateFight(): void {
+    const id = this.fightTarget;
+    if (id === null) return;
+    const c = this.creatures.get(id);
+    if (!c || c.mode !== 'wild' || c.health <= 0) {
+      this.fightTarget = null;
+      return;
+    }
+    const a = this.action;
+    // A go of it under way is the fight going as it should.
+    if (a && isFightJob(a.def.id) && a.state === 'performing') this.fightTries = 0;
+    if (a || this.queue.length || this.time < this.fightNext) return;
+    const p = this.player;
+    const name = this.creatures.species(c).name.toLowerCase();
+    if (Math.hypot(c.x - p.x, c.y - p.y) > FOLLOW_RANGE) {
+      this.fightTarget = null;
+      this.logMsg(`The ${name} is away from you.`, 'fight');
+      return;
+    }
+    // Spent: the fight waits for your wind rather than ending.
+    if (this.player.stats.stamina < EXHAUSTED) return;
+    const def = this.fightJob();
+    if (!def) return;
+    // What no amount of following mends ends it, said once.
+    const arms = armsRefusal(this, def.id);
+    if (arms || this.fightTries >= FIGHT_TRIES) {
+      this.fightTarget = null;
+      this.logMsg(arms ?? `You cannot get at the ${name}.`, 'error');
+      return;
+    }
+    // Too close to draw on: it is on you, and there is nothing to walk to.
+    if (def.id === 'shoot_creature' && !inFightReach(this, def.id, c) && Math.hypot(c.x - p.x, c.y - p.y) < FOLLOW_RANGE / 2) return;
+    this.fightNext = this.time + 1;
+    this.fightTries += 1;
+    this.requestAction(def, { kind: 'creature', id });
+  }
+
+  /** Asks in a row that came to nothing, and how many of them end a fight (`FIGHT_TRIES`). */
+  private fightTries = 0;
+
+  /** The creature a fight job is after, while it is still there to fight. */
+  private foeOf(a: { def: ActionDef; target: Target }): Creature | undefined {
+    if (!isFightJob(a.def.id) || a.target.kind !== 'creature') return undefined;
+    const c = this.creatures.get(a.target.id);
+    return c && c.mode === 'wild' && c.health > 0 ? c : undefined;
+  }
+
+  /** Walk again to where it is now, while it is within `FOLLOW_RANGE`; false when it is not, or there is no way. */
+  private closeOn(a: { def: ActionDef; target: Target }, c: Creature): boolean {
+    if (Math.hypot(c.x - this.player.x, c.y - this.player.y) > FOLLOW_RANGE) return false;
+    return this.walkToward(a.def, a.target) && !!this.player.path;
   }
 
   /** Open a wound, or deepen one of the same kind already in that place. */
@@ -2780,6 +2909,54 @@ export class Game {
    * that counts there.
    */
   craftPrefsChanged?: () => void;
+
+  /**
+   * And the two fighting ones -- `fightStance` and `fightBack` -- for the same
+   * reason: the island lands the blows, so its copy is the one that counts.
+   */
+  fightPrefsChanged?: () => void;
+
+  /** Stand the next way round (`FIGHT_STANCES`), and say what it does. */
+  cycleStance(): void {
+    const s = nextStance(this.settings.fightStance);
+    this.settings.fightStance = s;
+    this.fightPrefsChanged?.();
+    this.logMsg(`${FIGHT_STANCE_NAMES[s]} stance: ${stanceSays(s)}`, 'info');
+    this.events.emit('stats');
+  }
+
+  /** The creature marked to fight, by a click or by the key that picks the nearest; null for none. */
+  marked: number | null = null;
+
+  /** Mark the nearest foe within `TARGET_RANGE`, or the next nearest after the one already marked. */
+  markNext(): Creature | null {
+    const p = this.player;
+    const foes = [...this.creatures.list.values()]
+      .filter((c) => this.hostile(c) && Math.hypot(c.x - p.x, c.y - p.y) <= TARGET_RANGE)
+      .sort((a, b) => Math.hypot(a.x - p.x, a.y - p.y) - Math.hypot(b.x - p.x, b.y - p.y));
+    if (!foes.length) {
+      this.logMsg(`Nothing within ${TARGET_RANGE} tiles is after you.`, 'info');
+      return null;
+    }
+    const at = foes.findIndex((c) => c.id === this.marked);
+    const next = foes[(at + 1) % foes.length];
+    this.marked = next.id;
+    const def = this.creatures.species(next);
+    this.logMsg(`You mark the ${def.name.toLowerCase()}, ${Math.round(Math.hypot(next.x - p.x, next.y - p.y))} tiles off, with ${Math.ceil(next.health)} health left.`, 'fight');
+    return next;
+  }
+
+  /** Fight what is marked, if it is still there to fight, or else the nearest foe. */
+  fightMarked(): void {
+    const c = this.marked !== null ? this.creatures.get(this.marked) : undefined;
+    const foe = c && c.mode === 'wild' && c.health > 0 ? c : this.nearestHostile();
+    if (!foe) {
+      this.logMsg(`Nothing within ${TARGET_RANGE} tiles is after you. Click one, or mark it first.`, 'info');
+      return;
+    }
+    this.marked = foe.id;
+    this.engage(foe.id);
+  }
 
   /**
    * What this body last said out loud, for the bubble over its own head.
@@ -3284,6 +3461,8 @@ export class Game {
     if (this.player.favour < cap) this.player.favour = Math.min(cap, this.player.favour + dt * FAVOUR_TRICKLE);
     if (s.health <= 0) this.die();
 
+    if (this.player.moving) this.movedAt = this.time;
+    this.updateFight();
     if (this.action) this.updateAction(dt);
   }
 
@@ -3401,10 +3580,14 @@ export class Game {
      * island's own answer drives the bar.
      */
     if (this.ask && a.state === 'walking') {
-      if (this.player.path) return;
+      // A fight is asked for the moment it is in reach, walk done or not, and walked again when it has moved on.
+      const foe = this.foeOf(a);
+      if (foe && inFightReach(this, a.def.id, foe)) this.player.stop();
+      else if (this.player.path) return;
+      else if (foe && this.closeOn(a, foe)) return;
       const { def, target, goes } = a;
       this.action = null;
-      if (!this.inRange(def, target)) {
+      if (foe ? !inFightReach(this, def.id, foe) : !this.inRange(def, target)) {
         this.logMsg(cellarGate(this, def.id, target) ?? 'You are too far away from that.', 'error');
         this.events.emit('action');
         return;
@@ -3417,8 +3600,16 @@ export class Game {
       // Walking off under your own steam used to cancel what you were on your
       // way to do. There is no longer a way to do that without clicking, and a
       // click cancels the action itself, so there is nothing left to catch.
+      // A fight begins the moment it is in reach, and goes after one that has moved on.
+      const foe = this.foeOf(a);
+      if (foe && inFightReach(this, a.def.id, foe)) {
+        p.stop();
+        this.beginPerform();
+        return;
+      }
+      if (!p.path && foe && this.closeOn(a, foe)) return;
       if (!p.path) {
-        if (this.inRange(a.def, a.target)) this.beginPerform();
+        if (!foe && this.inRange(a.def, a.target)) this.beginPerform();
         else if (a.waitUntil !== undefined && this.time < a.waitUntil) {
           // A called wildermon is still on its way over.
         } else {
@@ -3516,7 +3707,8 @@ export class Game {
     const again = a.def.perform(a.target, this) === true;
     this.sayBaubleGo();
     if (a.def.tool) this.wearTool(a.def.tool, a.def.wear ?? 1);
-    const cost = this.staminaCost(a.def.stamina);
+    // A swing costs what is swung: more for every kilogram in the hand (`fightWind`).
+    const cost = this.staminaCost(fightWind(this, a.def) ?? a.def.stamina);
     this.player.stats.stamina = Math.max(0, this.player.stats.stamina - cost);
     /*
      * The skill for the go, whether or not the go landed.
@@ -3612,9 +3804,10 @@ export class Game {
     if (!a && !this.queue.length) return;
     if (a) {
       this.action = null;
-      this.queue.unshift({ def: a.def, target: a.target, goes: a.left ?? a.goes });
+      // A fight is not work to come back to: walking off leaves it, as `rpc_hold` has it.
+      if (!isFightJob(a.def.id)) this.queue.unshift({ def: a.def, target: a.target, goes: a.left ?? a.goes });
     }
-    this.held = true;
+    this.held = this.queue.length > 0;
     // The island keeps the queue on the player row, so the hold is its
     // business too: `rpc_hold` puts the job in hand back at the front of
     // `act_queue` where `rpc_cancel` would have emptied it.
@@ -3647,6 +3840,8 @@ export class Game {
   cancelAction(silent = false): void {
     const a = this.action;
     const lined = this.queue.length;
+    // Out of the fight as well as the job: nothing goes after it again.
+    this.fightTarget = null;
     this.clearQueue(silent || !a);
     if (!a && !lined) return;
     /*
@@ -3853,7 +4048,9 @@ export class Game {
        * `updateAction`. Nothing about who decides has changed — the island is
        * still asked, and may still say no when we get there.
        */
-      if (!this.inRange(def, target)) {
+      const foe = this.foeOf({ def, target });
+      if (foe) this.fightTarget = foe.id;
+      if (foe ? !inFightReach(this, def.id, foe) : !this.inRange(def, target)) {
         this.action = { def, target, state: 'walking', elapsed: 0, duration: 0, left: goes, goes };
         this.watching = false;
         if (!this.walkToward(def, target)) {
@@ -3872,7 +4069,11 @@ export class Game {
      * way the island's half above does, and is asked when the feet arrive --
      * by `beginPerform`, which asks every job again before doing it.
      */
-    const walkFirst = target.kind === 'item' && this.intoStore(def, target) !== null && !this.inRange(def, target);
+    const foe = this.foeOf({ def, target });
+    if (foe) this.fightTarget = foe.id;
+    // And a fight out of reach walks to it first, and is asked again when it is in reach (`closeOn`).
+    const walkFirst = (target.kind === 'item' && this.intoStore(def, target) !== null && !this.inRange(def, target))
+      || (!!foe && !inFightReach(this, def.id, foe) && !armsRefusal(this, def.id));
     if (!walkFirst) {
       const reason = def.check?.(target, this);
       if (reason) {
@@ -3888,6 +4089,18 @@ export class Game {
     const spent = this.bodyRefusal(def);
     if (spent) {
       this.logMsg(spent, 'error');
+      return;
+    }
+    /*
+     * A fight never waits behind work: what is in hand goes to the front of the
+     * line to be picked up after, as a bite puts it, and a fight already in
+     * hand gives way to this one. `rpc_act` does the same.
+     */
+    if (this.action && foe) {
+      const was = this.action;
+      this.action = null;
+      if (!isFightJob(was.def.id)) this.queue.unshift({ def: was.def, target: was.target, goes: was.left ?? was.goes });
+      this.startAction(def, target, goes);
       return;
     }
     // Something already in hand: line this one up behind it instead of dropping it.
@@ -3945,7 +4158,8 @@ export class Game {
     // follows on the way it always has, once this one is done.
     this.held = false;
     this.action = { def, target, state: 'walking', elapsed: 0, duration: this.duration(def), left: goes, goes };
-    if (this.inRange(def, target)) {
+    const foe = this.foeOf(this.action);
+    if (foe ? inFightReach(this, def.id, foe) : this.inRange(def, target)) {
       this.beginPerform();
       return;
     }
@@ -4060,6 +4274,8 @@ export class Game {
       return false;
     }
     if (!keepFollowing) this.unfollow();
+    // And out of a fight: going somewhere is how you leave one.
+    this.fightTarget = null;
     // Following somebody about is not you deciding to go anywhere, so it
     // gives the work up as it always did. A click is, and a click holds.
     if (keepFollowing) this.cancelAction();
@@ -4279,7 +4495,8 @@ export class Game {
     // A Farmer's Worn-in Rake counts the rake better than it is, to the top.
     const toolQl = def.tool ? Math.min(QL_TOP, this.toolQl(def.tool) + this.perk(`tool:${def.id}`, 0)) : 0;
     // And less of it on a settlement whose altar has a bauble for the trade.
-    return goSeconds(def.baseTime, skill, toolQl, this.controlSpeed() * baublePace(this.baubleHere(), def.skill))
+    // A fight goes at the weapon's own swing, and slower on tired arms (`fight.ts`).
+    return goSeconds(fightBase(this, def) ?? def.baseTime, skill, toolQl, this.controlSpeed() * baublePace(this.baubleHere(), def.skill))
       * this.perk(`time:${def.id}`, 1) * this.pieceSpeed(def.skill);
   }
 

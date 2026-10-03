@@ -1,6 +1,6 @@
 import { DARK_SHOT, DARK_SWING, tryGain } from './learn';
 import type { ActionDef, Target } from './actions';
-import { isShod, SHOES_PER_MOUNT, TACK, AGES, ageDef, ageOf, attackOf, BLOW_SHARE, bloodMul, careWord, coaxBonus, COAX_STEP, creatureLevel, forgetCoaxing, isBaitFor, maxHealth, raritySays, SEX_NAMES, SPECIES, STANCE_NAMES, workRangeOf, type Creature, type Stance, type GatherKind } from './creatures';
+import { isShod, SHOES_PER_MOUNT, TACK, AGES, ageDef, ageOf, attackOf, bloodMul, careWord, coaxBonus, COAX_STEP, creatureLevel, forgetCoaxing, isBaitFor, maxHealth, raritySays, SEX_NAMES, SPECIES, STANCE_NAMES, workRangeOf, type Creature, type Stance, type GatherKind } from './creatures';
 import { studBook } from './husbandry';
 import { numberWord } from './words';
 import { GENTLE_HAND } from './meditation';
@@ -9,7 +9,8 @@ import type { Game } from './game';
 import { furnitureCentre, furnitureName, vehicleOf } from './furniture';
 import { deedJobLine, emptyCrate, letOut, shutIn } from './creaturecrate';
 import { itemDef, itemName, rarityOf, type Mark } from './items';
-import { BANE_BONUS, banes, bowRange, hitChance, isBow, WEAPON_BY_ID, weaponDamage, type WeaponDef } from './gear';
+import { BANE_BONUS, banes, bowRange, hitChance, isBow, WEAPON_BY_ID, weaponDamage } from './gear';
+import { armsRefusal, DRAW_CLOSEST, meleeReach, STANCE_DEALT, swungWith } from './fight';
 import { matOfItem } from './materials';
 
 /**
@@ -130,14 +131,6 @@ export const SHEAR_FROM = 0.35;
 export const SHEAR_WOOL = 3;
 export const SHEAR_FEATHERS = 6;
 
-/** Bare hands: what you fight with when there is nothing in them. */
-const FIST: WeaponDef = { id: 'fist', kind: 'knives', damage: 3, swing: 1.8 };
-/** How far you can reach with what is in your hand. */
-const meleeReach = (g: Game): number => {
-  const held = g.worn('weapon');
-  const w = held && WEAPON_BY_ID.get(held.id);
-  return w && !w.ammo ? Math.max(2.2, (w.range ?? 1) + 1.2) : 2.2;
-};
 
 export const CREATURE_ACTIONS: ActionDef[] = [
   {
@@ -444,12 +437,8 @@ export const CREATURE_ACTIONS: ActionDef[] = [
       const c = creatureOf(g, t);
       if (!c) return;
       const def = SPECIES[c.species];
-      const held = g.worn('weapon');
-      const wdef = held && WEAPON_BY_ID.get(held.id);
-      const bow = wdef?.ammo;
       // A bow is no use swung; bare hands are the fallback either way.
-      const usable = wdef && !bow ? wdef : FIST;
-      const item = wdef && !bow ? held : null;
+      const { def: usable, item } = swungWith(g);
       const before = c.health;
       // Its blood has a say in whether you connect at all.
       const landed = g.rand() <= hitChance(g, usable, item) * bloodMul(c, 'evade');
@@ -463,7 +452,8 @@ export const CREATURE_ACTIONS: ActionDef[] = [
       } else {
         // Silver's old virtue: what carries its own light hates a silver edge.
         const bane = banes(item) && def.glow ? BANE_BONUS : 1;
-        const dmg = weaponDamage(g, usable, item) * bane * (0.75 + g.rand() * 0.5);
+        // And harder or softer for the way you stand (`fight.ts`).
+        const dmg = weaponDamage(g, usable, item) * bane * STANCE_DEALT[g.settings.fightStance] * (0.75 + g.rand() * 0.5);
         g.creatures.hurt(g, c, dmg, 'player');
         // Less for a Mender's Armour Care, as `perform_fight` has it.
         if (item) g.damageItem(item, 0.35 * g.perk('worn:weapon', 1));
@@ -473,12 +463,17 @@ export const CREATURE_ACTIONS: ActionDef[] = [
         );
       }
       if (c.health <= 0) return false;
-      // A cornered animal gets a swipe in, and the defensive sorts never miss their chance.
-      if (def.defensive || g.rand() < 0.35) {
-        g.player.attackedBy = c.id;
-        g.player.attackedAt = g.time;
-        g.hurtPlayer(attackOf(c, def) * BLOW_SHARE, `The ${def.name.toLowerCase()} ${def.defensive ? 'comes straight back at you' : 'turns on you'}`, def.wound ?? 'bite');
-      }
+      /*
+       * And it fights back, on its own clock rather than yours.
+       *
+       * It used to answer each swing of yours with a roll -- a swipe in on one
+       * in three, every one for the defensive kinds -- so a fight was a single
+       * rhythm and it was yours. Now whatever you strike that does not bolt
+       * stands and fights (`engage`), and lands its own blows every
+       * `blowEvery` seconds while you are in reach of it, whether you are
+       * swinging or not.
+       */
+      g.creatures.engage(g, c);
       // Keep swinging while it is still within reach.
       return Math.hypot(c.x - g.player.x, c.y - g.player.y) <= meleeReach(g);
     },
@@ -500,13 +495,14 @@ export const CREATURE_ACTIONS: ActionDef[] = [
     check: (t, g) => {
       const c = creatureOf(g, t);
       if (!c) return 'It is dead or gone.';
+      const arms = armsRefusal(g, 'shoot_creature');
+      if (arms) return arms;
       const held = g.worn('weapon');
       const bow = held && WEAPON_BY_ID.get(held.id);
       if (!held || !bow?.ammo) return 'You have no bow in your hands.';
-      if (!g.inventory.has(bow.ammo)) return 'You are out of arrows.';
       const d = Math.hypot(c.x - g.player.x, c.y - g.player.y);
       if (d > bowRange(bow, held)) return `Too far for a ${itemName(held).toLowerCase()}.`;
-      if (d < 1.2) return 'It is too close to draw on.';
+      if (d < DRAW_CLOSEST) return 'It is too close to draw on.';
       return null;
     },
     perform: (t, g) => {
@@ -531,12 +527,14 @@ export const CREATURE_ACTIONS: ActionDef[] = [
         // The stave throws it; the head is what goes in. Both have a say.
         const head = matOfItem(arrow);
         const bane = head.bane && def.glow ? BANE_BONUS : 1;
-        const dmg = weaponDamage(g, bow, held) * head.edge * bane * (0.6 + arrow.ql / 140) * (0.8 + g.rand() * 0.4);
+        const dmg = weaponDamage(g, bow, held) * head.edge * bane * STANCE_DEALT[g.settings.fightStance] * (0.6 + arrow.ql / 140) * (0.8 + g.rand() * 0.4);
         g.creatures.hurt(g, c, dmg, 'player');
         g.damageItem(held, 0.25 * g.perk('worn:weapon', 1));
         g.logMsg(`Your arrow goes home. The ${def.name.toLowerCase()} is down to ${Math.max(0, Math.ceil(c.health))} of ${maxHealth(c, def)}.`, 'fight');
       }
       if (c.health <= 0) return false;
+      // Shot at, it comes for you, as anything struck does.
+      g.creatures.engage(g, c);
       return g.inventory.has(bow.ammo) && Math.hypot(c.x - g.player.x, c.y - g.player.y) <= bowRange(bow, held);
     },
   },

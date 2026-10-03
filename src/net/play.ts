@@ -8,6 +8,8 @@ import { Island, type ItemRow, type PlayerRow } from './island';
 import { generateAtlasWorld, loadAtlas } from '../world/atlas-world';
 import { ACTION_BY_ID, type ActionDef, type Target } from '../game/actions';
 import { hiddenAsk } from '../game/gates';
+import { isFightJob, isFightStance } from '../game/fight';
+import { FIGHT_BACK_GOES } from '../game/creatures';
 import { saidWords } from '../game/roster';
 import { skillRises, tookOff } from './felt';
 import { packAll } from './packed';
@@ -234,7 +236,8 @@ export async function startIsland(params: URLSearchParams, tell: Telling): Promi
   game.ask = (def: ActionDef, target: Target, goes?: number) => {
     lastTarget = target;
     // gates: a solid wall asked for as a hidden door goes in the one call that keeps the ask with its plan (`gates.ts`).
-    void island.act(def.id, target as unknown as Record<string, unknown>, goes ?? 1, hiddenAsk(target));
+    // A fight asked for without a count goes on until it is over or out of reach, as it does here.
+    void island.act(def.id, target as unknown as Record<string, unknown>, goes ?? (isFightJob(def.id) ? FIGHT_BACK_GOES : 1), hiddenAsk(target));
   };
   game.stop = () => {
     lastTarget = null;
@@ -547,6 +550,19 @@ export async function startIsland(params: URLSearchParams, tell: Telling): Promi
   game.craftPrefsChanged = () => void island.craftPrefs(game.settings.fromStores, game.settings.spareRare);
   if (typeof toldStores !== 'boolean' || typeof toldRare !== 'boolean') {
     void island.craftPrefs(game.settings.fromStores, game.settings.spareRare, true);
+  }
+  /*
+   * And the two fighting ones, the same way round: the island lands the blows
+   * and turns you on what bit you, so a copy it already has wins, and a body
+   * that has never been told is told what this browser has.
+   */
+  const toldStance = me.fight_stance;
+  const toldBack = me.fight_back;
+  if (isFightStance(toldStance)) game.settings.fightStance = toldStance;
+  if (typeof toldBack === 'boolean') game.settings.fightBack = toldBack;
+  game.fightPrefsChanged = () => void island.fightPrefs(game.settings.fightStance, game.settings.fightBack);
+  if (!isFightStance(toldStance) || typeof toldBack !== 'boolean') {
+    void island.fightPrefs(game.settings.fightStance, game.settings.fightBack, true);
   }
   island.hooks.people = (people: PlayerRow[]) => {
     game.roster.sawAll(people

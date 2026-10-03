@@ -92,6 +92,8 @@ import { CLEAR_OF_BUILDINGS, CONCRETE_PER_STEP, LIFT_PER_MASONRY, POOL_FILL } fr
 import { AWARENESS, awarenessReach, BASE_SIGHT, LIGHT_GIVES_BACK, NIGHT_LOSS, TREE_OPACITY } from '../../game/vision';
 import { NO_GO, pointAt, windWord, windWorth } from '../../game/wind';
 import { article, capital, listed, NumberWord, numberWord, percent, share, spanWords, times } from '../../game/words';
+import { BLOW_DEFENSIVE, BLOW_HUNTER, BLOW_PREY, FIGHT_BACK_STILL, FIGHT_GIVE_UP, FIGHT_LEASH, FIGHT_STANCE_NAMES, FIGHT_STANCES, FIST, FOLLOW_RANGE, stanceSays, SWING_WIND, SWING_WIND_KG, TARGET_RANGE, TIRED_AT, TIRED_SLOW } from '../../game/fight';
+import { BIND_BY_ID, keyName } from '../../game/keybinds';
 import {
   CLOSE_BARE, CLOSE_CLOTH, CLOSE_PACE, CLOSE_PER_SKILL, CLOSE_RIGHT, CLOSE_WRONG, FESTER_CLOTH, FESTER_WRONG, WOUND_KINDS,
 } from '../../game/wounds';
@@ -2082,9 +2084,27 @@ export function helpText(): string {
     one outright, and the shields skill and its quality decide how often. A weapon that takes both
     hands leaves none for one.</p>
     <h3>Weapons and the bow</h3>
-    <p>When something bites you, you <b>turn on it</b>: whatever you were doing goes to the front of the
-    line and is picked up again after, and you keep swinging until it is dead, gone or out of reach.
-    A swing you were already aiming at it is left alone, and nothing tame counts.</p>
+    <p>A <b>left click</b> on anything wild that is after you, or of a kind that hunts on sight, fights it:
+    you go to it and swing, or shoot with a bow in hand, and when it steps out of reach you go after it,
+    up to ${numberWord(FOLLOW_RANGE)} tiles. <b>${keyName(BIND_BY_ID.get('fight_mark')?.keys[0] ?? '')}</b> marks the nearest such thing
+    within ${numberWord(TARGET_RANGE)} tiles, and the next nearest at each press after; <b>${keyName(BIND_BY_ID.get('fight')?.keys[0] ?? '')}</b>
+    attacks what you marked or last clicked. A fight never waits behind work: whatever was in hand goes
+    to the front of the line and is picked up after. Clicking the ground walks you out of a fight, and
+    nothing turns you back into it.</p>
+    <p>What you strike that does not run <b>fights back on its own clock</b>, whether you are swinging or
+    not: a hunter or a monster every ${BLOW_HUNTER} seconds, a kind that stands up for itself every
+    ${BLOW_DEFENSIVE}, anything else every ${BLOW_PREY}. It comes after you up to ${numberWord(FIGHT_LEASH)} tiles from where
+    it was struck and lets you go once you are ${numberWord(FIGHT_GIVE_UP)} tiles off.</p>
+    <p>When something bites you and your feet have been still for ${FIGHT_BACK_STILL} seconds, you <b>turn on it</b>:
+    whatever you were doing goes to the front of the line and is picked up again after, and you keep
+    swinging until it is dead, gone or out of reach. A bite while you walk never turns you round, a swing
+    you were already aiming at it is left alone, and nothing tame counts. Settings, Fighting turns it off.</p>
+    <p>Your <b>stance</b> is on the button beside your health bar; click it or press
+    <b>${keyName(BIND_BY_ID.get('fight_stance')?.keys[0] ?? '')}</b> for the next. ${FIGHT_STANCES.map((st) => `<b>${FIGHT_STANCE_NAMES[st]}</b>: ${stanceSays(st)}`).join(' ')}</p>
+    <p>A swing takes its weapon's own time before skill: ${listed([...WEAPONS].filter((w) => !w.ammo).sort((a, b) => a.swing - b.swing).map((w) => `${itemDef(w.id).name.toLowerCase()} ${w.swing}`))}
+    seconds, and bare hands ${FIST.swing}. A bow's draw is its own the same way. Every swing or draw costs
+    ${percent(SWING_WIND)} of your stamina and ${percent(SWING_WIND_KG)} more for every kilogram in your hand, before body stamina
+    and armour have their say; below ${percent(TIRED_AT)} stamina every swing is slower, up to ${percent(TIRED_SLOW)} slower with none left.</p>
     <p>Every weapon belongs to a kind, and each kind is its own subskill: ${listed(WEAPON_KINDS.map((k) => `<b>${k}</b>`))}.
     Swinging trains the weapon's own subskill and the <b>fighting</b> skill behind it, and both decide
     whether a blow lands and how hard. A weapon's own numbers matter as much: a hunting knife is quick
