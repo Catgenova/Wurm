@@ -1,3 +1,4 @@
+import { BACK_PACE, BACK_SLACK, CIRCLE_R, COWARD_AT, COWARD_DRAG, DRAW_WALK, FALL_BACK, GUARD_RANGE, HUNTER_TURN, KEEP_OFF, MONSTER_TURN, PACK_CALL, PACK_MOST, THROW_HIT, THROW_REACH } from '../../game/fight';
 import { FIGHT_QUIET, ARM_SLOW_MOST, ARMOUR_VS, armourSays, BLINDSIDE, blowSays, CROWD_BLOCK, FLANK_HIT, HEAVY_EVERY, HEAVY_HIT, HIDE_NAMES, HIDES, hideSays, LEG_SLOW_MOST, sideOf, WIND_UP, BLOW_DEFENSIVE, BLOW_HUNTER, BLOW_PREY, FIGHT_BACK_STILL, FIGHT_GIVE_UP, FIGHT_LEASH, FIGHT_STANCE_NAMES, FIGHT_STANCES, FIST, FOLLOW_RANGE, stanceSays, SWING_WIND, SWING_WIND_KG, TARGET_RANGE, TIRED_AT, TIRED_SLOW } from '../../game/fight';
 import {
   CELLAR_DECAY, CELLAR_DEPTH, CELLAR_SOIL, COLUMN_SHARE, columnBill, floorBill, GLASS_ROOF, INDOORS_DECAY, INDOORS_REST, JETTY_REACH, MATERIAL_BY_ID, MATERIALS as WALL_MATERIALS, RAILING_HEIGHT,
@@ -50,7 +51,7 @@ import { weaponCarry } from '../../render/figure';
 import { TRY_LEARN } from '../../game/learn';
 import { CLIMB_LEARN_FROM, CLIMB_PER_LEVEL, MAX_STEP } from '../../game/player';
 import { ALL_GOALS } from '../../game/journal';
-import { SPECIES } from '../../game/creatures';
+import { COMPANION_SIGHT, SPECIES } from '../../game/creatures';
 import { betterThanCommon, CHANNELS, husbandryOdds, pct as cardPct } from '../../game/traits';
 import { CHAIN_MOST, FALL_DROP, FILL_RATE, POOL_DEPTH, POOL_LIP, RUN_RATE, SPRING_DEPTH, SPRINGS_EACH } from '../../world/springs';
 import { POOL_FILL } from '../../game/foundations';
@@ -980,6 +981,17 @@ export const NEWS: News[] = [
       'A health bar over everything after you, a ring at your feet that fills as your swing comes, arrows at the edge of the view pointing at anything after you out of sight, and a red edge to the view when you are struck.',
       `With the cursor on a hunter not yet after you, a dashed ring shows how far off it will notice you.`,
       `Settings, Fighting, One line for a whole fight: skill gains in a fight are said once, ${FIGHT_QUIET} seconds after the last blow, with how long it lasted, what you dealt and what you took. On by default.`,
+    ],
+  },
+  {
+    n: 73,
+    day: '2026-10-03',
+    lines: () => [
+      `Packs: ${listed(Object.values(SPECIES).filter((d) => d.pack).map((d) => `${d.name.toLowerCase()}s`))} share a home, up to ${PACK_MOST} to one. When one has your scent, every other of its kind within ${PACK_CALL} tiles comes too, and they spread round you ${CIRCLE_R} tiles out before coming in from their own sides.`,
+      `Throwers: ${listed(Object.values(SPECIES).filter((d) => d.throws).map((d) => `${d.name.toLowerCase()}s`))} stand off ${KEEP_OFF} tiles and throw from up to ${THROW_REACH}, ${pct(THROW_HIT)} of a blow; closer than ${KEEP_OFF - BACK_SLACK} they back away at ${pct(BACK_PACE)} of their walk.`,
+      `Nerve: a hunter turns tail below ${pct(HUNTER_TURN)} health, a monster below ${pct(MONSTER_TURN)}, ${listed(Object.values(SPECIES).filter((d) => d.coward).map((d) => `${d.name.toLowerCase()}s`))} below ${pct(COWARD_AT)}, or ${pct(COWARD_DRAG)} once one of their kind nearby has run. Kill or rout the one leading a pack and the whole pack runs.`,
+      `Companion orders, from wherever you stand: Attack my target (${defaultKey('pet_attack')}, or Set … on it from a wild one's menu), whatever its stance; Fall back (${defaultKey('pet_back')}), no fight of its own for ${FALL_BACK} seconds; and a Guarding you stance that goes for anything hunting you within ${COMPANION_SIGHT} tiles and stays within ${GUARD_RANGE} tiles of you. A dashed blue line shows what it is fighting.`,
+      `Bows on the move: walking keeps a draw going at ${pct(DRAW_WALK)} of your pace, and it keeps loosing while the target is in range. A line to the target fills with the draw, amber in range and grey out of it.`,
     ],
   },
 ];

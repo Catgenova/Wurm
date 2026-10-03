@@ -39,7 +39,7 @@ import { DYE_BY_ID } from '../game/dyestuffs';
 import { hash2 } from '../world/noise';
 import { bareRock, DAMP_SAND, dustiness, FLAT, growth, oreWash, PAVED, ROCK_VARIANTS, SLAB_VARIANTS, STREWN, TileType, TILE_DEFS, COVERED, bushSpecies, slabVariant, trailGround, stonesBed, treeSpecies, treeVariant } from '../world/tiles';
 import { HALF_H, HALF_W, HEIGHT_SCALE, UNITS_PER_TILE } from './iso';
-import { HUNT_REACH, isFightJob, WIND_UP } from '../game/fight';
+import { HUNT_REACH, inFightReach, isFightJob, WIND_UP } from '../game/fight';
 import { depthOf, type View } from './view';
 import { FALLS, roofModel, type Fall, type RoofGable, type RoofModel, type RoofPt } from './roofshape';
 import { COVER_PPT, covering } from './roofing';
@@ -3519,6 +3519,53 @@ export class Renderer {
       ctx.ellipse(this.feetAt.x, this.feetAt.y, rx, ry, 0, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * k);
       ctx.stroke();
     }
+    // A bow being drawn: the line to what it is drawn on, filling as the draw comes up,
+    // in amber while it is within the bow's range and grey once it is not.
+    if (a && a.def.id === 'shoot_creature' && a.state === 'performing' && a.target.kind === 'creature' && this.feetAt) {
+      const t = game.creatures.get(a.target.id);
+      if (t) {
+        const k = Math.max(0, Math.min(1, a.elapsed / Math.max(0.001, a.duration)));
+        const tx = cam.worldToScreenX(t.x, t.y);
+        const ty = cam.worldToScreenY(t.x, t.y, w.heightAt(t.x, t.y));
+        const fx = this.feetAt.x;
+        const fy = this.feetAt.y;
+        const inRange = inFightReach(game, 'shoot_creature', t);
+        ctx.lineWidth = Math.max(1, 1.5 * zoom);
+        ctx.strokeStyle = 'rgba(0, 0, 0, 0.3)';
+        ctx.beginPath();
+        ctx.moveTo(fx, fy);
+        ctx.lineTo(tx, ty);
+        ctx.stroke();
+        ctx.lineWidth = Math.max(2, 2.5 * zoom);
+        ctx.strokeStyle = inRange ? 'rgba(255, 214, 120, 0.95)' : 'rgba(170, 170, 170, 0.8)';
+        ctx.beginPath();
+        ctx.moveTo(fx, fy);
+        ctx.lineTo(fx + (tx - fx) * k, fy + (ty - fy) * k);
+        ctx.stroke();
+      }
+    }
+    // Your companion's fight: a line from it to what it is going for.
+    ctx.setLineDash([5 * zoom, 4 * zoom]);
+    for (const c of game.creatures.list.values()) {
+      if (c.mode !== 'active' || c.mine === false || c.enemy === null || c.enemy === PLAYER_ATTACKER) continue;
+      const e = game.creatures.get(c.enemy);
+      if (!e) continue;
+      const cx = cam.worldToScreenX(c.x, c.y);
+      const cy = cam.worldToScreenY(c.x, c.y, w.heightAt(c.x, c.y));
+      const ex = cam.worldToScreenX(e.x, e.y);
+      const ey = cam.worldToScreenY(e.x, e.y, w.heightAt(e.x, e.y));
+      ctx.lineWidth = Math.max(1.5, 2 * zoom);
+      ctx.strokeStyle = 'rgba(120, 190, 255, 0.85)';
+      ctx.beginPath();
+      ctx.moveTo(cx, cy);
+      ctx.lineTo(ex, ey);
+      ctx.stroke();
+      ctx.fillStyle = 'rgba(120, 190, 255, 0.95)';
+      ctx.beginPath();
+      ctx.arc(ex, ey, Math.max(2.5, 3.5 * zoom), 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.setLineDash([]);
     // How far a hunter under the cursor will notice you from.
     const hc = this.hover?.creature !== undefined ? game.creatures.get(this.hover.creature) : undefined;
     if (hc && hc.mode === 'wild' && hc.enemy !== PLAYER_ATTACKER && game.creatures.species(hc).hunter) {

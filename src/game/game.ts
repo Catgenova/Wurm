@@ -64,7 +64,7 @@ import { deckOver, floorNear, levelGround, pierDrop, pierGround, pierRefusal, pi
 import { greenNow, mossyPiece } from './greening';
 import { WATER_PLANT_BY_ID, type WaterPlant, type WaterPlantKind } from '../world/waterplants';
 import { liveSettings, type Settings } from './settings';
-import { ARMOUR_VS, armsRefusal, CROWD_BLOCK, FIGHT_QUIET, skillLine, type FightRecord, FIGHT_BACK_STILL, FIGHT_STANCE_NAMES, FLANK_HIT, legPace, FIGHT_TRIES, fightBase, fightWind, FOLLOW_RANGE, inFightReach, isFightJob, nextStance, STANCE_TAKEN, stanceSays, TARGET_RANGE } from './fight';
+import { ARMOUR_VS, armsRefusal, CROWD_BLOCK, DRAW_WALK, FIGHT_QUIET, skillLine, type FightRecord, FIGHT_BACK_STILL, FIGHT_STANCE_NAMES, FLANK_HIT, legPace, FIGHT_TRIES, fightBase, fightWind, FOLLOW_RANGE, inFightReach, isFightJob, nextStance, STANCE_TAKEN, stanceSays, TARGET_RANGE } from './fight';
 import { Skills, SKILL_DEFS, isQuiet } from './skills';
 import { jewelGain } from './gems';
 import { earnedBy, knackBonus, knackLands, KNACK_CAP, KNACK_ODDS, TITLE_BY_ID } from './titles';
@@ -3015,6 +3015,41 @@ export class Game {
     return next;
   }
 
+  /** Whether a bow is being drawn just now, which a walk does not interrupt. */
+  drawingBow(): boolean {
+    const a = this.action;
+    return !!a && a.def.id === 'shoot_creature' && a.state === 'performing';
+  }
+
+  /** What follows you, when anything does: on an island, only one the island says is yours. */
+  companion(): Creature | null {
+    for (const c of this.creatures.list.values()) if (c.mode === 'active' && c.mine !== false) return c;
+    return null;
+  }
+
+  /** Send your companion at what you are fighting, or have marked, or else the nearest foe (`order_attack`). */
+  orderAttack(): void {
+    const c = this.companion();
+    const def = ACTION_BY_ID.get('order_attack');
+    if (!c || !def) {
+      this.logMsg('Nothing follows you.', 'info');
+      return;
+    }
+    const foe = this.fightTarget ?? this.marked ?? this.nearestHostile()?.id;
+    this.requestAction(def, { kind: 'creature', id: c.id, ...(foe === undefined || foe === null ? {} : { foe }) });
+  }
+
+  /** Call your companion out of its fight to your side (`order_heel`). */
+  orderHeel(): void {
+    const c = this.companion();
+    const def = ACTION_BY_ID.get('order_heel');
+    if (!c || !def) {
+      this.logMsg('Nothing follows you.', 'info');
+      return;
+    }
+    this.requestAction(def, { kind: 'creature', id: c.id });
+  }
+
   /** Fight what is marked, if it is still there to fight, or else the nearest foe. */
   fightMarked(): void {
     const c = this.marked !== null ? this.creatures.get(this.marked) : undefined;
@@ -3323,6 +3358,8 @@ export class Game {
     p.speedMul = boat ? this.boatSpeed(boat) / BASE_SPEED : driven ? this.vehicleSpeed(driven) / BASE_SPEED : up ? this.mountSpeed(up) / BASE_SPEED : 1;
     // And on your own feet, what a wound to a leg or a foot leaves of your pace (`legPace`).
     p.legPace = legPace(p.wounds);
+    // And drawing a bow, a walk at `DRAW_WALK` of it: the draw goes on as you go.
+    p.drawPace = this.drawingBow() ? DRAW_WALK : 1;
     // Only wheels feel the ground: a boat is on water and feet are feet.
     p.wheelLoad = driven ? this.vehicleLoad(driven) : 0;
     // And whether your own feet are in the water at all, which is the whole of
@@ -3706,7 +3743,8 @@ export class Game {
       }
       return;
     }
-    if (p.moving) {
+    // Walking puts the work down, but not a bow being drawn: that looses on the move (`DRAW_WALK`).
+    if (p.moving && a.def.id !== 'shoot_creature') {
       this.cancelAction();
       return;
     }
@@ -4360,9 +4398,10 @@ export class Game {
     // And out of a fight: going somewhere is how you leave one.
     this.fightTarget = null;
     // Following somebody about is not you deciding to go anywhere, so it
-    // gives the work up as it always did. A click is, and a click holds.
+    // gives the work up as it always did. A click is, and a click holds --
+    // except a bow being drawn, which goes on drawing as you go (`DRAW_WALK`).
     if (keepFollowing) this.cancelAction();
-    else this.pauseAction();
+    else if (!this.drawingBow()) this.pauseAction();
     const p = this.player;
     if (!this.world.inBounds(x, y)) return false;
     const { rule, levels, below } = this.movement();

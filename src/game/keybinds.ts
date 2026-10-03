@@ -22,7 +22,7 @@ import { SIDE_NAMES } from './building';
 import { NODES_PER_TRADE, PERK_TIER_AT, PERKS_PER_TIER } from './classes';
 import { TURNS } from '../render/view';
 import { capital, numberWord, share } from './words';
-import { FIGHT_STANCE_NAMES, FIGHT_STANCES, FOLLOW_RANGE, stanceSays, TARGET_RANGE } from './fight';
+import { FALL_BACK, FIGHT_STANCE_NAMES, FIGHT_STANCES, FOLLOW_RANGE, stanceSays, TARGET_RANGE } from './fight';
 
 /** What a turn key turns by: the view one of its viewpoints, a piece being set down one of its sides. */
 const VIEW_TURN = share(1 / TURNS);
@@ -104,6 +104,8 @@ export const BINDS: BindDef[] = [
   { id: 'fight_mark', label: 'Mark the nearest foe', hint: `The nearest wild thing within ${TARGET_RANGE} tiles that is after you or hunts on sight; again for the next nearest.`, group: 'Doing things', keys: ['Tab'] },
   { id: 'fight', label: 'Attack', hint: `Fight what you marked or last clicked, or else the nearest foe: a swing, or a shot with a bow in hand. When it steps out of reach you go after it, up to ${FOLLOW_RANGE} tiles.`, group: 'Doing things', keys: ['Space'] },
   { id: 'fight_stance', label: 'Change stance', hint: `${FIGHT_STANCES.map((s) => `${FIGHT_STANCE_NAMES[s]}: ${stanceSays(s)}`).join(' ')}`, group: 'Doing things', keys: ['Backquote'] },
+  { id: 'pet_attack', label: 'Companion: attack my target', hint: 'Your companion goes for what you are fighting or have marked, or else the nearest foe, whatever its stance.', group: 'Doing things', keys: ['Semicolon'] },
+  { id: 'pet_back', label: 'Companion: fall back', hint: `Your companion leaves its fight, comes to your side, and starts no fight for ${FALL_BACK} seconds.`, group: 'Doing things', keys: ['Quote'] },
 ];
 
 export const BIND_BY_ID = new Map(BINDS.map((b) => [b.id, b]));

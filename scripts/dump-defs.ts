@@ -52,6 +52,7 @@ import { WEAPONS, ARMOUR, ARMOUR_CLASSES, SHIELDS, HIT_LOCATIONS } from '../src/
 import { WOUND_BY_WEAPON, WOUND_KINDS } from '../src/game/wounds';
 import { BUTCHER_PARTS, HOARD_METALS } from '../src/game/butcher';
 import { CRATE_DEFS } from '../src/game/crates';
+import { BACK_PACE, BACK_SLACK, CIRCLE_ARC, CIRCLE_R, COWARD_AT, COWARD_DRAG, FALL_BACK, FLEE_PACE, FLEE_SECS, GUARD_RANGE, HUNTER_TURN, KEEP_OFF, MONSTER_TURN, PACK_CALL, PACK_MOST, PACK_RANGE, THROW_HIT, THROW_REACH } from '../src/game/fight';
 import { ARM_SLOW, ARM_SLOW_MOST, ARMOUR_VS, BLINDSIDE, BLOW_DEFENSIVE, BLOW_HUNTER, BLOW_KINDS, BLOW_PREY, CROWD_BLOCK, FIGHT_BACK_STILL, FIGHT_GIVE_UP, FIGHT_LEASH, FIGHT_STANCES, FIST, FLANK_HIT, HEAVY_EVERY, HEAVY_HIT, HIDE_TAKES, HIDES, HUNT_REACH, KNIFE_BLEED, KNIFE_BLEED_SECS, STAGGER_MAUL, STAGGER_POLE, STANCE_DEALT, STANCE_TAKEN, SWING_WIND, SWING_WIND_KG, TIRED_AT, TIRED_SLOW, WIND_UP } from '../src/game/fight';
 import { METALS, MOULDS, ORE_PER_LUMP, RARE_LUMP_FACTOR, RARE_METALS } from '../src/game/metal';
 import { POTTERY } from '../src/game/kiln';
@@ -465,6 +466,10 @@ out.push(`alter table species_def add column if not exists pannier real;`);
 /* What it wears against a blow, and whether it hits heavy (`fight.ts`). */
 out.push(`alter table species_def add column if not exists hide text;`);
 out.push(`alter table species_def add column if not exists heavy boolean not null default false;`);
+/* Runs in a pack, keeps its distance and throws, turns tail early (`fight.ts`). */
+out.push(`alter table species_def add column if not exists pack boolean not null default false;`);
+out.push(`alter table species_def add column if not exists throws boolean not null default false;`);
+out.push(`alter table species_def add column if not exists coward boolean not null default false;`);
 /* A cart is pulled by hand; a vehicle is driven from a seat with a team in
  * front of it; a boat is neither and wants water under it. */
 out.push(`alter table furniture_def add column if not exists cart boolean not null default false;`);
@@ -1123,6 +1128,9 @@ for (const d of Object.values(SPECIES) as unknown as S[]) {
   if (d.hives) out.push(`update species_def set hives = true where id = ${q(d.id)};`);
   if (d.hide) out.push(`update species_def set hide = ${q(d.hide)} where id = ${q(d.id)};`);
   if (d.heavy) out.push(`update species_def set heavy = true where id = ${q(d.id)};`);
+  if (d.pack) out.push(`update species_def set pack = true where id = ${q(d.id)};`);
+  if (d.throws) out.push(`update species_def set throws = true where id = ${q(d.id)};`);
+  if (d.coward) out.push(`update species_def set coward = true where id = ${q(d.id)};`);
   for (const item of d.diet as string[]) out.push(`insert into species_diet values (${q(d.id)}, ${q(item)});`);
   const trades = (d as unknown as { trades?: string[] }).trades;
   if (trades) out.push(`update species_def set trades = array[${trades.map(q).join(', ')}]::text[] where id = ${q(d.id)};`);
@@ -1362,6 +1370,15 @@ for (const [fn, v] of [
      long it stands drawing back, what it lands for, and how near a blow
      reaches (which the hand-written hunt_reach said the same of). */
   ['heavy_every', HEAVY_EVERY], ['wind_up', WIND_UP], ['heavy_hit', HEAVY_HIT], ['hunt_reach', HUNT_REACH],
+  /* Packs: how many to a home, how close to it they keep, how far one hears
+     another on you, and how they go round you; a thrower's distances and its
+     throw; when nerve goes, and how one that has lost it runs. */
+  ['pack_most', PACK_MOST], ['pack_range', PACK_RANGE], ['pack_call', PACK_CALL], ['circle_r', CIRCLE_R], ['circle_arc', CIRCLE_ARC],
+  ['keep_off', KEEP_OFF], ['throw_reach', THROW_REACH], ['throw_hit', THROW_HIT], ['back_slack', BACK_SLACK], ['back_pace', BACK_PACE],
+  ['hunter_turn', HUNTER_TURN], ['monster_turn', MONSTER_TURN], ['coward_at', COWARD_AT], ['coward_drag', COWARD_DRAG],
+  ['flee_pace', FLEE_PACE], ['flee_secs', FLEE_SECS],
+  /* A companion's orders: how near a guarding one keeps a fight, and how long one fallen back starts none. */
+  ['guard_range', GUARD_RANGE], ['fall_back', FALL_BACK],
   /* Wounds that slow a swing, and how far; a blow at your back, a crowd on
      your shield, and a blow at something whose mind is elsewhere. */
   ['arm_slow', ARM_SLOW], ['arm_slow_most', ARM_SLOW_MOST],

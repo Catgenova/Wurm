@@ -261,6 +261,80 @@ export function sideOf(w: WeaponDef): string | null {
   return null;
 }
 
+/* ---- Packs, throwers and nerve -------------------------------------------- */
+
+/**
+ * A kind that runs in a pack (`SpeciesDef.pack`) takes the home of another of
+ * its kind within `HERD_REACH` when it comes into the world, as a herd does,
+ * up to this many to one home;
+ */
+export const PACK_MOST = 4;
+/** and keeps within this many tiles of that home rather than `WILD_RANGE`, so a pack is met together. */
+export const PACK_RANGE = 6;
+/** When one of a pack takes your scent, each other of its kind within this many tiles takes it too, and the first leads them. */
+export const PACK_CALL = 8;
+/**
+ * A pack on you spreads round you. Each makes for its own side of you, an even
+ * share of the circle round from the one that leads, circling this many tiles
+ * out until it is within `CIRCLE_ARC` of its side, and then comes in.
+ */
+export const CIRCLE_R = 2.5;
+export const CIRCLE_ARC = Math.PI / 4;
+/** The way round you the `k`th of a pack of `n` makes for, from the bearing of the one that leads it. */
+export const slotAngle = (lead: number, k: number, n: number): number => lead + (2 * Math.PI * k) / n;
+/** The turn from one bearing to another the short way round, -π to π. */
+export const turnTo = (from: number, to: number): number => {
+  const t = (to - from) % (2 * Math.PI);
+  return t > Math.PI ? t - 2 * Math.PI : t < -Math.PI ? t + 2 * Math.PI : t;
+};
+/** Where a pack's one on its way round to its side makes for next: `CIRCLE_R` out, at most `CIRCLE_ARC` further round. */
+export function circlePoint(px: number, py: number, own: number, slot: number): { x: number; y: number } {
+  const b = own + Math.sign(turnTo(own, slot)) * Math.min(Math.abs(turnTo(own, slot)), CIRCLE_ARC);
+  return { x: px + Math.cos(b) * CIRCLE_R, y: py + Math.sin(b) * CIRCLE_R };
+}
+
+/** A thrower (`SpeciesDef.throws`) stands off this many tiles from you, */
+export const KEEP_OFF = 3.5;
+/** throws from no further than this many, */
+export const THROW_REACH = 6;
+/** and each throw lands this share of what its blow would. */
+export const THROW_HIT = 0.6;
+/**
+ * Nearer than `KEEP_OFF - BACK_SLACK` it backs away from you at `BACK_PACE`
+ * of its walk, and fights hand to hand only when it has nowhere to back to.
+ */
+export const BACK_SLACK = 1;
+export const BACK_PACE = 0.6;
+
+/** A hunter turns tail below this share of its health, a monster below `MONSTER_TURN`, a coward below `COWARD_AT`; */
+export const HUNTER_TURN = 0.3;
+export const MONSTER_TURN = 0.08;
+export const COWARD_AT = 0.5;
+/** and a coward below this share as soon as another of its kind within `PACK_CALL` has turned tail. */
+export const COWARD_DRAG = 0.8;
+/** The share of its health a kind turns tail below. */
+export const turnsAt = (def: Pick<SpeciesDef, 'coward' | 'monster'>): number =>
+  def.coward ? COWARD_AT : def.monster ? MONSTER_TURN : HUNTER_TURN;
+/**
+ * One that turns tail runs for home at this times its walk for `FLEE_SECS`,
+ * and takes no interest in you for `HUNT_REST`. A pack whose leader turns tail
+ * or dies turns tail with it.
+ */
+export const FLEE_PACE = 1.6;
+export const FLEE_SECS = 6;
+
+/* ---- Your companion's orders ------------------------------------------------ */
+
+/** A guarding companion gives up a fight that has got this many tiles from you. */
+export const GUARD_RANGE = 4;
+/** Fall back: it leaves its fight, comes to your side, and starts no fight for this many seconds. */
+export const FALL_BACK = 8;
+
+/* ---- A bow on the move ------------------------------------------------------ */
+
+/** Drawing a bow you can walk, at this share of your pace, and the draw goes on and looses when it is full. */
+export const DRAW_WALK = 0.6;
+
 /* ---- A fight, remembered ------------------------------------------------- */
 
 /** Seconds without a blow given or taken that end a fight, and say how it went. */

@@ -22,7 +22,7 @@ import { auraMul, breedTraits, channelOf, CHANNELS, pct, rollTraits, traitList, 
 import { ACTION_FLOOR, ACTION_PACE, WORKER_WEIGHT } from './pace';
 import { world } from './pace';
 import { emptyCrate, shutIn, standingCrate } from './creaturecrate';
-import { blowEvery, FIGHT_GIVE_UP, FIGHT_LEASH, HEAVY_EVERY, HEAVY_HIT, HUNT_REACH, KNIFE_BLEED_SECS, WIND_UP, type Hide } from './fight';
+import { BACK_PACE, BACK_SLACK, blowEvery, circlePoint, CIRCLE_ARC, CIRCLE_R, COWARD_DRAG, FIGHT_GIVE_UP, FIGHT_LEASH, FLEE_PACE, FLEE_SECS, GUARD_RANGE, HEAVY_EVERY, HEAVY_HIT, HUNT_REACH, KEEP_OFF, KNIFE_BLEED_SECS, PACK_CALL, PACK_MOST, PACK_RANGE, slotAngle, THROW_HIT, THROW_REACH, turnsAt, turnTo, WIND_UP, type Hide } from './fight';
 
 /**
  * Wildermon: creatures that roam the wild, can be tamed with the taming
@@ -70,7 +70,7 @@ export interface Unborn {
 /** What a card and a tooltip say of a pedigree: "Dam Snow · sire Horn". */
 export const pedigreeLine = (p: Pedigree): string => `Dam ${p.dam.name} · sire ${p.sire.name}`;
 
-export type Stance = 'passive' | 'defensive' | 'aggressive';
+export type Stance = 'passive' | 'defensive' | 'aggressive' | 'guard';
 /** What a creature gathers from the land, as a wild grazer and as a deed job. */
 export type GatherKind =
   | 'forage'
@@ -209,8 +209,10 @@ const GATHER_TABLE: Record<GatherKind, Array<[string, number]>> = { forage: FORA
 export type ButcherPart = 'meat' | 'fur' | 'leather' | 'bone' | 'gland' | 'feather' | 'tusk' | 'sinew' | 'scale' | 'hoard';
 /** Marks a creature as last hurt by the player rather than another creature. */
 export const PLAYER_ATTACKER = -1;
+/** What a settlement's workers can be set to; a companion can also guard you (`COMPANION_STANCES`). */
 export const STANCES: Stance[] = ['passive', 'defensive', 'aggressive'];
-export const STANCE_NAMES: Record<Stance, string> = { passive: 'Passive', defensive: 'Defensive', aggressive: 'Aggressive' };
+export const COMPANION_STANCES: Stance[] = ['passive', 'defensive', 'guard', 'aggressive'];
+export const STANCE_NAMES: Record<Stance, string> = { passive: 'Passive', defensive: 'Defensive', aggressive: 'Aggressive', guard: 'Guarding you' };
 /**
  * A companion at heel, and what it does about company.
  *
@@ -244,6 +246,7 @@ export const STANCE_HINTS: Record<Stance, string> = {
   passive: 'Never attacks.',
   defensive: 'Fights back when it or you are attacked.',
   aggressive: `Hunts other wildermon within ${COMPANION_SIGHT} tiles of you.`,
+  guard: `Goes for anything hunting you within ${COMPANION_SIGHT} tiles of you before it lands a blow, as well as what strikes it or you; gives up a fight ${GUARD_RANGE} tiles from you rather than ${COMPANION_LEASH}.`,
 };
 
 export interface SpeciesDef {
@@ -353,6 +356,12 @@ export interface SpeciesDef {
   hide?: Hide;
   /** Big enough to draw back for a heavy blow every `HEAVY_EVERY` (`fight.ts`). */
   heavy?: boolean;
+  /** Runs in a pack: shares a home with its kind, comes when one of them has your scent, and spreads round you (`PACK_CALL`). */
+  pack?: boolean;
+  /** Keeps its distance and throws (`KEEP_OFF`, `THROW_REACH`). */
+  throws?: boolean;
+  /** Turns tail at `COWARD_AT` of its health, and sooner when one of its kind has run (`COWARD_DRAG`). */
+  coward?: boolean;
 }
 
 export const SPECIES: Record<string, SpeciesDef> = {
@@ -759,6 +768,7 @@ export const SPECIES: Record<string, SpeciesDef> = {
     leaves: 'goes off at a long easy lope and is lost in the trees',
     nearTrees: true,
     hunter: true,
+    pack: true,
     defensive: true,
     unruly: 0.08,
     defaultStance: 'aggressive',
@@ -1352,6 +1362,9 @@ export const SPECIES: Record<string, SpeciesDef> = {
     tameFail: 'spits at your hand',
     leaves: 'slinks off into the undergrowth',
     hunter: true,
+    pack: true,
+    throws: true,
+    coward: true,
     defensive: true,
     defaultStance: 'aggressive',
   },
@@ -1382,6 +1395,7 @@ export const SPECIES: Record<string, SpeciesDef> = {
     tameFail: 'laughs at you',
     leaves: 'turns and walks away without hurrying',
     hunter: true,
+    pack: true,
     defensive: true,
     defaultStance: 'aggressive',
   },
@@ -1861,6 +1875,10 @@ export interface IslandCreature {
   hunting?: boolean;
   /** Seconds left of a heavy blow it is drawing back for, when it is. */
   windup?: number;
+  /** The one leading the pack it hunts with, when it runs with one. */
+  lead?: number | null;
+  /** What a companion of yours is fighting, said only of your own. */
+  enemy?: number | null;
   mine?: boolean;
   /** How rare it is, as the island words it ('rare', 'supreme', 'fantastic'); absent for an ordinary one. */
   rare?: string | null;
@@ -2005,6 +2023,10 @@ export interface Creature {
   homeY: number;
   /** When it will take an interest again, after giving a chase up. */
   huntRest: number;
+  /** The one leading the pack it hunts with (its own id for the leader), or null hunting alone. */
+  packLead: number | null;
+  /** A companion told to fall back starts no fight before this game time. */
+  heelUntil: number;
   /** When it last said it had nowhere to put a load down. */
   noRoomAt: number;
   /** Time banked up while nobody was watching, spent on the next think. */
@@ -2367,14 +2389,23 @@ export class Creatures {
    * Hunters keep their own ground. Six goblins sharing a range would be a
    * pack, and what makes a hunter frightening is meeting it where it lives.
    */
+  /** How many wild ones of its kind share its home. */
+  private homeCount(o: Creature): number {
+    let n = 0;
+    for (const m of this.list.values()) if (m.species === o.species && m.mode === 'wild' && m.homeX === o.homeX && m.homeY === o.homeY) n++;
+    return n;
+  }
+
   private joinHerd(c: Creature): void {
-    if (SPECIES[c.species]?.hunter) return;
+    const def = SPECIES[c.species];
+    // A hunter keeps its own ground, unless its kind runs in a pack, and then no more than `PACK_MOST` to a home.
+    if (def?.hunter && !def.pack) return;
     let bestD = HERD_REACH;
     let best: Creature | null = null;
     for (const o of this.list.values()) {
       if (o.species !== c.species || o.mode !== 'wild') continue;
       const d = Math.hypot(o.homeX - c.x, o.homeY - c.y);
-      if (d < bestD) {
+      if (d < bestD && (!def?.pack || this.homeCount(o) < PACK_MOST)) {
         bestD = d;
         best = o;
       }
@@ -2444,6 +2475,8 @@ export class Creatures {
       homeX: x,
       homeY: y,
       huntRest: -1e9,
+      packLead: null,
+      heelUntil: -1e9,
       noRoomAt: 0,
       owed: 0,
       calledAt: -1e9,
@@ -2520,8 +2553,9 @@ export class Creatures {
       // The island sends a pedigree with anything bred and with nothing else.
       c.pedigree = r.pedigree ?? null;
       // The island says `hunting` only of one that is after you (`rpc_creatures`), and that is what `PLAYER_ATTACKER` means here.
-      c.enemy = r.hunting ? PLAYER_ATTACKER : null;
+      c.enemy = r.hunting ? PLAYER_ATTACKER : (r.enemy ?? null);
       c.windup = r.windup ?? 0;
+      c.packLead = r.lead ?? null;
       // Whose it is, which the island says and the journal has to know.
       c.mine = r.mine;
       // And what it was set to, if that is not what its kind does anyway.
@@ -4128,8 +4162,8 @@ export class Creatures {
     let bestD = Infinity;
     for (const o of this.list.values()) {
       if (o.id === c.id || !quarry(o) || !inside(o)) continue;
-      // A defensive one waits to be given a reason; an aggressive one does not.
-      if (c.stance === 'defensive') {
+      // A defensive one waits to be given a reason; an aggressive one does not. Guarding is a companion's, and on a deed is defensive.
+      if (c.stance === 'defensive' || c.stance === 'guard') {
         const struck = (recent(c.attackedAt) && c.attackedBy === o.id) || (recent(game.player.attackedAt) && game.player.attackedBy === o.id);
         if (!struck) continue;
       }
@@ -4454,7 +4488,8 @@ export class Creatures {
      * what keeps an island's wildlife somewhere in particular.
      */
     if (game.time >= c.until) {
-      if (Math.hypot(c.x - c.homeX, c.y - c.homeY) > WILD_RANGE) this.wanderTarget(game, c, WILD_REACH, c.homeX, c.homeY);
+      // A pack keeps closer to home, so that it is met together.
+      if (Math.hypot(c.x - c.homeX, c.y - c.homeY) > (def.pack ? PACK_RANGE : WILD_RANGE)) this.wanderTarget(game, c, WILD_REACH, c.homeX, c.homeY);
       else this.wanderTarget(game, c, WILD_REACH);
     }
   }
@@ -4473,6 +4508,8 @@ export class Creatures {
     c.huntY = c.y;
     c.blows = 0;
     c.windup = 0;
+    // One of a pack struck leads whatever of its pack comes to it (`PACK_CALL`).
+    c.packLead = this.species(c).pack ? c.id : null;
     // Whatever it was about, it is about you now.
     if (c.state !== 'flee') {
       c.state = 'idle';
@@ -4482,9 +4519,13 @@ export class Creatures {
 
   /**
    * A hunter closing on the player, or anything else you have struck that
-   * stands and fights. A hunter gives up when you get far enough away or when
-   * it has been badly enough hurt to think better of it; the rest on the
-   * shorter leash a fight it did not go looking for is worth.
+   * stands and fights. A hunter gives up when you get far enough away, and
+   * turns tail when its nerve goes (`nerveGoes`); the rest fight on the
+   * shorter leash a fight they did not go looking for is worth.
+   *
+   * One of a pack comes when another of its kind within `PACK_CALL` is on you,
+   * and a pack spreads round you (`packWay`); a thrower keeps its distance
+   * (`throwStep`).
    */
   private huntStep(game: Game, c: Creature, def: SpeciesDef, dt: number): boolean {
     const p = game.player;
@@ -4502,8 +4543,7 @@ export class Creatures {
     const came = Math.hypot(c.x - c.huntX, c.y - c.huntY);
     const out = Math.hypot(c.x - c.homeX, c.y - c.homeY);
     const spent = came > (def.hunter ? HUNT_LEASH : FIGHT_LEASH) || out > HUNT_HOME;
-    if (hunting && (d > giveUp || spent
-                    || (def.hunter && c.health < maxHealth(c, def) * (def.monster ? 0.08 : 0.3)))) {
+    if (hunting && (d > giveUp || spent)) {
       c.enemy = null;
       c.windup = 0;
       if (spent) {
@@ -4517,10 +4557,17 @@ export class Creatures {
       }
       return false;
     }
+    if (hunting && this.nerveGoes(game, c, def)) {
+      this.turnTail(game, c, def);
+      return true;
+    }
     if (!hunting) {
       // Only a hunter goes looking for a fight.
       if (!def.hunter) return false;
-      if (d > (def.notice ?? HUNT_SIGHT) || game.time < c.searchAt || game.time < c.huntRest) return false;
+      if (game.time < c.searchAt || game.time < c.huntRest) return false;
+      // One of its pack already on you brings it, from wherever it can hear.
+      const mate = def.pack ? this.packmateOn(game, c) : null;
+      if (!mate && d > (def.notice ?? HUNT_SIGHT)) return false;
       c.searchAt = game.time + 2;
       if (!this.tileOk(game, Math.floor(p.x), Math.floor(p.y))) return false;
       c.enemy = PLAYER_ATTACKER;
@@ -4528,7 +4575,8 @@ export class Creatures {
       c.huntY = c.y;
       c.blows = 0;
       c.windup = 0;
-      game.logMsg(`A ${def.name.toLowerCase()} has your scent.`, 'fight');
+      c.packLead = !def.pack ? null : mate ? (mate.packLead ?? mate.id) : c.id;
+      game.logMsg(mate ? `Another ${def.name.toLowerCase()} comes with it.` : `A ${def.name.toLowerCase()} has your scent.`, 'fight');
     }
     const name = def.name.toLowerCase();
     /*
@@ -4549,6 +4597,7 @@ export class Creatures {
       } else game.logMsg(`The ${name}'s heavy blow falls short.`, 'fight');
       return true;
     }
+    if (def.throws && this.throwStep(game, c, def, d, dt)) return true;
     if (d <= HUNT_REACH) {
       if (c.cooldown <= 0) {
         // Every `HEAVY_EVERY`th blow of a kind that hits heavy is drawn back for first.
@@ -4565,8 +4614,118 @@ export class Creatures {
       }
       return true;
     }
-    if (this.stepToward(game, c, p.x, p.y, dt, 1.15) === 'blocked') c.enemy = null;
+    // A pack goes round to its own sides of you; anything else comes straight in.
+    const way = this.packWay(game, c, CIRCLE_R) ?? p;
+    if (this.stepToward(game, c, way.x, way.y, dt, 1.15) === 'blocked') c.enemy = null;
     return true;
+  }
+
+  /** What is after you this frame, worked out once a frame for the pack rules to look through. */
+  private onYouAt = -1;
+  private onYouList: Creature[] = [];
+  private onYou(game: Game): Creature[] {
+    if (this.onYouAt !== game.time) {
+      this.onYouAt = game.time;
+      this.onYouList = [];
+      for (const o of this.list.values()) if (o.mode === 'wild' && o.enemy === PLAYER_ATTACKER && o.health > 0) this.onYouList.push(o);
+    }
+    return this.onYouList;
+  }
+
+  /** Another of its kind within `PACK_CALL` of it that is already after you. */
+  private packmateOn(game: Game, c: Creature): Creature | null {
+    for (const o of this.onYou(game)) {
+      if (o.id !== c.id && o.species === c.species && Math.hypot(o.x - c.x, o.y - c.y) <= PACK_CALL) return o;
+    }
+    return null;
+  }
+
+  /**
+   * Where one of a pack on you makes for next while it is not yet on its own
+   * side of you, `r` tiles out; null once it is, or when it hunts alone.
+   *
+   * The pack is the leader and every one following it; the leader's side is
+   * where it already is, and the rest share the circle out evenly from there
+   * in the order they came into the world (`slotAngle`).
+   */
+  private packWay(game: Game, c: Creature, r: number): { x: number; y: number } | null {
+    if (c.packLead === null) return null;
+    const p = game.player;
+    const pack = this.onYou(game).filter((o) => o.packLead === c.packLead)
+      .sort((a, b) => (a.id === c.packLead ? -1 : b.id === c.packLead ? 1 : a.id - b.id));
+    const k = pack.indexOf(c);
+    if (pack.length < 2 || k < 0) return null;
+    const lead = pack[0];
+    const slot = slotAngle(Math.atan2(lead.y - p.y, lead.x - p.x), k, pack.length);
+    const own = Math.atan2(c.y - p.y, c.x - p.x);
+    if (Math.abs(turnTo(own, slot)) <= CIRCLE_ARC) return null;
+    const at = circlePoint(p.x, p.y, own, slot);
+    // `circlePoint` is `CIRCLE_R` out; a thrower goes round further out.
+    return { x: p.x + ((at.x - p.x) * r) / CIRCLE_R, y: p.y + ((at.y - p.y) * r) / CIRCLE_R };
+  }
+
+  /**
+   * A thrower's step. Nearer than `KEEP_OFF - BACK_SLACK` it backs away from
+   * you, and when it has nowhere to back to it is false, for the blow by hand;
+   * within `THROW_REACH` it stands and throws on its blow clock; further, it
+   * closes to `KEEP_OFF`, round to its own side of you when it runs with a pack.
+   */
+  private throwStep(game: Game, c: Creature, def: SpeciesDef, d: number, dt: number): boolean {
+    const p = game.player;
+    if (d < KEEP_OFF - BACK_SLACK) {
+      const away = Math.max(0.001, d);
+      return this.stepToward(game, c, c.x + ((c.x - p.x) / away) * 2, c.y + ((c.y - p.y) / away) * 2, dt, BACK_PACE) === 'moving';
+    }
+    if (d <= THROW_REACH) {
+      if (c.cooldown <= 0) {
+        c.blows += 1;
+        c.cooldown = blowEvery(def) / this.mul(c, 'haste');
+        p.attackedBy = c.id;
+        p.attackedAt = game.time;
+        game.hurtPlayer(attackOf(c, def) * BLOW_SHARE * THROW_HIT, `The ${def.name.toLowerCase()}'s stone finds you`, 'crush');
+      }
+      return true;
+    }
+    const way = this.packWay(game, c, KEEP_OFF) ?? { x: p.x + ((c.x - p.x) / d) * KEEP_OFF, y: p.y + ((c.y - p.y) / d) * KEEP_OFF };
+    if (this.stepToward(game, c, way.x, way.y, dt, 1.15) === 'blocked') c.enemy = null;
+    return true;
+  }
+
+  /**
+   * Whether a hunter on you has had enough: hurt below what its kind stands
+   * (`turnsAt`), the one leading its pack dead or run, or a coward below
+   * `COWARD_DRAG` with another of its kind within `PACK_CALL` already run.
+   */
+  private nerveGoes(game: Game, c: Creature, def: SpeciesDef): boolean {
+    if (!def.hunter) return false;
+    const max = maxHealth(c, def);
+    if (c.health < max * turnsAt(def)) return true;
+    if (c.packLead !== null && c.packLead !== c.id) {
+      const lead = this.list.get(c.packLead);
+      if (!lead || lead.mode !== 'wild' || lead.health <= 0 || game.time < lead.huntRest) return true;
+    }
+    if (def.coward && c.health < max * COWARD_DRAG) {
+      for (const o of this.list.values()) {
+        if (o.id !== c.id && o.species === c.species && o.mode === 'wild' && game.time < o.huntRest
+            && Math.hypot(o.x - c.x, o.y - c.y) <= PACK_CALL) return true;
+      }
+    }
+    return false;
+  }
+
+  /** It runs: away from you at `FLEE_PACE` for `FLEE_SECS`, and takes no interest in you for `HUNT_REST`. */
+  private turnTail(game: Game, c: Creature, def: SpeciesDef): void {
+    const p = game.player;
+    const d = Math.max(0.001, Math.hypot(c.x - p.x, c.y - p.y));
+    const run = def.speed * FLEE_PACE * FLEE_SECS;
+    c.enemy = null;
+    c.windup = 0;
+    c.huntRest = game.time + HUNT_REST;
+    c.state = 'flee';
+    c.tx = c.x + ((c.x - p.x) / d) * run;
+    c.ty = c.y + ((c.y - p.y) / d) * run;
+    c.until = game.time + FLEE_SECS;
+    game.logMsg(`The ${def.name.toLowerCase()} turns tail.`, 'fight');
   }
 
   private updateActive(c: Creature, dt: number, game: Game): void {
@@ -4584,10 +4743,25 @@ export class Creatures {
       return;
     }
     if (this.comeWhenCalled(c, dt, game)) return;
-    if (c.stance === 'passive') c.enemy = null;
-    else if (c.enemy === null) {
+    // Fallen back (`FALL_BACK`): at your side, and no fight of its own until the time is up.
+    // A passive one fights only what it is told to (`order_attack`), which is the one way it has an enemy.
+    if (game.time < c.heelUntil) c.enemy = null;
+    else if (c.enemy === null && c.stance !== 'passive') {
       let found: Creature | null = null;
-      if (c.stance === 'aggressive') {
+      // Guarding you: whatever is hunting you, nearest first, before it lands a blow.
+      if (c.stance === 'guard') {
+        let bestD = Infinity;
+        for (const o of this.onYou(game)) {
+          const d = Math.hypot(o.x - p.x, o.y - p.y);
+          if (quarry(o) && d <= COMPANION_SIGHT && d < bestD) {
+            bestD = d;
+            found = o;
+          }
+        }
+      }
+      if (found) {
+        // Found above.
+      } else if (c.stance === 'aggressive') {
         let bestD = Infinity;
         for (const o of this.list.values()) {
           if (o.id === c.id || !quarry(o)) continue;
@@ -4611,7 +4785,7 @@ export class Creatures {
     }
     if (c.enemy !== null) {
       const e = c.enemy === PLAYER_ATTACKER ? undefined : this.list.get(c.enemy);
-      if (!e || !quarry(e) || Math.hypot(e.x - p.x, e.y - p.y) > COMPANION_LEASH) {
+      if (!e || !quarry(e) || Math.hypot(e.x - p.x, e.y - p.y) > (c.stance === 'guard' ? GUARD_RANGE : COMPANION_LEASH)) {
         c.enemy = null;
       } else {
         const d = Math.hypot(e.x - c.x, e.y - c.y);

@@ -368,6 +368,8 @@ const PRESSES: Record<string, () => void> = {
   fight_mark: () => game.markNext(),
   fight: () => game.fightMarked(),
   fight_stance: () => game.cycleStance(),
+  pet_attack: () => game.orderAttack(),
+  pet_back: () => game.orderHeel(),
 };
 
 input.onKey = (code, ev) => {

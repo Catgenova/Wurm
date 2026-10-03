@@ -1,6 +1,6 @@
 import { DARK_SHOT, DARK_SWING, tryGain } from './learn';
 import type { ActionDef, Target } from './actions';
-import { isShod, SHOES_PER_MOUNT, TACK, AGES, ageDef, ageOf, attackOf, bloodMul, careWord, PLAYER_ATTACKER, coaxBonus, COAX_STEP, creatureLevel, forgetCoaxing, isBaitFor, maxHealth, raritySays, SEX_NAMES, SPECIES, STANCE_NAMES, workRangeOf, type Creature, type Stance, type GatherKind } from './creatures';
+import { isShod, SHOES_PER_MOUNT, TACK, AGES, ageDef, ageOf, attackOf, bloodMul, careWord, PLAYER_ATTACKER, coaxBonus, COAX_STEP, creatureLevel, forgetCoaxing, isBaitFor, maxHealth, raritySays, SEX_NAMES, SPECIES, STANCE_NAMES, COMPANION_LEASH, workRangeOf, type Creature, type Stance, type GatherKind } from './creatures';
 import { studBook } from './husbandry';
 import { numberWord } from './words';
 import { GENTLE_HAND } from './meditation';
@@ -10,8 +10,9 @@ import { furnitureCentre, furnitureName, vehicleOf } from './furniture';
 import { deedJobLine, emptyCrate, letOut, shutIn } from './creaturecrate';
 import { itemDef, itemName, rarityOf, type Mark } from './items';
 import { BANE_BONUS, banes, bowRange, hitChance, isBow, WEAPON_BY_ID, weaponDamage } from './gear';
-import { armsRefusal, BLINDSIDE, blowOf, DRAW_CLOSEST, FIST, hideTakes, KNIFE_BLEED, KNIFE_BLEED_SECS, meleeReach, STAGGER_MAUL, STAGGER_POLE, STANCE_DEALT, swungWith } from './fight';
+import { armsRefusal, BLINDSIDE, blowOf, DRAW_CLOSEST, FALL_BACK, FIST, hideTakes, KNIFE_BLEED, KNIFE_BLEED_SECS, meleeReach, STAGGER_MAUL, STAGGER_POLE, STANCE_DEALT, swungWith } from './fight';
 import { matOfItem } from './materials';
+import { defaultKey } from './keybinds';
 
 /**
  * What one offering and one blow teach, landed or not.
@@ -334,6 +335,7 @@ export const CREATURE_ACTIONS: ActionDef[] = [
     verb: 'instructing',
     instant: true,
     hidden: true,
+    rangeFor: () => COMPANION_LEASH,
     stamina: 0,
     baseTime: 0,
     applies: (t, g) => creatureOf(g, t)?.mode === 'active',
@@ -343,6 +345,56 @@ export const CREATURE_ACTIONS: ActionDef[] = [
       c.stance = t.stance;
       c.enemy = null;
       g.logMsg(`${c.name} will be ${STANCE_NAMES[t.stance].toLowerCase()}.`, 'info');
+    },
+  },
+  /*
+   * Orders to a companion in a fight, given from wherever you stand: it hears
+   * you across the field (`range`), as it hears a stance.
+   */
+  {
+    id: 'order_attack',
+    label: 'Attack my target',
+    verb: 'instructing',
+    instant: true,
+    hidden: true,
+    rangeFor: () => COMPANION_LEASH,
+    stamina: 0,
+    baseTime: 0,
+    applies: (t, g) => creatureOf(g, t)?.mode === 'active',
+    check: (t, g) => {
+      const c = creatureOf(g, t);
+      if (!c || c.mode !== 'active') return 'Only a companion takes orders like that.';
+      const foe = isCreature(t) && typeof t.foe === 'number' ? g.creatures.get(t.foe) : undefined;
+      if (!foe || foe.mode !== 'wild' || foe.hitchedTo !== null) return `Mark something wild first (${defaultKey('fight_mark')}), or fight it.`;
+      if (Math.hypot(foe.x - g.player.x, foe.y - g.player.y) > COMPANION_LEASH) return `It is more than ${COMPANION_LEASH} tiles from you.`;
+      return null;
+    },
+    perform: (t, g) => {
+      const c = creatureOf(g, t);
+      const foe = isCreature(t) && typeof t.foe === 'number' ? g.creatures.get(t.foe) : undefined;
+      if (!c || !foe) return;
+      c.enemy = foe.id;
+      c.heelUntil = -1e9;
+      g.logMsg(`${c.name} goes for the ${SPECIES[foe.species].name.toLowerCase()}.`, 'fight');
+    },
+  },
+  {
+    id: 'order_heel',
+    label: 'Fall back',
+    verb: 'instructing',
+    instant: true,
+    hidden: true,
+    rangeFor: () => COMPANION_LEASH,
+    stamina: 0,
+    baseTime: 0,
+    applies: (t, g) => creatureOf(g, t)?.mode === 'active',
+    check: (t, g) => (creatureOf(g, t)?.mode === 'active' ? null : 'Only a companion takes orders like that.'),
+    perform: (t, g) => {
+      const c = creatureOf(g, t);
+      if (!c) return;
+      c.enemy = null;
+      c.heelUntil = g.time + FALL_BACK;
+      g.logMsg(`${c.name} falls back to your side, and starts no fight for ${FALL_BACK} seconds.`, 'info');
     },
   },
   {

@@ -35,7 +35,7 @@ import { PERKS, perksOf } from '../../game/perks';
 import { CREATURE_CRATE } from '../../game/creaturecrate';
 import { CRATE_DEFS, SUBTILES } from '../../game/crates';
 import {
-  AGES, BLOW_SHARE, BREED_REST, CARE_BONUS, CARE_HOURS, COAX_LAPSE, COAX_STEP, GESTATION, HUNGRY, HUNT_SIGHT, MONSTER_CAP, MONSTER_KEEP_OFF,
+  AGES, BLOW_SHARE, BREED_REST, CARE_BONUS, CARE_HOURS, COAX_LAPSE, COAX_STEP, COMPANION_LEASH, COMPANION_SIGHT, GESTATION, HUNGRY, HUNT_REST, HUNT_SIGHT, MONSTER_CAP, MONSTER_KEEP_OFF,
   MONSTER_SHARE, MONSTERS, OLD_AT, PULL_DEFAULT, RANGE_PER_STEP, rangeSteps, SKILL_STEP, SPECIES, trainedHit, YOUNG_FOR,
 } from '../../game/creatures';
 import { DEED_UPGRADES } from '../../game/deed';
@@ -92,6 +92,7 @@ import { CLEAR_OF_BUILDINGS, CONCRETE_PER_STEP, LIFT_PER_MASONRY, POOL_FILL } fr
 import { AWARENESS, awarenessReach, BASE_SIGHT, LIGHT_GIVES_BACK, NIGHT_LOSS, TREE_OPACITY } from '../../game/vision';
 import { NO_GO, pointAt, windWord, windWorth } from '../../game/wind';
 import { article, capital, listed, NumberWord, numberWord, percent, share, spanWords, times } from '../../game/words';
+import { BACK_PACE, BACK_SLACK, CIRCLE_ARC, CIRCLE_R, COWARD_AT, COWARD_DRAG, DRAW_WALK, FALL_BACK, FLEE_SECS, GUARD_RANGE, HUNTER_TURN, KEEP_OFF, MONSTER_TURN, PACK_CALL, PACK_MOST, PACK_RANGE, THROW_HIT, THROW_REACH } from '../../game/fight';
 import { FIGHT_QUIET, ARM_SLOW, ARM_SLOW_MOST, armourSays, BLINDSIDE, blowSays, CROWD_BLOCK, FLANK_HIT, HEAVY_EVERY, HEAVY_HIT, HIDE_NAMES, HIDES, hideSays, LEG_SLOW_MOST, sideOf, WIND_UP, BLOW_DEFENSIVE, BLOW_HUNTER, BLOW_PREY, FIGHT_BACK_STILL, FIGHT_GIVE_UP, FIGHT_LEASH, FIGHT_STANCE_NAMES, FIGHT_STANCES, FIST, FOLLOW_RANGE, stanceSays, SWING_WIND, SWING_WIND_KG, TARGET_RANGE, TIRED_AT, TIRED_SLOW } from '../../game/fight';
 import { BIND_BY_ID, keyName } from '../../game/keybinds';
 import {
@@ -2125,6 +2126,28 @@ export function helpText(): string {
     you, a dashed ring shows how far off it will notice you: ${HUNT_SIGHT} tiles, or for ${listed(Object.values(SPECIES).filter((d) => d.hunter && d.notice !== undefined).map((d) => `${d.name.toLowerCase()}s ${d.notice}`))}.
     With <b>One line for a whole fight</b> on in Settings, what you learn in a fight is said once, ${FIGHT_QUIET} seconds
     after its last blow, with how long it lasted, what you dealt and what you took.</p>
+    <p>${capital(listed(Object.values(SPECIES).filter((d) => d.pack).map((d) => `${d.name.toLowerCase()}s`)))} <b>run in packs</b>. One that comes
+    into the world near another of its kind shares that one's home, up to ${numberWord(PACK_MOST)} to a home, and keeps within
+    ${numberWord(PACK_RANGE)} tiles of it. When one of them has your scent, every other of its kind within ${numberWord(PACK_CALL)} tiles
+    comes too, and the first leads them. A pack <b>spreads round you</b>: each makes for its own side of you, an even share of
+    the circle round from the one leading, going round ${CIRCLE_R} tiles out until it is within ${Math.round((CIRCLE_ARC * 180) / Math.PI)} degrees
+    of its side, and then comes in, and every one on you but the one you are fighting lands ${percent(FLANK_HIT - 1)} harder.</p>
+    <p>${capital(listed(Object.values(SPECIES).filter((d) => d.throws).map((d) => `${d.name.toLowerCase()}s`)))} <b>keep their distance</b>: they stand
+    off ${KEEP_OFF} tiles and throw from up to ${THROW_REACH}, each throw ${percent(THROW_HIT)} of a blow, and a crush. Closer than
+    ${KEEP_OFF - BACK_SLACK} tiles they back away at ${percent(BACK_PACE)} of their walk, and fight hand to hand only with nowhere to back to.</p>
+    <p>A hunter <b>turns tail</b> below ${percent(HUNTER_TURN)} of its health and a monster below ${percent(MONSTER_TURN)};
+    ${listed(Object.values(SPECIES).filter((d) => d.coward).map((d) => `${d.name.toLowerCase()}s`))} below ${percent(COWARD_AT)}, or below ${percent(COWARD_DRAG)}
+    once another of their kind within ${numberWord(PACK_CALL)} tiles has run. One that turns tail runs from you for ${FLEE_SECS} seconds and
+    takes no interest in you for ${Math.round(HUNT_REST)} seconds, and when the one leading a pack dies or runs, the whole pack runs.</p>
+    <p>Your <b>companion</b> takes orders from wherever you stand. <b>Attack my target</b> on its menu, <b>Set</b> <i>its name</i> <b>on it</b>
+    on a wild one's menu, or <b>${keyName(BIND_BY_ID.get('pet_attack')?.keys[0] ?? '')}</b> sends it at what you are fighting or have marked, or else the
+    nearest foe, whatever its stance. <b>Fall back</b>, or <b>${keyName(BIND_BY_ID.get('pet_back')?.keys[0] ?? '')}</b>, calls it out of its
+    fight to your side, and it starts no fight for ${FALL_BACK} seconds. The <b>Guarding you</b> stance sends it at anything hunting
+    you within ${COMPANION_SIGHT} tiles before it lands a blow, as well as at what strikes it or you, and gives up a fight
+    ${GUARD_RANGE} tiles from you rather than ${COMPANION_LEASH}. A dashed blue line runs from it to what it is fighting.</p>
+    <p>A <b>bow is drawn on the move</b>: walking while you draw keeps the draw going, at ${percent(DRAW_WALK)} of your pace, and it
+    looses when the draw is full; it keeps loosing while the target is within the bow's range and you have arrows. A line from you
+    to the target fills as the draw comes, amber while the target is in range and grey once it is not.</p>
     <p>Every weapon belongs to a kind, and each kind is its own subskill: ${listed(WEAPON_KINDS.map((k) => `<b>${k}</b>`))}.
     Swinging trains the weapon's own subskill and the <b>fighting</b> skill behind it, and both decide
     whether a blow lands and how hard. A weapon's own numbers matter as much: a hunting knife is quick

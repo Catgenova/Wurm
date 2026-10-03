@@ -1556,6 +1556,18 @@ jobs:
             --outfile=node_modules/.cache/blows.mjs --log-level=error
           node node_modules/.cache/blows.mjs
 
+      - name: Packs, throwers and orders
+        run: |
+          # One of a pack comes when another of its kind is on you, follows the
+          # first, and goes round to its own side of you; a thrower throws
+          # from where it stands and backs away when you close; a coward turns
+          # tail early and drags a hurt one of its kind with it, and a pack
+          # whose leader is gone runs; a companion that guards, attacks when
+          # told and falls back when told; and a bow drawn on the move. Both sides.
+          npx esbuild supabase/test/packs.ts --bundle --platform=node --format=esm \
+            --outfile=node_modules/.cache/packs.mjs --log-level=error
+          node node_modules/.cache/packs.mjs
+
       - name: A stone, and what you can get out of it
         run: |
           # The arcane, which has no mana in it. A focus is a cut gem in a

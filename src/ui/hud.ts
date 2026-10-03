@@ -17,7 +17,7 @@ import { BELT_MAX, pinLabel } from '../game/belt';
 import type { Renderer } from '../render/renderer';
 import { ashore, JOURNAL, nextGoals } from '../game/journal';
 import { VERSION } from '../version';
-import { blowOf, blowWords, FIGHT_STANCE_NAMES, HEAVY_EVERY, HIDE_NAMES, hideSays, hideTakes, HUNT_REACH, stanceSays, swungWith, TARGET_RANGE } from '../game/fight';
+import { BACK_SLACK, blowOf, blowWords, COWARD_DRAG, FIGHT_STANCE_NAMES, HEAVY_EVERY, HIDE_NAMES, hideSays, hideTakes, HUNT_REACH, KEEP_OFF, PACK_CALL, stanceSays, swungWith, TARGET_RANGE, THROW_HIT, THROW_REACH, turnsAt } from '../game/fight';
 import { HUNT_SIGHT, maxHealth, PLAYER_ATTACKER } from '../game/creatures';
 import { percent } from '../game/words';
 
@@ -569,6 +569,9 @@ export class Hud {
       def.hide ? `${HIDE_NAMES[def.hide]}: ${hideSays(def.hide)}.` : 'Takes every blow as it comes.',
       yours !== 1 ? `Your ${blowWords(blow)} land ${percent(Math.abs(yours - 1))} ${yours > 1 ? 'harder' : 'softer'} on it.` : '',
       def.heavy ? `Draws back for a heavy blow every ${HEAVY_EVERY} blows.` : '',
+      def.throws ? `Throws from up to ${THROW_REACH} tiles, ${percent(THROW_HIT)} of a blow; backs away inside ${KEEP_OFF - BACK_SLACK} tiles.` : '',
+      def.pack ? (c.packLead === c.id ? `Leads its pack: kill it and the rest turn tail.` : `Runs in a pack; each within ${PACK_CALL} tiles comes when one has your scent.`) : '',
+      def.hunter ? `Turns tail below ${percent(turnsAt(def))} health${def.coward ? `, or ${percent(COWARD_DRAG)} once one of its kind has run` : ''}.` : '',
     ].filter(Boolean).join(' ');
     const said = `${def.name}|${intent}${bleeding}|${note}|${c.windup > 0}`;
     if (said === this.targetSaid) return;

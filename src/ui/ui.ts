@@ -35,7 +35,7 @@ import { FIELD_GLASS_ONLY, glassDone, glazing, isGlasshouse, underGlass } from '
 import { GLASSHOUSE_GROWTH } from '../game/growth';
 import { crateLine, crateOf, CREATURE_CRATE, CREATURE_CRATE_ACTION_BY_ID, occupiedRefusal } from '../game/creaturecrate';
 import { graveLine, graveName, graveSays, graveUnits, isGrave } from '../game/graves';
-import { isBaitFor, SPECIES, STANCE_HINTS, STANCE_NAMES, STANCES, GATHER_VERB, GATHER_DO } from '../game/creatures';
+import { COMPANION_STANCES, isBaitFor, SPECIES, STANCE_HINTS, STANCE_NAMES, STANCES, GATHER_VERB, GATHER_DO } from '../game/creatures';
 import { itemDef, itemName, markOf, storedLine, type Item } from '../game/items';
 import { nearestSide } from '../render/renderer';
 import { crateKindOfItem, crateName, crateCapacity, crateUnits, subtileOf } from '../game/crates';
@@ -2326,10 +2326,17 @@ export class UI {
         push(item('crate_work', at));
       }
     }
+    // Your companion, set on a wild one from its own menu (`order_attack`).
+    const pet = c.mode === 'wild' ? g.companion() : null;
+    if (pet) push(item('order_attack', { kind: 'creature', id: pet.id, foe: c.id }, `Set ${pet.name} on it`));
     if (c.mode === 'active') {
+      // Orders in a fight, heard from wherever you stand.
+      const foe = g.fightTarget ?? g.marked ?? g.nearestHostile()?.id;
+      push(item('order_attack', foe === undefined || foe === null ? target : { ...target, foe }));
+      push(item('order_heel'));
       entries.push({
         label: `Stance: ${STANCE_NAMES[c.stance]}`,
-        children: STANCES.map((s) => ({
+        children: COMPANION_STANCES.map((s) => ({
           label: s === c.stance ? `${STANCE_NAMES[s]} (current)` : STANCE_NAMES[s],
           note: STANCE_HINTS[s],
           onSelect: () => {
