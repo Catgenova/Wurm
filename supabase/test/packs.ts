@@ -57,7 +57,7 @@ begin;
 create temp table said (k text, v text);
 do $b$
 declare w record; v_px double precision; v_py double precision; a int; b int; g int; r int; o int; pet int; i int;
-        q creature; v_x double precision; v_y double precision;
+        q creature; v_x double precision; v_y double precision; tx int; ty int;
 begin
   -- Off the beach of the biggest island there is, where things may come for you (\`at_peace\`).
   select p.world_id, p.uid, wd.size, wd.spawn_x, wd.spawn_y into w
@@ -65,6 +65,16 @@ begin
   v_px := case when w.spawn_x + peace_reach() + 6 < w.size then w.spawn_x + peace_reach() + 6.5
                else w.spawn_x - peace_reach() - 5.5 end;
   v_py := w.spawn_y + 0.5;
+  -- Its own ground, whatever island this turns out to be: grass at one height
+  -- all round, so nothing here stands in the sea off the beach or under a cliff,
+  -- and far enough east for a coward's whole run from you to be clear. The
+  -- whole test is rolled back, so the island is none the worse for it.
+  for tx in greatest(0, floor(v_px)::int - 8)..least(w.size - 1, floor(v_px)::int + 32) loop
+    for ty in greatest(0, floor(v_py)::int - 8)..least(w.size - 1, floor(v_py)::int + 14) loop
+      perform land_set_height(w.world_id, tx, ty, 4); perform land_set_dirt(w.world_id, tx, ty, 5);
+      perform land_set_tile(w.world_id, tx, ty, tile_id('Grass'));
+    end loop;
+  end loop;
   update player set act = null, act_target = null, act_ends = null, act_left = null, act_goes = null,
          act_queue = '[]'::jsonb, equipped = '{}'::jsonb, fight_stance = 'balanced', fight_back = false,
          moved_at = now() - interval '1 minute', x = v_px, y = v_py, level = 0, wounds = '[]'::jsonb, away = false,

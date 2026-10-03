@@ -85,6 +85,8 @@ export function share(x: number): string {
 }
 
 /** A share as a percentage, to the nearest whole one unless that would lose it: "16%", "2.5%". */
+/** A share finer than `percent` keeps, to the hundredth of a per cent: 0.0025 is "0.25%". */
+export const finePercent = (x: number): string => `${Number((x * 100).toFixed(2))}%`;
 export const percent = (x: number): string => {
   const p = x * 100;
   const whole = Math.round(p);
