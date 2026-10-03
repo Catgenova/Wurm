@@ -313,7 +313,11 @@ interface HitRect {
  * hue as well — see `computeColor` — so the two together read as an old
  * photograph of the place rather than the place at midnight.
  */
-const FOG_COLOR = 'rgba(30, 30, 32, 0.46)';
+const FOG_RGB = '30, 30, 32';
+const FOG_ALPHA = 0.46;
+const FOG_COLOR = `rgba(${FOG_RGB}, ${FOG_ALPHA})`;
+/** The same laid solid, for the wash's own layer (`fogLayer`). */
+const FOG_INK = `rgb(${FOG_RGB})`;
 
 /** The indices of the points on the convex hull of a handful of points, in order round it (Andrew's monotone chain). */
 function convexHull(xs: readonly number[], ys: readonly number[]): number[] {
@@ -331,6 +335,27 @@ function convexHull(xs: readonly number[], ys: readonly number[]): number[] {
     upper.push(i);
   }
   return lower.slice(0, -1).concat(upper.slice(0, -1));
+}
+
+/**
+ * A polygon onto a path, its points in `order`, wound the way a tile lying
+ * the right way up is wound. Shapes gathered on one path and filled once
+ * cover what any of them covers only while they all go round the same way:
+ * one wound the other way takes a hole out of the rest where they overlap.
+ * A steep tile folded over on itself on the screen comes the other way round.
+ */
+function windOn(path: Path2D, xs: ArrayLike<number>, ys: ArrayLike<number>, order: ArrayLike<number>): void {
+  const n = order.length;
+  let area = 0;
+  for (let k = 0; k < n; k++) {
+    const a = order[k];
+    const b = order[(k + 1) % n];
+    area += xs[a] * ys[b] - xs[b] * ys[a];
+  }
+  const at = (k: number): number => order[area >= 0 ? k : (n - k) % n];
+  path.moveTo(xs[at(0)], ys[at(0)]);
+  for (let k = 1; k < n; k++) path.lineTo(xs[at(k)], ys[at(k)]);
+  path.closePath();
 }
 /** How much of its own colour remembered ground keeps. */
 const MEMORY_SATURATION = 0.22;
@@ -1297,11 +1322,31 @@ export class Renderer {
    */
   private night: HTMLCanvasElement | null = null;
   /**
-   * The layer the cold wash over remembered ground is moved onto while a floor
-   * raised over its ground is in sight (`fogLayer`). Kept between frames at the
-   * canvas's own size, as the night is.
+   * The layer the cold wash over remembered ground is moved onto while
+   * something in sight stands up in front of it (`fogLayer`). Kept between
+   * frames at the canvas's own size, as the night is.
    */
   private fogMask: HTMLCanvasElement | null = null;
+  /**
+   * How far down the screen the wash gathered so far this frame comes, a
+   * column of the ground's lattice at a time: two numbers to a column, the
+   * lowest it comes at the column's left edge and at its right (`reach`).
+   */
+  private washFloor = new Float64Array(0);
+  /** And how far down what is waiting to take the wash off comes, the same way, since it last did. */
+  private liftFloor = new Float64Array(0);
+  /** Which column of a tile's own each of the view's four corners falls in, counted from its leftmost; and how many columns a tile is across. */
+  private readonly cornerCol = new Int8Array(4);
+  private cornerSpan = 2;
+  /** A tile's highest or lowest point on each of its column edges, worked out in `reach` and `over`. */
+  private readonly colY = new Float64Array(3);
+  /** The path a wall drawn now takes the wash off with, while it is drawn for a tile in sight (`liftWall`). */
+  private wallLift: Path2D | null = null;
+  /** Where the first of the wash's columns is across the screen this frame, and how wide a column is. */
+  private washX0 = 0;
+  private washHw = 1;
+  /** Whether anything is waiting on the lift path to take the wash off. */
+  private lifted = false;
 
   /**
    * What the lights do to the night, worked out apart from the night itself:
@@ -1428,8 +1473,9 @@ export class Renderer {
 
   /**
    * The wash's layer for this frame: the canvas's own pixels, cleared, drawn
-   * on as the world is and in an opaque ink, so ground gathered on it twice is
-   * washed once (`FOG_COLOR` goes on at the end, over what was gathered).
+   * on as the world is and in the wash's colour laid solid, so ground gathered
+   * on it twice is washed once. It goes over the world at the wash's own
+   * strength, `FOG_ALPHA`, at the end.
    */
   private fogLayer(drawnAt: DOMMatrix): HTMLCanvasElement {
     const { width, height } = this.canvas.el;
@@ -1443,12 +1489,128 @@ export class Renderer {
     fc.globalCompositeOperation = 'source-over';
     fc.clearRect(0, 0, width, height);
     fc.setTransform(drawnAt);
-    fc.fillStyle = '#000';
-    // The wash goes on in batches, one at each raised floor in sight, and where two batches meet a
-    // seam would show: a pixel's stroke round each closes it, and an opaque ink laid twice is laid once.
-    fc.strokeStyle = '#000';
-    fc.lineWidth = 1;
+    fc.fillStyle = FOG_INK;
     return this.fogMask;
+  }
+
+  /** Lay the wash gathered since it was last laid onto its layer, and take off it what in sight was drawn over it. */
+  private layWash(wash: HTMLCanvasElement, fog: Path2D | null, lift: Path2D | null): void {
+    const fc = wash.getContext('2d') as CanvasRenderingContext2D;
+    if (fog) {
+      fc.globalCompositeOperation = 'source-over';
+      fc.fill(fog);
+    }
+    if (lift) {
+      fc.globalCompositeOperation = 'destination-out';
+      fc.fill(lift);
+    }
+  }
+
+  /**
+   * Set the wash's columns up for a frame of `cols` columns, none of them
+   * reached yet, and where the view's corners fall among a tile's own. Returns
+   * the leftmost corner's place across the lattice from the tile's own, which
+   * a tile's first column is counted from.
+   */
+  private washColumns(V: View, cols: number): number {
+    if (this.washFloor.length < cols * 2) {
+      this.washFloor = new Float64Array(cols * 2);
+      this.liftFloor = new Float64Array(cols * 2);
+    }
+    this.washFloor.fill(-Infinity);
+    this.liftFloor.fill(-Infinity);
+    let lo = Infinity;
+    let hi = -Infinity;
+    for (const [sx] of V.shape) {
+      lo = Math.min(lo, sx);
+      hi = Math.max(hi, sx);
+    }
+    for (let k = 0; k < 4; k++) this.cornerCol[k] = V.shape[k][0] - lo;
+    this.cornerSpan = hi - lo;
+    return lo;
+  }
+
+  /**
+   * Note on `f` how far down the screen something laid over a tile comes --
+   * its wash, or what takes the wash off it: as far as its ground does, at
+   * each edge of each column it is across, whose first is `at`. Its ground is
+   * the lowest of it -- water over it and a floor raised on it are both
+   * higher up -- and between two edges of a column a tile's ground runs
+   * straight, so the two ends say it all.
+   */
+  private reach(f: Float64Array, at: number, pts: ArrayLike<number>): void {
+    const ys = this.colY;
+    ys.fill(-Infinity);
+    for (let k = 0; k < 4; k++) {
+      const j = this.cornerCol[k];
+      if (pts[k * 2 + 1] > ys[j]) ys[j] = pts[k * 2 + 1];
+    }
+    for (let j = 0; j < this.cornerSpan; j++) {
+      const i = (at + j) * 2;
+      if (ys[j] > f[i]) f[i] = ys[j];
+      if (ys[j + 1] > f[i + 1]) f[i + 1] = ys[j + 1];
+    }
+  }
+
+  /**
+   * Whether a tile, standing up to `top` over its ground (or its ground
+   * alone, where null), comes up the screen past what `f` has noted in any
+   * column it is across, and so over some of it: a tile in sight over the
+   * wash gathered behind it, or remembered ground in front over what is
+   * waiting to take the wash off. Ground beside either meets it along an edge
+   * and does not come past it: half a pixel is allowed for that.
+   */
+  private over(f: Float64Array, at: number, pts: ArrayLike<number>, c: ArrayLike<number>, top: number | null, hs: number): boolean {
+    const ys = this.colY;
+    ys.fill(Infinity);
+    for (let k = 0; k < 4; k++) {
+      const j = this.cornerCol[k];
+      const y = pts[k * 2 + 1] - (top === null ? 0 : Math.max(0, top - c[k]) * hs);
+      if (y < ys[j]) ys[j] = y;
+    }
+    for (let j = 0; j < this.cornerSpan; j++) {
+      const i = (at + j) * 2;
+      if (ys[j] < f[i] - 0.5 || ys[j + 1] < f[i + 1] - 0.5) return true;
+    }
+    return false;
+  }
+
+  /**
+   * Take the wash off a wall drawn for a tile in sight, where the wall comes
+   * up the screen past the wash gathered behind it: the wall from its foot to
+   * its top, both faces, onto `wallLift`. `px` and `py` are `drawWall`'s own
+   * points on it. A wall seen end on covers nothing.
+   */
+  private liftWall(px: (t: number, k: number, s?: number) => number, py: (t: number, k: number, s?: number) => number): void {
+    const path = this.wallLift;
+    if (!path) return;
+    const ca = Math.round((px(0, 0) - this.washX0) / this.washHw);
+    const cb = Math.round((px(1, 0) - this.washX0) / this.washHw);
+    if (ca === cb) return;
+    const i = Math.min(ca, cb) * 2;
+    const f = this.washFloor;
+    if (i < 0 || i + 1 >= f.length) return;
+    const topA = Math.min(py(0, 1, 1), py(0, 1, -1));
+    const topB = Math.min(py(1, 1, 1), py(1, 1, -1));
+    if (!((ca < cb ? topA : topB) < f[i] - 0.5 || (ca < cb ? topB : topA) < f[i + 1] - 0.5)) return;
+    const xs: number[] = [];
+    const ys: number[] = [];
+    for (const t of [0, 1]) {
+      for (const k of [0, 1]) {
+        for (const s of [1, -1]) {
+          xs.push(px(t, k, s));
+          ys.push(py(t, k, s));
+        }
+      }
+    }
+    windOn(path, xs, ys, convexHull(xs, ys));
+    // Its foot, at each end, is as far down the screen as it comes.
+    const footA = Math.max(py(0, 0, 1), py(0, 0, -1));
+    const footB = Math.max(py(1, 0, 1), py(1, 0, -1));
+    const lf = this.liftFloor;
+    lf[i] = Math.max(lf[i], ca < cb ? footA : footB);
+    lf[i + 1] = Math.max(lf[i + 1], ca < cb ? footB : footA);
+    this.lifted = true;
   }
 
   /**
@@ -1472,10 +1634,18 @@ export class Renderer {
   private tileColumn(path: Path2D, pts: ArrayLike<number>, c: ArrayLike<number>, top: number | null, hs: number): void {
     const low = Math.min(c[0], c[1], c[2], c[3]);
     if (top === null || top <= low) {
+      // Wound as a tile lying the right way up is, folded over or not (`windOn`), without making four arrays a tile to say so.
+      let area = 0;
+      for (let i = 0; i < 4; i++) {
+        const j = (i + 1) & 3;
+        area += pts[i * 2] * pts[j * 2 + 1] - pts[j * 2] * pts[i * 2 + 1];
+      }
+      const step = area >= 0 ? 1 : 3;
       path.moveTo(pts[0], pts[1]);
-      path.lineTo(pts[2], pts[3]);
-      path.lineTo(pts[4], pts[5]);
-      path.lineTo(pts[6], pts[7]);
+      for (let k = 1; k < 4; k++) {
+        const i = (k * step) & 3;
+        path.lineTo(pts[i * 2], pts[i * 2 + 1]);
+      }
       path.closePath();
       return;
     }
@@ -1485,10 +1655,7 @@ export class Renderer {
       xs.push(pts[i * 2], pts[i * 2]);
       ys.push(pts[i * 2 + 1], pts[i * 2 + 1] - Math.max(0, top - c[i]) * hs);
     }
-    const hull = convexHull(xs, ys);
-    path.moveTo(xs[hull[0]], ys[hull[0]]);
-    for (let k = 1; k < hull.length; k++) path.lineTo(xs[hull[k]], ys[hull[k]]);
-    path.closePath();
+    windOn(path, xs, ys, convexHull(xs, ys));
   }
 
   private nightLayer(res = 1): HTMLCanvasElement {
@@ -2514,23 +2681,33 @@ export class Renderer {
     /*
      * The wash over remembered ground, gathered a line at a time and laid over
      * the world once at the end, so a remembered wood goes cold with its
-     * ground. A floor raised over its ground -- a deck on piers, a poured slab
-     * -- stands in front of the ground behind it lower down, and the wash of
-     * that ground, laid last, would darken the floor in front of it. So the
-     * first raised floor in sight moves the wash gathered so far onto a layer
-     * of its own (`fogLayer`), and every raised floor in sight takes off it
-     * what it was drawn over before anything in front of it goes on. With no
-     * raised floor in sight the wash is the one fill it always was.
+     * ground. But what is in sight and stands higher than remembered ground
+     * behind it -- a hilltop over the plain behind it, a deck on piers, a
+     * poured slab, a wall -- is drawn over that ground, and its wash, laid
+     * last, would darken it. So whatever in sight comes up the screen past the
+     * wash behind it (`over`) is gathered as well, and at the end the wash goes
+     * onto a layer of its own (`fogLayer`) and that is taken off it before it
+     * is laid over the world. Remembered ground in front that comes back down
+     * over any of that is the one thing that cannot wait: the wash so far is
+     * laid, and taken off, before its own goes on. Where nothing in sight
+     * comes up past the wash behind it, the wash is the one fill it always
+     * was.
      */
     const raising = fogged && (this.game.buildings.pierTiles.size > 0 || this.game.foundations.size > 0);
+    const walled = fogged && this.game.buildings.walls.size > 0;
+    const washAt = fogged ? 1 - eMin + this.washColumns(V, eMax - eMin + 4) : 0;
     const drawnAt = ctx.getTransform();
     let wash: HTMLCanvasElement | null = null;
     let fogPath = new Path2D();
-    let lineFog = raising ? new Path2D() : fogPath;
+    let lineFog = new Path2D();
     let liftPath = new Path2D();
+    // Any wash gathered yet this frame; and any waiting in `fogPath` to be laid.
+    let washed = false;
     let gathered = false;
     let lineAny = false;
-    let lineLift = false;
+    // Whether remembered ground on this line came down over something waiting to take the wash off.
+    let lineOver = false;
+    this.lifted = false;
     this.seaPath = new Path2D();
     this.drewWater = false;
     this.pierFeet.clear();
@@ -2655,6 +2832,9 @@ export class Renderer {
     const hw = stepW * zoom;
     const hh = stepH * zoom;
     const hs = HEIGHT_SCALE * zoom;
+    // Where the first of the wash's columns is across the screen, for a wall to find its own by (`liftWall`).
+    this.washX0 = (eMin - 1) * hw - cam.cx * zoom + W / 2;
+    this.washHw = hw;
     // The tile's screen outline and the world corners it hangs on. Both are
     // fixed for the whole frame: the shape of a tile does not change across
     // the island, only where it sits and how far its corners are lifted.
@@ -2817,13 +2997,23 @@ export class Renderer {
         ctx.closePath();
         ctx.fillStyle = color;
         ctx.fill();
-        if (!lit) lineAny = fogged;
-        else if (raising && (gathered || wash)) {
-          const top = this.raisedTop(x, y);
-          if (top !== null && top > Math.min(c[0], c[1], c[2], c[3])) {
-            this.tileColumn(liftPath, pts, c, top, hs);
-            lineLift = true;
+        // Remembered ground's wash comes this far down the screen; ground in sight that comes up past it takes it off what it covers.
+        this.wallLift = null;
+        if (!lit) {
+          if (fogged) {
+            lineAny = true;
+            this.reach(this.washFloor, e + washAt, pts);
           }
+        } else if (washed) {
+          // Its ground, and the floor raised on it where there is one.
+          const top = raising ? this.raisedTop(x, y) : null;
+          if (this.over(this.washFloor, e + washAt, pts, c, top, hs)) {
+            this.tileColumn(liftPath, pts, c, top, hs);
+            this.reach(this.liftFloor, e + washAt, pts);
+            this.lifted = true;
+          }
+          // And the walls it stands, each as it is drawn (`liftWall`).
+          if (walled) this.wallLift = liftPath;
         }
         // Under the sea where a corner is below nothing, and under a pond where its water has risen over a corner of the tile.
         const sea = c[0] < 0 || c[1] < 0 || c[2] < 0 || c[3] < 0;
@@ -2944,7 +3134,10 @@ export class Renderer {
           }
           if (this.game.buildings.list.size || this.game.buildings.walls.size) this.drawStructures(x, y, V, d > playerDepth);
           if (this.hingeTiles.has(x * 65536 + y)) this.drawGateAt(x, y, V);
-          this.tileColumn(lineFog, pts, c, raising ? this.raisedTop(x, y) : null, hs);
+          const top = raising ? this.raisedTop(x, y) : null;
+          this.tileColumn(lineFog, pts, c, top, hs);
+          // Come down over something waiting to take the wash off, which stands behind it, its wash and its water's: that goes first.
+          if (this.lifted && !lineOver && this.over(this.liftFloor, e + washAt, pts, c, wet ? Math.max(top ?? -Infinity, pond ? this.pondTop : 0) : top, hs)) lineOver = true;
           continue;
         }
         if (t === TileType.Tree || t === TileType.Bush || t === TileType.Stump) {
@@ -3169,6 +3362,8 @@ export class Renderer {
         // At a helm on a deck of its own the driver stands there, not in her middle.
         if (drivenBy && furnitureDef(drivenBy.kind).boat?.helm) this.onDeck(pe, drivenBy, this.game.helmSpot(drivenBy), pe.lift, true);
       }
+      // A wall laid at the end of the line is laid again over one already laid, which took the wash off it then.
+      this.wallLift = null;
       if (grain) {
         this.specks(ctx, this.grainDark, this.grainN, 'rgba(0,0,0,0.095)');
         this.specks(ctx, this.grainPale, this.grainM, 'rgba(255,255,255,0.07)');
@@ -3225,31 +3420,21 @@ export class Renderer {
       // And whatever small thing is in the air over it, sorted in with everything standing on it.
       for (const m of this.life.aloft(d)) this.take('life', m.tx, m.ty, m.sx, m.sy, null).mote = m;
       if (this.ents.length) this.drawEntities(ctx, zoom);
-      // A raised floor in sight takes the wash off what it was drawn over; then the line's own remembered ground goes on.
-      if (lineLift) {
+      // Remembered ground on this line came down over what was waiting to take the wash off: the wash so far is laid, and that taken off it, first.
+      if (lineOver) {
         wash ??= this.fogLayer(drawnAt);
-        const fc = wash.getContext('2d') as CanvasRenderingContext2D;
-        if (gathered) {
-          fc.globalCompositeOperation = 'source-over';
-          fc.fill(fogPath);
-          fc.stroke(fogPath);
-          fogPath = new Path2D();
-          gathered = false;
-        }
-        fc.globalCompositeOperation = 'destination-out';
-        fc.fill(liftPath);
-        // Two floors taking the wash off either side of their edge would each leave a soft sliver of it.
-        fc.lineWidth = 2;
-        fc.stroke(liftPath);
-        fc.lineWidth = 1;
+        this.layWash(wash, gathered ? fogPath : null, liftPath);
+        fogPath = new Path2D();
         liftPath = new Path2D();
-        lineLift = false;
+        gathered = false;
+        lineOver = false;
+        this.lifted = false;
+        this.liftFloor.fill(-Infinity);
       }
       if (lineAny) {
-        if (lineFog !== fogPath) {
-          fogPath.addPath(lineFog);
-          lineFog = new Path2D();
-        }
+        fogPath.addPath(lineFog);
+        lineFog = new Path2D();
+        washed = true;
         gathered = true;
         lineAny = false;
       }
@@ -3263,19 +3448,12 @@ export class Renderer {
     this.drawFloaters(ctx, zoom);
 
     // One pass for all of it, so a remembered wood goes cold with its ground.
-    if (wash) {
-      const fc = wash.getContext('2d') as CanvasRenderingContext2D;
-      if (gathered) {
-        fc.globalCompositeOperation = 'source-over';
-        fc.fill(fogPath);
-        fc.stroke(fogPath);
-      }
-      fc.setTransform(1, 0, 0, 1, 0, 0);
-      fc.globalCompositeOperation = 'source-in';
-      fc.fillStyle = FOG_COLOR;
-      fc.fillRect(0, 0, wash.width, wash.height);
+    if (this.lifted || wash) {
+      wash ??= this.fogLayer(drawnAt);
+      this.layWash(wash, gathered ? fogPath : null, this.lifted ? liftPath : null);
       ctx.save();
       ctx.setTransform(1, 0, 0, 1, 0, 0);
+      ctx.globalAlpha = FOG_ALPHA;
       ctx.drawImage(wash, 0, 0);
       ctx.restore();
     } else if (gathered) {
@@ -7898,6 +8076,8 @@ export class Renderer {
       cam.worldToScreenX(ax + dx * t + nx * s * toward, ay + dy * t + ny * s * toward);
     const py = (t: number, k: number, s = 1): number =>
       cam.worldToScreenY(ax + dx * t + nx * s * toward, ay + dy * t + ny * s * toward, h0 + (h1 - h0) * k);
+    // In sight in front of remembered ground, it takes the wash off it -- finished and solid: not one seen through, half built or a railing.
+    if (this.wallLift && alpha >= 1 && !kind?.railed && isDone(wall)) this.liftWall(px, py);
     const quad = (t0: number, t1: number, k0: number, k1: number, s = 1): void => {
       ctx.beginPath();
       ctx.moveTo(px(t0, k0, s), py(t0, k0, s));
