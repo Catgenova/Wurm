@@ -444,6 +444,8 @@ const lines = (g: Game): string[] => g.log.map((l) => l.text);
     turned && held && back && defensive === null && gob.brawl === pet.id, `turned ${turned}, held ${held}, back ${back}, defensive ${defensive}, guard ${gob.brawl}`);
   const before = pet.health;
   g.player.stats.health = 1;
+  // A rowl is unruly and now and then nips its keeper (`maybeNip`), which is its own rule and not this one.
+  pet.nipAt = Number.POSITIVE_INFINITY;
   for (let i = 0; i < 30; i++) {
     g.time += 0.1;
     g.creatures.update(0.1, g);
