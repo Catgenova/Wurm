@@ -2,9 +2,10 @@
  * Dodging, critical hits, arrow heads, venom and burns, and threat.
  *
  *   * Every blow a creature lands on you is first rolled against your dodge
- *     (`dodge_chance`): `dodge_per_control` a point of body control, less
- *     `dodge_per_kg` a kilogram of armour worn (`worn_kg`), never more than
- *     `dodge_most`; a dodge teaches body control `dodge_gain`.
+ *     (`dodge_chance`): `dodge_per_control` a point of body control past the
+ *     `dodge_from` everyone starts with, less `dodge_per_kg` a kilogram of
+ *     armour worn (`worn_kg`), never more than `dodge_most`; a dodge teaches
+ *     body control `dodge_gain`, and with no chance there is no roll.
  *   * A blow or shot that lands is critical `crit_chance` of the time and lands
  *     `crit_hit` as hard.
  *   * Arrows come with four heads (`arrow_head_of`): a shot looses the kind
@@ -29,7 +30,7 @@ alter table creature add column if not exists threat_at timestamptz;
 -- Your chance of dodging a blow, for your body control and the kilograms of armour on you (`dodgeChance`).
 create or replace function dodge_chance(p_control double precision, p_kg double precision) returns double precision
   language sql immutable as $$
-  select greatest(0, least(dodge_most(), p_control * dodge_per_control() - p_kg * dodge_per_kg()))
+  select greatest(0, least(dodge_most(), (p_control - dodge_from()) * dodge_per_control() - p_kg * dodge_per_kg()))
 $$;
 
 -- The kilograms of armour on a body: every piece worn on the head, chest, arms, legs and feet.
@@ -174,13 +175,15 @@ declare p player; shield item; sh shield_def; chance double precision; roll doub
         part text; piece item; cls armour_class_def; soak double precision; taken double precision;
         health double precision; ws jsonb; had jsonb; found_w boolean := false; out_w jsonb := '[]'::jsonb;
         w jsonb; k wound_kind_def; note text; aegis double precision; v_worn double precision;
-        v_from creature; v_venom boolean := false;
+        v_from creature; v_venom boolean := false; v_dodge double precision;
 begin
   select * into p from player where world_id = p_world and uid = p_uid for update;
   if not found then return; end if;
   -- Dodged, before anything else has its say (`dodge_chance`): your body control, less the armour on you.
   select * into v_from from creature where world_id = p_world and id = (p.stats->>'hurtBy')::int;
-  if random() < dodge_chance(skill_of(p_world, p_uid, 'body_control'), worn_kg(p_world, p_uid)) then
+  -- No roll at all while there is no chance, so nothing else's luck moves.
+  v_dodge := dodge_chance(skill_of(p_world, p_uid, 'body_control'), worn_kg(p_world, p_uid));
+  if v_dodge > 0 and random() < v_dodge then
     perform skill_raise(p_world, p_uid, 'body_control', dodge_gain());
     perform tell(p_world, p_uid, 'You dodge the '
       || coalesce((select lower(name) from species_def where id = v_from.species), 'blow') || '.', 'fight');

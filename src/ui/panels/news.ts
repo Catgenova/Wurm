@@ -1,5 +1,5 @@
 import {
-  BODKIN_HIDE, BURN_WEAR, CONSIDER_EASY, CONSIDER_HARD, CRIT_BASE, CRIT_HIT, CRIT_KNIFE, CRIT_PER_SKILL, DODGE_MOST, DODGE_PER_CONTROL, DODGE_PER_KG, KNIFE_BLEED,
+  BODKIN_HIDE, BURN_WEAR, CONSIDER_EASY, CONSIDER_HARD, CRIT_BASE, CRIT_HIT, CRIT_KNIFE, CRIT_PER_SKILL, DODGE_FROM, DODGE_PER_CONTROL, DODGE_PER_KG, dodgeChance, KNIFE_BLEED,
   KNIFE_BLEED_SECS, STAGGER_MAUL, THREAT_HOLD, VENOM_DRAIN, VENOM_SECS,
 } from '../../game/fight';
 import { BACK_PACE, BACK_SLACK, CIRCLE_R, COWARD_AT, COWARD_DRAG, DRAW_WALK, FALL_BACK, GUARD_RANGE, HUNTER_TURN, KEEP_OFF, MONSTER_TURN, PACK_CALL, PACK_MOST, THROW_HIT, THROW_REACH } from '../../game/fight';
@@ -1002,7 +1002,7 @@ export const NEWS: News[] = [
     n: 74,
     day: '2026-10-03',
     lines: () => [
-      `Dodge: every blow a creature lands on you is first rolled against 1% for every ${Math.round(0.01 / DODGE_PER_CONTROL)} points of body control, less 1% for every ${Math.round(0.01 / DODGE_PER_KG)} kilograms of armour you wear, up to ${percent(DODGE_MOST)}. A dodged blow takes nothing and trains body control.`,
+      `Dodge: every blow a creature lands on you is first rolled against 1% for every ${Math.round(0.01 / DODGE_PER_CONTROL)} points of body control past the ${DODGE_FROM} everyone starts with (${percent(dodgeChance(100, 0))} at 100), less 1% for every ${Math.round(0.01 / DODGE_PER_KG)} kilograms of armour you wear. A dodged blow takes nothing and trains body control.`,
       `Critical hits: a blow or shot that lands is critical ${percent(CRIT_BASE)} of the time plus ${percent(CRIT_PER_SKILL * 10)} for every ten points of the weapon's subskill, ${times(CRIT_KNIFE)} as often with a knife, and lands ${percent(CRIT_HIT - 1)} harder. Its number rises larger and in orange.`,
       `Arrow heads, fletched like arrows: broadheads bleed ${percent(KNIFE_BLEED)} of the shot a second for ${KNIFE_BLEED_SECS} seconds; bodkins land ${percent(BODKIN_HIDE - 1)} harder on a thick hide, shell or scales; blunts crush, knock a heavy blow off its stroke and put the next back ${STAGGER_MAUL} second. Shoot these first on a stack of arrows picks the kind a shot takes.`,
       `Venom: ${listed(Object.values(SPECIES).filter((d) => d.venom).map((d) => `${d.name.toLowerCase()}`))} bites take ${percent(VENOM_DRAIN)} of your health a second for ${VENOM_SECS} seconds while the wound is undressed. Burns wear the armour they land on ${times(BURN_WEAR)} as fast.`,

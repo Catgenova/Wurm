@@ -52,7 +52,7 @@ import { WEAPONS, ARMOUR, ARMOUR_CLASSES, SHIELDS, HIT_LOCATIONS } from '../src/
 import { WOUND_BY_WEAPON, WOUND_KINDS } from '../src/game/wounds';
 import { BUTCHER_PARTS, HOARD_METALS } from '../src/game/butcher';
 import { CRATE_DEFS } from '../src/game/crates';
-import { ARROWS, BODKIN_HIDE, BURN_WEAR, CRIT_BASE, CRIT_HIT, CRIT_KNIFE, CRIT_PER_SKILL, DODGE_GAIN, DODGE_MOST, DODGE_PER_CONTROL, DODGE_PER_KG, THREAT_HOLD, VENOM_DRAIN, VENOM_SECS } from '../src/game/fight';
+import { ARROWS, BODKIN_HIDE, BURN_WEAR, CRIT_BASE, CRIT_HIT, CRIT_KNIFE, CRIT_PER_SKILL, DODGE_GAIN, DODGE_MOST, DODGE_FROM, DODGE_PER_CONTROL, DODGE_PER_KG, THREAT_HOLD, VENOM_DRAIN, VENOM_SECS } from '../src/game/fight';
 import { BACK_PACE, BACK_SLACK, CIRCLE_ARC, CIRCLE_R, COWARD_AT, COWARD_DRAG, FALL_BACK, FLEE_PACE, FLEE_SECS, GUARD_RANGE, HUNTER_TURN, KEEP_OFF, MONSTER_TURN, PACK_CALL, PACK_MOST, PACK_RANGE, THROW_HIT, THROW_REACH } from '../src/game/fight';
 import { ARM_SLOW, ARM_SLOW_MOST, ARMOUR_VS, BLINDSIDE, BLOW_DEFENSIVE, BLOW_HUNTER, BLOW_KINDS, BLOW_PREY, CROWD_BLOCK, FIGHT_BACK_STILL, FIGHT_GIVE_UP, FIGHT_LEASH, FIGHT_STANCES, FIST, FLANK_HIT, HEAVY_EVERY, HEAVY_HIT, HIDE_TAKES, HIDES, HUNT_REACH, KNIFE_BLEED, KNIFE_BLEED_SECS, STAGGER_MAUL, STAGGER_POLE, STANCE_DEALT, STANCE_TAKEN, SWING_WIND, SWING_WIND_KG, TIRED_AT, TIRED_SLOW, WIND_UP } from '../src/game/fight';
 import { METALS, MOULDS, ORE_PER_LUMP, RARE_LUMP_FACTOR, RARE_METALS } from '../src/game/metal';
@@ -1392,7 +1392,7 @@ for (const [fn, v] of [
      more per point of skill, a knife's share more, and what it lands for. A
      bodkin through a hide; venom, a second and how long; a burn on armour;
      and how long what a creature is on holds it. */
-  ['dodge_per_control', DODGE_PER_CONTROL], ['dodge_per_kg', DODGE_PER_KG], ['dodge_most', DODGE_MOST], ['dodge_gain', DODGE_GAIN],
+  ['dodge_from', DODGE_FROM], ['dodge_per_control', DODGE_PER_CONTROL], ['dodge_per_kg', DODGE_PER_KG], ['dodge_most', DODGE_MOST], ['dodge_gain', DODGE_GAIN],
   ['crit_base', CRIT_BASE], ['crit_per_skill', CRIT_PER_SKILL], ['crit_knife', CRIT_KNIFE], ['crit_hit', CRIT_HIT],
   ['bodkin_hide', BODKIN_HIDE], ['venom_drain', VENOM_DRAIN], ['venom_secs', VENOM_SECS], ['burn_wear', BURN_WEAR],
   ['threat_hold', THREAT_HOLD],

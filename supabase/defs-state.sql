@@ -4166,6 +4166,7 @@ create or replace function coward_at() returns double precision language sql imm
 create or replace function coward_drag() returns double precision language sql immutable as $fn$ select 0.8::double precision $fn$;
 create or replace function flee_pace() returns double precision language sql immutable as $fn$ select 1.6::double precision $fn$;
 create or replace function flee_secs() returns double precision language sql immutable as $fn$ select 6::double precision $fn$;
+create or replace function dodge_from() returns double precision language sql immutable as $fn$ select 20::double precision $fn$;
 create or replace function dodge_per_control() returns double precision language sql immutable as $fn$ select 0.0025::double precision $fn$;
 create or replace function dodge_per_kg() returns double precision language sql immutable as $fn$ select 0.0025::double precision $fn$;
 create or replace function dodge_most() returns double precision language sql immutable as $fn$ select 0.3::double precision $fn$;

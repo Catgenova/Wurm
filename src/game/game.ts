@@ -2364,7 +2364,7 @@ export class Game {
     return { taken: raw * (1 - Math.min(0.92, soak * hide * ARMOUR_VS[def.cls][kind])), part, worn: item, blocked: false };
   }
 
-  /** Your chance of dodging a creature's blow just now (`dodgeChance`): body control, less the kilograms of armour on you. */
+  /** Your chance of dodging a creature's blow just now (`dodgeChance`): body control past where it starts, less the kilograms of armour on you. */
   dodge(): number {
     const kg = this.wornArmour().reduce((n, { item }) => n + itemDef(item.id).weight, 0);
     return dodgeChance(this.skills.get('body_control'), kg);
@@ -2410,7 +2410,9 @@ export class Game {
     const by = this.player.attackedBy;
     const from = by !== null && by !== PLAYER_ATTACKER ? this.creatures.get(by) : undefined;
     // Dodged, before anything else has its say (`dodgeChance`): your body control, less the armour on you.
-    if (this.rand() < this.dodge()) {
+    // No roll at all while there is no chance, so nothing else's luck moves.
+    const dodge = this.dodge();
+    if (dodge > 0 && this.rand() < dodge) {
       this.gainSkill('body_control', DODGE_GAIN);
       this.player.attackedAt = this.time;
       this.logMsg(`You dodge the ${from ? this.creatures.species(from).name.toLowerCase() : 'blow'}.`, 'fight');

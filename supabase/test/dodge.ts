@@ -92,7 +92,7 @@ begin
   insert into said values ('KG', worn_kg(w.world_id, w.uid)::text);
   update player set equipped = '{}'::jsonb where world_id = w.world_id and uid = w.uid;
 
-  -- Four hundred blows from a goblin at body control 100 and nothing worn: a quarter of them dodged.
+  -- Four hundred blows from a goblin at body control 100 and nothing worn: a fifth of them dodged.
   insert into skill (world_id, uid, id, value) values (w.world_id, w.uid, 'body_control', 100)
     on conflict (world_id, uid, id) do update set value = excluded.value;
   g := creature_spawn(w.world_id, 'goblin', v_px + 0.8, v_py, 'wild', now() - interval '2 hours');
@@ -345,7 +345,8 @@ const lines = (g: Game): string[] => g.log.map((l) => l.text);
   g.equip('head', g.inventory.add('chain_coif', { ql: 40 }).uid);
   g.equip('chest', g.inventory.add('chain_hauberk', { ql: 40 }).uid);
   const kg = 2.6 + 7.5;
-  check('in the browser, the dodge chance is your body control less the armour worn', near(g.dodge(), dodgeChance(g.skills.get('body_control'), kg)), String(g.dodge()));
+  g.skills.values.set('body_control', 60);
+  check('in the browser, the dodge chance is your body control past where it starts, less the armour worn', near(g.dodge(), dodgeChance(g.skills.get('body_control'), kg)), String(g.dodge()));
   const gob = beast(g, 'goblin', 21.2, 20.5);
   g.player.attackedBy = gob.id;
   g.rand = () => 0;

@@ -3,6 +3,7 @@ import type { Game } from './game';
 import { bowRange, WEAPON_BY_ID, type ArmourClass, type WeaponDef } from './gear';
 import { describeWith, itemDef, type Item } from './items';
 import type { SpeciesDef } from './creatures';
+import { SKILL_BY_ID } from './skills';
 import { listed, percent } from './words';
 import { WOUND_BY_WEAPON, type Wound, type WoundKind } from './wounds';
 
@@ -339,17 +340,18 @@ export const DRAW_WALK = 0.6;
 
 /**
  * Every blow a creature lands on you is first rolled against your dodge: this
- * share for every point of body control, less this share for every kilogram of
- * armour you wear, and never more than `DODGE_MOST`. A dodge teaches body
- * control `DODGE_GAIN`.
+ * share for every point of body control past the `DODGE_FROM` everyone starts
+ * with, less this share for every kilogram of armour you wear, and never more
+ * than `DODGE_MOST`. A dodge teaches body control `DODGE_GAIN`.
  */
+export const DODGE_FROM = SKILL_BY_ID.get('body_control')?.start ?? 0;
 export const DODGE_PER_CONTROL = 0.0025;
 export const DODGE_PER_KG = 0.0025;
 export const DODGE_MOST = 0.3;
 export const DODGE_GAIN = 0.3;
 /** Your chance of dodging a blow, for your body control and the kilograms of armour on you. */
 export const dodgeChance = (control: number, kg: number): number =>
-  Math.max(0, Math.min(DODGE_MOST, control * DODGE_PER_CONTROL - kg * DODGE_PER_KG));
+  Math.max(0, Math.min(DODGE_MOST, (control - DODGE_FROM) * DODGE_PER_CONTROL - kg * DODGE_PER_KG));
 
 /* ---- Critical hits ------------------------------------------------------------ */
 

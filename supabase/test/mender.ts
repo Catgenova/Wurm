@@ -29,6 +29,7 @@ import { execFileSync } from 'node:child_process';
 import { Game, goSeconds } from '../../src/game/game';
 import { ACTION_BY_ID, KIT_MEND, repairGo, type Target } from '../../src/game/actions';
 import { RESTORE_AGE, RESTORE_HARM, RESTORE_HARM_SPREAD } from '../../src/game/archaeology';
+import { DODGE_FROM } from '../../src/game/fight';
 import { TRY_LEARN } from '../../src/game/learn';
 import { MINOR_SKILLS } from '../../src/game/baubles';
 import { IMPROVE_FLOOR, improveCeiling } from '../../src/game/improve';
@@ -265,6 +266,8 @@ begin
   ${clearAll};
 
   /* ---- Armour Care: a blow on the chest, one stopped on a shield, and one landed with a sword. ---- */
+  -- Body control back where everyone starts, so no dodge takes the low roll meant for the shield (dodge_chance).
+  ${skillAt('body_control', DODGE_FROM)};
   v_t := '';
   foreach v_t in array array['', ${q(P('Armour Care').id)}] loop
     perform pg_temp.hold(w, u, case when v_t = '' then '{}'::text[] else array[v_t] end);

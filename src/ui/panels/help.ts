@@ -95,7 +95,7 @@ import { article, capital, listed, NumberWord, numberWord, percent, share, spanW
 import { BACK_PACE, BACK_SLACK, CIRCLE_ARC, CIRCLE_R, COWARD_AT, COWARD_DRAG, DRAW_WALK, FALL_BACK, FLEE_SECS, GUARD_RANGE, HUNTER_TURN, KEEP_OFF, MONSTER_TURN, PACK_CALL, PACK_MOST, PACK_RANGE, THROW_HIT, THROW_REACH } from '../../game/fight';
 import { FIGHT_QUIET, ARM_SLOW, ARM_SLOW_MOST, armourSays, BLINDSIDE, blowSays, CROWD_BLOCK, FLANK_HIT, HEAVY_EVERY, HEAVY_HIT, HIDE_NAMES, HIDES, hideSays, LEG_SLOW_MOST, sideOf, WIND_UP, BLOW_DEFENSIVE, BLOW_HUNTER, BLOW_PREY, FIGHT_BACK_STILL, FIGHT_GIVE_UP, FIGHT_LEASH, FIGHT_STANCE_NAMES, FIGHT_STANCES, FIST, FOLLOW_RANGE, stanceSays, SWING_WIND, SWING_WIND_KG, TARGET_RANGE, TIRED_AT, TIRED_SLOW } from '../../game/fight';
 import {
-  BODKIN_HIDE, BURN_WEAR, CONSIDER_EASY, CONSIDER_HARD, CRIT_BASE, CRIT_HIT, CRIT_KNIFE, CRIT_PER_SKILL, DODGE_MOST, DODGE_PER_CONTROL, DODGE_PER_KG, KNIFE_BLEED,
+  BODKIN_HIDE, BURN_WEAR, CONSIDER_EASY, CONSIDER_HARD, CRIT_BASE, CRIT_HIT, CRIT_KNIFE, CRIT_PER_SKILL, DODGE_FROM, DODGE_PER_CONTROL, DODGE_PER_KG, dodgeChance, KNIFE_BLEED,
   KNIFE_BLEED_SECS, STAGGER_MAUL, THREAT_HOLD, VENOM_DRAIN, VENOM_SECS,
 } from '../../game/fight';
 import { BIND_BY_ID, keyName } from '../../game/keybinds';
@@ -2153,8 +2153,9 @@ export function helpText(): string {
     looses when the draw is full; it keeps loosing while the target is within the bow's range and you have arrows. A line from you
     to the target fills as the draw comes, amber while the target is in range and grey once it is not.</p>
     <p>Every blow a creature lands on you is first rolled against your <b>dodge</b>: 1% for every
-    ${numberWord(Math.round(0.01 / DODGE_PER_CONTROL))} points of body control, less 1% for every ${numberWord(Math.round(0.01 / DODGE_PER_KG))} kilograms
-    of armour you wear, and never more than ${percent(DODGE_MOST)}. A dodged blow takes nothing, and every dodge trains body control.</p>
+    ${numberWord(Math.round(0.01 / DODGE_PER_CONTROL))} points of body control past the ${DODGE_FROM} everyone starts with (${percent(dodgeChance(100, 0))} at 100),
+    less 1% for every ${numberWord(Math.round(0.01 / DODGE_PER_KG))} kilograms of armour you wear. A dodged
+    blow takes nothing, and every dodge trains body control.</p>
     <p>A blow or a shot that lands is <b>critical</b> ${percent(CRIT_BASE)} of the time, and ${percent(CRIT_PER_SKILL * 10)} more for every ten
     points of the weapon's own subskill (${percent(CRIT_BASE + 100 * CRIT_PER_SKILL)} at 100), ${times(CRIT_KNIFE)} as often with a knife. A critical
     one lands ${percent(CRIT_HIT - 1)} harder, the log says so, and its number rises larger and in orange.</p>

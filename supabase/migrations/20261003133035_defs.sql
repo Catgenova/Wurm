@@ -3566,6 +3566,7 @@ create or replace function arrow_head_of(p_item text) returns text language sql 
     when 'blunt_arrow' then 'blunt'
   end
 $fn$;
+create or replace function dodge_from() returns double precision language sql immutable as $fn$ select 20::double precision $fn$;
 create or replace function dodge_per_control() returns double precision language sql immutable as $fn$ select 0.0025::double precision $fn$;
 create or replace function dodge_per_kg() returns double precision language sql immutable as $fn$ select 0.0025::double precision $fn$;
 create or replace function dodge_most() returns double precision language sql immutable as $fn$ select 0.3::double precision $fn$;
