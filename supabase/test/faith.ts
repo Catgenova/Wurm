@@ -49,7 +49,7 @@ const check = (what: string, passed: boolean, detail = ''): void => {
 };
 
 /* The suite's own spells: two at the Blessing's first tier, one at its second, and one of Chaos's. */
-const SPELL_A: FaithSpellDef = { id: 'blessing_test_a', patron: 'blessing', tier: 1, name: 'Test A', note: 'Nothing.', cost: 5, rest: 30, on: ['self'] };
+const SPELL_A: FaithSpellDef = { id: 'blessing_test_a', patron: 'blessing', tier: 1, name: 'Test A', note: 'Nothing.', cost: 5, rest: 30, on: ['self'], fx: {} };
 const SPELL_B: FaithSpellDef = { ...SPELL_A, id: 'blessing_test_b', name: 'Test B' };
 const SPELL_C: FaithSpellDef = { ...SPELL_A, id: 'blessing_test_c', name: 'Test C', tier: 2, on: ['enemy'] };
 const SPELL_D: FaithSpellDef = { ...SPELL_A, id: 'chaos_test_d', name: 'Test D', patron: 'chaos' };

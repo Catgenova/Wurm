@@ -1593,6 +1593,18 @@ jobs:
             --outfile=node_modules/.cache/faith.mjs --log-level=error
           node node_modules/.cache/faith.mjs
 
+      - name: The Blessing's spells
+        run: |
+          # Every one of the fifteen pointed and cast as the door does it, and
+          # what it did read back: health, wounds, a hunt dropped, a boon kept,
+          # a zone on the ground, a tree a stage on. What lasts is asked of the
+          # rule it works through -- a blow, a body settling, a monster struck,
+          # a job timed, a taming, the beach, a hunter -- and one goes through
+          # rpc_cast_spell itself. Every number is the browser's own.
+          npx esbuild supabase/test/blessing.ts --bundle --platform=node --format=esm \
+            --outfile=node_modules/.cache/blessing.mjs --log-level=error
+          node node_modules/.cache/blessing.mjs
+
       - name: A stone, and what you can get out of it
         run: |
           # The arcane, which has no mana in it. A focus is a cut gem in a

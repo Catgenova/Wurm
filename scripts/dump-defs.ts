@@ -591,6 +591,8 @@ out.push(`create table if not exists faith_spell (
   id text primary key, patron text not null, tier int not null, name text not null, note text not null,
   cost double precision not null, rest double precision not null, on_what text[] not null, radius double precision
 );`);
+/* The numbers behind what a spell does, which its arm in `faith_spell_cast` reads. */
+out.push(`alter table faith_spell add column if not exists fx jsonb not null default '{}'::jsonb;`);
 /* What a spell can be cast on, in the words "<spell> is cast on ..." uses. */
 out.push(`create table if not exists spell_on_def (
   id text primary key, word text not null
@@ -1869,8 +1871,9 @@ PERK_TIER_AT.forEach((at, i) => out.push(`insert into perk_tier values (${q(i + 
 for (const p of PATRONS) out.push(`insert into patron_def values (${q(p.id)}, ${q(p.name)}, ${q(p.alignment)});`);
 FAITH_TIER_AT.forEach((at, i) => out.push(`insert into faith_tier values (${q(i + 1)}, ${q(at)});`));
 for (const s of FAITH_SPELLS) {
-  out.push(`insert into faith_spell values (` + [q(s.id), q(s.patron), q(s.tier), q(s.name), q(s.note),
-    q(s.cost), q(s.rest), q(`{${s.on.join(',')}}`), q(s.radius)].join(', ') + `);`);
+  out.push(`insert into faith_spell (id, patron, tier, name, note, cost, rest, on_what, radius, fx) values (`
+    + [q(s.id), q(s.patron), q(s.tier), q(s.name), q(s.note), q(s.cost), q(s.rest), `array[${s.on.map((o) => q(o)).join(', ')}]::text[]`, q(s.radius),
+       q(JSON.stringify(s.fx))].join(', ') + `);`);
 }
 for (const o of SPELL_ONS) out.push(`insert into spell_on_def values (${q(o)}, ${q(SPELL_ON_WORDS[o])});`);
 SPELL_BAR.forEach((school, i) => out.push(`insert into spell_slot values (${q(i)}, ${q(school)});`));

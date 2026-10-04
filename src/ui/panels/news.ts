@@ -32,7 +32,7 @@ import { RECIPE_BY_ID, RECIPES, TRADE_BOOK_AT } from '../../game/recipes';
 import { BOARD_TOP } from '../../game/boards';
 import { IDLE_LOGOUT, WORKER_REST_EVERY, WORKER_REST_FIRST, WORKER_REST_MOST } from '../../game/keep';
 import { REPORTS_A_SESSION } from '../../net/errors';
-import { ALIGNMENT_NAMES, BAR_SLOTS, FAITH_TIER_AT, PATRON_AT, PATRONS, SCHOOL_NAMES, slotsFor, SPELL_ON_WORDS, SPELL_ONS, SPELL_REACH, SPELLS_PER_TIER } from '../../game/patrons';
+import { ALIGNMENT_NAMES, BAR_SLOTS, FAITH_SPELLS, FAITH_TIER_AT, PATRON_AT, PATRONS, SCHOOL_NAMES, slotsFor, SPELL_ON_WORDS, SPELL_ONS, SPELL_REACH, SPELLS_PER_TIER } from '../../game/patrons';
 import { article, capital, finePercent, listed, listedOr, NumberWord, numberWord, percent, share, spanWords, times } from '../../game/words';
 import { ANCIENT_EFFECTS, ANCIENT_PLUS, BAUBLE_HIGH, BAUBLE_LOW, BAUBLE_SHARE, BAUBLE_TIERS, baubleTimes, REGRET_SHARE, YIELD_TIMES } from '../../game/baubles';
 import { CLASS_CHANGE_COST, CLASSES, PERK_TIER_AT, PERKS_PER_TIER } from '../../game/classes';
@@ -1026,6 +1026,14 @@ export const NEWS: News[] = [
     lines: () => [
       `Faith has ${FAITH_TIER_AT.length} tiers now, at ${FAITH_TIER_AT.join(', ')} faith, each still offering ${SPELLS_PER_TIER} spells of which you take one.`,
       `Every spell says what it can be cast on: ${listedOr(SPELL_ONS.map((o) => SPELL_ON_WORDS[o]))}. Right-click a person, a creature, a thing or the ground to cast a spell from your bar on it; anything but you and what you carry has to be within ${SPELL_REACH} tiles.`,
+    ],
+  },
+  {
+    n: 77,
+    day: '2026-10-04',
+    lines: () => [
+      `The Blessing's spells are written, ${SPELLS_PER_TIER} at each tier: ${listed(FAITH_SPELLS.filter((s) => s.patron === 'blessing').map((s) => s.name))}. What each does, to the number, is in the Faith window.`,
+      `Take the Blessing as your patron at ${PATRON_AT} faith, take a spell at each tier as your faith reaches it, and put ${numberWord(slotsFor('faith'))} of them on the spell bar.`,
     ],
   },
 ];

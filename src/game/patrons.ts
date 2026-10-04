@@ -1,7 +1,8 @@
+import { TREE_AGES } from '../world/tiles';
 import { FAITH } from './faith';
 import { TARGET_RANGE } from './fight';
 import { SKILL_BY_ID } from './skills';
-import { listedOr } from './words';
+import { listed, listedOr, percent } from './words';
 
 /**
  * Patrons, and the spells they give.
@@ -22,8 +23,9 @@ import { listedOr } from './words';
  * calls a spell off the bar. What a patron *offers* is the same for everybody
  * and is written here, which is what the island's rows are generated from.
  *
- * No patron has a spell written yet. `FAITH_SPELLS` is where they go, and the
- * Faith window and the bar already draw whatever is in it.
+ * The Blessing's fifteen are written; Justice's and Chaos's are still to come.
+ * `FAITH_SPELLS` is where they go, and the Faith window and the bar draw
+ * whatever is in it.
  */
 
 export type PatronId = 'blessing' | 'justice' | 'chaos';
@@ -97,14 +99,88 @@ export interface FaithSpellDef {
   on: readonly SpellOn[];
   /** For a spell cast on the ground: how many tiles round the spot it reaches. */
   radius?: number;
+  /** The numbers behind what it does, by name, which the island reads off its row and the note is written from. */
+  fx: Readonly<Record<string, number>>;
 }
+
+/** A stretch of time as the spell notes say it: seconds up to two minutes, then minutes. */
+const span = (secs: number): string => (secs < 120 ? `${secs} s` : `${secs / 60} minutes`);
+
+/**
+ * The stages Bless the Land moves a tree on by, in the order a tree grows:
+ * each living stage to the next, so long as the next is alive and not the
+ * same stage over again -- nothing is grown into dying, and a clipped tree
+ * stays clipped.
+ */
+export const LAND_GROWS: ReadonlyArray<readonly [number, number]> = (() => {
+  const by = new Map(TREE_AGES.map((a) => [a.id, a]));
+  const grows = (id: number): boolean => {
+    const a = by.get(id);
+    const n = a?.next ?? null;
+    return !!a && a.alive && n !== null && n !== id && !!by.get(n)?.alive;
+  };
+  const into = new Set(TREE_AGES.filter((a) => grows(a.id)).map((a) => a.next as number));
+  const out: Array<readonly [number, number]> = [];
+  for (let at = TREE_AGES.find((a) => grows(a.id) && !into.has(a.id))?.id ?? -1; at >= 0 && grows(at);) {
+    const next = by.get(at)?.next as number;
+    out.push([at, next]);
+    at = next;
+  }
+  return out;
+})();
+const ageName = (id: number): string => (TREE_AGES.find((a) => a.id === id)?.name ?? '').toLowerCase();
+
+/** One of the Blessing's, its note written from its own numbers. */
+const blessing = (
+  tier: number, id: string, name: string, cost: number, rest: number, on: readonly SpellOn[],
+  fx: Record<string, number>, note: (fx: Record<string, number>, radius: number) => string, radius?: number,
+): FaithSpellDef => ({ id: `blessing_${id}`, patron: 'blessing', tier, name, cost, rest, on, radius, fx, note: note(fx, radius ?? 0) });
 
 /**
  * Every faith spell there is, patron by patron and tier by tier.
  *
- * Empty until the first set is written: the Blessing's are next.
+ * The Blessing's three at each tier are one that mends, one that guards and
+ * one for creatures, things and the land. What lasts a while is kept on the
+ * island against whoever it was cast on (`player.blessings`) or against the
+ * ground (`faith_zone`), and the rules that fight, heal, tame, work and grow
+ * look there.
  */
-export const FAITH_SPELLS: FaithSpellDef[] = [];
+export const FAITH_SPELLS: FaithSpellDef[] = [
+  blessing(1, 'soothe', 'Soothe', 8, 20, ['self', 'player'], { heal: 0.1 },
+    (fx) => `Heals ${percent(fx.heal)} of their health and stops their worst bleeding wound bleeding.`),
+  blessing(1, 'ward', 'Ward', 10, 60, ['self', 'player'], { cut: 0.5, secs: 30 },
+    (fx) => `The next blow to land on them within ${span(fx.secs)} does ${percent(fx.cut)} less damage.`),
+  blessing(1, 'tend', 'Tend', 8, 30, ['wildermon'], { heal: 0.25 },
+    (fx) => `Heals the wildermon ${percent(fx.heal)} of its health and stops it bleeding.`),
+
+  blessing(2, 'purify', 'Purify', 12, 45, ['self', 'player'], {},
+    () => 'Draws the venom out of every wound they have and closes every burn.'),
+  blessing(2, 'calm', 'Calm', 14, 90, ['enemy'], { secs: 60 },
+    (fx) => `A wild creature stops hunting and cannot start a hunt for ${span(fx.secs)}. Monsters are not calmed.`),
+  blessing(2, 'steady', 'Steady Hands', 14, 600, ['object'], { cut: 0.1, secs: 1800 },
+    (fx) => `For ${span(fx.secs)}, every job that wants this tool takes ${percent(fx.cut)} less time while you carry it.`),
+
+  blessing(3, 'renewal', 'Renewal', 20, 60, ['self', 'player'], { each: 0.03, every: 3, secs: 30 },
+    (fx) => `Heals ${percent(fx.each)} of their health every ${span(fx.every)} for ${span(fx.secs)}: ${percent(fx.each * fx.secs / fx.every)} in all.`),
+  blessing(3, 'arms', 'Bless Arms', 20, 120, ['self', 'player'], { more: 0.2, secs: 60 },
+    (fx) => `For ${span(fx.secs)}, their blows do ${percent(fx.more)} more damage to monsters.`),
+  blessing(3, 'kinship', 'Kinship', 20, 600, ['wildermon'], { points: 0.25, secs: 60 },
+    (fx) => `Your next go at taming this wildermon within ${span(fx.secs)} is ${Math.round(fx.points * 100)} points likelier to succeed.`),
+
+  blessing(4, 'benediction', 'Benediction', 30, 120, ['area'], { heal: 0.2 },
+    (fx, r) => `Everybody within ${r} tiles of the spot, you too, and every wildermon there heals ${percent(fx.heal)} of their health and stops bleeding.`, 6),
+  blessing(4, 'shield', 'Shield of Dawn', 30, 180, ['self', 'player'], { share: 0.3, secs: 60 },
+    (fx) => `For ${span(fx.secs)}, damage up to ${percent(fx.share)} of their health is taken by the shield instead of them.`),
+  blessing(4, 'sanctuary', 'Sanctuary', 34, 300, ['area'], { secs: 30 },
+    (fx, r) => `For ${span(fx.secs)}, nothing wild starts a hunt on anybody within ${r} tiles of the spot, and whatever is hunting somebody there gives it up.`, 4),
+
+  blessing(5, 'second_life', 'Second Life', 60, 1800, ['self', 'player'], { secs: 600, heal: 0.5 },
+    (fx) => `For ${span(fx.secs)}, the first blow that would kill them leaves them at ${percent(fx.heal)} of their health instead.`),
+  blessing(5, 'radiance', 'Radiance', 60, 600, ['area'], { each: 0.02, secs: 30 },
+    (fx, r) => `For ${span(fx.secs)}, every creature within ${r} tiles of the spot that is hunting somebody loses ${percent(fx.each)} of its health a second, ${percent(fx.each * fx.secs)} in all; it is never killed by it.`, 8),
+  blessing(5, 'land', 'Bless the Land', 50, 3600, ['area'], {},
+    (_fx, r) => `Every tree within ${r} tiles of the spot grows a stage: ${listed(LAND_GROWS.map(([a, b]) => `${ageName(a)} to ${ageName(b)}`))}. One that would grow into dying, and one that is clipped, stays as it is.`, 10),
+];
 export const FAITH_SPELL_BY_ID = new Map(FAITH_SPELLS.map((s) => [s.id, s]));
 export const spellsOf = (patron: PatronId, tier: number): FaithSpellDef[] =>
   FAITH_SPELLS.filter((s) => s.patron === patron && s.tier === tier);

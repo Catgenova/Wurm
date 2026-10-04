@@ -260,6 +260,7 @@ create table if not exists faith_spell (
   id text primary key, patron text not null, tier int not null, name text not null, note text not null,
   cost double precision not null, rest double precision not null, on_what text[] not null, radius double precision
 );
+alter table faith_spell add column if not exists fx jsonb not null default '{}'::jsonb;
 create table if not exists spell_on_def (
   id text primary key, word text not null
 );
@@ -5361,6 +5362,21 @@ insert into faith_tier values (2, 40);
 insert into faith_tier values (3, 60);
 insert into faith_tier values (4, 80);
 insert into faith_tier values (5, 99);
+insert into faith_spell (id, patron, tier, name, note, cost, rest, on_what, radius, fx) values ('blessing_soothe', 'blessing', 1, 'Soothe', 'Heals 10% of their health and stops their worst bleeding wound bleeding.', 8, 20, array['self', 'player']::text[], null, '{"heal":0.1}');
+insert into faith_spell (id, patron, tier, name, note, cost, rest, on_what, radius, fx) values ('blessing_ward', 'blessing', 1, 'Ward', 'The next blow to land on them within 30 s does 50% less damage.', 10, 60, array['self', 'player']::text[], null, '{"cut":0.5,"secs":30}');
+insert into faith_spell (id, patron, tier, name, note, cost, rest, on_what, radius, fx) values ('blessing_tend', 'blessing', 1, 'Tend', 'Heals the wildermon 25% of its health and stops it bleeding.', 8, 30, array['wildermon']::text[], null, '{"heal":0.25}');
+insert into faith_spell (id, patron, tier, name, note, cost, rest, on_what, radius, fx) values ('blessing_purify', 'blessing', 2, 'Purify', 'Draws the venom out of every wound they have and closes every burn.', 12, 45, array['self', 'player']::text[], null, '{}');
+insert into faith_spell (id, patron, tier, name, note, cost, rest, on_what, radius, fx) values ('blessing_calm', 'blessing', 2, 'Calm', 'A wild creature stops hunting and cannot start a hunt for 60 s. Monsters are not calmed.', 14, 90, array['enemy']::text[], null, '{"secs":60}');
+insert into faith_spell (id, patron, tier, name, note, cost, rest, on_what, radius, fx) values ('blessing_steady', 'blessing', 2, 'Steady Hands', 'For 30 minutes, every job that wants this tool takes 10% less time while you carry it.', 14, 600, array['object']::text[], null, '{"cut":0.1,"secs":1800}');
+insert into faith_spell (id, patron, tier, name, note, cost, rest, on_what, radius, fx) values ('blessing_renewal', 'blessing', 3, 'Renewal', 'Heals 3% of their health every 3 s for 30 s: 30% in all.', 20, 60, array['self', 'player']::text[], null, '{"each":0.03,"every":3,"secs":30}');
+insert into faith_spell (id, patron, tier, name, note, cost, rest, on_what, radius, fx) values ('blessing_arms', 'blessing', 3, 'Bless Arms', 'For 60 s, their blows do 20% more damage to monsters.', 20, 120, array['self', 'player']::text[], null, '{"more":0.2,"secs":60}');
+insert into faith_spell (id, patron, tier, name, note, cost, rest, on_what, radius, fx) values ('blessing_kinship', 'blessing', 3, 'Kinship', 'Your next go at taming this wildermon within 60 s is 25 points likelier to succeed.', 20, 600, array['wildermon']::text[], null, '{"points":0.25,"secs":60}');
+insert into faith_spell (id, patron, tier, name, note, cost, rest, on_what, radius, fx) values ('blessing_benediction', 'blessing', 4, 'Benediction', 'Everybody within 6 tiles of the spot, you too, and every wildermon there heals 20% of their health and stops bleeding.', 30, 120, array['area']::text[], 6, '{"heal":0.2}');
+insert into faith_spell (id, patron, tier, name, note, cost, rest, on_what, radius, fx) values ('blessing_shield', 'blessing', 4, 'Shield of Dawn', 'For 60 s, damage up to 30% of their health is taken by the shield instead of them.', 30, 180, array['self', 'player']::text[], null, '{"share":0.3,"secs":60}');
+insert into faith_spell (id, patron, tier, name, note, cost, rest, on_what, radius, fx) values ('blessing_sanctuary', 'blessing', 4, 'Sanctuary', 'For 30 s, nothing wild starts a hunt on anybody within 4 tiles of the spot, and whatever is hunting somebody there gives it up.', 34, 300, array['area']::text[], 4, '{"secs":30}');
+insert into faith_spell (id, patron, tier, name, note, cost, rest, on_what, radius, fx) values ('blessing_second_life', 'blessing', 5, 'Second Life', 'For 10 minutes, the first blow that would kill them leaves them at 50% of their health instead.', 60, 1800, array['self', 'player']::text[], null, '{"secs":600,"heal":0.5}');
+insert into faith_spell (id, patron, tier, name, note, cost, rest, on_what, radius, fx) values ('blessing_radiance', 'blessing', 5, 'Radiance', 'For 30 s, every creature within 8 tiles of the spot that is hunting somebody loses 2% of its health a second, 60% in all; it is never killed by it.', 60, 600, array['area']::text[], 8, '{"each":0.02,"secs":30}');
+insert into faith_spell (id, patron, tier, name, note, cost, rest, on_what, radius, fx) values ('blessing_land', 'blessing', 5, 'Bless the Land', 'Every tree within 10 tiles of the spot grows a stage: sapling to young, young to mature, mature to old and old to very old. One that would grow into dying, and one that is clipped, stays as it is.', 50, 3600, array['area']::text[], 10, '{}');
 insert into spell_on_def values ('self', 'yourself');
 insert into spell_on_def values ('player', 'another person');
 insert into spell_on_def values ('wildermon', 'a wildermon');
