@@ -46,8 +46,15 @@ export const TINCTURE_SKILLS = ['foraging', 'botanizing', 'alchemy', 'first_aid'
 export const TINCTURE_BONUS = 0.1;
 export const TINCTURE_SECONDS = world(20 * 60);
 
-/** The trades a dish can favour: the ones you work at, not the ones you are. */
-export const BOON_SKILLS: string[] = SKILL_DEFS.filter((d) => d.group !== 'Characteristics').map((d) => d.id);
+/**
+ * The trades a dish can favour: the ones you work at, not the ones you are --
+ * and only the ones there were when the island's table was dealt. A dish's
+ * trade is picked by its place in this list, so a trade added since would
+ * move every dish on every island to another; glassblowing is left out
+ * instead, and the table stays as everybody learned it.
+ */
+const DEALT_AFTER: ReadonlySet<string> = new Set(['glassblowing']);
+export const BOON_SKILLS: string[] = SKILL_DEFS.filter((d) => d.group !== 'Characteristics' && !DEALT_AFTER.has(d.id)).map((d) => d.id);
 
 /** Everything cooked, which is everything that can carry a knack. */
 export const BOON_FOODS: string[] = Object.keys(ITEM_DEFS).filter((id) => nourishing(ITEM_DEFS[id]));

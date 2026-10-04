@@ -748,19 +748,19 @@ function build(material: string): Covering | null {
         fascia: { kind: 'cornice', body: [226, 229, 234], edge: [170, 176, 186], deep: EAVE_DEEP * 1.15 },
       };
     case 'mosaic':
-      // Glazed scales in the mosaic's glass, mostly lapis, under a ridge of gold.
+      // Glazed scales in a sea-glass mint, a paler one and an aqua among them, under a ridge of gold.
       return {
         mips: [lapped({
-          rows: 14, unit: [36.57, 36.57], bond: 'half', gap: 1, ground: '#3c4778',
-          tones: [['#4a62a6', 5], ['#5770b2', 3], ['#5dbfbf', 2], ['#3f9a7b', 2], ['#e3b955', 1]],
-          line: '#2f3a66', lineW: 2, hi: '#c8d6f4', drip: 4, dripInk: 'rgba(40, 46, 80, 0.5)',
-          shape: 'scale', ragged: 0, skew: 0, detail: sheened('#f4f6fa', '#ccdcf2'),
+          rows: 14, unit: [36.57, 36.57], bond: 'half', gap: 1, ground: '#5f8f88',
+          tones: [['#9fd3c7', 5], ['#b2ddd1', 3], ['#8cc6bb', 3], ['#a9ddd9', 2], ['#c4e6dc', 2]],
+          line: '#4f7a73', lineW: 2, hi: '#ecf8f4', drip: 4, dripInk: 'rgba(52, 84, 78, 0.45)',
+          shape: 'scale', ragged: 0, skew: 0, detail: sheened('#f6fbf9', '#d2ece6'),
         }, 47)],
         deck: [paved({ w: 128, h: 128, running: false, joint: 3, bed: '#cfc7b6', tones: [['#ebe4d5', 3], ['#efe9dc', 2], ['#e0d8c8', 2]], hi: '#f8f4ec', line: '#a39a86', seed: 153 })],
-        shade: [52, 58, 96],
+        shade: [56, 74, 86],
         shadow: shadowOf(0.75),
-        cap: { kind: 'crest', body: '#e3b955', dark: '#8a6a2a', hi: '#f8e3a2', w: 5, joint: 0 },
-        valley: 'rgba(50, 58, 96, 0.6)',
+        cap: { kind: 'crest', body: '#e3c46a', dark: '#8a6a2a', hi: '#f8e7b0', w: 5, joint: 0 },
+        valley: 'rgba(60, 92, 86, 0.55)',
         fascia: { kind: 'cornice', body: [230, 222, 206], edge: [163, 154, 134], deep: EAVE_DEEP * 1.15 },
       };
     case 'ornate_silver':

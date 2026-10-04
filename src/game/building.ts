@@ -202,7 +202,7 @@ export const MATERIALS: MaterialDef[] = [
    * Stone brick faced in a mosaic of coloured glass: a gem ground into the
    * melt colours a batch of tiles, and a solid wall takes one batch.
    */
-  { id: 'mosaic', name: 'Mosaic', kind: 'stone', tool: 'trowel', skill: 'masonry', color: [92, 120, 178], trim: [232, 224, 206], floor: [176, 168, 196], courses: 4, bill: [['stone_brick', 24], ['mortar', 12], ['mosaic_tile', 20]], storeys: 10, heft: 3 },
+  { id: 'mosaic', name: 'Mosaic', kind: 'stone', tool: 'trowel', skill: 'masonry', color: [214, 196, 226], trim: [232, 224, 206], floor: [238, 228, 214], courses: 4, bill: [['stone_brick', 24], ['mortar', 12], ['mosaic_tile', 20]], storeys: 10, heft: 3 },
 ];
 export const MATERIAL_BY_ID = new Map(MATERIALS.map((m) => [m.id, m]));
 /**

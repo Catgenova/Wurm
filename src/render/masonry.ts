@@ -468,13 +468,11 @@ interface Stock {
    */
   slab?: boolean;
   /**
-   * On mosaic, a field of glass tesserae under the band where the slabs
-   * would be: a lapis ground strewn with gold stars, a roundel at a quarter
-   * and at three quarters of every section, a lozenge between them and on
-   * each seam, and a border of gold and a chequer of red and white along the
-   * top and the foot of it. Everything else -- the band, the plinth, the
-   * quoins, every architrave, hood and sill -- is the marble's, laid in an
-   * ivory stone, because a mosaic is set in a frame of cut stone.
+   * On mosaic, a panel of leaded glass under the band where the slabs would
+   * be: pastel panes of no set size between a marble pilaster at each end of
+   * the section. Everything else -- the band, the plinth, the quoins, every
+   * architrave, hood and sill -- is the marble's, laid in an ivory stone,
+   * because the glass is set in a frame of cut stone.
    */
   mosaic?: boolean;
 }
@@ -901,15 +899,14 @@ const MARBLE: Stock = ((P) => ({
 }))(MARBLE_PASTEL);
 
 /**
- * And mosaic: tiles of coloured glass, a gem ground into each melt, set in a
- * frame of ivory marble.
+ * And mosaic: tiles of coloured glass, a gem ground into each melt, leaded
+ * into panels and set in a frame of ivory marble.
  *
- * The field is the one picture on the island in the colours of the gems
- * themselves: a lapis ground, gold, pearl, ruby, emerald, turquoise,
- * amethyst and topaz, each glass at five values a few points apart, because
- * no two tesserae out of a melt are the same. The marble round it is warm
- * where the house marble is cool, so the gold carries into the frame; its
- * veins run to gold.
+ * The glass is the island's own pastels with the light behind them -- pink,
+ * peach, lemon, mint, aqua, sky, lilac, rose, sage and cream -- each pane
+ * streaked as a sheet of cathedral glass is, in leads of a cool dark grey.
+ * The marble round it is warm where the house marble is cool, and its veins
+ * run to gold.
  */
 const MOSAIC_PASTEL: Record<string, string> = {
   ...MARBLE_PASTEL,
@@ -924,9 +921,10 @@ const MOSAIC_PASTEL: Record<string, string> = {
   veinGold: '#e3cf9d', veinDark: '#8a7f6c',
   slabJoint: '#e1d9ca',
   stain: '#ddd8c9', stainShade: '#cfc9b9',
-  // The glass, and the grout it is set in.
-  tessBlue: '#4a62a6', tessGold: '#e3b955', tessPearl: '#f1ebdf', tessRuby: '#c4475b', tessEmerald: '#3f9a7b',
-  tessTurquoise: '#5dbfbf', tessAmethyst: '#8c66b6', tessTopaz: '#e69a4a', tessGrout: '#cdc5b3',
+  // The glass, pale as a sheet of it is with the light behind it, and the lead it is set in.
+  glassPink: '#f4bccb', glassPeach: '#f7d0ae', glassLemon: '#f5e6a2', glassMint: '#bfe5cf', glassAqua: '#a9ddd9',
+  glassSky: '#b0caee', glassLilac: '#cdb9e8', glassRose: '#eea9bb', glassSage: '#d3e4b3', glassCream: '#f6eedb',
+  lead: '#4c5058',
 };
 
 const MOSAIC: Stock = ((P) => ({
@@ -4082,154 +4080,106 @@ function paint(S: Stock): Masonry {
     return [];
   }
   /* ---- mosaic --------------------------------------------------------------- */
-  /** A tessera and its joint, in picture px: forty to a section across, so every repeat of the field lands on a joint. */
-  const TESS = TW / 40;
-  /** The glass of a mosaic, each colour at five values a few points apart: no two tesserae out of a melt are alike. */
-  const GLASS: Record<string, string[]> = !S.mosaic ? {} : Object.fromEntries(
-    ['tessBlue', 'tessGold', 'tessPearl', 'tessRuby', 'tessEmerald', 'tessTurquoise', 'tessAmethyst', 'tessTopaz']
-      .map((k) => [k, [-5, -2, 0, 2, 5].map((d) => lighten(PASTEL[k], d))]),
-  );
-  /** The two glasses a roundel is worked in, one pair to a variant: the first draw off its seed, so its face and every opening cut in it agree. */
-  const ROUNDELS: Array<[string, string]> = [
-    ['tessRuby', 'tessTurquoise'], ['tessEmerald', 'tessAmethyst'], ['tessAmethyst', 'tessTopaz'],
-    ['tessTurquoise', 'tessRuby'], ['tessTopaz', 'tessEmerald'],
-  ];
-  /** A number off three integers, the same every time it is asked: the lattice is the same in every section, so it meets itself at every seam. */
-  const hash3 = (a: number, b: number, c: number): number => {
-    let h = Math.imul(a | 0, 374761393) ^ Math.imul(b | 0, 668265263) ^ Math.imul(c | 0, 1274126177);
-    h = Math.imul(h ^ (h >>> 13), 1103515245);
-    return ((h ^ (h >>> 16)) >>> 0) / 4294967296;
-  };
+  /** The glass of a mosaic, in the order a pane is offered it. */
+  const GLASSES = ['glassPink', 'glassPeach', 'glassLemon', 'glassMint', 'glassAqua', 'glassSky', 'glassLilac', 'glassRose', 'glassSage', 'glassCream'];
+  /** How wide a marble pilaster stands at each end of a section, half of it in each of the two sections it parts. */
+  const PILASTER = 20;
   /**
-   * One tessera: a little square of glass a hand off true at every corner,
-   * at one of its glass's five values, and where the light comes from a
-   * glint along its top edge -- gold catches more of it than coloured glass,
-   * which is why a gold ground is laid at all.
+   * One pane of glass: its own colour, paler toward the light, and the
+   * streaks a sheet of cathedral glass has run through it -- a few lighter,
+   * one or two darker, never straight -- and a fleck or two where the light
+   * catches a seed in it.
    */
-  function tessera(g: Ctx, pts: Pt[], glass: string[], h: number, glint: number): void {
-    g.beginPath(); poly(g, pts);
-    g.fillStyle = glass[Math.min(glass.length - 1, Math.floor(h * glass.length))];
-    g.fill();
-    if (glint <= 0) return;
-    g.strokeStyle = `rgba(255, 252, 240, ${glint * (0.55 + 0.45 * h)})`;
-    g.lineWidth = 1.4;
-    g.beginPath(); g.moveTo(pts[0][0] + 0.6, pts[0][1] + 0.8); g.lineTo(pts[1][0] - 0.6, pts[1][1] + 0.8); g.stroke();
-    g.strokeStyle = 'rgba(40, 32, 62, 0.16)';
-    g.lineWidth = 1.2;
-    g.beginPath(); g.moveTo(pts[3][0] + 0.6, pts[3][1] - 0.6); g.lineTo(pts[2][0] - 0.6, pts[2][1] - 0.6); g.stroke();
-  }
-  /** The cell at column `c` and row `r` of a lattice laid from `y0` in rows `th` deep, inside its joint, each corner moved a hand's width off. */
-  function cellOf(c: number, r: number, y0: number, th: number): Pt[] {
-    const x = c * TESS, y = y0 + r * th, gap = 1.25;
-    const j = (k: number): number => (hash3(c, r, k) - 0.5) * 1.5;
-    return [
-      [x + gap + j(1), y + gap + j(2)], [x + TESS - gap + j(3), y + gap + j(4)],
-      [x + TESS - gap + j(5), y + th - gap + j(6)], [x + gap + j(7), y + th - gap + j(8)],
-    ];
+  function pane(g: Ctx, x: number, y: number, w: number, h: number, hex: string, R: Rand): void {
+    g.save();
+    g.beginPath(); g.rect(x, y, w, h); g.clip();
+    g.fillStyle = hex; g.fillRect(x, y, w, h);
+    const lit = g.createLinearGradient(x, y, x + w * 0.8, y + h);
+    lit.addColorStop(0, 'rgba(255, 253, 246, 0.38)');
+    lit.addColorStop(0.55, 'rgba(255, 253, 246, 0.06)');
+    lit.addColorStop(1, 'rgba(70, 58, 92, 0.1)');
+    g.fillStyle = lit; g.fillRect(x, y, w, h);
+    // A cloud or two of paler glass, where the sheet ran thin.
+    for (let i = 0; i < 1 + Math.floor((w * h) / 2500); i++) {
+      const cx = x + R() * w, cy = y + R() * h, rad = Math.max(w, h) * (0.3 + R() * 0.4);
+      const cloud = g.createRadialGradient(cx, cy, 0, cx, cy, rad);
+      cloud.addColorStop(0, 'rgba(255, 253, 246, 0.3)');
+      cloud.addColorStop(1, 'rgba(255, 253, 246, 0)');
+      g.fillStyle = cloud; g.fillRect(x, y, w, h);
+    }
+    const streaks = 1 + Math.round((w * h) / 1800) + Math.floor(R() * 2);
+    for (let i = 0; i < streaks; i++) {
+      const dark = R() < 0.3;
+      g.strokeStyle = dark ? hexA(lighten(hex, -12), 0.22) : `rgba(255, 253, 246, ${0.2 + R() * 0.2})`;
+      g.lineWidth = 2 + R() * 3.5;
+      const across = w >= h;
+      const a = across ? y + R() * h : x + R() * w;
+      const b = across ? y + R() * h : x + R() * w;
+      g.beginPath();
+      if (across) {
+        g.moveTo(x - 4, a);
+        g.bezierCurveTo(x + w * 0.33, a + (R() - 0.5) * h * 0.8, x + w * 0.66, b + (R() - 0.5) * h * 0.8, x + w + 4, b);
+      } else {
+        g.moveTo(a, y - 4);
+        g.bezierCurveTo(a + (R() - 0.5) * w * 0.8, y + h * 0.33, b + (R() - 0.5) * w * 0.8, y + h * 0.66, b, y + h + 4);
+      }
+      g.stroke();
+    }
+    for (let i = 0; i < 1 + Math.floor(R() * 3); i++) {
+      g.fillStyle = 'rgba(255, 255, 250, 0.55)';
+      g.beginPath(); g.arc(x + 3 + R() * (w - 6), y + 3 + R() * (h - 6), 0.8 + R() * 1.2, 0, Math.PI * 2); g.fill();
+    }
+    g.restore();
+    // The came's own light: a hair of it along the top of the pane, where the lead turns to the sky.
+    g.fillStyle = 'rgba(255, 255, 255, 0.28)';
+    g.fillRect(x, y, w, 1.2);
   }
   /**
-   * A field of mosaic from `y0` down to `y1`, across the whole section.
+   * A panel of leaded glass from `y0` down to `y1`, between a marble
+   * pilaster at each end of the section.
    *
-   * Laid on a lattice of forty columns, so the field repeats twice in a
-   * section and meets the next section's on a joint: the roundels stand at a
-   * quarter and at three quarters, a lozenge between them and one on each
-   * seam -- half of it at either end of the picture, drawn alike in every
-   * variant -- and the stars are on a lattice of their own that repeats in
-   * ten columns, so they come out the same either side of a seam as well. A
-   * roundel is the one thing laid round rather than on the lattice: ring
-   * after ring of tesserae following its edge, the way a mosaicist lays
-   * anything round, with a ring of the ground outside it so the lattice
-   * meets a circle and not a staircase. Only the roundels' colours are the
-   * variant's own.
+   * Panes of no set size, packed on a lattice the way a glazier cuts them
+   * from what the sheets give: a cell is taken by a pane one to three wide
+   * and one to four tall, whatever fits, so the leads run long in places and
+   * break short in others. No pane takes the colour of the one beside it or
+   * over it. Every section is a panel of its own, so nothing in the glass
+   * comes near a seam; the pilaster is what two sections share.
    */
-  function mosaicField(g: Ctx, y0: number, y1: number, R: Rand): void {
-    const pair = ROUNDELS[Math.floor(R() * ROUNDELS.length) % ROUNDELS.length];
-    const H = y1 - y0, rows = Math.max(3, Math.round(H / TESS)), th = H / rows, cols = Math.round(TW / TESS);
-    const border = rows >= 14 ? 2 : 1;
-    const inTop = y0 + border * th, inBot = y1 - border * th, cy = (inTop + inBot) / 2;
-    const rad = Math.min(TESS * 5, (inBot - inTop) / 2 - TESS * 0.7);
-    const round = rad >= TESS * 2.4;
-    const centres = [TW / 4, (TW * 3) / 4];
-    const lozA = TESS * 3.1, lozB = Math.max(TESS * 1.4, (inBot - inTop) / 2 - TESS * 0.9);
-    const loz = (x: number, y: number): number =>
-      Math.min(Math.abs(x), Math.abs(x - TW / 2), Math.abs(x - TW)) / lozA + Math.abs(y - cy) / lozB;
-    const nearRoundel = (x: number, y: number, by: number): boolean => round && centres.some((cx) => Math.hypot(x - cx, y - cy) < rad + by);
-    const at = (c: number, r: number): Pt => [(c + 0.5) * TESS, y0 + (r + 0.5) * th];
-    // A star is a cross of five gold tesserae, on a staggered lattice, and only where it stands clear of everything else.
-    const star = (c: number, r: number): boolean => {
-      const ri = r - border;
-      if (ri < 2 || r > rows - border - 2 || ri % 4 !== 2) return false;
-      if ((((c + (Math.floor(ri / 4) % 2) * 5) % 10) + 10) % 10 !== 2) return false;
-      const [x, y] = at(c, r);
-      return !nearRoundel(x, y, TESS * 2.2) && loz(x, y) > 1.55;
-    };
-    const starAt = (c: number, r: number): boolean =>
-      star(c, r) || star(c - 1, r) || star(c + 1, r) || star(c, r - 1) || star(c, r + 1);
-    g.fillStyle = PASTEL.tessGrout;
-    g.fillRect(0, y0, TW, H);
+  function glassField(g: Ctx, y0: number, y1: number, R: Rand): void {
+    const F = 6, x0 = PILASTER / 2 + 4, x1 = TW - PILASTER / 2 - 4, gy0 = y0 + F, gy1 = y1 - F;
+    // The fillet of marble the panel is set in, and the lead under every pane.
+    g.fillStyle = TONES.dress.lit; g.fillRect(0, y0, TW, y1 - y0);
+    g.fillStyle = PASTEL.lead; g.fillRect(x0, gy0, x1 - x0, gy1 - gy0);
+    const cols = 14, rows = Math.max(2, Math.round((gy1 - gy0) / 34));
+    const cw = (x1 - x0) / cols, rh = (gy1 - gy0) / rows, lead = 1.8;
+    const taken: number[][] = Array.from({ length: rows }, () => Array(cols).fill(-1));
     for (let r = 0; r < rows; r++) {
       for (let c = 0; c < cols; c++) {
-        const [x, y] = at(c, r);
-        let key: string;
-        if (r < border || r >= rows - border) key = r === 0 || r === rows - 1 ? 'tessGold' : c % 2 ? 'tessPearl' : 'tessRuby';
-        else {
-          if (nearRoundel(x, y, TESS * 0.95)) continue;
-          const m = loz(x, y);
-          key = m <= 0.34 ? 'tessRuby' : m <= 0.8 ? 'tessEmerald' : m <= 1 ? 'tessGold' : starAt(c, r) ? 'tessGold' : 'tessBlue';
-        }
-        tessera(g, cellOf(c, r, y0, th), GLASS[key], hash3(c, r, 9), key === 'tessGold' ? 0.5 : 0.2);
+        if (taken[r][c] >= 0) continue;
+        let w = 1 + Math.floor(R() * 3), h = 1 + Math.floor(R() * 4);
+        while (w > 1 && taken[r].slice(c, c + w).some((t, i) => t >= 0 || c + i >= cols)) w--;
+        if (c + w > cols) w = cols - c;
+        h = Math.min(h, rows - r);
+        while (h > 1 && taken.slice(r, r + h).some((row) => row.slice(c, c + w).some((t) => t >= 0))) h--;
+        const near = new Set<number>();
+        for (let i = 0; i < w; i++) if (r > 0) near.add(taken[r - 1][c + i]);
+        for (let j = 0; j < h; j++) if (c > 0) near.add(taken[r + j][c - 1]);
+        let k = Math.floor(R() * GLASSES.length);
+        for (let t = 0; t < GLASSES.length && near.has(k); t++) k = (k + 1) % GLASSES.length;
+        for (let j = 0; j < h; j++) for (let i = 0; i < w; i++) taken[r + j][c + i] = k;
+        pane(g, x0 + c * cw + lead, gy0 + r * rh + lead, w * cw - lead * 2, h * rh - lead * 2, PASTEL[GLASSES[k]], R);
       }
     }
-    if (!round) return;
-    for (const cx of centres) roundel(g, cx, cy, rad, pair, hash3(Math.round(cx), Math.round(rad), 3));
+    // The pilasters: a half at each end, cut and veined as the band is, so two sections meet on one pier of marble.
+    stone(g, 0, y0, PILASTER / 2 + 4, y1 - y0, R, 'dress', 'unit', 0, 1.2);
+    stone(g, TW - PILASTER / 2 - 4, y0, PILASTER / 2 + 4, y1 - y0, R, 'dress', 'unit', 0, 1.2);
   }
-  /**
-   * A roundel of `rad`, laid in rings from the outside in: a ring of the
-   * ground, gold, pearl, the variant's first glass, then its second worked
-   * in eight petals against pearl, and gold again; a boss of gold at the
-   * middle. A small one keeps the gold and the first glass.
-   */
-  function roundel(g: Ctx, cx: number, cy: number, rad: number, pair: [string, string], seed: number): void {
-    const big = rad >= TESS * 4;
-    const ring = (k: number, a: number): string => {
-      if (k < 0) return 'tessBlue';
-      if (!big) return k === 0 ? 'tessGold' : pair[0];
-      if (k === 0) return 'tessGold';
-      if (k === 1) return 'tessPearl';
-      if (k === 2) return pair[0];
-      if (k === 3) return Math.floor((a / (Math.PI * 2)) * 8 + 0.5) % 2 ? 'tessPearl' : pair[1];
-      return k % 2 ? 'tessGold' : pair[0];
-    };
-    let inner = rad;
-    for (let k = -1; ; k++) {
-      const rr = rad - (k + 0.5) * TESS;
-      if (rr < TESS * 0.8) break;
-      inner = rr - TESS / 2;
-      const n = Math.max(6, Math.round((Math.PI * 2 * rr) / TESS)), da = (Math.PI * 2) / n, off = (k & 1) * da / 2;
-      const r0 = rr - TESS * 0.4, r1 = rr + TESS * 0.4;
-      for (let i = 0; i < n; i++) {
-        const a = off + i * da, a0 = a - da * 0.42, a1 = a + da * 0.42;
-        // Laid with the top edge outermost on the upper half and innermost on the lower, so the glint is always the edge toward the light.
-        const outer: Pt[] = [[cx + Math.cos(a0) * r1, cy + Math.sin(a0) * r1], [cx + Math.cos(a1) * r1, cy + Math.sin(a1) * r1]];
-        const inside: Pt[] = [[cx + Math.cos(a1) * r0, cy + Math.sin(a1) * r0], [cx + Math.cos(a0) * r0, cy + Math.sin(a0) * r0]];
-        const pts: Pt[] = Math.sin(a) < 0 ? [outer[0], outer[1], inside[0], inside[1]] : [inside[1], inside[0], outer[1], outer[0]];
-        const key = ring(k, ((a % (Math.PI * 2)) + Math.PI * 2) % (Math.PI * 2));
-        tessera(g, pts, GLASS[key], hash3(i, k + 2, seed * 1e6), key === 'tessGold' ? 0.5 : 0.2);
-      }
-    }
-    // The boss: one piece of gold cut round, and its own glint.
-    const b = Math.max(TESS * 0.55, inner - 1.2);
-    g.beginPath(); g.arc(cx, cy, b, 0, Math.PI * 2);
-    g.fillStyle = GLASS.tessGold[3]; g.fill();
-    g.beginPath(); g.arc(cx - b * 0.3, cy - b * 0.3, b * 0.38, 0, Math.PI * 2);
-    g.fillStyle = 'rgba(255, 250, 230, 0.55)'; g.fill();
-  }
-  /** A storey of a mosaic wall: the marble's band over a field of glass. */
+  /** A storey of a mosaic wall: the marble's band over a panel of leaded glass. */
   function paintMosaic(g: Ctx, R: Rand): Block[] {
     g.fillStyle = PASTEL.joint;
     g.fillRect(0, 0, TW, TH);
     marbleBand(g, R);
-    mosaicField(g, BAND, TH, R);
+    glassField(g, BAND, TH, R);
     oversail(g, 0, BAND, 12);
     return [];
   }
@@ -6391,7 +6341,7 @@ function paint(S: Stock): Masonry {
    * unit thick, and there is nothing for a header to bond to.
    */
   function lowBond(g: Ctx, R: Rand, fh: number, rows: number): Block[] {
-    if (S.mosaic) { mosaicField(g, COPE, fh, R); return []; }
+    if (S.mosaic) { glassField(g, COPE, fh, R); return []; }
     const top = COPE;
     const own: Block[] = [];
     const zone = firing(R);
