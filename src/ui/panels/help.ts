@@ -91,14 +91,14 @@ import { CHAIN_MOST, FALL_DROP, FILL_RATE, POND_MOST, POOL_DEPTH, POOL_LIP, RUN_
 import { CLEAR_OF_BUILDINGS, CONCRETE_PER_STEP, LIFT_PER_MASONRY, POOL_FILL } from '../../game/foundations';
 import { AWARENESS, awarenessReach, BASE_SIGHT, LIGHT_GIVES_BACK, NIGHT_LOSS, TREE_OPACITY } from '../../game/vision';
 import { NO_GO, pointAt, windWord, windWorth } from '../../game/wind';
-import { article, capital, finePercent, listed, NumberWord, numberWord, percent, share, spanWords, times } from '../../game/words';
+import { article, capital, finePercent, listed, listedOr, NumberWord, numberWord, percent, share, spanWords, times } from '../../game/words';
 import { BACK_PACE, BACK_SLACK, CIRCLE_ARC, CIRCLE_R, COWARD_AT, COWARD_DRAG, DRAW_WALK, FALL_BACK, FLEE_SECS, GUARD_RANGE, HUNTER_TURN, KEEP_OFF, MONSTER_TURN, PACK_CALL, PACK_MOST, PACK_RANGE, THROW_HIT, THROW_REACH } from '../../game/fight';
 import { FIGHT_QUIET, ARM_SLOW, ARM_SLOW_MOST, armourSays, BLINDSIDE, blowSays, CROWD_BLOCK, FLANK_HIT, HEAVY_EVERY, HEAVY_HIT, HIDE_NAMES, HIDES, hideSays, LEG_SLOW_MOST, sideOf, WIND_UP, BLOW_DEFENSIVE, BLOW_HUNTER, BLOW_PREY, FIGHT_BACK_STILL, FIGHT_GIVE_UP, FIGHT_LEASH, FIGHT_STANCE_NAMES, FIGHT_STANCES, FIST, FOLLOW_RANGE, stanceSays, SWING_WIND, SWING_WIND_KG, TARGET_RANGE, TIRED_AT, TIRED_SLOW } from '../../game/fight';
 import {
   ARROW_IDS, BODKIN_HIDE, BURN_WEAR, CONSIDER_EASY, CONSIDER_HARD, CRIT_BASE, CRIT_HIT, CRIT_KNIFE, CRIT_PER_SKILL, DODGE_FROM, DODGE_PER_CONTROL, DODGE_PER_KG, dodgeChance, KNIFE_BLEED,
   KNIFE_BLEED_SECS, STAGGER_MAUL, THREAT_HOLD, VENOM_DRAIN, VENOM_SECS,
 } from '../../game/fight';
-import { ALIGNMENT_NAMES, BAR_SLOTS, FAITH_TIER_AT, PATRON_AT, PATRONS, SCHOOL_NAMES, slotsFor, SPELLS_PER_TIER } from '../../game/patrons';
+import { ALIGNMENT_NAMES, BAR_SLOTS, FAITH_TIER_AT, PATRON_AT, PATRONS, SCHOOL_NAMES, slotsFor, SPELL_ON_WORDS, SPELL_ONS, SPELL_REACH, SPELLS_PER_TIER } from '../../game/patrons';
 import { BIND_BY_ID, keyName } from '../../game/keybinds';
 import {
   CLOSE_BARE, CLOSE_CLOTH, CLOSE_PACE, CLOSE_PER_SKILL, CLOSE_RIGHT, CLOSE_WRONG, FESTER_CLOTH, FESTER_WRONG, WOUND_KINDS,
@@ -2487,9 +2487,15 @@ export function helpText(): string {
     seconds of its own after each call.</p>
     <p>The <b>spell bar</b> along the bottom has ${numberWord(BAR_SLOTS)} slots: ${listed((['class', 'faith', 'path'] as const).map((s) => `${numberWord(slotsFor(s))} for ${SCHOOL_NAMES[s].toLowerCase()} spells`))}.
     A spell you take goes in the first empty faith slot; right-click a slot to put another of yours there or to empty it.
-    Click a slot, or hold <b>Shift</b> and press its number, to call what is in it; a spell called on a creature goes at
-    what you are fighting or have marked. A dark shade over a slot is the rest that spell has left. On an island only:
-    playing by yourself in the browser there is nobody to keep a patron.</p>
+    A dark shade over a slot is the rest that spell has left. On an island only: playing by yourself in the browser there
+    is nobody to keep a patron.</p>
+    <p>Every spell says what it can be cast on: ${listedOr(SPELL_ONS.map((o) => `<b>${SPELL_ON_WORDS[o]}</b>`))}. A
+    wildermon is any creature that is not after you; an enemy is any wild creature, so one minding its own business is both.
+    A thing is anything in your pack or set down in the world, and a spell on the ground reaches everything within its own
+    number of tiles of the spot. Anything but you and what you carry has to be within <b>${SPELL_REACH}</b> tiles.
+    Click a slot, or hold <b>Shift</b> and press its number, and the spell goes at what you are fighting or have marked
+    if it takes a creature, or else on you or round where you stand if it takes those; otherwise it asks what at.
+    Right-click a person, a creature, a thing or the ground to cast any spell on your bar that takes it.</p>
     <h3>The things that are not wildermon</h3>
     <p>Most of what walks this island can be tamed. ${NumberWord(MONSTER_SORTS.length)} things cannot. A <b>goblin</b> is knee-high and
     entirely malice; an <b>orc</b> is a head taller than you and carries sharpened iron; an <b>ogre</b>

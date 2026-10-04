@@ -1,17 +1,50 @@
+import { PLAYER_ATTACKER } from '../game/creatures';
 import type { Game } from '../game/game';
-import { FAITH_SPELL_BY_ID, PATRON_AT, SCHOOL_NAMES, SPELL_BAR, type SpellSchool } from '../game/patrons';
+import {
+  FAITH_SPELL_BY_ID, PATRON_AT, SCHOOL_NAMES, SPELL_BAR, SPELL_REACH, spellOnText, type FaithSpellDef, type SpellSchool,
+} from '../game/patrons';
 import type { MenuItem } from './contextmenu';
 import type { FaithBook } from './faithbook';
+
+/** What a spell is sent at (`rpc_cast_spell`'s `p_target`); the island decides what kind of thing it counts as. */
+export type SpellAim =
+  | { kind: 'self' }
+  | { kind: 'player'; uid: string }
+  | { kind: 'creature'; id: number }
+  | { kind: 'item'; id: number }
+  | { kind: 'placed'; id: number }
+  | { kind: 'area'; x?: number; y?: number };
+
+/** The most creatures a "Cast on" list names, nearest first. */
+const AIM_MOST = 10;
+
+/** Whether a spell takes this sort of thing at all, before the island is asked about this one. */
+const takes = (def: FaithSpellDef, aim: SpellAim): boolean => {
+  switch (aim.kind) {
+    case 'self': return def.on.includes('self');
+    case 'player': return def.on.includes('player');
+    case 'creature': return def.on.includes('enemy') || def.on.includes('wildermon');
+    case 'item':
+    case 'placed': return def.on.includes('object');
+    case 'area': return def.on.includes('area');
+  }
+};
 
 /**
  * The spell bar: six slots along the bottom, three for your trade's spells,
  * two for your patron's and one for your path's (`SPELL_BAR`).
  *
- * A click, or Shift and the slot's number, calls what is in it; a right-click
- * says what can go in it. What is in each slot is the island's (`faith_said`
- * `.bar`), as is whether a call is refused, and the spell's own sentence for
- * what it did comes back through the log. A slot resting shows how much of
- * its rest is left as a shade drawn down across it.
+ * A click, or Shift and the slot's number, calls what is in it: at what you
+ * are fighting or have marked when the spell takes a creature, on yourself or
+ * round where you stand when it takes those, and otherwise the bar asks what
+ * at. A right-click says what can go in the slot and what in reach the spell
+ * can be cast on, and right-clicking a person, a creature, a thing or the
+ * ground offers every spell on the bar that takes it (`entriesFor`).
+ *
+ * What is in each slot is the island's (`faith_said` `.bar`), as is whether a
+ * call is refused, and the spell's own sentence for what it did comes back
+ * through the log. A slot resting shows how much of its rest is left as a
+ * shade drawn down across it.
  *
  * Only on an island: playing by yourself there is nobody to keep a patron,
  * so there is nothing to put here.
@@ -74,7 +107,7 @@ export class SpellBar {
     this.draw();
   }
 
-  /** Call the spell in a slot, at what you are fighting or have marked when it wants a creature. */
+  /** Call the spell in a slot at whatever it would go at by itself, or ask what at when there is nothing. */
   async cast(i: number): Promise<void> {
     if (!this.book.island) return;
     const id = this.book.said?.bar[i] ?? null;
@@ -83,18 +116,84 @@ export class SpellBar {
       return;
     }
     const def = FAITH_SPELL_BY_ID.get(id);
-    const target: Record<string, unknown> = {};
-    if (def?.on === 'creature') {
-      const c = this.game.fightTarget ?? this.game.marked;
-      if (c === null) {
-        this.game.logMsg(`${def.name} is called on what you are fighting or have marked: mark something first (Tab).`, 'error');
-        return;
-      }
-      target.kind = 'creature';
-      target.id = c;
+    const aim = def ? this.aimOf(def) : { kind: 'self' as const };
+    if (aim) {
+      await this.castAt(i, aim);
+      return;
     }
-    const why = await this.book.cast(i, target);
+    if (!def) return;
+    const r = this.slots[i].btn.getBoundingClientRect();
+    this.menu(r.left, r.top, `Cast ${def.name} on`, this.aimItems(i, def));
+  }
+
+  /** Call the spell in a slot at this. */
+  async castAt(i: number, aim: SpellAim): Promise<void> {
+    const why = await this.book.cast(i, aim);
     if (why) this.game.logMsg(why, 'error');
+  }
+
+  /** "Cast ..." for every spell on the bar that takes this, for the menu of whatever it is. */
+  entriesFor(aim: SpellAim): MenuItem[] {
+    if (!this.book.island) return [];
+    const bar = this.book.said?.bar ?? [];
+    const out: MenuItem[] = [];
+    bar.forEach((id, i) => {
+      const def = id ? FAITH_SPELL_BY_ID.get(id) : undefined;
+      if (!def || !takes(def, aim)) return;
+      const left = this.book.restLeft(def.id);
+      out.push({
+        label: `Cast ${def.name}`,
+        note: left > 0 ? `${def.cost} favour · ready in ${Math.ceil(left)} s` : `${def.cost} favour`,
+        onSelect: () => void this.castAt(i, aim),
+      });
+    });
+    return out;
+  }
+
+  /** What a spell goes at by itself, in the order its kinds are written: nothing, when it has to be asked. */
+  private aimOf(def: FaithSpellDef): SpellAim | null {
+    const g = this.game;
+    const id = g.fightTarget ?? g.marked;
+    const c = id !== null ? g.creatures.get(id) : undefined;
+    for (const on of def.on) {
+      if ((on === 'enemy' || on === 'wildermon') && c) return { kind: 'creature', id: c.id };
+      if (on === 'self') return { kind: 'self' };
+      if (on === 'area') return { kind: 'area' };
+    }
+    return null;
+  }
+
+  /** Everything within reach a spell can be cast on, nearest first, as menu rows that cast it. */
+  private aimItems(i: number, def: FaithSpellDef): MenuItem[] {
+    const g = this.game;
+    const p = g.player;
+    const far = (x: number, y: number): number => Math.hypot(x - p.x, y - p.y);
+    const tiles = (d: number): string => `${Math.round(d)} tiles off`;
+    const items: MenuItem[] = [];
+    const at = (aim: SpellAim) => () => void this.castAt(i, aim);
+    if (def.on.includes('self')) items.push({ label: 'Yourself', onSelect: at({ kind: 'self' }) });
+    if (def.on.includes('area')) {
+      items.push({ label: 'Where you stand', note: `everything within ${def.radius ?? 0} tiles`, onSelect: at({ kind: 'area' }) });
+    }
+    if (def.on.includes('player')) {
+      for (const peer of g.roster.list()) {
+        const d = far(peer.x, peer.y);
+        if (peer.uid && d <= SPELL_REACH) items.push({ label: peer.name, note: tiles(d), onSelect: at({ kind: 'player', uid: peer.uid }) });
+      }
+    }
+    if (def.on.includes('enemy') || def.on.includes('wildermon')) {
+      const near = [...g.creatures.list.values()]
+        .filter((c) => c.health > 0 && far(c.x, c.y) <= SPELL_REACH
+          && ((def.on.includes('enemy') && c.mode === 'wild') || (def.on.includes('wildermon') && c.enemy !== PLAYER_ATTACKER)))
+        .sort((a, b) => far(a.x, a.y) - far(b.x, b.y))
+        .slice(0, AIM_MOST);
+      for (const c of near) {
+        items.push({ label: `${c.name} (${g.creatures.species(c).name.toLowerCase()})`, note: tiles(far(c.x, c.y)), onSelect: at({ kind: 'creature', id: c.id }) });
+      }
+    }
+    if (def.on.includes('object')) items.push({ label: 'A thing: right-click it in your pack, or where it stands', disabled: true });
+    if (!items.length) items.push({ label: `Nothing it can be cast on is within ${SPELL_REACH} tiles`, disabled: true });
+    return items;
   }
 
   /** The shade on each resting slot, a frame at a time. */
@@ -124,7 +223,7 @@ export class SpellBar {
       name.textContent = def?.name ?? id ?? '—';
       btn.classList.toggle('spell-empty', !id);
       btn.title = def
-        ? `${def.name}: ${def.note} ${def.cost} favour, rests ${def.rest} s. Shift+${i + 1}; right-click to change.`
+        ? `${def.name}: ${def.note} Cast on ${spellOnText(def)}. ${def.cost} favour, rests ${def.rest} s. Shift+${i + 1}; right-click to change.`
         : `${SCHOOL_NAMES[school]} slot. ${this.emptyWhy(i)}`;
     });
   }
@@ -138,11 +237,13 @@ export class SpellBar {
     return 'Right-click to put one of your patron’s spells here.';
   }
 
-  /** What can go in a slot: the spells of its school you have, and nothing. */
+  /** What the spell in a slot can be cast on, then what can go in it: the spells of its school you have, and nothing. */
   private choose(i: number, x: number, y: number): void {
     const s = this.book.said;
     const school = SPELL_BAR[i];
     const items: MenuItem[] = [];
+    const now = s?.bar[i] ? FAITH_SPELL_BY_ID.get(s.bar[i] as string) : undefined;
+    if (now) items.push({ label: `Cast ${now.name} on…`, children: this.aimItems(i, now) });
     if (school === 'faith' && s) {
       for (const id of s.taken) {
         const def = FAITH_SPELL_BY_ID.get(id);

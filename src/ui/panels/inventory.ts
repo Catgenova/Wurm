@@ -38,6 +38,8 @@ export class InventoryPanel {
     private readonly openBag?: (uid: number) => void,
     /** Opens a treasure map's picture. */
     private readonly readMap?: (uid: number) => void,
+    /** The spells on the bar that can be cast on a thing, as rows for its menu. */
+    private readonly spellsFor?: (uid: number) => MenuItem[],
   ) {
     this.search = document.createElement('input');
     this.search.type = 'search';
@@ -277,6 +279,7 @@ export class InventoryPanel {
       });
     }
     this.win.focus();
+    entries.push(...(this.spellsFor?.(item.uid) ?? []));
     this.menu.show(x, y, itemName(item), entries);
   }
 }

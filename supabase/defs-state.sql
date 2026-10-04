@@ -258,7 +258,10 @@ create table if not exists faith_tier (
 );
 create table if not exists faith_spell (
   id text primary key, patron text not null, tier int not null, name text not null, note text not null,
-  cost double precision not null, rest double precision not null, on_what text not null
+  cost double precision not null, rest double precision not null, on_what text[] not null, radius double precision
+);
+create table if not exists spell_on_def (
+  id text primary key, word text not null
 );
 create table if not exists spell_slot (
   slot int primary key, school text not null
@@ -1830,6 +1833,7 @@ delete from perk_tier;
 delete from patron_def;
 delete from faith_tier;
 delete from faith_spell;
+delete from spell_on_def;
 delete from spell_slot;
 delete from pan_ore;
 delete from rite_def;
@@ -4185,6 +4189,7 @@ create or replace function flee_pace() returns double precision language sql imm
 create or replace function flee_secs() returns double precision language sql immutable as $fn$ select 6::double precision $fn$;
 create or replace function patron_at() returns double precision language sql immutable as $fn$ select 20::double precision $fn$;
 create or replace function spells_per_tier() returns double precision language sql immutable as $fn$ select 3::double precision $fn$;
+create or replace function spell_reach() returns double precision language sql immutable as $fn$ select 12::double precision $fn$;
 create or replace function dodge_from() returns double precision language sql immutable as $fn$ select 20::double precision $fn$;
 create or replace function dodge_per_control() returns double precision language sql immutable as $fn$ select 0.0025::double precision $fn$;
 create or replace function dodge_per_kg() returns double precision language sql immutable as $fn$ select 0.0025::double precision $fn$;
@@ -5352,14 +5357,16 @@ insert into patron_def values ('blessing', 'Blessing', 'good');
 insert into patron_def values ('justice', 'Justice', 'neutral');
 insert into patron_def values ('chaos', 'Chaos', 'evil');
 insert into faith_tier values (1, 20);
-insert into faith_tier values (2, 30);
-insert into faith_tier values (3, 40);
-insert into faith_tier values (4, 50);
-insert into faith_tier values (5, 60);
-insert into faith_tier values (6, 70);
-insert into faith_tier values (7, 80);
-insert into faith_tier values (8, 90);
-insert into faith_tier values (9, 99);
+insert into faith_tier values (2, 40);
+insert into faith_tier values (3, 60);
+insert into faith_tier values (4, 80);
+insert into faith_tier values (5, 99);
+insert into spell_on_def values ('self', 'yourself');
+insert into spell_on_def values ('player', 'another person');
+insert into spell_on_def values ('wildermon', 'a wildermon');
+insert into spell_on_def values ('enemy', 'an enemy');
+insert into spell_on_def values ('object', 'a thing');
+insert into spell_on_def values ('area', 'the ground');
 insert into spell_slot values (0, 'class');
 insert into spell_slot values (1, 'class');
 insert into spell_slot values (2, 'class');

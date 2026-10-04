@@ -16,12 +16,16 @@
  *   * a call off the bar costs nothing when nothing is written behind the
  *     spell, is refused while the favour is short, costs its favour and rests
  *     when it works, and is refused while it rests;
+ *   * what a spell is pointed at is found and counted as yourself, another
+ *     person, a wildermon, an enemy, a thing or the ground, or refused -- not
+ *     there, not a kind the spell takes, or too far off -- in the same words on
+ *     both sides (`spell_target`);
  *   * the skill is called Faith, and no door is open but the rpc ones.
  */
 import { execFileSync } from 'node:child_process';
 import {
-  BAR_SLOTS, FAITH_TIER_AT, faithSpellRefusal, PATRON_AT, patronRefusal, PATRONS, slotRefusal, SPELL_BAR, SPELLS_PER_TIER,
-  type FaithSpellDef,
+  BAR_SLOTS, FAITH_TIER_AT, faithSpellRefusal, PATRON_AT, patronRefusal, PATRONS, slotRefusal, SPELL_BAR, SPELL_ON_WORDS, SPELL_ONS,
+  SPELL_REACH, SPELLS_PER_TIER, spellTargetRefusal, type FaithSpellDef, type PointedAt,
 } from '../../src/game/patrons';
 import { SKILL_BY_ID } from '../../src/game/skills';
 
@@ -45,13 +49,20 @@ const check = (what: string, passed: boolean, detail = ''): void => {
 };
 
 /* The suite's own spells: two at the Blessing's first tier, one at its second, and one of Chaos's. */
-const SPELL_A: FaithSpellDef = { id: 'blessing_test_a', patron: 'blessing', tier: 1, name: 'Test A', note: 'Nothing.', cost: 5, rest: 30, on: 'self' };
+const SPELL_A: FaithSpellDef = { id: 'blessing_test_a', patron: 'blessing', tier: 1, name: 'Test A', note: 'Nothing.', cost: 5, rest: 30, on: ['self'] };
 const SPELL_B: FaithSpellDef = { ...SPELL_A, id: 'blessing_test_b', name: 'Test B' };
-const SPELL_C: FaithSpellDef = { ...SPELL_A, id: 'blessing_test_c', name: 'Test C', tier: 2, on: 'creature' };
+const SPELL_C: FaithSpellDef = { ...SPELL_A, id: 'blessing_test_c', name: 'Test C', tier: 2, on: ['enemy'] };
 const SPELL_D: FaithSpellDef = { ...SPELL_A, id: 'chaos_test_d', name: 'Test D', patron: 'chaos' };
-const TEST_SPELLS = [SPELL_A, SPELL_B, SPELL_C, SPELL_D];
+/* And four only ever pointed at things, for what they are cast on: never taken, so at the last tier. */
+const SPELL_E: FaithSpellDef = { ...SPELL_A, id: 'blessing_test_e', name: 'Test E', tier: 5, on: ['self', 'player'] };
+const SPELL_F: FaithSpellDef = { ...SPELL_E, id: 'blessing_test_f', name: 'Test F', on: ['enemy'] };
+const SPELL_G: FaithSpellDef = { ...SPELL_E, id: 'blessing_test_g', name: 'Test G', on: ['wildermon'] };
+const SPELL_H: FaithSpellDef = { ...SPELL_E, id: 'blessing_test_h', name: 'Test H', on: ['object', 'area'], radius: 3 };
+const TEST_SPELLS = [SPELL_A, SPELL_B, SPELL_C, SPELL_D, SPELL_E, SPELL_F, SPELL_G, SPELL_H];
 const row = (s: FaithSpellDef): string =>
-  `('${s.id}', '${s.patron}', ${s.tier}, '${s.name}', '${s.note}', ${s.cost}, ${s.rest}, '${s.on}')`;
+  `('${s.id}', '${s.patron}', ${s.tier}, '${s.name}', '${s.note}', ${s.cost}, ${s.rest}, '{${s.on.join(',')}}', ${s.radius ?? 'null'})`;
+/* Where the suite stands the two of them, and how far off it puts what is too far. */
+const FAR = SPELL_REACH + 8;
 
 /* ---- The island's half ------------------------------------------------- */
 
@@ -60,15 +71,19 @@ begin;
 create temp table said (k text, v text);
 insert into faith_spell values ${TEST_SPELLS.map(row).join(', ')};
 do $b$
-declare w record; r jsonb;
+declare w record; r jsonb; o uuid; v_px double precision; v_py double precision; a int; b int; v_item bigint; v_theirs bigint; v_placed bigint;
 begin
-  insert into said values ('NUMS', patron_at() || '|' || spells_per_tier());
+  insert into said values ('NUMS', patron_at() || '|' || spells_per_tier() || '|' || spell_reach());
+  insert into said select 'ONS', string_agg(id || ':' || word, ',' order by id) from spell_on_def;
   insert into said select 'TIERS', string_agg(at::text, ',' order by tier) from faith_tier;
   insert into said select 'PATRONS', string_agg(id || ':' || name || ':' || alignment, ',' order by id) from patron_def;
   insert into said select 'SLOTS', string_agg(school, ',' order by slot) from spell_slot;
   insert into said select 'SKILL', name from skill_def where id = faith_skill();
 
-  select p.world_id, p.uid into w from player p order by p.world_id, p.uid limit 1;
+  -- Somebody on an island with somebody else on it, for a spell cast on another person.
+  select p.world_id, p.uid, wd.spawn_x, wd.spawn_y into w from player p join world wd on wd.id = p.world_id
+   where (select count(*) from player q where q.world_id = p.world_id) >= 2
+   order by wd.size desc, p.world_id, p.uid limit 1;
   update player set patron = null, spell_bar = '[]'::jsonb, used_at = '{}'::jsonb where world_id = w.world_id and uid = w.uid;
   delete from player_spell where world_id = w.world_id and uid = w.uid;
   delete from event where uid = w.uid;
@@ -125,6 +140,47 @@ begin
     || (r->>'favour') || '|' || coalesce(r->'rest'->>'blessing_test_a', 'none') || '|'
     || (select count(*) from event where uid = w.uid and text = 'Test A answers.'));
   insert into said values ('RESTING', rpc_cast_spell(w.world_id, 3, '{}'::jsonb)->>'why');
+
+  -- What a spell is cast on: yourself, somebody else, creatures, things and the ground.
+  select uid into o from player where world_id = w.world_id and uid <> w.uid order by uid limit 1;
+  v_px := w.spawn_x + 0.5; v_py := w.spawn_y + 0.5;
+  update player set x = v_px, y = v_py, away = false where world_id = w.world_id and uid = w.uid;
+  update player set x = v_px + 3, y = v_py, away = false where world_id = w.world_id and uid = o;
+  insert into said values ('T:SELF', spell_target(w.world_id, w.uid, 'blessing_test_e', '{}'::jsonb)->>'kind');
+  insert into said values ('T:YOU', spell_target(w.world_id, w.uid, 'blessing_test_e', jsonb_build_object('kind', 'player', 'uid', w.uid))->>'kind');
+  r := spell_target(w.world_id, w.uid, 'blessing_test_e', jsonb_build_object('kind', 'player', 'uid', o));
+  insert into said values ('T:OTHER', (r->>'kind') || '|' || ((r->>'uid') = o::text));
+  update player set away = true where world_id = w.world_id and uid = o;
+  insert into said values ('T:AWAY', spell_target(w.world_id, w.uid, 'blessing_test_e', jsonb_build_object('kind', 'player', 'uid', o))->>'why');
+  update player set away = false, x = v_px + ${FAR} where world_id = w.world_id and uid = o;
+  insert into said values ('T:FAR', spell_target(w.world_id, w.uid, 'blessing_test_e', jsonb_build_object('kind', 'player', 'uid', o))->>'why');
+  a := creature_spawn(w.world_id, 'rowl', v_px + 4, v_py, 'wild', now() - interval '2 hours');
+  b := creature_spawn(w.world_id, 'rowl', v_px, v_py + 4, 'wild', now() - interval '2 hours');
+  update creature set hunting = null where world_id = w.world_id and id in (a, b);
+  update creature set mode = 'deed' where world_id = w.world_id and id = b;
+  insert into said values ('T:KIND', spell_target(w.world_id, w.uid, 'blessing_test_e', jsonb_build_object('kind', 'creature', 'id', a))->>'why');
+  insert into said values ('T:ENEMY', spell_target(w.world_id, w.uid, 'blessing_test_f', jsonb_build_object('kind', 'creature', 'id', a))->>'kind');
+  insert into said values ('T:TAME', spell_target(w.world_id, w.uid, 'blessing_test_f', jsonb_build_object('kind', 'creature', 'id', b))->>'why');
+  insert into said values ('T:WILDERMON', (spell_target(w.world_id, w.uid, 'blessing_test_g', jsonb_build_object('kind', 'creature', 'id', a))->>'kind')
+    || '|' || (spell_target(w.world_id, w.uid, 'blessing_test_g', jsonb_build_object('kind', 'creature', 'id', b))->>'kind'));
+  update creature set hunting = w.uid where world_id = w.world_id and id = a;
+  insert into said values ('T:AFTER', spell_target(w.world_id, w.uid, 'blessing_test_g', jsonb_build_object('kind', 'creature', 'id', a))->>'why');
+  insert into said values ('T:JUNK', spell_target(w.world_id, w.uid, 'blessing_test_f', jsonb_build_object('kind', 'creature', 'id', 'a goblin'))->>'why');
+  insert into item (world_id, holder, holder_uid, def, ql) values (w.world_id, 'player', w.uid, (select id from item_def order by id limit 1), 10)
+    returning id into v_item;
+  insert into item (world_id, holder, holder_uid, def, ql) values (w.world_id, 'player', o, (select id from item_def order by id limit 1), 10)
+    returning id into v_theirs;
+  r := spell_target(w.world_id, w.uid, 'blessing_test_h', jsonb_build_object('kind', 'item', 'id', v_item));
+  insert into said values ('T:ITEM', (r->>'kind') || '|' || ((r->>'item')::bigint = v_item));
+  insert into said values ('T:THEIRS', spell_target(w.world_id, w.uid, 'blessing_test_h', jsonb_build_object('kind', 'item', 'id', v_theirs))->>'why');
+  insert into placed (world_id, kind, x, y, cx, cy) values (w.world_id, 'campfire', floor(v_px)::int + 2, floor(v_py)::int, floor(v_px) + 2.5, floor(v_py) + 0.5)
+    returning id into v_placed;
+  r := spell_target(w.world_id, w.uid, 'blessing_test_h', jsonb_build_object('kind', 'placed', 'id', v_placed));
+  insert into said values ('T:PLACED', (r->>'kind') || '|' || ((r->>'placed')::bigint = v_placed));
+  r := spell_target(w.world_id, w.uid, 'blessing_test_h', jsonb_build_object('kind', 'area'));
+  insert into said values ('T:AREA', (r->>'kind') || '|' || ((r->>'x')::double precision - v_px) || '|' || ((r->>'y')::double precision - v_py) || '|' || (r->>'radius'));
+  insert into said values ('T:AREAFAR', spell_target(w.world_id, w.uid, 'blessing_test_h', jsonb_build_object('kind', 'area', 'x', v_px + ${FAR}, 'y', v_py))->>'why');
+  insert into said values ('T:NOTSELF', spell_target(w.world_id, w.uid, 'blessing_test_h', '{}'::jsonb)->>'why');
 end $b$;
 insert into said select 'OPEN', count(*)::text from pg_proc p join pg_namespace n on n.oid = p.pronamespace
   where n.nspname = 'public' and p.proname <> 'rpc_name_free'
@@ -144,7 +200,9 @@ for (const line of out.split('\n')) {
 const island = (k: string): string => said.get(k) ?? '(nothing)';
 
 check('the faith a patron is taken at, and the spells a tier offers, are the same on both sides',
-  island('NUMS') === `${PATRON_AT}|${SPELLS_PER_TIER}`, island('NUMS'));
+  island('NUMS') === `${PATRON_AT}|${SPELLS_PER_TIER}|${SPELL_REACH}`, island('NUMS'));
+check('and so are the kinds of thing a spell is cast on, in the same words',
+  island('ONS') === [...SPELL_ONS].sort().map((o) => `${o}:${SPELL_ON_WORDS[o]}`).join(','), island('ONS'));
 check('and so are the tiers', island('TIERS') === FAITH_TIER_AT.join(','), island('TIERS'));
 check('and the patrons, by name and alignment',
   island('PATRONS') === [...PATRONS].sort((a, b) => a.id.localeCompare(b.id)).map((p) => `${p.id}:${p.name}:${p.alignment}`).join(','),
@@ -184,14 +242,39 @@ check(`a call costs its ${SPELL_A.cost} favour, rests ${SPELL_A.rest} seconds an
   island('CAST') === `${SPELL_A.id}|Test A answers.|${40 - SPELL_A.cost}|${SPELL_A.rest}|1`, island('CAST'));
 check('and while it rests it is refused', island('RESTING') === `${SPELL_A.name} can be called again in ${SPELL_A.rest} seconds.`, island('RESTING'));
 
+const why = (s: FaithSpellDef, t: PointedAt): string => spellTargetRefusal(s, t) ?? 'null';
+check('a spell pointed at nothing at all is cast on yourself', island('T:SELF') === 'self', island('T:SELF'));
+check('and so is one pointed at you by name', island('T:YOU') === 'self', island('T:YOU'));
+check('one that takes another person is cast on somebody within reach', island('T:OTHER') === 'player|true', island('T:OTHER'));
+check('not on somebody who is away, in the same words on both sides',
+  island('T:AWAY') === why(SPELL_E, { kind: 'player', found: false, dist: 0 }), island('T:AWAY'));
+check(`nor on somebody more than ${SPELL_REACH} tiles off, ditto`,
+  island('T:FAR') === why(SPELL_E, { kind: 'player', found: true, dist: FAR }), island('T:FAR'));
+check('nor on a kind of thing it does not take, ditto',
+  island('T:KIND') === why(SPELL_E, { kind: 'creature', found: true, dist: 4, wild: true, after: false }), island('T:KIND'));
+check('an enemy is anything wild', island('T:ENEMY') === 'enemy', island('T:ENEMY'));
+check('and not a tame one, ditto', island('T:TAME') === why(SPELL_F, { kind: 'creature', found: true, dist: 4, wild: false }), island('T:TAME'));
+check('a wildermon is anything not after you, wild or tame', island('T:WILDERMON') === 'wildermon|wildermon', island('T:WILDERMON'));
+check('and not one that is, ditto',
+  island('T:AFTER') === why(SPELL_G, { kind: 'creature', found: true, dist: 4, wild: true, after: true }), island('T:AFTER'));
+check('nonsense is nothing that is here, ditto', island('T:JUNK') === why(SPELL_F, { kind: 'creature', found: false, dist: 0 }), island('T:JUNK'));
+check('a thing is one in your own pack', island('T:ITEM') === 'object|true', island('T:ITEM'));
+check('and not one in somebody else’s, ditto', island('T:THEIRS') === why(SPELL_H, { kind: 'item', found: false, dist: 0 }), island('T:THEIRS'));
+check('or one set down within reach', island('T:PLACED') === 'object|true', island('T:PLACED'));
+check(`the ground is round where you stand, out to the spell’s own ${SPELL_H.radius} tiles`,
+  island('T:AREA') === `area|0|0|${SPELL_H.radius}`, island('T:AREA'));
+check('and not ground too far off, ditto', island('T:AREAFAR') === why(SPELL_H, { kind: 'area', found: true, dist: FAR }), island('T:AREAFAR'));
+check('a spell that does not take you says what it does take, ditto',
+  island('T:NOTSELF') === why(SPELL_H, { kind: 'self', found: true, dist: 0 }), island('T:NOTSELF'));
+
 check('no function is open to a player but the doors', island('OPEN') === '0', island('OPEN'));
 check('and the five faith doors are, running as their owner', island('DOORS') === '5', island('DOORS'));
 
 /* ---- The browser's half --------------------------------------------------- */
 
-check('the browser takes the tiers every ten faith from the patron to ninety, and the last at ninety-nine',
-  FAITH_TIER_AT[0] === PATRON_AT && FAITH_TIER_AT[FAITH_TIER_AT.length - 1] === 99
-  && FAITH_TIER_AT.slice(0, -1).every((at, i) => i === 0 || at - FAITH_TIER_AT[i - 1] === 10), FAITH_TIER_AT.join(','));
+check('the browser takes five tiers: the patron’s own, every twenty to eighty, and the last at ninety-nine',
+  FAITH_TIER_AT.length === 5 && FAITH_TIER_AT[0] === PATRON_AT && FAITH_TIER_AT[FAITH_TIER_AT.length - 1] === 99
+  && FAITH_TIER_AT.slice(0, -1).every((at, i) => i === 0 || at - FAITH_TIER_AT[i - 1] === 20), FAITH_TIER_AT.join(','));
 check('three patrons, good, neutral and evil', PATRONS.map((p) => p.alignment).join(',') === 'good,neutral,evil');
 check('a bar of three class slots, two faith and one path', SPELL_BAR.join(',') === 'class,class,class,faith,faith,path');
 

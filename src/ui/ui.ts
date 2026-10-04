@@ -97,7 +97,7 @@ import { SkillsPanel } from './panels/skills';
 import { TradesPanel } from './panels/trades';
 import { FaithPanel } from './panels/faith';
 import { FaithBook } from './faithbook';
-import { SpellBar } from './spellbar';
+import { SpellBar, type SpellAim } from './spellbar';
 import { SocialPanel } from './panels/social';
 import { MarketPanel } from './panels/market';
 import { BoardsPanel } from './panels/boards';
@@ -308,7 +308,8 @@ export class UI {
     const events = this.windows.create({ id: 'events', title: 'Event', x: 12, y: 12, width: 420, height: 210, anchor: 'bl' });
     this.eventLog = new EventLogPanel(events, game);
     const inventory = this.windows.create({ id: 'inventory', title: 'Inventory', x: 12, y: 56, width: 340, height: 300, anchor: 'tr' });
-    new InventoryPanel(inventory, game, this.menu, (p) => this.moveDragged(p, 'inventory'), (uid) => this.cratePanel.openBag(uid), (uid) => this.hoard.openOn(uid));
+    new InventoryPanel(inventory, game, this.menu, (p) => this.moveDragged(p, 'inventory'), (uid) => this.cratePanel.openBag(uid), (uid) => this.hoard.openOn(uid),
+      (uid) => this.spellBar?.entriesFor({ kind: 'item', id: uid }) ?? []);
     const skills = this.windows.create({ id: 'skills', title: 'Skills', x: 364, y: 56, width: 260, height: 380, anchor: 'tr', open: false });
     new SkillsPanel(skills, game);
     // The handful you are moving today, beside the book that holds all forty.
@@ -1026,6 +1027,27 @@ export class UI {
    * neither can fall behind the other.
    */
   menuFor(pick: Pick): { title: string; facts?: string[]; entries: MenuItem[] } {
+    const built = this.pickMenu(pick);
+    const aim = this.aimAt(pick);
+    if (aim) built.entries.push(...(this.spellBar?.entriesFor(aim) ?? []));
+    return built;
+  }
+
+  /**
+   * What a spell off the bar would be cast at, for whatever was picked: a
+   * person, a creature, a thing the island keeps in `placed`, or else the
+   * ground of the tile.
+   */
+  private aimAt(pick: Pick): SpellAim | null {
+    if (pick.peer !== undefined) return { kind: 'player', uid: pick.peer };
+    if (pick.creature !== undefined) return { kind: 'creature', id: pick.creature };
+    const placed = pick.furniture ?? pick.fire ?? pick.smelter ?? pick.kiln ?? pick.anvil ?? pick.post;
+    if (placed !== undefined) return { kind: 'placed', id: placed };
+    if (pick.crate !== undefined || pick.trap !== undefined || pick.bridge !== undefined || pick.down) return null;
+    return { kind: 'area', x: pick.x + 0.5, y: pick.y + 0.5 };
+  }
+
+  private pickMenu(pick: Pick): { title: string; facts?: string[]; entries: MenuItem[] } {
     if (pick.peer !== undefined) return this.personMenu(pick.peer);
     const creature = pick.creature !== undefined ? this.game.creatures.get(pick.creature) : undefined;
     if (creature) {

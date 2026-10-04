@@ -1,6 +1,6 @@
 import {
-  ALIGNMENT_NAMES, FAITH_TIER_AT, PATRON_AT, PATRON_BY_ID, PATRONS, SPELL_BAR, SPELLS_PER_TIER, slotsFor, spellsOf,
-  type FaithSpellDef, type PatronDef, type PatronId, type SpellOn,
+  ALIGNMENT_NAMES, FAITH_TIER_AT, PATRON_AT, PATRON_BY_ID, PATRONS, SPELL_BAR, SPELLS_PER_TIER, slotsFor, spellOnText, spellsOf,
+  type FaithSpellDef, type PatronDef, type PatronId,
 } from '../../game/patrons';
 import { listed, NumberWord, numberWord } from '../../game/words';
 import type { FaithBook } from '../faithbook';
@@ -23,12 +23,6 @@ import type { UIWindow } from '../windows';
 
 /** How often the window asks again while it is open, in seconds. */
 const REFRESH = 4;
-
-const ON_WORDS: Record<SpellOn, string> = {
-  self: 'on yourself',
-  creature: 'on what you are fighting or have marked',
-  item: 'on a thing in your pack',
-};
 
 export class FaithPanel {
   private readonly tabs = new Map<PatronId, HTMLButtonElement>();
@@ -192,7 +186,7 @@ export class FaithPanel {
     cost.className = 'trade-points';
     cost.textContent = `${sp.cost} favour · rests ${sp.rest} s`;
     top.append(name, cost);
-    card.append(top, cardNote(`${sp.note} Called ${ON_WORDS[sp.on]}.`));
+    card.append(top, cardNote(`${sp.note} Cast on ${spellOnText(sp)}.`));
     if (!s || s.patron !== p.id) return card;
     if (taken) {
       const slot = s.bar.indexOf(sp.id);

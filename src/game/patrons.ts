@@ -1,5 +1,7 @@
 import { FAITH } from './faith';
+import { TARGET_RANGE } from './fight';
 import { SKILL_BY_ID } from './skills';
+import { listedOr } from './words';
 
 /**
  * Patrons, and the spells they give.
@@ -7,9 +9,11 @@ import { SKILL_BY_ID } from './skills';
  * At `PATRON_AT` faith a person may take one of three patrons, once and for
  * good: **Blessing**, who is good; **Justice**, who is neither; and **Chaos**,
  * who is evil. A patron is what the faith spells come from. Each one offers
- * `SPELLS_PER_TIER` spells at each of the tiers in `FAITH_TIER_AT`, every ten
- * faith from the patron itself up to ninety and the last at ninety-nine, and
- * one of the three is taken at each tier, the way a trade's perks are.
+ * `SPELLS_PER_TIER` spells at each of the tiers in `FAITH_TIER_AT`, the first
+ * with the patron itself and the last at ninety-nine, and one of the three is
+ * taken at each tier, the way a trade's perks are. Each spell says what it can
+ * be cast on (`SpellOn`), and the island checks what it was pointed at against
+ * that (`spellTargetRefusal`).
  *
  * The island keeps all of it -- the patron, the spells taken, what is on the
  * spell bar and when each spell can be called again -- and the browser asks:
@@ -41,13 +45,40 @@ export const ALIGNMENT_NAMES: Record<Alignment, string> = { good: 'Good', neutra
 
 /** The faith a patron is taken at, which is also where its first tier of spells opens. */
 export const PATRON_AT = 20;
-/** The faith each tier of spells opens at: the patron's own, then every ten to ninety, and the last at ninety-nine. */
-export const FAITH_TIER_AT = [PATRON_AT, 30, 40, 50, 60, 70, 80, 90, 99] as const;
+/** The faith each tier of spells opens at: the patron's own, then every twenty to eighty, and the last at ninety-nine. */
+export const FAITH_TIER_AT = [PATRON_AT, 40, 60, 80, 99] as const;
 /** How many spells each tier offers, of which one is taken. */
 export const SPELLS_PER_TIER = 3;
 
-/** What a spell is pointed at when it is called: nothing but you, the creature you have marked or are fighting, or a thing in your pack. */
-export type SpellOn = 'self' | 'creature' | 'item';
+/**
+ * What a spell can be cast on. A spell names every kind it takes:
+ *
+ *   - `self`: you.
+ *   - `player`: somebody else on the island.
+ *   - `wildermon`: a creature that is not after you -- a companion, anybody's
+ *     beast, or a wild one going about its own business.
+ *   - `enemy`: a wild creature, which is anything that can be fought.
+ *   - `object`: a thing in your pack, or a thing set down in the world.
+ *   - `area`: everything within the spell's `radius` of a spot: where you
+ *     stand, or a tile you choose.
+ *
+ * A wild creature that is not after you is both a wildermon and an enemy, so a
+ * spell of either kind can be cast on it. Anything but yourself and what you
+ * carry has to be within `SPELL_REACH` tiles.
+ */
+export type SpellOn = 'self' | 'player' | 'wildermon' | 'enemy' | 'object' | 'area';
+export const SPELL_ONS: readonly SpellOn[] = ['self', 'player', 'wildermon', 'enemy', 'object', 'area'];
+/** How each kind reads in "<spell> is cast on ...". */
+export const SPELL_ON_WORDS: Record<SpellOn, string> = {
+  self: 'yourself',
+  player: 'another person',
+  wildermon: 'a wildermon',
+  enemy: 'an enemy',
+  object: 'a thing',
+  area: 'the ground',
+};
+/** How far off anything a spell is cast on may be, in tiles: as far as a foe can be marked. */
+export const SPELL_REACH = TARGET_RANGE;
 
 export interface FaithSpellDef {
   /** `<patron>_<name>`, which is what the island keeps. */
@@ -62,7 +93,10 @@ export interface FaithSpellDef {
   cost: number;
   /** Seconds before it can be called again. */
   rest: number;
-  on: SpellOn;
+  /** Every kind of thing it can be cast on, the one it goes at by default first. */
+  on: readonly SpellOn[];
+  /** For a spell cast on the ground: how many tiles round the spot it reaches. */
+  radius?: number;
 }
 
 /**
@@ -74,6 +108,66 @@ export const FAITH_SPELLS: FaithSpellDef[] = [];
 export const FAITH_SPELL_BY_ID = new Map(FAITH_SPELLS.map((s) => [s.id, s]));
 export const spellsOf = (patron: PatronId, tier: number): FaithSpellDef[] =>
   FAITH_SPELLS.filter((s) => s.patron === patron && s.tier === tier);
+
+/** What a spell can be cast on, as the Faith window says it. */
+export const spellOnText = (s: FaithSpellDef): string =>
+  listedOr(s.on.map((o) => (o === 'area' ? `the ground, everything within ${s.radius ?? 0} tiles of you or of a tile you choose` : SPELL_ON_WORDS[o])));
+
+/**
+ * What a spell was pointed at, as the island finds it. `rpc_cast_spell` takes
+ * `{kind: 'self'}`, `{kind: 'player', uid}`, `{kind: 'creature', id}`,
+ * `{kind: 'item', id}`, `{kind: 'placed', id}` or `{kind: 'area'}`, the last
+ * with an `x` and `y` when it is not where you stand.
+ */
+export interface PointedAt {
+  kind: 'self' | 'player' | 'creature' | 'item' | 'placed' | 'area';
+  /** Whether it is there at all: somebody on the island, a thing in your own pack, and so on. */
+  found: boolean;
+  /** Tiles from you; nought for yourself and what you carry. */
+  dist: number;
+  /** A person who turns out to be you. */
+  you?: boolean;
+  /** A creature that is wild. */
+  wild?: boolean;
+  /** A creature that is after you. */
+  after?: boolean;
+}
+
+/** Which of the spell's kinds the thing pointed at counts as, or nothing. */
+export function spellOnOf(on: readonly SpellOn[], t: PointedAt): SpellOn | null {
+  switch (t.kind) {
+    case 'self':
+      return on.includes('self') ? 'self' : null;
+    case 'player':
+      if (t.you) return on.includes('self') ? 'self' : null;
+      return on.includes('player') ? 'player' : null;
+    case 'creature':
+      if (on.includes('enemy') && t.wild) return 'enemy';
+      if (on.includes('wildermon') && !t.after) return 'wildermon';
+      return null;
+    case 'item':
+    case 'placed':
+      return on.includes('object') ? 'object' : null;
+    case 'area':
+      return on.includes('area') ? 'area' : null;
+  }
+}
+
+/**
+ * Why a spell cannot be cast on what it was pointed at, or nothing: the same
+ * as the island's `spell_target`, in the same order and words. Not there, not
+ * a kind the spell takes, or too far off.
+ */
+export function spellTargetRefusal(s: FaithSpellDef, t: PointedAt): string | null {
+  if (!t.found) return 'That is not here.';
+  if (!spellOnOf(s.on, t)) {
+    if (t.kind === 'creature' && s.on.includes('enemy') && !t.wild) return 'That is tame, not an enemy.';
+    if (t.kind === 'creature' && s.on.includes('wildermon') && t.after) return 'That is after you.';
+    return `${s.name} is cast on ${listedOr(s.on.map((o) => SPELL_ON_WORDS[o]))}.`;
+  }
+  if (t.dist > SPELL_REACH) return `That is more than ${SPELL_REACH} tiles away.`;
+  return null;
+}
 
 /** The faith a tier opens at. */
 export const faithTierAt = (tier: number): number => FAITH_TIER_AT[tier - 1];

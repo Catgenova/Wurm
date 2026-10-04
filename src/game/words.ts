@@ -172,6 +172,9 @@ export function timeWords(secs: number): string {
 /** "a, b and c", for a list somebody reads rather than parses. */
 export const listed = (xs: readonly string[]): string =>
   xs.length < 2 ? (xs[0] ?? '') : `${xs.slice(0, -1).join(', ')} and ${xs[xs.length - 1]}`;
+/** "a, b or c": the same, for a choice. */
+export const listedOr = (xs: readonly string[]): string =>
+  xs.length < 2 ? (xs[0] ?? '') : `${xs.slice(0, -1).join(', ')} or ${xs[xs.length - 1]}`;
 
 /**
  * A definition's text with its own numbers put into it.

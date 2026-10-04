@@ -32,8 +32,8 @@ import { RECIPE_BY_ID, RECIPES, TRADE_BOOK_AT } from '../../game/recipes';
 import { BOARD_TOP } from '../../game/boards';
 import { IDLE_LOGOUT, WORKER_REST_EVERY, WORKER_REST_FIRST, WORKER_REST_MOST } from '../../game/keep';
 import { REPORTS_A_SESSION } from '../../net/errors';
-import { ALIGNMENT_NAMES, BAR_SLOTS, FAITH_TIER_AT, PATRON_AT, PATRONS, SCHOOL_NAMES, slotsFor, SPELLS_PER_TIER } from '../../game/patrons';
-import { article, capital, finePercent, listed, NumberWord, numberWord, percent, share, spanWords, times } from '../../game/words';
+import { ALIGNMENT_NAMES, BAR_SLOTS, FAITH_TIER_AT, PATRON_AT, PATRONS, SCHOOL_NAMES, slotsFor, SPELL_ON_WORDS, SPELL_ONS, SPELL_REACH, SPELLS_PER_TIER } from '../../game/patrons';
+import { article, capital, finePercent, listed, listedOr, NumberWord, numberWord, percent, share, spanWords, times } from '../../game/words';
 import { ANCIENT_EFFECTS, ANCIENT_PLUS, BAUBLE_HIGH, BAUBLE_LOW, BAUBLE_SHARE, BAUBLE_TIERS, baubleTimes, REGRET_SHARE, YIELD_TIMES } from '../../game/baubles';
 import { CLASS_CHANGE_COST, CLASSES, PERK_TIER_AT, PERKS_PER_TIER } from '../../game/classes';
 import { perksOf } from '../../game/perks';
@@ -1018,6 +1018,14 @@ export const NEWS: News[] = [
       `Patrons: at ${PATRON_AT} faith take ${PATRONS.map((p) => `${p.name} (${ALIGNMENT_NAMES[p.alignment].toLowerCase()})`).join(', ').replace(/, ([^,]*)$/, ' or $1')} as your patron, for good, in the new Faith window. Each offers ${SPELLS_PER_TIER} spells at each of ${FAITH_TIER_AT.length} tiers (${FAITH_TIER_AT.join(', ')} faith), one taken per tier. The first spells, the Blessing's, are next.`,
       `The spell bar, bottom and middle: ${BAR_SLOTS} slots, ${(['class', 'faith', 'path'] as const).map((s) => `${slotsFor(s)} ${SCHOOL_NAMES[s].toLowerCase()}`).join(', ')}. Click a slot or press Shift and its number to call it; right-click to choose what goes in it.`,
       `The Prayer skill is called Faith now. Nothing else about it has changed.`,
+    ],
+  },
+  {
+    n: 76,
+    day: '2026-10-04',
+    lines: () => [
+      `Faith has ${FAITH_TIER_AT.length} tiers now, at ${FAITH_TIER_AT.join(', ')} faith, each still offering ${SPELLS_PER_TIER} spells of which you take one.`,
+      `Every spell says what it can be cast on: ${listedOr(SPELL_ONS.map((o) => SPELL_ON_WORDS[o]))}. Right-click a person, a creature, a thing or the ground to cast a spell from your bar on it; anything but you and what you carry has to be within ${SPELL_REACH} tiles.`,
     ],
   },
 ];
