@@ -66,7 +66,10 @@ declare w record; v_id bigint; r record; v_job text; v_fresh double precision; v
 begin
   -- The biggest island there is, and a body well off its beach: nothing comes for you on the beach (\`at_peace\`).
   select p.world_id, p.uid, wd.size, wd.spawn_x, wd.spawn_y into w
-    from player p join world wd on wd.id = p.world_id order by wd.size desc, p.world_id, p.uid limit 1;
+    from player p join world wd on wd.id = p.world_id
+   -- With land under it: \`window.ts\` leaves an island as big as any with none, and a body on it.
+   where exists (select 1 from land_tile t where t.world_id = wd.id)
+   order by wd.size desc, p.world_id, p.uid limit 1;
   v_px := case when w.spawn_x + peace_reach() + 6 < w.size then w.spawn_x + peace_reach() + 6.5
                else w.spawn_x - peace_reach() - 5.5 end;
   v_py := w.spawn_y + 0.5;

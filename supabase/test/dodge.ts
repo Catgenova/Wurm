@@ -65,7 +65,10 @@ begin
   perform setseed(0.42);
   -- Off the beach of the biggest island there is, where things may come for you (\`at_peace\`).
   select p.world_id, p.uid, wd.size, wd.spawn_x, wd.spawn_y into w
-    from player p join world wd on wd.id = p.world_id order by wd.size desc, p.world_id, p.uid limit 1;
+    from player p join world wd on wd.id = p.world_id
+   -- With land under it: \`window.ts\` leaves an island as big as any with none, and a body on it.
+   where exists (select 1 from land_tile t where t.world_id = wd.id)
+   order by wd.size desc, p.world_id, p.uid limit 1;
   v_px := case when w.spawn_x + peace_reach() + 6 < w.size then w.spawn_x + peace_reach() + 6.5
                else w.spawn_x - peace_reach() - 5.5 end;
   v_py := w.spawn_y + 0.5;
