@@ -5,7 +5,7 @@ import {
 import { BACK_PACE, BACK_SLACK, CIRCLE_R, COWARD_AT, COWARD_DRAG, DRAW_WALK, FALL_BACK, GUARD_RANGE, HUNTER_TURN, KEEP_OFF, MONSTER_TURN, PACK_CALL, PACK_MOST, THROW_HIT, THROW_REACH } from '../../game/fight';
 import { FIGHT_QUIET, ARM_SLOW_MOST, ARMOUR_VS, armourSays, BLINDSIDE, blowSays, CROWD_BLOCK, FLANK_HIT, HEAVY_EVERY, HEAVY_HIT, HIDE_NAMES, HIDES, hideSays, LEG_SLOW_MOST, sideOf, WIND_UP, BLOW_DEFENSIVE, BLOW_HUNTER, BLOW_PREY, FIGHT_BACK_STILL, FIGHT_GIVE_UP, FIGHT_LEASH, FIGHT_STANCE_NAMES, FIGHT_STANCES, FIST, FOLLOW_RANGE, stanceSays, SWING_WIND, SWING_WIND_KG, TARGET_RANGE, TIRED_AT, TIRED_SLOW } from '../../game/fight';
 import {
-  CELLAR_DECAY, CELLAR_DEPTH, CELLAR_SOIL, COLUMN_SHARE, columnBill, floorBill, GLASS_ROOF, heftWord, INDOORS_DECAY, INDOORS_REST, JETTY_REACH, MATERIAL_BY_ID, MATERIALS as WALL_MATERIALS, RAILING_HEIGHT,
+  CELLAR_DECAY, CELLAR_DEPTH, CELLAR_SOIL, COLUMN_SHARE, columnBill, floorBill, GLASS_ROOF, heftWord, onlySaid, takesAs, INDOORS_DECAY, INDOORS_REST, JETTY_REACH, MATERIAL_BY_ID, MATERIALS as WALL_MATERIALS, RAILING_HEIGHT,
   roofShapeDef, roofShapeOf, WALL_HEIGHT, WALL_TYPE_BY_ID, wallBill as typeBill,
 } from '../../game/building';
 import { CELLAR_DAYLIGHT } from '../../game/cellar';
@@ -935,7 +935,7 @@ export const NEWS: News[] = [
     n: 69,
     day: '2026-10-02',
     lines: () => {
-      const stones = WALL_MATERIALS.filter((m) => m.kind === 'stone').map((m) => m.name.toLowerCase());
+      const stones = WALL_MATERIALS.filter((m) => m.kind === 'stone' && takesAs(m, { wall: 'portcullis' })).map((m) => m.name.toLowerCase());
       const portReach = gateReach('raise_portcullis');
       const winchReach = gateReach('raise_drawbridge');
       const planWall = ACTION_BY_ID.get('plan_wall');
@@ -1066,7 +1066,7 @@ export const NEWS: News[] = [
       return [
         `Glassblowing is a new skill, and the Artisan's: at a hot smelter, ${listed(['make_glass', 'make_glass_panel', 'make_bottle', 'make_mosaic_tiles'].map(job))}. A firing of tiles that fails keeps the gem and the sand.`,
         `Windows, bay windows and glasshouse roofs are glazed with glass panels: a window takes ${panes('window')} and a bay window ${panes('bay')}. Every pane you had is a glass panel now.`,
-        mosaic ? `A new material to build in, mosaic: ${billWords(mosaic.bill, true)} to a solid wall, as heavy as ${heftWord(mosaic.heft)} and up to ${mosaic.storeys} storeys tall. Walls, floors, stairs and roofs of it are each drawn in coloured glass.` : '',
+        mosaic ? `A new material to build in, mosaic: ${billWords(mosaic.bill, true)} to a solid wall, as heavy as ${heftWord(mosaic.heft)} and up to ${mosaic.storeys} storeys tall. ${onlySaid(mosaic)}` : '',
         `A bottle holds ${bottle.holds} of one food or drink, and what is in it rots at ${share(bottle.shelter ?? 1)} the rate if it is left lying about.`,
       ].filter(Boolean);
     },

@@ -14,6 +14,7 @@ import {
   heftWord,
   isDone,
   MATERIALS,
+  takesAs,
   progressOf,
   ROOF_SHAPES,
   roofShapeOf,
@@ -193,7 +194,7 @@ function cellarEntries(g: Game, base: Extract<Target, { kind: 'tile' }>, side: S
   }
   entries.push({
     label: 'Plan staircase down',
-    children: MATERIALS.map((m) => ({
+    children: MATERIALS.filter((m) => takesAs(m, { floor: 'stairs' })).map((m) => ({
       label: m.name,
       note: `${describeNeeds(floorBill(m.id, 'stairs'), materialName)} · Q and E choose the side`,
       onSelect: () => place(m.id, 'stairs'),
@@ -2634,7 +2635,7 @@ export class UI {
       if (!def.applies(target, g)) return [];
       return [{
         label,
-        children: MATERIALS.filter((m) => m.kind === 'stone' && m.id !== standing.material).map((m) => {
+        children: MATERIALS.filter((m) => m.kind === 'stone' && m.id !== standing.material && takesAs(m, { wall: standing.type })).map((m) => {
           const to: Extract<Target, { kind: 'tile' }> = { ...target, material: m.id };
           const why = cellarReason(g, def, to);
           return {
@@ -2678,7 +2679,7 @@ export class UI {
             label: `Plan fence (${SIDE_NAMES[side]})`,
             children: FENCE_TYPES.map((wt) => ({
               label: wt.name,
-              children: MATERIALS.map((m) => ({
+              children: MATERIALS.filter((m) => takesAs(m, { wall: wt.id })).map((m) => ({
                 label: m.name,
                 note: describeNeeds(wallBill(m.id, wt.id), materialName),
                 onSelect: () => g.requestAction(fence, { ...withSide, wallType: wt.id, material: m.id }),
@@ -2758,7 +2759,7 @@ export class UI {
               hint: lacks ?? undefined,
               disabled: !!lacks,
               // A portcullis is laid only in stone or brick (`gates.ts`).
-              children: MATERIALS.filter((m) => fitsMaterial(wt.id, m)).map((m) => ({
+              children: MATERIALS.filter((m) => fitsMaterial(wt.id, m) && takesAs(m, { wall: wt.id })).map((m) => ({
                 label: m.name,
                 note: describeNeeds(wallBill(m.id, wt.id), materialName)
                   + (hidden ? `, and ${hiddenDoorIronWords()} as it is planned` : ''),
@@ -2802,7 +2803,7 @@ export class UI {
       else {
         entries.push({
           label: `Plan ${floorLabel}`,
-          children: MATERIALS.map((m) => {
+          children: MATERIALS.filter((m) => takesAs(m, { floor: 'floor' })).map((m) => {
             const t: Target = { ...base, material: m.id, floorKind: 'floor' };
             const why = cellarReason(g, plan, t);
             if (why) return { label: m.name, hint: why, disabled: true };
@@ -2818,7 +2819,7 @@ export class UI {
             // The side to climb from is chosen on the tile: Q and E turn it, a click plans it.
             entries.push({
               label: 'Plan staircase',
-              children: MATERIALS.map((m) => ({
+              children: MATERIALS.filter((m) => takesAs(m, { floor: 'stairs' })).map((m) => ({
                 label: m.name,
                 note: `${describeNeeds(floorBill(m.id, 'stairs'), materialName)} · Q and E choose the side`,
                 onSelect: () => this.startPlacingStairs(base, level, m.id, 'stairs', side),
@@ -2854,7 +2855,7 @@ export class UI {
           const glassAt: Target = { ...t, material: GLASS_ROOF.id };
           const glassNo = shape ? cellarReason(g, plan, glassAt) : glassWhy;
           return [
-            ...MATERIALS.map((m) => ({
+            ...MATERIALS.filter((m) => takesAs(m, { floor: 'roof' })).map((m) => ({
               label: m.name,
               note: describeNeeds(floorBill(m.id, 'roof', shape ?? roofShapeOf(b)), materialName),
               hint: glassOnly ? FIELD_GLASS_ONLY : undefined,

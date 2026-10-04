@@ -17,7 +17,7 @@
 import { execFileSync } from 'node:child_process';
 // First, so the rules load in the order the game loads them: building and items lean on each other.
 import { ACTIONS } from '../../src/game/actions';
-import { MATERIAL_BY_ID, wallBill, WALL_TYPE_BY_ID } from '../../src/game/building';
+import { MATERIAL_BY_ID, onlyRefusal, onlySaid, wallBill, WALL_TYPE_BY_ID, WALL_TYPES } from '../../src/game/building';
 import { CRAFT_CLASSES } from '../../src/game/classes';
 import { bagRefuses, ITEM_DEFS, type Item } from '../../src/game/items';
 import { RECIPE_BY_ID, type Recipe } from '../../src/game/recipes';
@@ -139,6 +139,13 @@ begin
 
   v_b := give(w, u, 'bottle', 1, 30, null, null, null, null, null);
   insert into said values ('REFUSE', coalesce(bag_refuses((select i from item i where i.id = v_b), 'log', 1), 'ALLOWED'));
+
+  -- A half wall of mosaic, on open ground, trowel and all: refused for what it is laid as.
+  perform give(w, u, 'trowel', 1, 30, null, null, null, null, null);
+  insert into said values ('FENCE', coalesce(act_refusal(w, u, 'plan_fence', jsonb_build_object('kind', 'tile', 'x', 9, 'y', 10,
+    'side', 'n', 'wallType', 'half_wall', 'material', 'mosaic')), 'ALLOWED'));
+  insert into said values ('SOLIDFENCE', coalesce(act_refusal(w, u, 'plan_fence', jsonb_build_object('kind', 'tile', 'x', 9, 'y', 10,
+    'side', 'n', 'wallType', 'half_wall', 'material', 'stone_brick')), 'ALLOWED'));
 end $$;
 select k || '=' || v from said order by k;
 rollback;`);
@@ -180,6 +187,24 @@ check('a bottle holds as much, keeps as well, and one kind, on both sides',
 const bottle: Item = { uid: 1, id: 'bottle', ql: 30, dmg: 0, count: 1, inside: [] };
 const log: Item = { uid: 2, id: 'log', ql: 30, dmg: 0, count: 1 };
 check('and turns a log away in the same words', got('REFUSE') === bagRefuses(bottle, log), `browser "${bagRefuses(bottle, log)}", island "${got('REFUSE')}"`);
+
+/* ---- mosaic is a solid wall, a floor or a roof, and nothing else ----------------------------- */
+const M = MATERIAL_BY_ID.get('mosaic')!;
+const asked = [
+  ...WALL_TYPES.map((wt) => ({ what: `a ${wt.name.toLowerCase()}`, mine: onlyRefusal('mosaic', { wall: wt.id }), sql: `'${wt.id}', null` })),
+  ...(['floor', 'stairs', 'ladder', 'roof'] as const).map((k) => ({ what: `a ${k}`, mine: onlyRefusal('mosaic', { floor: k }), sql: `null, '${k}'` })),
+  { what: 'a column', mine: onlyRefusal('mosaic', { column: true }), sql: `'column', null` },
+];
+const theirsOnly = psql(asked.map((a) => `select coalesce(material_only_refusal('mosaic', ${a.sql}), 'ALLOWED');`).join('\n')).split('\n');
+const allowed = asked.filter((a) => a.mine === null).map((a) => a.what);
+check('mosaic is laid as a solid wall, a floor or a roof, and as nothing else, on both sides',
+  asked.every((a, i) => (a.mine ?? 'ALLOWED') === theirsOnly[i]) && allowed.join() === 'a solid,a floor,a roof',
+  `allowed: ${allowed.join(', ')}; differ: ${asked.filter((a, i) => (a.mine ?? 'ALLOWED') !== theirsOnly[i]).map((a) => a.what).join(', ') || 'none'}`);
+check('and it says so in the same words everywhere it is refused', theirsOnly.filter((s) => s !== 'ALLOWED').every((s) => s === onlySaid(M)), onlySaid(M));
+check('every other material is laid as anything', [...MATERIAL_BY_ID.values()].filter((m) => !m.only).every((m) =>
+  WALL_TYPES.every((wt) => onlyRefusal(m.id, { wall: wt.id }) === null) && onlyRefusal(m.id, { column: true }) === null));
+check('the island turns away a half wall of mosaic in those words, and lets one of stone brick through that check',
+  got('FENCE') === onlySaid(M) && got('SOLIDFENCE') !== onlySaid(M), `${got('FENCE')} / ${got('SOLIDFENCE')}`);
 
 for (const l of [...ok, ...bad]) console.log(l);
 console.log(`${bad.length} of ${ok.length + bad.length} are not what they should be`);

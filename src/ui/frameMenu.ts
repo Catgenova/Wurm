@@ -16,6 +16,7 @@ import {
   isDone,
   MATERIAL_BY_ID,
   MATERIALS,
+  takesAs,
   progressOf,
   ROOF_SHAPES,
   roofShapeOf,
@@ -52,9 +53,11 @@ const materials = (g: Game, def: ActionDef, target: TileTarget, label: string, b
   const probe = def.check?.({ ...target, material: 'log', wallType: target.wallType ?? 'solid' }, g) ?? null;
   // Refused whatever it is made of: say why on the row itself.
   if (probe && !probe.includes('too heavy') && !probe.startsWith('Choose')) return { label, hint: probe, disabled: true };
+  // A material laid as only some things (`onlyRefusal`) is not offered for the rest at all.
+  const as = def.id === 'plan_column' ? { column: true } : def.id === 'plan_floor' ? { floor: target.floorKind ?? 'floor' } : { wall: target.wallType };
   return {
     label,
-    children: MATERIALS.map((m) => {
+    children: MATERIALS.filter((m) => takesAs(m, as)).map((m) => {
       const t: TileTarget = { ...target, material: m.id };
       const why = def.check?.(t, g) ?? null;
       return { label: m.name, note: describeNeeds(bill(m.id), materialName), hint: why ?? undefined, disabled: !!why, onSelect: () => g.requestAction(def, t) };
@@ -75,7 +78,7 @@ function roofShapeMenu(g: Game, b: Building, target: TileTarget): MenuItem[] | n
   return ROOF_SHAPES.map((r) => ({
     label: r.name,
     note: r.note,
-    children: MATERIALS.map((m) => {
+    children: MATERIALS.filter((m) => takesAs(m, { floor: 'roof' })).map((m) => {
       const t: TileTarget = { ...target, floorKind: 'roof', roofShape: r.id as RoofShape, material: m.id };
       const why = plan.check?.(t, g) ?? null;
       return { label: m.name, note: describeNeeds(floorBill(m.id, 'roof', r.id), materialName), hint: why ?? undefined, disabled: !!why, onSelect: () => g.requestAction(plan, t) };
@@ -166,7 +169,7 @@ export function frameJettyEntries(g: Game, pick: Pick): MenuItem[] {
             children: WALL_TYPES.filter((wt) => !wt.standalone).map((wt) => ({
               label: wt.name,
               // gates: a portcullis only in stone or brick, and a hidden door asked for with a solid wall's plan, its iron in hand (`gates.ts`).
-              children: MATERIALS.filter((m) => fitsMaterial(wt.id, m)).map((m) => {
+              children: MATERIALS.filter((m) => fitsMaterial(wt.id, m) && takesAs(m, { wall: wt.id })).map((m) => {
                 const hidden = wt.id === 'hidden_door';
                 const t: TileTarget = { ...withSide, wallType: hidden ? 'solid' : wt.id, material: m.id };
                 const why = (hidden ? hiddenDoorWants(g) : null) ?? plan.check?.(t, g) ?? null;

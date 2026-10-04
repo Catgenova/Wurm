@@ -3,7 +3,7 @@
  * walls that sit on tile borders, and stacked floors. Walls and floors are
  * planned first, then built by feeding them materials one unit at a time.
  */
-import { fill } from './words';
+import { fill, listedOr } from './words';
 
 export type WallType = 'solid' | 'window' | 'bay' | 'door' | 'double_door' | 'arch' | 'fence' | 'fence_gate' | 'half_wall' | 'iron_gate'
   | 'counter' | 'railing'
@@ -172,6 +172,12 @@ export interface MaterialDef {
    * marble storey over a log one is a roof looking for somewhere to fall.
    */
   heft: number;
+  /**
+   * Where a material is not laid as everything, what it is laid as: the wall
+   * types and the floor kinds it takes, and nothing else -- no fence, no
+   * column, no flight of stairs.
+   */
+  only?: { walls: readonly WallType[]; floors: readonly FloorKind[] };
 }
 
 /** The three grades of weight, as a builder names them. */
@@ -202,7 +208,7 @@ export const MATERIALS: MaterialDef[] = [
    * Stone brick faced in a mosaic of coloured glass: a gem ground into the
    * melt colours a batch of tiles, and a solid wall takes one batch.
    */
-  { id: 'mosaic', name: 'Mosaic', kind: 'stone', tool: 'trowel', skill: 'masonry', color: [214, 196, 226], trim: [232, 224, 206], floor: [238, 228, 214], courses: 4, bill: [['stone_brick', 24], ['mortar', 12], ['mosaic_tile', 20]], storeys: 10, heft: 3 },
+  { id: 'mosaic', name: 'Mosaic', kind: 'stone', tool: 'trowel', skill: 'masonry', color: [214, 196, 226], trim: [232, 224, 206], floor: [238, 228, 214], courses: 4, bill: [['stone_brick', 24], ['mortar', 12], ['mosaic_tile', 20]], storeys: 10, heft: 3, only: { walls: ['solid'], floors: ['floor', 'roof'] } },
 ];
 export const MATERIAL_BY_ID = new Map(MATERIALS.map((m) => [m.id, m]));
 /**
@@ -219,6 +225,31 @@ export const GLASS_ROOF: MaterialDef = {
   bill: [['glass', 24], ['timber', 8]], storeys: 10, heft: 1,
 };
 MATERIAL_BY_ID.set(GLASS_ROOF.id, GLASS_ROOF);
+
+/** A floor kind as the sentence below names it. */
+const FLOOR_WORDS: Record<FloorKind, string> = { floor: 'a floor', stairs: 'a flight of stairs', ladder: 'a ladder', roof: 'a roof' };
+/** What is said of a material laid as something it is not: "Mosaic is laid as a solid wall, a floor or a roof, and nothing else." The island holds the same sentence. */
+export const onlySaid = (m: MaterialDef): string =>
+  `${m.name} is laid as ${listedOr([
+    ...(m.only?.walls ?? []).map((w) => `a ${(WALL_TYPE_BY_ID.get(w)?.name ?? w).toLowerCase()} wall`),
+    ...(m.only?.floors ?? []).map((k) => FLOOR_WORDS[k]),
+  ])}, and nothing else.`;
+/**
+ * Why a material will not be laid as this wall type, this floor kind or a
+ * column, or null: a material with an `only` is laid as that and nothing
+ * else. A wall type or a floor kind not yet chosen asks nothing. The island's
+ * `material_only_refusal`, asked at the same points.
+ */
+export function onlyRefusal(material: string | undefined, as: { wall?: string; floor?: string; column?: boolean }): string | null {
+  const m = material ? MATERIAL_BY_ID.get(material) : undefined;
+  if (!m?.only) return null;
+  if (as.column) return onlySaid(m);
+  if (as.wall && !(m.only.walls as readonly string[]).includes(as.wall)) return onlySaid(m);
+  if (as.floor && !(m.only.floors as readonly string[]).includes(as.floor)) return onlySaid(m);
+  return null;
+}
+/** Whether a menu offers this material for this wall type or floor kind at all. */
+export const takesAs = (m: MaterialDef, as: { wall?: string; floor?: string; column?: boolean }): boolean => onlyRefusal(m.id, as) === null;
 
 /** Height of one storey in terrain units (3 m). */
 export const WALL_HEIGHT = 30;

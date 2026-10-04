@@ -12,6 +12,7 @@ import {
   SIDE_NAMES,
   gapText,
   heftWord,
+  onlyRefusal,
   roofShapeDef,
   storeySkill,
   WALL_TYPE_BY_ID,
@@ -169,6 +170,8 @@ function repointReason(g: Game, t: TileTarget): string | null {
   const mat = material(t.material);
   if (!mat || mat.kind !== 'stone') return 'Choose the stone to lay it in.';
   if (mat.id === was.id) return `It is ${mat.name.toLowerCase()} already.`;
+  const only = onlyRefusal(mat.id, { wall: wall.type });
+  if (only) return only;
   const tool = needTool(g, mat.tool);
   if (tool) return tool;
   const b = storeyOf(g, t);

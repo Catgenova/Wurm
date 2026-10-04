@@ -5,7 +5,7 @@
  */
 import type { ActionDef, Target } from './actions';
 import { consumeUnit, materialName, needsText, needTool, nextAvailable } from './buildActions';
-import { heftWord, INDOORS_DECAY, INDOORS_REST, isDone, jobLevel, MATERIAL_BY_ID, TOP_LEVELS } from './building';
+import { heftWord, INDOORS_DECAY, INDOORS_REST, isDone, jobLevel, MATERIAL_BY_ID, onlyRefusal, TOP_LEVELS } from './building';
 import { SUBTILES } from './crates';
 import { furnitureCovers } from './furniture';
 import type { Game } from './game';
@@ -30,8 +30,10 @@ export const FRAME_ACTIONS: ActionDef[] = [
       if (!isTile(t) || !t.material || !MATERIAL_BY_ID.get(t.material)) return 'Choose a material.';
       const corner = cornerOf(t);
       if (!corner) return 'Choose a corner of the tile.';
-      // Glass goes on a roof and nowhere else (`glasshouse.ts`).
+      // Glass goes on a roof and nowhere else (`glasshouse.ts`), and no material with an `only` makes a column.
       if (t.material === GLASS) return GLASS_ROOF_ONLY;
+      const only = onlyRefusal(t.material, { column: true });
+      if (only) return only;
       const tool = needTool(g, 'mallet');
       if (tool) return tool;
       const b = storeyOf(g, t);

@@ -483,7 +483,7 @@ function rail(r: Run, t0: number, t1: number, h: number, rad: number, pal: Palet
 /* -------------------------------------------------------------------------- */
 
 /** The cut stones and the metals stand on round shafts; rubble, brick and adobe on square piers. */
-const ROUND = new Set(['marble', 'sandstone', 'stone_brick', 'slate', 'ornate_silver', 'ornate_gold', 'mosaic']);
+const ROUND = new Set(['marble', 'sandstone', 'stone_brick', 'slate', 'ornate_silver', 'ornate_gold']);
 
 /** A square block round a corner, from `h0` to `h1`, `r` tiles either side of it: its faces turned to the camera and its top. */
 function block(ctx: CanvasRenderingContext2D, cam: Camera, cx: number, cy: number, r: number, h0: number, h1: number, body: RGB, top: RGB, line: RGB, zoom: number): void {

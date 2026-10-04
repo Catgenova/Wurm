@@ -39,7 +39,7 @@
  * at `INDOORS_DECAY` of the rate outside.
  */
 import type { Target } from './actions';
-import { floorKind, GLASS_ROOF, isDone, WALL_TYPE_BY_ID, workLevel, type Building, type Buildings } from './building';
+import { floorKind, GLASS_ROOF, isDone, onlyRefusal, WALL_TYPE_BY_ID, workLevel, type Building, type Buildings } from './building';
 import type { Game } from './game';
 import { rebaseStage } from './growth';
 import { TileType } from '../world/tiles';
@@ -174,9 +174,12 @@ export function glassPlanRefusal(g: Game, t: TileTarget, action: 'plan_wall' | '
     const b = g.buildings.buildingAt(t.x, t.y);
     return b && fieldIn(g, b) ? FIELD_NO_STOREY : null;
   }
-  if (action !== 'plan_floor') return t.material === GLASS ? GLASS_ROOF_ONLY : null;
+  // Glass on a roof only, and a material with an `only` as that and nothing else (`onlyRefusal`).
+  if (action !== 'plan_floor') return t.material === GLASS ? GLASS_ROOF_ONLY : onlyRefusal(t.material, { wall: t.wallType });
   const kind = t.floorKind ?? 'floor';
   if (t.material === GLASS && kind !== 'roof') return GLASS_ROOF_ONLY;
+  const only = onlyRefusal(t.material, { floor: kind });
+  if (only) return only;
   const b = g.buildings.buildingAt(t.x, t.y);
   if (!b) return null;
   // A building has one roof, and its first tile set the shape; the first tile asks for its own.

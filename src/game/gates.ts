@@ -1,6 +1,6 @@
 import type { ActionDef, Target } from './actions';
 import { BRIDGES, bridgeDone, type Bridge, type BridgeKind } from './bridges';
-import { borderOf, isDone, MATERIALS, progressOf, WALL_TYPE_BY_ID, type Border, type MaterialDef, type Side, type Wall, type WallType } from './building';
+import { borderOf, isDone, MATERIALS, onlyRefusal, progressOf, WALL_TYPE_BY_ID, type Border, type MaterialDef, type Side, type Wall, type WallType } from './building';
 import type { Game } from './game';
 import { rankAtLeast } from './ranks';
 import type { Lockable } from './locks';
@@ -151,7 +151,8 @@ export function keepHiddenAsks(g: Game): void {
  * the island's words.
  */
 export function planHiddenDoor(g: Game, planWall: ActionDef, t: TileTarget): void {
-  const why = hiddenDoorWants(g);
+  // A material laid as only some things (`onlyRefusal`) is no hidden door unless it says so; then the padlock and the hinges.
+  const why = onlyRefusal(t.material, { wall: 'hidden_door' }) ?? hiddenDoorWants(g);
   if (why) {
     g.logMsg(why, 'error');
     return;

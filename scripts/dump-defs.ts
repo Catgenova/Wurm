@@ -24,7 +24,7 @@ import { STONES_DEPTH, STONES_SLABS } from '../src/game/watergarden';
 import { WATER_PLANTS, WATER_PLANT_DEEPEST, WATER_PLANT_SHALLOWEST, WATER_ROOTING } from '../src/world/waterplants';
 import { CROP_LIST, glassExamine } from '../src/game/farming';
 import { FISH, BAITS } from '../src/game/fishing';
-import { GLASS_ROOF, WALL_TYPES, MATERIALS as BUILD_MATERIALS, ROOF_SHAPES, STOREY_SKILL, INDOORS_DECAY, INDOORS_REST, WALL_HEIGHT, LADDER_PLANKS, MAX_LEVELS, TOP_LEVELS, WALL_THICK,
+import { GLASS_ROOF, onlySaid, WALL_TYPES, MATERIALS as BUILD_MATERIALS, ROOF_SHAPES, STOREY_SKILL, INDOORS_DECAY, INDOORS_REST, WALL_HEIGHT, LADDER_PLANKS, MAX_LEVELS, TOP_LEVELS, WALL_THICK,
   CELLAR_DECAY, CELLAR_DEPTH, CELLAR_LEVEL, CELLAR_SOIL, COLUMN_SHARE, JETTY_REACH } from '../src/game/building';
 import { cellarOutdoor } from '../src/game/cellar';
 import { REPOINT_BACK } from '../src/game/buildActions';
@@ -211,6 +211,14 @@ out.push(`create table if not exists build_material_def (
  */
 out.push(`alter table build_material_def add column if not exists storeys int not null default 10;`);
 out.push(`alter table build_material_def add column if not exists heft int not null default 1;`);
+/*
+ * What a material is laid as, where it is not laid as everything: the wall
+ * types and the floor kinds it takes, and the sentence that says so. Null
+ * everywhere but mosaic, which is a solid wall, a floor or a roof.
+ */
+out.push(`alter table build_material_def add column if not exists only_walls text[];`);
+out.push(`alter table build_material_def add column if not exists only_floors text[];`);
+out.push(`alter table build_material_def add column if not exists only_said text;`);
 /*
  * The three shapes a roof comes in: what each costs, how far it rises and
  * whether you may walk out onto it.
@@ -1744,6 +1752,10 @@ for (const r of ROOF_SHAPES) {
 for (const m of BUILD_MATERIALS) {
   out.push(`insert into build_material_def (id, name, kind, tool, skill, storeys, heft) values (${q(m.id)}, ${q(m.name)}, ${q(m.kind)}, ${q(m.tool)}, ${q(m.skill)}, ${q(m.storeys)}, ${q(m.heft)});`);
   m.bill.forEach(([item, n], ord) => out.push(`insert into build_material_bill values (${q(m.id)}, ${q(ord)}, ${q(item)}, ${q(n)});`));
+  if (m.only) {
+    const arr = (xs: readonly string[]): string => `array[${xs.map(q).join(', ')}]::text[]`;
+    out.push(`update build_material_def set only_walls = ${arr(m.only.walls)}, only_floors = ${arr(m.only.floors)}, only_said = ${q(onlySaid(m))} where id = ${q(m.id)};`);
+  }
 }
 for (const f of FISH) out.push(`insert into fish_def values (${q(f.id)}, ${q(f.name)}, ${q(f.depth)}, ${q(f.level)}, ${q(f.weight)});`);
 for (const b of BAITS) {

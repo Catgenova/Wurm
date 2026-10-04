@@ -16,7 +16,7 @@ import { AQUEDUCT_FLOW, AQUEDUCT_LPS, CHANNEL_DEEP, CHANNEL_WIDE, CORNER_LITRES,
 import { gateJobWords, gateReach, HIDDEN_DOOR_IRON, HIDDEN_DOOR_LAPSE } from '../../game/gates';
 import { HOARD_LUMPS, HOARD_MORE } from '../../game/butcher';
 import {
-  CELLAR_DECAY, CELLAR_DEPTH, CELLAR_SOIL, COLUMN_SHARE, columnBill, floorBill, GLASS_ROOF, HEFT_WORDS, INDOORS_DECAY, INDOORS_REST, JETTY_REACH, MATERIALS as WALL_MATERIALS,
+  CELLAR_DECAY, CELLAR_DEPTH, CELLAR_SOIL, COLUMN_SHARE, columnBill, floorBill, GLASS_ROOF, HEFT_WORDS, INDOORS_DECAY, INDOORS_REST, JETTY_REACH, MATERIALS as WALL_MATERIALS, onlySaid, takesAs,
   MAX_LEVELS, RAILING_HEIGHT, roofShapeDef, roofShapeOf, SIDE_NAMES, WALL_HEIGHT, wallBill, WALL_TYPE_BY_ID, WALL_TYPES,
 } from '../../game/building';
 import { CELLAR_ACTION_BY_ID, CELLAR_DAYLIGHT, cellarOutdoor } from '../../game/cellar';
@@ -163,6 +163,8 @@ const glassJob = (id: string): string => {
   const r = recipe(id);
   return `<b>${r.label}</b>, ${bill(id)} into ${countOf(r.result, r.count ?? 1)}`;
 };
+/** What mosaic is laid as, in the words the plan refuses anything else in. */
+const mosaicOnly = (): string => { const m = WALL_MATERIALS.find((x) => x.id === 'mosaic'); return m ? onlySaid(m) : ''; };
 /** How many glass panels an opening is glazed with. */
 const glazing = (type: 'window' | 'bay'): number => WALL_TYPE_BY_ID.get(type)?.fittings?.find(([item]) => item === 'glass')?.[1] ?? 0;
 /** A recipe by its id. A missing one is a mistake in the help, and says so. */
@@ -1013,7 +1015,7 @@ export function helpText(): string {
     roof is laid in them. A firing of tiles that fails keeps the gem and the sand; the others spend what went in.</p>
     <p>A <b>bottle</b> holds ${numberWord(itemDef('bottle').holds ?? 0)} of one food or drink, and what is in it rots at ${share(itemDef('bottle').shelter ?? 1)}
     the rate left lying about. A solid <b>mosaic</b> wall takes ${billWords(WALL_MATERIALS.find((m) => m.id === 'mosaic')?.bill ?? [])}: stone brick faced in the tiles,
-    laid with a trowel and trained as masonry, so one firing of tiles faces one solid wall.</p>
+    laid with a trowel and trained as masonry, so one firing of tiles faces one solid wall. ${mosaicOnly()}</p>
 
     <h3>Hunting and butchering</h3>
     <p>Wild wildermon can be <b>attacked</b> from their menu; an edged tool in your pack hits far harder
@@ -1087,7 +1089,7 @@ export function helpText(): string {
     over a run of fence, half wall or railing, so if you want a floor above, the side below needs a wall,
     or a finished column at each end.</p>
     <p>A <b>portcullis</b> is a wall type for a ground-floor wall of stone or brick &mdash;
-    ${listed(WALL_MATERIALS.filter((m) => m.kind === 'stone').map((m) => m.name.toLowerCase()))} &mdash;
+    ${listed(WALL_MATERIALS.filter((m) => m.kind === 'stone' && takesAs(m, { wall: 'portcullis' })).map((m) => m.name.toLowerCase()))} &mdash;
     a gateway as wide as a double door with an iron grille, ${billWords(WALL_TYPE_BY_ID.get('portcullis')?.fittings ?? [])} over the stone's own bill
     (in stone brick, ${billWords(Object.entries(wallBill('stone_brick', 'portcullis').total))}). <b>Raise the portcullis</b> takes
     ${gateJobWords('raise_portcullis', goSeconds)} and <b>Lower the portcullis</b> ${gateJobWords('lower_portcullis', goSeconds)},
@@ -1257,7 +1259,7 @@ export function helpText(): string {
     reach you walk to it first. A trash crate and a market stall do not take a drop.</p>
     <h3>Shop counters</h3>
     <p>A <b>shop counter</b> is a wall with a market stall in it. Plan it as any wall &mdash; <b>Plan wall</b>,
-    <b>Shop counter</b>, in any of the ${numberWord(WALL_MATERIALS.length)} materials &mdash; and build it with ${share(COUNTER_TYPE.factor ?? 1)} of a solid wall's
+    <b>Shop counter</b>, in any of the ${numberWord(WALL_MATERIALS.filter((m) => takesAs(m, { wall: 'counter' })).length)} materials it may be laid in &mdash; and build it with ${share(COUNTER_TYPE.factor ?? 1)} of a solid wall's
     material and ${countOf('hinge', counterHinges)}: in log, ${numberWord(wallBill('log', 'counter').needed.log ?? 0)} logs where a solid log wall takes ${numberWord(wallBill('log', 'solid').needed.log ?? 0)}.
     It goes only in a wall of the <b>ground floor</b> with no building across it: that side is its <b>street</b>, and once
     a counter is planned there no building is planned or added onto that tile. Nothing walks through it, a storey stands on it as on

@@ -40,6 +40,9 @@ create table if not exists build_material_def (
 );
 alter table build_material_def add column if not exists storeys int not null default 10;
 alter table build_material_def add column if not exists heft int not null default 1;
+alter table build_material_def add column if not exists only_walls text[];
+alter table build_material_def add column if not exists only_floors text[];
+alter table build_material_def add column if not exists only_said text;
 create table if not exists roof_shape_def (
   id text primary key, name text not null, rise real not null,
   factor real not null, walkable boolean not null default false, note text not null
@@ -4554,6 +4557,7 @@ insert into build_material_def (id, name, kind, tool, skill, storeys, heft) valu
 insert into build_material_bill values ('mosaic', 0, 'stone_brick', 24);
 insert into build_material_bill values ('mosaic', 1, 'mortar', 12);
 insert into build_material_bill values ('mosaic', 2, 'mosaic_tile', 20);
+update build_material_def set only_walls = array['solid']::text[], only_floors = array['floor', 'roof']::text[], only_said = 'Mosaic is laid as a solid wall, a floor or a roof, and nothing else.' where id = 'mosaic';
 insert into fish_def values ('minnow', 'Minnow', 0, 1, 30);
 insert into fish_def values ('perch', 'Perch', 3, 1, 24);
 insert into fish_def values ('trout', 'Trout', 8, 15, 16);
