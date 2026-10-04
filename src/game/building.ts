@@ -178,6 +178,8 @@ export interface MaterialDef {
    * column, no flight of stairs.
    */
   only?: { walls: readonly WallType[]; floors: readonly FloorKind[] };
+  /** Glass, and seen through: a wall of it does not stop the eye (`vision.ts`), as a window does not. */
+  seeThrough?: boolean;
 }
 
 /** The three grades of weight, as a builder names them. */
@@ -208,7 +210,7 @@ export const MATERIALS: MaterialDef[] = [
    * Stone brick framing leaded panes of coloured glass: a gem ground into the
    * melt colours a batch of panes, and a solid wall takes one batch.
    */
-  { id: 'stained_glass', name: 'Stained glass', kind: 'stone', tool: 'trowel', skill: 'masonry', color: [214, 196, 226], trim: [232, 224, 206], floor: [238, 228, 214], courses: 4, bill: [['stone_brick', 24], ['mortar', 12], ['stained_glass_pane', 20]], storeys: 10, heft: 3, only: { walls: ['solid'], floors: ['floor', 'roof'] } },
+  { id: 'stained_glass', name: 'Stained glass', kind: 'stone', tool: 'trowel', skill: 'masonry', color: [214, 196, 226], trim: [232, 224, 206], floor: [238, 228, 214], courses: 4, bill: [['stone_brick', 24], ['mortar', 12], ['stained_glass_pane', 20]], storeys: 10, heft: 3, only: { walls: ['solid'], floors: ['floor', 'roof'] }, seeThrough: true },
 ];
 export const MATERIAL_BY_ID = new Map(MATERIALS.map((m) => [m.id, m]));
 /**

@@ -1,5 +1,5 @@
 import { TileType } from '../world/tiles';
-import { isDone, WALL_TYPE_BY_ID } from './building';
+import { isDone, MATERIAL_BY_ID, WALL_TYPE_BY_ID } from './building';
 import { CELLAR_DAYLIGHT } from './cellar';
 import { bloodMul } from './creatures';
 import type { Game } from './game';
@@ -533,7 +533,7 @@ export class Vision {
     set = new Set();
     const bld = this.game.buildings;
     for (const w of bld.walls.values()) {
-      if (w.level !== level || !WALL_TYPE_BY_ID.get(bld.seenType(w))?.opaque || !isDone(w)) continue;
+      if (w.level !== level || !WALL_TYPE_BY_ID.get(bld.seenType(w))?.opaque || MATERIAL_BY_ID.get(w.material)?.seeThrough || !isDone(w)) continue;
       set.add(this.borderKey(w.dir, w.x, w.y));
     }
     for (const key of this.game.hinges.keys()) {
