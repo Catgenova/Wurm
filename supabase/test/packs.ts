@@ -183,7 +183,9 @@ begin
 
   -- A rowl at a quarter of itself runs; at two fifths it does not.
   r := creature_spawn(w.world_id, 'rowl', v_px + 4, v_py, 'wild', now() - interval '2 hours');
-  update creature set traits = '{}', health = max_health(c) * 0.25, hunting = w.uid, pack_lead = null,
+  -- Its traits go first: a quarter of what a deep-chested one stands is more than three tenths of a plain one.
+  update creature set traits = '{}' where world_id = w.world_id and id = r;
+  update creature set health = max_health(c) * 0.25, hunting = w.uid, pack_lead = null,
       hunt_x = v_px + 4, hunt_y = v_py, hunt_again = null,
       until = now() - interval '1 second', settled_at = now() - interval '1 second'
     from creature c where creature.world_id = w.world_id and creature.id = r and c.world_id = w.world_id and c.id = r;
