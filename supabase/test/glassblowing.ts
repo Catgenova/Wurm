@@ -146,6 +146,9 @@ begin
     'side', 'n', 'wallType', 'half_wall', 'material', 'stained_glass')), 'ALLOWED'));
   insert into said values ('SOLIDFENCE', coalesce(act_refusal(w, u, 'plan_fence', jsonb_build_object('kind', 'tile', 'x', 9, 'y', 10,
     'side', 'n', 'wallType', 'half_wall', 'material', 'stone_brick')), 'ALLOWED'));
+  -- And a door, a window and an arch of it, asked of the job that plans a wall.
+  insert into said values ('OPENINGS', (select string_agg(coalesce(act_refusal(w, u, 'plan_wall', jsonb_build_object('kind', 'tile', 'x', 9, 'y', 10,
+    'side', 'n', 'wallType', t, 'material', 'stained_glass')), 'ALLOWED'), '|' order by t) from unnest(array['arch', 'door', 'window']) t));
 end $$;
 select k || '=' || v from said order by k;
 rollback;`);
@@ -205,6 +208,13 @@ check('every other material is laid as anything', [...MATERIAL_BY_ID.values()].f
   WALL_TYPES.every((wt) => onlyRefusal(m.id, { wall: wt.id }) === null) && onlyRefusal(m.id, { column: true }) === null));
 check('the island turns away a half wall of stained glass in those words, and lets one of stone brick through that check',
   got('FENCE') === onlySaid(M) && got('SOLIDFENCE') !== onlySaid(M), `${got('FENCE')} / ${got('SOLIDFENCE')}`);
+const planWall = ACTIONS.find((a) => a.id === 'plan_wall')!;
+// The browser's job refuses before it asks anything of the game, so no game is needed to hear it.
+const openings = ['arch', 'door', 'window'].map((wallType) =>
+  planWall.check?.({ kind: 'tile', x: 9, y: 10, side: 'n', wallType, material: 'stained_glass' } as Parameters<NonNullable<typeof planWall.check>>[0],
+    undefined as unknown as Parameters<NonNullable<typeof planWall.check>>[1]) ?? 'ALLOWED');
+check('no door, window or arch of stained glass is planned, by the job that plans a wall, on either side',
+  openings.every((o) => o === onlySaid(M)) && got('OPENINGS') === openings.join('|'), `browser ${openings.join(' / ')}; island ${got('OPENINGS')}`);
 
 for (const l of [...ok, ...bad]) console.log(l);
 console.log(`${bad.length} of ${ok.length + bad.length} are not what they should be`);
