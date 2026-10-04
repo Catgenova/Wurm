@@ -767,20 +767,23 @@ function build(material: string): Covering | null {
         fascia: { kind: 'cornice', body: [226, 229, 234], edge: [170, 176, 186], deep: EAVE_DEEP * 1.15 },
       };
     case 'stained_glass':
-      // Scales of sea-glass mint, a paler one and an aqua among them, each set in lead, under a ridge of gold; laid flat, the floor's leaded panels.
+      // Scales of sea-glass mint, a paler one and an aqua among them far enough apart to tell at play size, each set in
+      // lead, under a ridge and an eave of gold; laid flat, the floor's leaded panels.
       return {
         mips: [seenThrough(lapped({
           rows: 14, unit: [36.57, 36.57], bond: 'half', gap: 1.5, ground: '#4c5058',
-          tones: [['#9fd3c7', 5], ['#b2ddd1', 3], ['#8cc6bb', 3], ['#a9ddd9', 2], ['#c4e6dc', 2]],
+          tones: [['#9fd3c7', 5], ['#b8e2d6', 3], ['#82bfb2', 3], ['#a3dad6', 2], ['#cbebe1', 2]],
           line: '#4c5058', lineW: 2.6, hi: '#ecf8f4', drip: 4, dripInk: 'rgba(52, 60, 70, 0.4)',
           shape: 'scale', ragged: 0, skew: 0, detail: sheened('#f6fbf9', '#d2ece6'),
         }, 47), '#4c5058')],
         deck: [leadedGlass(153)],
         shade: [56, 74, 86],
-        shadow: shadowOf(0.75),
-        cap: { kind: 'crest', body: '#e3c46a', dark: '#8a6a2a', hi: '#f8e7b0', w: 5, joint: 0 },
+        // Deeper than a tile roof's, so the two slopes in view are a step apart and the hip reads as a hip.
+        shadow: shadowOf(1.1),
+        // A plain roll of gold along the ridge and the hips, and a gold gutter along the eave, as the cames round a lamp.
+        cap: { kind: 'roll', body: '#e3c46a', dark: '#8a6a2a', hi: '#f8e7b0', w: 5, joint: 0 },
         valley: 'rgba(60, 92, 86, 0.55)',
-        fascia: { kind: 'cornice', body: [230, 222, 206], edge: [163, 154, 134], deep: EAVE_DEEP * 1.15 },
+        fascia: { kind: 'gutter', body: [227, 196, 106], edge: [138, 106, 42], deep: EAVE_DEEP * 1.15 },
       };
     case 'ornate_silver':
       return {

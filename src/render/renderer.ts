@@ -6507,10 +6507,18 @@ export class Renderer {
       for (const i of byPoint.get(`${a[0]},${a[1]}`) ?? []) if (B.has(i)) most = Math.max(most, shown(model.faces[i]));
       return most;
     };
+    /*
+     * On a roof with no valley every ridge and hip is on top of everything
+     * else of it, so they go on after all its faces: laid after only the two
+     * faces either side, the next tile's face along the hip went on over the
+     * end of the piece before it, and every joint of the ridge was a notch of
+     * the covering cut into the cap.
+     */
+    const ridgedLast = !model.creases.some((c) => c.kind === 'valley');
     for (const c of model.creases) {
       const strength = isDone(roofs[c.tile]) ? seen(c.a, c.b) : 0;
       if (strength <= 0) continue;
-      items.push({ d: after(c.a, c.b) + 0.001, draw: () => {
+      items.push({ d: (ridgedLast ? 1e9 : 0) + after(c.a, c.b) + 0.001, draw: () => {
         const was = ctx.globalAlpha;
         ctx.globalAlpha = was * strength;
         drawCrease();
@@ -7968,6 +7976,13 @@ export class Renderer {
         ctx.lineTo(px + ((px - cx) / l) * grow, py + ((py - cy) / l) * grow);
       }
       ctx.closePath();
+      // Glass over your head is a tint of its colour: its lead drawn faint was a second grid over the room under it.
+      if (alpha < 1 && bare.seeThrough) {
+        ctx.fillStyle = rgb(fl.mean, 0.4);
+        ctx.fill();
+        ctx.globalAlpha = 1;
+        return;
+      }
       const mip = this.roofMip(FLOOR_PPT), k = 1 / (FLOOR_PPT >> mip);
       // Boards run with the building: along one axis on one storey and across it on the next.
       const turned = fl.runs && (floor.building + floor.level) % 2 === 1;
@@ -8418,6 +8433,22 @@ export class Renderer {
       return P ? [-1, -line.h / half] : [line.h / half, 1];
     };
     ctx.globalAlpha = alpha;
+    /*
+     * Glass let go in front of the room you are in is a breath of its colour
+     * and the line of its frame. Drawn faint in full, its lead and its marble
+     * were a cage laid over everything in the room.
+     */
+    if (done && alpha < 1 && bare.seeThrough) {
+      quad(0, 1, 0, 1);
+      ctx.fillStyle = rgb(mat.color, lit, 0.4);
+      ctx.fill();
+      ctx.strokeStyle = rgb(mat.trim, lit, 0.9);
+      ctx.lineWidth = Math.max(0.75, 0.75 * zoom);
+      ctx.stroke();
+      ctx.lineWidth = 1;
+      ctx.globalAlpha = 1;
+      return;
+    }
     if (!done && wall.type === 'railing') {
       /*
        * A railing going up: inside the outline of the whole of it, at its

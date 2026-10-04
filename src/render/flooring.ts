@@ -769,9 +769,10 @@ const LEAD = '#4c5058';
 export const STAINED_OPACITY = 0.75;
 
 /**
- * One pane of stained glass: its own colour, paler toward the light, the
- * clouds and streaks a sheet of cathedral glass has run through it, a fleck
- * where the light catches a seed, and the came's light along its top edge.
+ * One pane of stained glass: its own colour, paler toward the light, clouded
+ * as a sheet of cathedral glass is, a faint ream through one pane in two, now
+ * and then a fleck where the light catches a seed, and the came's light along
+ * its top edge.
  */
 function stainedPane(g: Ctx, x: number, y: number, w: number, h: number, hex: string, R: Rand): void {
   g.save();
@@ -789,10 +790,10 @@ function stainedPane(g: Ctx, x: number, y: number, w: number, h: number, hex: st
     cloud.addColorStop(1, 'rgba(255, 253, 246, 0)');
     g.fillStyle = cloud; g.fillRect(x, y, w, h);
   }
-  const streaks = 1 + Math.round((w * h) / 1800) + Math.floor(R() * 2);
+  const streaks = R() < 0.5 ? 1 : 0;
   for (let i = 0; i < streaks; i++) {
-    g.strokeStyle = R() < 0.3 ? hexA(step(hex, -0.12), 0.22) : `rgba(255, 253, 246, ${0.2 + R() * 0.2})`;
-    g.lineWidth = 2 + R() * 3.5;
+    g.strokeStyle = `rgba(255, 253, 246, ${0.08 + R() * 0.07})`;
+    g.lineWidth = 1.2 + R() * 0.8;
     const across = w >= h;
     const a = across ? y + R() * h : x + R() * w;
     const b = across ? y + R() * h : x + R() * w;
@@ -806,9 +807,9 @@ function stainedPane(g: Ctx, x: number, y: number, w: number, h: number, hex: st
     }
     g.stroke();
   }
-  for (let i = 0; i < 1 + Math.floor(R() * 3); i++) {
-    g.fillStyle = 'rgba(255, 255, 250, 0.55)';
-    g.beginPath(); g.arc(x + 3 + R() * (w - 6), y + 3 + R() * (h - 6), 0.8 + R() * 1.2, 0, Math.PI * 2); g.fill();
+  for (let i = 0; i < Math.floor(R() * 2); i++) {
+    g.fillStyle = 'rgba(255, 255, 250, 0.45)';
+    g.beginPath(); g.arc(x + 3 + R() * (w - 6), y + 3 + R() * (h - 6), 0.8 + R() * 1.0, 0, Math.PI * 2); g.fill();
   }
   g.restore();
   g.fillStyle = 'rgba(255, 255, 255, 0.28)';
@@ -821,7 +822,7 @@ function stainedPane(g: Ctx, x: number, y: number, w: number, h: number, hex: st
  * came round each panel where it meets the next.
  *
  * The panes are packed on a lattice as the walls' are: a cell is taken by a
- * pane one to three across and one to three down, whatever fits, so the leads
+ * pane one or two across and one or two down, whatever fits, so the leads
  * run long in places and break short in others, and no pane takes the colour
  * of the one beside it or above it. Every tile is a panel of its own, so
  * nothing in the glass comes near a seam and the picture repeats both ways.
@@ -832,7 +833,9 @@ export function leadedGlass(seed: number): HTMLCanvasElement {
   // The panes on a sheet of their own, laid in at the glass's opacity, and the lead round them on another, laid in whole.
   const [glass, gl] = canvas(S, S), [cames, cm] = canvas(S, S);
   const R = rand(seed);
-  const T = S / FLOOR_TILES, border = 3, lead = 2.6, n = 8, u = (T - border * 2) / n;
+  // Four cells a side and panes of one or two: a floor of slivers is a grid of lead and nothing else. The frame round
+  // each tile outweighs the lead between its panes, so the tiles lead the eye.
+  const T = S / FLOOR_TILES, border = 5, lead = 3, n = 4, u = (T - border * 2) / n;
   cm.fillStyle = LEAD;
   cm.fillRect(0, 0, S, S);
   for (let ty = 0; ty < FLOOR_TILES; ty++) {
@@ -842,7 +845,7 @@ export function leadedGlass(seed: number): HTMLCanvasElement {
       for (let r = 0; r < n; r++) {
         for (let q = 0; q < n; q++) {
           if (taken[r][q] >= 0) continue;
-          let w = 1 + Math.floor(R() * 3), h = 1 + Math.floor(R() * 3);
+          let w = 1 + Math.floor(R() * 2), h = 1 + Math.floor(R() * 2);
           while (w > 1 && (q + w > n || taken[r].slice(q, q + w).some((t) => t >= 0))) w--;
           h = Math.min(h, n - r);
           while (h > 1 && taken.slice(r, r + h).some((row) => row.slice(q, q + w).some((t) => t >= 0))) h--;

@@ -4084,12 +4084,12 @@ function paint(S: Stock): Masonry {
   /** The colours of stained glass, in the order a pane is offered them. */
   const GLASSES = ['glassPink', 'glassPeach', 'glassLemon', 'glassMint', 'glassAqua', 'glassSky', 'glassLilac', 'glassRose', 'glassSage', 'glassCream'];
   /** How wide a marble pilaster stands at each end of a section, half of it in each of the two sections it parts. */
-  const PILASTER = 20;
+  const PILASTER = 28;
   /**
-   * One pane of glass: its own colour, paler toward the light, and the
-   * streaks a sheet of cathedral glass has run through it -- a few lighter,
-   * one or two darker, never straight -- and a fleck or two where the light
-   * catches a seed in it.
+   * One pane of glass: its own colour, paler toward the light, clouded as a
+   * sheet of cathedral glass is, a faint ream run through one pane in two,
+   * never straight, and now and then a fleck where the light catches a seed
+   * in it.
    */
   function pane(g: Ctx, x: number, y: number, w: number, h: number, hex: string, R: Rand): void {
     g.save();
@@ -4108,11 +4108,11 @@ function paint(S: Stock): Masonry {
       cloud.addColorStop(1, 'rgba(255, 253, 246, 0)');
       g.fillStyle = cloud; g.fillRect(x, y, w, h);
     }
-    const streaks = 1 + Math.round((w * h) / 1800) + Math.floor(R() * 2);
+    // A ream in the sheet, now and then, and faint: drawn every time and strongly, the streaks read as wood grain.
+    const streaks = R() < 0.5 ? 1 : 0;
     for (let i = 0; i < streaks; i++) {
-      const dark = R() < 0.3;
-      g.strokeStyle = dark ? hexA(lighten(hex, -12), 0.22) : `rgba(255, 253, 246, ${0.2 + R() * 0.2})`;
-      g.lineWidth = 2 + R() * 3.5;
+      g.strokeStyle = `rgba(255, 253, 246, ${0.08 + R() * 0.07})`;
+      g.lineWidth = 1.2 + R() * 0.8;
       const across = w >= h;
       const a = across ? y + R() * h : x + R() * w;
       const b = across ? y + R() * h : x + R() * w;
@@ -4126,9 +4126,9 @@ function paint(S: Stock): Masonry {
       }
       g.stroke();
     }
-    for (let i = 0; i < 1 + Math.floor(R() * 3); i++) {
-      g.fillStyle = 'rgba(255, 255, 250, 0.55)';
-      g.beginPath(); g.arc(x + 3 + R() * (w - 6), y + 3 + R() * (h - 6), 0.8 + R() * 1.2, 0, Math.PI * 2); g.fill();
+    for (let i = 0; i < Math.floor(R() * 2); i++) {
+      g.fillStyle = 'rgba(255, 255, 250, 0.45)';
+      g.beginPath(); g.arc(x + 3 + R() * (w - 6), y + 3 + R() * (h - 6), 0.8 + R() * 1.0, 0, Math.PI * 2); g.fill();
     }
     g.restore();
     // The came's own light: a hair of it along the top of the pane, where the lead turns to the sky.
@@ -4140,8 +4140,8 @@ function paint(S: Stock): Masonry {
    * pilaster at each end of the section.
    *
    * Panes of no set size, packed on a lattice the way a glazier cuts them
-   * from what the sheets give: a cell is taken by a pane one to three wide
-   * and one to four tall, whatever fits, so the leads run long in places and
+   * from what the sheets give: a cell is taken by a pane one or two wide
+   * and one to three tall, whatever fits, so the leads run long in places and
    * break short in others. No pane takes the colour of the one beside it or
    * over it. Every section is a panel of its own, so nothing in the glass
    * comes near a seam; the pilaster is what two sections share.
@@ -4164,13 +4164,14 @@ function paint(S: Stock): Masonry {
     };
     const [glass, gl] = sheet(), [cames, cm] = sheet();
     cm.fillStyle = PASTEL.lead; cm.fillRect(x0, gy0, x1 - x0, gy1 - gy0);
-    const cols = 14, rows = Math.max(2, Math.round((gy1 - gy0) / 34));
-    const cw = (x1 - x0) / cols, rh = (gy1 - gy0) / rows, lead = 1.8;
+    // Few panes and big ones, in a lead heavy enough to read at play size: a sliver of a pane is a barcode at a quarter scale.
+    const cols = 8, rows = Math.max(2, Math.round((gy1 - gy0) / 48));
+    const cw = (x1 - x0) / cols, rh = (gy1 - gy0) / rows, lead = 2.7;
     const taken: number[][] = Array.from({ length: rows }, () => Array(cols).fill(-1));
     for (let r = 0; r < rows; r++) {
       for (let c = 0; c < cols; c++) {
         if (taken[r][c] >= 0) continue;
-        let w = 1 + Math.floor(R() * 3), h = 1 + Math.floor(R() * 4);
+        let w = 1 + Math.floor(R() * 2), h = 1 + Math.floor(R() * 3);
         while (w > 1 && taken[r].slice(c, c + w).some((t, i) => t >= 0 || c + i >= cols)) w--;
         if (c + w > cols) w = cols - c;
         h = Math.min(h, rows - r);
