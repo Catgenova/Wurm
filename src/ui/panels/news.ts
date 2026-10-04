@@ -1036,6 +1036,14 @@ export const NEWS: News[] = [
       `Take the Blessing as your patron at ${PATRON_AT} faith, take a spell at each tier as your faith reaches it, and put ${numberWord(slotsFor('faith'))} of them on the spell bar.`,
     ],
   },
+  {
+    n: 78,
+    day: '2026-10-04',
+    lines: () => [
+      `Justice's spells are written, ${SPELLS_PER_TIER} at each tier: ${listed(FAITH_SPELLS.filter((s) => s.patron === 'justice').map((s) => s.name))}. What each does, to the number, is in the Faith window.`,
+      `At each tier one judges what it is cast on, one keeps order in a fight, and one measures: an Oath binds only friends, and Restitution brings home whatever your latest grave holds.`,
+    ],
+  },
 ];
 
 /** The highest entry this browser has shown. */

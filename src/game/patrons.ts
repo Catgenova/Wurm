@@ -23,7 +23,7 @@ import { listed, listedOr, percent } from './words';
  * calls a spell off the bar. What a patron *offers* is the same for everybody
  * and is written here, which is what the island's rows are generated from.
  *
- * The Blessing's fifteen are written; Justice's and Chaos's are still to come.
+ * The Blessing's fifteen and Justice's fifteen are written; Chaos's are still to come.
  * `FAITH_SPELLS` is where they go, and the Faith window and the bar draw
  * whatever is in it.
  */
@@ -130,18 +130,22 @@ export const LAND_GROWS: ReadonlyArray<readonly [number, number]> = (() => {
 })();
 const ageName = (id: number): string => (TREE_AGES.find((a) => a.id === id)?.name ?? '').toLowerCase();
 
-/** One of the Blessing's, its note written from its own numbers. */
-const blessing = (
+/** One of a patron's spells, its note written from its own numbers. */
+const spellOf = (patron: PatronId) => (
   tier: number, id: string, name: string, cost: number, rest: number, on: readonly SpellOn[],
   fx: Record<string, number>, note: (fx: Record<string, number>, radius: number) => string, radius?: number,
-): FaithSpellDef => ({ id: `blessing_${id}`, patron: 'blessing', tier, name, cost, rest, on, radius, fx, note: note(fx, radius ?? 0) });
+): FaithSpellDef => ({ id: `${patron}_${id}`, patron, tier, name, cost, rest, on, radius, fx, note: note(fx, radius ?? 0) });
+const blessing = spellOf('blessing');
+const justice = spellOf('justice');
 
 /**
  * Every faith spell there is, patron by patron and tier by tier.
  *
  * The Blessing's three at each tier are one that mends, one that guards and
- * one for creatures, things and the land. What lasts a while is kept on the
- * island against whoever it was cast on (`player.blessings`) or against the
+ * one for creatures, things and the land. Justice's are one that judges what
+ * it is cast on, one that keeps order in a fight, and one that measures. What
+ * lasts a while is kept on the island against whoever it was cast on
+ * (`player.blessings`), against a creature (`faith_mark`) or against the
  * ground (`faith_zone`), and the rules that fight, heal, tame, work and grow
  * look there.
  */
@@ -180,6 +184,41 @@ export const FAITH_SPELLS: FaithSpellDef[] = [
     (fx, r) => `For ${span(fx.secs)}, every creature within ${r} tiles of the spot that is hunting somebody loses ${percent(fx.each)} of its health a second, ${percent(fx.each * fx.secs)} in all; it is never killed by it.`, 8),
   blessing(5, 'land', 'Bless the Land', 50, 3600, ['area'], {},
     (_fx, r) => `Every tree within ${r} tiles of the spot grows a stage: ${listed(LAND_GROWS.map(([a, b]) => `${ageName(a)} to ${ageName(b)}`))}. One that would grow into dying, and one that is clipped, stays as it is.`, 10),
+
+  justice(1, 'mark', 'Mark of Judgment', 10, 30, ['enemy'], { more: 0.15, secs: 30 },
+    (fx) => `For ${span(fx.secs)} the creature takes ${percent(fx.more)} more damage from every blow, whoever or whatever strikes it.`),
+  justice(1, 'retribution', 'Retribution', 10, 60, ['self', 'player'], { share: 0.2, secs: 60 },
+    (fx) => `For ${span(fx.secs)}, ${percent(fx.share)} of every blow that lands on them is dealt back to whatever struck.`),
+  justice(1, 'assay', 'Assay', 12, 600, ['area'], { secs: 600 },
+    (fx, r) => `Every ore seam under the ground within ${r} tiles of the spot is marked for you for ${span(fx.secs)}, as a prospector's sensing marks it.`, 8),
+
+  justice(2, 'sentence', 'Sentence', 16, 60, ['enemy'], { share: 0.25 },
+    (fx) => `Strikes the creature for ${percent(fx.share)} of the health it has already lost. Not on a creature that is unhurt.`),
+  justice(2, 'bind', 'Bind', 14, 90, ['enemy'], { secs: 5, monster: 0.5 },
+    (fx) => `Holds the creature where it stands for ${span(fx.secs)}: it neither moves nor strikes. A monster is held for ${span(fx.secs * fx.monster)}.`),
+  justice(2, 'equity', 'Equity', 10, 60, ['player'], {},
+    () => 'You and the other person both end at the average of your healths.'),
+
+  justice(3, 'verdict', 'Verdict', 24, 120, ['enemy'], { below: 0.2, monster: 0.1, share: 0.1 },
+    (fx) => `A creature below ${percent(fx.below)} of its health dies at once, a monster below ${percent(fx.monster)}; any other loses ${percent(fx.share)} of its health.`),
+  justice(3, 'summons', 'Summons', 20, 60, ['enemy'], { secs: 20 },
+    (fx) => `The creature turns on you and hunts only you for ${span(fx.secs)}, whoever it was after.`),
+  justice(3, 'temper', 'Temper', 20, 600, ['object'], { secs: 1800 },
+    (fx) => `For ${span(fx.secs)}, the thing takes no wear at all while you carry it.`),
+
+  justice(4, 'judgment', 'Judgment', 34, 300, ['area'], { share: 0.15, more: 0.15, secs: 30 },
+    (fx, r) => `Every creature within ${r} tiles of the spot that is hunting somebody loses ${percent(fx.share)} of its health and, for ${span(fx.secs)}, takes ${percent(fx.more)} more damage from every blow.`, 6),
+  justice(4, 'truce', 'Truce', 30, 600, ['area'], { secs: 30 },
+    (fx, r) => `For ${span(fx.secs)}, nothing within ${r} tiles of the spot can strike or be struck, people and creatures alike.`, 8),
+  justice(4, 'restitution', 'Restitution', 40, 3600, ['self', 'player'], {},
+    () => 'Everything in their latest grave comes back into their pack, wherever they are.'),
+
+  justice(5, 'execution', 'Execution', 60, 1800, ['enemy'], { below: 0.5, monster: 0.3, share: 0.2 },
+    (fx) => `A creature below ${percent(fx.below)} of its health dies at once, a monster below ${percent(fx.monster)}; any other loses ${percent(fx.share)} of its health.`),
+  justice(5, 'oath', 'Oath', 50, 3600, ['player'], { secs: 600 },
+    (fx) => `For ${span(fx.secs)}, every blow that lands on you or on the friend it is cast on is split evenly between you. Only on a friend.`),
+  justice(5, 'reward', 'Due Reward', 50, 3600, ['self', 'player'], { more: 0.2, secs: 1800 },
+    (fx) => `For ${span(fx.secs)}, every skill they raise gains ${percent(fx.more)} more.`),
 ];
 export const FAITH_SPELL_BY_ID = new Map(FAITH_SPELLS.map((s) => [s.id, s]));
 export const spellsOf = (patron: PatronId, tier: number): FaithSpellDef[] =>

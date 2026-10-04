@@ -93,7 +93,7 @@ import { BRIDGES, CLEARANCE, END_SLOP } from '../src/game/bridges';
 import { BREWS } from '../src/game/brewing';
 import { DYEABLE_ITEMS } from '../src/game/dyes';
 import { PAIR_RANGE, GROOM_CAP, GROOM_HEAL, TIER_LEVEL } from '../src/game/husbandry';
-import { BREED_REST, GESTATION } from '../src/game/creatures';
+import { BLOW_SHARE, BREED_REST, GESTATION } from '../src/game/creatures';
 import { REST_CAP, REST_MULT, REST_PER_SECOND } from '../src/game/boons';
 import { DAWN, DUSK, DAY_SECONDS, CARRY_BASE, CARRY_PER_STRENGTH, CARRY_STOP } from '../src/game/game';
 import { CARRY_CRAWL } from '../src/game/player';
@@ -1417,7 +1417,7 @@ for (const [fn, v] of [
      more per point of skill, a knife's share more, and what it lands for. A
      bodkin through a hide; venom, a second and how long; a burn on armour;
      and how long what a creature is on holds it. */
-  ['patron_at', PATRON_AT], ['spells_per_tier', SPELLS_PER_TIER], ['spell_reach', SPELL_REACH],
+  ['patron_at', PATRON_AT], ['spells_per_tier', SPELLS_PER_TIER], ['spell_reach', SPELL_REACH], ['blow_share', BLOW_SHARE],
   ['dodge_from', DODGE_FROM], ['dodge_per_control', DODGE_PER_CONTROL], ['dodge_per_kg', DODGE_PER_KG], ['dodge_most', DODGE_MOST], ['dodge_gain', DODGE_GAIN],
   ['crit_base', CRIT_BASE], ['crit_per_skill', CRIT_PER_SKILL], ['crit_knife', CRIT_KNIFE], ['crit_hit', CRIT_HIT],
   ['bodkin_hide', BODKIN_HIDE], ['venom_drain', VENOM_DRAIN], ['venom_secs', VENOM_SECS], ['burn_wear', BURN_WEAR],

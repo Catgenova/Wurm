@@ -1605,6 +1605,18 @@ jobs:
             --outfile=node_modules/.cache/blessing.mjs --log-level=error
           node node_modules/.cache/blessing.mjs
 
+      - name: Justice's spells
+        run: |
+          # Every one of the fifteen pointed and cast as the door does it: a mark
+          # through every blow, a Retribution owed and paid at the striker's
+          # settling, a Truce on both sides of a blow, a Summons a stranger's
+          # blow cannot take back, a Temper through any wear, an Oath split, a
+          # grave brought home, a Due Reward through skill_mult. Every number
+          # is the browser's own.
+          npx esbuild supabase/test/justice.ts --bundle --platform=node --format=esm \
+            --outfile=node_modules/.cache/justice.mjs --log-level=error
+          node node_modules/.cache/justice.mjs
+
       - name: A stone, and what you can get out of it
         run: |
           # The arcane, which has no mana in it. A focus is a cut gem in a

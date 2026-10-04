@@ -2048,8 +2048,9 @@ import{$a as e,Aa as t,Cn as n,Dn as r,Dt as i,En as a,F as o,Fr as s,Ft as c,H 
     if it takes a creature, or else on you or round where you stand if it takes those; otherwise it asks what at.
     Right-click a person, a creature, a thing or the ground to cast any spell on your bar that takes it.</p>
     <p>The Blessing's ${_(si.filter(e=>e.patron===`blessing`).length)} spells are written: at each tier one that mends,
-    one that guards, and one for creatures, things and the land. Justice's and Chaos's are still to come. Every spell's numbers are in the
-    Faith window, beside it.</p>
+    one that guards, and one for creatures, things and the land. So are Justice's ${_(si.filter(e=>e.patron===`justice`).length)}:
+    at each tier one that judges what it is cast on, one that keeps order in a fight, and one that measures. Chaos's are still to come. Every
+    spell's numbers are in the Faith window, beside it.</p>
     <h3>The things that are not wildermon</h3>
     <p>Most of what walks this island can be tamed. ${l(rs.length)} things cannot. A <b>goblin</b> is knee-high and
     entirely malice; an <b>orc</b> is a head taller than you and carries sharpened iron; an <b>ogre</b>
