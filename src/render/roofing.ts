@@ -20,6 +20,7 @@
  */
 
 import { EAVE_DEEP } from '../game/building';
+import { leadedGlass } from './flooring';
 
 /** Picture pixels to a tile, along the eave and up the slope, at the finest of the three. */
 export const COVER_PPT = 256;
@@ -747,16 +748,16 @@ function build(material: string): Covering | null {
         valley: 'rgba(150, 158, 172, 0.6)',
         fascia: { kind: 'cornice', body: [226, 229, 234], edge: [170, 176, 186], deep: EAVE_DEEP * 1.15 },
       };
-    case 'mosaic':
-      // Glazed scales in a sea-glass mint, a paler one and an aqua among them, under a ridge of gold.
+    case 'stained_glass':
+      // Scales of sea-glass mint, a paler one and an aqua among them, each set in lead, under a ridge of gold; laid flat, the floor's leaded panels.
       return {
         mips: [lapped({
-          rows: 14, unit: [36.57, 36.57], bond: 'half', gap: 1, ground: '#5f8f88',
+          rows: 14, unit: [36.57, 36.57], bond: 'half', gap: 1.5, ground: '#4c5058',
           tones: [['#9fd3c7', 5], ['#b2ddd1', 3], ['#8cc6bb', 3], ['#a9ddd9', 2], ['#c4e6dc', 2]],
-          line: '#4f7a73', lineW: 2, hi: '#ecf8f4', drip: 4, dripInk: 'rgba(52, 84, 78, 0.45)',
+          line: '#4c5058', lineW: 2.6, hi: '#ecf8f4', drip: 4, dripInk: 'rgba(52, 60, 70, 0.4)',
           shape: 'scale', ragged: 0, skew: 0, detail: sheened('#f6fbf9', '#d2ece6'),
         }, 47)],
-        deck: [paved({ w: 128, h: 128, running: false, joint: 3, bed: '#cfc7b6', tones: [['#ebe4d5', 3], ['#efe9dc', 2], ['#e0d8c8', 2]], hi: '#f8f4ec', line: '#a39a86', seed: 153 })],
+        deck: [leadedGlass(153)],
         shade: [56, 74, 86],
         shadow: shadowOf(0.75),
         cap: { kind: 'crest', body: '#e3c46a', dark: '#8a6a2a', hi: '#f8e7b0', w: 5, joint: 0 },

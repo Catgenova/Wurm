@@ -4,11 +4,11 @@
  *   * the trade: a skill on both sides, and the Artisan's on both;
  *   * the four jobs at a hot smelter -- sand melted into lumps, a lump blown
  *     into a panel, sand blown into a bottle, a gem and sand fired into a
- *     batch of mosaic tiles -- the same bill, count and trade on both sides,
+ *     batch of stained glass panes -- the same bill, count and trade on both sides,
  *     and each made on the island, the skill going up as it is worked;
- *   * a firing of tiles that fails keeps the gem and the sand;
+ *   * a firing of stained glass that fails keeps the gem and the sand;
  *   * a window and a bay are glazed with panels, and a pane is called one;
- *   * the mosaic wall: the same bill, weight and height on both sides;
+ *   * the stained glass wall: the same bill, weight and height on both sides;
  *   * a bottle is a bag of one food or drink, and turns away a log in the
  *     browser's own words.
  *
@@ -52,8 +52,8 @@ const recipe = (id: string): Recipe => {
 const LUMPS = recipe('make_glass');
 const PANEL = recipe('make_glass_panel');
 const BOTTLE = recipe('make_bottle');
-const TILES = recipe('make_mosaic_tiles');
-const JOBS = [LUMPS, PANEL, BOTTLE, TILES];
+const PANES = recipe('make_stained_glass');
+const JOBS = [LUMPS, PANEL, BOTTLE, PANES];
 
 /* ---- the trade ------------------------------------------------------------- */
 check('glassblowing is a skill on both sides',
@@ -125,25 +125,25 @@ begin
 
   select value into v_before from skill where world_id = w and uid = u and id = 'glassblowing';
   perform give(w, u, 'gem', 1, 40, 'Ruby', null, null, null, null);
-  perform give(w, u, 'sand', ${n(TILES, 'sand')}, 30, null, null, null, null, null);
-  ${craft(TILES.id, newest('gem'))};
-  insert into said values ('TILES', ${count(TILES.result)}::text || '|' || ${count('gem')} || '|' || ${count('sand')});
+  perform give(w, u, 'sand', ${n(PANES, 'sand')}, 30, null, null, null, null, null);
+  ${craft(PANES.id, newest('gem'))};
+  insert into said values ('PANES', ${count(PANES.result)}::text || '|' || ${count('gem')} || '|' || ${count('sand')});
   insert into said values ('LEARNT', ((select value from skill where world_id = w and uid = u and id = 'glassblowing') > v_before)::text);
 
   ${checks(false)};
-  delete from item where world_id = w and holder = 'player' and holder_uid = u and def = '${TILES.result}';
+  delete from item where world_id = w and holder = 'player' and holder_uid = u and def = '${PANES.result}';
   perform give(w, u, 'gem', 1, 40, 'Ruby', null, null, null, null);
-  perform give(w, u, 'sand', ${n(TILES, 'sand')}, 30, null, null, null, null, null);
-  ${craft(TILES.id, newest('gem'))};
-  insert into said values ('SPOILT', ${count(TILES.result)}::text || '|' || ${count('gem')} || '|' || ${count('sand')});
+  perform give(w, u, 'sand', ${n(PANES, 'sand')}, 30, null, null, null, null, null);
+  ${craft(PANES.id, newest('gem'))};
+  insert into said values ('SPOILT', ${count(PANES.result)}::text || '|' || ${count('gem')} || '|' || ${count('sand')});
 
   v_b := give(w, u, 'bottle', 1, 30, null, null, null, null, null);
   insert into said values ('REFUSE', coalesce(bag_refuses((select i from item i where i.id = v_b), 'log', 1), 'ALLOWED'));
 
-  -- A half wall of mosaic, on open ground, trowel and all: refused for what it is laid as.
+  -- A half wall of stained glass, on open ground, trowel and all: refused for what it is laid as.
   perform give(w, u, 'trowel', 1, 30, null, null, null, null, null);
   insert into said values ('FENCE', coalesce(act_refusal(w, u, 'plan_fence', jsonb_build_object('kind', 'tile', 'x', 9, 'y', 10,
-    'side', 'n', 'wallType', 'half_wall', 'material', 'mosaic')), 'ALLOWED'));
+    'side', 'n', 'wallType', 'half_wall', 'material', 'stained_glass')), 'ALLOWED'));
   insert into said values ('SOLIDFENCE', coalesce(act_refusal(w, u, 'plan_fence', jsonb_build_object('kind', 'tile', 'x', 9, 'y', 10,
     'side', 'n', 'wallType', 'half_wall', 'material', 'stone_brick')), 'ALLOWED'));
 end $$;
@@ -155,9 +155,9 @@ check(`${LUMPS.label}: ${n(LUMPS, 'sand')} sand make ${LUMPS.count} ${ITEM_DEFS[
   got('LUMPS') === `${LUMPS.count}|0`, got('LUMPS'));
 check(`${PANEL.label}: a lump makes a ${ITEM_DEFS[PANEL.result].name.toLowerCase()}`, got('PANEL') === `${PANEL.count ?? 1}|${(LUMPS.count ?? 1) - 1}`, got('PANEL'));
 check(`${BOTTLE.label}: ${n(BOTTLE, 'sand')} sand make a bottle`, got('BOTTLE') === '1|0', got('BOTTLE'));
-check(`${TILES.label}: a gem and ${n(TILES, 'sand')} sand make ${TILES.count} tiles`, got('TILES') === `${TILES.count}|0|0`, got('TILES'));
+check(`${PANES.label}: a gem and ${n(PANES, 'sand')} sand make ${PANES.count} panes`, got('PANES') === `${PANES.count}|0|0`, got('PANES'));
 check('and glassblowing goes up for the work', got('LEARNT') === 'true', got('LEARNT'));
-check('a firing that fails keeps the gem and the sand', got('SPOILT') === `0|1|${n(TILES, 'sand')}`, got('SPOILT'));
+check('a firing that fails keeps the gem and the sand', got('SPOILT') === `0|1|${n(PANES, 'sand')}`, got('SPOILT'));
 
 /* ---- what glass goes into ---------------------------------------------------- */
 check('a pane is a glass panel on both sides',
@@ -169,16 +169,16 @@ for (const type of ['window', 'bay'] as const) {
     want > 0 && (wallBill('stone_brick', type).total.glass ?? 0) === want && theirs === want, `island ${theirs}`);
 }
 
-/* ---- the mosaic wall ----------------------------------------------------------- */
-const MOSAIC = MATERIAL_BY_ID.get('mosaic');
-const mine = JSON.stringify(Object.entries(wallBill('mosaic', 'solid').total).sort());
-const theirs = JSON.stringify(Object.entries(JSON.parse(psql(`select wall_bill('mosaic', 'solid')::text;`) || '{}') as Record<string, number>).sort());
-check('a solid mosaic wall takes the same bill on both sides, mosaic tiles and all',
-  mine === theirs && mine.includes('mosaic_tile'), `browser ${mine}, island ${theirs}`);
+/* ---- the stained glass wall ----------------------------------------------------------- */
+const STAINED = MATERIAL_BY_ID.get('stained_glass');
+const mine = JSON.stringify(Object.entries(wallBill('stained_glass', 'solid').total).sort());
+const theirs = JSON.stringify(Object.entries(JSON.parse(psql(`select wall_bill('stained_glass', 'solid')::text;`) || '{}') as Record<string, number>).sort());
+check('a solid stained glass wall takes the same bill on both sides, stained glass panes and all',
+  mine === theirs && mine.includes('stained_glass_pane'), `browser ${mine}, island ${theirs}`);
 check('and is laid with a trowel, in masonry, as heavy and as tall on both sides',
-  !!MOSAIC && psql(`select kind || '|' || tool || '|' || skill || '|' || storeys || '|' || heft from build_material_def where id = 'mosaic';`)
-    === `${MOSAIC.kind}|${MOSAIC.tool}|${MOSAIC.skill}|${MOSAIC.storeys}|${MOSAIC.heft}`);
-check('one firing of tiles faces one solid wall', (TILES.count ?? 1) === (wallBill('mosaic', 'solid').total.mosaic_tile ?? 0));
+  !!STAINED && psql(`select kind || '|' || tool || '|' || skill || '|' || storeys || '|' || heft from build_material_def where id = 'stained_glass';`)
+    === `${STAINED.kind}|${STAINED.tool}|${STAINED.skill}|${STAINED.storeys}|${STAINED.heft}`);
+check('one firing of stained glass glazes one solid wall', (PANES.count ?? 1) === (wallBill('stained_glass', 'solid').total.stained_glass_pane ?? 0));
 
 /* ---- the bottle ------------------------------------------------------------------ */
 const B = ITEM_DEFS.bottle;
@@ -188,22 +188,22 @@ const bottle: Item = { uid: 1, id: 'bottle', ql: 30, dmg: 0, count: 1, inside: [
 const log: Item = { uid: 2, id: 'log', ql: 30, dmg: 0, count: 1 };
 check('and turns a log away in the same words', got('REFUSE') === bagRefuses(bottle, log), `browser "${bagRefuses(bottle, log)}", island "${got('REFUSE')}"`);
 
-/* ---- mosaic is a solid wall, a floor or a roof, and nothing else ----------------------------- */
-const M = MATERIAL_BY_ID.get('mosaic')!;
+/* ---- stained glass is a solid wall, a floor or a roof, and nothing else ----------------------------- */
+const M = MATERIAL_BY_ID.get('stained_glass')!;
 const asked = [
-  ...WALL_TYPES.map((wt) => ({ what: `a ${wt.name.toLowerCase()}`, mine: onlyRefusal('mosaic', { wall: wt.id }), sql: `'${wt.id}', null` })),
-  ...(['floor', 'stairs', 'ladder', 'roof'] as const).map((k) => ({ what: `a ${k}`, mine: onlyRefusal('mosaic', { floor: k }), sql: `null, '${k}'` })),
-  { what: 'a column', mine: onlyRefusal('mosaic', { column: true }), sql: `'column', null` },
+  ...WALL_TYPES.map((wt) => ({ what: `a ${wt.name.toLowerCase()}`, mine: onlyRefusal('stained_glass', { wall: wt.id }), sql: `'${wt.id}', null` })),
+  ...(['floor', 'stairs', 'ladder', 'roof'] as const).map((k) => ({ what: `a ${k}`, mine: onlyRefusal('stained_glass', { floor: k }), sql: `null, '${k}'` })),
+  { what: 'a column', mine: onlyRefusal('stained_glass', { column: true }), sql: `'column', null` },
 ];
-const theirsOnly = psql(asked.map((a) => `select coalesce(material_only_refusal('mosaic', ${a.sql}), 'ALLOWED');`).join('\n')).split('\n');
+const theirsOnly = psql(asked.map((a) => `select coalesce(material_only_refusal('stained_glass', ${a.sql}), 'ALLOWED');`).join('\n')).split('\n');
 const allowed = asked.filter((a) => a.mine === null).map((a) => a.what);
-check('mosaic is laid as a solid wall, a floor or a roof, and as nothing else, on both sides',
+check('stained glass is laid as a solid wall, a floor or a roof, and as nothing else, on both sides',
   asked.every((a, i) => (a.mine ?? 'ALLOWED') === theirsOnly[i]) && allowed.join() === 'a solid,a floor,a roof',
   `allowed: ${allowed.join(', ')}; differ: ${asked.filter((a, i) => (a.mine ?? 'ALLOWED') !== theirsOnly[i]).map((a) => a.what).join(', ') || 'none'}`);
 check('and it says so in the same words everywhere it is refused', theirsOnly.filter((s) => s !== 'ALLOWED').every((s) => s === onlySaid(M)), onlySaid(M));
 check('every other material is laid as anything', [...MATERIAL_BY_ID.values()].filter((m) => !m.only).every((m) =>
   WALL_TYPES.every((wt) => onlyRefusal(m.id, { wall: wt.id }) === null) && onlyRefusal(m.id, { column: true }) === null));
-check('the island turns away a half wall of mosaic in those words, and lets one of stone brick through that check',
+check('the island turns away a half wall of stained glass in those words, and lets one of stone brick through that check',
   got('FENCE') === onlySaid(M) && got('SOLIDFENCE') !== onlySaid(M), `${got('FENCE')} / ${got('SOLIDFENCE')}`);
 
 for (const l of [...ok, ...bad]) console.log(l);

@@ -205,10 +205,10 @@ export const MATERIALS: MaterialDef[] = [
   { id: 'ornate_silver', name: 'Ornate silver', kind: 'stone', tool: 'trowel', skill: 'masonry', color: [200, 204, 212], trim: [120, 126, 140], floor: [190, 194, 202], courses: 3, bill: [['stone_brick', 24], ['mortar', 12], ['silver_lump', 12]], storeys: 10, heft: 3 },
   { id: 'ornate_gold', name: 'Ornate gold', kind: 'stone', tool: 'trowel', skill: 'masonry', color: [217, 180, 81], trim: [150, 112, 34], floor: [206, 172, 84], courses: 3, bill: [['stone_brick', 24], ['mortar', 12], ['gold_lump', 12]], storeys: 10, heft: 3 },
   /*
-   * Stone brick faced in a mosaic of coloured glass: a gem ground into the
-   * melt colours a batch of tiles, and a solid wall takes one batch.
+   * Stone brick framing leaded panes of coloured glass: a gem ground into the
+   * melt colours a batch of panes, and a solid wall takes one batch.
    */
-  { id: 'mosaic', name: 'Mosaic', kind: 'stone', tool: 'trowel', skill: 'masonry', color: [214, 196, 226], trim: [232, 224, 206], floor: [238, 228, 214], courses: 4, bill: [['stone_brick', 24], ['mortar', 12], ['mosaic_tile', 20]], storeys: 10, heft: 3, only: { walls: ['solid'], floors: ['floor', 'roof'] } },
+  { id: 'stained_glass', name: 'Stained glass', kind: 'stone', tool: 'trowel', skill: 'masonry', color: [214, 196, 226], trim: [232, 224, 206], floor: [238, 228, 214], courses: 4, bill: [['stone_brick', 24], ['mortar', 12], ['stained_glass_pane', 20]], storeys: 10, heft: 3, only: { walls: ['solid'], floors: ['floor', 'roof'] } },
 ];
 export const MATERIAL_BY_ID = new Map(MATERIALS.map((m) => [m.id, m]));
 /**
@@ -228,7 +228,7 @@ MATERIAL_BY_ID.set(GLASS_ROOF.id, GLASS_ROOF);
 
 /** A floor kind as the sentence below names it. */
 const FLOOR_WORDS: Record<FloorKind, string> = { floor: 'a floor', stairs: 'a flight of stairs', ladder: 'a ladder', roof: 'a roof' };
-/** What is said of a material laid as something it is not: "Mosaic is laid as a solid wall, a floor or a roof, and nothing else." The island holds the same sentence. */
+/** What is said of a material laid as something it is not: "Stained glass is laid as a solid wall, a floor or a roof, and nothing else." The island holds the same sentence. */
 export const onlySaid = (m: MaterialDef): string =>
   `${m.name} is laid as ${listedOr([
     ...(m.only?.walls ?? []).map((w) => `a ${(WALL_TYPE_BY_ID.get(w)?.name ?? w).toLowerCase()} wall`),

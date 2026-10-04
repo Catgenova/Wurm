@@ -762,46 +762,94 @@ function panels(o: { unit: number; bed: string; field: string; hi: string; lo: s
   return c;
 }
 
+/** The colours of stained glass, as its walls are glazed, and the lead it is set in. */
+const STAINED = ['#f4bccb', '#f7d0ae', '#f5e6a2', '#bfe5cf', '#a9ddd9', '#b0caee', '#cdb9e8', '#eea9bb', '#d3e4b3', '#f6eedb'];
+const LEAD = '#4c5058';
+
 /**
- * A floor of mosaic: flags of the ivory marble the walls are framed in, and
- * where every four of them meet a diamond of pastel glass set in lead, a
- * quarter of it in each flag, so the diamonds meet across tiles as they do
- * across flags. One flag in six or so is glass of a paler cut, as if the
- * light had come through a window onto it.
+ * One pane of stained glass: its own colour, paler toward the light, the
+ * clouds and streaks a sheet of cathedral glass has run through it, a fleck
+ * where the light catches a seed, and the came's light along its top edge.
  */
-function tessellated(seed: number): HTMLCanvasElement {
+function stainedPane(g: Ctx, x: number, y: number, w: number, h: number, hex: string, R: Rand): void {
+  g.save();
+  g.beginPath(); g.rect(x, y, w, h); g.clip();
+  g.fillStyle = hex; g.fillRect(x, y, w, h);
+  const lit = g.createLinearGradient(x, y, x + w * 0.8, y + h);
+  lit.addColorStop(0, 'rgba(255, 253, 246, 0.38)');
+  lit.addColorStop(0.55, 'rgba(255, 253, 246, 0.06)');
+  lit.addColorStop(1, 'rgba(70, 58, 92, 0.1)');
+  g.fillStyle = lit; g.fillRect(x, y, w, h);
+  for (let i = 0; i < 1 + Math.floor((w * h) / 2500); i++) {
+    const cx = x + R() * w, cy = y + R() * h, rad = Math.max(w, h) * (0.3 + R() * 0.4);
+    const cloud = g.createRadialGradient(cx, cy, 0, cx, cy, rad);
+    cloud.addColorStop(0, 'rgba(255, 253, 246, 0.3)');
+    cloud.addColorStop(1, 'rgba(255, 253, 246, 0)');
+    g.fillStyle = cloud; g.fillRect(x, y, w, h);
+  }
+  const streaks = 1 + Math.round((w * h) / 1800) + Math.floor(R() * 2);
+  for (let i = 0; i < streaks; i++) {
+    g.strokeStyle = R() < 0.3 ? hexA(step(hex, -0.12), 0.22) : `rgba(255, 253, 246, ${0.2 + R() * 0.2})`;
+    g.lineWidth = 2 + R() * 3.5;
+    const across = w >= h;
+    const a = across ? y + R() * h : x + R() * w;
+    const b = across ? y + R() * h : x + R() * w;
+    g.beginPath();
+    if (across) {
+      g.moveTo(x - 4, a);
+      g.bezierCurveTo(x + w * 0.33, a + (R() - 0.5) * h * 0.8, x + w * 0.66, b + (R() - 0.5) * h * 0.8, x + w + 4, b);
+    } else {
+      g.moveTo(a, y - 4);
+      g.bezierCurveTo(a + (R() - 0.5) * w * 0.8, y + h * 0.33, b + (R() - 0.5) * w * 0.8, y + h * 0.66, b, y + h + 4);
+    }
+    g.stroke();
+  }
+  for (let i = 0; i < 1 + Math.floor(R() * 3); i++) {
+    g.fillStyle = 'rgba(255, 255, 250, 0.55)';
+    g.beginPath(); g.arc(x + 3 + R() * (w - 6), y + 3 + R() * (h - 6), 0.8 + R() * 1.2, 0, Math.PI * 2); g.fill();
+  }
+  g.restore();
+  g.fillStyle = 'rgba(255, 255, 255, 0.28)';
+  g.fillRect(x, y, w, 1.2);
+}
+
+/**
+ * Stained glass laid flat, for a floor and a flat roof: a panel of leaded
+ * panes to every tile, in the colours the walls are glazed in, and a heavier
+ * came round each panel where it meets the next.
+ *
+ * The panes are packed on a lattice as the walls' are: a cell is taken by a
+ * pane one to three across and one to three down, whatever fits, so the leads
+ * run long in places and break short in others, and no pane takes the colour
+ * of the one beside it or above it. Every tile is a panel of its own, so
+ * nothing in the glass comes near a seam and the picture repeats both ways.
+ */
+export function leadedGlass(seed: number): HTMLCanvasElement {
   const [c, g] = canvas(S, S);
   const R = rand(seed);
-  const n = 8, u = S / n, joint = 2.4, r = u * 0.17;
-  const GLASS = ['#f4bccb', '#f7d0ae', '#f5e6a2', '#bfe5cf', '#a9ddd9', '#b0caee', '#cdb9e8', '#eea9bb', '#d3e4b3'];
-  const IVORY = ['#efe9dc', '#ece5d6', '#f2ede2', '#e9e2d3'];
-  g.fillStyle = '#d6ccb8';
+  const T = S / FLOOR_TILES, border = 3, lead = 2.6, n = 8, u = (T - border * 2) / n;
+  g.fillStyle = LEAD;
   g.fillRect(0, 0, S, S);
-  for (let j = 0; j < n; j++) {
-    for (let i = 0; i < n; i++) {
-      const x = i * u + joint / 2, y = j * u + joint / 2, w = u - joint;
-      const tone = R() < 0.16 ? mix(GLASS[Math.floor(R() * GLASS.length)], '#f2ede2', 0.4) : IVORY[Math.floor(R() * IVORY.length)];
-      g.fillStyle = tone;
-      g.fillRect(x, y, w, w);
-      // A vein or two through the marble, faint.
-      g.strokeStyle = hexA('#cdbfa4', 0.35);
-      g.lineWidth = 1;
-      for (let k = 0; k < 1 + Math.floor(R() * 2); k++) {
-        const a = y + R() * w, b = y + R() * w;
-        g.beginPath(); g.moveTo(x, a); g.bezierCurveTo(x + w * 0.35, a + (R() - 0.5) * w * 0.5, x + w * 0.65, b + (R() - 0.5) * w * 0.5, x + w, b); g.stroke();
+  for (let ty = 0; ty < FLOOR_TILES; ty++) {
+    for (let tx = 0; tx < FLOOR_TILES; tx++) {
+      const x0 = tx * T + border, y0 = ty * T + border;
+      const taken: number[][] = Array.from({ length: n }, () => Array<number>(n).fill(-1));
+      for (let r = 0; r < n; r++) {
+        for (let q = 0; q < n; q++) {
+          if (taken[r][q] >= 0) continue;
+          let w = 1 + Math.floor(R() * 3), h = 1 + Math.floor(R() * 3);
+          while (w > 1 && (q + w > n || taken[r].slice(q, q + w).some((t) => t >= 0))) w--;
+          h = Math.min(h, n - r);
+          while (h > 1 && taken.slice(r, r + h).some((row) => row.slice(q, q + w).some((t) => t >= 0))) h--;
+          const near = new Set<number>();
+          for (let i = 0; i < w; i++) if (r > 0) near.add(taken[r - 1][q + i]);
+          for (let j = 0; j < h; j++) if (q > 0) near.add(taken[r + j][q - 1]);
+          let k = Math.floor(R() * STAINED.length);
+          for (let t = 0; t < STAINED.length && near.has(k); t++) k = (k + 1) % STAINED.length;
+          for (let j = 0; j < h; j++) for (let i = 0; i < w; i++) taken[r + j][q + i] = k;
+          stainedPane(g, x0 + q * u + lead, y0 + r * u + lead, w * u - lead * 2, h * u - lead * 2, STAINED[k], R);
+        }
       }
-      g.fillStyle = hexA('#ffffff', 0.45); g.fillRect(x, y, w, 1.4); g.fillRect(x, y, 1.4, w);
-      g.fillStyle = hexA('#a8987c', 0.3); g.fillRect(x, y + w - 1.4, w, 1.4); g.fillRect(x + w - 1.4, y, 1.4, w);
-    }
-  }
-  for (let j = 0; j <= n; j++) {
-    for (let i = 0; i <= n; i++) {
-      const cx = i * u, cy = j * u, k = ((i % n) + (j % n) * 3) % GLASS.length;
-      const dia: Pt[] = [[cx, cy - r], [cx + r, cy], [cx, cy + r], [cx - r, cy]];
-      path(g, dia); g.fillStyle = GLASS[k]; g.fill();
-      path(g, dia); g.strokeStyle = '#4c5058'; g.lineWidth = 1.8; g.stroke();
-      g.strokeStyle = hexA('#ffffff', 0.55); g.lineWidth = 1.1;
-      g.beginPath(); g.moveTo(cx - r * 0.55, cy - r * 0.05); g.lineTo(cx - r * 0.05, cy - r * 0.55); g.stroke();
     }
   }
   return c;
@@ -962,8 +1010,8 @@ function laid(material: string): { img: HTMLCanvasElement; runs: boolean } | nul
           },
         }),
       };
-    case 'mosaic':
-      return { runs: false, img: tessellated(277) };
+    case 'stained_glass':
+      return { runs: false, img: leadedGlass(277) };
     case 'ornate_silver':
       return { runs: false, img: panels({ unit: 128, bed: '#626882', field: '#c6cad6', hi: '#eef1f6', lo: '#8e92a3', ink: '#626882', boss: '#dfe2ea', seed: 269 }) };
     case 'ornate_gold':

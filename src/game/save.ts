@@ -647,14 +647,28 @@ function finish(world: World, m: SaveMeta): Game {
   // hold. Species no longer need seeding one at a time: what is let out of the
   // bank is rolled from the whole table, so every one of them turns up.
   game.creatures.stockIsland(game);
-  // The settlement deed form became a carved stake; rename it wherever it sits.
+  // The settlement deed form became a carved stake, and mosaic stained glass;
+  // rename them wherever they sit.
+  const RENAMED: Record<string, string> = { settlement_deed: 'deed_stake', mosaic_tile: 'stained_glass_pane' };
   const restake = (items: Item[]): void => {
-    for (const it of items) if (it.id === 'settlement_deed') it.id = 'deed_stake';
+    for (const it of items) {
+      it.id = RENAMED[it.id] ?? it.id;
+      if (it.inside) restake(it.inside);
+    }
   };
   restake(game.inventory.items);
   for (const pile of game.ground.values()) restake(pile);
   for (const pile of game.cellarGround.values()) restake(pile);
   for (const crate of game.crates.values()) restake(crate.items);
+  const rekey = (rec: Record<string, unknown>): void => {
+    for (const [was, now] of Object.entries(RENAMED)) if (was in rec) { rec[now] = rec[was]; delete rec[was]; }
+  };
+  rekey(game.ledger);
+  for (const part of [...game.buildings.walls.values(), ...game.buildings.floors.values(), ...game.buildings.columns.values()]) {
+    if (part.material === 'mosaic') part.material = 'stained_glass';
+    rekey(part.needed);
+    rekey(part.total);
+  }
   if (game.deed && !game.deedCrate()) game.placeDeedCrate();
   // Nothing is kept at the token any more: what was, is put in creature crates.
   const crated = crateTheKept(game);

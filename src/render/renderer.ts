@@ -53,7 +53,7 @@ import { jettyBase } from '../game/frame';
 import { drawSteps, stepsFootAt } from './steps';
 import { seasonAt, type Season } from '../world/calendar';
 import { drawShine, shines } from './shine';
-import { ARCH, BAY, DOOR, DOUBLE, FENCE_GAP, WINDOW, type Masonry, adobe, brickwork, cobble, goldwork, logwork, marblework, mosaicwork, planking, sandstone, silverwork, slatework, stonework, timbercraft } from './masonry';
+import { ARCH, BAY, DOOR, DOUBLE, FENCE_GAP, WINDOW, type Masonry, adobe, brickwork, cobble, goldwork, logwork, glasswork, marblework, planking, sandstone, silverwork, slatework, stonework, timbercraft } from './masonry';
 import { CAP_D, CAP_W, capMoss, hashOf, ivyLayout, mossStrip, PAVE_STAGES, pavingMoss, PPM, slabTopMoss, strandPic, vigour, type Keep } from './ivy';
 import { bridgeGreen, greenNow, greenShows, GREEN_WET_REACH, mossyPiece, pavingGreen, pieceGreen, slabGreen, wallGreen, wetFrom } from '../game/greening';
 import { anvilCentre, type PlacedAnvil } from '../game/anvil';
@@ -8132,7 +8132,7 @@ export class Renderer {
                         : wall.material === 'plank' ? planking()
                           : wall.material === 'ornate_silver' ? silverwork()
                             : wall.material === 'ornate_gold' ? goldwork()
-                              : wall.material === 'mosaic' ? mosaicwork()
+                              : wall.material === 'stained_glass' ? glasswork()
                                 : undefined;
   }
 

@@ -69,7 +69,7 @@ export const SKILL_DEFS: SkillDef[] = [
   { id: 'jewellery', name: 'Jewellery', group: 'Skills', start: 1 },
   /*
    * Sand at a hot smelter: the glass itself, the panels a window is glazed
-   * with, bottles, and the coloured tiles a mosaic is laid in.
+   * with, bottles, and the coloured panes stained glass is laid in.
    */
   { id: 'glassblowing', name: 'Glassblowing', group: 'Skills', start: 1 },
   { id: 'bowyery', name: 'Bowyery', group: 'Skills', start: 1 },

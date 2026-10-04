@@ -1061,12 +1061,12 @@ export const NEWS: News[] = [
         return r ? `<b>${r.label}</b> (${billWords(r.inputs.map((i) => [i.item, i.count ?? 1] as const), true)} into ${countOf(r.result, r.count ?? 1, true)})` : id;
       };
       const panes = (type: 'window' | 'bay'): number => WALL_TYPE_BY_ID.get(type)?.fittings?.find(([item]) => item === 'glass')?.[1] ?? 0;
-      const mosaic = MATERIAL_BY_ID.get('mosaic');
+      const stained = MATERIAL_BY_ID.get('stained_glass');
       const bottle = itemDef('bottle');
       return [
-        `Glassblowing is a new skill, and the Artisan's: at a hot smelter, ${listed(['make_glass', 'make_glass_panel', 'make_bottle', 'make_mosaic_tiles'].map(job))}. A firing of tiles that fails keeps the gem and the sand.`,
+        `Glassblowing is a new skill, and the Artisan's: at a hot smelter, ${listed(['make_glass', 'make_glass_panel', 'make_bottle', 'make_stained_glass'].map(job))}. A firing of stained glass that fails keeps the gem and the sand.`,
         `Windows, bay windows and glasshouse roofs are glazed with glass panels: a window takes ${panes('window')} and a bay window ${panes('bay')}. Every pane you had is a glass panel now.`,
-        mosaic ? `A new material to build in, mosaic: ${billWords(mosaic.bill, true)} to a solid wall, as heavy as ${heftWord(mosaic.heft)} and up to ${mosaic.storeys} storeys tall. ${onlySaid(mosaic)}` : '',
+        stained ? `A new material to build in, stained glass: ${billWords(stained.bill, true)} to a solid wall, as heavy as ${heftWord(stained.heft)} and up to ${stained.storeys} storeys tall. ${onlySaid(stained)}` : '',
         `A bottle holds ${bottle.holds} of one food or drink, and what is in it rots at ${share(bottle.shelter ?? 1)} the rate if it is left lying about.`,
       ].filter(Boolean);
     },

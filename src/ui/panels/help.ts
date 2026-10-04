@@ -163,8 +163,8 @@ const glassJob = (id: string): string => {
   const r = recipe(id);
   return `<b>${r.label}</b>, ${bill(id)} into ${countOf(r.result, r.count ?? 1)}`;
 };
-/** What mosaic is laid as, in the words the plan refuses anything else in. */
-const mosaicOnly = (): string => { const m = WALL_MATERIALS.find((x) => x.id === 'mosaic'); return m ? onlySaid(m) : ''; };
+/** What stained glass is laid as, in the words the plan refuses anything else in. */
+const stainedOnly = (): string => { const m = WALL_MATERIALS.find((x) => x.id === 'stained_glass'); return m ? onlySaid(m) : ''; };
 /** How many glass panels an opening is glazed with. */
 const glazing = (type: 'window' | 'bay'): number => WALL_TYPE_BY_ID.get(type)?.fittings?.find(([item]) => item === 'glass')?.[1] ?? 0;
 /** A recipe by its id. A missing one is a mistake in the help, and says so. */
@@ -1010,12 +1010,12 @@ export function helpText(): string {
     once, by that Smith or another with the perk, from its menu, standing at water or beside a barrel or a
     well of it, for the quality its maker's mark says; Examine shows it.</p>
     <h3>Glass</h3>
-    <p><b>Glassblowing</b> is the Artisan's trade, and it is all done at a hot smelter: ${listed(['make_glass', 'make_glass_panel', 'make_bottle', 'make_mosaic_tiles'].map(glassJob))}.
+    <p><b>Glassblowing</b> is the Artisan's trade, and it is all done at a hot smelter: ${listed(['make_glass', 'make_glass_panel', 'make_bottle', 'make_stained_glass'].map(glassJob))}.
     Every window is glazed with ${numberWord(glazing('window'))} glass panels and every bay window with ${numberWord(glazing('bay'))}, and a glasshouse
-    roof is laid in them. A firing of tiles that fails keeps the gem and the sand; the others spend what went in.</p>
+    roof is laid in them. A firing of stained glass that fails keeps the gem and the sand; the others spend what went in.</p>
     <p>A <b>bottle</b> holds ${numberWord(itemDef('bottle').holds ?? 0)} of one food or drink, and what is in it rots at ${share(itemDef('bottle').shelter ?? 1)}
-    the rate left lying about. A solid <b>mosaic</b> wall takes ${billWords(WALL_MATERIALS.find((m) => m.id === 'mosaic')?.bill ?? [])}: stone brick faced in the tiles,
-    laid with a trowel and trained as masonry, so one firing of tiles faces one solid wall. ${mosaicOnly()}</p>
+    the rate left lying about. A solid <b>stained glass</b> wall takes ${billWords(WALL_MATERIALS.find((m) => m.id === 'stained_glass')?.bill ?? [])}: the panes
+    leaded in a frame of stone brick, laid with a trowel and trained as masonry, so one firing of stained glass glazes one solid wall. ${stainedOnly()}</p>
 
     <h3>Hunting and butchering</h3>
     <p>Wild wildermon can be <b>attacked</b> from their menu; an edged tool in your pack hits far harder

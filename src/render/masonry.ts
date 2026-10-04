@@ -468,13 +468,13 @@ interface Stock {
    */
   slab?: boolean;
   /**
-   * On mosaic, a panel of leaded glass under the band where the slabs would
+   * On stained glass, a panel of leaded glass under the band where the slabs would
    * be: pastel panes of no set size between a marble pilaster at each end of
    * the section. Everything else -- the band, the plinth, the quoins, every
    * architrave, hood and sill -- is the marble's, laid in an ivory stone,
    * because the glass is set in a frame of cut stone.
    */
-  mosaic?: boolean;
+  stained?: boolean;
 }
 
 /* ---- the two masonries -------------------------------------------------- */
@@ -899,8 +899,8 @@ const MARBLE: Stock = ((P) => ({
 }))(MARBLE_PASTEL);
 
 /**
- * And mosaic: tiles of coloured glass, a gem ground into each melt, leaded
- * into panels and set in a frame of ivory marble.
+ * And stained glass: panes of coloured glass, a gem ground into each melt,
+ * leaded into panels and set in a frame of ivory marble.
  *
  * The glass is the island's own pastels with the light behind them -- pink,
  * peach, lemon, mint, aqua, sky, lilac, rose, sage and cream -- each pane
@@ -908,7 +908,7 @@ const MARBLE: Stock = ((P) => ({
  * The marble round it is warm where the house marble is cool, and its veins
  * run to gold.
  */
-const MOSAIC_PASTEL: Record<string, string> = {
+const STAINED_PASTEL: Record<string, string> = {
   ...MARBLE_PASTEL,
   stone: '#ebe4d5', stoneShade: '#ddd5c4', stoneHi: '#f6f1e7', stoneDark: '#cfc6b3',
   warm: '#efe9dc', warmShade: '#e1d9c9', warmHi: '#f8f4ec',
@@ -927,7 +927,7 @@ const MOSAIC_PASTEL: Record<string, string> = {
   lead: '#4c5058',
 };
 
-const MOSAIC: Stock = ((P) => ({
+const STAINED: Stock = ((P) => ({
   pastel: P,
   tones: {
     '':      { lit: P.stone, shade: P.stoneShade, hi: P.stoneHi },
@@ -963,8 +963,8 @@ const MOSAIC: Stock = ((P) => ({
   field: [['warm', 0.4], ['burnt', 0.35], ['brown', 0.25]],
   master: true,
   slab: true,
-  mosaic: true,
-}))(MOSAIC_PASTEL);
+  stained: true,
+}))(STAINED_PASTEL);
 
 /**
  * And slate: an ornate black brick, the island's grandest dark masonry.
@@ -1606,7 +1606,7 @@ let golden: Masonry | undefined;
 let sanded: Masonry | undefined;
 let slated: Masonry | undefined;
 let marbled: Masonry | undefined;
-let tiled: Masonry | undefined;
+let leaded: Masonry | undefined;
 
 /**
  * Cobblestone: what a novice lays, out of what the field gave up.
@@ -1646,9 +1646,9 @@ export function slatework(): Masonry {
 export function marblework(): Masonry {
   return marbled ??= paint(MARBLE);
 }
-/** Mosaic: a field of coloured glass under a band of ivory marble, its openings dressed in the marble. */
-export function mosaicwork(): Masonry {
-  return tiled ??= paint(MOSAIC);
+/** Stained glass: a field of leaded coloured panes under a band of ivory marble, its openings dressed in the marble. */
+export function glasswork(): Masonry {
+  return leaded ??= paint(STAINED);
 }
 
 /**
@@ -4079,8 +4079,8 @@ function paint(S: Stock): Masonry {
     oversail(g, 0, BAND, 12);
     return [];
   }
-  /* ---- mosaic --------------------------------------------------------------- */
-  /** The glass of a mosaic, in the order a pane is offered it. */
+  /* ---- stained glass ------------------------------------------------------- */
+  /** The colours of stained glass, in the order a pane is offered them. */
   const GLASSES = ['glassPink', 'glassPeach', 'glassLemon', 'glassMint', 'glassAqua', 'glassSky', 'glassLilac', 'glassRose', 'glassSage', 'glassCream'];
   /** How wide a marble pilaster stands at each end of a section, half of it in each of the two sections it parts. */
   const PILASTER = 20;
@@ -4174,8 +4174,8 @@ function paint(S: Stock): Masonry {
     stone(g, 0, y0, PILASTER / 2 + 4, y1 - y0, R, 'dress', 'unit', 0, 1.2);
     stone(g, TW - PILASTER / 2 - 4, y0, PILASTER / 2 + 4, y1 - y0, R, 'dress', 'unit', 0, 1.2);
   }
-  /** A storey of a mosaic wall: the marble's band over a panel of leaded glass. */
-  function paintMosaic(g: Ctx, R: Rand): Block[] {
+  /** A storey of a stained glass wall: the marble's band over a panel of leaded glass. */
+  function paintStained(g: Ctx, R: Rand): Block[] {
     g.fillStyle = PASTEL.joint;
     g.fillRect(0, 0, TW, TH);
     marbleBand(g, R);
@@ -4201,7 +4201,7 @@ function paint(S: Stock): Masonry {
    * whole of what there is to look at.
    */
   function paintBond(g: Ctx, R: Rand, crests: Pt[]): Block[] {
-    if (S.mosaic) return paintMosaic(g, R);
+    if (S.stained) return paintStained(g, R);
     if (S.slab) return paintSlabs(g, R);
     g.fillStyle = PASTEL.joint;
     g.fillRect(0, 0, TW, TH);
@@ -6341,7 +6341,7 @@ function paint(S: Stock): Masonry {
    * unit thick, and there is nothing for a header to bond to.
    */
   function lowBond(g: Ctx, R: Rand, fh: number, rows: number): Block[] {
-    if (S.mosaic) { glassField(g, COPE, fh, R); return []; }
+    if (S.stained) { glassField(g, COPE, fh, R); return []; }
     const top = COPE;
     const own: Block[] = [];
     const zone = firing(R);
@@ -7802,7 +7802,7 @@ export function warmMasonry(): void {
   const idle = globalThis.requestIdleCallback;
   // A set to an idle: painting them back to back is that many pauses at once,
   // and the later ones are only wanted by whoever has built in them.
-  const sets = [cobble, brickwork, stonework, sandstone, slatework, marblework, adobe, timbercraft, logwork, planking, silverwork, goldwork, mosaicwork];
+  const sets = [cobble, brickwork, stonework, sandstone, slatework, marblework, adobe, timbercraft, logwork, planking, silverwork, goldwork, glasswork];
   const next = (i: number): void => {
     if (i >= sets.length) return;
     if (typeof idle === 'function') idle(() => { sets[i](); next(i + 1); });

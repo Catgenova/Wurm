@@ -214,7 +214,7 @@ out.push(`alter table build_material_def add column if not exists heft int not n
 /*
  * What a material is laid as, where it is not laid as everything: the wall
  * types and the floor kinds it takes, and the sentence that says so. Null
- * everywhere but mosaic, which is a solid wall, a floor or a roof.
+ * everywhere but stained glass, which is a solid wall, a floor or a roof.
  */
 out.push(`alter table build_material_def add column if not exists only_walls text[];`);
 out.push(`alter table build_material_def add column if not exists only_floors text[];`);

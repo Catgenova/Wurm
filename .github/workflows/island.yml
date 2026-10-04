@@ -1629,14 +1629,14 @@ jobs:
             --outfile=node_modules/.cache/chaos.mjs --log-level=error
           node node_modules/.cache/chaos.mjs
 
-      - name: Glassblowing, glass panels, bottles and the mosaic wall
+      - name: Glassblowing, glass panels, bottles and the stained glass wall
         run: |
           # The Artisan's fourth trade, at a hot smelter: sand melted into
           # lumps, a lump blown into the panel every window, bay and glasshouse
           # roof is glazed with, a bottle, and a gem and sand fired into the
-          # tiles a mosaic wall is faced in. Each job the same on both sides and
-          # made on the island; a failed firing keeps its gem; the mosaic wall's
-          # bill, and a bottle's room, alike on both sides.
+          # panes a stained glass wall is leaded from. Each job the same on both
+          # sides and made on the island; a failed firing keeps its gem; the
+          # stained glass wall's bill, and a bottle's room, alike on both sides.
           npx esbuild supabase/test/glassblowing.ts --bundle --platform=node --format=esm \
             --outfile=node_modules/.cache/glassblowing.mjs --log-level=error
           node node_modules/.cache/glassblowing.mjs

@@ -213,8 +213,8 @@ export const ITEM_DEFS: Record<string, ItemDef> = {
     description: 'A flat panel of clear glass. A window takes {wall.window.glass}, a bay window {wall.bay.glass}, and a glasshouse roof is laid in them.' },
   bottle: { name: 'Bottle', category: 'misc', weight: 0.5, decay: 1, holds: 4, shelter: 0.25, oneKind: true,
     description: 'A blown glass bottle with a stopper. It holds {holds} of one food or drink at a time, and what is in it rots at {shelter:share} the rate if it is left lying about.' },
-  mosaic_tile: { name: 'Mosaic tile', category: 'material', weight: 0.1, stackable: true, decay: 0,
-    description: 'A chip of glass coloured with a ground gem. A solid mosaic wall is faced in {mosaicWall.mosaic_tile} of them.' },
+  stained_glass_pane: { name: 'Stained glass pane', category: 'material', weight: 0.1, stackable: true, decay: 0,
+    description: 'A pane of glass coloured with a ground gem. A solid stained glass wall takes {stainedGlassWall.stained_glass_pane} of them.' },
   clay: { name: 'Clay', category: 'material', weight: 20, stackable: true, raw: true },
   peat: { name: 'Peat', category: 'material', weight: 2, stackable: true, raw: true },
   // Raked out of a fire, and nothing a bench has touched — which is the whole
@@ -624,7 +624,7 @@ for (const d of Object.values(ITEM_DEFS)) {
     coinsPerLump: COINS_PER_LUMP,
     rareLumps: RARE_LUMP_FACTOR,
     wall: Object.fromEntries(WALL_TYPES.map((w) => [w.id, Object.fromEntries(w.fittings ?? [])])),
-    mosaicWall: Object.fromEntries(MATERIAL_BY_ID.get('mosaic')?.bill ?? []),
+    stainedGlassWall: Object.fromEntries(MATERIAL_BY_ID.get('stained_glass')?.bill ?? []),
     light: {
       lanternNear: lanternReach(1), lanternFar: lanternReach(100), candleShort: candleBurn(1), candleLong: candleBurn(100),
       torchNear: torchReach(1), torchFar: torchReach(100), torchShort: torchBurn(1), torchLong: torchBurn(100),
