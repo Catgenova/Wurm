@@ -1044,6 +1044,14 @@ export const NEWS: News[] = [
       `At each tier one judges what it is cast on, one keeps order in a fight, and one measures: an Oath binds only friends, and Restitution brings home whatever your latest grave holds.`,
     ],
   },
+  {
+    n: 79,
+    day: '2026-10-04',
+    lines: () => [
+      `Chaos's spells are written, ${SPELLS_PER_TIER} at each tier: ${listed(FAITH_SPELLS.filter((s) => s.patron === 'chaos').map((s) => s.name))}. What each does, to the number, is in the Faith window.`,
+      `At each tier one ruins, one dreads, and one is a bargain paid for in your own health or your own things rather than favour. None of them is cast on another person.`,
+    ],
+  },
 ];
 
 /** The highest entry this browser has shown. */

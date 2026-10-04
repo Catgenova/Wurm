@@ -2498,8 +2498,10 @@ export function helpText(): string {
     Right-click a person, a creature, a thing or the ground to cast any spell on your bar that takes it.</p>
     <p>The Blessing's ${numberWord(FAITH_SPELLS.filter((s) => s.patron === 'blessing').length)} spells are written: at each tier one that mends,
     one that guards, and one for creatures, things and the land. So are Justice's ${numberWord(FAITH_SPELLS.filter((s) => s.patron === 'justice').length)}:
-    at each tier one that judges what it is cast on, one that keeps order in a fight, and one that measures. Chaos's are still to come. Every
-    spell's numbers are in the Faith window, beside it.</p>
+    at each tier one that judges what it is cast on, one that keeps order in a fight, and one that measures. And Chaos's
+    ${numberWord(FAITH_SPELLS.filter((s) => s.patron === 'chaos').length)}: at each tier one that ruins, one that dreads, and one that is a bargain, paid
+    for in your own health or your own things rather than favour; none of them is cast on another person. Every spell's numbers are in the
+    Faith window, beside it.</p>
     <h3>The things that are not wildermon</h3>
     <p>Most of what walks this island can be tamed. ${NumberWord(MONSTER_SORTS.length)} things cannot. A <b>goblin</b> is knee-high and
     entirely malice; an <b>orc</b> is a head taller than you and carries sharpened iron; an <b>ogre</b>

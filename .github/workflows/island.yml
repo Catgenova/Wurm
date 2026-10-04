@@ -1617,6 +1617,18 @@ jobs:
             --outfile=node_modules/.cache/justice.mjs --log-level=error
           node node_modules/.cache/justice.mjs
 
+      - name: Chaos's spells
+        run: |
+          # Every one of the fifteen pointed and cast as the door does it: a
+          # creature bleeding, running, cowering, struck or dead; health spent
+          # for favour or for power; a thing unmade. A Cower and Undying through
+          # hurt_player, a Pact through faith_arms, a Blood Feast through
+          # faith_feast, a Shroud through hunt_settle. None of them is cast on
+          # another person. Every number is the browser's own.
+          npx esbuild supabase/test/chaos.ts --bundle --platform=node --format=esm \
+            --outfile=node_modules/.cache/chaos.mjs --log-level=error
+          node node_modules/.cache/chaos.mjs
+
       - name: A stone, and what you can get out of it
         run: |
           # The arcane, which has no mana in it. A focus is a cut gem in a

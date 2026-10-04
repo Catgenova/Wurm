@@ -23,7 +23,7 @@ import { listed, listedOr, percent } from './words';
  * calls a spell off the bar. What a patron *offers* is the same for everybody
  * and is written here, which is what the island's rows are generated from.
  *
- * The Blessing's fifteen and Justice's fifteen are written; Chaos's are still to come.
+ * All three patrons' spells are written, fifteen apiece.
  * `FAITH_SPELLS` is where they go, and the Faith window and the bar draw
  * whatever is in it.
  */
@@ -137,13 +137,17 @@ const spellOf = (patron: PatronId) => (
 ): FaithSpellDef => ({ id: `${patron}_${id}`, patron, tier, name, cost, rest, on, radius, fx, note: note(fx, radius ?? 0) });
 const blessing = spellOf('blessing');
 const justice = spellOf('justice');
+const chaos = spellOf('chaos');
 
 /**
  * Every faith spell there is, patron by patron and tier by tier.
  *
  * The Blessing's three at each tier are one that mends, one that guards and
  * one for creatures, things and the land. Justice's are one that judges what
- * it is cast on, one that keeps order in a fight, and one that measures. What
+ * it is cast on, one that keeps order in a fight, and one that measures.
+ * Chaos's are one that ruins, one that dreads and one that is a bargain --
+ * paid for in your own health or your own things rather than favour -- and
+ * none of them touches another person or anything of theirs. What
  * lasts a while is kept on the island against whoever it was cast on
  * (`player.blessings`), against a creature (`faith_mark`) or against the
  * ground (`faith_zone`), and the rules that fight, heal, tame, work and grow
@@ -219,6 +223,41 @@ export const FAITH_SPELLS: FaithSpellDef[] = [
     (fx) => `For ${span(fx.secs)}, every blow that lands on you or on the friend it is cast on is split evenly between you. Only on a friend.`),
   justice(5, 'reward', 'Due Reward', 50, 3600, ['self', 'player'], { more: 0.2, secs: 1800 },
     (fx) => `For ${span(fx.secs)}, every skill they raise gains ${percent(fx.more)} more.`),
+
+  chaos(1, 'hex', 'Hex', 8, 20, ['enemy'], { each: 0.02, secs: 15 },
+    (fx) => `The creature bleeds ${percent(fx.each)} of its health a second for ${span(fx.secs)}, ${percent(fx.each * fx.secs)} in all. Bleeding never kills.`),
+  chaos(1, 'fright', 'Fright', 10, 60, ['enemy'], { secs: 8 },
+    (fx) => `The creature flees from you for ${span(fx.secs)}. Monsters are not frightened.`),
+  chaos(1, 'blood_price', 'Blood Price', 0, 300, ['self'], { price: 0.2, favour: 15, floor: 0.3 },
+    (fx) => `Costs no favour. Spend ${percent(fx.price)} of your health for ${fx.favour} favour; not with less than ${percent(fx.floor)} of your health.`),
+
+  chaos(2, 'siphon', 'Siphon', 12, 30, ['enemy'], { share: 0.1 },
+    (fx) => `Takes ${percent(fx.share)} of the creature's health, and heals you by what a blow of that much would take from you.`),
+  chaos(2, 'cower', 'Cower', 14, 60, ['enemy'], { cut: 0.3, secs: 30 },
+    (fx) => `For ${span(fx.secs)} the creature's blows do ${percent(fx.cut)} less damage.`),
+  chaos(2, 'pact', 'Pact', 0, 180, ['self'], { price: 0.3, more: 0.4, secs: 60 },
+    (fx) => `Costs no favour. Spend ${percent(fx.price)} of your health: for ${span(fx.secs)} your blows do ${percent(fx.more)} more damage.`),
+
+  chaos(3, 'plague', 'Plague', 26, 180, ['area'], { each: 0.015, secs: 30 },
+    (fx, r) => `Every wild creature within ${r} tiles of the spot bleeds ${percent(fx.each)} of its health a second for ${span(fx.secs)}, ${percent(fx.each * fx.secs)} in all. Bleeding never kills.`, 5),
+  chaos(3, 'panic', 'Panic', 24, 120, ['area'], { secs: 10, monster: 3 },
+    (fx, r) => `Every wild creature within ${r} tiles of the spot flees from it for ${span(fx.secs)}, a monster for ${span(fx.monster)}.`, 6),
+  chaos(3, 'unmake', 'Unmake', 0, 600, ['object'], { per: 0.25, most: 25 },
+    (fx) => `Costs no favour. Destroys a thing you carry and gives you favour of ${percent(fx.per)} of its quality, ${fx.most} at most. Not a thing you wear, a locked thing, or a bag with anything in it.`),
+
+  chaos(4, 'soul_rend', 'Soul Rend', 36, 300, ['enemy'], { share: 0.3, favour: 30 },
+    (fx) => `Takes ${percent(fx.share)} of the creature's health; if that kills it, ${fx.favour} favour comes back to you.`),
+  chaos(4, 'shroud', 'Shroud', 30, 300, ['self'], { reach: 3, secs: 60 },
+    (fx) => `For ${span(fx.secs)} nothing notices you from further than ${fx.reach} tiles off, and whatever is hunting you from further than that loses you.`),
+  chaos(4, 'blood_feast', 'Blood Feast', 0, 600, ['self'], { price: 0.15, share: 0.25, secs: 60 },
+    (fx) => `Costs no favour. Spend ${percent(fx.price)} of your health: for ${span(fx.secs)}, every blow you land heals you by ${percent(fx.share)} of what it dealt.`),
+
+  chaos(5, 'cataclysm', 'Cataclysm', 70, 1800, ['area'], { share: 0.4 },
+    (fx, r) => `Every wild creature within ${r} tiles of the spot loses ${percent(fx.share)} of its health at once.`, 8),
+  chaos(5, 'abyssal_gaze', 'Abyssal Gaze', 60, 1800, ['enemy'], { secs: 15, more: 0.5 },
+    (fx) => `The creature flees from you for ${span(fx.secs)}, monsters too, and takes ${percent(fx.more)} more damage from every blow while it does.`),
+  chaos(5, 'undying', 'Undying', 0, 3600, ['self'], { price: 0.25, secs: 60, floor: 0.01 },
+    (fx) => `Costs no favour. Spend ${percent(fx.price)} of your health: for ${span(fx.secs)} no blow can kill you, and one that would leaves you at ${percent(fx.floor)} of your health.`),
 ];
 export const FAITH_SPELL_BY_ID = new Map(FAITH_SPELLS.map((s) => [s.id, s]));
 export const spellsOf = (patron: PatronId, tier: number): FaithSpellDef[] =>
