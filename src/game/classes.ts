@@ -831,7 +831,7 @@ export function riteRefusal(
     return `That is the ${(classDef(r.class)?.name ?? r.class).toLowerCase()}’s to call, and you are not one.`;
   }
   if (prayer < r.level) {
-    return `${r.name} takes ${r.level} prayer; you have ${Math.floor(prayer)}.`;
+    return `${r.name} takes ${r.level} faith; you have ${Math.floor(prayer)}.`;
   }
   if (favour < r.cost) {
     return `${r.name} costs ${r.cost} favour; you hold ${Math.floor(favour)}. Pray at an altar.`;

@@ -95,6 +95,9 @@ import { InventoryPanel } from './panels/inventory';
 import { MinimapPanel } from './panels/minimap';
 import { SkillsPanel } from './panels/skills';
 import { TradesPanel } from './panels/trades';
+import { FaithPanel } from './panels/faith';
+import { FaithBook } from './faithbook';
+import { SpellBar } from './spellbar';
 import { SocialPanel } from './panels/social';
 import { MarketPanel } from './panels/market';
 import { BoardsPanel } from './panels/boards';
@@ -246,6 +249,10 @@ export class UI {
   private readonly craftPanel: CraftPanel;
   private readonly ledgerPanel: LedgerPanel;
   private readonly trades: TradesPanel;
+  /** Your faith as the island keeps it, which the Faith window and the spell bar both draw. */
+  private readonly faithBook: FaithBook;
+  private readonly faith: FaithPanel;
+  private readonly spellBar: SpellBar;
   private readonly deedPanel: DeedPanel;
   private readonly tilePanel: TilePanel;
   private readonly social: SocialPanel;
@@ -389,6 +396,17 @@ export class UI {
      */
     const tradesWin = this.windows.create({ id: 'trades', title: 'Trades', x: 12, y: 56, width: 560, height: 560, anchor: 'tl', open: false });
     this.trades = new TradesPanel(tradesWin, game, this.island);
+    /*
+     * Faith: your patron and its tiers of spells, beside the Trades window it
+     * is built like; and the spell bar along the bottom, which draws the same
+     * answer. Asked once now, so the bar has what is in it from the start.
+     */
+    this.faithBook = new FaithBook(this.island);
+    const faithWin = this.windows.create({ id: 'faith', title: 'Faith', x: 12, y: 56, width: 460, height: 560, anchor: 'tl', open: false });
+    this.faith = new FaithPanel(faithWin, this.faithBook);
+    this.spellBar = new SpellBar(root, game, this.faithBook, (x, y, title, items) => this.menu.show(x, y, title, items),
+      () => this.windows.get('faith')?.open());
+    void this.faithBook.ask();
     const help = this.windows.create({ id: 'help', title: 'Help', x: 0, y: 0, width: 440, height: 460, open: false });
     help.el.style.left = `${Math.max(0, (uiBox().w - 440) / 2)}px`;
     help.el.style.top = `${Math.max(0, (uiBox().h - 460) / 2)}px`;
@@ -642,6 +660,13 @@ export class UI {
     this.craftPanel.update(performance.now());
     this.ledgerPanel.update(performance.now());
     this.trades.update(performance.now() / 1000);
+    this.faith.update(performance.now() / 1000);
+    this.spellBar.update();
+  }
+
+  /** Call the spell in a slot of the bar (Shift and its number). */
+  castSpell(slot: number): void {
+    void this.spellBar.cast(slot);
   }
 
   /** Describe what is under the cursor. */
@@ -1882,7 +1907,7 @@ export class UI {
             const why = cast.check?.(wantsItem ? { kind: 'item', uid: targets[0]?.uid ?? -1, spell: c.id } : plain, g) ?? null;
             return {
               label: c.name,
-              note: `${c.cost} favour · prayer ${c.level}`,
+              note: `${c.cost} favour · faith ${c.level}`,
               hint: why ?? c.note,
               disabled: !!why && !wantsItem,
               children: wantsItem

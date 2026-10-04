@@ -61,6 +61,7 @@ export const WINDOWS: Array<{ label: string; bind: string; id: string }> = [
   { label: 'Tile', bind: 'win_tile', id: 'tile' },
   { label: 'Skills', bind: 'win_skills', id: 'skills' },
   { label: 'Trades', bind: 'win_trades', id: 'trades' },
+  { label: 'Faith', bind: 'win_faith', id: 'faith' },
   { label: 'Tracker', bind: 'win_tracker', id: 'tracker' },
   { label: 'Events', bind: 'win_events', id: 'events' },
   { label: 'Map', bind: 'win_map', id: 'map' },

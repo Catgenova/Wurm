@@ -541,6 +541,34 @@ export interface ClassCard {
   why: string | null;
 }
 
+/**
+ * Your faith as the island keeps it (`faith_said`): your faith and favour,
+ * your patron, the spells you have taken, the bar, and the island's own
+ * refusal for every patron and every one of your patron's spells, null where
+ * there is none. Every faith door answers with all of it, or with `why`.
+ */
+export interface FaithSaid {
+  faith: number;
+  favour: number;
+  cap: number;
+  patron: string | null;
+  /** Patron id to why it cannot be taken, or null. */
+  patrons: Record<string, string | null>;
+  /** Spell ids taken, oldest first. */
+  taken: string[];
+  /** Your patron's spell ids to why each cannot be taken, or null. */
+  spells: Record<string, string | null>;
+  /** The six slots, each a spell id or null. */
+  bar: Array<string | null>;
+  /** Spell id to seconds before it can be called again, for those resting. */
+  rest: Record<string, number>;
+  /** What a door just did, when it did something. */
+  took?: string;
+  cast?: string;
+  said?: string;
+  why?: string;
+}
+
 export interface ClassesSaid {
   taken: { craft: string | null; combat: string | null };
   /** The skill level a trade opens at. */
@@ -2754,6 +2782,39 @@ export class Island {
   }
 
   /** Call your trade's rite, out of the same favour every prayer is paid from. */
+  /** Your faith, patron, spells and bar, and why anything is refused. */
+  async faith(): Promise<FaithSaid | null> {
+    return this.faithDoor('rpc_faith', {});
+  }
+
+  /** Take a patron, once and for good. */
+  async takePatron(id: string): Promise<FaithSaid | null> {
+    return this.faithDoor('rpc_take_patron', { p_patron: id });
+  }
+
+  /** Take one spell of a tier: one of the three, for good. */
+  async takeFaithSpell(id: string): Promise<FaithSaid | null> {
+    return this.faithDoor('rpc_take_faith_spell', { p_spell: id });
+  }
+
+  /** Put a spell you have in a slot of the bar, or empty the slot with null. */
+  async setSpellSlot(slot: number, spell: string | null): Promise<FaithSaid | null> {
+    return this.faithDoor('rpc_spell_bar', { p_slot: slot, p_spell: spell });
+  }
+
+  /** Call the spell in a slot of the bar, at what it is pointed at. */
+  async castSpell(slot: number, target: Record<string, unknown>): Promise<FaithSaid | null> {
+    return this.faithDoor('rpc_cast_spell', { p_slot: slot, p_target: target });
+  }
+
+  /** A faith door: the whole answer, or `why` alone when it refused or failed. */
+  private async faithDoor(door: string, args: Record<string, unknown>): Promise<FaithSaid | null> {
+    if (!this.info) return null;
+    const { data, error } = await supabase().rpc(door, { p_world: this.info.id, ...args });
+    if (error) return { why: error.message } as FaithSaid;
+    return (data as FaithSaid | null) ?? null;
+  }
+
   async callRite(id: string): Promise<string | null> {
     return this.door('rpc_rite', { p_rite: id });
   }

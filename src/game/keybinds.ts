@@ -20,6 +20,7 @@
 
 import { SIDE_NAMES } from './building';
 import { NODES_PER_TRADE, PERK_TIER_AT, PERKS_PER_TIER } from './classes';
+import { FAITH_TIER_AT, PATRONS, SPELLS_PER_TIER } from './patrons';
 import { TURNS } from '../render/view';
 import { capital, numberWord, share } from './words';
 import { FALL_BACK, FIGHT_STANCE_NAMES, FIGHT_STANCES, FOLLOW_RANGE, stanceSays, TARGET_RANGE } from './fight';
@@ -69,6 +70,7 @@ export const BINDS: BindDef[] = [
   { id: 'win_tile', label: 'Tile', hint: 'Everything you could do to whatever you last clicked.', group: 'Windows', keys: ['KeyT'] },
   { id: 'win_skills', label: 'Skills', hint: 'What you know and how well.', group: 'Windows', keys: ['KeyK'] },
   { id: 'win_trades', label: 'Trades', hint: `The trade you have taken up, the ${numberWord(NODES_PER_TRADE)} nodes or ${numberWord(PERK_TIER_AT.length * PERKS_PER_TIER)} perks behind it, and its rite.`, group: 'Windows', keys: ['KeyF'] },
+  { id: 'win_faith', label: 'Faith', hint: `Your faith and favour, the ${numberWord(PATRONS.length)} patrons, and the spells your patron gives: ${numberWord(SPELLS_PER_TIER)} at each of ${numberWord(FAITH_TIER_AT.length)} tiers, one taken at each. The spell bar along the bottom is called with Shift and a slot's number.`, group: 'Windows', keys: [] },
   { id: 'win_tracker', label: 'Tracker', hint: 'The few trades you are watching today, with a bar apiece.', group: 'Windows', keys: ['KeyV'] },
   { id: 'win_events', label: 'Event log', hint: 'What has been happening, and the box you talk in.', group: 'Windows', keys: ['KeyL'] },
   { id: 'win_map', label: 'Map', hint: 'The island as far as you have seen it.', group: 'Windows', keys: ['KeyM'] },

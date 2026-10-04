@@ -250,6 +250,19 @@ create table if not exists class_perk (
 create table if not exists perk_fx_rule (
   family text primary key, rule text not null
 );
+create table if not exists patron_def (
+  id text primary key, name text not null, alignment text not null
+);
+create table if not exists faith_tier (
+  tier int primary key, at int not null
+);
+create table if not exists faith_spell (
+  id text primary key, patron text not null, tier int not null, name text not null, note text not null,
+  cost double precision not null, rest double precision not null, on_what text not null
+);
+create table if not exists spell_slot (
+  slot int primary key, school text not null
+);
 create table if not exists perk_tier (
   tier int primary key, at int not null
 );
@@ -1080,7 +1093,7 @@ insert into skill_def values ('taming', 'Taming', 1, null);
 insert into skill_def values ('animal_husbandry', 'Animal husbandry', 1, null);
 insert into skill_def values ('butchering', 'Butchering', 1, null);
 insert into skill_def values ('alchemy', 'Alchemy', 1, null);
-insert into skill_def values ('prayer', 'Prayer', 1, null);
+insert into skill_def values ('prayer', 'Faith', 1, null);
 insert into skill_def values ('meditation', 'Meditation', 1, null);
 insert into skill_def values ('repair', 'Repair', 1, null);
 insert into skill_def values ('first_aid', 'First aid', 1, null);
@@ -1814,6 +1827,10 @@ delete from class_node;
 delete from class_perk;
 delete from perk_fx_rule;
 delete from perk_tier;
+delete from patron_def;
+delete from faith_tier;
+delete from faith_spell;
+delete from spell_slot;
 delete from pan_ore;
 delete from rite_def;
 delete from school_def;
@@ -4166,6 +4183,8 @@ create or replace function coward_at() returns double precision language sql imm
 create or replace function coward_drag() returns double precision language sql immutable as $fn$ select 0.8::double precision $fn$;
 create or replace function flee_pace() returns double precision language sql immutable as $fn$ select 1.6::double precision $fn$;
 create or replace function flee_secs() returns double precision language sql immutable as $fn$ select 6::double precision $fn$;
+create or replace function patron_at() returns double precision language sql immutable as $fn$ select 20::double precision $fn$;
+create or replace function spells_per_tier() returns double precision language sql immutable as $fn$ select 3::double precision $fn$;
 create or replace function dodge_from() returns double precision language sql immutable as $fn$ select 20::double precision $fn$;
 create or replace function dodge_per_control() returns double precision language sql immutable as $fn$ select 0.0025::double precision $fn$;
 create or replace function dodge_per_kg() returns double precision language sql immutable as $fn$ select 0.0025::double precision $fn$;
@@ -5329,6 +5348,24 @@ insert into perk_tier values (3, 70);
 insert into perk_tier values (4, 80);
 insert into perk_tier values (5, 90);
 insert into perk_tier values (6, 99);
+insert into patron_def values ('blessing', 'Blessing', 'good');
+insert into patron_def values ('justice', 'Justice', 'neutral');
+insert into patron_def values ('chaos', 'Chaos', 'evil');
+insert into faith_tier values (1, 20);
+insert into faith_tier values (2, 30);
+insert into faith_tier values (3, 40);
+insert into faith_tier values (4, 50);
+insert into faith_tier values (5, 60);
+insert into faith_tier values (6, 70);
+insert into faith_tier values (7, 80);
+insert into faith_tier values (8, 90);
+insert into faith_tier values (9, 99);
+insert into spell_slot values (0, 'class');
+insert into spell_slot values (1, 'class');
+insert into spell_slot values (2, 'class');
+insert into spell_slot values (3, 'faith');
+insert into spell_slot values (4, 'faith');
+insert into spell_slot values (5, 'path');
 insert into pan_ore values ('copper_ore');
 insert into pan_ore values ('tin_ore');
 insert into pan_ore values ('silver_ore');

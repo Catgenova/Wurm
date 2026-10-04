@@ -1092,6 +1092,128 @@ kbd {
   color: var(--ui-dim);
 }
 
+/* The spell bar ------------------------------------------------------------ */
+
+.spell-bar {
+  position: absolute;
+  /* Bottom and middle, under the action bar: the event log holds the left
+     and the belt the right. */
+  left: 50%;
+  bottom: 12px;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+}
+
+/* Only on an island; display here would otherwise beat the rule for [hidden]. */
+.spell-bar[hidden] {
+  display: none;
+}
+
+.spell-group {
+  position: relative;
+  display: flex;
+  gap: 3px;
+  padding-top: 12px;
+}
+
+.spell-cap {
+  position: absolute;
+  top: 0;
+  left: 1px;
+  color: var(--ui-dim);
+  font-size: 9px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.spell-slot {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: space-between;
+  width: 66px;
+  height: 38px;
+  padding: 3px 5px;
+  overflow: hidden;
+  font: inherit;
+  font-size: 11px;
+  color: var(--ui-text);
+  background: var(--ui-bg);
+  border: 1px solid var(--ui-border);
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.6);
+  cursor: pointer;
+}
+
+.spell-slot:hover {
+  border-color: var(--ui-accent);
+}
+
+.spell-slot:focus-visible {
+  outline: 2px solid var(--ui-accent);
+  outline-offset: 1px;
+}
+
+.spell-key {
+  position: relative;
+  color: var(--ui-accent);
+  font-size: 10px;
+  font-weight: bold;
+}
+
+.spell-name {
+  position: relative;
+  max-width: 100%;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+/* Nothing in it yet. */
+.spell-slot.spell-empty {
+  opacity: 0.45;
+}
+
+/* How much of a spell's rest is left, drawn down from the top as it runs out. */
+.spell-shade {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 0;
+  background: rgba(0, 0, 0, 0.55);
+  pointer-events: none;
+}
+
+.spell-slot.spell-resting .spell-name {
+  color: var(--ui-dim);
+}
+
+/* A patron's alignment, on its card in the Faith window. */
+.faith-align {
+  padding: 0 6px;
+  border: 1px solid currentColor;
+  border-radius: 8px;
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.faith-good {
+  color: #e3c56b;
+}
+
+.faith-neutral {
+  color: #9fb4c8;
+}
+
+.faith-evil {
+  color: #d07a70;
+}
+
 /* Context menu & tooltip ------------------------------------------------ */
 
 .ctx-menu {

@@ -26,6 +26,7 @@ import { boonOf, boonTime, BOON_BONUS } from './game/boons';
 import { balance, fedness, NUTRIENTS, tableMul, upkeepMul } from './game/nutrition';
 import { weaponDamage, WEAPON_BY_ID } from './game/gear';
 import { SPECIES } from './game/creatures';
+import { BAR_SLOTS } from './game/patrons';
 import { TITLES } from './game/titles';
 import { ITEM_DEFS, itemName } from './game/items';
 import { RECIPES } from './game/recipes';
@@ -332,6 +333,7 @@ const PRESSES: Record<string, () => void> = {
   win_tile: () => ui.toggleWindow('tile'),
   win_skills: () => ui.toggleWindow('skills'),
   win_trades: () => ui.toggleWindow('trades'),
+  win_faith: () => ui.toggleWindow('faith'),
   win_tracker: () => ui.toggleWindow('tracker'),
   win_events: () => ui.toggleWindow('events'),
   win_map: () => ui.toggleWindow('map'),
@@ -389,6 +391,11 @@ input.onKey = (code, ev) => {
   // The number keys: the selection window when it is looking at something,
   // and the loops on a worn toolbelt otherwise. 0 is the tenth of either.
   const digit = /^Digit([0-9])$/.exec(code);
+  // Shift and a number is a slot of the spell bar, which has no zero.
+  if (digit && ev.shiftKey && Number(digit[1]) >= 1 && Number(digit[1]) <= BAR_SLOTS) {
+    ui.castSpell(Number(digit[1]) - 1);
+    return;
+  }
   if (digit) {
     ui.pressNumber((Number(digit[1]) + 9) % 10);
     return;

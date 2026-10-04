@@ -152,7 +152,7 @@ export function altarNear(g: Game): PlacedFurniture | undefined {
 
 /** Why this cast will not go, or null. */
 export function castReason(g: Game, def: CastDef, item?: Item): string | null {
-  if (g.skills.get(FAITH) < def.level) return `${def.name} takes ${def.level} prayer; you have ${g.skills.get(FAITH).toFixed(0)}.`;
+  if (g.skills.get(FAITH) < def.level) return `${def.name} takes ${def.level} faith; you have ${g.skills.get(FAITH).toFixed(0)}.`;
   if (g.player.favour < def.cost) return `${def.name} costs ${def.cost} favour; you hold ${Math.floor(g.player.favour)}. Pray at an altar.`;
   if (def.on === 'item' && !item) return 'Choose something to lay it on.';
   // Not on a find nobody has restored yet, which nothing mends (`unrestored`).

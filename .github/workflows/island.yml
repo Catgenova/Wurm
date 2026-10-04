@@ -1581,6 +1581,18 @@ jobs:
             --outfile=node_modules/.cache/dodge.mjs --log-level=error
           node node_modules/.cache/dodge.mjs
 
+      - name: Patrons, faith spells and the spell bar
+        run: |
+          # A patron is refused below its faith, taken at it and never twice; a
+          # spell is refused at a shut tier and from another patron, taken onto
+          # the bar, and closes its tier; the bar takes a spell only in a slot
+          # of its school; a call costs nothing when nothing is written behind
+          # it, its favour and its rest when it works, and is refused while it
+          # rests. Both sides, in the same words; and no door open but rpc_.
+          npx esbuild supabase/test/faith.ts --bundle --platform=node --format=esm \
+            --outfile=node_modules/.cache/faith.mjs --log-level=error
+          node node_modules/.cache/faith.mjs
+
       - name: A stone, and what you can get out of it
         run: |
           # The arcane, which has no mana in it. A focus is a cut gem in a

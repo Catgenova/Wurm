@@ -98,6 +98,7 @@ import {
   ARROW_IDS, BODKIN_HIDE, BURN_WEAR, CONSIDER_EASY, CONSIDER_HARD, CRIT_BASE, CRIT_HIT, CRIT_KNIFE, CRIT_PER_SKILL, DODGE_FROM, DODGE_PER_CONTROL, DODGE_PER_KG, dodgeChance, KNIFE_BLEED,
   KNIFE_BLEED_SECS, STAGGER_MAUL, THREAT_HOLD, VENOM_DRAIN, VENOM_SECS,
 } from '../../game/fight';
+import { ALIGNMENT_NAMES, BAR_SLOTS, FAITH_TIER_AT, PATRON_AT, PATRONS, SCHOOL_NAMES, slotsFor, SPELLS_PER_TIER } from '../../game/patrons';
 import { BIND_BY_ID, keyName } from '../../game/keybinds';
 import {
   CLOSE_BARE, CLOSE_CLOTH, CLOSE_PACE, CLOSE_PER_SKILL, CLOSE_RIGHT, CLOSE_WRONG, FESTER_CLOTH, FESTER_WRONG, WOUND_KINDS,
@@ -2461,7 +2462,7 @@ export function helpText(): string {
     <p>An <b>altar</b> is masonry: ${bill('make_altar')}, laid with a trowel. It is built, and set down, only on a
     settlement of yours: one you founded or one you are a citizen of. A settlement has one altar: a second
     is neither built nor set down on one that has its altar standing. Kneel at it and you bank
-    <b>favour</b>, on the <b>prayer</b> skill. You may say what you have to say once every ${spanWords(PRAYER_REST)}, and it is
+    <b>favour</b>, on the <b>faith</b> skill. You may say what you have to say once every ${spanWords(PRAYER_REST)}, and it is
     worth most at <b>${listed(PRAYER_PEAKS.map(hudHour))}</b> &mdash; ${times((PRAYER_BASE + PRAYER_LIFT) / PRAYER_BASE)} what it is worth
     ${numberWord(PRAYER_TAPER)} hours or more from either &mdash; and less the further off you are. A good altar banks more
     than a rough one. Favour also trickles back on its own, slowly, up to whatever your faith carries
@@ -2475,8 +2476,20 @@ export function helpText(): string {
     are not given up, and a bauble takes no mote: its rarity is rolled when it is restored.</p>
     <p>${NumberWord(CASTS.length)} things it buys, and none of them can be had any other way:</p>
     <table>
-      ${CASTS.map((c) => `<tr><td><b>${c.name}</b></td><td>${c.cost} favour, prayer ${c.level}. ${c.note}</td></tr>`).join('\n      ')}
+      ${CASTS.map((c) => `<tr><td><b>${c.name}</b></td><td>${c.cost} favour, faith ${c.level}. ${c.note}</td></tr>`).join('\n      ')}
     </table>
+    <h3>Patrons and the spell bar</h3>
+    <p>At <b>${PATRON_AT} faith</b> you may take a <b>patron</b>, in the <b>Faith</b> window: ${listed(PATRONS.map((p) => `<b>${p.name}</b> (${ALIGNMENT_NAMES[p.alignment].toLowerCase()})`))}.
+    A patron is for good: once one is taken no other can be. Each offers ${numberWord(SPELLS_PER_TIER)} spells at each of
+    ${numberWord(FAITH_TIER_AT.length)} tiers, which open at ${listed(FAITH_TIER_AT.map(String))} faith, and you take one of the ${numberWord(SPELLS_PER_TIER)} at each
+    tier: ${numberWord(FAITH_TIER_AT.length)} spells in all, out of ${numberWord(FAITH_TIER_AT.length * SPELLS_PER_TIER)}. Every patron's tiers can be read in the window
+    before you take one. Taking a patron or a spell waits for you to confirm it in the window. A spell is paid for in favour and rests a number of
+    seconds of its own after each call.</p>
+    <p>The <b>spell bar</b> along the bottom has ${numberWord(BAR_SLOTS)} slots: ${listed((['class', 'faith', 'path'] as const).map((s) => `${numberWord(slotsFor(s))} for ${SCHOOL_NAMES[s].toLowerCase()} spells`))}.
+    A spell you take goes in the first empty faith slot; right-click a slot to put another of yours there or to empty it.
+    Click a slot, or hold <b>Shift</b> and press its number, to call what is in it; a spell called on a creature goes at
+    what you are fighting or have marked. A dark shade over a slot is the rest that spell has left. On an island only:
+    playing by yourself in the browser there is nobody to keep a patron.</p>
     <h3>The things that are not wildermon</h3>
     <p>Most of what walks this island can be tamed. ${NumberWord(MONSTER_SORTS.length)} things cannot. A <b>goblin</b> is knee-high and
     entirely malice; an <b>orc</b> is a head taller than you and carries sharpened iron; an <b>ogre</b>

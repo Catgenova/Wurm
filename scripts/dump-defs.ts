@@ -63,6 +63,7 @@ import { BOON_SKILLS, BOON_SECONDS, BOON_BONUS, TINCTURE_BONUS, TINCTURE_SECONDS
 import { HIVE_BASE, HIVE_PER_QL, HIVE_SWARMS, HIVE_WAX, POND_EVERY } from '../src/game/furniture';
 import { GRASS_PER_CUT, MOSS_PER_CUT, REED_CUT, REED_EXTRA_AT } from '../src/game/actions';
 import { CROWD_HIDES, DEEDS_JOINED, PLANTABLE } from '../src/game/game';
+import { FAITH_SPELLS, FAITH_TIER_AT, PATRON_AT, PATRONS, SPELL_BAR, SPELLS_PER_TIER } from '../src/game/patrons';
 import { RARITIES, RARITY_LIFT, RARITY_ODDS, RARITY_WORD } from '../src/game/items';
 import { DYES } from '../src/game/dyestuffs';
 import { SLAB_VARIANTS } from '../src/world/tiles';
@@ -575,6 +576,24 @@ out.push(`create table if not exists class_perk (
 out.push(`create table if not exists perk_fx_rule (
   family text primary key, rule text not null
 );`);
+/*
+ * And the patrons: three, taken at `patron_at` faith, each offering
+ * `spells_per_tier` spells at each faith tier, one of which is taken; and the
+ * six slots of the spell bar, each for one school of spell.
+ */
+out.push(`create table if not exists patron_def (
+  id text primary key, name text not null, alignment text not null
+);`);
+out.push(`create table if not exists faith_tier (
+  tier int primary key, at int not null
+);`);
+out.push(`create table if not exists faith_spell (
+  id text primary key, patron text not null, tier int not null, name text not null, note text not null,
+  cost double precision not null, rest double precision not null, on_what text not null
+);`);
+out.push(`create table if not exists spell_slot (
+  slot int primary key, school text not null
+);`);
 out.push(`create table if not exists perk_tier (
   tier int primary key, at int not null
 );`);
@@ -1079,7 +1098,7 @@ out.push(emptied(['melt_def', 'wall_fitting', 'recipe', 'recipe_input', 'recipe_
   'improvable_def', 'item_feeds', 'boon_skill', 'plantable', 'buryable', 'flower_octave', 'flower_season', 'stone_bed', 'title_def',
   'knack_kin', 'category_decay', 'vehicle_def', 'boat_def', 'tack_def', 'cast_def', 'path_def',
   'path_step', 'class_def', 'class_skill', 'class_channel', 'class_node', 'class_perk',
-  'perk_fx_rule', 'perk_tier', 'pan_ore', 'rite_def',
+  'perk_fx_rule', 'perk_tier', 'patron_def', 'faith_tier', 'faith_spell', 'spell_slot', 'pan_ore', 'rite_def',
   'school_def', 'school_stone', 'spell_def', 'bridge_def', 'bridge_bill', 'bridge_winch', 'brew_def',
   'dyeable_item', 'dyeable_class']));
 
@@ -1392,6 +1411,7 @@ for (const [fn, v] of [
      more per point of skill, a knife's share more, and what it lands for. A
      bodkin through a hide; venom, a second and how long; a burn on armour;
      and how long what a creature is on holds it. */
+  ['patron_at', PATRON_AT], ['spells_per_tier', SPELLS_PER_TIER],
   ['dodge_from', DODGE_FROM], ['dodge_per_control', DODGE_PER_CONTROL], ['dodge_per_kg', DODGE_PER_KG], ['dodge_most', DODGE_MOST], ['dodge_gain', DODGE_GAIN],
   ['crit_base', CRIT_BASE], ['crit_per_skill', CRIT_PER_SKILL], ['crit_knife', CRIT_KNIFE], ['crit_hit', CRIT_HIT],
   ['bodkin_hide', BODKIN_HIDE], ['venom_drain', VENOM_DRAIN], ['venom_secs', VENOM_SECS], ['burn_wear', BURN_WEAR],
@@ -1842,6 +1862,13 @@ for (const [family, rule] of Object.entries(FX_RULE)) {
   out.push(`insert into perk_fx_rule values (${q(family)}, ${q(rule)});`);
 }
 PERK_TIER_AT.forEach((at, i) => out.push(`insert into perk_tier values (${q(i + 1)}, ${q(at)});`));
+for (const p of PATRONS) out.push(`insert into patron_def values (${q(p.id)}, ${q(p.name)}, ${q(p.alignment)});`);
+FAITH_TIER_AT.forEach((at, i) => out.push(`insert into faith_tier values (${q(i + 1)}, ${q(at)});`));
+for (const s of FAITH_SPELLS) {
+  out.push(`insert into faith_spell values (` + [q(s.id), q(s.patron), q(s.tier), q(s.name), q(s.note),
+    q(s.cost), q(s.rest), q(s.on)].join(', ') + `);`);
+}
+SPELL_BAR.forEach((school, i) => out.push(`insert into spell_slot values (${q(i)}, ${q(school)});`));
 for (const ore of PAN_ORES) out.push(`insert into pan_ore values (${q(ore)});`);
 for (const sc of SCHOOLS) {
   out.push(`insert into school_def values (${q(sc.id)}, ${q(sc.name)}, ${q(sc.skill)}, ${q(sc.note)});`);
