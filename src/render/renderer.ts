@@ -6292,6 +6292,8 @@ export class Renderer {
       c.height = img.height;
       const g = c.getContext('2d') as CanvasRenderingContext2D;
       g.drawImage(img, 0, 0);
+      // The hour's light on what is there and not over it: a covering seen through keeps the opacity it was painted at.
+      g.globalCompositeOperation = 'source-atop';
       const a = cov.shadow(q);
       if (a > 0.001) {
         g.fillStyle = `rgba(${cov.shade[0]}, ${cov.shade[1]}, ${cov.shade[2]}, ${a.toFixed(3)})`;

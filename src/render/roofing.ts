@@ -20,7 +20,7 @@
  */
 
 import { EAVE_DEEP } from '../game/building';
-import { leadedGlass } from './flooring';
+import { STAINED_OPACITY, leadedGlass } from './flooring';
 
 /** Picture pixels to a tile, along the eave and up the slope, at the finest of the three. */
 export const COVER_PPT = 256;
@@ -518,6 +518,24 @@ function veined(ink: string): (g: Ctx, x: number, y0: number, w: number, h: numb
 }
 
 
+/**
+ * A covering of stained glass, seen through: every pixel at the glass's
+ * opacity but the lead -- the ground between the pieces and the line round
+ * each -- which is kept whole, and the edge of a line between the two by how
+ * near it is to the lead's colour.
+ */
+function seenThrough(c: HTMLCanvasElement, lead: string): HTMLCanvasElement {
+  const g = c.getContext('2d') as CanvasRenderingContext2D;
+  const d = g.getImageData(0, 0, c.width, c.height), p = d.data;
+  const lr = parseInt(lead.slice(1, 3), 16), lg = parseInt(lead.slice(3, 5), 16), lb = parseInt(lead.slice(5, 7), 16);
+  for (let i = 0; i < p.length; i += 4) {
+    const near = Math.max(0, 1 - Math.hypot(p[i] - lr, p[i + 1] - lg, p[i + 2] - lb) / 60);
+    p[i + 3] = Math.round(p[i + 3] * (STAINED_OPACITY + (1 - STAINED_OPACITY) * near));
+  }
+  g.putImageData(d, 0, 0);
+  return c;
+}
+
 /* ---- decks, for a flat roof ------------------------------------------------ */
 
 /**
@@ -751,12 +769,12 @@ function build(material: string): Covering | null {
     case 'stained_glass':
       // Scales of sea-glass mint, a paler one and an aqua among them, each set in lead, under a ridge of gold; laid flat, the floor's leaded panels.
       return {
-        mips: [lapped({
+        mips: [seenThrough(lapped({
           rows: 14, unit: [36.57, 36.57], bond: 'half', gap: 1.5, ground: '#4c5058',
           tones: [['#9fd3c7', 5], ['#b2ddd1', 3], ['#8cc6bb', 3], ['#a9ddd9', 2], ['#c4e6dc', 2]],
           line: '#4c5058', lineW: 2.6, hi: '#ecf8f4', drip: 4, dripInk: 'rgba(52, 60, 70, 0.4)',
           shape: 'scale', ragged: 0, skew: 0, detail: sheened('#f6fbf9', '#d2ece6'),
-        }, 47)],
+        }, 47), '#4c5058')],
         deck: [leadedGlass(153)],
         shade: [56, 74, 86],
         shadow: shadowOf(0.75),

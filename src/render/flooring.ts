@@ -765,6 +765,8 @@ function panels(o: { unit: number; bed: string; field: string; hi: string; lo: s
 /** The colours of stained glass, as its walls are glazed, and the lead it is set in. */
 const STAINED = ['#f4bccb', '#f7d0ae', '#f5e6a2', '#bfe5cf', '#a9ddd9', '#b0caee', '#cdb9e8', '#eea9bb', '#d3e4b3', '#f6eedb'];
 const LEAD = '#4c5058';
+/** How much of what is behind it stained glass hides, wherever it is laid: a wall's panes, a floor's and a roof's. The lead and the stone it is set in hide all of it. */
+export const STAINED_OPACITY = 0.75;
 
 /**
  * One pane of stained glass: its own colour, paler toward the light, the
@@ -823,13 +825,16 @@ function stainedPane(g: Ctx, x: number, y: number, w: number, h: number, hex: st
  * run long in places and break short in others, and no pane takes the colour
  * of the one beside it or above it. Every tile is a panel of its own, so
  * nothing in the glass comes near a seam and the picture repeats both ways.
+ * The panes are seen through, at `STAINED_OPACITY`; the lead is not.
  */
 export function leadedGlass(seed: number): HTMLCanvasElement {
   const [c, g] = canvas(S, S);
+  // The panes on a sheet of their own, laid in at the glass's opacity, and the lead round them on another, laid in whole.
+  const [glass, gl] = canvas(S, S), [cames, cm] = canvas(S, S);
   const R = rand(seed);
   const T = S / FLOOR_TILES, border = 3, lead = 2.6, n = 8, u = (T - border * 2) / n;
-  g.fillStyle = LEAD;
-  g.fillRect(0, 0, S, S);
+  cm.fillStyle = LEAD;
+  cm.fillRect(0, 0, S, S);
   for (let ty = 0; ty < FLOOR_TILES; ty++) {
     for (let tx = 0; tx < FLOOR_TILES; tx++) {
       const x0 = tx * T + border, y0 = ty * T + border;
@@ -847,11 +852,17 @@ export function leadedGlass(seed: number): HTMLCanvasElement {
           let k = Math.floor(R() * STAINED.length);
           for (let t = 0; t < STAINED.length && near.has(k); t++) k = (k + 1) % STAINED.length;
           for (let j = 0; j < h; j++) for (let i = 0; i < w; i++) taken[r + j][q + i] = k;
-          stainedPane(g, x0 + q * u + lead, y0 + r * u + lead, w * u - lead * 2, h * u - lead * 2, STAINED[k], R);
+          const [px, py, pw, ph] = [x0 + q * u + lead, y0 + r * u + lead, w * u - lead * 2, h * u - lead * 2];
+          stainedPane(gl, px, py, pw, ph, STAINED[k], R);
+          cm.clearRect(px, py, pw, ph);
         }
       }
     }
   }
+  g.globalAlpha = STAINED_OPACITY;
+  g.drawImage(glass, 0, 0);
+  g.globalAlpha = 1;
+  g.drawImage(cames, 0, 0);
   return c;
 }
 

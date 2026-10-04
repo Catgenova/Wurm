@@ -1,5 +1,6 @@
 import { WALL_HEIGHT } from '../game/building';
 import { HEIGHT_SCALE, TILE_H } from './iso';
+import { STAINED_OPACITY } from './flooring';
 
 /**
  * Cobblestone, five ways, one seam.
@@ -4147,9 +4148,22 @@ function paint(S: Stock): Masonry {
    */
   function glassField(g: Ctx, y0: number, y1: number, R: Rand): void {
     const F = 6, x0 = PILASTER / 2 + 4, x1 = TW - PILASTER / 2 - 4, gy0 = y0 + F, gy1 = y1 - F;
-    // The fillet of marble the panel is set in, and the lead under every pane.
+    // The fillet of marble the panel is set in, and nothing where the panel goes: it is seen through.
     g.fillStyle = TONES.dress.lit; g.fillRect(0, y0, TW, y1 - y0);
-    g.fillStyle = PASTEL.lead; g.fillRect(x0, gy0, x1 - x0, gy1 - gy0);
+    g.clearRect(x0, gy0, x1 - x0, gy1 - gy0);
+    /*
+     * The glass on a sheet of its own, laid in at the opacity stained glass is
+     * drawn at, and the lead between the panes on another, laid in whole:
+     * whatever stands behind the wall shows through the colour and not
+     * through the cames.
+     */
+    const sheet = (): [HTMLCanvasElement, Ctx] => {
+      const c = document.createElement('canvas');
+      c.width = TW; c.height = Math.ceil(y1) + 1;
+      return [c, c.getContext('2d') as Ctx];
+    };
+    const [glass, gl] = sheet(), [cames, cm] = sheet();
+    cm.fillStyle = PASTEL.lead; cm.fillRect(x0, gy0, x1 - x0, gy1 - gy0);
     const cols = 14, rows = Math.max(2, Math.round((gy1 - gy0) / 34));
     const cw = (x1 - x0) / cols, rh = (gy1 - gy0) / rows, lead = 1.8;
     const taken: number[][] = Array.from({ length: rows }, () => Array(cols).fill(-1));
@@ -4167,9 +4181,15 @@ function paint(S: Stock): Masonry {
         let k = Math.floor(R() * GLASSES.length);
         for (let t = 0; t < GLASSES.length && near.has(k); t++) k = (k + 1) % GLASSES.length;
         for (let j = 0; j < h; j++) for (let i = 0; i < w; i++) taken[r + j][c + i] = k;
-        pane(g, x0 + c * cw + lead, gy0 + r * rh + lead, w * cw - lead * 2, h * rh - lead * 2, PASTEL[GLASSES[k]], R);
+        const [px, py, pw, ph] = [x0 + c * cw + lead, gy0 + r * rh + lead, w * cw - lead * 2, h * rh - lead * 2];
+        pane(gl, px, py, pw, ph, PASTEL[GLASSES[k]], R);
+        cm.clearRect(px, py, pw, ph);
       }
     }
+    g.globalAlpha = STAINED_OPACITY;
+    g.drawImage(glass, 0, 0);
+    g.globalAlpha = 1;
+    g.drawImage(cames, 0, 0);
     // The pilasters: a half at each end, cut and veined as the band is, so two sections meet on one pier of marble.
     stone(g, 0, y0, PILASTER / 2 + 4, y1 - y0, R, 'dress', 'unit', 0, 1.2);
     stone(g, TW - PILASTER / 2 - 4, y0, PILASTER / 2 + 4, y1 - y0, R, 'dress', 'unit', 0, 1.2);
@@ -7777,7 +7797,8 @@ function paint(S: Stock): Masonry {
     plinth: S.plinth,
     shade: S.shade,
     growth: S.growth,
-    under: S.lay === 'render' || S.lay === 'log' ? channels(PASTEL.stone) : S.lay === 'frame' || S.lay === 'plank' || S.lay === 'gild' ? channels(PASTEL.dress)
+    // Stained glass is seen through, so nothing is laid under its picture: what shows through it is what stands behind the wall.
+    under: S.stained ? undefined : S.lay === 'render' || S.lay === 'log' ? channels(PASTEL.stone) : S.lay === 'frame' || S.lay === 'plank' || S.lay === 'gild' ? channels(PASTEL.dress)
       : S.slab ? channels(PASTEL.slabJoint) : S.grain || S.master ? channels(PASTEL.joint) : undefined,
     pad: PAD,
     capH: CAP_H,
