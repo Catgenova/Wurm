@@ -42,7 +42,8 @@ import { DEED_UPGRADES } from '../../game/deed';
 import { DYE_BY_ID, DYES } from '../../game/dyestuffs';
 import { CROP_BY_SEED, CROPS, cropYield, growthWords, PATCH_TIME, RIPE, STAGE_NAMES } from '../../game/farming';
 import { GLASSHOUSE_GROWTH, PLANTER_GROWTH, SEASON_GROWTH, SEASON_SECONDS, YEAR_SECONDS, YEARLESS_GROWTH } from '../../game/growth';
-import { CASTS, FAITH, FAVOUR_CEILING, favourCap, PRAYER_BASE, PRAYER_GAIN, PRAYER_LIFT, PRAYER_PEAKS, PRAYER_REST, PRAYER_TAPER } from '../../game/faith';
+import { CASTS, FAVOUR_TRICKLE, favourCap, PRAYER_BASE, PRAYER_GAIN, PRAYER_LIFT, PRAYER_PEAKS, PRAYER_REST, PRAYER_TAPER, prayerWorth } from '../../game/faith';
+import { tryGain } from '../../game/learn';
 import { ANCIENT_EFFECTS, ANCIENT_PLUS, BAUBLE_HIGH, BAUBLE_KINDS, BAUBLE_LOW, BAUBLE_SHARE, BAUBLE_TIERS, baubleTimes, MAJOR_SKILLS, MINOR_SKILLS, REGRET_SHARE, YIELD_TIMES } from '../../game/baubles';
 import { MOTE_CHANCE } from '../../game/sacrifice';
 import { HERB_HEAL, healAmount, SUITS_HEAL } from '../../game/firstaid';
@@ -163,8 +164,13 @@ const glassJob = (id: string): string => {
   const r = recipe(id);
   return `<b>${r.label}</b>, ${bill(id)} into ${countOf(r.result, r.count ?? 1)}`;
 };
-/** What one prayer trains faith by at faith `v`, on the roll's mean: "+1.4". */
-const prayerTrains = (v: number): string => `+${skillGain(v, PRAYER_GAIN, 1).toFixed(1)}`;
+/** What one prayer trains a skill by at `v`, for a gain of `base`, on the roll's mean: "+1.4". */
+const prayerTrains = (v: number, base: number): string => `+${skillGain(v, base, 1).toFixed(1)}`;
+/** Where the help reads a prayer off: the skill levels, and the altar's quality at either end and in the middle. */
+const PRAYER_SHOWN = [1, 50, 100];
+const ALTAR_QL = [0, 50, 100] as const;
+/** What one prayer banks at Prayer `v`, at an altar of the middling quality, at the better hour. */
+const prayerBanks = (v: number): number => Math.round(prayerWorth(ALTAR_QL[1], PRAYER_PEAKS[0], v));
 /** What stained glass is laid as, in the words the plan refuses anything else in. */
 const stainedOnly = (): string => { const m = WALL_MATERIALS.find((x) => x.id === 'stained_glass'); return m ? onlySaid(m) : ''; };
 /** How many glass panels an opening is glazed with. */
@@ -2480,13 +2486,16 @@ export function helpText(): string {
     over then comes out better than a thing that was not.</p>
     <p>An <b>altar</b> is masonry: ${bill('make_altar')}, laid with a trowel. It is built, and set down, only on a
     settlement of yours: one you founded or one you are a citizen of. A settlement has one altar: a second
-    is neither built nor set down on one that has its altar standing. Kneel at it and you bank
-    <b>favour</b>, on the <b>faith</b> skill. You may say what you have to say once every ${spanWords(PRAYER_REST)}, and each
-    prayer trains faith by about ${listed([1, 20, 50].map((v) => `${prayerTrains(v)} at faith ${v}`))}. A prayer is
-    worth most at <b>${listed(PRAYER_PEAKS.map(hudHour))}</b> &mdash; ${times((PRAYER_BASE + PRAYER_LIFT) / PRAYER_BASE)} what it is worth
-    ${numberWord(PRAYER_TAPER)} hours or more from either &mdash; and less the further off you are. A good altar banks more
-    than a rough one. Favour also trickles back on its own, slowly, up to whatever your faith carries
-    &mdash; ${Math.round(favourCap(startOf(FAITH)))} at the start and ${FAVOUR_CEILING} at the very top.</p>
+    is neither built nor set down on one that has its altar standing. <b>Pray</b> at it to bank <b>favour</b>, once
+    every ${spanWords(PRAYER_REST)}. Each prayer trains <b>Prayer</b> by about ${listed([1, 20, 50].map((v) => `${prayerTrains(v, tryGain(true))} at ${v}`))},
+    and <b>faith</b> by about ${listed([1, 20, 50].map((v) => `${prayerTrains(v, PRAYER_GAIN)} at ${v}`))}.</p>
+    <p><b>Prayer</b> sets the favour a prayer banks: at an altar of quality ${ALTAR_QL[1]} at ${hudHour(PRAYER_PEAKS[0])},
+    ${listed(PRAYER_SHOWN.map((v) => `${prayerBanks(v)} at Prayer ${v}`))}. <b>Faith</b> sets the most favour you can hold:
+    ${listed(PRAYER_SHOWN.map((v) => `${Math.floor(favourCap(v))} at faith ${v}`))}.
+    A prayer is worth most at <b>${listed(PRAYER_PEAKS.map(hudHour))}</b> &mdash; ${times((PRAYER_BASE + PRAYER_LIFT) / PRAYER_BASE)} what it is worth
+    ${numberWord(PRAYER_TAPER)} hours or more from either &mdash; and less the further off you are. An altar of quality
+    ${ALTAR_QL[2]} banks ${times(prayerWorth(ALTAR_QL[2], PRAYER_PEAKS[0], 1) / prayerWorth(ALTAR_QL[0], PRAYER_PEAKS[0], 1))} what one of quality ${ALTAR_QL[0]} does.
+    Favour also comes back on its own, ${Number((FAVOUR_TRICKLE * 3600).toFixed(1))} favour an hour, up to the most your faith lets you hold.</p>
     <p>It also holds the settlement's bauble sockets: see <b>Baubles</b>, under digging up the past.</p>
     <p><b>Sacrifice</b>, on the altar's menu, gives up one ${RARITIES.slice(1, -1).map((r) => r.name).join(', ')} or ${RARITIES[RARITIES.length - 1].name} thing from your
     pack, one of a stack where it is a stack, and fills ${listed(NUTRIENTS.map((k) => NUTRIENT_NAMES[k].toLowerCase()))} to the top.

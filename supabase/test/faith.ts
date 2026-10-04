@@ -28,7 +28,7 @@ import {
   SPELL_REACH, SPELLS_PER_TIER, spellTargetRefusal, type FaithSpellDef, type PointedAt,
 } from '../../src/game/patrons';
 import { SKILL_BY_ID } from '../../src/game/skills';
-import { PRAYER_GAIN, PRAYER_REST, prayerRestWords } from '../../src/game/faith';
+import { FAITH, FAITH_ACTIONS, favourCap, PRAYER, PRAYER_GAIN, PRAYER_REST, prayerRestWords, prayerWorth } from '../../src/game/faith';
 
 const psql = (sql: string): string =>
   execFileSync('psql', ['-v', 'ON_ERROR_STOP=1', '-X', '-q', '-t', '-A', '-f', '-'], {
@@ -279,26 +279,37 @@ check('the browser takes five tiers: the patron’s own, every twenty to eighty,
 check('three patrons, good, neutral and evil', PATRONS.map((p) => p.alignment).join(',') === 'good,neutral,evil');
 check('a bar of three class slots, two faith and one path', SPELL_BAR.join(',') === 'class,class,class,faith,faith,path');
 
-/* ---- Prayer: every thirty minutes, and each one trains faith ------------------------------- */
+/* ---- Prayer: every thirty minutes; Prayer sets what it banks, faith what you hold, and it trains both -- */
+const ALTAR_QL = 40;
+const [FAITH_AT, PRAYER_AT] = [10, 60];
 const prayed = psql(`
 begin;
 create temp table said (k text, v text);
 do $p$
-declare w record; v_altar bigint; v_before double precision; v_at jsonb;
+declare w record; v_altar bigint; v_at jsonb;
 begin
   select p.world_id, p.uid, p.x, p.y into w from player p order by p.world_id, p.uid limit 1;
-  insert into skill (world_id, uid, id, value) values (w.world_id, w.uid, faith_skill(), 10)
+  -- Faith low and Prayer high, so which of them a prayer reads shows.
+  insert into skill (world_id, uid, id, value) values (w.world_id, w.uid, faith_skill(), ${FAITH_AT}), (w.world_id, w.uid, praying_skill(), ${PRAYER_AT})
     on conflict (world_id, uid, id) do update set value = excluded.value;
-  -- An altar where the body kneels, and no prayer said yet.
+  -- An altar where the body kneels, no prayer said yet, and no favour banked.
   insert into placed (world_id, kind, sub, x, y, cx, cy, ql)
-    values (w.world_id, 'furniture', 'altar', floor(w.x)::int, floor(w.y)::int, w.x, w.y, 40) returning id into v_altar;
+    values (w.world_id, 'furniture', 'altar', floor(w.x)::int, floor(w.y)::int, w.x, w.y, ${ALTAR_QL}) returning id into v_altar;
   v_at := jsonb_build_object('kind', 'furniture', 'id', v_altar);
-  update player set prayed_at = null where world_id = w.world_id and uid = w.uid;
+  update player set prayed_at = null, favour = 0, favour_at = now() where world_id = w.world_id and uid = w.uid;
   insert into said values ('REST', prayer_rest() || '|' || prayer_gain());
+  insert into said values ('SKILLS', faith_skill() || '|' || praying_skill() || '|' || (select skill from action_def where id = 'pray'));
   insert into said values ('FIRST', coalesce(faith_refusal(w.world_id, w.uid, 'pray', v_at), 'HEARD'));
-  select value into v_before from skill where world_id = w.world_id and uid = w.uid and id = faith_skill();
   perform perform_faith(w.world_id, w.uid, 'pray', v_at);
-  insert into said select 'TRAINED', (value > v_before)::text from skill where world_id = w.world_id and uid = w.uid and id = faith_skill();
+  insert into said select 'BANKED', favour || '|' || hour_of_day(w.world_id) from player where world_id = w.world_id and uid = w.uid;
+  insert into said select 'TRAINED', string_agg(id || ':' || (value > case when id = faith_skill() then ${FAITH_AT} else ${PRAYER_AT} end), '|' order by id)
+    from skill where world_id = w.world_id and uid = w.uid and id in (faith_skill(), praying_skill());
+  -- Faith at its first point holds no more than it carries, however much Prayer banks.
+  update skill set value = case when id = faith_skill() then 1 else 100 end
+    where world_id = w.world_id and uid = w.uid and id in (faith_skill(), praying_skill());
+  update player set favour = favour_cap(1) - 1, favour_at = now() where world_id = w.world_id and uid = w.uid;
+  perform perform_faith(w.world_id, w.uid, 'pray', v_at);
+  insert into said select 'CAPPED', favour || '|' || favour_cap(1) from player where world_id = w.world_id and uid = w.uid;
   -- Twelve minutes short of the rest, and a minute past it.
   update player set prayed_at = now() - make_interval(secs => prayer_rest() - 12 * 60) where world_id = w.world_id and uid = w.uid;
   insert into said values ('WAIT', coalesce(faith_refusal(w.world_id, w.uid, 'pray', v_at), 'HEARD'));
@@ -311,7 +322,27 @@ const prayer = new Map(prayed.split('\n').filter((l) => l.includes('=')).map((l)
 check(`a prayer rests ${PRAYER_REST / 60} minutes and trains faith by the same base on both sides`,
   prayer.get('REST') === `${PRAYER_REST}|${PRAYER_GAIN}` && PRAYER_REST === 30 * 60, prayer.get('REST'));
 check('a prayer at an altar with no prayer before it is heard', prayer.get('FIRST') === 'HEARD', prayer.get('FIRST'));
-check('and trains faith on the island', prayer.get('TRAINED') === 'true', prayer.get('TRAINED'));
+const prayJob = FAITH_ACTIONS.find((a) => a.id === 'pray');
+check('a prayer is said with Prayer, on both sides, and faith is a skill of its own',
+  prayer.get('SKILLS') === `${FAITH}|${PRAYER}|${PRAYER}` && prayJob?.skill === PRAYER,
+  `island ${prayer.get('SKILLS')}, browser ${FAITH}|${PRAYER}|${prayJob?.skill}`);
+{
+  const [banked, hour] = (prayer.get('BANKED') ?? '').split('|').map(Number);
+  const want = prayerWorth(ALTAR_QL, hour, PRAYER_AT);
+  check(`it banks what Prayer ${PRAYER_AT} says at a quality ${ALTAR_QL} altar, the same on both sides, and not what faith ${FAITH_AT} would`,
+    Math.abs(banked - want) < 1e-6 && Math.abs(want - prayerWorth(ALTAR_QL, hour, FAITH_AT)) > 1,
+    `island ${banked}, browser ${want} at hour ${hour}`);
+}
+check('and trains both faith and Prayer on the island', prayer.get('TRAINED') === [FAITH, PRAYER].sort().map((id) => `${id}:true`).join('|'),
+  prayer.get('TRAINED'));
+{
+  const [held, cap] = (prayer.get('CAPPED') ?? '').split('|').map(Number);
+  // A point short of the cap, and a prayer at Prayer 100 worth more than that point.
+  const hour = Number((prayer.get('BANKED') ?? '').split('|')[1]);
+  check('faith sets the most it holds, the same on both sides, whatever Prayer would bank',
+    Math.abs(held - cap) < 1e-9 && Math.abs(cap - favourCap(1)) < 1e-9 && prayerWorth(ALTAR_QL, hour, 100) > 1,
+    `held ${held} after a prayer worth ${prayerWorth(ALTAR_QL, hour, 100).toFixed(2)} from a point short; island cap ${cap}, browser cap ${favourCap(1)}`);
+}
 check('a prayer twelve minutes short of the rest waits, in the same words on both sides',
   prayer.get('WAIT') === prayerRestWords(12 * 60), `island "${prayer.get('WAIT')}", browser "${prayerRestWords(12 * 60)}"`);
 check('and one a minute past it is heard', prayer.get('AGAIN') === 'HEARD', prayer.get('AGAIN'));

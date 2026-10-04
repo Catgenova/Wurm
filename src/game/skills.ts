@@ -48,6 +48,13 @@ export const SKILL_DEFS: SkillDef[] = [
   { id: 'butchering', name: 'Butchering', group: 'Skills', start: 1 },
   { id: 'alchemy', name: 'Alchemy', group: 'Skills', start: 1 },
   { id: 'prayer', name: 'Faith', group: 'Skills', start: 1 },
+  /*
+   * The skill a prayer is said with. It sets how much favour a prayer banks;
+   * faith sets how much favour you can hold and what you can call on with it.
+   * The id `prayer` is faith's, from before the two were told apart, and stays
+   * so that nobody's faith moved.
+   */
+  { id: 'praying', name: 'Prayer', group: 'Skills', start: 1 },
   { id: 'meditation', name: 'Meditation', group: 'Skills', start: 1 },
   { id: 'repair', name: 'Repair', group: 'Skills', start: 1 },
   { id: 'first_aid', name: 'First aid', group: 'Skills', start: 1 },

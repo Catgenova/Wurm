@@ -47,14 +47,14 @@ const check = (what: string, passed: boolean, detail = ''): void => {
  *
  * The craft side partitions cleanly -- every one of its forty skills is
  * in exactly one trade -- and the fighting side deliberately does not. These
- * eight are the body and the soul, common to all twenty-one, and `fighting` in
+ * nine are the body and the soul, common to all twenty-one, and `fighting` in
  * particular *could not* be owned even if it should be: it is the scope key
  * every melee swing carries, so a trade that held it would move everybody's
  * numbers rather than its own.
  */
 const NOBODY_OWNS = [
   'body_control', 'body_stamina', 'body_strength', 'fighting',
-  'meditation', 'mind_logic', 'prayer', 'swimming',
+  'meditation', 'mind_logic', 'prayer', 'praying', 'swimming',
 ].sort();
 
 const out = psql(`
@@ -138,7 +138,7 @@ check('and the same two numbers', Number(at) === CLASS_AT && Number(cost) === CL
 const all = CRAFT_CLASSES.flatMap((c) => c.skills);
 check('every craft skill belongs to exactly one trade', new Set(all).size === all.length,
   `${all.length} covered, ${new Set(all).size} distinct`);
-check('and what is left over is exactly the eight that belong to nobody',
+check(`and what is left over is exactly the ${NOBODY_OWNS.length} that belong to nobody`,
   said('LEFTOVER').split(',').sort().join() === NOBODY_OWNS.join(),
   `${said('LEFTOVER').split(',').length} left over: ${said('LEFTOVER')}`);
 

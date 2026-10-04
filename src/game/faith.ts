@@ -21,6 +21,12 @@ import { capital, spanWords, times } from './words';
  */
 
 export const FAITH = 'prayer';
+/**
+ * The skill a prayer is said with, which sets how much favour it banks.
+ * Faith (`FAITH`, whose id is `prayer` from before the two were told apart)
+ * sets how much favour you can hold and what you can call on with it.
+ */
+export const PRAYER = 'praying';
 
 /**
  * Favour comes back on its own, slowly, up to what your faith carries.
@@ -35,7 +41,11 @@ export const FAVOUR_TRICKLE = worldRate(0.004);
 export const PRAYER_FAVOUR = 22;
 /** How long between prayers that are worth anything: thirty minutes on the clock on the wall, whatever the island's hour. */
 export const PRAYER_REST = 30 * 60;
-/** What a prayer trains faith by: the base of the skill's own gain, as an ordinary job of work's is `ORDINARY_GAIN`. */
+/**
+ * What a prayer trains faith by: the base of the skill's own gain, as an
+ * ordinary job of work's is `ORDINARY_GAIN`. Prayer, the skill it is said
+ * with, learns what any go that comes off teaches its own skill (`tryGain`).
+ */
 export const PRAYER_GAIN = 1.4;
 /** Why a prayer is not heard yet: `rest` seconds of the wait left. The island's `faith_refusal` says the same. */
 export const prayerRestWords = (rest: number): string =>
@@ -60,9 +70,13 @@ export const PRAYER_LIFT = 0.75;
 export const prayerHour = (hour: number): number =>
   PRAYER_BASE + Math.max(...PRAYER_PEAKS.map((p) => Math.max(0, 1 - Math.abs(hour - p) / PRAYER_TAPER))) * PRAYER_LIFT;
 
-/** An altar is worth more the better it was built, and those two hours are worth more than noon. */
-export const prayerWorth = (altarQl: number, hour: number, faith: number): number =>
-  PRAYER_FAVOUR * prayerHour(hour) * (0.6 + altarQl / 200) * (0.7 + faith / 220);
+/**
+ * What one prayer banks: more at a better altar, at those two hours than at
+ * noon, and the more Prayer it is said with. The island's `prayer_worth` is
+ * the same sum.
+ */
+export const prayerWorth = (altarQl: number, hour: number, prayer: number): number =>
+  PRAYER_FAVOUR * prayerHour(hour) * (0.6 + altarQl / 200) * (0.7 + prayer / 220);
 
 export interface CastDef {
   id: string;
@@ -255,7 +269,8 @@ export const FAITH_ACTIONS: ActionDef[] = [
     id: 'pray',
     label: 'Pray',
     verb: 'praying',
-    skill: FAITH,
+    // Said with Prayer, which the go trains as every job trains its own skill; faith is trained in `perform`.
+    skill: PRAYER,
     stamina: 0.02,
     baseTime: 14,
     applies: (t, g) => {
@@ -273,10 +288,9 @@ export const FAITH_ACTIONS: ActionDef[] = [
     perform: (t, g) => {
       const f = pieceOf(g, t);
       if (!f) return;
-      const faith = g.skills.get(FAITH);
       const hour = g.hourOfDay();
-      const gained = prayerWorth(f.ql, hour, faith);
-      const cap = favourCap(faith);
+      const gained = prayerWorth(f.ql, hour, g.skills.get(PRAYER));
+      const cap = favourCap(g.skills.get(FAITH));
       const before = g.player.favour;
       g.player.favour = Math.min(cap, before + gained);
       g.player.prayedAt = g.time;
