@@ -81,7 +81,7 @@ import { ORDER_LIFE } from '../src/game/orders';
 import { VESSELS, LIQUID_NAME, type LiquidKind } from '../src/game/furniture';
 import { isBrew, drinkable } from '../src/game/brewing';
 import { TACK } from '../src/game/creatureActions';
-import { CASTS, FAVOUR_TRICKLE, PRAYER_FAVOUR, PRAYER_REST, FAVOUR_CEILING, BLESS_CAP, BLESS_STEP } from '../src/game/faith';
+import { CASTS, FAVOUR_TRICKLE, PRAYER_FAVOUR, PRAYER_GAIN, PRAYER_REST, FAVOUR_CEILING, BLESS_CAP, BLESS_STEP } from '../src/game/faith';
 import { PATH_LIST, CHOOSE_AT, SIT_REST } from '../src/game/meditation';
 import {
   CLASSES, CLASS_AT, CLASS_CHANGE_COST, CLASS_NODES, CHANNELS as CLASS_CHANNELS, RITES,
@@ -1732,7 +1732,7 @@ for (const [fn, v] of [
 }
 /* What a prayer is worth and what it takes; what a sitting is worth and how often. */
 for (const [fn, v] of [
-  ['favour_trickle', FAVOUR_TRICKLE], ['prayer_favour', PRAYER_FAVOUR], ['prayer_rest', PRAYER_REST],
+  ['favour_trickle', FAVOUR_TRICKLE], ['prayer_favour', PRAYER_FAVOUR], ['prayer_rest', PRAYER_REST], ['prayer_gain', PRAYER_GAIN],
   ['favour_ceiling', FAVOUR_CEILING], ['bless_cap', BLESS_CAP], ['bless_step', BLESS_STEP],
   ['choose_at', CHOOSE_AT], ['sit_rest', SIT_REST],
 ] as Array<[string, number]>) {

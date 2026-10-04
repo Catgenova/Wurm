@@ -4474,7 +4474,8 @@ create or replace function circlet_share() returns double precision language sql
 create or replace function circlet_set() returns double precision language sql immutable as $fn$ select 16::double precision $fn$;
 create or replace function favour_trickle() returns double precision language sql immutable as $fn$ select 0.0016::double precision $fn$;
 create or replace function prayer_favour() returns double precision language sql immutable as $fn$ select 22::double precision $fn$;
-create or replace function prayer_rest() returns double precision language sql immutable as $fn$ select 2400::double precision $fn$;
+create or replace function prayer_rest() returns double precision language sql immutable as $fn$ select 1800::double precision $fn$;
+create or replace function prayer_gain() returns double precision language sql immutable as $fn$ select 1.4::double precision $fn$;
 create or replace function favour_ceiling() returns double precision language sql immutable as $fn$ select 120::double precision $fn$;
 create or replace function bless_cap() returns double precision language sql immutable as $fn$ select 3::double precision $fn$;
 create or replace function bless_step() returns double precision language sql immutable as $fn$ select 9::double precision $fn$;

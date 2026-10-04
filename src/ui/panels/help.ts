@@ -42,7 +42,7 @@ import { DEED_UPGRADES } from '../../game/deed';
 import { DYE_BY_ID, DYES } from '../../game/dyestuffs';
 import { CROP_BY_SEED, CROPS, cropYield, growthWords, PATCH_TIME, RIPE, STAGE_NAMES } from '../../game/farming';
 import { GLASSHOUSE_GROWTH, PLANTER_GROWTH, SEASON_GROWTH, SEASON_SECONDS, YEAR_SECONDS, YEARLESS_GROWTH } from '../../game/growth';
-import { CASTS, FAITH, FAVOUR_CEILING, favourCap, PRAYER_BASE, PRAYER_LIFT, PRAYER_PEAKS, PRAYER_REST, PRAYER_TAPER } from '../../game/faith';
+import { CASTS, FAITH, FAVOUR_CEILING, favourCap, PRAYER_BASE, PRAYER_GAIN, PRAYER_LIFT, PRAYER_PEAKS, PRAYER_REST, PRAYER_TAPER } from '../../game/faith';
 import { ANCIENT_EFFECTS, ANCIENT_PLUS, BAUBLE_HIGH, BAUBLE_KINDS, BAUBLE_LOW, BAUBLE_SHARE, BAUBLE_TIERS, baubleTimes, MAJOR_SKILLS, MINOR_SKILLS, REGRET_SHARE, YIELD_TIMES } from '../../game/baubles';
 import { MOTE_CHANCE } from '../../game/sacrifice';
 import { HERB_HEAL, healAmount, SUITS_HEAL } from '../../game/firstaid';
@@ -163,6 +163,8 @@ const glassJob = (id: string): string => {
   const r = recipe(id);
   return `<b>${r.label}</b>, ${bill(id)} into ${countOf(r.result, r.count ?? 1)}`;
 };
+/** What one prayer trains faith by at faith `v`, on the roll's mean: "+1.4". */
+const prayerTrains = (v: number): string => `+${skillGain(v, PRAYER_GAIN, 1).toFixed(1)}`;
 /** What stained glass is laid as, in the words the plan refuses anything else in. */
 const stainedOnly = (): string => { const m = WALL_MATERIALS.find((x) => x.id === 'stained_glass'); return m ? onlySaid(m) : ''; };
 /** How many glass panels an opening is glazed with. */
@@ -2479,7 +2481,8 @@ export function helpText(): string {
     <p>An <b>altar</b> is masonry: ${bill('make_altar')}, laid with a trowel. It is built, and set down, only on a
     settlement of yours: one you founded or one you are a citizen of. A settlement has one altar: a second
     is neither built nor set down on one that has its altar standing. Kneel at it and you bank
-    <b>favour</b>, on the <b>faith</b> skill. You may say what you have to say once every ${spanWords(PRAYER_REST)}, and it is
+    <b>favour</b>, on the <b>faith</b> skill. You may say what you have to say once every ${spanWords(PRAYER_REST)}, and each
+    prayer trains faith by about ${listed([1, 20, 50].map((v) => `${prayerTrains(v)} at faith ${v}`))}. A prayer is
     worth most at <b>${listed(PRAYER_PEAKS.map(hudHour))}</b> &mdash; ${times((PRAYER_BASE + PRAYER_LIFT) / PRAYER_BASE)} what it is worth
     ${numberWord(PRAYER_TAPER)} hours or more from either &mdash; and less the further off you are. A good altar banks more
     than a rough one. Favour also trickles back on its own, slowly, up to whatever your faith carries

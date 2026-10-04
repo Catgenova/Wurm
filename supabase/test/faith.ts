@@ -28,6 +28,7 @@ import {
   SPELL_REACH, SPELLS_PER_TIER, spellTargetRefusal, type FaithSpellDef, type PointedAt,
 } from '../../src/game/patrons';
 import { SKILL_BY_ID } from '../../src/game/skills';
+import { PRAYER_GAIN, PRAYER_REST, prayerRestWords } from '../../src/game/faith';
 
 const psql = (sql: string): string =>
   execFileSync('psql', ['-v', 'ON_ERROR_STOP=1', '-X', '-q', '-t', '-A', '-f', '-'], {
@@ -277,6 +278,43 @@ check('the browser takes five tiers: the patron’s own, every twenty to eighty,
   && FAITH_TIER_AT.slice(0, -1).every((at, i) => i === 0 || at - FAITH_TIER_AT[i - 1] === 20), FAITH_TIER_AT.join(','));
 check('three patrons, good, neutral and evil', PATRONS.map((p) => p.alignment).join(',') === 'good,neutral,evil');
 check('a bar of three class slots, two faith and one path', SPELL_BAR.join(',') === 'class,class,class,faith,faith,path');
+
+/* ---- Prayer: every thirty minutes, and each one trains faith ------------------------------- */
+const prayed = psql(`
+begin;
+create temp table said (k text, v text);
+do $p$
+declare w record; v_altar bigint; v_before double precision; v_at jsonb;
+begin
+  select p.world_id, p.uid, p.x, p.y into w from player p order by p.world_id, p.uid limit 1;
+  insert into skill (world_id, uid, id, value) values (w.world_id, w.uid, faith_skill(), 10)
+    on conflict (world_id, uid, id) do update set value = excluded.value;
+  -- An altar where the body kneels, and no prayer said yet.
+  insert into placed (world_id, kind, sub, x, y, cx, cy, ql)
+    values (w.world_id, 'furniture', 'altar', floor(w.x)::int, floor(w.y)::int, w.x, w.y, 40) returning id into v_altar;
+  v_at := jsonb_build_object('kind', 'furniture', 'id', v_altar);
+  update player set prayed_at = null where world_id = w.world_id and uid = w.uid;
+  insert into said values ('REST', prayer_rest() || '|' || prayer_gain());
+  insert into said values ('FIRST', coalesce(faith_refusal(w.world_id, w.uid, 'pray', v_at), 'HEARD'));
+  select value into v_before from skill where world_id = w.world_id and uid = w.uid and id = faith_skill();
+  perform perform_faith(w.world_id, w.uid, 'pray', v_at);
+  insert into said select 'TRAINED', (value > v_before)::text from skill where world_id = w.world_id and uid = w.uid and id = faith_skill();
+  -- Twelve minutes short of the rest, and a minute past it.
+  update player set prayed_at = now() - make_interval(secs => prayer_rest() - 12 * 60) where world_id = w.world_id and uid = w.uid;
+  insert into said values ('WAIT', coalesce(faith_refusal(w.world_id, w.uid, 'pray', v_at), 'HEARD'));
+  update player set prayed_at = now() - make_interval(secs => prayer_rest() + 60) where world_id = w.world_id and uid = w.uid;
+  insert into said values ('AGAIN', coalesce(faith_refusal(w.world_id, w.uid, 'pray', v_at), 'HEARD'));
+end $p$;
+select k || '=' || v from said order by k;
+rollback;`);
+const prayer = new Map(prayed.split('\n').filter((l) => l.includes('=')).map((l) => [l.slice(0, l.indexOf('=')), l.slice(l.indexOf('=') + 1)] as [string, string]));
+check(`a prayer rests ${PRAYER_REST / 60} minutes and trains faith by the same base on both sides`,
+  prayer.get('REST') === `${PRAYER_REST}|${PRAYER_GAIN}` && PRAYER_REST === 30 * 60, prayer.get('REST'));
+check('a prayer at an altar with no prayer before it is heard', prayer.get('FIRST') === 'HEARD', prayer.get('FIRST'));
+check('and trains faith on the island', prayer.get('TRAINED') === 'true', prayer.get('TRAINED'));
+check('a prayer twelve minutes short of the rest waits, in the same words on both sides',
+  prayer.get('WAIT') === prayerRestWords(12 * 60), `island "${prayer.get('WAIT')}", browser "${prayerRestWords(12 * 60)}"`);
+check('and one a minute past it is heard', prayer.get('AGAIN') === 'HEARD', prayer.get('AGAIN'));
 
 for (const line of [...ok, ...bad]) console.log(line);
 if (bad.length) {

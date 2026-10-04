@@ -14,7 +14,8 @@ import { COUNTER_HOLDS, COUNTER_REACH, COUNTER_WALL } from '../../game/counters'
 import { candleBurn, lanternReach } from '../../game/light';
 import { flameSources } from '../../game/lantern';
 import { WORLD_PACE } from '../../game/pace';
-import { SKILL_BY_ID } from '../../game/skills';
+import { SKILL_BY_ID, skillGain } from '../../game/skills';
+import { PRAYER_GAIN, PRAYER_REST } from '../../game/faith';
 import { deckBill, metres, PIER_CLEAR, PIER_DROP, PIER_WALL_DROP, PIER_WATER } from '../../game/piers';
 import { TILE_DEFS, TileType, TREE_AGES, TREE_DAWN_UTC, TREE_DEFS } from '../../world/tiles';
 import { SEASON_DAYS, seasonLine, YEAR_DAYS, YEAR_FROM } from '../../world/calendar';
@@ -1070,6 +1071,13 @@ export const NEWS: News[] = [
         `A bottle holds ${bottle.holds} of one food or drink, and what is in it rots at ${share(bottle.shelter ?? 1)} the rate if it is left lying about.`,
       ].filter(Boolean);
     },
+  },
+  {
+    n: 81,
+    day: '2026-10-04',
+    lines: () => [
+      `You may pray at an altar once every ${spanWords(PRAYER_REST)}, and each prayer trains Faith by about +${skillGain(1, PRAYER_GAIN, 1).toFixed(1)} at Faith 1, +${skillGain(20, PRAYER_GAIN, 1).toFixed(1)} at 20 and +${skillGain(50, PRAYER_GAIN, 1).toFixed(1)} at 50.`,
+    ],
   },
 ];
 

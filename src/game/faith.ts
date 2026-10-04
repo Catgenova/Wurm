@@ -2,7 +2,7 @@ import type { ActionDef, Target } from './actions';
 import type { Game } from './game';
 import { furnitureCentre, furnitureDef, type PlacedFurniture } from './furniture';
 import { itemName, NOT_RESTORED, unrestored, type Item } from './items';
-import { world, worldRate } from './pace';
+import { worldRate } from './pace';
 import { capital, spanWords, times } from './words';
 
 /**
@@ -33,8 +33,13 @@ export const FAITH = 'prayer';
 export const FAVOUR_TRICKLE = worldRate(0.004);
 /** What a prayer at an altar is worth, before the hour and the stone are counted. */
 export const PRAYER_FAVOUR = 22;
-/** How long between prayers that are worth anything: most of an island day. */
-export const PRAYER_REST = world(16 * 60);
+/** How long between prayers that are worth anything: thirty minutes on the clock on the wall, whatever the island's hour. */
+export const PRAYER_REST = 30 * 60;
+/** What a prayer trains faith by: the base of the skill's own gain, as an ordinary job of work's is `ORDINARY_GAIN`. */
+export const PRAYER_GAIN = 1.4;
+/** Why a prayer is not heard yet: `rest` seconds of the wait left. The island's `faith_refusal` says the same. */
+export const prayerRestWords = (rest: number): string =>
+  `You prayed less than ${PRAYER_REST / 60} minutes ago. ${Math.ceil(rest / 60)} minutes to go.`;
 /** The most favour anybody holds, whatever their faith. */
 export const FAVOUR_CEILING = 120;
 
@@ -262,7 +267,7 @@ export const FAITH_ACTIONS: ActionDef[] = [
       if (!f) return 'It is gone.';
       if (!nearPiece(g, f)) return 'Kneel at the altar.';
       const rest = g.player.prayedAt + PRAYER_REST - g.time;
-      if (rest > 0) return `You have said what you had to say today. ${Math.ceil(rest / 60)} minutes.`;
+      if (rest > 0) return prayerRestWords(rest);
       return null;
     },
     perform: (t, g) => {
@@ -275,7 +280,7 @@ export const FAITH_ACTIONS: ActionDef[] = [
       const before = g.player.favour;
       g.player.favour = Math.min(cap, before + gained);
       g.player.prayedAt = g.time;
-      g.gainSkill(FAITH, 1.4);
+      g.gainSkill(FAITH, PRAYER_GAIN);
       g.note('prayed');
       const dawn = Math.abs(hour - 6) < 2 || Math.abs(hour - 20) < 2;
       g.logMsg(
