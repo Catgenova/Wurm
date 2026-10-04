@@ -158,6 +158,13 @@ const awayAfter = (): string => (IDLE_LOGOUT % 60 ? `${+(IDLE_LOGOUT / 60).toFix
  * helpers below read those tables the way a sentence wants them.
  */
 
+/** A glassblowing job as the help names it: "Melt into glass, three sand into two glass lumps". */
+const glassJob = (id: string): string => {
+  const r = recipe(id);
+  return `<b>${r.label}</b>, ${bill(id)} into ${countOf(r.result, r.count ?? 1)}`;
+};
+/** How many glass panels an opening is glazed with. */
+const glazing = (type: 'window' | 'bay'): number => WALL_TYPE_BY_ID.get(type)?.fittings?.find(([item]) => item === 'glass')?.[1] ?? 0;
 /** A recipe by its id. A missing one is a mistake in the help, and says so. */
 const recipe = (id: string) => {
   const r = RECIPE_BY_ID.get(id);
@@ -1000,6 +1007,14 @@ export function helpText(): string {
     comes back as lumps. A weapon or tool finished by a Smith with <b>Temper Bath</b> can be <b>quenched</b>
     once, by that Smith or another with the perk, from its menu, standing at water or beside a barrel or a
     well of it, for the quality its maker's mark says; Examine shows it.</p>
+    <h3>Glass</h3>
+    <p><b>Glassblowing</b> is the Artisan's trade, and it is all done at a hot smelter: ${listed(['make_glass', 'make_glass_panel', 'make_bottle', 'make_mosaic_tiles'].map(glassJob))}.
+    Every window is glazed with ${numberWord(glazing('window'))} glass panels and every bay window with ${numberWord(glazing('bay'))}, and a glasshouse
+    roof is laid in them. A firing of tiles that fails keeps the gem and the sand; the others spend what went in.</p>
+    <p>A <b>bottle</b> holds ${numberWord(itemDef('bottle').holds ?? 0)} of one food or drink, and what is in it rots at ${share(itemDef('bottle').shelter ?? 1)}
+    the rate left lying about. A solid <b>mosaic</b> wall takes ${billWords(WALL_MATERIALS.find((m) => m.id === 'mosaic')?.bill ?? [])}: stone brick faced in the tiles,
+    laid with a trowel and trained as masonry, so one firing of tiles faces one solid wall.</p>
+
     <h3>Hunting and butchering</h3>
     <p>Wild wildermon can be <b>attacked</b> from their menu; an edged tool in your pack hits far harder
     than bare hands, and timid creatures bolt when hurt, so expect a chase. Whatever kills one leaves a
@@ -1046,7 +1061,7 @@ export function helpText(): string {
     walk onto it from below and you are upstairs, step off it toward the ground and you are down again.
     Once the top storey's walls are done you can <b>Plan roof</b> tile by tile; neighbouring roof tiles
     join into ridges and hips.</p>
-    <p>A roof can be laid in <b>glass</b>: <b>Plan roof</b> offers it beside the building materials, panes on timber
+    <p>A roof can be laid in <b>glass</b>: <b>Plan roof</b> offers it beside the building materials, glass panels on timber
     glazing bars, ${glassTile()} to a tile of the ${roofShapeDef(undefined).name.toLowerCase()} roof Plan roof lays,
     built with a mallet and trained as carpentry. Glass goes on a roof and nowhere else: not on a wall, a floor, a fence or
     a stair. A building of one storey, <b>walled all round to full height</b> (a door, a window or an arch is a wall;
@@ -1057,7 +1072,7 @@ export function helpText(): string {
     the field, no roof but glass on the building and no storey over it: <b>Clear the field</b> first, which packs the
     ground flat again. A crop in a glasshouse grows <b>${growthWords(GLASSHOUSE_GROWTH)} in every season</b>, winter too,
     where a field in the open grows ${listed(SEASONS.map((s) => `${growthWords(SEASON_GROWTH[s])} in ${s}`))}: a stage
-    of cotton takes ${spanWords(CROPS.cotton.stageSeconds / GLASSHOUSE_GROWTH)} in one all year. When the last pane or
+    of cotton takes ${spanWords(CROPS.cotton.stageSeconds / GLASSHOUSE_GROWTH)} in one all year. When the last panel or
     the last wall goes in, whatever is already growing in the building carries on from as far into its stage as it had
     grown, at the glasshouse's pace; take a tile of the roof or a wall down, or add a tile to the footprint, and it
     carries on at a field's pace from there. Walled all round and roofed over, a glasshouse is indoors, and whatever is

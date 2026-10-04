@@ -198,6 +198,11 @@ export const MATERIALS: MaterialDef[] = [
   { id: 'clay_bricks', name: 'Clay bricks', kind: 'stone', tool: 'trowel', skill: 'masonry', color: [176, 85, 60], trim: [110, 50, 36], floor: [164, 82, 60], courses: 5, bill: [['clay_brick', 12], ['mortar', 6]], storeys: 7, heft: 2 },
   { id: 'ornate_silver', name: 'Ornate silver', kind: 'stone', tool: 'trowel', skill: 'masonry', color: [200, 204, 212], trim: [120, 126, 140], floor: [190, 194, 202], courses: 3, bill: [['stone_brick', 24], ['mortar', 12], ['silver_lump', 12]], storeys: 10, heft: 3 },
   { id: 'ornate_gold', name: 'Ornate gold', kind: 'stone', tool: 'trowel', skill: 'masonry', color: [217, 180, 81], trim: [150, 112, 34], floor: [206, 172, 84], courses: 3, bill: [['stone_brick', 24], ['mortar', 12], ['gold_lump', 12]], storeys: 10, heft: 3 },
+  /*
+   * Stone brick faced in a mosaic of coloured glass: a gem ground into the
+   * melt colours a batch of tiles, and a solid wall takes one batch.
+   */
+  { id: 'mosaic', name: 'Mosaic', kind: 'stone', tool: 'trowel', skill: 'masonry', color: [92, 120, 178], trim: [232, 224, 206], floor: [176, 168, 196], courses: 4, bill: [['stone_brick', 24], ['mortar', 12], ['mosaic_tile', 20]], storeys: 10, heft: 3 },
 ];
 export const MATERIAL_BY_ID = new Map(MATERIALS.map((m) => [m.id, m]));
 /**

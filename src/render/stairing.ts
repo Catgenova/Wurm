@@ -110,6 +110,13 @@ const STAIRS: Record<string, StairStyle> = {
     string: hex('#725c52'), stringHi: hex('#8a7064'), line: hex('#42322f'),
     rail: 'wood', post: hex('#725c52'), bar: hex('#8a7064'), barHi: hex('#a38878'),
   },
+  /* Treads of the ivory marble a mosaic is framed in, each riser a panel of lapis glass in gold. */
+  mosaic: {
+    build: 'solid', tread: hex('#ece5d6'), nose: hex('#f7f2e8'), proud: true,
+    riser: hex('#4a62a6'), joint: hex('#e3b955'), courses: 1, across: 3, slabs: 1,
+    string: hex('#e6dece'), stringHi: hex('#f3eee3'), line: hex('#a39a86'),
+    rail: 'stone', post: hex('#e8e1d1'), bar: hex('#e6dece'), barHi: hex('#f7f2e8'),
+  },
   log: {
     build: 'log', tread: hex('#a58e78'), nose: hex('#c8ad8b'), proud: false,
     riser: hex('#6c5a57'), joint: hex('#a38a70'), courses: 0, across: 0, slabs: 0,

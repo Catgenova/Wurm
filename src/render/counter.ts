@@ -135,7 +135,7 @@ const SHAPE_OF: Record<string, Shape> = Object.fromEntries(([
 const COLOUR_OF: Record<string, string> = Object.fromEntries(([
   ['#e9c25a', 'gold ring pendant circlet coin'], ['#d9dde3', 'silver'], ['#c27a4e', 'copper'], ['#c99a52', 'bronze brass electrum'],
   ['#aeb3b8', 'tin zinc pewter lead'], ['#8d8f98', 'iron steel nail ribbon'], ['#c07a52', 'clay jar pot bowl amphora urn jug'],
-  ['#ece8e0', 'marble'], ['#6c7888', 'slate'], ['#d8b884', 'sandstone'], ['#c6956a', 'adobe'], ['#a39c90', 'stone rock mortar concrete shards'],
+  ['#ece8e0', 'marble'], ['#bfe0dc', 'glass bottle'], ['#4a62a6', 'mosaic'], ['#6c7888', 'slate'], ['#d8b884', 'sandstone'], ['#c6956a', 'adobe'], ['#a39c90', 'stone rock mortar concrete shards'],
   ['#c49461', 'plank log timber shaft peg'], ['#ece4d0', 'cloth linen cotton'], ['#e2d6c0', 'wool yarn'], ['#e9b8c8', 'silk'],
   ['#9a6a46', 'leather hide fur'], ['#c9ae7c', 'rope thread string wemp'], ['#c99a5a', 'bread pie dough loaf cake'], ['#f0d070', 'cheese'],
   ['#eee6d4', 'flour cornmeal'], ['#e0c068', 'wheat corn'], ['#b89a68', 'seed'], ['#4a4a50', 'coal ash'], ['#e0cf9a', 'sand'],

@@ -467,6 +467,16 @@ interface Stock {
    * of it is laid in courses of blocks.
    */
   slab?: boolean;
+  /**
+   * On mosaic, a field of glass tesserae under the band where the slabs
+   * would be: a lapis ground strewn with gold stars, a roundel at a quarter
+   * and at three quarters of every section, a lozenge between them and on
+   * each seam, and a border of gold and a chequer of red and white along the
+   * top and the foot of it. Everything else -- the band, the plinth, the
+   * quoins, every architrave, hood and sill -- is the marble's, laid in an
+   * ivory stone, because a mosaic is set in a frame of cut stone.
+   */
+  mosaic?: boolean;
 }
 
 /* ---- the two masonries -------------------------------------------------- */
@@ -889,6 +899,74 @@ const MARBLE: Stock = ((P) => ({
   master: true,
   slab: true,
 }))(MARBLE_PASTEL);
+
+/**
+ * And mosaic: tiles of coloured glass, a gem ground into each melt, set in a
+ * frame of ivory marble.
+ *
+ * The field is the one picture on the island in the colours of the gems
+ * themselves: a lapis ground, gold, pearl, ruby, emerald, turquoise,
+ * amethyst and topaz, each glass at five values a few points apart, because
+ * no two tesserae out of a melt are the same. The marble round it is warm
+ * where the house marble is cool, so the gold carries into the frame; its
+ * veins run to gold.
+ */
+const MOSAIC_PASTEL: Record<string, string> = {
+  ...MARBLE_PASTEL,
+  stone: '#ebe4d5', stoneShade: '#ddd5c4', stoneHi: '#f6f1e7', stoneDark: '#cfc6b3',
+  warm: '#efe9dc', warmShade: '#e1d9c9', warmHi: '#f8f4ec',
+  dark: '#e0d8c8', darkHi: '#ece5d8',
+  joint: '#cfc7b6', line: '#a39a86',
+  dress: '#e6dece', dressShade: '#d6ccb9', dressHi: '#f3eee3',
+  band: '#e8e1d1', bandShade: '#d6cdb9', bandHi: '#f5f0e5',
+  ringJoint: '#cfc7b6', reveal: '#ddd5c5',
+  veinSoft: '#ddd3c2', vein: '#d8cdb9', veinEdge: '#e2d9c9', veinDeep: '#c9bca5', veinFaint: '#e6dece',
+  veinGold: '#e3cf9d', veinDark: '#8a7f6c',
+  slabJoint: '#e1d9ca',
+  stain: '#ddd8c9', stainShade: '#cfc9b9',
+  // The glass, and the grout it is set in.
+  tessBlue: '#4a62a6', tessGold: '#e3b955', tessPearl: '#f1ebdf', tessRuby: '#c4475b', tessEmerald: '#3f9a7b',
+  tessTurquoise: '#5dbfbf', tessAmethyst: '#8c66b6', tessTopaz: '#e69a4a', tessGrout: '#cdc5b3',
+};
+
+const MOSAIC: Stock = ((P) => ({
+  pastel: P,
+  tones: {
+    '':      { lit: P.stone, shade: P.stoneShade, hi: P.stoneHi },
+    ...values(P.stone, 1),
+    warm:    { lit: P.warm, shade: P.warmShade, hi: P.warmHi },
+    burnt:   { lit: '#e7e0d1', shade: lighten('#e7e0d1', -5), hi: lighten('#e7e0d1', 4) },
+    brown:   { lit: '#e9e2d4', shade: lighten('#e9e2d4', -5), hi: lighten('#e9e2d4', 3) },
+    weather: { lit: lighten(P.stone, -3), shade: lighten(P.stone, -7), hi: lighten(P.stone, 3) },
+    bleach:  { lit: lighten(P.stone, 3), shade: lighten(P.stone, -1), hi: lighten(P.stone, 6) },
+    dress:   { lit: P.dress, shade: P.dressShade, hi: P.dressHi },
+    plinth:  { lit: '#d9d0bd', shade: '#c9bfab', hi: '#e6dfd0' },
+    dark:    { lit: '#d9d0bd', shade: '#c9bfab', hi: '#e6dfd0' },
+    green:   { lit: P.stain, shade: P.stainShade, hi: lighten(P.stain, 6) },
+    foot:    { lit: '#d4cab6', shade: '#c3b9a4', hi: '#e2dac9' },
+    footB:   { lit: '#dbd2c0', shade: '#cac0ad', hi: '#e7e0d2' },
+    flat:    { lit: P.band, shade: P.bandShade, hi: P.bandHi },
+    top:     { lit: lighten(P.band, 5), shade: lighten(P.band, 1), hi: lighten(P.band, 8) },
+  },
+  lay: 'bond',
+  rows: 9,
+  across: 5,
+  headers: 0,
+  base: ['foot', 'footB'],
+  mortar: 2,
+  bandN: 2,
+  plinth: 72,
+  wear: 0.05,
+  shade: [42, 46, 74],
+  shadow: (k) => (1 - k) * 0.8,
+  growth: false,
+  mix: [['warm', 0.08], ['burnt', 0.06], ['brown', 0.04]],
+  pairs: [],
+  field: [['warm', 0.4], ['burnt', 0.35], ['brown', 0.25]],
+  master: true,
+  slab: true,
+  mosaic: true,
+}))(MOSAIC_PASTEL);
 
 /**
  * And slate: an ornate black brick, the island's grandest dark masonry.
@@ -1530,6 +1608,7 @@ let golden: Masonry | undefined;
 let sanded: Masonry | undefined;
 let slated: Masonry | undefined;
 let marbled: Masonry | undefined;
+let tiled: Masonry | undefined;
 
 /**
  * Cobblestone: what a novice lays, out of what the field gave up.
@@ -1568,6 +1647,10 @@ export function slatework(): Masonry {
 /** Marble: great white slabs, each veined on its own, dressed in dove grey; its garden walls laid in veined blocks. */
 export function marblework(): Masonry {
   return marbled ??= paint(MARBLE);
+}
+/** Mosaic: a field of coloured glass under a band of ivory marble, its openings dressed in the marble. */
+export function mosaicwork(): Masonry {
+  return tiled ??= paint(MOSAIC);
 }
 
 /**
@@ -3998,6 +4081,158 @@ function paint(S: Stock): Masonry {
     oversail(g, 0, BAND, 12);
     return [];
   }
+  /* ---- mosaic --------------------------------------------------------------- */
+  /** A tessera and its joint, in picture px: forty to a section across, so every repeat of the field lands on a joint. */
+  const TESS = TW / 40;
+  /** The glass of a mosaic, each colour at five values a few points apart: no two tesserae out of a melt are alike. */
+  const GLASS: Record<string, string[]> = !S.mosaic ? {} : Object.fromEntries(
+    ['tessBlue', 'tessGold', 'tessPearl', 'tessRuby', 'tessEmerald', 'tessTurquoise', 'tessAmethyst', 'tessTopaz']
+      .map((k) => [k, [-5, -2, 0, 2, 5].map((d) => lighten(PASTEL[k], d))]),
+  );
+  /** The two glasses a roundel is worked in, one pair to a variant: the first draw off its seed, so its face and every opening cut in it agree. */
+  const ROUNDELS: Array<[string, string]> = [
+    ['tessRuby', 'tessTurquoise'], ['tessEmerald', 'tessAmethyst'], ['tessAmethyst', 'tessTopaz'],
+    ['tessTurquoise', 'tessRuby'], ['tessTopaz', 'tessEmerald'],
+  ];
+  /** A number off three integers, the same every time it is asked: the lattice is the same in every section, so it meets itself at every seam. */
+  const hash3 = (a: number, b: number, c: number): number => {
+    let h = Math.imul(a | 0, 374761393) ^ Math.imul(b | 0, 668265263) ^ Math.imul(c | 0, 1274126177);
+    h = Math.imul(h ^ (h >>> 13), 1103515245);
+    return ((h ^ (h >>> 16)) >>> 0) / 4294967296;
+  };
+  /**
+   * One tessera: a little square of glass a hand off true at every corner,
+   * at one of its glass's five values, and where the light comes from a
+   * glint along its top edge -- gold catches more of it than coloured glass,
+   * which is why a gold ground is laid at all.
+   */
+  function tessera(g: Ctx, pts: Pt[], glass: string[], h: number, glint: number): void {
+    g.beginPath(); poly(g, pts);
+    g.fillStyle = glass[Math.min(glass.length - 1, Math.floor(h * glass.length))];
+    g.fill();
+    if (glint <= 0) return;
+    g.strokeStyle = `rgba(255, 252, 240, ${glint * (0.55 + 0.45 * h)})`;
+    g.lineWidth = 1.4;
+    g.beginPath(); g.moveTo(pts[0][0] + 0.6, pts[0][1] + 0.8); g.lineTo(pts[1][0] - 0.6, pts[1][1] + 0.8); g.stroke();
+    g.strokeStyle = 'rgba(40, 32, 62, 0.16)';
+    g.lineWidth = 1.2;
+    g.beginPath(); g.moveTo(pts[3][0] + 0.6, pts[3][1] - 0.6); g.lineTo(pts[2][0] - 0.6, pts[2][1] - 0.6); g.stroke();
+  }
+  /** The cell at column `c` and row `r` of a lattice laid from `y0` in rows `th` deep, inside its joint, each corner moved a hand's width off. */
+  function cellOf(c: number, r: number, y0: number, th: number): Pt[] {
+    const x = c * TESS, y = y0 + r * th, gap = 1.25;
+    const j = (k: number): number => (hash3(c, r, k) - 0.5) * 1.5;
+    return [
+      [x + gap + j(1), y + gap + j(2)], [x + TESS - gap + j(3), y + gap + j(4)],
+      [x + TESS - gap + j(5), y + th - gap + j(6)], [x + gap + j(7), y + th - gap + j(8)],
+    ];
+  }
+  /**
+   * A field of mosaic from `y0` down to `y1`, across the whole section.
+   *
+   * Laid on a lattice of forty columns, so the field repeats twice in a
+   * section and meets the next section's on a joint: the roundels stand at a
+   * quarter and at three quarters, a lozenge between them and one on each
+   * seam -- half of it at either end of the picture, drawn alike in every
+   * variant -- and the stars are on a lattice of their own that repeats in
+   * ten columns, so they come out the same either side of a seam as well. A
+   * roundel is the one thing laid round rather than on the lattice: ring
+   * after ring of tesserae following its edge, the way a mosaicist lays
+   * anything round, with a ring of the ground outside it so the lattice
+   * meets a circle and not a staircase. Only the roundels' colours are the
+   * variant's own.
+   */
+  function mosaicField(g: Ctx, y0: number, y1: number, R: Rand): void {
+    const pair = ROUNDELS[Math.floor(R() * ROUNDELS.length) % ROUNDELS.length];
+    const H = y1 - y0, rows = Math.max(3, Math.round(H / TESS)), th = H / rows, cols = Math.round(TW / TESS);
+    const border = rows >= 14 ? 2 : 1;
+    const inTop = y0 + border * th, inBot = y1 - border * th, cy = (inTop + inBot) / 2;
+    const rad = Math.min(TESS * 5, (inBot - inTop) / 2 - TESS * 0.7);
+    const round = rad >= TESS * 2.4;
+    const centres = [TW / 4, (TW * 3) / 4];
+    const lozA = TESS * 3.1, lozB = Math.max(TESS * 1.4, (inBot - inTop) / 2 - TESS * 0.9);
+    const loz = (x: number, y: number): number =>
+      Math.min(Math.abs(x), Math.abs(x - TW / 2), Math.abs(x - TW)) / lozA + Math.abs(y - cy) / lozB;
+    const nearRoundel = (x: number, y: number, by: number): boolean => round && centres.some((cx) => Math.hypot(x - cx, y - cy) < rad + by);
+    const at = (c: number, r: number): Pt => [(c + 0.5) * TESS, y0 + (r + 0.5) * th];
+    // A star is a cross of five gold tesserae, on a staggered lattice, and only where it stands clear of everything else.
+    const star = (c: number, r: number): boolean => {
+      const ri = r - border;
+      if (ri < 2 || r > rows - border - 2 || ri % 4 !== 2) return false;
+      if ((((c + (Math.floor(ri / 4) % 2) * 5) % 10) + 10) % 10 !== 2) return false;
+      const [x, y] = at(c, r);
+      return !nearRoundel(x, y, TESS * 2.2) && loz(x, y) > 1.55;
+    };
+    const starAt = (c: number, r: number): boolean =>
+      star(c, r) || star(c - 1, r) || star(c + 1, r) || star(c, r - 1) || star(c, r + 1);
+    g.fillStyle = PASTEL.tessGrout;
+    g.fillRect(0, y0, TW, H);
+    for (let r = 0; r < rows; r++) {
+      for (let c = 0; c < cols; c++) {
+        const [x, y] = at(c, r);
+        let key: string;
+        if (r < border || r >= rows - border) key = r === 0 || r === rows - 1 ? 'tessGold' : c % 2 ? 'tessPearl' : 'tessRuby';
+        else {
+          if (nearRoundel(x, y, TESS * 0.95)) continue;
+          const m = loz(x, y);
+          key = m <= 0.34 ? 'tessRuby' : m <= 0.8 ? 'tessEmerald' : m <= 1 ? 'tessGold' : starAt(c, r) ? 'tessGold' : 'tessBlue';
+        }
+        tessera(g, cellOf(c, r, y0, th), GLASS[key], hash3(c, r, 9), key === 'tessGold' ? 0.5 : 0.2);
+      }
+    }
+    if (!round) return;
+    for (const cx of centres) roundel(g, cx, cy, rad, pair, hash3(Math.round(cx), Math.round(rad), 3));
+  }
+  /**
+   * A roundel of `rad`, laid in rings from the outside in: a ring of the
+   * ground, gold, pearl, the variant's first glass, then its second worked
+   * in eight petals against pearl, and gold again; a boss of gold at the
+   * middle. A small one keeps the gold and the first glass.
+   */
+  function roundel(g: Ctx, cx: number, cy: number, rad: number, pair: [string, string], seed: number): void {
+    const big = rad >= TESS * 4;
+    const ring = (k: number, a: number): string => {
+      if (k < 0) return 'tessBlue';
+      if (!big) return k === 0 ? 'tessGold' : pair[0];
+      if (k === 0) return 'tessGold';
+      if (k === 1) return 'tessPearl';
+      if (k === 2) return pair[0];
+      if (k === 3) return Math.floor((a / (Math.PI * 2)) * 8 + 0.5) % 2 ? 'tessPearl' : pair[1];
+      return k % 2 ? 'tessGold' : pair[0];
+    };
+    let inner = rad;
+    for (let k = -1; ; k++) {
+      const rr = rad - (k + 0.5) * TESS;
+      if (rr < TESS * 0.8) break;
+      inner = rr - TESS / 2;
+      const n = Math.max(6, Math.round((Math.PI * 2 * rr) / TESS)), da = (Math.PI * 2) / n, off = (k & 1) * da / 2;
+      const r0 = rr - TESS * 0.4, r1 = rr + TESS * 0.4;
+      for (let i = 0; i < n; i++) {
+        const a = off + i * da, a0 = a - da * 0.42, a1 = a + da * 0.42;
+        // Laid with the top edge outermost on the upper half and innermost on the lower, so the glint is always the edge toward the light.
+        const outer: Pt[] = [[cx + Math.cos(a0) * r1, cy + Math.sin(a0) * r1], [cx + Math.cos(a1) * r1, cy + Math.sin(a1) * r1]];
+        const inside: Pt[] = [[cx + Math.cos(a1) * r0, cy + Math.sin(a1) * r0], [cx + Math.cos(a0) * r0, cy + Math.sin(a0) * r0]];
+        const pts: Pt[] = Math.sin(a) < 0 ? [outer[0], outer[1], inside[0], inside[1]] : [inside[1], inside[0], outer[1], outer[0]];
+        const key = ring(k, ((a % (Math.PI * 2)) + Math.PI * 2) % (Math.PI * 2));
+        tessera(g, pts, GLASS[key], hash3(i, k + 2, seed * 1e6), key === 'tessGold' ? 0.5 : 0.2);
+      }
+    }
+    // The boss: one piece of gold cut round, and its own glint.
+    const b = Math.max(TESS * 0.55, inner - 1.2);
+    g.beginPath(); g.arc(cx, cy, b, 0, Math.PI * 2);
+    g.fillStyle = GLASS.tessGold[3]; g.fill();
+    g.beginPath(); g.arc(cx - b * 0.3, cy - b * 0.3, b * 0.38, 0, Math.PI * 2);
+    g.fillStyle = 'rgba(255, 250, 230, 0.55)'; g.fill();
+  }
+  /** A storey of a mosaic wall: the marble's band over a field of glass. */
+  function paintMosaic(g: Ctx, R: Rand): Block[] {
+    g.fillStyle = PASTEL.joint;
+    g.fillRect(0, 0, TW, TH);
+    marbleBand(g, R);
+    mosaicField(g, BAND, TH, R);
+    oversail(g, 0, BAND, 12);
+    return [];
+  }
   /**
    * The field of a bond: units of one size, laid to a line in a half lap.
    *
@@ -4016,6 +4251,7 @@ function paint(S: Stock): Masonry {
    * whole of what there is to look at.
    */
   function paintBond(g: Ctx, R: Rand, crests: Pt[]): Block[] {
+    if (S.mosaic) return paintMosaic(g, R);
     if (S.slab) return paintSlabs(g, R);
     g.fillStyle = PASTEL.joint;
     g.fillRect(0, 0, TW, TH);
@@ -6155,6 +6391,7 @@ function paint(S: Stock): Masonry {
    * unit thick, and there is nothing for a header to bond to.
    */
   function lowBond(g: Ctx, R: Rand, fh: number, rows: number): Block[] {
+    if (S.mosaic) { mosaicField(g, COPE, fh, R); return []; }
     const top = COPE;
     const own: Block[] = [];
     const zone = firing(R);
@@ -7615,7 +7852,7 @@ export function warmMasonry(): void {
   const idle = globalThis.requestIdleCallback;
   // A set to an idle: painting them back to back is that many pauses at once,
   // and the later ones are only wanted by whoever has built in them.
-  const sets = [cobble, brickwork, stonework, sandstone, slatework, marblework, adobe, timbercraft, logwork, planking, silverwork, goldwork];
+  const sets = [cobble, brickwork, stonework, sandstone, slatework, marblework, adobe, timbercraft, logwork, planking, silverwork, goldwork, mosaicwork];
   const next = (i: number): void => {
     if (i >= sets.length) return;
     if (typeof idle === 'function') idle(() => { sets[i](); next(i + 1); });

@@ -1,7 +1,7 @@
 import { matOfItem, workingQl } from './materials';
 import { COINS_PER_LUMP, INGOT_LUMPS, INGOT_WEIGHT, ingotOf, METALS, MOULDS, RARE_LUMP_FACTOR } from './metal';
 import { DYES, dyeWord } from './dyestuffs';
-import { WALL_TYPES } from './building';
+import { MATERIAL_BY_ID, WALL_TYPES } from './building';
 import { candleBurn, lanternReach, torchBurn, torchReach } from './light';
 import { CLOSE_CLOTH, CLOSE_RIGHT } from './wounds';
 import { article, capital, fill, listed, numberWord, share, times } from './words';
@@ -201,8 +201,20 @@ export const ITEM_DEFS: Record<string, ItemDef> = {
   dirt: { name: 'Dirt', category: 'material', weight: 20, stackable: true, raw: true, description: 'A pile of dirt. Drop it to raise the ground.' },
   moss: { name: 'Moss', category: 'material', weight: 0.5, stackable: true, raw: true, description: 'A clump of living moss. Cutting a moss tile gives {moss.cut:w}; plant {moss.plant} of it on a tile of dirt and the tile is moss.' },
   sand: { name: 'Sand', category: 'material', weight: 20, stackable: true, raw: true },
-  glass: { name: 'Glass pane', category: 'material', weight: 2, stackable: true, decay: 0,
-    description: 'A pane of green glass, run flat off a smelter hearth and cut square. It goes into a window: a window without one is a hole with a shutter.' },
+  /*
+   * Glass comes off the smelter in two steps, both glassblowing: sand melted
+   * down into lumps, and a lump blown and flattened into a panel. The panel
+   * kept the id the pane had, so every window, bay and glasshouse roof that
+   * was glazed or half built stays exactly as it was.
+   */
+  glass_lump: { name: 'Glass lump', category: 'material', weight: 1, stackable: true, decay: 0,
+    description: 'Sand melted down at a hot smelter. Glassblowing works one into a glass panel.' },
+  glass: { name: 'Glass panel', category: 'material', weight: 2, stackable: true, decay: 0,
+    description: 'A flat panel of clear glass. A window takes {wall.window.glass}, a bay window {wall.bay.glass}, and a glasshouse roof is laid in them.' },
+  bottle: { name: 'Bottle', category: 'misc', weight: 0.5, decay: 1, holds: 4, shelter: 0.25, oneKind: true,
+    description: 'A blown glass bottle with a stopper. It holds {holds} of one food or drink at a time, and what is in it rots at {shelter:share} the rate if it is left lying about.' },
+  mosaic_tile: { name: 'Mosaic tile', category: 'material', weight: 0.1, stackable: true, decay: 0,
+    description: 'A chip of glass coloured with a ground gem. A solid mosaic wall is faced in {mosaicWall.mosaic_tile} of them.' },
   clay: { name: 'Clay', category: 'material', weight: 20, stackable: true, raw: true },
   peat: { name: 'Peat', category: 'material', weight: 2, stackable: true, raw: true },
   // Raked out of a fire, and nothing a bench has touched — which is the whole
@@ -612,6 +624,7 @@ for (const d of Object.values(ITEM_DEFS)) {
     coinsPerLump: COINS_PER_LUMP,
     rareLumps: RARE_LUMP_FACTOR,
     wall: Object.fromEntries(WALL_TYPES.map((w) => [w.id, Object.fromEntries(w.fittings ?? [])])),
+    mosaicWall: Object.fromEntries(MATERIAL_BY_ID.get('mosaic')?.bill ?? []),
     light: {
       lanternNear: lanternReach(1), lanternFar: lanternReach(100), candleShort: candleBurn(1), candleLong: candleBurn(100),
       torchNear: torchReach(1), torchFar: torchReach(100), torchShort: torchBurn(1), torchLong: torchBurn(100),

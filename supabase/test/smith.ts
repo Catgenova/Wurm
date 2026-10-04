@@ -167,16 +167,16 @@ begin
     values (w, 'anvil', 'iron', 9, 10, 0, 0, 9.25, 10.25, 50, u) returning id into v_anvil;
   ${checks(true)};
 
-  /* ---- Glassblower: a sheet of glass is three. ---- */
+  /* ---- Glassblower: a melt of glass is three lumps. ---- */
   perform give(w, u, 'sand', ${(GLASS.inputs[0].count ?? 1) * 2}, 30);
   perform pg_temp.hold(w, u, '{}');
   ${craft('make_glass', newest('sand'))};
-  v_t := ${count('glass')}::text;
-  ${clear('glass')};
+  v_t := ${count(GLASS.result)}::text;
+  ${clear(GLASS.result)};
   ${hold('Glassblower')};
   ${craft('make_glass', newest('sand'))};
-  insert into said values ('GLASS', v_t || '|' || ${count('glass')});
-  ${clear('glass', 'sand')};
+  insert into said values ('GLASS', v_t || '|' || ${count(GLASS.result)});
+  ${clear(GLASS.result, 'sand')};
 
   /* ---- Sure Alloy: a mix that fails every time without it, at a failure's share of nothing with it. ---- */
   ${checks(false)};
@@ -438,8 +438,8 @@ const say = (k: string): string => said.get(k) ?? 'unsaid';
 /* ---- the smelter --------------------------------------------------------------------- */
 
 const [glassA, glassB] = say('GLASS').split('|').map(Number);
-check(`${P('Glassblower').name}: a go of ${GLASS.label} makes ${P('Glassblower').fx['count:glass']} glass with it, ${GLASS.count} without`,
-  glassA === GLASS.count && glassB === P('Glassblower').fx['count:glass'], say('GLASS'));
+check(`${P('Glassblower').name}: a go of ${GLASS.label} makes ${P('Glassblower').fx[`count:${GLASS.result}`]} with it, ${GLASS.count} without`,
+  glassA === GLASS.count && glassB === P('Glassblower').fx[`count:${GLASS.result}`], say('GLASS'));
 const [alloyA, alloyB] = say('ALLOY').split('|').map(Number);
 check(`${P('Sure Alloy').name}: a mix that fails without it comes off with it (its failure put at none)`,
   alloyA === 0 && alloyB === BRONZE.count, say('ALLOY'));

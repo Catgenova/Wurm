@@ -60,8 +60,8 @@ const article = (id: string): string => (/^[aeiou]/.test(lower(id)) ? 'an ' : 'a
  * up) that become a result. Each recipe is also an item action, so it shows on
  * the material's menu as well as in the crafting window.
  */
-export type RecipeCategory = 'Woodwork' | 'Furniture' | 'Stonework' | 'Clay & thatch' | 'Cloth' | 'Alchemy' | 'Writing' | 'Cooking' | 'Smelting' | 'Jewellery'
-  | 'Mending';
+export type RecipeCategory = 'Woodwork' | 'Furniture' | 'Stonework' | 'Clay & thatch' | 'Cloth' | 'Alchemy' | 'Writing' | 'Cooking' | 'Smelting' | 'Glassblowing'
+  | 'Jewellery' | 'Mending';
 /** A place a recipe has to be worked at, beyond what is carried. */
 export type Station = 'campfire' | 'smelter' | 'spindle' | 'loom';
 const STATION_NAME: Record<Station, string> = { campfire: 'lit campfire', smelter: 'hot smelter', spindle: 'spindle', loom: 'loom' };
@@ -379,14 +379,17 @@ const MOULD_RECIPES: Recipe[] = MOULDS.map((m) => ({
 
 const SMELTER_RECIPES: Recipe[] = [
   /*
-   * Glass, which the island had drawn in every window and never made.
-   *
-   * A window wall cost three quarters of a solid one and not a thing besides,
-   * so glazing was free and a window was cheaper than the wall it was cut into
-   * — which is exactly backwards. Sand run flat on a smelter hearth and cut
-   * square is what a pane is, and a window takes two of them.
+   * Glass, at a hot smelter and by its own trade. Sand is melted down into
+   * lumps; a lump is blown and flattened into the panel a window, a bay and a
+   * glasshouse roof are glazed with; sand goes straight to a bottle; and a gem
+   * ground into the melt colours a batch of the tiles a mosaic is laid in.
+   * Nothing is lost when the tiles fail but the time: a gem is one stone in
+   * hundreds out of the rock.
    */
-  { id: 'make_glass', category: 'Smelting', result: 'glass', count: 2, inputs: [{ item: 'sand', count: 3 }], station: 'smelter', skill: 'smelting', label: 'Run a sheet of glass', verb: 'running glass', baseTime: 12, stamina: 0.03, difficulty: 16, done: 'You run the sand flat on the hearth and cut {count:w} panes out of the sheet.', fail: 'The sheet cords and cracks as it cools, and there is nothing square in it.', consumeOnFail: true },
+  { id: 'make_glass', category: 'Glassblowing', result: 'glass_lump', count: 2, inputs: [{ item: 'sand', count: 3 }], station: 'smelter', skill: 'glassblowing', label: 'Melt into glass', verb: 'melting glass', baseTime: 12, stamina: 0.03, difficulty: 10, done: 'You melt the sand down on the hearth and draw off {count:w} lumps of glass.', fail: 'The melt comes out full of seed and grit and will not work.', consumeOnFail: true },
+  { id: 'make_glass_panel', category: 'Glassblowing', result: 'glass', inputs: [{ item: 'glass_lump' }], station: 'smelter', skill: 'glassblowing', label: 'Blow a glass panel', verb: 'blowing a panel', baseTime: 10, stamina: 0.03, difficulty: 16, done: 'You blow a cylinder, split it down its length and flatten it on the hearth. A glass panel.', fail: 'The cylinder cracks as it is opened, and there is nothing flat in it.', consumeOnFail: true },
+  { id: 'make_bottle', category: 'Glassblowing', result: 'bottle', inputs: [{ item: 'sand', count: 2 }], station: 'smelter', skill: 'glassblowing', label: 'Blow a bottle', verb: 'blowing a bottle', baseTime: 10, stamina: 0.03, difficulty: 20, done: 'You gather the melt on the pipe, blow it round and turn a neck on it. A bottle.', fail: 'The gather sags off the pipe before it is round.', consumeOnFail: true },
+  { id: 'make_mosaic_tiles', category: 'Glassblowing', result: 'mosaic_tile', count: 20, inputs: [{ item: 'gem' }, { item: 'sand', count: 4 }], station: 'smelter', skill: 'glassblowing', label: 'Fire mosaic tiles', verb: 'firing mosaic tiles', baseTime: 16, stamina: 0.04, difficulty: 26, done: 'You grind the stone into the melt, pour it thin and break the colour into {count:w} tiles.', fail: 'The colour clouds in the melt. You let it cool and keep the stone and the sand.' },
   { id: 'make_bronze', category: 'Smelting', result: 'bronze_lump', count: 4, inputs: [{ item: 'copper_lump', count: 3 }, { item: 'tin_lump', count: 1 }], station: 'smelter', skill: 'smelting', qlFromInputs: true, label: 'Mix bronze', verb: 'mixing an alloy', baseTime: 10, stamina: 0.03, difficulty: 12, done: 'You mix a crucible of bronze.', fail: 'The mix will not take and you pour off a ruined crucible.', consumeOnFail: true },
   { id: 'make_steel', category: 'Smelting', result: 'steel_lump', count: 3, inputs: [{ item: 'iron_lump', count: 3 }, { item: 'coal', count: 1 }], station: 'smelter', skill: 'smelting', qlFromInputs: true, label: 'Make steel', verb: 'making steel', baseTime: 14, stamina: 0.04, difficulty: 20, done: 'You draw off a crucible of steel.', fail: 'The heat is wrong and the crucible comes off grey and crumbling.', consumeOnFail: true },
   { id: 'make_brass', category: 'Smelting', result: 'brass_lump', count: 4, inputs: [{ item: 'copper_lump', count: 3 }, { item: 'zinc_lump', count: 1 }], station: 'smelter', skill: 'smelting', qlFromInputs: true, label: 'Mix brass', verb: 'mixing an alloy', baseTime: 10, stamina: 0.03, difficulty: 12, done: 'You mix a crucible of brass.', fail: 'The mix will not take and you pour off a ruined crucible.', consumeOnFail: true },
@@ -759,7 +762,7 @@ const secondAltar = (r: Recipe, g: Game): boolean => ALTARS.has(r.result) && !!g
  * stone's own menu. It is listed now, with the circlet.
  */
 export const RECIPE_CATEGORIES: RecipeCategory[] = ['Woodwork', 'Furniture', 'Stonework', 'Clay & thatch', 'Cloth', 'Alchemy', 'Writing', 'Cooking', 'Smelting',
-  'Jewellery', 'Mending'];
+  'Glassblowing', 'Jewellery', 'Mending'];
 export const stationName = (s: Station): string => STATION_NAME[s];
 
 export interface RecipeStatus {

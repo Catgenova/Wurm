@@ -168,7 +168,7 @@ export const MINOR_SKILLS: string[] = [
   'masonry', 'stonecutting', 'carpentry', 'fine_carpentry', 'pottery', 'tailoring', 'ropemaking', 'cooking', 'milling',
   'smelting', 'blacksmithing', 'weaponsmithing', 'armorsmithing', 'farming', 'taming', 'animal_husbandry', 'butchering',
   'alchemy', 'prayer', 'meditation', 'repair', 'first_aid', 'chirurgy', 'papyrusmaking', 'archaeology', 'restoration',
-  'leatherworking', 'chainsmithing', 'platesmithing', 'jewellery', 'bowyery', 'fletching',
+  'leatherworking', 'chainsmithing', 'platesmithing', 'jewellery', 'bowyery', 'fletching', 'glassblowing',
 ];
 
 /**
@@ -182,7 +182,7 @@ export const MAJOR_SKILLS: string[] = [
   'digging', 'mining', 'woodcutting', 'forestry', 'foraging', 'botanizing', 'fishing', 'farming', 'butchering',
   'alchemy', 'animal_husbandry', 'armorsmithing', 'blacksmithing', 'bowyery', 'brewing', 'carpentry', 'chainsmithing', 'cooking',
   'fine_carpentry', 'first_aid', 'fletching', 'jewellery', 'leatherworking', 'masonry', 'milling', 'papyrusmaking',
-  'platesmithing', 'pottery', 'repair', 'ropemaking', 'smelting', 'stonecutting', 'tailoring', 'weaponsmithing',
+  'platesmithing', 'pottery', 'repair', 'ropemaking', 'smelting', 'stonecutting', 'tailoring', 'weaponsmithing', 'glassblowing',
 ];
 
 export interface AncientEffect {

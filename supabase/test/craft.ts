@@ -45,7 +45,7 @@ const check = (what: string, passed: boolean, detail = ''): void => {
 /*
  * The skills that belong to no trade at all, craft or fighting.
  *
- * The craft side partitions cleanly -- every one of its thirty-nine skills is
+ * The craft side partitions cleanly -- every one of its forty skills is
  * in exactly one trade -- and the fighting side deliberately does not. These
  * eight are the body and the soul, common to all twenty-one, and `fighting` in
  * particular *could not* be owned even if it should be: it is the scope key

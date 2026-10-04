@@ -58,6 +58,7 @@ const NAMES: Record<string, [string, string]> = {
   platesmithing: ['Platesmith', 'Plate Armoursmith'],
   bowyery: ['Stavemaker', 'Bowyer'],
   fletching: ['Shaftmaker', 'Fletcher'],
+  glassblowing: ['Glazier', 'Glassblower'],
   climbing: ['Scrambler', 'Climber'],
   swimming: ['Swimmer', 'Waterman'],
   fighting: ['Fighter', 'Warrior'],
@@ -104,7 +105,7 @@ export const earnedBy = (skill: string, level: number): TitleDef[] => titlesFor(
 export const FAMILIES: Record<string, string[]> = {
   wood: ['woodcutting', 'forestry', 'carpentry', 'fine_carpentry', 'bowyery', 'fletching'],
   stone: ['digging', 'mining', 'prospecting', 'masonry', 'stonecutting', 'paving'],
-  metal: ['smelting', 'blacksmithing', 'weaponsmithing', 'armorsmithing', 'chainsmithing', 'platesmithing', 'jewellery'],
+  metal: ['smelting', 'blacksmithing', 'weaponsmithing', 'armorsmithing', 'chainsmithing', 'platesmithing', 'jewellery', 'glassblowing'],
   cloth: ['tailoring', 'leatherworking', 'ropemaking', 'papyrusmaking'],
   land: ['farming', 'foraging', 'botanizing', 'fishing', 'cooking', 'milling', 'brewing', 'alchemy'],
   beast: ['taming', 'animal_husbandry', 'butchering', 'first_aid'],

@@ -762,6 +762,74 @@ function panels(o: { unit: number; bed: string; field: string; hi: string; lo: s
   return c;
 }
 
+/**
+ * A floor of mosaic: an ivory ground laid on a lattice of glass, a roundel
+ * at the middle of every tile -- lapis and ruby turn about from tile to tile
+ * -- and where four tiles meet, a lozenge of lapis with a gold eye, a
+ * quarter of it in each, so a room of it is one carpet whatever its size.
+ * The roundel is laid ring after ring round its edge, as the wall's are.
+ */
+function tessellated(seed: number): HTMLCanvasElement {
+  const [c, g] = canvas(S, S);
+  const T = FLOOR_PPT / 24, n = Math.round(S / T), half = FLOOR_PPT / 2, rad = T * 6;
+  const glass = (hex: string): string[] => [-0.07, -0.03, 0, 0.03, 0.07].map((k) => step(hex, k));
+  const G: Record<string, string[]> = {
+    ivory: glass('#ebe4d5'), blue: glass('#4a62a6'), gold: glass('#e3b955'), ruby: glass('#c4475b'),
+    pearl: glass('#f4efe5'), teal: glass('#5dbfbf'),
+  };
+  const R = rand(seed);
+  const hashed: number[] = Array.from({ length: n * n * 9 + 64 }, () => R());
+  const h = (i: number, j: number, k: number): number => hashed[((i * n + j) * 9 + k) % hashed.length];
+  const lay = (pts: Pt[], tones: string[], v: number, glint: number): void => {
+    path(g, pts);
+    g.fillStyle = tones[Math.min(tones.length - 1, Math.floor(v * tones.length))];
+    g.fill();
+    g.strokeStyle = `rgba(255, 252, 240, ${glint})`;
+    g.lineWidth = 1.2;
+    g.beginPath(); g.moveTo(pts[0][0] + 0.5, pts[0][1] + 0.7); g.lineTo(pts[1][0] - 0.5, pts[1][1] + 0.7); g.stroke();
+  };
+  g.fillStyle = '#cdc5b3';
+  g.fillRect(0, 0, S, S);
+  for (let j = 0; j < n; j++) {
+    for (let i = 0; i < n; i++) {
+      const x = (i + 0.5) * T, y = (j + 0.5) * T;
+      const lx = (x % FLOOR_PPT) - half, ly = (y % FLOOR_PPT) - half;
+      if (Math.hypot(lx, ly) < rad + T * 0.9) continue;
+      // To the nearest place four tiles meet, in the lozenge's own measure.
+      const m = (half - Math.abs(lx)) / (T * 4.2) + (half - Math.abs(ly)) / (T * 4.2);
+      const key = m <= 0.3 ? 'gold' : m <= 0.85 ? 'blue' : m <= 1 ? 'gold' : 'ivory';
+      const gap = 1.1, jt = (k: number): number => (h(i, j, k) - 0.5) * 1.3;
+      const x0 = i * T, y0 = j * T;
+      lay([[x0 + gap + jt(1), y0 + gap + jt(2)], [x0 + T - gap + jt(3), y0 + gap + jt(4)], [x0 + T - gap + jt(5), y0 + T - gap + jt(6)], [x0 + gap + jt(7), y0 + T - gap + jt(8)]],
+        G[key], h(i, j, 0), key === 'gold' ? 0.45 : 0.18);
+    }
+  }
+  for (let ty = 0; ty < FLOOR_TILES; ty++) {
+    for (let tx = 0; tx < FLOOR_TILES; tx++) {
+      const cx = tx * FLOOR_PPT + half, cy = ty * FLOOR_PPT + half;
+      const own = (tx + ty) % 2 ? 'ruby' : 'blue';
+      const rings = ['ivory', 'gold', 'pearl', own, 'teal', own, 'gold'];
+      let inner = rad;
+      for (let k = -1; k + 1 < rings.length; k++) {
+        const rr = rad - (k + 0.5) * T;
+        if (rr < T * 0.8) break;
+        inner = rr - T / 2;
+        const cnt = Math.max(6, Math.round((Math.PI * 2 * rr) / T)), da = (Math.PI * 2) / cnt, off = (k & 1) * da / 2;
+        for (let q = 0; q < cnt; q++) {
+          const a = off + q * da, a0 = a - da * 0.42, a1 = a + da * 0.42, r0 = rr - T * 0.4, r1 = rr + T * 0.4;
+          const pts: Pt[] = [[cx + Math.cos(a0) * r1, cy + Math.sin(a0) * r1], [cx + Math.cos(a1) * r1, cy + Math.sin(a1) * r1],
+            [cx + Math.cos(a1) * r0, cy + Math.sin(a1) * r0], [cx + Math.cos(a0) * r0, cy + Math.sin(a0) * r0]];
+          const key = rings[k + 1];
+          lay(pts, G[key], h(tx * 7 + q, ty * 5 + k + 2, 3), key === 'gold' ? 0.45 : 0.18);
+        }
+      }
+      g.beginPath(); g.arc(cx, cy, Math.max(T * 0.6, inner - 1), 0, Math.PI * 2);
+      g.fillStyle = G.gold[3]; g.fill();
+    }
+  }
+  return c;
+}
+
 /* ---- the floors ------------------------------------------------------------- */
 
 /** A slate's face: riven, split along its bed so it lies in shallow steps, one edge of each catching the light. */
@@ -917,6 +985,8 @@ function laid(material: string): { img: HTMLCanvasElement; runs: boolean } | nul
           },
         }),
       };
+    case 'mosaic':
+      return { runs: false, img: tessellated(277) };
     case 'ornate_silver':
       return { runs: false, img: panels({ unit: 128, bed: '#626882', field: '#c6cad6', hi: '#eef1f6', lo: '#8e92a3', ink: '#626882', boss: '#dfe2ea', seed: 269 }) };
     case 'ornate_gold':

@@ -769,9 +769,9 @@ const SMITH: Seed[] = [
   },
   {
     num: 8, name: 'Glassblower',
-    fx: { 'count:glass': 3 },
-    note: (fx) => `${GLASS.label} makes ${numberWord(fx['count:glass'])} glass from ${numberWord(GLASS.inputs[0].count ?? 1)} `
-      + `${itemName(GLASS.inputs[0].item)} (now ${numberWord(GLASS.count ?? 1)}).`,
+    fx: { [`count:${GLASS.result}`]: 3 },
+    note: (fx) => `${GLASS.label} makes ${numberWord(fx[`count:${GLASS.result}`])} ${itemName(GLASS.result).toLowerCase()}s from `
+      + `${numberWord(GLASS.inputs[0].count ?? 1)} ${itemName(GLASS.inputs[0].item).toLowerCase()} (now ${numberWord(GLASS.count ?? 1)}).`,
   },
   {
     num: 9, name: 'Reclaimer',

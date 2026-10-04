@@ -7,7 +7,7 @@
  * each opening a small tree of passive nodes of its own.
  *
  * Three rules shape the whole thing, and they are the reason it is fourteen
- * rather than thirty-nine or four.
+ * rather than forty or four.
  *
  * **A card opens at fifty.** Nothing here is offered to somebody who has not
  * done the work: reach fifty in any skill a class covers and its card is on
@@ -27,7 +27,7 @@
  * of gold out of the ground, through a smelter and over an anvil. It is a
  * decision you can undo and will not undo twice in an afternoon.
  *
- * Every one of the thirty-nine craft skills belongs to exactly one class. That
+ * Every one of the forty craft skills belongs to exactly one class. That
  * is checked, not hoped for: `craft.ts` asks both sides for the list and adds
  * it up.
  */
@@ -156,7 +156,7 @@ export const CRAFT_CLASSES = ([
   },
   {
     id: 'artisan', kind: 'craft', name: 'Artisan', main: 'jewellery',
-    skills: ['jewellery', 'pottery', 'papyrusmaking'],
+    skills: ['jewellery', 'pottery', 'papyrusmaking', 'glassblowing'],
   },
 ] satisfies ClassSeed[]) as ClassDef[];
 

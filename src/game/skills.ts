@@ -67,6 +67,11 @@ export const SKILL_DEFS: SkillDef[] = [
   { id: 'chainsmithing', name: 'Chain armoursmithing', group: 'Skills', start: 1 },
   { id: 'platesmithing', name: 'Plate armoursmithing', group: 'Skills', start: 1 },
   { id: 'jewellery', name: 'Jewellery', group: 'Skills', start: 1 },
+  /*
+   * Sand at a hot smelter: the glass itself, the panels a window is glazed
+   * with, bottles, and the coloured tiles a mosaic is laid in.
+   */
+  { id: 'glassblowing', name: 'Glassblowing', group: 'Skills', start: 1 },
   { id: 'bowyery', name: 'Bowyery', group: 'Skills', start: 1 },
   { id: 'fletching', name: 'Fletching', group: 'Skills', start: 1 },
   { id: 'fighting', name: 'Fighting', group: 'Fighting', start: 1 },
