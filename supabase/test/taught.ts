@@ -58,8 +58,10 @@ const pinned = (base: string): string => psql(`
   select setseed(0.4242);
   insert into skill (world_id, uid, id, value) values (${W}, ${DANE}, 'smelting', 1)
     on conflict (world_id, uid, id) do update set value = 1;
-  select to_char(skill_raise(${W}, ${DANE}, 'smelting', ${base}), 'FM0.000000');
+  select to_char(skill_raise(${W}, ${DANE}, 'smelting', ${base}), 'FM0.000000000000');
 `).split('\n').pop()!.trim();
+// Twelve places, not six: at a fifth of the old gain a miss is 0.0575, and rounding both to
+// six places moved their ratio by three in a million (run 920), over the check's one.
 
 const hit = Number(pinned('1'));
 const miss = Number(pinned('try_gain(false)'));

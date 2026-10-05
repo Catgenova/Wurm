@@ -160,7 +160,10 @@ const ISLAND_SCENE = `
   delete from item where world_id = w and holder = 'ground' and gx < 41 and gy > 29;
   delete from building b where b.world_id = w and exists (select 1 from building_tile bt
     where bt.world_id = w and bt.building = b.id and bt.x < 41 and bt.y > 29);
-  delete from deed where world_id = w and founded_by = me;
+  -- Anybody's token in the scene goes too, not only Crowd4's: the island test founds Dane's
+  -- Latecomer over a hoard buried wherever it fell, and its token, standing at 25,43, refused a
+  -- plan there that the browser, which holds only Pierside, took (run 921).
+  delete from deed where world_id = w and (founded_by = me or (x < 41 and y > 29));
   insert into deed (world_id, name, x, y, radius, level, founded_by)
     values (w, ${q(DEED.name)}, ${DEED.x}, ${DEED.y}, ${DEED.radius}, ${DEED.level}, me);
   perform land_set_height(w, v.x, v.y, v.h) from (values ${cornerRows.join(', ')}) v(x, y, h);
