@@ -25,9 +25,9 @@ export const DRIVING_TOP = 0.25;
 export const SAILING_TOP = 0.25;
 
 /** What one tile driven into teaches Driving, as the base of a gain (`skillGain`). */
-export const DRIVING_LEARN = 0.03;
+export const DRIVING_LEARN = 0.003;
 /** What one tile sailed or rowed into teaches Sailing, as the base of a gain. */
-export const SAILING_LEARN = 0.03;
+export const SAILING_LEARN = 0.003;
 
 /** What Driving `skill` makes of a team's pace. The island's `driving_pace`. */
 export const drivingPace = (skill: number): number => 1 + DRIVING_TOP * Math.min(TRAVEL_TOP_AT, skill) / TRAVEL_TOP_AT;

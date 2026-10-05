@@ -4492,8 +4492,8 @@ create or replace function sailing_skill() returns text language sql immutable a
 create or replace function driving_top() returns double precision language sql immutable as $fn$ select 0.25::double precision $fn$;
 create or replace function sailing_top() returns double precision language sql immutable as $fn$ select 0.25::double precision $fn$;
 create or replace function travel_top_at() returns double precision language sql immutable as $fn$ select 100::double precision $fn$;
-create or replace function driving_learn() returns double precision language sql immutable as $fn$ select 0.03::double precision $fn$;
-create or replace function sailing_learn() returns double precision language sql immutable as $fn$ select 0.03::double precision $fn$;
+create or replace function driving_learn() returns double precision language sql immutable as $fn$ select 0.003::double precision $fn$;
+create or replace function sailing_learn() returns double precision language sql immutable as $fn$ select 0.003::double precision $fn$;
 insert into wall_type_def values ('solid', 'Solid', 1, false, null, false, false, false);
 insert into wall_type_def values ('window', 'Window', 0.75, false, null, false, false, false);
 insert into wall_fitting values ('window', 'glass', 6);
