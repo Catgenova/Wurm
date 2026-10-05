@@ -71,6 +71,7 @@ import { jewelGain } from './gems';
 import { earnedBy, knackBonus, knackLands, KNACK_CAP, KNACK_ODDS, TITLE_BY_ID } from './titles';
 import { TileIndex, Tally, keyX, keyY, tileKey } from './tileindex';
 import { DARK_HIT, NIGHT_EYES_FROM, WORK_HAND, WORK_WIND, WORK_WIND_SPENT, HEAVY_SKILLS, WORK_BACK } from './learn';
+import { DRIVING, DRIVING_LEARN, drivingPace, SAILING, SAILING_LEARN, sailingPace } from './travel';
 import { AWARENESS, Vision } from './vision';
 import { blessBonus, favourCap, FAITH, FAVOUR_TRICKLE } from './faith';
 import { ATTENTIVE, FURY_MULT, FURY_SECS, GREEN_THUMB, hasStep, IRONHIDE, MEDITATION, MEND_FLESH, SENSE_REACH, STRONG_BACK, type PathId } from './meditation';
@@ -1406,8 +1407,9 @@ export class Game {
     const heft = furnitureHeft(f);
     const cap = furnitureCapacity(f);
     const load = heft ? Math.min(1, furnitureKg(f) / heft) : cap ? Math.min(1, furnitureUnits(f) / cap) : 0;
-    // And her builder's hand in her, for a hull a Carpenter laid the keel of.
-    return hullSpeed(def, f.ql, body, weather, load) * markOf(f, 'speed');
+    // And her builder's hand in her, for a hull a Carpenter laid the keel of,
+    // and the hand at her helm: Sailing (`sailingPace`).
+    return hullSpeed(def, f.ql, body, weather, load) * markOf(f, 'speed') * sailingPace(this.skills.get(SAILING));
   }
 
   /**
@@ -3460,6 +3462,12 @@ export class Game {
      */
     if (p.steppedX >= 0) {
       if (!this.bodyFromIsland && !p.carried) this.wearStep(p.steppedX, p.steppedY);
+      /*
+       * And a tile gone into with the reins or the helm in your hands is a go
+       * of Driving or of Sailing. On an island the island pays it, off the
+       * walk it is told about (`rpc_move`), as it pays climbing.
+       */
+      if (!this.bodyFromIsland && driven) this.gainSkill(boat ? SAILING : DRIVING, boat ? SAILING_LEARN : DRIVING_LEARN);
       p.steppedX = -1;
       p.steppedY = -1;
     }
@@ -6303,8 +6311,10 @@ export class Game {
     // A body of light wood rolls a shade easier than one of oak, which is the
     // price oak charges for holding more and lasting longer.
     // The builder's mark goes on after the cap, as the island has it, so a
-    // Carpenter's Smooth Axle is its whole share at the top of the range too.
-    return Math.min(MAX_VEHICLE_SPEED, mean * pull * worst * footing(this.teamClimb(f)) * rollEase(f.material)) * markOf(f, 'speed');
+    // Carpenter's Smooth Axle is its whole share at the top of the range too;
+    // and so does the driver's hand on the reins (`drivingPace`).
+    return Math.min(MAX_VEHICLE_SPEED, mean * pull * worst * footing(this.teamClimb(f)) * rollEase(f.material)) * markOf(f, 'speed')
+      * drivingPace(this.skills.get(DRIVING));
   }
 
   /** How full a vehicle is, 0..1. An empty one rolls over anything. */

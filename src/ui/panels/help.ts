@@ -44,6 +44,7 @@ import { CROP_BY_SEED, CROPS, cropYield, growthWords, PATCH_TIME, RIPE, STAGE_NA
 import { GLASSHOUSE_GROWTH, PLANTER_GROWTH, SEASON_GROWTH, SEASON_SECONDS, YEAR_SECONDS, YEARLESS_GROWTH } from '../../game/growth';
 import { CASTS, FAVOUR_TRICKLE, favourCap, PRAYER_BASE, PRAYER_GAIN, PRAYER_LIFT, PRAYER_PEAKS, PRAYER_REST, PRAYER_TAPER, prayerWorth } from '../../game/faith';
 import { tryGain } from '../../game/learn';
+import { DRIVING_TOP, drivingPace, SAILING_TOP, sailingPace, TRAVEL_TOP_AT } from '../../game/travel';
 import { ANCIENT_EFFECTS, ANCIENT_PLUS, BAUBLE_HIGH, BAUBLE_KINDS, BAUBLE_LOW, BAUBLE_SHARE, BAUBLE_TIERS, baubleTimes, MAJOR_SKILLS, MINOR_SKILLS, REGRET_SHARE, YIELD_TIMES } from '../../game/baubles';
 import { MOTE_CHANCE } from '../../game/sacrifice';
 import { HERB_HEAL, healAmount, SUITS_HEAL } from '../../game/firstaid';
@@ -1483,6 +1484,9 @@ export function helpText(): string {
     <b>${numberWord(SHIP.boat?.draught ?? 0)} deep</b>, makes <b>${SHIP.boat?.speed}</b> tiles a second at a fair effort to the
     sailing boat's <b>${SAILER.boat?.speed}</b>, and carries <b>${numberWord(SHIP.boat?.passengers ?? 0)} passengers</b> besides
     whoever has her helm.</p>
+    <p>Whoever has the helm handles her with <b>sailing</b>, rowed or sailed: it makes any boat go
+    ${percent(sailingPace(TRAVEL_TOP_AT / 2) - 1)} faster at sailing ${TRAVEL_TOP_AT / 2} and ${percent(SAILING_TOP)} faster at ${TRAVEL_TOP_AT}. Every tile she goes into with you at
+    her helm trains it.</p>
     <p><b>Launch</b> her by setting her down on water deep enough while you stand on the bank &mdash; she
     will not go on land and will not go in a puddle. <b>Climb aboard</b> from the shore and she moves
     with you, over any water with depth enough and over nothing else: no beaching, no dragging her over
@@ -1569,9 +1573,11 @@ export function helpText(): string {
     <p>A <b>wagon</b> takes ${bill('make_wagon', true)}. It holds <b>${WAGON.capacity} things</b> and will not stir until
     <b>${WAGON.vehicle ? teamSaid(WAGON.vehicle) : ''} yokes</b> have a wildermon in them.</p>
     <p>Set one down, stand beside it and <b>hitch</b> a tamed wildermon from its menu &mdash; one you
-    have with you or a deed worker; one in a creature crate is let out of it first. Then <b>take the reins</b> and drive. How fast you go is the team's business and nothing
-    else's: a quick animal gets there sooner, more of them pull better than fewer, and a hungry one
-    drags its feet, so feed the team before it goes in. A Seavic pair will outrun you at a walk; ${numberWord(WAGON.vehicle?.needs ?? 0)}
+    have with you or a deed worker; one in a creature crate is let out of it first. Then <b>take the reins</b> and drive. How fast you go is the team's business and
+    the driver's: a quick animal gets there sooner, more of them pull better than fewer, and a hungry one
+    drags its feet, so feed the team before it goes in. Whoever has the reins drives with <b>driving</b>, which makes the
+    team's pace ${percent(drivingPace(TRAVEL_TOP_AT / 2) - 1)} faster at driving ${TRAVEL_TOP_AT / 2} and ${percent(DRIVING_TOP)} faster at ${TRAVEL_TOP_AT}; every tile the vehicle goes into
+    with you on the seat trains it. A Seavic pair will outrun you at a walk; ${numberWord(WAGON.vehicle?.needs ?? 0)}
     Quarra will not, but they will shift ${numberWord(WAGON.capacity ?? 0)} bricks.</p>
     <p>The team is not only the pace but the pitch: a draught beast trains <b>climbing</b> by hauling
     over bad ground, and what the team knows between them decides both how fast the wheels turn and how

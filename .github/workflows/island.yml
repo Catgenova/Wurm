@@ -1902,6 +1902,16 @@ jobs:
             --outfile=node_modules/.cache/climb.mjs --log-level=error
           node node_modules/.cache/climb.mjs
 
+      - name: Driving and sailing
+        run: |
+          # Two skills of the reins and the helm: each makes what it steers go
+          # faster by the same sum on both sides, the island lets the faster
+          # pace stand, and each is paid a go for every tile the cart or the
+          # hull goes into under way -- and nothing for a cart nothing pulls.
+          npx esbuild supabase/test/travel.ts --bundle --platform=node --format=esm \
+            --outfile=node_modules/.cache/travel.mjs --log-level=error
+          node node_modules/.cache/travel.mjs
+
       - name: An altar goes up on your own ground
         run: |
           # Asked for: "Make the altar only craftable within deed perimeter".

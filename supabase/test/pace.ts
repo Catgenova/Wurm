@@ -23,6 +23,7 @@ import { execFileSync } from 'node:child_process';
 import { furnitureDef } from '../../src/game/furniture';
 import { hullSpeed } from '../../src/game/game';
 import { Roster } from '../../src/game/roster';
+import { SAILING, sailingPace } from '../../src/game/travel';
 import { WEATHER_MOST } from '../../src/game/wind';
 import type { PeerState } from '../../src/net/protocol';
 
@@ -50,6 +51,8 @@ const near = (a: number, b: number): boolean => Math.abs(a - b) <= 1e-4 * Math.m
 
 const CONTROL = 90;
 const STRENGTH = 70;
+// And the helm's own Sailing, which both sides put on the hull's pace (`sailingPace`).
+const SAILED_AT = 60;
 const said = new Map(psql(`
 begin;
 create temp table said (k text, v text);
@@ -59,7 +62,8 @@ begin
   select id into w from world where name = 'Hoarding';
   select uid into me from player where world_id = w and name = 'Crowd2';
   update placed set driver = null where world_id = w and driver = me;
-  insert into skill (world_id, uid, id, value) values (w, me, 'body_control', ${CONTROL}), (w, me, 'body_strength', ${STRENGTH})
+  insert into skill (world_id, uid, id, value) values (w, me, 'body_control', ${CONTROL}), (w, me, 'body_strength', ${STRENGTH}),
+      (w, me, '${SAILING}', ${SAILED_AT})
     on conflict (world_id, uid, id) do update set value = excluded.value;
   insert into placed (world_id, kind, sub, x, y, sx, sy, cx, cy, ql, made_by)
     values (w, 'furniture', 'caravel', 40, 40, 0, 0, 40.5, 40.5, 95, me) returning id into v_boat;
@@ -76,13 +80,13 @@ check('the island takes the weather at its best as the browser does', near(said.
   `${said.get('weather')} against ${WEATHER_MOST}`);
 const caravel = furnitureDef('caravel').boat;
 const rower = furnitureDef('rowing_boat').boat;
-const sailed = caravel ? hullSpeed(caravel, 95, CONTROL, WEATHER_MOST, 0) : NaN;
-const rowed = rower ? hullSpeed(rower, 60, STRENGTH, 1, 0) : NaN;
-check(`a caravel of 95 under a helm of ${CONTROL} body control is allowed what she makes on a reach in a gale`,
+const sailed = caravel ? hullSpeed(caravel, 95, CONTROL, WEATHER_MOST, 0) * sailingPace(SAILED_AT) : NaN;
+const rowed = rower ? hullSpeed(rower, 60, STRENGTH, 1, 0) * sailingPace(SAILED_AT) : NaN;
+check(`a caravel of 95 under a helm of ${CONTROL} body control and ${SAILED_AT} sailing is allowed what she makes on a reach in a gale`,
   near(said.get('caravel') ?? NaN, sailed), `${said.get('caravel')} tiles a second, and she makes ${sailed.toFixed(3)}`);
 check(`which is past what her build's pace used to allow her in a second, and would have been pulled back`,
   sailed > (caravel?.speed ?? 0) * 1.6 + 1.5, `${sailed.toFixed(2)} against ${((caravel?.speed ?? 0) * 1.6 + 1.5).toFixed(2)}`);
-check(`a rowing boat of 60 pulled by ${STRENGTH} body strength is allowed what she makes at the oars`,
+check(`a rowing boat of 60 pulled by ${STRENGTH} body strength and ${SAILED_AT} sailing is allowed what she makes at the oars`,
   near(said.get('rowing') ?? NaN, rowed), `${said.get('rowing')} against ${rowed.toFixed(3)}`);
 
 /* ---- Other people are drawn walking on, not jumped about ------------------ */

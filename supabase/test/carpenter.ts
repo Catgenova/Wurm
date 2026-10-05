@@ -23,6 +23,7 @@
  */
 import { execFileSync } from 'node:child_process';
 import { Game, hullSpeed } from '../../src/game/game';
+import { sailingPace } from '../../src/game/travel';
 import { ACTION_BY_ID } from '../../src/game/actions';
 import { fenceScale } from '../../src/game/buildActions';
 import { MATERIAL_BY_ID, wallBill } from '../../src/game/building';
@@ -279,7 +280,8 @@ begin
   v_a := travel_speed(w, u);
   update placed set mark = null where id = v_boat;
   insert into said values ('BOAT', v_t || '|' || v_a || '|' || travel_speed(w, u)
-    || '|' || (select furniture_capacity(pl) from placed pl where pl.id = v_boat) || '|' || skill_of(w, u, 'body_strength'));
+    || '|' || (select furniture_capacity(pl) from placed pl where pl.id = v_boat) || '|' || skill_of(w, u, 'body_strength')
+    || '|' || skill_of(w, u, sailing_skill()));
   update placed set mark = (select mark from item where id = v_it) where id = v_boat;
   insert into said values ('HOLD', (select furniture_capacity(pl) from placed pl where pl.id = v_boat)::text);
   delete from placed where id = v_boat;
@@ -452,10 +454,11 @@ check(`and holds ${Math.round(Number(dCapA) * hold12)} where a plain pine chest 
 check('and picked up again, the mark comes back into the pack with it', dBack !== 'none' && JSON.parse(dBack).hold === hold12 && dGone === '0',
   `${dBack} / ${dGone}`);
 
-const [boatMark, boatFast, boatPlain, boatCap, boatBody] = say('BOAT').split('|');
+const [boatMark, boatFast, boatPlain, boatCap, boatBody, boatSailing] = say('BOAT').split('|');
 const rower = furnitureDef('rowing_boat');
 // As fast as she goes at her best, which is what the island holds a hull to: see supabase/test/pace.ts.
-const rowed = rower.boat ? hullSpeed(rower.boat, 40, Number(boatBody), 1, 0) : 0;
+// And the helm's own Sailing on it, as both sides have it (`sailingPace`).
+const rowed = rower.boat ? hullSpeed(rower.boat, 40, Number(boatBody), 1, 0) * sailingPace(Number(boatSailing)) : 0;
 check(`${P('Keel Layer').name} and ${P('Deep Hold').name}: a rowing boat made with both carries both`,
   boatMark === `${P('Keel Layer').fx['speed:rowing_boat']},${P('Deep Hold').fx['hold:rowing_boat']}`, boatMark);
 check(`and goes ${P('Keel Layer').fx['speed:rowing_boat']} as fast as one without, as the island reckons it`,

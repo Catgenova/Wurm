@@ -109,6 +109,12 @@ export const SKILL_DEFS: SkillDef[] = [
   { id: 'plate_armour', name: 'Plate armour', group: 'Fighting', start: 1 },
   { id: 'climbing', name: 'Climbing', group: 'Skills', start: 1 },
   { id: 'swimming', name: 'Swimming', group: 'Skills', start: 1 },
+  /*
+   * The reins of a cart or a wagon, and the helm of a boat (`travel.ts`):
+   * each makes what it steers go faster, and each is learned by going.
+   */
+  { id: 'driving', name: 'Driving', group: 'Skills', start: 1 },
+  { id: 'sailing', name: 'Sailing', group: 'Skills', start: 1 },
 ];
 
 /**
@@ -130,7 +136,7 @@ export const SKILL_BY_ID = new Map(SKILL_DEFS.map((d) => [d.id, d]));
  * climbing is what that cost you. A line about it after every step would bury
  * the thing you were actually doing.
  */
-export const QUIET_SKILLS: ReadonlySet<string> = new Set(['climbing', 'swimming']);
+export const QUIET_SKILLS: ReadonlySet<string> = new Set(['climbing', 'swimming', 'driving', 'sailing']);
 
 /**
  * Whether a gain says anything about itself, which is a question about the

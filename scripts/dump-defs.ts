@@ -82,6 +82,7 @@ import { VESSELS, LIQUID_NAME, type LiquidKind } from '../src/game/furniture';
 import { isBrew, drinkable } from '../src/game/brewing';
 import { TACK } from '../src/game/creatureActions';
 import { CASTS, FAVOUR_TRICKLE, PRAYER, PRAYER_FAVOUR, PRAYER_GAIN, PRAYER_REST, FAVOUR_CEILING, BLESS_CAP, BLESS_STEP } from '../src/game/faith';
+import { DRIVING, DRIVING_LEARN, DRIVING_TOP, SAILING, SAILING_LEARN, SAILING_TOP, TRAVEL_TOP_AT } from '../src/game/travel';
 import { PATH_LIST, CHOOSE_AT, SIT_REST } from '../src/game/meditation';
 import {
   CLASSES, CLASS_AT, CLASS_CHANGE_COST, CLASS_NODES, CHANNELS as CLASS_CHANNELS, RITES,
@@ -1740,6 +1741,16 @@ for (const [fn, v] of [
 }
 /* The skill a prayer is said with (`PRAYER`), beside faith's own `faith_skill`. */
 out.push(`create or replace function praying_skill() returns text language sql immutable as $fn$ select ${q(PRAYER)} $fn$;`);
+/* Driving and sailing (`travel.ts`): the skills, what each adds to the pace at 100, and what a tile gone into teaches. */
+for (const [fn, v] of [['driving_skill', DRIVING], ['sailing_skill', SAILING]] as Array<[string, string]>) {
+  out.push(`create or replace function ${fn}() returns text language sql immutable as $fn$ select ${q(v)} $fn$;`);
+}
+for (const [fn, v] of [
+  ['driving_top', DRIVING_TOP], ['sailing_top', SAILING_TOP], ['travel_top_at', TRAVEL_TOP_AT],
+  ['driving_learn', DRIVING_LEARN], ['sailing_learn', SAILING_LEARN],
+] as Array<[string, number]>) {
+  out.push(`create or replace function ${fn}() returns double precision language sql immutable as $fn$ select ${q(v)}::double precision $fn$;`);
+}
 for (const w of WALL_TYPES) {
   out.push(`insert into wall_type_def values (${q(w.id)}, ${q(w.name)}, ${q(w.factor)}, ${q(w.passable)}, ${q(w.height ?? null)}, ${q(!!w.low)}, ${q(!!w.railed)}, ${q(!!w.standalone)});`);
   if (w.beastProof) out.push(`update wall_type_def set beast_proof = true where id = ${q(w.id)};`);

@@ -17,6 +17,7 @@ import { WORLD_PACE } from '../../game/pace';
 import { SKILL_BY_ID, skillGain } from '../../game/skills';
 import { favourCap, PRAYER_GAIN, PRAYER_PEAKS, PRAYER_REST, prayerWorth } from '../../game/faith';
 import { tryGain } from '../../game/learn';
+import { DRIVING_TOP, drivingPace, SAILING_TOP, sailingPace, TRAVEL_TOP_AT } from '../../game/travel';
 import { deckBill, metres, PIER_CLEAR, PIER_DROP, PIER_WALL_DROP, PIER_WATER } from '../../game/piers';
 import { TILE_DEFS, TileType, TREE_AGES, TREE_DAWN_UTC, TREE_DEFS } from '../../world/tiles';
 import { SEASON_DAYS, seasonLine, YEAR_DAYS, YEAR_FROM } from '../../world/calendar';
@@ -1090,6 +1091,18 @@ export const NEWS: News[] = [
         `Prayer is a skill of its own, and everybody starts it at ${low}. Each prayer trains Prayer by about +${skillGain(low, tryGain(true), 1).toFixed(1)} and Faith by about +${skillGain(low, PRAYER_GAIN, 1).toFixed(1)}, at ${low}.`,
         `Prayer sets the favour a prayer banks: at a quality ${altar} altar at ${String(PRAYER_PEAKS[0]).padStart(2, '0')}:00, ${banks(low)} at Prayer ${low} and ${banks(high)} at Prayer ${high}. Faith no longer adds to it.`,
         `Faith sets the most favour you can hold: ${Math.floor(favourCap(low))} at Faith ${low} and ${Math.floor(favourCap(high))} at Faith ${high}.`,
+      ];
+    },
+  },
+  {
+    n: 83,
+    day: '2026-10-05',
+    lines: () => {
+      const mid = TRAVEL_TOP_AT / 2;
+      return [
+        `Driving is a new skill: the team's pace on a cart or wagon you have the reins of is ${percent(drivingPace(mid) - 1)} faster at Driving ${mid} and ${percent(DRIVING_TOP)} faster at ${TRAVEL_TOP_AT}.`,
+        `Sailing is a new skill: any boat you have the helm of, rowed or sailed, goes ${percent(sailingPace(mid) - 1)} faster at Sailing ${mid} and ${percent(SAILING_TOP)} faster at ${TRAVEL_TOP_AT}.`,
+        'Each trains on every tile the cart or the boat goes into with you at the reins or the helm.',
       ];
     },
   },
