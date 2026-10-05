@@ -690,6 +690,9 @@ game.deed = { name: 'Latecomer', x: 21, y: 26, radius: 5, level: 1, mine: true }
 game.inventory.add('mallet', { ql: 40 });
 game.inventory.add('rake', { ql: 40 });
 game.setPerks({});
+// The island's carpentry: a storey over plank wants 10, and at a fifth of the gain the goes made
+// here no longer carry a body there from where it starts (run 922).
+game.skills.values.set('carpentry', 50);
 game.productQl = () => 40;
 const at = (x: number, y: number, extra: Record<string, unknown> = {}): Target => ({ kind: 'tile', x, y, cx: x, cy: y, ...extra } as Target);
 const ask = (id: string, t: Target): string => ACTION_BY_ID.get(id)!.check?.(t, game) ?? 'ALLOWED';
