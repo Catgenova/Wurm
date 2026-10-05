@@ -14,7 +14,7 @@ import { COUNTER_HOLDS, COUNTER_REACH, COUNTER_WALL } from '../../game/counters'
 import { candleBurn, lanternReach } from '../../game/light';
 import { flameSources } from '../../game/lantern';
 import { WORLD_PACE } from '../../game/pace';
-import { SKILL_BY_ID, skillGain } from '../../game/skills';
+import { GAIN_RATE, MIN_GAIN, SKILL_BY_ID, skillGain } from '../../game/skills';
 import { favourCap, PRAYER_GAIN, PRAYER_PEAKS, PRAYER_REST, prayerWorth } from '../../game/faith';
 import { tryGain } from '../../game/learn';
 import { DRIVING_TOP, drivingPace, SAILING_TOP, sailingPace, TRAVEL_TOP_AT } from '../../game/travel';
@@ -1103,6 +1103,18 @@ export const NEWS: News[] = [
         `Driving is a new skill: the team's pace on a cart or wagon you have the reins of is ${percent(drivingPace(mid) - 1)} faster at Driving ${mid} and ${percent(DRIVING_TOP)} faster at ${TRAVEL_TOP_AT}.`,
         `Sailing is a new skill: any boat you have the helm of, rowed or sailed, goes ${percent(sailingPace(mid) - 1)} faster at Sailing ${mid} and ${percent(SAILING_TOP)} faster at ${TRAVEL_TOP_AT}.`,
         'Each trains on every tile the cart or the boat goes into with you at the reins or the helm.',
+      ];
+    },
+  },
+  {
+    n: 84,
+    day: '2026-10-05',
+    lines: () => {
+      const go = (v: number): string => skillGain(v, tryGain(true), 1).toFixed(v < 50 ? 2 : 3);
+      return [
+        `Every skill now rises at ${share(GAIN_RATE)} of the pace it did: every gain, yours and your workers' and your wildermon's, is ${share(GAIN_RATE)} of what it was.`,
+        `A job that comes off is worth about +${go(1)} at level 1, +${go(50)} at 50 and +${go(90)} at 90, and the last point of a skill takes about ${numberWord(Math.round(1 / (MIN_GAIN * GAIN_RATE)))} goes.`,
+        'What you have already learned stays where it is.',
       ];
     },
   },

@@ -22,7 +22,7 @@ import { execFileSync } from 'node:child_process';
 import { Game, queueCapAt } from '../../src/game/game';
 import { RECIPE_BY_ID } from '../../src/game/recipes';
 import { RECIPE_ACTIONS } from '../../src/game/recipes';
-import { SKILL_DEFS, isQuiet } from '../../src/game/skills';
+import { GAIN_RATE, MIN_GAIN, SKILL_DEFS, isQuiet, skillGain } from '../../src/game/skills';
 import { TRY_LEARN } from '../../src/game/learn';
 
 const psql = (sql: string): string =>
@@ -264,6 +264,27 @@ check('the skills that say nothing about themselves are the same list on both si
   `${quietHere.length} of them: ${quietHere.join(', ')}`);
 check('and every trade is a loud one', SKILL_DEFS.filter((d) => d.group !== 'Characteristics' && !isQuiet(d.id)).length > 30,
   `${SKILL_DEFS.filter((d) => !isQuiet(d.id)).length} skills narrate themselves`);
+
+/*
+ * Every gain at the one rate, on both sides: the curve, the floor under it and
+ * the roll, then `GAIN_RATE` -- a fifth since everything was asked for five
+ * times slower, a body's and a worker's alike, which is why it is held here
+ * rather than at any one trade.
+ */
+const GRID = [1, 20, 50, 90, 99, 99.95].flatMap((v) => [0.003, 0.3, 1, 1.4].flatMap((b) => [0.6, 1, 1.4].map((r) => [v, b, r])));
+const there = psql(`select gain_rate() || ';' || string_agg(skill_gain_of(v, b, r)::text, ' ' order by i)
+  from unnest(array[${GRID.map((g) => g[0]).join(', ')}]::double precision[], array[${GRID.map((g) => g[1]).join(', ')}]::double precision[],
+              array[${GRID.map((g) => g[2]).join(', ')}]::double precision[]) with ordinality t(v, b, r, i)`).split(';');
+const gains = there[1].split(' ').map(Number);
+check(`every gain is ${GAIN_RATE} of the curve, floor and all, the same on both sides`,
+  Number(there[0]) === GAIN_RATE && gains.length === GRID.length
+    && GRID.every(([v, b, r], i) => Math.abs(gains[i] - skillGain(v, b, r)) <= 1e-12 * Math.max(1, skillGain(v, b, r)))
+    && Math.abs(skillGain(99.95, 1, 1) - MIN_GAIN * GAIN_RATE) < 1e-15,
+  `rate ${there[0]}; one go at level 1 ${gains[GRID.findIndex(([v, b, r]) => v === 1 && b === 1 && r === 1)]} on the island, ${skillGain(1, 1, 1)} in the browser`);
+const fn = psql(`select string_agg(p.proname, ',' order by p.proname) from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+  where n.nspname = 'public' and p.prokind = 'f' and p.prosrc ilike '%skill_gain_of(%'`);
+check('and a body learns by it and a worker learns by it, and nothing on the island learns any other way',
+  fn === 'skill_raise,worker_learn', fn);
 
 for (const line of [...ok, ...bad]) console.log(line);
 if (bad.length) {

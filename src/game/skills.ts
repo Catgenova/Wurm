@@ -120,11 +120,11 @@ export const SKILL_DEFS: SkillDef[] = [
 /**
  * How steeply gains fall away as a skill fills up.
  *
- * The share of a gain that survives is the room left, raised to this. The
- * first point of a skill comes in two or three swings of a pick; the ninetieth
- * takes a hundred and fifty; the hundredth takes ten thousand, which is the
- * point — nobody finishes a skill by accident, and the last stretch of one is
- * a standing target rather than a thing you tick off.
+ * The share of a gain that survives is the room left, raised to this. At
+ * `GAIN_RATE` the first point of a skill comes in about six goes that come
+ * off; the ninetieth takes about three hundred; the hundredth over forty
+ * thousand, which is the point — nobody finishes a skill by accident, and the
+ * last stretch of one is a standing target rather than a thing you tick off.
  */
 /** Every skill by its id, for anything that has an id and wants the name. */
 export const SKILL_BY_ID = new Map(SKILL_DEFS.map((d) => [d.id, d]));
@@ -158,15 +158,24 @@ export const SKILL_CURVE = 1.8;
 export const skillRoom = (v: number): number => Math.pow(Math.max(0, 1 - v / 100), SKILL_CURVE);
 
 /**
- * The least an honest go at something is worth. Without it the curve never
- * quite arrives: gains would shrink towards nothing and a hundred would be a
- * number nobody could reach. With it, the last point of a skill is ten
- * thousand goes away and no further, which is punishing rather than pointless.
+ * The least an honest go at something is worth, before `GAIN_RATE`. Without
+ * it the curve never quite arrives: gains would shrink towards nothing and a
+ * hundred would be a number nobody could reach. With it, the last point of a
+ * skill is `1 / (MIN_GAIN * GAIN_RATE)` goes away and no further, which is
+ * punishing rather than pointless.
  */
 export const MIN_GAIN = 0.0001;
 
-/** One gain: the curve, floored, and then luck of a fifth either way. */
-export const skillGain = (v: number, base: number, roll: number): number => Math.max(MIN_GAIN, base * skillRoom(v)) * roll;
+/**
+ * What every gain is worth against the curve, for everybody: every skill and
+ * every characteristic, a body's and a worker's alike, floor included. A
+ * fifth since 5 October 2026, when it was asked for five times slower across
+ * the board. The island's `gain_rate`, emitted from here.
+ */
+export const GAIN_RATE = 0.2;
+
+/** One gain: the curve, floored, then luck of a fifth either way, at `GAIN_RATE`. */
+export const skillGain = (v: number, base: number, roll: number): number => Math.max(MIN_GAIN, base * skillRoom(v)) * roll * GAIN_RATE;
 
 export class Skills {
   values = new Map<string, number>();

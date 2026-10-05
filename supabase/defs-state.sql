@@ -4487,6 +4487,7 @@ create or replace function bless_step() returns double precision language sql im
 create or replace function choose_at() returns double precision language sql immutable as $fn$ select 5::double precision $fn$;
 create or replace function sit_rest() returns double precision language sql immutable as $fn$ select 1800::double precision $fn$;
 create or replace function praying_skill() returns text language sql immutable as $fn$ select 'praying' $fn$;
+create or replace function gain_rate() returns double precision language sql immutable as $fn$ select 0.2::double precision $fn$;
 create or replace function driving_skill() returns text language sql immutable as $fn$ select 'driving' $fn$;
 create or replace function sailing_skill() returns text language sql immutable as $fn$ select 'sailing' $fn$;
 create or replace function driving_top() returns double precision language sql immutable as $fn$ select 0.25::double precision $fn$;

@@ -81,7 +81,7 @@ import { BASE_SPEED, CARRY_CRAWL, CLIMB_LEARN_FROM, CLIMB_PER_LEVEL, MAX_STAND, 
 import { deckBill, PIER_CLEAR, PIER_DROP, PIER_WALL_DROP, PIER_WATER } from '../../game/piers';
 import { POST_LIFE_MAX, POST_LIFE_MIN, postRadius } from '../../game/posts';
 import { CRAFT_REACH, RECIPE_BY_ID, RECIPES, TRADE_BOOK_AT, TRADE_BOOK_SKILLS } from '../../game/recipes';
-import { MIN_GAIN, SKILL_BY_ID, skillGain } from '../../game/skills';
+import { GAIN_RATE, MIN_GAIN, SKILL_BY_ID, skillGain } from '../../game/skills';
 import { SMELTER_H, SMELTER_W } from '../../game/smelter';
 import { KNACK_BONUS, KNACK_CAP, KNACK_HOME, KNACK_ODDS, TITLE_STEPS, titlesFor } from '../../game/titles';
 import { CHECK_EVERY, CREEL_BAIT_LOSS, creelOdds, HUNTER_TRAPPED, TIMID_TRAPPED, TRAPS } from '../../game/traps';
@@ -2721,7 +2721,7 @@ export function helpText(): string {
     <p><b>What a gain is worth falls away as the skill fills.</b> An ordinary action gives about
     ${listed(GAIN_AT.map((v, i) => `<b>${gainSaid(v)}</b> at ${i === 0 ? 'level ' : ''}${v}`))} &mdash;
     ${numberWord(Math.round(1 / gainAt(GAIN_AT[0])))} goes for the first point of a skill, ${numberWord(Math.round(1 / gainAt(GAIN_AT[2])))} for the point after
-    ${GAIN_AT[2]}, and something like <b>${numberWord(Math.round(1 / MIN_GAIN))}</b> for the last. Nobody finishes a skill in passing; the last
+    ${GAIN_AT[2]}, and something like <b>${numberWord(Math.round(1 / (MIN_GAIN * GAIN_RATE)))}</b> for the last. Nobody finishes a skill in passing; the last
     point of one is a thing to go after on purpose, and the log shows it moving at the fourth place
     after the point while you do.</p>
     <h3>Garden steps, rose arches and flags</h3>
