@@ -1,6 +1,6 @@
 import {
-  ACTION_BY_ID, CHIP_CHANCE, CLEARED_TO, FRUIT_MATURE, FRUIT_OLD, GLAZE_ASH, KIT_MEND, MINE_COLLAPSE, MINE_DEPTH, MOSS_PER_CUT, MOSS_PLANT, PROSPECT_REACH,
-  PROSPECT_STEP, REPAIR_FLOOR, repairGo, RESIN_TREE,
+  ACTION_BY_ID, CHIP_CHANCE, CLEARED_TO, FRUIT_MATURE, FRUIT_OLD, GLAZE_ASH, GRASS_PER_CUT, GRASS_PLANT, KIT_MEND, MINE_COLLAPSE, MINE_DEPTH, MOSS_PER_CUT, MOSS_PLANT,
+  PROSPECT_REACH, PROSPECT_STEP, REPAIR_FLOOR, repairGo, RESIN_TREE,
 } from '../../game/actions';
 import { CIRCLET_SHARE, CIRCLET_STONES, GEM_ODDS, GEMS, JEWEL_BONUS, tradeName } from '../../game/gems';
 import { ANVIL_SUBTILES } from '../../game/anvil';
@@ -2680,6 +2680,9 @@ export function helpText(): string {
     and like cut grass it cannot be cut again until it has grown back. Digging its corner gives dirt. <b>Plant moss</b> on a
     tile of <b>dirt</b> that is not under water takes <b>${MOSS_PLANT} moss</b> from your pack and turns the tile to moss;
     it is farm work, and on a settlement it is one of the jobs the border speaks for.</p>
+    <p>Dirt never grows grass back of itself. <b>Plant grass</b> on a tile of <b>dirt</b> that is not under water takes
+    <b>${GRASS_PLANT} mixed grass</b> from your pack and turns the tile to grass; like planting moss, it is farm work, and on a
+    settlement it is one of the jobs the border speaks for. <b>Cut grass</b> gives <b>${numberWord(GRASS_PER_CUT)}</b> mixed grass a cut.</p>
     <p><b>Packing</b> is what makes a floor of the ground. A shovel treads <b>grass, dirt, lawn, steppe,
     tundra or moss</b> down into <b>packed dirt</b>: on sod it cuts the turf away first. Packed dirt is
     what a building wants under it, and it is the only thing <b>paving</b> will go on &mdash; both

@@ -59,7 +59,7 @@
  */
 import { execFileSync } from 'node:child_process';
 import { Game } from '../../src/game/game';
-import { ACTION_BY_ID, MOSS_PLANT, type Target } from '../../src/game/actions';
+import { ACTION_BY_ID, GRASS_PLANT, MOSS_PLANT, type Target } from '../../src/game/actions';
 import { BUILD_ACTION_BY_ID } from '../../src/game/buildActions';
 import { CRATE_ACTIONS } from '../../src/game/crates';
 import { MATERIALS, isDone } from '../../src/game/building';
@@ -564,6 +564,7 @@ rollback;`));
     ['planting a water lily under it', 'plant_lily', tile(3, 44), jt(3, 44), [4.5, 44.5]],
     ['planting a sprout under the bank house, from beside it', 'plant', tile(27, 58), jt(27, 58), [27.5, 57.5]],
     ['planting moss on the dirt under it', 'plant_moss', tile(28, 58), jt(28, 58), [28.5, 57.5]],
+    ['planting grass on the dirt under it', 'plant_grass', tile(28, 58), jt(28, 58), [28.5, 57.5]],
     ['mining a face at one of its corners', 'mine', { kind: 'tile', x: 27, y: 59, cx: 27, cy: 59 } as Target, `jsonb_build_object('kind', 'tile', 'x', 27, 'y', 59, 'cx', 27, 'cy', 59)`, [27.5, 59.5]],
   ];
   const island = answers(psql(`
@@ -577,6 +578,7 @@ begin
   perform give(w, me, 'lily_root', 1, 50);
   perform give(w, me, 'sprout', 1, 50);
   perform give(w, me, 'moss', ${MOSS_PLANT}, 50);
+  perform give(w, me, 'mixed_grass', ${GRASS_PLANT}, 50);
   perform give(w, me, 'dirt', 1, 50);
   -- Dirt under the bank house, and bare rock beside it.
   perform land_set_tile(w, 28, 58, ${TileType.Dirt});
@@ -620,6 +622,7 @@ rollback;`));
   g.inventory.add('lily_root', { ql: 50 });
   g.inventory.add('sprout', { ql: 50, extra: 'Oak' });
   g.inventory.add('moss', { ql: 50, count: MOSS_PLANT });
+  g.inventory.add('mixed_grass', { ql: 50, count: GRASS_PLANT });
   const dirt = g.inventory.add('dirt', { ql: 50 });
   g.world.setTile(28, 58, TileType.Dirt, 0);
   g.world.setTile(27, 59, TileType.Rock, 0);

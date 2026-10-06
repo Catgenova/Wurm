@@ -1201,6 +1201,7 @@ delete from action_def;
 insert into action_def (id, label, verb, skill, tool, corner, range, stamina, base_time, difficulty, instant, repeatable) values ('examine', 'Examine', 'examining', null, null, false, null, 0, 0, null, true, false);
 insert into action_def (id, label, verb, skill, tool, corner, range, stamina, base_time, difficulty, instant, repeatable) values ('collect', 'Collect', 'filling a shovel', 'digging', 'shovel', false, 0, 0.05, 7, 6, false, false);
 insert into action_def (id, label, verb, skill, tool, corner, range, stamina, base_time, difficulty, instant, repeatable) values ('plant_moss', 'Plant moss', 'planting moss', 'farming', null, false, null, 0.03, 5, null, false, false);
+insert into action_def (id, label, verb, skill, tool, corner, range, stamina, base_time, difficulty, instant, repeatable) values ('plant_grass', 'Plant grass', 'planting grass', 'farming', null, false, null, 0.03, 5, null, false, false);
 insert into action_def (id, label, verb, skill, tool, corner, range, stamina, base_time, difficulty, instant, repeatable) values ('dig_worms', 'Turn it over for worms', 'turning the dirt over', 'digging', 'shovel', false, null, 0.04, 6, null, false, true);
 insert into action_def (id, label, verb, skill, tool, corner, range, stamina, base_time, difficulty, instant, repeatable) values ('dig', 'Dig', 'digging', 'digging', 'shovel', true, null, 0.05, 6, 8, false, false);
 insert into action_def (id, label, verb, skill, tool, corner, range, stamina, base_time, difficulty, instant, repeatable) values ('dig_tile', 'Dig out the tile', 'digging out the tile', 'digging', 'shovel', false, null, 0.12, 16, 8, false, false);
@@ -2675,6 +2676,7 @@ update item_def set description = 'Set it into one of the 3 ancient sockets of t
 update item_def set description = 'A closed clay lamp with a wick hole. It still smells faintly of oil.' where id = 'old_lamp';
 update item_def set description = 'A disc of bronze polished on one face. It gives back a dim, honest likeness.' where id = 'bronze_mirror';
 update item_def set description = 'Fine teeth cut in old bone. Somebody took a great deal of trouble over it.' where id = 'bone_comb';
+update item_def set description = 'Cutting a grass tile gives two; plant 10 of it on a tile of dirt and the tile is grass.' where id = 'mixed_grass';
 update item_def set food = 0.01 where id = 'sage';
 insert into item_feeds values ('sage', 'greens', 0.01);
 update item_def set food = 0.01 where id = 'basil';
@@ -2975,6 +2977,7 @@ create or replace function glazeable(p_def text) returns boolean language sql im
 create or replace function tincture_bonus() returns double precision language sql immutable as $fn$ select 0.1::double precision $fn$;
 create or replace function tincture_seconds() returns double precision language sql immutable as $fn$ select 3000::double precision $fn$;
 create or replace function moss_plant() returns int language sql immutable as $fn$ select 10::int $fn$;
+create or replace function grass_plant() returns int language sql immutable as $fn$ select 10::int $fn$;
 insert into title_def values ('digging:50', 'digging', 50, 'Digger');
 insert into title_def values ('digging:70', 'digging', 70, 'Excavator');
 insert into title_def values ('digging:90', 'digging', 90, 'Master Excavator');

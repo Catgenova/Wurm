@@ -1934,7 +1934,7 @@ jobs:
             --outfile=node_modules/.cache/baubles.mjs --log-level=error
           node node_modules/.cache/baubles.mjs
 
-      - name: Dirt is collected, moss cut and moss planted on dirt, the same on both sides
+      - name: Dirt is collected, moss cut, and moss and grass planted on dirt, the same on both sides
         run: |
           # Asked for: collect dirt on its tile, as clay and sand are collected;
           # moss cut off a moss tile as grass is cut, giving moss; and ten moss
@@ -1943,7 +1943,9 @@ jobs:
           # still gives dirt), keep a cut tile short until it grows back, and
           # turn the dirt to moss for the same moss. And a tile of dirt dug
           # bare still shows the rock on both sides, where a bed of sand stays
-          # sand: dirt is collected from, but it is not a bed.
+          # sand: dirt is collected from, but it is not a bed. Then, after a
+          # player found no way to plant grass: as much mixed grass as moss
+          # planted on dirt turns it to grass, refused in the same words.
           npx esbuild supabase/test/moss.ts --bundle --platform=node --format=esm \
             --outfile=node_modules/.cache/moss.mjs --log-level=error
           node node_modules/.cache/moss.mjs

@@ -100,7 +100,7 @@ import { DAWN, DUSK, DAY_SECONDS, CARRY_BASE, CARRY_PER_STRENGTH, CARRY_STOP } f
 import { CARRY_CRAWL } from '../src/game/player';
 import { RELICS, DIGGABLE } from '../src/game/archaeology';
 import { isSeam } from '../src/world/tiles';
-import { CHIP_CHANCE, KIT_MEND, MOSS_PLANT, TRY_LEARN } from '../src/game/actions';
+import { CHIP_CHANCE, GRASS_PLANT, KIT_MEND, MOSS_PLANT, TRY_LEARN } from '../src/game/actions';
 import { BRAZIER_BURN_AT_HUNDRED, BRAZIER_BURN_AT_ONE, BRAZIER_CAPACITY } from '../src/game/placeables';
 import { CARE_BONUS, CARE_HOURS, GRAZE_FILL, GRAZE_HUNGRY, PER_REGION, WILD_TARGET } from '../src/game/creatures';
 import {
@@ -1228,6 +1228,8 @@ out.push(`create or replace function tincture_bonus() returns double precision l
 out.push(`create or replace function tincture_seconds() returns double precision language sql immutable as $fn$ select ${q(TINCTURE_SECONDS)}::double precision $fn$;`);
 /* Moss planted on a tile of dirt to turn it to moss (`MOSS_PLANT`). */
 out.push(`create or replace function moss_plant() returns int language sql immutable as $fn$ select ${q(MOSS_PLANT)}::int $fn$;`);
+/* Mixed grass planted on a tile of dirt to turn it to grass (`GRASS_PLANT`). */
+out.push(`create or replace function grass_plant() returns int language sql immutable as $fn$ select ${q(GRASS_PLANT)}::int $fn$;`);
 for (const t of TITLES) out.push(`insert into title_def values (${q(t.id)}, ${q(t.skill)}, ${q(t.at)}, ${q(t.name)});`);
 for (const [skill, family] of FAMILY_OF) out.push(`insert into knack_kin values (${q(skill)}, ${q(family)});`);
 for (const [cat, per] of Object.entries(CATEGORY_DECAY)) out.push(`insert into category_decay values (${q(cat)}, ${q(per)});`);

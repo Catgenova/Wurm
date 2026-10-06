@@ -2213,6 +2213,9 @@ import{$a as e,Br as t,Ci as n,Cn as r,Di as i,Dn as a,Dt as o,En as s,F as c,Fa
     and like cut grass it cannot be cut again until it has grown back. Digging its corner gives dirt. <b>Plant moss</b> on a
     tile of <b>dirt</b> that is not under water takes <b>10 moss</b> from your pack and turns the tile to moss;
     it is farm work, and on a settlement it is one of the jobs the border speaks for.</p>
+    <p>Dirt never grows grass back of itself. <b>Plant grass</b> on a tile of <b>dirt</b> that is not under water takes
+    <b>10 mixed grass</b> from your pack and turns the tile to grass; like planting moss, it is farm work, and on a
+    settlement it is one of the jobs the border speaks for. <b>Cut grass</b> gives <b>${e(2)}</b> mixed grass a cut.</p>
     <p><b>Packing</b> is what makes a floor of the ground. A shovel treads <b>grass, dirt, lawn, steppe,
     tundra or moss</b> down into <b>packed dirt</b>: on sod it cuts the turf away first. Packed dirt is
     what a building wants under it, and it is the only thing <b>paving</b> will go on &mdash; both

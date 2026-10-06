@@ -764,6 +764,13 @@ export const KIT_MEND = 50;
  */
 export const MOSS_PLANT = 10;
 describeFrom('moss', { moss: { cut: MOSS_PER_CUT, plant: MOSS_PLANT } });
+/**
+ * Mixed grass planted on a tile of dirt to turn it to grass, as moss is: this
+ * many, pressed in at once. Dirt never grows grass back of itself, and a
+ * player found no way to put it back. The island's `grass_plant`.
+ */
+export const GRASS_PLANT = MOSS_PLANT;
+describeFrom('mixed_grass', { grass: { cut: GRASS_PER_CUT, plant: GRASS_PLANT } });
 describeFrom('repair_kit', { mend: KIT_MEND });
 /** Whether a thing could take a seal: anything but the sealant itself, and nothing sealed already. */
 const sealable = (item: Item): boolean => item.id !== 'sealant' && item.mark?.seal === undefined;
@@ -933,6 +940,32 @@ export const ACTIONS: ActionDef[] = [
       g.inventory.consume('moss', MOSS_PLANT);
       g.world.setTile(t.x, t.y, TileType.Moss);
       g.logMsg(`You plant ${MOSS_PLANT} moss and the dirt is moss now.`, 'event');
+    },
+  },
+  {
+    // Mixed grass pressed into bare dirt, `GRASS_PLANT` of it at once, turns
+    // the tile to grass, as moss is planted: the island's `perform_farm`.
+    id: 'plant_grass',
+    label: 'Plant grass',
+    verb: 'planting grass',
+    skill: 'farming',
+    stamina: 0.03,
+    baseTime: 5,
+    applies: (t, g) => t.kind === 'tile' && g.world.getTile(t.x, t.y) === TileType.Dirt && g.inventory.count('mixed_grass') > 0,
+    check: (t, g) => {
+      if (t.kind !== 'tile') return null;
+      if (g.world.getTile(t.x, t.y) !== TileType.Dirt) return 'Grass is planted on a tile of dirt.';
+      if (g.world.hasWater(t.x, t.y)) return 'You cannot plant grass underwater.';
+      const have = g.inventory.count('mixed_grass');
+      if (have < GRASS_PLANT) return `It takes ${GRASS_PLANT} mixed grass to plant a tile; you have ${have}.`;
+      return underBuilding(g, t.x, t.y);
+    },
+    perform: (t, g) => {
+      if (t.kind !== 'tile') return;
+      if (g.world.getTile(t.x, t.y) !== TileType.Dirt || g.inventory.count('mixed_grass') < GRASS_PLANT) return;
+      g.inventory.consume('mixed_grass', GRASS_PLANT);
+      g.world.setTile(t.x, t.y, TileType.Grass);
+      g.logMsg(`You plant ${GRASS_PLANT} mixed grass and the dirt is grass now.`, 'event');
     },
   },
   {
@@ -3070,7 +3103,7 @@ export const ACTIONS: ActionDef[] = [
 const SHAPES_GROUND = new Set(['dig', 'dredge', 'flatten', 'drop_dirt', 'drop_dirt_here', 'raise_rock',
   'mine', 'chip_corner', 'pack', 'cultivate', 'pave_cobble', 'pave_slabs', 'remove_paving',
   'dig_spring', 'stop_spring', 'dig_pool', 'fill_pool',
-  'lay_steps', 'lay_timber_steps', 'take_up_steps', 'plant_moss',
+  'lay_steps', 'lay_timber_steps', 'take_up_steps', 'plant_moss', 'plant_grass',
   // Stepping stones laid and taken up, and a water lily or a lotus planted or pulled up.
   'lay_stones', 'lift_stones', 'plant_lily', 'plant_lotus', 'pull_water_plant']);
 for (const def of ACTIONS) {

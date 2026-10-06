@@ -15,6 +15,9 @@
  *   * Plant moss takes `MOSS_PLANT` moss from the pack and turns a tile of
  *     dirt to moss, refused in the same words when there is too little moss,
  *     when the tile is not dirt and when it is under water;
+ *   * and Plant grass, asked after a player found no way to plant grass, takes
+ *     `GRASS_PLANT` mixed grass and turns a tile of dirt to grass, uncut and
+ *     unpicked, refused in the same words as moss is;
  *   * a tile of dirt dug to its last spadeful shows the rock under it on both
  *     sides, as it did before dirt could be collected from, while a bed of
  *     sand stays sand;
@@ -24,7 +27,8 @@
  */
 import { execFileSync } from 'node:child_process';
 import { Game } from '../../src/game/game';
-import { ACTION_BY_ID, MOSS_PER_CUT, MOSS_PLANT, type Target } from '../../src/game/actions';
+import { ACTION_BY_ID, GRASS_PER_CUT, GRASS_PLANT, MOSS_PER_CUT, MOSS_PLANT, type Target } from '../../src/game/actions';
+import { itemDef } from '../../src/game/items';
 import { numberWord } from '../../src/game/words';
 import { TILE_DEFS, TileType } from '../../src/world/tiles';
 
@@ -52,6 +56,8 @@ const DIRT = [3, 3] as const;
 const MOSS = [5, 3] as const;
 const GRASS = [7, 3] as const;
 const WET = [9, 3] as const;
+/** A second tile of dirt, for grass to be planted on once the first is moss. */
+const PATCH = [5, 5] as const;
 /** A tile of dirt and a bed of sand, each with no soil left on any corner. */
 const BARE_DIRT = [3, 5] as const;
 const BARE_SAND = [7, 5] as const;
@@ -143,6 +149,22 @@ begin
   perform perform_farm(w, u, 'plant_moss', ${tileT(DIRT)});
   insert into said values ('PLANTED', land_tile(w, ${DIRT[0]}, ${DIRT[1]}) || '|' || ${count('moss')});
   insert into said values ('SAID', ${lastSaid('You plant')});
+
+  /* Plant grass: a cut's worth of mixed grass is too little, then the wrong ground, under water, and done. */
+  perform land_set_tile(w, ${PATCH[0]}, ${PATCH[1]}, tile_id('Dirt'));
+  perform give(w, u, 'mixed_grass', ${GRASS_PER_CUT}, 50);
+  ${stand(PATCH)}
+  insert into said values ('G_FEW', ${refused('plant_grass', PATCH)});
+  perform give(w, u, 'mixed_grass', ${GRASS_PLANT - GRASS_PER_CUT}, 50);
+  ${stand(GRASS)}
+  insert into said values ('G_NOT_DIRT', ${refused('plant_grass', GRASS)});
+  ${stand(WET)}
+  insert into said values ('G_WET', ${refused('plant_grass', WET)});
+  ${stand(PATCH)}
+  insert into said values ('G_REF', ${refused('plant_grass', PATCH)});
+  perform perform_farm(w, u, 'plant_grass', ${tileT(PATCH)});
+  insert into said values ('G_PLANTED', land_tile(w, ${PATCH[0]}, ${PATCH[1]}) || '|' || land_data(w, ${PATCH[0]}, ${PATCH[1]}) || '|' || ${count('mixed_grass')});
+  insert into said values ('G_SAID', ${lastSaid('You plant')});
 end $$;
 select k || E'\\t' || coalesce(v, 'null') from said;
 rollback;
@@ -187,6 +209,16 @@ const [plantedTile, left] = say('PLANTED').split('|');
 check(`with ${MOSS_PLANT} moss the dirt turns to moss and the moss is used up`,
   say('PLANT_REF') === 'ALLOWED' && Number(plantedTile) === TileType.Moss && left === '0', `${say('PLANT_REF')} / ${say('PLANTED')}`);
 check('and it says so', say('SAID') === `You plant ${MOSS_PLANT} moss and the dirt is moss now.`, say('SAID'));
+
+check(`Plant grass with ${GRASS_PER_CUT} mixed grass is refused for want of ${GRASS_PLANT}`,
+  say('G_FEW') === `It takes ${GRASS_PLANT} mixed grass to plant a tile; you have ${GRASS_PER_CUT}.`, say('G_FEW'));
+check('and on grass, for it is not dirt', say('G_NOT_DIRT') === 'Grass is planted on a tile of dirt.', say('G_NOT_DIRT'));
+check('and under water', say('G_WET') === 'You cannot plant grass underwater.', say('G_WET'));
+const [grassTile, grassData, grassLeft] = say('G_PLANTED').split('|');
+check(`with ${GRASS_PLANT} mixed grass the dirt turns to grass, uncut and unpicked, and the mixed grass is used up`,
+  say('G_REF') === 'ALLOWED' && Number(grassTile) === TileType.Grass && grassData === '0' && grassLeft === '0',
+  `${say('G_REF')} / ${say('G_PLANTED')}`);
+check('and it says so', say('G_SAID') === `You plant ${GRASS_PLANT} mixed grass and the dirt is grass now.`, say('G_SAID'));
 
 /* ---- the browser ----------------------------------------------------------- */
 const game = Game.create(4405);
@@ -244,9 +276,31 @@ check(`the browser turns the dirt to moss and uses up ${MOSS_PLANT} moss`,
   w.getTile(DIRT[0], DIRT[1]) === TileType.Moss && game.inventory.count('moss') === 0);
 check('and digging a moss tile still gives dirt', TILE_DEFS[TileType.Moss].digYield === 'dirt');
 
+const sow = ACTION_BY_ID.get('plant_grass')!;
+w.setTile(PATCH[0], PATCH[1], TileType.Dirt);
+check('Plant grass is not offered to somebody carrying no mixed grass', !sow.applies(at(PATCH), game));
+game.inventory.add('mixed_grass', { ql: 50, count: GRASS_PER_CUT });
+check('and is offered on dirt to somebody carrying some, and not on grass or moss',
+  sow.applies(at(PATCH), game) && !sow.applies(at(GRASS), game) && !sow.applies(at(MOSS), game));
+check('and refused in the island\'s words for want of mixed grass', sow.check?.(at(PATCH), game) === say('G_FEW'), String(sow.check?.(at(PATCH), game)));
+game.inventory.add('mixed_grass', { ql: 50, count: GRASS_PLANT - GRASS_PER_CUT });
+check('in the island\'s words on ground that is not dirt, and under water',
+  sow.check?.(at(GRASS), game) === say('G_NOT_DIRT') && sow.check?.(at(WET), game) === say('G_WET'),
+  `${sow.check?.(at(GRASS), game)} / ${sow.check?.(at(WET), game)}`);
+check('and allowed with enough on dry dirt', (sow.check?.(at(PATCH), game) ?? null) === null);
+const before = game.log.length;
+sow.perform(at(PATCH), game);
+check(`the browser turns the dirt to grass, uncut and unpicked, and uses up ${GRASS_PLANT} mixed grass`,
+  w.getTile(PATCH[0], PATCH[1]) === TileType.Grass && w.getData(PATCH[0], PATCH[1]) === 0 && game.inventory.count('mixed_grass') === 0);
+check('and says so in the island\'s words', game.log.slice(before).some((l) => l.text === say('G_SAID')),
+  game.log.slice(before).map((l) => l.text).join(' | '));
+check('mixed grass says what it plants', itemDef('mixed_grass').description
+  === `Cutting a grass tile gives ${numberWord(GRASS_PER_CUT)}; plant ${GRASS_PLANT} of it on a tile of dirt and the tile is grass.`,
+  String(itemDef('mixed_grass').description));
+
 for (const line of [...ok, ...bad]) console.log(line);
 if (bad.length) {
   console.error(`${bad.length} of ${ok.length + bad.length} are not what they should be`);
   process.exit(1);
 }
-console.log(`dirt collected, moss cut, and moss planted — ${ok.length} of ${ok.length}`);
+console.log(`dirt collected, moss cut, and moss and grass planted — ${ok.length} of ${ok.length}`);

@@ -396,7 +396,7 @@ export const ITEM_DEFS: Record<string, ItemDef> = {
   old_lamp: { name: 'Old lamp', category: 'misc', weight: 0.9, decay: 3, description: 'A closed clay lamp with a wick hole. It still smells faintly of oil.' },
   bronze_mirror: { name: 'Bronze mirror', category: 'misc', weight: 0.8, decay: 3, description: 'A disc of bronze polished on one face. It gives back a dim, honest likeness.' },
   bone_comb: { name: 'Bone comb', category: 'misc', weight: 0.15, decay: 3, description: 'Fine teeth cut in old bone. Somebody took a great deal of trouble over it.' },
-  mixed_grass: { name: 'Mixed grass', category: 'material', weight: 0.1, stackable: true, raw: true, decay: 120 },
+  mixed_grass: { name: 'Mixed grass', category: 'material', weight: 0.1, stackable: true, raw: true, decay: 120, description: 'Cutting a grass tile gives {grass.cut:w}; plant {grass.plant} of it on a tile of dirt and the tile is grass.' },
   sage: { name: 'Sage', category: 'plant', weight: 0.05, stackable: true, food: 0.01, feeds: { greens: 0.01 } },
   basil: { name: 'Basil', category: 'plant', weight: 0.05, stackable: true, food: 0.01, feeds: { greens: 0.01 } },
   thyme: { name: 'Thyme', category: 'plant', weight: 0.05, stackable: true, food: 0.01, feeds: { greens: 0.01 } },

@@ -29,7 +29,7 @@ import { INGOT_LUMPS, INGOT_WEIGHT, MOULD_BY_ID } from '../../game/metal';
 import { meltLumps } from '../../game/melt';
 import { ORDER_LIFE } from '../../game/orders';
 import { POST_LIFE_MIN } from '../../game/posts';
-import { ACTION_BY_ID, GLAZE_ASH, KIT_MEND, MOSS_PER_CUT, MOSS_PLANT } from '../../game/actions';
+import { ACTION_BY_ID, GLAZE_ASH, GRASS_PER_CUT, GRASS_PLANT, KIT_MEND, MOSS_PER_CUT, MOSS_PLANT } from '../../game/actions';
 import { CIRCLET_SHARE, CIRCLET_STONES, GEMS } from '../../game/gems';
 import { RECIPE_BY_ID, RECIPES, TRADE_BOOK_AT } from '../../game/recipes';
 import { BOARD_TOP } from '../../game/boards';
@@ -1117,6 +1117,14 @@ export const NEWS: News[] = [
         'What you have already learned stays where it is.',
       ];
     },
+  },
+  {
+    n: 85,
+    day: '2026-10-06',
+    lines: () => [
+      `Plant grass on a tile of dirt with ${GRASS_PLANT} mixed grass in your pack and the tile is grass. Dirt never grows grass back of itself.`,
+      `Cut grass gives ${numberWord(GRASS_PER_CUT)} mixed grass a cut.`,
+    ],
   },
 ];
 
