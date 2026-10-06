@@ -395,6 +395,9 @@ begin
 
   /* ---- 16. Treasure Nose, the same way: no map without it, and one a go with it at one. ---- */
   create or replace function map_odds() returns double precision language sql immutable as 'select 0::double precision';
+  -- Counted from none: every ground job before this one rolled a map at the plain odds, one in a
+  -- thousand, and one that came up was counted as found without the perk (run 927, '1|2').
+  delete from item where world_id = w and holder = 'player' and holder_uid = u and def = 'treasure_map';
   perform pg_temp.hold(w, u, '{}');
   ${until(dig(9, 4), `pack_count(w, u, 'dirt') > 0`)}
   n := pack_count(w, u, 'treasure_map');
