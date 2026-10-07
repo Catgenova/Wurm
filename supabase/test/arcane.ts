@@ -29,15 +29,16 @@ import {
   SCHOOLS, SPELLS, spellDef, spellWear, spellForce, spellSecs, spellRange,
   landEase, spellRefusal, spellsOf,
 } from '../../src/game/arcane';
-import { CLASS_NODES, classDef } from '../../src/game/classes';
+import { classDef, RITES } from '../../src/game/classes';
 
 /**
- * The first node of a thrift column on a trade still on a tree, which is what
- * thrift is asked of now the Kindler and the Binder have none; its school, the
- * first spell of it, and another school to ask it does nothing on.
+ * The rite that spares the stone, which is what thrift is asked of now no
+ * trade is on a tree: Deep Stone, on the trade it is the rite of, the first
+ * spell of that trade's school, and another school to ask it does nothing on.
  */
-const THRIFT_NODE = CLASS_NODES.find((n) => n.channel === 'thrift' && n.rank === 1)!;
-const THRIFT_SCHOOL = SCHOOLS.find((sc) => sc.skill === classDef(THRIFT_NODE.class)!.main)!;
+const THRIFT_RITE = RITES.find((r) => r.muls.thrift !== undefined)!;
+const THRIFT = THRIFT_RITE.muls.thrift!;
+const THRIFT_SCHOOL = SCHOOLS.find((sc) => sc.skill === classDef(THRIFT_RITE.class)!.main)!;
 const THRIFT_SPELL = spellsOf(THRIFT_SCHOOL.id).find((s) => s.level === 1)!;
 const THRIFT_GEM = THRIFT_SPELL.gem[0].toUpperCase() + THRIFT_SPELL.gem.slice(1);
 const NOT_THRIFT = SCHOOLS.find((sc) => sc.id !== THRIFT_SCHOOL.id)!;
@@ -160,14 +161,16 @@ begin
   update item set rare = null where id = f;
 
   /*
-   * Thrift, on this school and on nobody else's. The Kindler's and the
-   * Binder's trees went to spells and passives, so it is asked of the trade
-   * still on a tree (THRIFT_NODE), on a stone of its school cut as well as the
-   * garnet, and the Kindler taken back up after.
+   * Thrift, on this school and on nobody else's. No trade is on a tree, so it
+   * is asked of the rite that spares the stone (THRIFT_RITE), put on by hand,
+   * on a stone of its trade's school cut as well as the garnet, and the
+   * Kindler taken back up after.
    */
-  update player set combat_class = '${THRIFT_NODE.class}', class_mul = null where world_id = w.world_id and uid = w.uid;
-  insert into player_node (world_id, uid, node) values (w.world_id, w.uid, '${THRIFT_NODE.id}');
+  update player set combat_class = '${THRIFT_RITE.class}', class_mul = null where world_id = w.world_id and uid = w.uid;
   perform class_fold(w.world_id, w.uid);
+  update player set class_mul = jsonb_set(coalesce(class_mul, '{}'::jsonb), '{rite}', jsonb_build_object(
+      'until', now() + interval '1 minute', 'muls', jsonb_build_object('thrift', ${THRIFT})))
+   where world_id = w.world_id and uid = w.uid;
   f2 := give(w.world_id, w.uid, 'focus', 1, 70, '${THRIFT_GEM}');
   insert into said values ('THRIFT|' || class_mul(w.world_id, w.uid, 'thrift', '${THRIFT_SCHOOL.skill}')
     || '|' || class_mul(w.world_id, w.uid, 'thrift', '${NOT_THRIFT.skill}')
@@ -288,8 +291,8 @@ check('and a rarer find holds more casts', Number(said('FIND')) < cut70,
 
 const [thriftMine, thriftTheirs, thriftWear] = said('THRIFT').split('|').map(Number);
 check('thrift tells on your own school and on nobody else’s',
-  near(thriftMine, THRIFT_NODE.mul) && thriftTheirs === 1
-    && near(thriftWear, spellWear(THRIFT_SPELL, ql, 1, ease, THRIFT_NODE.mul), 1e-9),
+  near(thriftMine, THRIFT) && thriftTheirs === 1
+    && near(thriftWear, spellWear(THRIFT_SPELL, ql, 1, ease, THRIFT), 1e-9),
   `${THRIFT_SCHOOL.skill} ×${thriftMine}, ${NOT_THRIFT.skill} ×${thriftTheirs}, and the wear fell to ${thriftWear}`);
 
 if (said('BURN') === 'MISSING') {

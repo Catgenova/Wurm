@@ -538,6 +538,9 @@ const OTHERS = new Set([
   // A Binder's: how far a spell aimed at a creature reaches, a creature's pace once a hold ends and for how long, how long a hold
   // lasts and what a held creature takes, and a striker held, rooted or slowed.
   'reach:spell', 'chill:pace', 'chill:secs', 'bind:secs', 'bind:brittle', 'ward:stilled',
+  // A Warder's: how large a skin is, and over somebody else, how far one adds to another, stamina back when a blow uses one up,
+  // how far off a blow on somebody turns its striker, and a share of a striker's own attack back on it.
+  'skin:size', 'skin:other', 'skin:over', 'stamina:skin', 'watch:reach', 'thorns:attack',
   ...STRIDE_KEYS,
 ]);
 const unnamed = PERKS.flatMap((p) => Object.keys(p.fx).filter((key) => {

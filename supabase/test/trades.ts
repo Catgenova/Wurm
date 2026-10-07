@@ -27,7 +27,10 @@
  * Runs against the database the suite leaves behind.
  */
 import { execFileSync } from 'node:child_process';
-import { CLASSES, classRefusal } from '../../src/game/classes';
+import { CLASSES, classRefusal, PERK_CLASSES } from '../../src/game/classes';
+
+/** Whether any trade is still on a tree, which the node half of the Tree tab is asked of; none is, the Warder having moved last. */
+const TREED = CLASSES.some((c) => !PERK_CLASSES.has(c.id));
 
 const psql = (sql: string): string =>
   execFileSync('psql', ['-v', 'ON_ERROR_STOP=1', '-X', '-q', '-t', '-A', '-f', '-'], {
@@ -99,14 +102,14 @@ begin
    *
    * Which two is immaterial: the panel draws whatever the island answers, so
    * they are whichever sort first and every assertion reads the answer rather
-   * than assuming a name. The fighting one is the first still on a tree: the
-   * fighting trades are moving to spells and passives one at a time, and the
-   * nodes asked of below are a tree's.
+   * than assuming a name. The fighting one is the first still on a tree
+   * while any is, for the nodes asked of below; and the first with a rite
+   * once none is, every trade being on perks.
    */
   select c.id into v_cls from class_def c where c.kind = 'craft' order by c.id limit 1;
   select c.id into v_fight from class_def c where c.kind = 'combat'
    and exists (select 1 from rite_def r where r.class = c.id)
-   and exists (select 1 from class_node n where n.class = c.id) order by c.id limit 1;
+   order by exists (select 1 from class_node n where n.class = c.id) desc, c.id limit 1;
   insert into skill (world_id, uid, id, value)
   select w.world_id, w.uid, cs.skill, 80 from class_skill cs
    where cs.class in (v_cls, v_fight)
@@ -256,7 +259,8 @@ check('taking a trade of each works, and the tree has both',
   say('TOOK').split('|')[1] === 'no why' && say('FOUGHT').split('|')[1] === 'no why'
     && say('TRADES') === '2',
   `${say('TOOK').split('|')[0]} and ${say('FOUGHT').split('|')[0]} · ${say('TRADES')} in the tree`);
-check('nine nodes to it, three columns of three', say('NODES') === '9', say('NODES'));
+check(TREED ? 'nine nodes to it, three columns of three' : 'and no trade in it with nodes, every trade being on perks',
+  say('NODES') === (TREED ? '9' : 'MISSING'), say('NODES'));
 check('and every field the node card reads is on every one',
   say('NFIELDS') === 'all there', say('NFIELDS'));
 check('every channel carries the name, note and direction the column head wants',
@@ -264,9 +268,11 @@ check('every channel carries the name, note and direction the column head wants'
 check('fourteen channels, one for each way a trade can lean',
   say('CHANNELS') === '14', say('CHANNELS'));
 const [points, spent] = say('POINTS').split('|');
-check('and the points line has both its numbers',
-  Number.isFinite(Number(points)) && Number.isFinite(Number(spent)),
-  `${points} earned, ${spent} spent`);
+if (TREED) {
+  check('and the points line has both its numbers',
+    Number.isFinite(Number(points)) && Number.isFinite(Number(spent)),
+    `${points} earned, ${spent} spent`);
+}
 
 /* ---- the buttons ------------------------------------------------------ */
 

@@ -111,7 +111,7 @@ export const FX_RULE: Record<string, 'mul' | 'add'> = {
   carry: 'add', serve: 'add', jobs: 'add', plus: 'add', bumper: 'add', fodder: 'add', tool: 'add', passes: 'add', hook: 'add', haul: 'add',
   block: 'add', leech: 'add', length: 'add', save: 'add', crit: 'add', stamina: 'add',
   gap: 'mul', monster: 'mul', still: 'mul', closest: 'mul', ambush: 'mul', far: 'mul', bleed: 'mul', fester: 'mul',
-  burn: 'mul', ward: 'mul', cast: 'mul', bind: 'mul', chill: 'mul',
+  burn: 'mul', ward: 'mul', cast: 'mul', bind: 'mul', chill: 'mul', skin: 'mul',
 };
 
 export const fxFamily = (key: string): string => key.split(':')[0];
@@ -2441,6 +2441,49 @@ const BINDER: Seed[] = [
   },
 ];
 
+/*
+ * The Warder's. Its spells, and six passives on the skins it lays and the
+ * blows that land: larger skins, larger again over somebody else, skins that
+ * add up rather than only replace, stamina back when a skin is used up, a
+ * creature that strikes somebody near you turned on you, and a share of its
+ * own attack back on whatever strikes you. A skin is a share of an Aegis out
+ * of the focus (`talents.ts`).
+ */
+const WARDER: Seed[] = [
+  ...classSpellsOf('warder').map((sp): Seed => ({ num: sp.num, name: sp.name, fx: {}, note: () => `${spellTerms(sp)} ${sp.note}` })),
+  {
+    num: 115, name: 'Second Wind',
+    fx: { 'stamina:skin': 0.1 },
+    note: (fx) => `When a blow uses up the skin over you, you get back ${percent(fx['stamina:skin'])} of your stamina.`,
+  },
+  {
+    num: 125, name: 'Watchful',
+    fx: { 'watch:reach': 4 },
+    note: (fx) => `A creature that lands a blow on somebody within ${fx['watch:reach']} tiles of you turns on you.`,
+  },
+  {
+    num: 122, name: 'Protector',
+    fx: { 'skin:other': 1.25 },
+    note: (fx) => `Every skin you lay over somebody else is ${percent(fx['skin:other'] - 1)} larger.`,
+  },
+  {
+    num: 128, name: 'Thorns',
+    fx: { 'thorns:attack': 0.1 },
+    note: (fx) => `Every creature that lands a blow on you takes damage of ${percent(fx['thorns:attack'])} of its own attack.`,
+  },
+  {
+    num: 101, name: 'Thick Skin',
+    fx: { 'skin:size': 1.2 },
+    note: (fx) => `Every skin you lay is ${percent(fx['skin:size'] - 1)} larger, the school's Aegis and Bulwark included.`,
+  },
+  {
+    num: 104, name: 'Overcharge',
+    fx: { 'skin:over': 1.5 },
+    note: (fx) => `A skin you lay over one already there adds to it, up to ${percent(fx['skin:over'])} of whichever of them is the larger, `
+      + 'where it would otherwise only go over a smaller one.',
+  },
+];
+
 /** Every trade's perks, in the order they were picked. */
 const SEEDS: Record<string, Seed[]> = {
   terraformer: TERRAFORMER,
@@ -2466,6 +2509,7 @@ const SEEDS: Record<string, Seed[]> = {
   beastmaster: BEASTMASTER,
   kindler: KINDLER,
   binder: BINDER,
+  warder: WARDER,
 };
 
 const slug = (name: string): string => name.toLowerCase().replace(/[’']/g, '').replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '');
@@ -2500,6 +2544,7 @@ export const TIERS: Record<string, number[][]> = {
   beastmaster: [[1, 15, 106], [2, 28, 120], [27, 8, 101], [13, 18, 102], [32, 50, 108], [48, 41, 119]],
   kindler: [[3, 6, 125], [11, 5, 118], [44, 46, 106], [4, 10, 109], [24, 13, 124], [14, 26, 108]],
   binder: [[1, 29, 108], [6, 36, 103], [20, 21, 101], [8, 27, 105], [2, 35, 117], [16, 15, 122]],
+  warder: [[1, 11, 115], [2, 47, 125], [12, 20, 122], [7, 32, 128], [3, 14, 101], [42, 44, 104]],
 };
 
 /** Every perk there is, tier by tier, and in each tier by the number it was picked under, as the island lists them. */

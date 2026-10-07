@@ -51,10 +51,10 @@ export const GUARDIAN_REACH = 2;
 /**
  * What a spell wants in your hands before it can be called: a shield in the off hand, or a weapon of a kind in the other --
  * and for a Skirmisher's Hit and Run, a thrown weapon or a knife; for a Beastmaster's, a companion at heel rather than
- * anything in the hand; and for a Kindler's or a Binder's, a focus of the school's stones to cast it out of.
+ * anything in the hand; and for a Kindler's, a Binder's or a Warder's, a focus of the school's stones to cast it out of.
  */
 export type SpellNeeds = 'shield' | 'axes' | 'mauls' | 'archery' | 'throwing' | 'skirmish' | 'knives' | 'companion' | 'kindling'
-  | 'binding';
+  | 'binding' | 'warding';
 /** As the spell's note says it first, and as its refusal says it is missing. */
 export const NEEDS_SAID: Record<SpellNeeds, { has: string; wants: string }> = {
   shield: { has: 'With a shield in your off hand', wants: 'a shield in your off hand' },
@@ -70,6 +70,7 @@ export const NEEDS_SAID: Record<SpellNeeds, { has: string; wants: string }> = {
   // Any focus of a stone kindling works that is not worn through (`focus_for`), and casting a trade's spell does not wear it.
   kindling: { has: 'With a garnet or ruby focus in your pack', wants: 'a garnet or ruby focus in your pack' },
   binding: { has: 'With a sapphire or diamond focus in your pack', wants: 'a sapphire or diamond focus in your pack' },
+  warding: { has: 'With a topaz or emerald focus in your pack', wants: 'a topaz or emerald focus in your pack' },
 };
 
 export interface ClassSpellDef {
@@ -117,14 +118,15 @@ const chirurgeon = spellOf('chirurgeon');
 const beastmaster = spellOf('beastmaster');
 const kindler = spellOf('kindler');
 const binder = spellOf('binder');
+const warder = spellOf('warder');
 
 /** "fire at 80%": what share of a Kindler's fire a spell lands. */
 const fire = (m: number): string => `fire at ${ofBlow(m)}`;
 /** "shatter at 80%": what share of a Binder's shatter a spell lands. */
 const shatter = (m: number): string => `shatter at ${ofBlow(m)}`;
 /** The least and the most a skill and a focus's quality can be, which the notes give a spell's numbers at. */
-const FIRE_LOW = 1;
-const FIRE_TOP = 100;
+export const FIRE_LOW = 1;
+export const FIRE_TOP = 100;
 /**
  * What a school's damage at 100% does: an Ember's, out of the best focus of the school's stones you carry, at the school's
  * skill (`spellForce`), from the bottom of both to the top.
@@ -145,6 +147,17 @@ const held = (m: number): string => `held at ${ofBlow(m)}, neither moving nor st
 const HOLD_IS = `A hold at ${ofBlow(1)} lasts ${Number(spellSecs(SNARE, FIRE_LOW, 1).toFixed(1))} s at ${FIRE_LOW} binding, up to `
   + `${Number(spellSecs(SNARE, FIRE_TOP, 1).toFixed(1))} s at ${FIRE_TOP} binding, rising evenly with it.`;
 const ROOTED = 'it cannot move, but strikes and throws at anything within its reach';
+/**
+ * "a skin of 40%": that share of an Aegis out of your focus at your warding (`spellForce`), which is a skin of a
+ * hundredth of full health for every point of its force (`skinOf`, `warder_skin_at`), from the bottom of both to the top.
+ */
+const AEGIS = spellDef('aegis')!;
+export const skinOf = (force: number): number => force / 100;
+const skin = (m: number): string => `skin of ${ofBlow(m)}`;
+const SKIN_IS = `A ${skin(1)} is ${percent(skinOf(spellForce(AEGIS, FIRE_LOW, FIRE_LOW, 1)))} of full health at ${FIRE_LOW} warding `
+  + `with a QL ${FIRE_LOW} focus, up to ${percent(skinOf(spellForce(AEGIS, FIRE_TOP, FIRE_TOP, 1)))} at ${FIRE_TOP} warding with a QL `
+  + `${FIRE_TOP} focus, rising evenly with each. Every blow takes what it can out of a skin before the shield and the armour, and a `
+  + 'new skin goes over an old one only where it is the larger.';
 /** "burns 1% of its full health a second for 8 s": a burn, which is a bleed that a Kindler started (`class_burn`). */
 const burns = (each: number, secs: number): string => `burns ${percent(each)} of its full health a second for ${span(secs)}`;
 const BURN_LAST = 'a burn never takes the last of its health';
@@ -172,7 +185,10 @@ const BURN_LAST = 'a burn never takes the last of its health';
  * Binder's too, out of a sapphire or diamond: "held at N%" is that share of a
  * Snare's hold out of it at your binding, longer in a Long Hold, and
  * "shatter" is an Ember's force out of it at your binding. Every reach and
- * width of a Binder's is a Long Hold's further.
+ * width of a Binder's is a Long Hold's further. A Warder's, out of a topaz or
+ * emerald: "a skin of N%" is that share of an Aegis out of it at your warding,
+ * in hundredths of the health of whoever it is over, which takes what it can
+ * out of every blow before the shield and the armour do.
  */
 export const CLASS_SPELLS: ClassSpellDef[] = [
   /* ---- The Sworn Blade ---- */
@@ -455,6 +471,35 @@ export const CLASS_SPELLS: ClassSpellDef[] = [
     'binding'),
   binder(15, 'Mass Root', 0.18, 40, ['self'], { reach: 4, secs: 6 },
     (fx) => `every enemy within ${fx.reach} tiles of you is rooted for ${span(fx.secs)}: ${ROOTED}.`, 'binding'),
+
+  /* ---- The Warder ---- */
+  warder(1, 'Ward', 0.05, 10, ['self'], { skin: 0.4 },
+    (fx) => `a ${skin(fx.skin)} over you. ${SKIN_IS}`, 'warding'),
+  warder(11, 'Ward Other', 0.06, 10, ['player'], { skin: 0.4, reach: 6 },
+    (fx) => `a ${skin(fx.skin)} over somebody within ${fx.reach} tiles of you. ${SKIN_IS}`, 'warding'),
+  warder(2, 'Greater Ward', 0.1, 20, ['self'], { skin: 1 },
+    (fx) => `a ${skin(fx.skin)} over you. ${SKIN_IS}`, 'warding'),
+  warder(47, 'Thicken', 0.06, 30, ['self'], { more: 1.5, secs: 60 },
+    (fx) => `the next skin you lay within ${span(fx.secs)}, over anybody, is ${percent(fx.more - 1)} larger.`, 'warding'),
+  warder(12, 'Greater Ward Other', 0.12, 20, ['player'], { skin: 1, reach: 6 },
+    (fx) => `a ${skin(fx.skin)} over somebody within ${fx.reach} tiles of you. ${SKIN_IS}`, 'warding'),
+  warder(20, 'Ward Link', 0.15, 60, ['self'], { secs: 30, reach: 8, skin: 0.3 },
+    (fx) => `for ${span(fx.secs)}, when a skin of yours over somebody within ${fx.reach} tiles of you is used up, a ${skin(fx.skin)} `
+      + `goes back over them, once each. ${SKIN_IS}`, 'warding'),
+  warder(7, 'Stoneskin', 0.12, 45, ['self'], { cut: 0.25, secs: 10 },
+    (fx) => `for ${span(fx.secs)} you take ${percent(fx.cut)} less from every blow.`, 'warding'),
+  warder(32, 'Ward Burst', 0.15, 30, ['self'], { reach: 3, dmg: 1 },
+    (fx) => `the skin over you breaks, and every enemy within ${fx.reach} tiles of you takes ${fx.dmg} damage for every hundredth of `
+      + 'your health it held.', 'warding'),
+  warder(3, 'Deep Ward', 0.2, 60, ['self'], { skin: 2 },
+    (fx) => `a ${skin(fx.skin)} over you. ${SKIN_IS}`, 'warding'),
+  warder(14, 'Sanctuary', 0.25, 60, ['self'], { skin: 0.8, reach: 6 },
+    (fx) => `a ${skin(fx.skin)} over you and over everybody within ${fx.reach} tiles of you. ${SKIN_IS}`, 'warding'),
+  warder(42, 'Bastion of Stone', 0.35, 300, ['self'], { cut: 0.4, secs: 10, reach: 4 },
+    (fx) => `for ${span(fx.secs)} you and everybody within ${fx.reach} tiles of you take ${percent(fx.cut)} less from every blow.`,
+    'warding'),
+  warder(44, 'Unbreakable', 0.45, 900, ['self'], { secs: 6 },
+    (fx) => `for ${span(fx.secs)} no blow aimed at you lands.`, 'warding'),
 ];
 export const CLASS_SPELL_BY_ID = new Map(CLASS_SPELLS.map((s) => [s.id, s]));
 export const classSpellsOf = (cls: string): ClassSpellDef[] => CLASS_SPELLS.filter((s) => s.class === cls);

@@ -39,9 +39,9 @@ import { ALIGNMENT_NAMES, BAR_SLOTS, FAITH_SPELLS, FAITH_TIER_AT, PATRON_AT, PAT
 import { article, capital, finePercent, listed, listedOr, NumberWord, numberWord, percent, share, spanWords, times } from '../../game/words';
 import { ANCIENT_EFFECTS, ANCIENT_PLUS, BAUBLE_HIGH, BAUBLE_LOW, BAUBLE_SHARE, BAUBLE_TIERS, baubleTimes, REGRET_SHARE, YIELD_TIMES } from '../../game/baubles';
 import { CLASS_CHANGE_COST, CLASS_TIER_AT, CLASSES, PERK_CLASSES, PERK_TIER_AT, PERKS_PER_TIER } from '../../game/classes';
-import { spellsOf } from '../../game/arcane';
+import { spellDef, spellForce, spellsOf } from '../../game/arcane';
 import { perksOf } from '../../game/perks';
-import { CLASS_LEARN_BLOW, CLASS_LEARN_KILL, CLASS_LEVEL_START, CLASS_SPELL_BY_ID, CLASS_SPELLS, classSpellsOf, spellTerms } from '../../game/talents';
+import { CLASS_LEARN_BLOW, CLASS_LEARN_KILL, CLASS_LEVEL_START, CLASS_SPELL_BY_ID, CLASS_SPELLS, classSpellsOf, FIRE_LOW, FIRE_TOP, skinOf, spellTerms } from '../../game/talents';
 import { HUSBANDRY_ACTIONS } from '../../game/husbandry';
 import { TINCTURE_BONUS, TINCTURE_SECONDS } from '../../game/boons';
 import { TINCTURE_NAMES } from '../../game/remedies';
@@ -1270,6 +1270,28 @@ export const NEWS: News[] = [
           + 'no longer ends when a blow turns the creature held on whoever struck it: it holds for as long as the spell says.',
         'After a blow, a shot, a fire or a shatter, the sentence says what the creature is truly down to, counting everything that '
           + 'made it take more than the blow.',
+      ].filter(Boolean);
+    },
+  },
+  {
+    n: 95,
+    day: '2026-10-07',
+    lines: () => {
+      const spells = classSpellsOf('warder');
+      const first = perksOf('warder').map((p) => CLASS_SPELL_BY_ID.get(p.id)).find((sp) => sp !== undefined);
+      const before = CLASSES.filter((c) => c.kind === 'combat' && c.id !== 'warder' && PERK_CLASSES.has(c.id)).map((c) => `the ${c.name}’s`);
+      const aegis = spellDef('aegis')!;
+      return [
+        `The Warder is on spells and passives too: ${numberWord(spells.length)} spells and `
+          + `${numberWord(perksOf('warder').length - spells.length)} passives in ${numberWord(CLASS_TIER_AT.length)} tiers on its own class `
+          + `level, as ${listed(before)} are. Its tree and every node bought in it are gone; its rite stays. No trade is on a tree now.`,
+        first ? `${first.name}: ${spellTerms(first)} ${first.note}` : '',
+        'A Warder’s spell is cast out of the best topaz or emerald focus in your pack and does not wear it; every cast teaches warding, '
+          + 'as an Aegis does.',
+        `A skin is in hundredths of health now. An Aegis laid one of its whole force, so one cast took nearly every blow there was; it `
+          + `lays ${percent(skinOf(spellForce(aegis, FIRE_LOW, FIRE_LOW, 1)))} of full health at ${FIRE_LOW} warding with a QL ${FIRE_LOW} `
+          + `focus, up to ${percent(skinOf(spellForce(aegis, FIRE_TOP, FIRE_TOP, 1)))} at ${FIRE_TOP} with a QL ${FIRE_TOP} one, and every `
+          + 'skin already laid is brought down the same.',
       ].filter(Boolean);
     },
   },

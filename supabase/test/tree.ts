@@ -1,12 +1,14 @@
 /**
  * Nine nodes to a trade.
  *
- * Each trade that has not moved to perks (`PERK_CLASSES`) -- the Warder, now
- * that every craft trade and the other fighting trades have -- carries three
- * columns of three: two minor at a point each and a major over them at three,
- * which wants the two under it first. A trade is worth two points at fifty and
+ * A trade that has not moved to perks (`PERK_CLASSES`) carries three columns
+ * of three: two minor at a point each and a major over them at three, which
+ * wants the two under it first. A trade is worth two points at fifty and
  * twelve at a hundred, so twelve buys two whole columns and two over -- never
- * all three.
+ * all three. Every trade has moved now, the Warder last; the tables and the
+ * arithmetic are still held to each other on both sides, the walk below waits
+ * for a trade on a tree, and what is asked meanwhile is that nobody holds a
+ * node that is not a perk.
  *
  * What this asks:
  *
@@ -60,11 +62,12 @@ const check = (what: string, passed: boolean, detail = ''): void => {
 /* An item's quality is a `real`, so a ratio drawn back out of one is close. */
 const near = (a: number, b: number, by = 1e-6): boolean => Math.abs(a - b) <= by;
 
-/** The fighting trades still on a tree, in the order the rulebook lists them. */
-const TREED = CLASSES.filter((c) => c.kind === 'combat' && !PERK_CLASSES.has(c.id));
-if (TREED.length < 1) throw new Error('no fighting trade is still on a tree: there is nothing left for this suite to walk');
+/** The trades still on a tree, in the order the rulebook lists them: none, since the Warder moved to perks. */
+const TREED = CLASSES.filter((c) => !PERK_CLASSES.has(c.id));
+/** Whether there is a tree left to walk; with none, what is asked is that no node is left on anybody. */
+const WALK = TREED.length > 0;
 /** The trade walked through, and the column of it taken whole: its first. */
-const HAND: { c: ClassDef; col: number } = { c: TREED[0], col: 1 };
+const HAND: { c: ClassDef; col: number } = { c: TREED[0] ?? CLASSES[0], col: 1 };
 const T = HAND.c.id;
 /** What that column leans on. */
 const CH = CLASS_COLUMNS[T][HAND.col - 1].channel;
@@ -79,9 +82,9 @@ begin;
 create temp table said (k text);
 
 -- 1. The trees, as the island holds them.
-insert into said select 'NODES|' || string_agg(n.id || ':' || n.class || ':' || n.col || ':' || n.rank
+insert into said select 'NODES|' || coalesce(string_agg(n.id || ':' || n.class || ':' || n.col || ':' || n.rank
   || ':' || n.name || ':' || n.channel || ':' || n.cost || ':' || coalesce(n.needs, '-')
-  || ':' || n.mul, '|' order by n.id) from class_node n;
+  || ':' || n.mul, '|' order by n.id), '') from class_node n;
 insert into said select 'CHANNELS|' || string_agg(ch.id || ':' || ch.name || ':' || ch.note
   || ':' || ch.downward, '|' order by ch.id) from class_channel ch;
 insert into said select 'POINTS|' || string_agg(class_points_for(v)::text, '|' order by v)
@@ -98,6 +101,10 @@ insert into said select 'WIRED|' || string_agg(ch.id || ':' || (
        and strpos(pg_get_functiondef(p.oid), 'class_mul(') > 0), '|' order by ch.id)
   from class_channel ch;
 
+-- With no trade on a tree, nobody holds a node: every row bought is a perk.
+insert into said select 'ORPHANS|' || count(*) from player_node pn
+  where not exists (select 1 from class_perk k where k.id = pn.node);
+${WALK ? `
 -- 2. Somebody to hand a tree to.
 do $$
 declare w record; v jsonb;
@@ -170,7 +177,7 @@ begin
     from player_node where world_id = w.world_id and uid = w.uid;
   -- And the tree is somebody else's now: its first node is refused as another trade's.
   insert into said values ('THEIRS|' || coalesce(rpc_take_node(w.world_id, '${node(HAND.col, 1)}')->>'why', 'IT WENT THROUGH'));
-end $$;
+end $$;` : ''}
 
 select * from said;
 rollback;
@@ -180,7 +187,7 @@ const said = (key: string): string =>
   out.split('\n').find((l) => l.startsWith(`${key}|`))?.slice(key.length + 1) ?? 'MISSING';
 
 /* The island's nodes, in the shape the browser's make. */
-const island = said('NODES').split('|').sort();
+const island = said('NODES').split('|').filter(Boolean).sort();
 const browser = CLASS_NODES.map((n) => [n.id, n.class, n.col, n.rank, n.name, n.channel,
   n.cost, n.needs ?? '-', n.mul].join(':')).sort();
 check('both sides hold the same nodes, field for field',
@@ -221,6 +228,10 @@ check('every channel is read by something, so no column is quietly dead',
   wired.length === Object.keys(CHANNELS).length && wired.every((w) => Number(w.split(':')[1]) > 0),
   wired.join(' '));
 
+check(`${WALK ? `${TREED.length} trades are on a tree` : 'no trade is on a tree'}, and nobody holds a node that is not a perk`,
+  WALK || (CLASS_NODES.length === 0 && said('ORPHANS') === '0'), `${CLASS_NODES.length} nodes; ${said('ORPHANS')} held that are not perks`);
+
+if (WALK) {
 check('a fresh trade is twelve points with none of them spent', said('BUDGET') === '12|0', said('BUDGET'));
 
 const mine = (taken: string[], id: string): string =>
@@ -252,6 +263,7 @@ check('twelve spent, and the thirteenth point is refused in the same words',
 
 check('putting the trade down puts the whole tree down with it',
   said('CLEARED') === '0|gone', said('CLEARED'));
+}
 
 for (const line of [...ok, ...bad]) console.log(line);
 if (bad.length) {

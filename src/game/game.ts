@@ -32,7 +32,7 @@ import { bury, crumble, graveAt, graveRefusal, graveSays, GRAVE_MARK } from './g
 import { cropStageSeconds, RIPE, settleCrop, type Crop } from './farming';
 import { fieldClock, fieldRate, GLASSHOUSE_GROWTH, PLANTER_GROWTH } from './growth';
 import { underGlass } from './glasshouse';
-import { ageDef, bloodMul, BLOW_SHARE, CALL_WINDOW, Creatures, setLocalKept, FIGHT_BACK_GOES, HAUL_SKILL, isBaitFor, isShod, maxHealth, PLAYER_ATTACKER, PULL_DEFAULT, SHOE_PACE, SHOE_STEP, SPECIES, tackSpeed, type Creature, type CreatureJSON, type Stance } from './creatures';
+import { ageDef, attackOf, bloodMul, BLOW_SHARE, CALL_WINDOW, Creatures, setLocalKept, FIGHT_BACK_GOES, HAUL_SKILL, isBaitFor, isShod, maxHealth, PLAYER_ATTACKER, PULL_DEFAULT, SHOE_PACE, SHOE_STEP, SPECIES, tackSpeed, type Creature, type CreatureJSON, type Stance } from './creatures';
 import { CRAFT_REACH, knackable, type CraftStock, type Station } from './recipes';
 import { Actor, type ActiveAction, type GuestSave } from './actor';
 import { HOST_ID, type PeerId } from '../net/protocol';
@@ -2432,6 +2432,11 @@ export class Game {
       if (share > 0 && from) riposte(this, from, share);
       this.fightBack();
       return;
+    }
+    // A blow that lands is answered with its share of the creature's own attack, for a Warder's Thorns (`class_owed_pay`).
+    const thorns = this.perk('thorns:attack', 0);
+    if (thorns > 0 && from && from.health > 0) {
+      this.creatures.hurt(this, from, attackOf(from, this.creatures.species(from)) * thorns, 'player');
     }
     // Being hit in the dark teaches more about watching than hitting does.
     this.fought(DARK_HIT);
