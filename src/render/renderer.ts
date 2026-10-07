@@ -138,6 +138,13 @@ import { bridgeDone, type Bridge } from '../game/bridges';
 import { SmallLife, type Mote } from './life';
 import { lookStep, yearAt } from './foliage';
 import { FIGURE_TOP } from './figure';
+/**
+ * How much larger a beast in the traces is drawn than one loose: enough that
+ * a grown orse, the draught beast, stands a quarter again as tall as a body
+ * (`FIGURE_TOP`), as a horse in harness stands over its driver. The rest of a
+ * team is drawn up by the same, so a team keeps its kinds' sizes to each other.
+ */
+const TRACES_SCALE = Math.max(1, (1.25 * FIGURE_TOP) / (wildermonTop('orse') ?? FIGURE_TOP));
 import {
   CELLAR_DARK, CELLAR_DARK_INK, CELLAR_FALL, CELLAR_VEIL, cellarFloor, cellarFloorHeight, cellarOrder, cutFace, earthEnd, earthFace, faceOn, KERB, OUT, UNDER,
   flightShade, SHAFT_STOPS, shaftAlpha, shaftShade, sidesOf, type CellarCanvas,
@@ -3996,7 +4003,8 @@ export class Renderer {
         const turned = this.facingOnScreen(cr.dirX, cr.dirY, this.beastFacing.get(cr.id));
         this.beastFacing.set(cr.id, turned);
         // Its age, and how rare it came into the world: a fantastic one stands three times the height of its kind.
-        const big = ageDef(cr, this.game.time).scale * rarityOf(cr).size;
+        // And in the traces at draught size: a team that came up to the driver's chest read as foals next to the wagon (`TRACES_SCALE`).
+        const big = ageDef(cr, this.game.time).scale * rarityOf(cr).size * (cr.hitchedTo !== null ? TRACES_SCALE : 1);
         const hit = this.flashOf(cr.attackedAt);
         // Drawing back for a heavy blow: its reach on the ground under it, filling as the blow comes (`WIND_UP`).
         if (cr.windup > 0) this.drawWindupReach(ctx, ent.sx, ent.sy, zoom, cr.windup);
