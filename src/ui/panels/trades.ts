@@ -5,11 +5,12 @@ import type {
 import { SKILL_DEFS } from '../../game/skills';
 import { REGRET } from '../../game/baubles';
 import {
-  CHANNELS, CLASS_CHANGE_COST, CLASS_COLUMNS, CLASS_NODES, CLASS_POINTS_MAX, CLASSES, classDef, classOpen,
-  classPoints, PERK_CLASSES, PERK_TIER_AT, RITES,
+  CHANNELS, CLASS_CHANGE_COST, CLASS_COLUMNS, CLASS_NODES, CLASS_POINTS_MAX, CLASS_TIER_AT, CLASSES, classDef, classOpen,
+  classPoints, PERK_CLASSES, RITES, tiersAtFor,
 } from '../../game/classes';
 import type { ClassDef } from '../../game/classes';
 import { perksOf } from '../../game/perks';
+import { CLASS_LEVEL_START } from '../../game/talents';
 import { article, listed, numberWord } from '../../game/words';
 import type { UIWindow } from '../windows';
 
@@ -95,6 +96,8 @@ export class TradesPanel {
     private readonly win: UIWindow,
     private readonly game: Game,
     private readonly island: Island | null,
+    /** Told after every choice made here: a fighting trade's spell taken, or the trade put down, changes the spell bar. */
+    private readonly changed: () => void = () => {},
   ) {
     win.body.classList.add('trade-body');
     const bar = document.createElement('div');
@@ -164,6 +167,7 @@ export class TradesPanel {
   private async doorway(what: Promise<string | null>): Promise<void> {
     const why = await what;
     if (why) this.game.logMsg(why, 'error');
+    else this.changed();
     await this.ask(true);
   }
 
@@ -348,14 +352,23 @@ export class TradesPanel {
 
   /**
    * The figure at the top of a card: tiers open for a trade on perks, points
-   * for a trade with a tree. The tiers are counted from this browser's copy of
-   * your skills, the same way the island opens them.
+   * for a trade with a tree. A craft trade's tiers are counted from this
+   * browser's copy of your skills, the same way the island opens them; a
+   * fighting trade's from its own level, which is the island's to say and is
+   * where every one starts until it is taken up.
    */
   private standing(c: ClassCard, mine: boolean): string {
     if (!PERK_CLASSES.has(c.id)) return mine ? `${c.points} points` : `would be ${c.points}`;
-    const main = this.game.skills.get(c.main);
-    const open = c.open || mine ? PERK_TIER_AT.filter((at, i) => i === 0 || main >= at).length : 0;
-    return mine ? `${open} of ${PERK_TIER_AT.length} tiers open` : `would open ${open} of ${PERK_TIER_AT.length}`;
+    const at = tiersAtFor(c.kind);
+    const reach = c.kind === 'combat' ? this.classLevel(c.id, mine) : this.game.skills.get(c.main);
+    const open = c.open || mine ? at.filter((x, i) => i === 0 || reach >= x).length : 0;
+    if (mine && c.kind === 'combat') return `level ${Math.floor(reach)} · ${open} of ${at.length} tiers open`;
+    return mine ? `${open} of ${at.length} tiers open` : `would open ${open} of ${at.length}`;
+  }
+
+  /** A fighting trade's level: the island's word for your own, and where it starts for one not yet taken up. */
+  private classLevel(id: string, mine: boolean): number {
+    return mine ? this.tree?.trades.find((t) => t.class === id)?.level ?? CLASS_LEVEL_START : CLASS_LEVEL_START;
   }
 
   /**
@@ -384,6 +397,10 @@ export class TradesPanel {
     if (PERK_CLASSES.has(c.id)) {
       const first = perksOf(c.id).filter((p) => p.tier === 1).map((p) => p.name);
       lines.push(`Its first tier opens at once, and you take one of ${either(first)} on the Tree tab.`);
+      if (c.kind === 'combat') {
+        lines.push(`It starts at class level ${CLASS_LEVEL_START}, and its other tiers open at class levels `
+          + `${listed(CLASS_TIER_AT.slice(1).map(String))}, as you land blows and kills while you hold it.`);
+      }
     } else {
       lines.push(`You would have ${c.points} point${c.points === 1 ? '' : 's'} to spend in its tree now, and at most ${CLASS_POINTS_MAX}.`);
     }
@@ -437,10 +454,12 @@ export class TradesPanel {
     const box = document.createElement('div');
     box.className = 'trade-offer';
     if (PERK_CLASSES.has(c.id)) {
-      const main = this.game.skills.get(c.main);
+      const combat = c.kind === 'combat';
+      // A fighting trade's tiers open on its own level, which starts where everybody's does.
+      const main = combat ? CLASS_LEVEL_START : this.game.skills.get(c.main);
       const perks = perksOf(c.id);
-      PERK_TIER_AT.forEach((at, i) => {
-        // The first opens with the trade, the rest in its main skill.
+      tiersAtFor(c.kind).forEach((at, i) => {
+        // The first opens with the trade, the rest in its main skill or its level.
         const reached = i === 0 ? c.open : main >= at;
         const tier = document.createElement('div');
         tier.className = `trade-tier${reached ? '' : ' trade-tier-shut'}`;
@@ -448,9 +467,10 @@ export class TradesPanel {
         cap.className = 'trade-card-top';
         const says = document.createElement('span');
         says.className = 'trade-col-head';
-        says.textContent = i === 0 ? `Tier ${i + 1} · with the trade` : `Tier ${i + 1} · at ${at} in ${skillName(c.main).toLowerCase()}`;
+        says.textContent = i === 0 ? `Tier ${i + 1} · with the trade`
+          : combat ? `Tier ${i + 1} · at class level ${at}` : `Tier ${i + 1} · at ${at} in ${skillName(c.main).toLowerCase()}`;
         cap.append(says);
-        if (!reached && i > 0) {
+        if (!reached && i > 0 && !combat) {
           const have = document.createElement('span');
           have.className = 'trade-points';
           have.textContent = `you have ${Math.floor(main)}`;
@@ -462,28 +482,11 @@ export class TradesPanel {
         tier.append(cap, row);
         box.append(tier);
       });
+      for (const r of RITES.filter((x) => x.class === c.id)) box.append(this.caption('Rite'), this.riteRead(r));
       return box;
     }
 
-    for (const r of RITES.filter((x) => x.class === c.id)) {
-      box.append(this.caption('Rite'));
-      const rite = document.createElement('div');
-      rite.className = 'trade-rite';
-      const top = document.createElement('div');
-      top.className = 'trade-card-top';
-      const name = document.createElement('span');
-      name.className = 'trade-name';
-      name.textContent = r.name;
-      const cost = document.createElement('span');
-      cost.className = 'trade-points';
-      cost.textContent = `${r.cost} favour · ${r.level} prayer`;
-      top.append(name, cost);
-      const note = document.createElement('div');
-      note.className = 'trade-card-note';
-      note.textContent = r.note;
-      rite.append(top, note);
-      box.append(rite);
-    }
+    for (const r of RITES.filter((x) => x.class === c.id)) box.append(this.caption('Rite'), this.riteRead(r));
 
     const nodes = CLASS_NODES.filter((n) => n.class === c.id);
     const whole = nodes.reduce((sum, n) => sum + n.cost, 0);
@@ -510,6 +513,26 @@ export class TradesPanel {
     });
     box.append(grid);
     return box;
+  }
+
+  /** A trade's rite as the rulebook has it, to be read and not called. */
+  private riteRead(r: (typeof RITES)[number]): HTMLDivElement {
+    const rite = document.createElement('div');
+    rite.className = 'trade-rite';
+    const top = document.createElement('div');
+    top.className = 'trade-card-top';
+    const name = document.createElement('span');
+    name.className = 'trade-name';
+    name.textContent = r.name;
+    const cost = document.createElement('span');
+    cost.className = 'trade-points';
+    cost.textContent = `${r.cost} favour · ${r.level} prayer`;
+    top.append(name, cost);
+    const note = document.createElement('div');
+    note.className = 'trade-card-note';
+    note.textContent = r.note;
+    rite.append(top, note);
+    return rite;
   }
 
   private caption(text: string): HTMLDivElement {
@@ -558,6 +581,8 @@ export class TradesPanel {
     for (const t of tree.trades) {
       if (t.tiers) {
         this.page.append(this.tierHead(t));
+        // A fighting trade keeps its rite beside its tiers.
+        for (const r of tree.rites.filter((x) => x.class === t.class)) this.page.append(this.rite(r));
         for (const tier of t.tiers) this.page.append(this.tier(tier, t));
         continue;
       }
@@ -579,7 +604,8 @@ export class TradesPanel {
     const open = tiers.filter((x) => x.open && !x.perks.some((p) => p.taken)).length;
     const left = document.createElement('span');
     left.className = 'trade-points';
-    left.textContent = open ? `${open} to choose` : `${tiers.filter((x) => x.perks.some((p) => p.taken)).length} of ${tiers.length} chosen`;
+    left.textContent = (t.level != null ? `level ${Math.floor(t.level)} · ` : '')
+      + (open ? `${open} to choose` : `${tiers.filter((x) => x.perks.some((p) => p.taken)).length} of ${tiers.length} chosen`);
     if (open) left.classList.add('trade-spare');
     head.append(name, left);
     return head;
@@ -597,7 +623,8 @@ export class TradesPanel {
     box.className = `trade-tier${tier.open ? '' : ' trade-tier-shut'}`;
     const cap = document.createElement('div');
     cap.className = 'trade-col-head';
-    cap.textContent = tier.tier === 1 ? `Tier ${tier.tier} · with the trade` : `Tier ${tier.tier} · at ${tier.at}`;
+    cap.textContent = tier.tier === 1 ? `Tier ${tier.tier} · with the trade`
+      : t.kind === 'combat' ? `Tier ${tier.tier} · at class level ${tier.at}` : `Tier ${tier.tier} · at ${tier.at}`;
     const row = document.createElement('div');
     row.className = 'trade-grid';
     for (const p of tier.perks) row.append(this.perk(p));

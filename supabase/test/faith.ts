@@ -301,7 +301,8 @@ begin
   insert into said values ('SKILLS', faith_skill() || '|' || praying_skill() || '|' || (select skill from action_def where id = 'pray'));
   insert into said values ('FIRST', coalesce(faith_refusal(w.world_id, w.uid, 'pray', v_at), 'HEARD'));
   perform perform_faith(w.world_id, w.uid, 'pray', v_at);
-  insert into said select 'BANKED', favour || '|' || hour_of_day(w.world_id) from player where world_id = w.world_id and uid = w.uid;
+  -- Favour is kept as a real: its exact value, not the shortest text that reads back as it.
+  insert into said select 'BANKED', favour::double precision || '|' || hour_of_day(w.world_id) from player where world_id = w.world_id and uid = w.uid;
   insert into said select 'TRAINED', string_agg(id || ':' || (value > case when id = faith_skill() then ${FAITH_AT} else ${PRAYER_AT} end), '|' order by id)
     from skill where world_id = w.world_id and uid = w.uid and id in (faith_skill(), praying_skill());
   -- Faith at its first point holds no more than it carries, however much Prayer banks.
@@ -330,7 +331,8 @@ check('a prayer is said with Prayer, on both sides, and faith is a skill of its 
   const [banked, hour] = (prayer.get('BANKED') ?? '').split('|').map(Number);
   const want = prayerWorth(ALTAR_QL, hour, PRAYER_AT);
   check(`it banks what Prayer ${PRAYER_AT} says at a quality ${ALTAR_QL} altar, the same on both sides, and not what faith ${FAITH_AT} would`,
-    Math.abs(banked - want) < 1e-6 && Math.abs(want - prayerWorth(ALTAR_QL, hour, FAITH_AT)) > 1,
+    // To within what a real holds: one part in 2^23 of it.
+    Math.abs(banked - want) <= Math.max(1e-6, Math.abs(want) * 2 ** -23) && Math.abs(want - prayerWorth(ALTAR_QL, hour, FAITH_AT)) > 1,
     `island ${banked}, browser ${want} at hour ${hour}`);
 }
 check('and trains both faith and Prayer on the island', prayer.get('TRAINED') === [FAITH, PRAYER].sort().map((id) => `${id}:true`).join('|'),

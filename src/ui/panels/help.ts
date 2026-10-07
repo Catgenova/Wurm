@@ -28,10 +28,11 @@ import { STORE_REACH } from '../../game/crates';
 import { GREEN_ACTIONS, GREEN_DAY, GREEN_DAYS, GREEN_SHADE, GREEN_SUN, GREEN_WET, GREEN_WET_REACH } from '../../game/greening';
 import { FIRE_COST, FIRE_SUBTILES } from '../../game/campfire';
 import {
-  CHANNELS, CLASS_AT, CLASS_CHANGE_COST, CLASS_COLUMNS, CLASS_NODES, CLASSES, channelSays, NODES_PER_TRADE, PERK_CLASSES, PERK_TIER_AT,
-  PERKS_PER_TIER, riteDef, RITES, type Channel,
+  CHANNELS, CLASS_AT, CLASS_CHANGE_COST, CLASS_COLUMNS, CLASS_NODES, CLASS_TIER_AT, CLASSES, channelSays, NODES_PER_TRADE, PERK_CLASSES,
+  PERK_TIER_AT, PERKS_PER_TIER, riteDef, RITES, type Channel,
 } from '../../game/classes';
 import { PERKS, perksOf } from '../../game/perks';
+import { CLASS_LEARN_BLOW, CLASS_LEARN_KILL, CLASS_LEVEL_START, CLASS_SPELL_BY_ID, spellTerms } from '../../game/talents';
 import { CREATURE_CRATE } from '../../game/creaturecrate';
 import { CRATE_DEFS, SUBTILES } from '../../game/crates';
 import {
@@ -373,8 +374,13 @@ const pointsFor = (rank: number): string => (costOf(rank) === 1 ? 'a point' : `$
 /** What a node of this channel and rank says on its card. */
 const nodeSays = (ch: Channel, rank: number): string => CLASS_NODES.find((n) => n.channel === ch && n.rank === rank)?.note ?? '';
 /** The trades moved over to perks, and the first perk of the first of them, as its card says it. */
-const PERK_TRADES = CLASSES.filter((c) => PERK_CLASSES.has(c.id));
+const PERK_TRADES = CLASSES.filter((c) => PERK_CLASSES.has(c.id) && c.kind === 'craft');
 const FIRST_PERK = PERK_TRADES.length ? perksOf(PERK_TRADES[0].id)[0] : undefined;
+/** The fighting trades moved over to spells and passives, and the first spell of the first of them. */
+const SPELL_TRADES = CLASSES.filter((c) => PERK_CLASSES.has(c.id) && c.kind === 'combat');
+const FIRST_SPELL = SPELL_TRADES.length
+  ? perksOf(SPELL_TRADES[0].id).map((p) => CLASS_SPELL_BY_ID.get(p.id)).find((sp) => sp !== undefined)
+  : undefined;
 /** A Forester's perk's numbers, by the perk's name. */
 const forester = (name: string): Record<string, number> => perksOf('forester').find((p) => p.name === name)?.fx ?? {};
 const BRUSH_SIDE = 2 * (forester('Clear Brush').clear_brush ?? 0) + 1;
@@ -715,14 +721,23 @@ export function helpText(): string {
     at ${listed(PERK_TIER_AT.slice(1).map(String))} in its main skill, and at each tier you take <b>one</b> of the
     ${numberWord(PERKS_PER_TIER)}. Every card says exactly what that perk changes and by how much &mdash;
     ${FIRST_PERK.name}: <i>${FIRST_PERK.note}</i> A perk taken is kept for as long as the trade is.</p>` : ''}
+    ${FIRST_SPELL ? `<p>A fighting trade on <b>spells and passives</b> &mdash; ${listed(SPELL_TRADES.map((c) => `the ${c.name}`))} &mdash; has
+    ${numberWord(CLASS_TIER_AT.length)} tiers too, and they open on the trade's own <b>class level</b> rather than on a skill. It is
+    ${CLASS_LEVEL_START} when you take the trade up, so the first tier opens with it, and the others open at class levels
+    ${listed(CLASS_TIER_AT.slice(1).map(String))}. It rises on the curve every skill rises on, with every blow or shot that lands on a
+    creature while you hold the trade, and a blow that kills raises it ${numberWord(1 + CLASS_LEARN_KILL / CLASS_LEARN_BLOW)} times as much.
+    Each tier offers <b>${numberWord(PERKS_PER_TIER - 1)} spells and a passive</b>, and you take one of them. A passive works by itself, as a
+    craft trade's perk does. A spell goes on the spell bar and is paid for in <b>stamina</b>, as a share of a full bar, and rests its own
+    number of seconds after each call &mdash; ${FIRST_SPELL.name}: <i>${spellTerms(FIRST_SPELL)} ${FIRST_SPELL.note}</i>
+    The trade's level, its spells and their place on the bar go when the trade is put down.</p>` : ''}
     <p>A <b>rite</b> is the one thing a trade may ask for out loud: ${listed(riteWidths.map(numberWord)).replace(' and ', ' or ')} channels pushed much
     harder for a fixed number of seconds, paid out of the same <b>favour</b> a prayer is paid from, and
     then a rest before you may ask again. The card gives each of those figures. Some trade one channel away
     for another &mdash; ${riteDef('redhour')?.name} is <i>${riteSays('redhour')}</i> &mdash; so read both halves before you call one.
     Only the <b>fighting</b> trades have a rite; a craft trade has its perks and none. It sits at
-    the head of its trade's tree, with the reason underneath when you cannot call it.</p>
+    the head of its trade's tree or tiers, with the reason underneath when you cannot call it.</p>
     <p>Every card has <b>What it offers</b>, which lays the trade open before you take it up: its
-    ${numberWord(PERK_TIER_AT.length)} tiers of perks with the skill each opens at and what you have, or its rite and its
+    ${numberWord(PERK_TIER_AT.length)} tiers of perks with the skill or class level each opens at, or its rite and its
     ${numberWord(COLUMNS)} columns with what each node costs and does. That is read from the rulebook, and it is there playing by
     yourself too. <b>Take up</b> and <b>Take this one</b> each ask a second time before anything is done, saying what
     goes with it, what it costs and which perks close.</p>
@@ -2521,9 +2536,9 @@ export function helpText(): string {
     before you take one. Taking a patron or a spell waits for you to confirm it in the window. A spell is paid for in favour and rests a number of
     seconds of its own after each call.</p>
     <p>The <b>spell bar</b> along the bottom has ${numberWord(BAR_SLOTS)} slots: ${listed((['class', 'faith', 'path'] as const).map((s) => `${numberWord(slotsFor(s))} for ${SCHOOL_NAMES[s].toLowerCase()} spells`))}.
-    A spell you take goes in the first empty faith slot; right-click a slot to put another of yours there or to empty it.
-    A dark shade over a slot is the rest that spell has left. On an island only: playing by yourself in the browser there
-    is nobody to keep a patron.</p>
+    A patron's spell you take goes in the first empty faith slot and a fighting trade's in the first empty class slot; right-click a
+    slot to put another of yours there or to empty it. A dark shade over a slot is the rest that spell has left. On an island only:
+    playing by yourself in the browser there is nobody to keep a patron or a trade.</p>
     <p>Every spell says what it can be cast on: ${listedOr(SPELL_ONS.map((o) => `<b>${SPELL_ON_WORDS[o]}</b>`))}. A
     wildermon is any creature that is not after you; an enemy is any wild creature, so one minding its own business is both.
     A thing is anything in your pack or set down in the world, and a spell on the ground reaches everything within its own

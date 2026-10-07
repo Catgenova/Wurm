@@ -2,7 +2,7 @@ import { ACTION_BY_ID } from './actions';
 import { attackOf, BLOW_SHARE, bloodMul, type Creature } from './creatures';
 import {
   ARROWS, blowEvery, blowOf, CONSIDER_EASY, CONSIDER_HARD, CRIT_HIT, critChance, fightBase, headBlow, headHide, hideTakes, nockedArrow,
-  STANCE_DEALT, swungWith,
+  stanceDealt, swungWith,
 } from './fight';
 import type { Game } from './game';
 import { hitChance, WEAPON_BY_ID, weaponDamage } from './gear';
@@ -39,14 +39,14 @@ export function consider(g: Game, c: Creature): Consider {
   let secs: number;
   if (held && bow && arrow) {
     const head = ARROWS[arrow.id];
-    blow = weaponDamage(g, bow, held) * matOfItem(arrow).edge * (0.6 + arrow.ql / 140) * STANCE_DEALT[g.settings.fightStance]
+    blow = weaponDamage(g, bow, held) * matOfItem(arrow).edge * (0.6 + arrow.ql / 140) * stanceDealt(g.settings.fightStance, (k, o) => g.perk(k, o))
       * hideTakes(def.hide, headBlow(head, bow)) * headHide(head, def.hide) * (1 + critChance(g.skills.get('archery'), bow) * (CRIT_HIT - 1));
     hit = hitChance(g, bow, held);
     const shoot = ACTION_BY_ID.get('shoot_creature');
     secs = (shoot && fightBase(g, shoot)) || bow.swing;
   } else {
     const { def: w, item } = swungWith(g);
-    blow = weaponDamage(g, w, item) * STANCE_DEALT[g.settings.fightStance] * hideTakes(def.hide, blowOf(w))
+    blow = weaponDamage(g, w, item) * stanceDealt(g.settings.fightStance, (k, o) => g.perk(k, o)) * hideTakes(def.hide, blowOf(w))
       * (1 + critChance(g.skills.get(w.kind), w) * (CRIT_HIT - 1));
     hit = hitChance(g, w, item);
     const attack = ACTION_BY_ID.get('attack_creature');

@@ -29,6 +29,8 @@ import { perksOf } from '../../src/game/perks';
 
 // The Terraformer holds perks rather than a tree now: two of them, a tier apart.
 const [TF_A, , , TF_B] = perksOf('terraformer').map((p) => p.id);
+/** A Sworn Blade's first passive, which is a perk of the fighting trade like any other. */
+const BLADE_PERK = perksOf('blade').find((p) => p.tier === 1 && Object.keys(p.fx).length > 0)!.id;
 
 const psql = (sql: string): string =>
   execFileSync('psql', ['-v', 'ON_ERROR_STOP=1', '-X', '-q', '-t', '-A', '-f', '-'], {
@@ -113,7 +115,7 @@ begin
   perform set_config('request.jwt.claims', json_build_object('sub', u)::text, true);
   update player set craft_class = 'terraformer', combat_class = 'blade' where world_id = w and uid = u;
   insert into player_node (world_id, uid, node) values
-    (w, u, '${TF_A}'), (w, u, '${TF_B}'), (w, u, 'blade_1_1');
+    (w, u, '${TF_A}'), (w, u, '${TF_B}'), (w, u, '${BLADE_PERK}');
   perform class_fold(w, u);
   insert into said values ('KIND', coalesce(rpc_regret_class(w, 'fishing')->>'why', 'IT WENT THROUGH'));
   insert into said values ('NONE', coalesce(rpc_regret_class(w, 'craft')->>'why', 'IT WENT THROUGH'));
@@ -188,7 +190,7 @@ check('which is kept, and the trade with it', say('LOCKEDKEPT') === 'terraformer
 check('and an empty slot', say('EMPTY') === regretEmpty('combat'), say('EMPTY'));
 check('one undoes the crafting trade', say('UNDONE') === 'terraformer|craft|-', say('UNDONE'));
 check('and leaves the fighting one', say('SLOTS') === 'none|blade', say('SLOTS'));
-check('its tree goes with it, and the other tree stays', say('NODES') === 'blade_1_1', say('NODES'));
+check('its perks go with it, and the other trade’s stay', say('NODES') === BLADE_PERK, say('NODES'));
 check('and what it gave is gone from the body',
   !CLASSES.find((c) => c.id === 'terraformer')!.skills.some((s) => say('FOLDED').split(',').includes(s))
     && CLASSES.find((c) => c.id === 'blade')!.skills.every((s) => say('FOLDED').split(',').includes(s)),

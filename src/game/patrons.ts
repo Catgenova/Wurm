@@ -2,6 +2,7 @@ import { TREE_AGES } from '../world/tiles';
 import { FAITH } from './faith';
 import { TARGET_RANGE } from './fight';
 import { SKILL_BY_ID } from './skills';
+import { CLASS_SPELL_BY_ID } from './talents';
 import { listed, listedOr, percent } from './words';
 
 /**
@@ -264,7 +265,7 @@ export const spellsOf = (patron: PatronId, tier: number): FaithSpellDef[] =>
   FAITH_SPELLS.filter((s) => s.patron === patron && s.tier === tier);
 
 /** What a spell can be cast on, as the Faith window says it. */
-export const spellOnText = (s: FaithSpellDef): string =>
+export const spellOnText = (s: Pick<FaithSpellDef, 'on' | 'radius'>): string =>
   listedOr(s.on.map((o) => (o === 'area' ? `the ground, everything within ${s.radius ?? 0} tiles of you or of a tile you choose` : SPELL_ON_WORDS[o])));
 
 /**
@@ -375,8 +376,9 @@ export const BAR_SLOTS = SPELL_BAR.length;
 /** How many slots each school has. */
 export const slotsFor = (school: SpellSchool): number => SPELL_BAR.filter((s) => s === school).length;
 
-/** Which school a spell id belongs to; only faith spells exist yet. */
-export const schoolOf = (id: string): SpellSchool | null => (FAITH_SPELL_BY_ID.has(id) ? 'faith' : null);
+/** Which school a spell id belongs to: a patron's, or a fighting trade's (`talents.ts`). No path's are written yet. */
+export const schoolOf = (id: string): SpellSchool | null =>
+  (FAITH_SPELL_BY_ID.has(id) ? 'faith' : CLASS_SPELL_BY_ID.has(id) ? 'class' : null);
 
 /**
  * Why this spell cannot go in this slot, or nothing: the same as the island's

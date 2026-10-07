@@ -1629,6 +1629,19 @@ jobs:
             --outfile=node_modules/.cache/chaos.mjs --log-level=error
           node node_modules/.cache/chaos.mjs
 
+      - name: The Sworn Blade's spells and passives
+        run: |
+          # The first fighting trade on spells and passives: twelve spells and
+          # six passives in six tiers that open on the trade's own level. Both
+          # sides hold the same rows; the level starts, learns and opens its
+          # tiers; a spell taken goes on the bar and is cast through the door
+          # for its stamina and its rest; every spell measured -- a blow at its
+          # share of a swing's, the same roll asked twice -- and every passive
+          # through the rule it changes, with the browser's numbers alike.
+          npx esbuild supabase/test/blade.ts --bundle --platform=node --format=esm \
+            --outfile=node_modules/.cache/blade.mjs --log-level=error
+          node node_modules/.cache/blade.mjs
+
       - name: Glassblowing, glass panels, bottles and the stained glass wall
         run: |
           # The Artisan's fourth trade, at a hot smelter: sand melted into

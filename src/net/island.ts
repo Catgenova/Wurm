@@ -562,6 +562,12 @@ export interface FaithSaid {
   bar: Array<string | null>;
   /** Spell id to seconds before it can be called again, for those resting. */
   rest: Record<string, number>;
+  /** Your fighting trade's spells that you know, lowest tier first, for its slots on the bar. */
+  classSpells?: string[];
+  /** Your stamina, a share of a full bar, which a trade's spells are paid in. */
+  stamina?: number;
+  /** Where a spell put your body (a Sworn Blade's Lunge), for the browser to go to. */
+  put?: { x: number; y: number; level: number };
   /** What a door just did, when it did something. */
   took?: string;
   cast?: string;
@@ -605,6 +611,8 @@ export interface TreeTrade {
   nodes: TreeNode[];
   /** A trade moved over to perks has these instead of nodes: six tiers of three. */
   tiers?: TreeTier[];
+  /** A fighting trade's own level, which its tiers open on; null for a craft trade. */
+  level?: number | null;
 }
 
 /** One perk of a tier, and why it may not be taken right now. */
@@ -616,7 +624,7 @@ export interface TreePerk {
   why: string | null;
 }
 
-/** One tier of a perk trade: the skill it opens at, whether it has, and its three. */
+/** One tier of a perk trade: the skill or class level it opens at, whether it has, and its three. */
 export interface TreeTier {
   tier: number;
   at: number;
@@ -2804,7 +2812,30 @@ export class Island {
 
   /** Call the spell in a slot of the bar, at what it is pointed at. */
   async castSpell(slot: number, target: Record<string, unknown>): Promise<FaithSaid | null> {
-    return this.faithDoor('rpc_cast_spell', { p_slot: slot, p_target: target });
+    const said = await this.faithDoor('rpc_cast_spell', { p_slot: slot, p_target: target });
+    if (said && !said.why && said.put && typeof said.put.x === 'number' && typeof said.put.y === 'number') this.follow(said.put);
+    return said;
+  }
+
+  /**
+   * Where a spell put the body: a Sworn Blade's Lunge strides it up to four
+   * tiles, which is short of `SNAP_GAP` and would never be noticed by a
+   * walk's answer. The island moved it, so the browser goes there too rather
+   * than walking back from where it stood, and the words still waiting were
+   * said from there and go unsaid.
+   */
+  private follow(put: { x: number; y: number; level: number }): void {
+    const { x, y } = put;
+    const level = typeof put.level === 'number' ? put.level : 0;
+    if (this.me) this.me = { ...this.me, x, y, level };
+    this.putGen += 1;
+    this.islandHas = { x, y, level };
+    this.lastSaid = '';
+    this.lastLevel = level;
+    this.lastTile = `${Math.floor(x)},${Math.floor(y)},${level}`;
+    this.stairsSaid = null;
+    this.crossed = null;
+    this.hooks.moved?.(x, y, level);
   }
 
   /** A faith door: the whole answer, or `why` alone when it refused or failed. */

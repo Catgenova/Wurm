@@ -1,8 +1,10 @@
 import { PLAYER_ATTACKER } from '../game/creatures';
 import type { Game } from '../game/game';
 import {
-  FAITH_SPELL_BY_ID, PATRON_AT, SCHOOL_NAMES, SPELL_BAR, SPELL_REACH, spellOnText, type FaithSpellDef, type SpellSchool,
+  FAITH_SPELL_BY_ID, PATRON_AT, SCHOOL_NAMES, SPELL_BAR, SPELL_REACH, spellOnText, type SpellOn, type SpellSchool,
 } from '../game/patrons';
+import { CLASS_SPELL_BY_ID } from '../game/talents';
+import { percent } from '../game/words';
 import type { MenuItem } from './contextmenu';
 import type { FaithBook } from './faithbook';
 
@@ -18,8 +20,31 @@ export type SpellAim =
 /** The most creatures a "Cast on" list names, nearest first. */
 const AIM_MOST = 10;
 
+/** A spell as the bar draws it, a patron's or a fighting trade's, with what it costs in its own coin. */
+interface BarSpell {
+  id: string;
+  name: string;
+  note: string;
+  on: readonly SpellOn[];
+  radius?: number;
+  rest: number;
+  /** "12 favour", "8% stamina". */
+  costs: string;
+}
+const barSpell = (id: string | null | undefined): BarSpell | undefined => {
+  if (!id) return undefined;
+  const f = FAITH_SPELL_BY_ID.get(id);
+  if (f) return { id, name: f.name, note: f.note, on: f.on, radius: f.radius, rest: f.rest, costs: `${f.cost} favour` };
+  const c = CLASS_SPELL_BY_ID.get(id);
+  if (c) return { id, name: c.name, note: c.note, on: c.on, rest: c.rest, costs: c.cost > 0 ? `${percent(c.cost)} stamina` : 'no stamina' };
+  return undefined;
+};
+
+/** "8% stamina" as the start of a sentence. */
+const capitalFirst = (t: string): string => (t ? t[0].toUpperCase() + t.slice(1) : t);
+
 /** Whether a spell takes this sort of thing at all, before the island is asked about this one. */
-const takes = (def: FaithSpellDef, aim: SpellAim): boolean => {
+const takes = (def: BarSpell, aim: SpellAim): boolean => {
   switch (aim.kind) {
     case 'self': return def.on.includes('self');
     case 'player': return def.on.includes('player');
@@ -46,8 +71,11 @@ const takes = (def: FaithSpellDef, aim: SpellAim): boolean => {
  * through the log. A slot resting shows how much of its rest is left as a
  * shade drawn down across it.
  *
- * Only on an island: playing by yourself there is nobody to keep a patron,
- * so there is nothing to put here.
+ * A trade's spell is paid in stamina and a patron's in favour; the bar says
+ * which beside every one (`BarSpell`).
+ *
+ * Only on an island: playing by yourself there is nobody to keep a patron or
+ * a trade, so there is nothing to put here.
  */
 export class SpellBar {
   private readonly el: HTMLDivElement;
@@ -61,6 +89,7 @@ export class SpellBar {
     private readonly book: FaithBook,
     private readonly menu: (x: number, y: number, title: string, items: MenuItem[]) => void,
     private readonly openFaith: () => void,
+    private readonly openTrades: () => void = () => {},
   ) {
     this.el = document.createElement('div');
     this.el.className = 'spell-bar';
@@ -115,7 +144,7 @@ export class SpellBar {
       this.game.logMsg(this.emptyWhy(i), 'error');
       return;
     }
-    const def = FAITH_SPELL_BY_ID.get(id);
+    const def = barSpell(id);
     const aim = def ? this.aimOf(def) : { kind: 'self' as const };
     if (aim) {
       await this.castAt(i, aim);
@@ -138,12 +167,12 @@ export class SpellBar {
     const bar = this.book.said?.bar ?? [];
     const out: MenuItem[] = [];
     bar.forEach((id, i) => {
-      const def = id ? FAITH_SPELL_BY_ID.get(id) : undefined;
+      const def = barSpell(id);
       if (!def || !takes(def, aim)) return;
       const left = this.book.restLeft(def.id);
       out.push({
         label: `Cast ${def.name}`,
-        note: left > 0 ? `${def.cost} favour · ready in ${Math.ceil(left)} s` : `${def.cost} favour`,
+        note: left > 0 ? `${def.costs} · ready in ${Math.ceil(left)} s` : def.costs,
         onSelect: () => void this.castAt(i, aim),
       });
     });
@@ -151,7 +180,7 @@ export class SpellBar {
   }
 
   /** What a spell goes at by itself, in the order its kinds are written: nothing, when it has to be asked. */
-  private aimOf(def: FaithSpellDef): SpellAim | null {
+  private aimOf(def: BarSpell): SpellAim | null {
     const g = this.game;
     const id = g.fightTarget ?? g.marked;
     const c = id !== null ? g.creatures.get(id) : undefined;
@@ -164,7 +193,7 @@ export class SpellBar {
   }
 
   /** Everything within reach a spell can be cast on, nearest first, as menu rows that cast it. */
-  private aimItems(i: number, def: FaithSpellDef): MenuItem[] {
+  private aimItems(i: number, def: BarSpell): MenuItem[] {
     const g = this.game;
     const p = g.player;
     const far = (x: number, y: number): number => Math.hypot(x - p.x, y - p.y);
@@ -201,8 +230,7 @@ export class SpellBar {
     if (this.el.hidden) return;
     const bar = this.book.said?.bar ?? [];
     this.slots.forEach((slot, i) => {
-      const id = bar[i];
-      const def = id ? FAITH_SPELL_BY_ID.get(id) : undefined;
+      const def = barSpell(bar[i]);
       const left = def ? this.book.restLeft(def.id) : 0;
       const frac = def && def.rest > 0 ? Math.min(1, left / def.rest) : 0;
       const h = `${Math.round(frac * 100)}%`;
@@ -219,11 +247,11 @@ export class SpellBar {
     SPELL_BAR.forEach((school, i) => {
       const { btn, name } = this.slots[i];
       const id = s?.bar[i] ?? null;
-      const def = id ? FAITH_SPELL_BY_ID.get(id) : undefined;
+      const def = barSpell(id);
       name.textContent = def?.name ?? id ?? '—';
       btn.classList.toggle('spell-empty', !id);
       btn.title = def
-        ? `${def.name}: ${def.note} Cast on ${spellOnText(def)}. ${def.cost} favour, rests ${def.rest} s. Shift+${i + 1}; right-click to change.`
+        ? `${def.name}: ${def.note} Cast on ${spellOnText(def)}. ${capitalFirst(def.costs)}, rests ${def.rest} s. Shift+${i + 1}; right-click to change.`
         : `${SCHOOL_NAMES[school]} slot. ${this.emptyWhy(i)}`;
     });
   }
@@ -231,6 +259,10 @@ export class SpellBar {
   /** Why a slot has nothing in it, and what would put something there. */
   private emptyWhy(i: number): string {
     const school = SPELL_BAR[i];
+    if (school === 'class') {
+      if (!this.book.said?.classSpells?.length) return 'Take a spell of your fighting trade’s in the Trades window, and it goes here.';
+      return 'Right-click to put one of your trade’s spells here.';
+    }
     if (school !== 'faith') return `No ${SCHOOL_NAMES[school].toLowerCase()} spells are written yet.`;
     if (!this.book.said?.patron) return `Faith spells come from a patron, taken at ${PATRON_AT} faith in the Faith window.`;
     if (!this.book.said.taken.length) return 'Take a spell of your patron’s in the Faith window, and it goes here.';
@@ -242,22 +274,25 @@ export class SpellBar {
     const s = this.book.said;
     const school = SPELL_BAR[i];
     const items: MenuItem[] = [];
-    const now = s?.bar[i] ? FAITH_SPELL_BY_ID.get(s.bar[i] as string) : undefined;
+    const now = barSpell(s?.bar[i]);
     if (now) items.push({ label: `Cast ${now.name} on…`, children: this.aimItems(i, now) });
-    if (school === 'faith' && s) {
-      for (const id of s.taken) {
-        const def = FAITH_SPELL_BY_ID.get(id);
+    // The spells of this slot's school you have: a patron's taken, or your trade's (`classSpells`).
+    const mine = school === 'faith' ? s?.taken ?? [] : school === 'class' ? s?.classSpells ?? [] : [];
+    if (s && mine.length) {
+      for (const id of mine) {
+        const def = barSpell(id);
         items.push({
           label: def?.name ?? id,
-          note: def ? `${def.cost} favour · rests ${def.rest} s` : undefined,
+          note: def ? `${def.costs} · rests ${def.rest} s` : undefined,
           disabled: s.bar[i] === id,
           onSelect: () => void this.put(i, id),
         });
       }
-      if (s.bar[i]) items.push({ label: 'Empty this slot', onSelect: () => void this.put(i, null) });
     }
+    if (s?.bar[i]) items.push({ label: 'Empty this slot', onSelect: () => void this.put(i, null) });
     if (!items.length) items.push({ label: this.emptyWhy(i), disabled: true });
-    items.push({ label: 'Open the Faith window', onSelect: () => this.openFaith() });
+    if (school === 'class') items.push({ label: 'Open the Trades window', onSelect: () => this.openTrades() });
+    else items.push({ label: 'Open the Faith window', onSelect: () => this.openFaith() });
     this.menu(x, y, `${SCHOOL_NAMES[school]} slot ${i + 1}`, items);
   }
 

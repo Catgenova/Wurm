@@ -15,18 +15,25 @@
  *   * each of the five new channels moves the number it claims, measured at
  *     the site that reads it -- and moves nothing for a trade that does not
  *     cover that skill, which is the whole of what separates two trades
- *     sharing a channel;
+ *     sharing a channel. Each is measured on a fighting trade that still has
+ *     a tree with a column of it: the trades are moving to spells and
+ *     passives one at a time (`talents.ts`), and one that has moved has no
+ *     nodes to buy;
  *   * `aim` goes inside the ceiling, so a blow can never land more than
  *     ninety-six times in a hundred however much of it you buy;
  *   * a wound is closed by `chirurgy` now and not by `first_aid`;
  *   * and the rite: the same four refusals in the same words on both sides, a
- *     multiplier while it holds, nothing once it lapses, and a node taken in
+ *     multiplier while it holds, nothing once it lapses, and a perk taken in
  *     the middle of one that does not put it out.
  *
  * Runs against the database the suite leaves behind.
  */
 import { execFileSync } from 'node:child_process';
-import { COMBAT_CLASSES, RITES, riteDef, riteRefusal } from '../../src/game/classes';
+import {
+  CLASS_COLUMNS, COMBAT_CLASSES, nodeDef, PERK_CLASSES, RITES, riteDef, riteRefusal, type ClassDef,
+} from '../../src/game/classes';
+import { WEAPON_BY_ID } from '../../src/game/gear';
+import { perksOf } from '../../src/game/perks';
 
 const psql = (sql: string): string =>
   execFileSync('psql', ['-v', 'ON_ERROR_STOP=1', '-X', '-q', '-t', '-A', '-f', '-'], {
@@ -47,6 +54,41 @@ const check = (what: string, passed: boolean, detail = ''): void => {
   (passed ? ok : bad).push(`${passed ? 'ok  ' : 'FAIL'} ${what}${detail ? ` — ${detail}` : ''}`);
 };
 const near = (a: number, b: number, by = 1e-9): boolean => Math.abs(a - b) <= by;
+
+/**
+ * The first fighting trade that still has a tree with a column of this
+ * channel, and the minor at the head of that column; none once every trade
+ * that had one has moved to perks.
+ */
+const treed = (channel: string): { c: ClassDef; node: string; mul: number } | null => {
+  for (const c of COMBAT_CLASSES) {
+    if (PERK_CLASSES.has(c.id)) continue;
+    const col = CLASS_COLUMNS[c.id].findIndex((x) => x.channel === channel);
+    const n = col >= 0 ? nodeDef(`${c.id}_${col + 1}_1`) : undefined;
+    if (n) return { c, node: n.id, mul: n.mul };
+  }
+  return null;
+};
+const AIM = treed('aim');
+const EDGE = treed('edge');
+const GUARD = treed('guard');
+/** A kind of weapon the trade does not cover, for the channel to leave alone. */
+const KINDS = [...new Set([...WEAPON_BY_ID.values()].map((x) => x.kind))].sort();
+const otherKind = (c: ClassDef): string => KINDS.find((k) => !c.skills.includes(k))!;
+/** A line of armour or the shield, covered by the trade or not. */
+const GUARDS = ['shields', 'chain_armour', 'plate_armour', 'leather_armour'];
+const guardOf = (c: ClassDef, mine: boolean): string => GUARDS.find((s) => c.skills.includes(s) === mine)!;
+/** A Sworn Blade's first passive, taken in the middle of its rite. */
+const BLADE_PERK = perksOf('blade').find((p) => p.tier === 1 && Object.keys(p.fx).length > 0)!.id;
+
+/** The trade put down and this one taken up afresh, at 55 in its main skill: below the ceiling, so aim shows. */
+const takeUp = (c: ClassDef): string => `
+  update player set combat_class = null, class_mul = null where world_id = w.world_id and uid = w.uid;
+  delete from player_node where world_id = w.world_id and uid = w.uid;
+  delete from caller where uid = w.uid;
+  insert into skill (world_id, uid, id, value) values (w.world_id, w.uid, '${c.main}', 55)
+    on conflict (world_id, uid, id) do update set value = 55;
+  perform rpc_take_class(w.world_id, '${c.id}');`;
 
 const out = psql(`
 begin;
@@ -112,37 +154,11 @@ begin
   insert into said values ('SCOPE|' || act_scope(w.world_id, w.uid, 'fighting')
     || '|' || act_scope(w.world_id, w.uid, 'mining'));
 
-  -- aim, below the ceiling and then hard against it.
-  a := hit_chance(w.world_id, w.uid, 'swords');
-  perform rpc_take_node(w.world_id, 'blade_3_1');
-  b := hit_chance(w.world_id, w.uid, 'swords');
-  insert into said values ('AIM|' || a || '|' || b || '|' || hit_chance(w.world_id, w.uid, 'axes'));
-  update skill set value = 100 where world_id = w.world_id and uid = w.uid and id = 'swords';
-  insert into said values ('CEIL|' || hit_chance(w.world_id, w.uid, 'swords'));
-  update skill set value = 55 where world_id = w.world_id and uid = w.uid and id = 'swords';
-
-  -- edge, on the sword and on nothing else.
-  a := weapon_damage(w.world_id, w.uid, (select x from weapon_def x where id = 'sword'), null::item);
-  c := weapon_damage(w.world_id, w.uid, (select x from weapon_def x where id = 'battle_axe'), null::item);
-  perform rpc_take_node(w.world_id, 'blade_2_1');
-  b := weapon_damage(w.world_id, w.uid, (select x from weapon_def x where id = 'sword'), null::item);
-  d := weapon_damage(w.world_id, w.uid, (select x from weapon_def x where id = 'battle_axe'), null::item);
-  insert into said values ('EDGE|' || (b / a) || '|' || (d / c));
-
-  -- guard, on the shield and the trade's own line of mail.
-  perform rpc_take_node(w.world_id, 'blade_1_1');
-  insert into said values ('GUARD|' || class_mul(w.world_id, w.uid, 'guard', 'shields')
-    || '|' || class_mul(w.world_id, w.uid, 'guard', 'chain_armour')
-    || '|' || class_mul(w.world_id, w.uid, 'guard', 'plate_armour'));
-
   /*
-   * And the points to go on with. Fifty-five in swords is three points, which
-   * is exactly what has been spent by here -- the rest of this wants a fourth,
-   * and a trade at the top of its skill has twelve.
+   * The rite, on the Sworn Blade: four refusals, then the thing itself. A
+   * hundred in swords, so nothing about the trade is short.
    */
   update skill set value = 100 where world_id = w.world_id and uid = w.uid and id = 'swords';
-
-  -- the rite: four refusals, then the thing itself.
   insert into said values ('THEIRS|' || rite_refusal(w.world_id, w.uid, 'redhour'));
   update skill set value = 4 where world_id = w.world_id and uid = w.uid and id = 'prayer';
   insert into said values ('PRAYER|' || rite_refusal(w.world_id, w.uid, 'ward'));
@@ -161,13 +177,38 @@ begin
   insert into said values ('CALLED|' || coalesce(v->>'called', v->>'why') || '|' || (b / a)
     || '|' || class_mul(w.world_id, w.uid, 'guard', 'plate_armour'));
   insert into said values ('AGAIN|' || coalesce(rpc_rite(w.world_id, 'ward')->>'why', 'IT WENT THROUGH'));
-  -- a node taken mid-rite keeps it
-  perform rpc_take_node(w.world_id, 'blade_1_2');
-  insert into said values ('KEPT|' || (class_mul(w.world_id, w.uid, 'guard', 'shields') / (1.03 * 1.04)));
+  -- a perk taken mid-rite keeps it
+  insert into said values ('KEPT|' || coalesce(rpc_take_perk(w.world_id, '${BLADE_PERK}')->>'why', 'taken')
+    || '|' || class_mul(w.world_id, w.uid, 'guard', 'shields'));
   -- and it goes when its hour does
   update player set class_mul = jsonb_set(class_mul, '{rite,until}', to_jsonb(now() - interval '1 second'))
     where world_id = w.world_id and uid = w.uid;
   insert into said values ('LAPSED|' || class_mul(w.world_id, w.uid, 'guard', 'shields'));
+${AIM ? `
+  -- aim, below the ceiling and then hard against it, on a trade with a column of it.
+  ${takeUp(AIM.c)}
+  a := hit_chance(w.world_id, w.uid, '${AIM.c.main}');
+  c := hit_chance(w.world_id, w.uid, '${otherKind(AIM.c)}');
+  perform rpc_take_node(w.world_id, '${AIM.node}');
+  b := hit_chance(w.world_id, w.uid, '${AIM.c.main}');
+  insert into said values ('AIM|' || a || '|' || b || '|' || (hit_chance(w.world_id, w.uid, '${otherKind(AIM.c)}') / c));
+  update skill set value = 100 where world_id = w.world_id and uid = w.uid and id = '${AIM.c.main}';
+  insert into said values ('CEIL|' || hit_chance(w.world_id, w.uid, '${AIM.c.main}'));` : ''}
+${EDGE ? `
+  -- edge, on the trade's own weapon and on nothing else.
+  ${takeUp(EDGE.c)}
+  a := weapon_damage(w.world_id, w.uid, (select x from weapon_def x where kind = '${EDGE.c.main}' order by id limit 1), null::item);
+  c := weapon_damage(w.world_id, w.uid, (select x from weapon_def x where kind = '${otherKind(EDGE.c)}' order by id limit 1), null::item);
+  perform rpc_take_node(w.world_id, '${EDGE.node}');
+  b := weapon_damage(w.world_id, w.uid, (select x from weapon_def x where kind = '${EDGE.c.main}' order by id limit 1), null::item);
+  d := weapon_damage(w.world_id, w.uid, (select x from weapon_def x where kind = '${otherKind(EDGE.c)}' order by id limit 1), null::item);
+  insert into said values ('EDGE|' || (b / a) || '|' || (d / c));` : ''}
+${GUARD ? `
+  -- guard, on the trade's own line of armour and not somebody else's.
+  ${takeUp(GUARD.c)}
+  perform rpc_take_node(w.world_id, '${GUARD.node}');
+  insert into said values ('GUARD|' || class_mul(w.world_id, w.uid, 'guard', '${guardOf(GUARD.c, true)}')
+    || '|' || class_mul(w.world_id, w.uid, 'guard', '${guardOf(GUARD.c, false)}'));` : ''}
 
   -- knit, and the skill that closes a wound.
   update player set combat_class = null, class_mul = null where world_id = w.world_id and uid = w.uid;
@@ -256,21 +297,34 @@ const [swung, dug] = said('SCOPE').split('|');
 check('a swing is done with what is in your hand, and a dig is still digging',
   swung === 'swords' && dug === 'mining', `fighting reads as ${swung}, mining as ${dug}`);
 
-const [aimPlain, aimTree, aimAxe] = said('AIM').split('|').map(Number);
-check('aim: a minor is two per cent more of the blows landing, on swords alone',
-  near(aimTree / aimPlain, 1.02, 1e-9) && aimAxe < aimPlain,
-  `${aimPlain} → ${aimTree}, and an axe is ${aimAxe}`);
-check('and it goes inside the ceiling, so nothing lands more than 96 times in 100',
-  Number(said('CEIL')) <= 0.96, said('CEIL'));
+/** Said when no fighting trade has a tree with this channel any more, and there is nothing to buy to measure it. */
+const moved = (channel: string): string => `no fighting trade has a tree with ${channel} in it any more`;
+if (AIM) {
+  const [aimPlain, aimTree, aimOther] = said('AIM').split('|').map(Number);
+  check(`aim: a minor is ${Math.round((AIM.mul - 1) * 100)} per cent more of the blows landing, on ${AIM.c.main} alone (${AIM.c.name})`,
+    near(aimTree / aimPlain, AIM.mul, 1e-9) && aimOther === 1,
+    `${aimPlain} → ${aimTree}, and ${otherKind(AIM.c)} ×${aimOther}`);
+  check('and it goes inside the ceiling, so nothing lands more than 96 times in 100',
+    Number(said('CEIL')) <= 0.96, said('CEIL'));
+} else {
+  check(`aim: ${moved('aim')}`, said('AIM') === 'MISSING', said('AIM'));
+}
 
-const [edgeSword, edgeAxe] = said('EDGE').split('|').map(Number);
-check('edge: a minor is three per cent on the sword and nothing on the axe',
-  near(edgeSword, 1.03, 1e-9) && edgeAxe === 1, `sword ×${edgeSword}, axe ×${edgeAxe}`);
+if (EDGE) {
+  const [edgeMine, edgeOther] = said('EDGE').split('|').map(Number);
+  check(`edge: a minor is ${Math.round((EDGE.mul - 1) * 100)} per cent on ${EDGE.c.main} and nothing on ${otherKind(EDGE.c)} (${EDGE.c.name})`,
+    near(edgeMine, EDGE.mul, 1e-9) && edgeOther === 1, `${EDGE.c.main} ×${edgeMine}, ${otherKind(EDGE.c)} ×${edgeOther}`);
+} else {
+  check(`edge: ${moved('edge')}`, said('EDGE') === 'MISSING', said('EDGE'));
+}
 
-const [gShield, gChain, gPlate] = said('GUARD').split('|').map(Number);
-check('guard: the shield and the trade’s own mail, and not somebody else’s plate',
-  near(gShield, 1.03, 1e-9) && near(gChain, 1.03, 1e-9) && gPlate === 1,
-  `shield ×${gShield}, chain ×${gChain}, plate ×${gPlate}`);
+if (GUARD) {
+  const [gMine, gOther] = said('GUARD').split('|').map(Number);
+  check(`guard: the trade’s own ${guardOf(GUARD.c, true).replace('_', ' ')}, and not somebody else’s ${guardOf(GUARD.c, false).replace('_', ' ')} (${GUARD.c.name})`,
+    near(gMine, GUARD.mul, 1e-9) && gOther === 1, `×${gMine}, ×${gOther}`);
+} else {
+  check(`guard: ${moved('guard')}`, said('GUARD') === 'MISSING', said('GUARD'));
+}
 
 const ward = riteDef('ward')!;
 check('a rite that is not yours is refused, in the same words on both sides',
@@ -289,10 +343,11 @@ check('calling it multiplies its channel, on the trade’s own skills only',
   `${called}, guard ×${riteMul}, plate ×${ritePlate}`);
 check('and it will not be called twice in a row',
   said('AGAIN') === riteRefusal(ward, 'blade', 60, 120, ward.rest), said('AGAIN'));
-check('a node taken in the middle of a rite does not put the rite out',
-  near(Number(said('KEPT')), ward.muls.guard!, 1e-9), said('KEPT'));
-check('and when its hour is up it stops, leaving the nodes',
-  near(Number(said('LAPSED')), 1.03 * 1.04, 1e-9), said('LAPSED'));
+const [keptPerk, keptMul] = said('KEPT').split('|');
+check('a perk taken in the middle of a rite does not put the rite out',
+  keptPerk === 'taken' && near(Number(keptMul), ward.muls.guard!, 1e-9), said('KEPT'));
+check('and when its hour is up it stops',
+  near(Number(said('LAPSED')), 1, 1e-9), said('LAPSED'));
 
 const [knitMine, knitTheirs] = said('KNIT').split('|').map(Number);
 check('knit tells on chirurgy and not on the forager’s first aid',

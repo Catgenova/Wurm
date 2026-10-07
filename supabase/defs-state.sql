@@ -273,6 +273,13 @@ create table if not exists spell_slot (
 create table if not exists perk_tier (
   tier int primary key, at int not null
 );
+create table if not exists class_tier (
+  tier int primary key, at int not null
+);
+create table if not exists class_spell (
+  id text primary key, class text not null, num int not null, name text not null, note text not null,
+  cost double precision not null, rest double precision not null, on_what text[] not null, fx jsonb not null
+);
 create table if not exists pan_ore (
   item text primary key
 );
@@ -1847,6 +1854,8 @@ delete from class_node;
 delete from class_perk;
 delete from perk_fx_rule;
 delete from perk_tier;
+delete from class_tier;
+delete from class_spell;
 delete from patron_def;
 delete from faith_tier;
 delete from faith_spell;
@@ -2977,6 +2986,11 @@ create or replace function glazeable(p_def text) returns boolean language sql im
 create or replace function tincture_bonus() returns double precision language sql immutable as $fn$ select 0.1::double precision $fn$;
 create or replace function tincture_seconds() returns double precision language sql immutable as $fn$ select 3000::double precision $fn$;
 create or replace function moss_plant() returns int language sql immutable as $fn$ select 10::int $fn$;
+create or replace function class_level_start() returns double precision language sql immutable as $fn$ select 1::double precision $fn$;
+create or replace function class_learn_blow() returns double precision language sql immutable as $fn$ select 1::double precision $fn$;
+create or replace function class_learn_kill() returns double precision language sql immutable as $fn$ select 5::double precision $fn$;
+create or replace function guardian_reach() returns double precision language sql immutable as $fn$ select 2::double precision $fn$;
+create or replace function block_most() returns double precision language sql immutable as $fn$ select 0.6::double precision $fn$;
 create or replace function grass_plant() returns int language sql immutable as $fn$ select 10::int $fn$;
 insert into title_def values ('digging:50', 'digging', 50, 'Digger');
 insert into title_def values ('digging:70', 'digging', 70, 'Excavator');
@@ -4969,7 +4983,7 @@ insert into class_skill values ('artisan', 'jewellery');
 insert into class_skill values ('artisan', 'pottery');
 insert into class_skill values ('artisan', 'papyrusmaking');
 insert into class_skill values ('artisan', 'glassblowing');
-insert into class_def values ('blade', 'combat', 'Sworn Blade', 'Nodes apply to swords, shields and chain armour.', 'swords', 'Bought out: damage stopped by shield and armour +17%, damage per hit +17%, chance to hit +9%.');
+insert into class_def values ('blade', 'combat', 'Sworn Blade', 'A spell or a passive to take at each of six tiers: the first with the trade, then at class levels 20, 40, 60, 80 and 99. The class level rises as you land blows and kills while you hold the trade.', 'swords', 'Each tier offers two spells and a passive and you take one of them: six in all, out of eighteen.');
 insert into class_skill values ('blade', 'swords');
 insert into class_skill values ('blade', 'shields');
 insert into class_skill values ('blade', 'chain_armour');
@@ -5012,15 +5026,6 @@ insert into class_channel values ('tame', 'Quiet', 'Chance to tame', false);
 insert into class_channel values ('force', 'Force', 'Spell damage, hold and skin', false);
 insert into class_channel values ('reach', 'Reach', 'Spell range', false);
 insert into class_channel values ('thrift', 'Thrift', 'Stone wear per cast', true);
-insert into class_node values ('blade_1_1', 'blade', 1, 1, 'Shieldwork I', 'Damage stopped by shield and armour +3%', 'guard', 1, null, 1.03);
-insert into class_node values ('blade_1_2', 'blade', 1, 2, 'Shieldwork II', 'Damage stopped by shield and armour +4%', 'guard', 1, 'blade_1_1', 1.04);
-insert into class_node values ('blade_1_3', 'blade', 1, 3, 'Iron Door', 'Damage stopped by shield and armour +9%', 'guard', 3, 'blade_1_2', 1.09);
-insert into class_node values ('blade_2_1', 'blade', 2, 1, 'Edge I', 'Damage per hit +3%', 'edge', 1, null, 1.03);
-insert into class_node values ('blade_2_2', 'blade', 2, 2, 'Edge II', 'Damage per hit +4%', 'edge', 1, 'blade_2_1', 1.04);
-insert into class_node values ('blade_2_3', 'blade', 2, 3, 'Riposte', 'Damage per hit +9%', 'edge', 3, 'blade_2_2', 1.09);
-insert into class_node values ('blade_3_1', 'blade', 3, 1, 'Guard’s Eye I', 'Chance to hit +2%', 'aim', 1, null, 1.02);
-insert into class_node values ('blade_3_2', 'blade', 3, 2, 'Guard’s Eye II', 'Chance to hit +2%', 'aim', 1, 'blade_3_1', 1.02);
-insert into class_node values ('blade_3_3', 'blade', 3, 3, 'Unhurried', 'Chance to hit +5%', 'aim', 3, 'blade_3_2', 1.05);
 insert into class_node values ('berserker_1_1', 'berserker', 1, 1, 'Heft I', 'Damage per hit +3%', 'edge', 1, null, 1.03);
 insert into class_node values ('berserker_1_2', 'berserker', 1, 2, 'Heft II', 'Damage per hit +4%', 'edge', 1, 'berserker_1_1', 1.04);
 insert into class_node values ('berserker_1_3', 'berserker', 1, 3, 'Whole Body', 'Damage per hit +9%', 'edge', 3, 'berserker_1_2', 1.09);
@@ -5354,6 +5359,24 @@ insert into class_perk values ('artisan_potters_wheel', 'artisan', 5, 49, 'Potte
 insert into class_perk values ('artisan_glaze', 'artisan', 6, 28, 'Glaze', 'A new job, Glaze it, on a clay pot, a clay bowl, a clay jar or an amphora: one lot of ashes brushed over it, and it never decays after, wherever it is left.', '{"glaze_item":1}');
 insert into class_perk values ('artisan_trade_book', 'artisan', 6, 36, 'Trade Book', 'A new book to write, on papyrusmaking: six papyrus, two leather and two inks, with a needle, make a book on any craft trade you have 50 of, and studying it teaches that trade, as much a go as a plain book teaches mind logic. Anybody may read one.', '{"trade_book":1}');
 insert into class_perk values ('artisan_circlet', 'artisan', 6, 48, 'Circlet', 'A new thing to make, on jewellery: two gold lumps, with a file, make a circlet, worn on the head in place of a helm. It takes three stones, set by anybody off each stone''s menu, and each gives half what it would in a ring: 5% more skill from every go at its trade.', '{"circlet":1}');
+insert into class_perk values ('blade_measured_cut', 'blade', 1, 1, 'Measured Cut', 'Spell, 8% of your stamina, 6 s before it can be called again. A blow at 130% that cannot miss, on an enemy within your reach.', '{}');
+insert into class_perk values ('blade_challenge', 'blade', 1, 32, 'Challenge', 'Spell, 8% of your stamina, 15 s before it can be called again. The creature turns on you at once and hunts only you for 10 s.', '{}');
+insert into class_perk values ('blade_light_sword', 'blade', 1, 108, 'Light Sword', 'A swing of a sword costs 30% less stamina.', '{"wind:swords":0.7}');
+insert into class_perk values ('blade_lunge', 'blade', 2, 2, 'Lunge', 'Spell, 10% of your stamina, 10 s before it can be called again. You stride to an enemy up to 4 tiles off, over ground you could walk, and strike it at 150%.', '{}');
+insert into class_perk values ('blade_hamstring', 'blade', 2, 11, 'Hamstring', 'Spell, 10% of your stamina, 20 s before it can be called again. A blow at 80%; for 10 s it walks, hunts and flees at 50% of its pace.', '{}');
+insert into class_perk values ('blade_counterweight', 'blade', 2, 111, 'Counterweight', 'A blow you block puts the next blow of whatever struck it back 0.5 s.', '{"stagger:block":0.5}');
+insert into class_perk values ('blade_shield_bash', 'blade', 3, 15, 'Shield Bash', 'Spell, 10% of your stamina, 12 s before it can be called again. With a shield in your off hand: a crushing blow at 70% that knocks a heavy blow off its stroke and puts its next blow back 2 s.', '{}');
+insert into class_perk values ('blade_second_breath', 'blade', 3, 29, 'Second Breath', 'Spell, 3 minutes before it can be called again. Costs no stamina. 40% of a full bar of stamina back at once.', '{}');
+insert into class_perk values ('blade_battle_hardened', 'blade', 3, 127, 'Battle-Hardened', 'A blow that lands on you opens or deepens its wound 20% less, so it bleeds and slows you less. What it takes off your health is the same.', '{"severity:wound":0.8}');
+insert into class_perk values ('blade_deflect', 'blade', 4, 19, 'Deflect', 'Spell, 10% of your stamina, 25 s before it can be called again. For 6 s, every blow you block lands back on what struck at 50% of the blow.', '{}');
+insert into class_perk values ('blade_hold_the_line', 'blade', 4, 26, 'Hold the Line', 'Spell, 15% of your stamina, 90 s before it can be called again. For 15 s your wounds bleed 50% less, and those on your arms do not slow your swing.', '{}');
+insert into class_perk values ('blade_stalwart', 'blade', 4, 123, 'Stalwart', 'In the defensive stance you take 30% less damage and deal 15% less, instead of 20% and 20%.', '{"stance:defensive_taken":0.7,"stance:defensive_dealt":0.85}');
+insert into class_perk values ('blade_disarming_cut', 'blade', 5, 12, 'Disarming Cut', 'Spell, 12% of your stamina, 30 s before it can be called again. A blow at 70%; its next 3 blows within 30 s do 40% less damage.', '{}');
+insert into class_perk values ('blade_measured_breathing', 'blade', 5, 31, 'Measured Breathing', 'Spell, 10% of your stamina, 60 s before it can be called again. For 20 s a swing or a draw costs no stamina.', '{}');
+insert into class_perk values ('blade_guardian', 'blade', 5, 129, 'Guardian', 'With a shield in your off hand, 20% of the blows a creature lands on another person or a companion within 2 tiles of you land on your shield instead, and do nothing to them.', '{"cover:share":0.2}');
+insert into class_perk values ('blade_last_stand', 'blade', 6, 28, 'Last Stand', 'Spell, 10 minutes before it can be called again. Costs no stamina. Only below 25% of your health: for 10 s you take 60% less damage.', '{}');
+insert into class_perk values ('blade_guardians_call', 'blade', 6, 33, 'Guardian’s Call', 'Spell, 18% of your stamina, 45 s before it can be called again. Every creature within 5 tiles of you that is hunting somebody turns on you and hunts only you for 8 s.', '{}');
+insert into class_perk values ('blade_shield_mastery', 'blade', 6, 109, 'Shield Mastery', 'Your shield blocks 8 percentage points more often, and the most it can block rises from 60% to 70%.', '{"block:shield":0.08,"blockcap:shield":0.7}');
 insert into perk_fx_rule values ('time', 'mul');
 insert into perk_fx_rule values ('ql', 'mul');
 insert into perk_fx_rule values ('weight', 'mul');
@@ -5378,6 +5401,8 @@ insert into perk_fx_rule values ('worn', 'mul');
 insert into perk_fx_rule values ('life', 'mul');
 insert into perk_fx_rule values ('harm', 'mul');
 insert into perk_fx_rule values ('age', 'mul');
+insert into perk_fx_rule values ('wind', 'mul');
+insert into perk_fx_rule values ('severity', 'mul');
 insert into perk_fx_rule values ('bright', 'mul');
 insert into perk_fx_rule values ('thrift', 'mul');
 insert into perk_fx_rule values ('force', 'mul');
@@ -5394,12 +5419,31 @@ insert into perk_fx_rule values ('tool', 'add');
 insert into perk_fx_rule values ('passes', 'add');
 insert into perk_fx_rule values ('hook', 'add');
 insert into perk_fx_rule values ('haul', 'add');
+insert into perk_fx_rule values ('block', 'add');
 insert into perk_tier values (1, 50);
 insert into perk_tier values (2, 60);
 insert into perk_tier values (3, 70);
 insert into perk_tier values (4, 80);
 insert into perk_tier values (5, 90);
 insert into perk_tier values (6, 99);
+insert into class_tier values (1, 1);
+insert into class_tier values (2, 20);
+insert into class_tier values (3, 40);
+insert into class_tier values (4, 60);
+insert into class_tier values (5, 80);
+insert into class_tier values (6, 99);
+insert into class_spell (id, class, num, name, note, cost, rest, on_what, fx) values ('blade_measured_cut', 'blade', 1, 'Measured Cut', 'A blow at 130% that cannot miss, on an enemy within your reach.', 0.08, 6, array['enemy']::text[], '{"more":1.3}');
+insert into class_spell (id, class, num, name, note, cost, rest, on_what, fx) values ('blade_challenge', 'blade', 32, 'Challenge', 'The creature turns on you at once and hunts only you for 10 s.', 0.08, 15, array['enemy']::text[], '{"secs":10}');
+insert into class_spell (id, class, num, name, note, cost, rest, on_what, fx) values ('blade_lunge', 'blade', 2, 'Lunge', 'You stride to an enemy up to 4 tiles off, over ground you could walk, and strike it at 150%.', 0.1, 10, array['enemy']::text[], '{"reach":4,"more":1.5}');
+insert into class_spell (id, class, num, name, note, cost, rest, on_what, fx) values ('blade_hamstring', 'blade', 11, 'Hamstring', 'A blow at 80%; for 10 s it walks, hunts and flees at 50% of its pace.', 0.1, 20, array['enemy']::text[], '{"more":0.8,"pace":0.5,"secs":10}');
+insert into class_spell (id, class, num, name, note, cost, rest, on_what, fx) values ('blade_shield_bash', 'blade', 15, 'Shield Bash', 'With a shield in your off hand: a crushing blow at 70% that knocks a heavy blow off its stroke and puts its next blow back 2 s.', 0.1, 12, array['enemy']::text[], '{"more":0.7,"back":2}');
+insert into class_spell (id, class, num, name, note, cost, rest, on_what, fx) values ('blade_second_breath', 'blade', 29, 'Second Breath', 'Costs no stamina. 40% of a full bar of stamina back at once.', 0, 180, array['self']::text[], '{"stamina":0.4}');
+insert into class_spell (id, class, num, name, note, cost, rest, on_what, fx) values ('blade_deflect', 'blade', 19, 'Deflect', 'For 6 s, every blow you block lands back on what struck at 50% of the blow.', 0.1, 25, array['self']::text[], '{"share":0.5,"secs":6}');
+insert into class_spell (id, class, num, name, note, cost, rest, on_what, fx) values ('blade_hold_the_line', 'blade', 26, 'Hold the Line', 'For 15 s your wounds bleed 50% less, and those on your arms do not slow your swing.', 0.15, 90, array['self']::text[], '{"bleed":0.5,"secs":15}');
+insert into class_spell (id, class, num, name, note, cost, rest, on_what, fx) values ('blade_disarming_cut', 'blade', 12, 'Disarming Cut', 'A blow at 70%; its next 3 blows within 30 s do 40% less damage.', 0.12, 30, array['enemy']::text[], '{"more":0.7,"cut":0.4,"blows":3,"secs":30}');
+insert into class_spell (id, class, num, name, note, cost, rest, on_what, fx) values ('blade_measured_breathing', 'blade', 31, 'Measured Breathing', 'For 20 s a swing or a draw costs no stamina.', 0.1, 60, array['self']::text[], '{"secs":20}');
+insert into class_spell (id, class, num, name, note, cost, rest, on_what, fx) values ('blade_guardians_call', 'blade', 33, 'Guardian’s Call', 'Every creature within 5 tiles of you that is hunting somebody turns on you and hunts only you for 8 s.', 0.18, 45, array['self']::text[], '{"reach":5,"secs":8}');
+insert into class_spell (id, class, num, name, note, cost, rest, on_what, fx) values ('blade_last_stand', 'blade', 28, 'Last Stand', 'Costs no stamina. Only below 25% of your health: for 10 s you take 60% less damage.', 0, 600, array['self']::text[], '{"below":0.25,"cut":0.6,"secs":10}');
 insert into patron_def values ('blessing', 'Blessing', 'good');
 insert into patron_def values ('justice', 'Justice', 'neutral');
 insert into patron_def values ('chaos', 'Chaos', 'evil');

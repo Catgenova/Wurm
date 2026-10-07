@@ -65,7 +65,7 @@ import { greenNow, mossyPiece } from './greening';
 import { WATER_PLANT_BY_ID, type WaterPlant, type WaterPlantKind } from '../world/waterplants';
 import { liveSettings, type Settings } from './settings';
 import { considerSays } from './consider';
-import { ARMOUR_VS, armsRefusal, BURN_WEAR, CROWD_BLOCK, DODGE_GAIN, dodgeChance, DRAW_WALK, FIGHT_QUIET, VENOM_DRAIN, VENOM_SECS, skillLine, type FightRecord, FIGHT_BACK_STILL, FIGHT_STANCE_NAMES, FLANK_HIT, legPace, FIGHT_TRIES, fightBase, fightWind, FOLLOW_RANGE, inFightReach, isFightJob, nextStance, STANCE_TAKEN, stanceSays, TARGET_RANGE } from './fight';
+import { ARMOUR_VS, armsRefusal, blockChance, BURN_WEAR, CROWD_BLOCK, DODGE_GAIN, dodgeChance, DRAW_WALK, FIGHT_QUIET, VENOM_DRAIN, VENOM_SECS, skillLine, type FightRecord, FIGHT_BACK_STILL, FIGHT_STANCE_NAMES, FLANK_HIT, legPace, FIGHT_TRIES, fightBase, fightWind, FOLLOW_RANGE, inFightReach, isFightJob, nextStance, stanceSays, stanceTaken, TARGET_RANGE } from './fight';
 import { Skills, SKILL_DEFS, isQuiet } from './skills';
 import { jewelGain } from './gems';
 import { earnedBy, knackBonus, knackLands, KNACK_CAP, KNACK_ODDS, TITLE_BY_ID } from './titles';
@@ -2326,7 +2326,8 @@ export class Game {
     if (sh) {
       // Less of a chance for every other thing on you than the one that struck (`CROWD_BLOCK`).
       const crowd = Math.max(0, 1 - CROWD_BLOCK * this.othersOnYou());
-      const chance = Math.min(0.6, sh.block * (0.6 + shield.ql / 160) + this.skills.get('shields') / 400) * crowd;
+      // And what a Sworn Blade's Shield Mastery adds, under the ceiling it raises (`blockChance`).
+      const chance = blockChance(sh.block, shield.ql, this.skills.get('shields'), (k, o) => this.perk(k, o)) * crowd;
       this.gainSkill('shields', 0.12);
       if (this.rand() < chance) {
         // Less for a Mender's Armour Care, as `hurt_player` has it.
@@ -2379,10 +2380,11 @@ export class Game {
    * is worn or learned by asking.
    */
   expectedBlow(raw: number, kind: WoundKind): number {
-    let through = raw * STANCE_TAKEN[this.settings.fightStance] * (1 - this.dodge());
+    const perk = (k: string, o: number): number => this.perk(k, o);
+    let through = raw * stanceTaken(this.settings.fightStance, perk) * (1 - this.dodge());
     const shield = this.worn('offhand');
     const sh = shield && SHIELDS[shield.id];
-    if (sh) through *= 1 - Math.min(0.6, sh.block * (0.6 + shield.ql / 160) + this.skills.get('shields') / 400);
+    if (sh) through *= 1 - blockChance(sh.block, shield.ql, this.skills.get('shields'), perk);
     let soaked = 0;
     for (const [slot, share] of HIT_LOCATIONS) {
       const item = this.worn(slot);
@@ -2430,7 +2432,7 @@ export class Game {
      */
     const a = this.action;
     const flank = a && isFightJob(a.def.id) && a.target.kind === 'creature' && by !== null && by !== PLAYER_ATTACKER && a.target.id !== by;
-    const hit = this.absorb(raw * STANCE_TAKEN[this.settings.fightStance] * (flank ? FLANK_HIT : 1), kind);
+    const hit = this.absorb(raw * stanceTaken(this.settings.fightStance, (k, o) => this.perk(k, o)) * (flank ? FLANK_HIT : 1), kind);
     if (hit.blocked) {
       this.player.attackedAt = this.time;
       this.events.emit('hit', this.player.x, this.player.y, 0, 'taken');
@@ -2441,7 +2443,8 @@ export class Game {
     this.player.stats.health = Math.max(0, this.player.stats.health - hit.taken);
     this.player.attackedAt = this.time;
     this.events.emit('hit', this.player.x, this.player.y, hit.taken, 'taken');
-    const wound = this.wound(kind, hit.part, hit.taken);
+    // Less of a wound than of a blow for a Sworn Blade's Battle-Hardened; the health it takes is the same.
+    const wound = this.wound(kind, hit.part, hit.taken * this.perk('severity:wound', 1));
     // A venomous bite leaves venom in what it opened (`VENOM_SECS`).
     if (from && this.creatures.species(from).venom) wound.venom = VENOM_SECS;
     const where = hit.worn ? `, though your ${itemName(hit.worn).toLowerCase()} takes the worst of it` : '';

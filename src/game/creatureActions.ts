@@ -10,7 +10,7 @@ import { furnitureCentre, furnitureName, vehicleOf } from './furniture';
 import { deedJobLine, emptyCrate, letOut, shutIn } from './creaturecrate';
 import { itemDef, itemName, rarityOf, type Mark } from './items';
 import { BANE_BONUS, banes, bowRange, hitChance, isBow, WEAPON_BY_ID, weaponDamage } from './gear';
-import { ARROWS, armsRefusal, BLINDSIDE, blowOf, CRIT_HIT, critChance, DRAW_CLOSEST, FALL_BACK, FIST, headBlow, headHide, headSide, hideTakes, nockedArrow, KNIFE_BLEED, KNIFE_BLEED_SECS, meleeReach, STAGGER_MAUL, STAGGER_POLE, STANCE_DEALT, swungWith } from './fight';
+import { ARROWS, armsRefusal, BLINDSIDE, blowOf, CRIT_HIT, critChance, DRAW_CLOSEST, FALL_BACK, FIST, headBlow, headHide, headSide, hideTakes, nockedArrow, KNIFE_BLEED, KNIFE_BLEED_SECS, meleeReach, STAGGER_MAUL, STAGGER_POLE, stanceDealt, swungWith } from './fight';
 import { matOfItem } from './materials';
 import { defaultKey } from './keybinds';
 
@@ -532,7 +532,7 @@ export const CREATURE_ACTIONS: ActionDef[] = [
          */
         // And now and then a critical one (`critChance`).
         const crit = g.rand() < critChance(g.skills.get(usable.kind), usable);
-        const dmg = weaponDamage(g, usable, item) * bane * STANCE_DEALT[g.settings.fightStance]
+        const dmg = weaponDamage(g, usable, item) * bane * stanceDealt(g.settings.fightStance, (k, o) => g.perk(k, o))
           * hideTakes(def.hide, blowOf(usable)) * blindside(c) * (0.75 + g.rand() * 0.5) * (crit ? CRIT_HIT : 1);
         g.creatures.hurt(g, c, dmg, 'player', crit);
         // And what the weapon does besides: a maul staggers, a spear holds it off, a knife opens it up (a fist none of these).
@@ -613,7 +613,7 @@ export const CREATURE_ACTIONS: ActionDef[] = [
         const bane = head.bane && def.glow ? BANE_BONUS : 1;
         const crit = g.rand() < critChance(g.skills.get('archery'), bow);
         // And what the head is: a blunt crushes, a bodkin goes through a hide (`headBlow`, `headHide`).
-        const dmg = weaponDamage(g, bow, held) * head.edge * bane * STANCE_DEALT[g.settings.fightStance]
+        const dmg = weaponDamage(g, bow, held) * head.edge * bane * stanceDealt(g.settings.fightStance, (k, o) => g.perk(k, o))
           * hideTakes(def.hide, headBlow(shape, bow)) * headHide(shape, def.hide) * blindside(c)
           * (0.6 + arrow.ql / 140) * (0.8 + g.rand() * 0.4) * (crit ? CRIT_HIT : 1);
         g.creatures.hurt(g, c, dmg, 'player', crit);

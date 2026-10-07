@@ -45,7 +45,9 @@
  * perk's own `fx` so that the two cannot say different things, and the
  * benefit check reads these functions as it reads any other note.
  */
-import { CLASSES, PERK_CLASSES, PERK_TIER_AT, PERKS_PER_TIER } from './classes';
+import { CLASSES, PERK_CLASSES, PERK_TIER_AT, PERKS_PER_TIER, tiersAtFor } from './classes';
+import { BLOCK_MOST, STANCE_DEALT, STANCE_TAKEN } from './fight';
+import { classSpellsOf, GUARDIAN_REACH, spellTerms } from './talents';
 import {
   ACTION_BY_ID, CHIP_CHANCE, CLEARED_TO, DIG_TILE_TIME, DREDGE_DEPTH, FLATTEN_STEP, GRASS_PER_CUT, MINE_COLLAPSE, MINE_DEPTH, PAN_ORES,
   PLANTED_AGE, plantedAge, PROSPECT_REACH, PROSPECT_STEP, REED_CUT, REED_EXTRA_AT, RESIN_TREE, SLOPE_FLOOR, SLOPE_PER_SKILL, SPOIL_REACH,
@@ -104,9 +106,10 @@ export type Fx = Record<string, number>;
 export const FX_RULE: Record<string, 'mul' | 'add'> = {
   time: 'mul', ql: 'mul', weight: 'mul', walk: 'mul', fail: 'mul', wear: 'mul', need: 'mul', bill: 'mul',
   grow: 'mul', rotate: 'mul', feed: 'mul', fill: 'mul', knack: 'mul', rot: 'mul', cool: 'mul', catch: 'mul', empty: 'mul', mend: 'mul',
-  bite: 'mul', cost: 'mul', worn: 'mul', life: 'mul', harm: 'mul', age: 'mul',
+  bite: 'mul', cost: 'mul', worn: 'mul', life: 'mul', harm: 'mul', age: 'mul', wind: 'mul', severity: 'mul',
   bright: 'mul', thrift: 'mul', force: 'mul', keeps: 'mul', teach: 'mul', sturdy: 'mul',
   carry: 'add', serve: 'add', jobs: 'add', plus: 'add', bumper: 'add', fodder: 'add', tool: 'add', passes: 'add', hook: 'add', haul: 'add',
+  block: 'add',
 };
 
 export const fxFamily = (key: string): string => key.split(':')[0];
@@ -2019,6 +2022,55 @@ const ARTISAN: Seed[] = [
   },
 ];
 
+/*
+ * ---------------------------------------------------------------------------
+ * The Sworn Blade: swords, shields and chain armour.
+ *
+ * Twelve spells and six passives, picked from fifty and thirty. A spell's
+ * numbers are in `talents.ts`, and its perk here is what puts it among the
+ * spells you know, so it has nothing to fold. The passives were offered under
+ * their own numbers, one to thirty; they are a hundred on from those here, so
+ * that no passive shares a number with a spell.
+ * ---------------------------------------------------------------------------
+ */
+const BLADE: Seed[] = [
+  ...classSpellsOf('blade').map((sp): Seed => ({ num: sp.num, name: sp.name, fx: {}, note: () => `${spellTerms(sp)} ${sp.note}` })),
+  {
+    num: 108, name: 'Light Sword',
+    fx: { 'wind:swords': 0.7 },
+    note: (fx) => `A swing of a sword costs ${less(fx['wind:swords'])} less stamina.`,
+  },
+  {
+    num: 111, name: 'Counterweight',
+    fx: { 'stagger:block': 0.5 },
+    note: (fx) => `A blow you block puts the next blow of whatever struck it back ${secs(fx['stagger:block'])}.`,
+  },
+  {
+    num: 127, name: 'Battle-Hardened',
+    fx: { 'severity:wound': 0.8 },
+    note: (fx) => `A blow that lands on you opens or deepens its wound ${less(fx['severity:wound'])} less, so it bleeds and slows you less. `
+      + 'What it takes off your health is the same.',
+  },
+  {
+    num: 123, name: 'Stalwart',
+    fx: { 'stance:defensive_taken': 0.7, 'stance:defensive_dealt': 0.85 },
+    note: (fx) => `In the defensive stance you take ${less(fx['stance:defensive_taken'])} less damage and deal `
+      + `${less(fx['stance:defensive_dealt'])} less, instead of ${less(STANCE_TAKEN.defensive)} and ${less(STANCE_DEALT.defensive)}.`,
+  },
+  {
+    num: 129, name: 'Guardian',
+    fx: { 'cover:share': 0.2 },
+    note: (fx) => `With a shield in your off hand, ${percent(fx['cover:share'])} of the blows a creature lands on another person `
+      + `or a companion within ${GUARDIAN_REACH} tiles of you land on your shield instead, and do nothing to them.`,
+  },
+  {
+    num: 109, name: 'Shield Mastery',
+    fx: { 'block:shield': 0.08, 'blockcap:shield': 0.7 },
+    note: (fx) => `Your shield blocks ${points(fx['block:shield'])} more often, and the most it can block rises from `
+      + `${percent(BLOCK_MOST)} to ${percent(fx['blockcap:shield'])}.`,
+  },
+];
+
 /** Every trade's perks, in the order they were picked. */
 const SEEDS: Record<string, Seed[]> = {
   terraformer: TERRAFORMER,
@@ -2035,6 +2087,7 @@ const SEEDS: Record<string, Seed[]> = {
   fisher: FISHER,
   mender: MENDER,
   artisan: ARTISAN,
+  blade: BLADE,
 };
 
 const slug = (name: string): string => name.toLowerCase().replace(/[’']/g, '').replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '');
@@ -2059,6 +2112,8 @@ export const TIERS: Record<string, number[][]> = {
   fisher: [[1, 4, 13], [2, 15, 45], [17, 25, 33], [3, 14, 19], [5, 6, 9], [12, 27, 47]],
   mender: [[4, 9, 17], [3, 10, 19], [1, 14, 18], [2, 20, 21], [24, 25, 42], [26, 27, 50]],
   artisan: [[2, 3, 26], [7, 9, 10], [13, 27, 35], [4, 14, 34], [12, 46, 49], [28, 36, 48]],
+  // Two spells and a passive to a tier, in order of what they are worth.
+  blade: [[1, 32, 108], [2, 11, 111], [15, 29, 127], [19, 26, 123], [12, 31, 129], [33, 28, 109]],
 };
 
 /** Every perk there is, tier by tier, and in each tier by the number it was picked under, as the island lists them. */
@@ -2102,9 +2157,13 @@ export function perkRefusal(p: PerkDef, mine: string | null, taken: readonly str
   if (taken.includes(p.id)) return 'You have that already.';
   const other = taken.map((id) => PERK_BY_ID.get(id)).find((o) => o && o.class === p.class && o.tier === p.tier);
   if (other) return `You took ${other.name} at this tier.`;
-  if (p.tier > 1 && main < tierAt(p.tier)) {
-    const c = CLASSES.find((x) => x.id === p.class);
-    return `This tier opens at ${tierAt(p.tier)} in ${(c?.main ?? '').replace(/_/g, ' ')}; you have ${Math.floor(main)}.`;
+  // A fighting trade's tiers open on its own level (`CLASS_TIER_AT`), and `main` is that level.
+  const c = CLASSES.find((x) => x.id === p.class);
+  const at = tiersAtFor(c?.kind ?? 'craft')[p.tier - 1];
+  if (p.tier > 1 && main < at) {
+    return c?.kind === 'combat'
+      ? `This tier opens at class level ${at}; you have ${Math.floor(main)}.`
+      : `This tier opens at ${at} in ${(c?.main ?? '').replace(/_/g, ' ')}; you have ${Math.floor(main)}.`;
   }
   return null;
 }

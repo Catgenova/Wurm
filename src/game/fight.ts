@@ -68,7 +68,9 @@ export function fightBase(g: Game, def: Pick<ActionDef, 'id' | 'baseTime'>): num
 /** What a go of a fight costs in stamina, before the body's own share; null for every other job. */
 export function fightWind(g: Game, def: Pick<ActionDef, 'id'>): number | null {
   if (def.id !== 'attack_creature' && def.id !== 'shoot_creature') return null;
-  return swingWind(heftOf(g, def));
+  // Less for a sword in a Sworn Blade's hand (Light Sword), as `act_wind` has it.
+  const sword = def.id === 'attack_creature' && swungWith(g).def.kind === 'swords';
+  return swingWind(heftOf(g, def)) * (sword ? g.perk('wind:swords', 1) : 1);
 }
 
 /**
@@ -95,6 +97,16 @@ export function stanceSays(s: FightStance): string {
   const word = (d: number): string => `${percent(Math.abs(d))} ${d > 0 ? 'more' : 'less'}`;
   return `${word(dealt)} damage dealt, ${word(taken)} damage taken.`;
 }
+
+/** A perk lookup: one number off what somebody's perks fold to, or the rule's own (`Game.perk`). */
+export type PerkOf = (key: string, otherwise: number) => number;
+/**
+ * What a stance makes of the damage you take, and of the damage you deal, with
+ * what a perk makes of it: a Sworn Blade's Stalwart sets the defensive pair.
+ * The island's `my_stance_taken` and `my_stance_dealt`.
+ */
+export const stanceTaken = (s: FightStance, perk: PerkOf): number => perk(`stance:${s}_taken`, STANCE_TAKEN[s]);
+export const stanceDealt = (s: FightStance, perk: PerkOf): number => perk(`stance:${s}_dealt`, STANCE_DEALT[s]);
 
 /** The next stance round from this one, for the key that cycles them. */
 export const nextStance = (s: FightStance): FightStance => FIGHT_STANCES[(FIGHT_STANCES.indexOf(s) + 1) % FIGHT_STANCES.length];
@@ -239,6 +251,15 @@ export const legPace = (wounds: Wound[]): number => 1 - Math.min(LEG_SLOW_MOST, 
 export const FLANK_HIT = 1.25;
 /** Each other thing on you takes this share off your shield's chance of a block. */
 export const CROWD_BLOCK = 0.25;
+/** The most a shield blocks, however good it and the arm behind it are. A Sworn Blade's Shield Mastery raises it. The island's `block_most`. */
+export const BLOCK_MOST = 0.6;
+/**
+ * A shield's chance of turning a blow aside, before a crowd takes its share:
+ * the shield's own, better for its quality, and the skill behind it, with what
+ * a perk adds and the ceiling a perk raises.
+ */
+export const blockChance = (block: number, ql: number, shields: number, perk: PerkOf): number =>
+  Math.min(perk('blockcap:shield', BLOCK_MOST), block * (0.6 + ql / 160) + shields / 400 + perk('block:shield', 0));
 /** A blow at something whose mind is on another fight lands this much harder. */
 export const BLINDSIDE = 1.25;
 

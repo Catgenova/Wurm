@@ -41,6 +41,11 @@ import { BRIDGES } from '../../src/game/bridges';
 import { buildWork } from '../../src/game/buildActions';
 import { MATERIALS as BUILD_MATERIALS } from '../../src/game/building';
 import { ROAD_TILES, TILE_DEFS } from '../../src/world/tiles';
+import { STANCE_TAKEN } from '../../src/game/fight';
+import { WEAPON_BY_ID } from '../../src/game/gear';
+
+/** Every kind of weapon there is, for a perk on the swing of one (a Sworn Blade's Light Sword: `wind:swords`). */
+const WEAPON_KINDS = new Set<string>([...WEAPON_BY_ID.values()].map((w) => w.kind));
 
 /** A Forester's Woodsman's Stride: a pace on each tile that slows a walker, which the browser alone reads. */
 const STRIDE_KEYS = STRIDE.map(walkKey);
@@ -513,6 +518,8 @@ const OTHERS = new Set([
   'reach:fish', 'reach:drag_net', 'bait:pull', 'bait:food', 'smoke_fish', 'fish_journal', 'fish_pond',
   'worn:armour', 'worn:shield', 'worn:weapon', 'rolls:bauble', 'floor:improve', 'repair_kit', 'sealant',
   'more_stones', 'amphora', 'potters_wheel', 'glaze_item', 'trade_book', 'circlet',
+  // A Sworn Blade's: a block's stagger and ceiling, a wound's depth, a shield over somebody else.
+  'stagger:block', 'block:shield', 'blockcap:shield', 'severity:wound', 'cover:share',
   ...STRIDE_KEYS,
 ]);
 const unnamed = PERKS.flatMap((p) => Object.keys(p.fx).filter((key) => {
@@ -531,6 +538,9 @@ const unnamed = PERKS.flatMap((p) => Object.keys(p.fx).filter((key) => {
   // And how slowly it rots set down, a thing or all food (a Fisher's fish, a Cook's food).
   if (fam === 'cool' && rest !== 'food') return !ITEM_DEFS[rest];
   if (fam === 'slope') return !['digging', 'masonry'].includes(rest);
+  // A swing of one kind of weapon, and what a stance takes or deals.
+  if (fam === 'wind') return !WEAPON_KINDS.has(rest);
+  if (fam === 'stance') return !Object.keys(STANCE_TAKEN).some((st) => rest === `${st}_taken` || rest === `${st}_dealt`);
   return !OTHERS.has(key);
 }).map((key) => `${p.id} ${key}`));
 check('every key names a job, a thing or a rule that exists', unnamed.length === 0, unnamed.join('; '));

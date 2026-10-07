@@ -38,8 +38,9 @@ import { REPORTS_A_SESSION } from '../../net/errors';
 import { ALIGNMENT_NAMES, BAR_SLOTS, FAITH_SPELLS, FAITH_TIER_AT, PATRON_AT, PATRONS, SCHOOL_NAMES, slotsFor, SPELL_ON_WORDS, SPELL_ONS, SPELL_REACH, SPELLS_PER_TIER } from '../../game/patrons';
 import { article, capital, finePercent, listed, listedOr, NumberWord, numberWord, percent, share, spanWords, times } from '../../game/words';
 import { ANCIENT_EFFECTS, ANCIENT_PLUS, BAUBLE_HIGH, BAUBLE_LOW, BAUBLE_SHARE, BAUBLE_TIERS, baubleTimes, REGRET_SHARE, YIELD_TIMES } from '../../game/baubles';
-import { CLASS_CHANGE_COST, CLASSES, PERK_TIER_AT, PERKS_PER_TIER } from '../../game/classes';
+import { CLASS_CHANGE_COST, CLASS_TIER_AT, CLASSES, PERK_TIER_AT, PERKS_PER_TIER } from '../../game/classes';
 import { perksOf } from '../../game/perks';
+import { CLASS_LEARN_BLOW, CLASS_LEARN_KILL, CLASS_LEVEL_START, CLASS_SPELL_BY_ID, classSpellsOf, spellTerms } from '../../game/talents';
 import { HUSBANDRY_ACTIONS } from '../../game/husbandry';
 import { TINCTURE_BONUS, TINCTURE_SECONDS } from '../../game/boons';
 import { TINCTURE_NAMES } from '../../game/remedies';
@@ -1125,6 +1126,22 @@ export const NEWS: News[] = [
       `Plant grass on a tile of dirt with ${GRASS_PLANT} mixed grass in your pack and the tile is grass. Dirt never grows grass back of itself.`,
       `Cut grass gives ${numberWord(GRASS_PER_CUT)} mixed grass a cut.`,
     ],
+  },
+  {
+    n: 86,
+    day: '2026-10-07',
+    lines: () => {
+      const blade = CLASSES.find((c) => c.id === 'blade');
+      const first = perksOf('blade').map((p) => CLASS_SPELL_BY_ID.get(p.id)).find((sp) => sp !== undefined);
+      return [
+        `The ${blade?.name} is the first fighting trade on spells and passives: ${numberWord(CLASS_TIER_AT.length)} tiers, each offering `
+          + `${numberWord(PERKS_PER_TIER - 1)} spells and a passive, of which you take one. Its tree and every node bought in it are gone; its rite stays, above its tiers.`,
+        `Its tiers open on its own class level: ${CLASS_LEVEL_START} when you take it up, then ${listed(CLASS_TIER_AT.slice(1).map(String))}. `
+          + `The level rises with every blow that lands while you hold the trade, on the curve a skill rises on, and a kill raises it ${numberWord(1 + CLASS_LEARN_KILL / CLASS_LEARN_BLOW)} times as much.`,
+        first ? `Its ${numberWord(classSpellsOf('blade').length)} spells go in the class slots of the spell bar and are paid for in stamina. ${first.name}: ${spellTerms(first)} ${first.note}` : '',
+        'A creature a Summons or a Challenge turns on you is held on you for the whole of it, however often you strike it.',
+      ].filter(Boolean);
+    },
   },
 ];
 

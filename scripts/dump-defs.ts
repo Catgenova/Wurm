@@ -86,7 +86,7 @@ import { DRIVING, DRIVING_LEARN, DRIVING_TOP, SAILING, SAILING_LEARN, SAILING_TO
 import { PATH_LIST, CHOOSE_AT, SIT_REST } from '../src/game/meditation';
 import {
   CLASSES, CLASS_AT, CLASS_CHANGE_COST, CLASS_NODES, CHANNELS as CLASS_CHANNELS, RITES,
-  CLASS_POINT_FLOOR, CLASS_POINT_STEP, PERK_TIER_AT,
+  CLASS_POINT_FLOOR, CLASS_POINT_STEP, CLASS_TIER_AT, PERK_TIER_AT,
 } from '../src/game/classes';
 import { FX_RULE, PERKS } from '../src/game/perks';
 import { SCHOOLS, SPELLS } from '../src/game/arcane';
@@ -101,6 +101,8 @@ import { CARRY_CRAWL } from '../src/game/player';
 import { RELICS, DIGGABLE } from '../src/game/archaeology';
 import { isSeam } from '../src/world/tiles';
 import { CHIP_CHANCE, GRASS_PLANT, KIT_MEND, MOSS_PLANT, TRY_LEARN } from '../src/game/actions';
+import { CLASS_LEARN_BLOW, CLASS_LEARN_KILL, CLASS_LEVEL_START, CLASS_SPELLS, GUARDIAN_REACH } from '../src/game/talents';
+import { BLOCK_MOST } from '../src/game/fight';
 import { BRAZIER_BURN_AT_HUNDRED, BRAZIER_BURN_AT_ONE, BRAZIER_CAPACITY } from '../src/game/placeables';
 import { CARE_BONUS, CARE_HOURS, GRAZE_FILL, GRAZE_HUNGRY, PER_REGION, WILD_TARGET } from '../src/game/creatures';
 import {
@@ -612,6 +614,19 @@ out.push(`create table if not exists spell_slot (
 out.push(`create table if not exists perk_tier (
   tier int primary key, at int not null
 );`);
+/*
+ * And a fighting trade's: the class level each of its six tiers opens at, and
+ * the spells its perks put among the spells you know, each with what it
+ * costs in stamina, how long it rests and what it can be cast on, as
+ * `talents.ts` has them. `class_spell_cast` reads its arm's numbers off `fx`.
+ */
+out.push(`create table if not exists class_tier (
+  tier int primary key, at int not null
+);`);
+out.push(`create table if not exists class_spell (
+  id text primary key, class text not null, num int not null, name text not null, note text not null,
+  cost double precision not null, rest double precision not null, on_what text[] not null, fx jsonb not null
+);`);
 /* What a Miner's Pan washes out of sand, each as likely. */
 out.push(`create table if not exists pan_ore (
   item text primary key
@@ -1113,7 +1128,7 @@ out.push(emptied(['melt_def', 'wall_fitting', 'recipe', 'recipe_input', 'recipe_
   'improvable_def', 'item_feeds', 'boon_skill', 'plantable', 'buryable', 'flower_octave', 'flower_season', 'stone_bed', 'title_def',
   'knack_kin', 'category_decay', 'vehicle_def', 'boat_def', 'tack_def', 'cast_def', 'path_def',
   'path_step', 'class_def', 'class_skill', 'class_channel', 'class_node', 'class_perk',
-  'perk_fx_rule', 'perk_tier', 'patron_def', 'faith_tier', 'faith_spell', 'spell_on_def', 'spell_slot', 'pan_ore', 'rite_def',
+  'perk_fx_rule', 'perk_tier', 'class_tier', 'class_spell', 'patron_def', 'faith_tier', 'faith_spell', 'spell_on_def', 'spell_slot', 'pan_ore', 'rite_def',
   'school_def', 'school_stone', 'spell_def', 'bridge_def', 'bridge_bill', 'bridge_winch', 'brew_def',
   'dyeable_item', 'dyeable_class']));
 
@@ -1228,6 +1243,13 @@ out.push(`create or replace function tincture_bonus() returns double precision l
 out.push(`create or replace function tincture_seconds() returns double precision language sql immutable as $fn$ select ${q(TINCTURE_SECONDS)}::double precision $fn$;`);
 /* Moss planted on a tile of dirt to turn it to moss (`MOSS_PLANT`). */
 out.push(`create or replace function moss_plant() returns int language sql immutable as $fn$ select ${q(MOSS_PLANT)}::int $fn$;`);
+/* A fighting trade's own level: where it starts, and what a landed blow and a kill teach it (`talents.ts`). */
+out.push(`create or replace function class_level_start() returns double precision language sql immutable as $fn$ select ${q(CLASS_LEVEL_START)}::double precision $fn$;`);
+out.push(`create or replace function class_learn_blow() returns double precision language sql immutable as $fn$ select ${q(CLASS_LEARN_BLOW)}::double precision $fn$;`);
+out.push(`create or replace function class_learn_kill() returns double precision language sql immutable as $fn$ select ${q(CLASS_LEARN_KILL)}::double precision $fn$;`);
+/* How far a Sworn Blade's Guardian reaches, and the most a shield blocks before a perk raises it (`fight.ts`). */
+out.push(`create or replace function guardian_reach() returns double precision language sql immutable as $fn$ select ${q(GUARDIAN_REACH)}::double precision $fn$;`);
+out.push(`create or replace function block_most() returns double precision language sql immutable as $fn$ select ${q(BLOCK_MOST)}::double precision $fn$;`);
 /* Mixed grass planted on a tile of dirt to turn it to grass (`GRASS_PLANT`). */
 out.push(`create or replace function grass_plant() returns int language sql immutable as $fn$ select ${q(GRASS_PLANT)}::int $fn$;`);
 for (const t of TITLES) out.push(`insert into title_def values (${q(t.id)}, ${q(t.skill)}, ${q(t.at)}, ${q(t.name)});`);
@@ -1897,6 +1919,12 @@ for (const [family, rule] of Object.entries(FX_RULE)) {
   out.push(`insert into perk_fx_rule values (${q(family)}, ${q(rule)});`);
 }
 PERK_TIER_AT.forEach((at, i) => out.push(`insert into perk_tier values (${q(i + 1)}, ${q(at)});`));
+CLASS_TIER_AT.forEach((at, i) => out.push(`insert into class_tier values (${q(i + 1)}, ${q(at)});`));
+for (const s of CLASS_SPELLS) {
+  out.push(`insert into class_spell (id, class, num, name, note, cost, rest, on_what, fx) values (`
+    + [q(s.id), q(s.class), q(s.num), q(s.name), q(s.note), q(s.cost), q(s.rest), `array[${s.on.map((o) => q(o)).join(', ')}]::text[]`,
+       q(JSON.stringify(s.fx))].join(', ') + `);`);
+}
 for (const p of PATRONS) out.push(`insert into patron_def values (${q(p.id)}, ${q(p.name)}, ${q(p.alignment)});`);
 FAITH_TIER_AT.forEach((at, i) => out.push(`insert into faith_tier values (${q(i + 1)}, ${q(at)});`));
 for (const s of FAITH_SPELLS) {

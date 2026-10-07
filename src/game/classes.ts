@@ -47,7 +47,7 @@ export const CLASS_AT = 50;
 export const CLASS_CHANGE_COST = 500;
 
 /**
- * The craft trades that have been moved from a tree of nodes to perks.
+ * The trades that have been moved from a tree of nodes to perks.
  *
  * Asked for: "We are replacing the current bonuses." A trade in this set has
  * no nodes at all. It has six tiers of perks instead, and at each tier its
@@ -55,8 +55,12 @@ export const CLASS_CHANGE_COST = 500;
  * moved over whole, when all eighteen of its perks do what they say, so that
  * nobody is ever offered a card with nothing behind it; the rest keep their
  * trees until then.
+ *
+ * Every craft trade has moved. The fighting trades are moving one at a time,
+ * each with two spells and a passive at each tier (`talents.ts`), and their
+ * tiers open on the trade's own level rather than a skill (`CLASS_TIER_AT`).
  */
-export const PERK_CLASSES: ReadonlySet<string> = new Set(['terraformer', 'miner', 'mason', 'carpenter', 'smith', 'forester', 'farmer', 'cook', 'tailor', 'herdsman', 'naturalist', 'fisher', 'mender', 'artisan']);
+export const PERK_CLASSES: ReadonlySet<string> = new Set(['terraformer', 'miner', 'mason', 'carpenter', 'smith', 'forester', 'farmer', 'cook', 'tailor', 'herdsman', 'naturalist', 'fisher', 'mender', 'artisan', 'blade']);
 
 /**
  * The six tiers, as the skill each one opens at.
@@ -69,6 +73,18 @@ export const PERK_CLASSES: ReadonlySet<string> = new Set(['terraformer', 'miner'
 export const PERK_TIER_AT = [CLASS_AT, 60, 70, 80, 90, 99] as const;
 /** How many perks each tier offers, of which one is taken. */
 export const PERKS_PER_TIER = 3;
+
+/**
+ * And a fighting trade's six, as the class level each opens at.
+ *
+ * Asked for: "New tiers unlock at class levels 1 20 40 60 80 99." The level is
+ * the trade's own, and rises as you fight in it (`talents.ts`): it starts at
+ * the first of these when the trade is taken up, so that tier opens with it.
+ */
+export const CLASS_TIER_AT = [1, 20, 40, 60, 80, 99] as const;
+
+/** What the tiers of this kind of trade open at: a craft trade's on its main skill, a fighting trade's on its own level. */
+export const tiersAtFor = (kind: 'craft' | 'combat'): readonly number[] => (kind === 'combat' ? CLASS_TIER_AT : PERK_TIER_AT);
 
 export type ClassKind = 'craft' | 'combat';
 
@@ -605,6 +621,14 @@ const skillWords = (id: string): string => id.replace(/_/g, ' ');
  * when you take the trade up, which is exactly when the number is wanted.
  */
 for (const c of CLASSES) {
+  if (PERK_CLASSES.has(c.id) && c.kind === 'combat') {
+    const later = CLASS_TIER_AT.slice(1);
+    c.note = `A spell or a passive to take at each of ${numberWord(CLASS_TIER_AT.length)} tiers: the first with the trade, `
+      + `then at class levels ${listed(later.map(String))}. The class level rises as you land blows and kills while you hold the trade.`;
+    c.lever = `Each tier offers ${numberWord(PERKS_PER_TIER - 1)} spells and a passive and you take one of them: `
+      + `${numberWord(CLASS_TIER_AT.length)} in all, out of ${numberWord(CLASS_TIER_AT.length * PERKS_PER_TIER)}.`;
+    continue;
+  }
   if (PERK_CLASSES.has(c.id)) {
     const later = PERK_TIER_AT.slice(1);
     c.note = `A perk to take at each of ${numberWord(PERK_TIER_AT.length)} tiers: the first with the trade, `

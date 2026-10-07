@@ -397,7 +397,7 @@ export class UI {
      * readable cards and their gaps come to.
      */
     const tradesWin = this.windows.create({ id: 'trades', title: 'Trades', x: 12, y: 56, width: 560, height: 560, anchor: 'tl', open: false });
-    this.trades = new TradesPanel(tradesWin, game, this.island);
+    this.trades = new TradesPanel(tradesWin, game, this.island, () => void this.faithBook.ask());
     /*
      * Faith: your patron and its tiers of spells, beside the Trades window it
      * is built like; and the spell bar along the bottom, which draws the same
@@ -407,7 +407,7 @@ export class UI {
     const faithWin = this.windows.create({ id: 'faith', title: 'Faith', x: 12, y: 56, width: 460, height: 560, anchor: 'tl', open: false });
     this.faith = new FaithPanel(faithWin, this.faithBook);
     this.spellBar = new SpellBar(root, game, this.faithBook, (x, y, title, items) => this.menu.show(x, y, title, items),
-      () => this.windows.get('faith')?.open());
+      () => this.windows.get('faith')?.open(), () => this.windows.get('trades')?.open());
     void this.faithBook.ask();
     const help = this.windows.create({ id: 'help', title: 'Help', x: 0, y: 0, width: 440, height: 460, open: false });
     help.el.style.left = `${Math.max(0, (uiBox().w - 440) / 2)}px`;

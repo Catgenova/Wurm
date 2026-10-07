@@ -120,7 +120,7 @@ begin
 
   -- The four refusals, in the island's words.
   insert into said values ('ORDER|' || coalesce(rpc_take_node(w.world_id, 'berserker_2_3')->>'why', 'IT WENT THROUGH'));
-  insert into said values ('THEIRS|' || coalesce(rpc_take_node(w.world_id, 'blade_1_1')->>'why', 'IT WENT THROUGH'));
+  insert into said values ('THEIRS|' || coalesce(rpc_take_node(w.world_id, 'pikeman_1_1')->>'why', 'IT WENT THROUGH'));
   perform rpc_take_node(w.world_id, 'berserker_2_1');
   insert into said values ('TWICE|' || coalesce(rpc_take_node(w.world_id, 'berserker_2_1')->>'why', 'IT WENT THROUGH'));
 
@@ -239,7 +239,7 @@ const mine = (taken: string[], id: string): string =>
 check('the major wants the minor under it, in the same words on both sides',
   said('ORDER') === mine([], 'berserker_2_3') && said('ORDER') === `${nodeDef('berserker_2_2')!.name} comes first.`, said('ORDER'));
 check('another trade’s node is not yours, ditto',
-  said('THEIRS') === mine([], 'blade_1_1'), said('THEIRS'));
+  said('THEIRS') === mine([], 'pikeman_1_1'), said('THEIRS'));
 check('one you already have, ditto',
   said('TWICE') === mine(['berserker_2_1'], 'berserker_2_1'), said('TWICE'));
 
