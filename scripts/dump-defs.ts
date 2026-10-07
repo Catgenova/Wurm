@@ -627,6 +627,8 @@ out.push(`create table if not exists class_spell (
   id text primary key, class text not null, num int not null, name text not null, note text not null,
   cost double precision not null, rest double precision not null, on_what text[] not null, fx jsonb not null
 );`);
+// And what it wants in your hands: a shield, or a weapon of a kind (\`SpellNeeds\`); null for anything.
+out.push(`alter table class_spell add column if not exists needs text;`);
 /* What a Miner's Pan washes out of sand, each as likely. */
 out.push(`create table if not exists pan_ore (
   item text primary key
@@ -1921,9 +1923,9 @@ for (const [family, rule] of Object.entries(FX_RULE)) {
 PERK_TIER_AT.forEach((at, i) => out.push(`insert into perk_tier values (${q(i + 1)}, ${q(at)});`));
 CLASS_TIER_AT.forEach((at, i) => out.push(`insert into class_tier values (${q(i + 1)}, ${q(at)});`));
 for (const s of CLASS_SPELLS) {
-  out.push(`insert into class_spell (id, class, num, name, note, cost, rest, on_what, fx) values (`
+  out.push(`insert into class_spell (id, class, num, name, note, cost, rest, on_what, fx, needs) values (`
     + [q(s.id), q(s.class), q(s.num), q(s.name), q(s.note), q(s.cost), q(s.rest), `array[${s.on.map((o) => q(o)).join(', ')}]::text[]`,
-       q(JSON.stringify(s.fx))].join(', ') + `);`);
+       q(JSON.stringify(s.fx)), s.needs ? q(s.needs) : 'null'].join(', ') + `);`);
 }
 for (const p of PATRONS) out.push(`insert into patron_def values (${q(p.id)}, ${q(p.name)}, ${q(p.alignment)});`);
 FAITH_TIER_AT.forEach((at, i) => out.push(`insert into faith_tier values (${q(i + 1)}, ${q(at)});`));

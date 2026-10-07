@@ -56,7 +56,11 @@ function heftOf(g: Game, def: Pick<ActionDef, 'id'>): number {
 export function fightBase(g: Game, def: Pick<ActionDef, 'id' | 'baseTime'>): number | null {
   // Tired arms, and wounded ones (`armPace`).
   const pace = tiredPace(g.player.stats.stamina) * armPace(g.player.wounds);
-  if (def.id === 'attack_creature') return swungWith(g).def.swing * pace;
+  if (def.id === 'attack_creature') {
+    const w = swungWith(g).def;
+    // Quicker with both hands on it for a Berserker's Wild Strength, as `act_base` has it.
+    return w.swing * pace * (w.twoHanded ? g.perk('swing:two_handed', 1) : 1);
+  }
   if (def.id === 'shoot_creature') {
     const held = g.worn('weapon');
     const bow = held && WEAPON_BY_ID.get(held.id);

@@ -1642,6 +1642,19 @@ jobs:
             --outfile=node_modules/.cache/blade.mjs --log-level=error
           node node_modules/.cache/blade.mjs
 
+      - name: The Berserker's spells and passives
+        run: |
+          # The second fighting trade on spells and passives. Both sides hold
+          # the same rows, what each spell wants in your hands included; every
+          # blow measured at its share of a swing's, the same roll asked twice;
+          # a hold, a bleed, a rage, an adrenaline, a whirlwind and an
+          # earthshaker on everything in reach and nothing past it; a spell
+          # refused without its axe, its maul or the health to pay; and every
+          # passive at the rule it changes, the browser's fold the island's.
+          npx esbuild supabase/test/berserker.ts --bundle --platform=node --format=esm \
+            --outfile=node_modules/.cache/berserker.mjs --log-level=error
+          node node_modules/.cache/berserker.mjs
+
       - name: Glassblowing, glass panels, bottles and the stained glass wall
         run: |
           # The Artisan's fourth trade, at a hot smelter: sand melted into

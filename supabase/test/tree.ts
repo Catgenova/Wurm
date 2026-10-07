@@ -25,17 +25,20 @@
  *     perks: the channels are still read where they were, and nothing buys
  *     them.
  *
- * The trade walked through it is the Berserker, whose columns are edge, hands
- * and wind: the Artisan, the last craft trade on a tree, has moved to perks.
- * Wind is measured on the Archer, whose third column it is.
+ * The trade walked through it is the first fighting trade still on a tree with
+ * a column of hands, and wind is measured on the first with a column of wind:
+ * every craft trade has moved to perks, and the fighting trades are moving one
+ * at a time (`talents.ts`), so which trade that is is asked of the rulebook
+ * rather than written here.
  *
  * Runs against the database the suite leaves behind.
  */
 import { execFileSync } from 'node:child_process';
 import {
-  CLASS_NODES, CHANNELS, CLASS_POINTS_MAX, COLUMN_COST, CLASSES,
-  classPoints, foldNodes, nodeDef, nodeRefusal, PERK_CLASSES,
+  CLASS_COLUMNS, CLASS_NODES, CHANNELS, CLASS_POINTS_MAX, COLUMN_COST, CLASSES, COMBAT_CLASSES,
+  classPoints, foldNodes, nodeDef, nodeRefusal, PERK_CLASSES, type ClassDef,
 } from '../../src/game/classes';
+import { WEAPONS } from '../../src/game/gear';
 
 const psql = (sql: string): string =>
   execFileSync('psql', ['-v', 'ON_ERROR_STOP=1', '-X', '-q', '-t', '-A', '-f', '-'], {
@@ -57,6 +60,29 @@ const check = (what: string, passed: boolean, detail = ''): void => {
 };
 /* An item's quality is a `real`, so a ratio drawn back out of one is close. */
 const near = (a: number, b: number, by = 1e-6): boolean => Math.abs(a - b) <= by;
+
+/** The first fighting trade still on a tree with a column of this channel, and which column it is. */
+const treedWith = (channel: string): { c: ClassDef; col: number } => {
+  for (const c of COMBAT_CLASSES) {
+    if (PERK_CLASSES.has(c.id)) continue;
+    const col = CLASS_COLUMNS[c.id].findIndex((x) => x.channel === channel) + 1;
+    if (col > 0) return { c, col };
+  }
+  throw new Error(`no fighting trade has a tree with ${channel} in it any more`);
+};
+const HAND = treedWith('hands');
+const T = HAND.c.id;
+/** A node of the hands trade: its column of hands, or another. */
+const node = (col: number, rank: number): string => `${T}_${col}_${rank}`;
+const [OTHER_A, OTHER_B] = [1, 2, 3].filter((col) => col !== HAND.col);
+/** Another fighting trade on a tree, to put the first down for. */
+const DOWN = COMBAT_CLASSES.find((c) => !PERK_CLASSES.has(c.id) && c.id !== T)!;
+/** Somebody else's node altogether. */
+const THEIRS = CLASS_NODES.find((n) => n.class === DOWN.id && n.rank === 1)!.id;
+const WIND = treedWith('wind');
+/** What the wind trade fights with, and the go that spends wind with it: a bow is drawn, anything else swung. */
+const WIND_WEAPON = WEAPONS.find((w) => w.kind === WIND.c.main)!;
+const WIND_GO = WIND_WEAPON.ammo ? 'shoot_creature' : 'attack_creature';
 
 const out = psql(`
 begin;
@@ -111,72 +137,76 @@ begin
   -- not what any of it is about.
   delete from caller where uid = w.uid;
   delete from player_node where world_id = w.world_id and uid = w.uid;
-  insert into skill (world_id, uid, id, value) values (w.world_id, w.uid, 'axes', 100)
+  insert into skill (world_id, uid, id, value) values (w.world_id, w.uid, '${HAND.c.main}', 100)
     on conflict (world_id, uid, id) do update set value = 100;
   perform set_config('request.jwt.claims', json_build_object('sub', w.uid)::text, false);
-  perform rpc_take_class(w.world_id, 'berserker');
-  insert into said values ('BUDGET|' || class_points(w.world_id, w.uid, 'berserker')
-    || '|' || class_spent(w.world_id, w.uid, 'berserker'));
+  perform rpc_take_class(w.world_id, '${T}');
+  insert into said values ('BUDGET|' || class_points(w.world_id, w.uid, '${T}')
+    || '|' || class_spent(w.world_id, w.uid, '${T}'));
 
   -- The four refusals, in the island's words.
-  insert into said values ('ORDER|' || coalesce(rpc_take_node(w.world_id, 'berserker_2_3')->>'why', 'IT WENT THROUGH'));
-  insert into said values ('THEIRS|' || coalesce(rpc_take_node(w.world_id, 'pikeman_1_1')->>'why', 'IT WENT THROUGH'));
-  perform rpc_take_node(w.world_id, 'berserker_2_1');
-  insert into said values ('TWICE|' || coalesce(rpc_take_node(w.world_id, 'berserker_2_1')->>'why', 'IT WENT THROUGH'));
+  insert into said values ('ORDER|' || coalesce(rpc_take_node(w.world_id, '${node(HAND.col, 3)}')->>'why', 'IT WENT THROUGH'));
+  insert into said values ('THEIRS|' || coalesce(rpc_take_node(w.world_id, '${THEIRS}')->>'why', 'IT WENT THROUGH'));
+  perform rpc_take_node(w.world_id, '${node(HAND.col, 1)}');
+  insert into said values ('TWICE|' || coalesce(rpc_take_node(w.world_id, '${node(HAND.col, 1)}')->>'why', 'IT WENT THROUGH'));
 
   -- A whole column, and what it comes to.
-  perform rpc_take_node(w.world_id, 'berserker_2_2');
-  v := rpc_take_node(w.world_id, 'berserker_2_3');
+  perform rpc_take_node(w.world_id, '${node(HAND.col, 2)}');
+  v := rpc_take_node(w.world_id, '${node(HAND.col, 3)}');
   insert into said values ('COLUMN|' || coalesce(v->>'took', 'nothing') || '|' || (v->>'left'));
   insert into said select 'FOLD|' || (class_mul->>'hands') from player
     where world_id = w.world_id and uid = w.uid;
-  insert into said values ('SCOPE|' || class_mul(w.world_id, w.uid, 'hands', 'axes')
+  insert into said values ('SCOPE|' || class_mul(w.world_id, w.uid, 'hands', '${HAND.c.main}')
     || '|' || class_mul(w.world_id, w.uid, 'hands', 'masonry')
     || '|' || class_mul(w.world_id, w.uid, 'hands', null));
 
   -- Hands, at the arithmetic every one of its three sites hands to act_duration.
   insert into said values ('HANDS|' || act_duration(8, 100, 0, control_speed(w.world_id, w.uid))
     || '|' || act_duration(8, 100, 0, control_speed(w.world_id, w.uid)
-                * class_mul(w.world_id, w.uid, 'hands', 'axes')));
+                * class_mul(w.world_id, w.uid, 'hands', '${HAND.c.main}')));
 
   -- And the twelfth point, which does not stretch to a third column.
-  perform rpc_take_node(w.world_id, 'berserker_1_1');
-  perform rpc_take_node(w.world_id, 'berserker_1_2');
-  perform rpc_take_node(w.world_id, 'berserker_1_3');
-  perform rpc_take_node(w.world_id, 'berserker_3_1');
-  perform rpc_take_node(w.world_id, 'berserker_3_2');
-  insert into said values ('SPENT|' || class_spent(w.world_id, w.uid, 'berserker')
-    || '|' || coalesce(rpc_take_node(w.world_id, 'berserker_3_3')->>'why', 'IT WENT THROUGH'));
+  perform rpc_take_node(w.world_id, '${node(OTHER_A, 1)}');
+  perform rpc_take_node(w.world_id, '${node(OTHER_A, 2)}');
+  perform rpc_take_node(w.world_id, '${node(OTHER_A, 3)}');
+  perform rpc_take_node(w.world_id, '${node(OTHER_B, 1)}');
+  perform rpc_take_node(w.world_id, '${node(OTHER_B, 2)}');
+  insert into said values ('SPENT|' || class_spent(w.world_id, w.uid, '${T}')
+    || '|' || coalesce(rpc_take_node(w.world_id, '${node(OTHER_B, 3)}')->>'why', 'IT WENT THROUGH'));
 
   -- 3. Putting the trade down puts the tree down, which is the only undo: for
-  -- another fighting trade, the Skirmisher, open at sixty in throwing.
-  insert into skill (world_id, uid, id, value) values (w.world_id, w.uid, 'throwing', 60)
+  -- another fighting trade on a tree, open at sixty in its main skill.
+  insert into skill (world_id, uid, id, value) values (w.world_id, w.uid, '${DOWN.main}', 60)
     on conflict (world_id, uid, id) do update set value = 60;
   perform give_coins(w.world_id, w.uid, class_change_cost()::bigint * 3);
-  perform rpc_take_class(w.world_id, 'skirmisher');
+  perform rpc_take_class(w.world_id, '${DOWN.id}');
   insert into said select 'CLEARED|' || count(*) || '|'
     || coalesce((select class_mul->>'hands' from player
                   where world_id = w.world_id and uid = w.uid), 'gone')
     from player_node where world_id = w.world_id and uid = w.uid;
 
   -- 4. Wind, with the body pinned so the only thing that moved is the node: on
-  -- the Archer, whose third column is wind, at the drawing of a bow.
-  insert into skill (world_id, uid, id, value) values (w.world_id, w.uid, 'archery', 100)
+  -- the first trade on a tree with a column of it, at a go with its own weapon.
+  insert into skill (world_id, uid, id, value) values (w.world_id, w.uid, '${WIND.c.main}', 100)
     on conflict (world_id, uid, id) do update set value = 100;
-  perform rpc_take_class(w.world_id, 'archer');
+  perform rpc_take_class(w.world_id, '${WIND.c.id}');
+  delete from player_node where world_id = w.world_id and uid = w.uid;
+  perform class_fold(w.world_id, w.uid);
+  update player set equipped = jsonb_build_object('weapon', give(w.world_id, w.uid, '${WIND_WEAPON.id}', 1, 40))
+    where world_id = w.world_id and uid = w.uid;
   insert into skill (world_id, uid, id, value) values (w.world_id, w.uid, 'body_stamina', 20)
     on conflict (world_id, uid, id) do update set value = 20;
   update player set stats = jsonb_set(coalesce(stats, '{}'::jsonb), '{stamina}', to_jsonb(1.0::double precision)),
          body_at = now()
     where world_id = w.world_id and uid = w.uid;
-  perform spend_wind(w.world_id, w.uid, 'shoot_creature');
+  perform spend_wind(w.world_id, w.uid, '${WIND_GO}');
   select 1 - (stats->>'stamina')::double precision into v_a from player
     where world_id = w.world_id and uid = w.uid;
-  perform rpc_take_node(w.world_id, 'archer_3_1');
+  perform rpc_take_node(w.world_id, '${WIND.c.id}_${WIND.col}_1');
   update skill set value = 20 where world_id = w.world_id and uid = w.uid and id = 'body_stamina';
   update player set stats = jsonb_set(stats, '{stamina}', to_jsonb(1.0::double precision)), body_at = now()
     where world_id = w.world_id and uid = w.uid;
-  perform spend_wind(w.world_id, w.uid, 'shoot_creature');
+  perform spend_wind(w.world_id, w.uid, '${WIND_GO}');
   select 1 - (stats->>'stamina')::double precision into v_b from player
     where world_id = w.world_id and uid = w.uid;
   insert into said values ('WIND|' || coalesce(v_a::text, 'none') || '|' || coalesce(v_b::text, 'none')
@@ -235,23 +265,24 @@ check('every channel is read by something, so no column is quietly dead',
 check('a fresh trade is twelve points with none of them spent', said('BUDGET') === '12|0', said('BUDGET'));
 
 const mine = (taken: string[], id: string): string =>
-  nodeRefusal(nodeDef(id)!, 'berserker', taken, 12) ?? 'open';
-check('the major wants the minor under it, in the same words on both sides',
-  said('ORDER') === mine([], 'berserker_2_3') && said('ORDER') === `${nodeDef('berserker_2_2')!.name} comes first.`, said('ORDER'));
+  nodeRefusal(nodeDef(id)!, T, taken, 12) ?? 'open';
+check(`the major wants the minor under it, in the same words on both sides (${HAND.c.name})`,
+  said('ORDER') === mine([], node(HAND.col, 3)) && said('ORDER') === `${nodeDef(node(HAND.col, 2))!.name} comes first.`, said('ORDER'));
 check('another trade’s node is not yours, ditto',
-  said('THEIRS') === mine([], 'pikeman_1_1'), said('THEIRS'));
+  said('THEIRS') === mine([], THEIRS), said('THEIRS'));
 check('one you already have, ditto',
-  said('TWICE') === mine(['berserker_2_1'], 'berserker_2_1'), said('TWICE'));
+  said('TWICE') === mine([node(HAND.col, 1)], node(HAND.col, 1)), said('TWICE'));
 
-check('a column taken in order leaves seven of the twelve', said('COLUMN') === 'berserker_2_3|7', said('COLUMN'));
+const handColumn = [1, 2, 3].map((rank) => node(HAND.col, rank));
+check('a column taken in order leaves seven of the twelve', said('COLUMN') === `${node(HAND.col, 3)}|7`, said('COLUMN'));
 check('and the island’s fold is the browser’s, to the last bit',
-  said('FOLD') === String(foldNodes(['berserker_2_1', 'berserker_2_2', 'berserker_2_3']).hands),
-  `island ${said('FOLD')}, browser ${foldNodes(['berserker_2_1', 'berserker_2_2', 'berserker_2_3']).hands}`);
+  said('FOLD') === String(foldNodes(handColumn).hands),
+  `island ${said('FOLD')}, browser ${foldNodes(handColumn).hands}`);
 
 const [onMine, onStone, onNeither] = said('SCOPE').split('|').map(Number);
 check('a node tells on its own trade’s skills and on nothing else',
   onMine < 1 && onStone === 1 && onNeither === 1,
-  `axes ${onMine}, masonry ${onStone}, no trade at all ${onNeither}`);
+  `${HAND.c.main} ${onMine}, masonry ${onStone}, no trade at all ${onNeither}`);
 
 const [handsPlain, handsTree] = said('HANDS').split('|').map(Number);
 check('hands: a whole column takes a sixth off the time a go takes',
@@ -259,16 +290,17 @@ check('hands: a whole column takes a sixth off the time a go takes',
 
 const [spent, broke] = said('SPENT').split('|');
 check('twelve spent, and the thirteenth point is refused in the same words',
-  spent === '12' && broke === nodeRefusal(nodeDef('berserker_3_3')!, 'berserker',
-    ['berserker_1_1', 'berserker_1_2', 'berserker_1_3', 'berserker_2_1', 'berserker_2_2', 'berserker_2_3', 'berserker_3_1', 'berserker_3_2'], 12),
+  spent === '12' && broke === nodeRefusal(nodeDef(node(OTHER_B, 3))!, T,
+    [...handColumn, ...[1, 2, 3].map((rank) => node(OTHER_A, rank)), node(OTHER_B, 1), node(OTHER_B, 2)], 12),
   broke);
 
 check('putting the trade down puts the whole tree down with it',
   said('CLEARED') === '0|gone', said('CLEARED'));
 
 const [windPlain, windTree, windTrade] = said('WIND').split('|');
-check('wind: one minor is three per cent less out of you, on the Archer drawing a bow',
-  windTrade === 'archer' && near(Number(windTree) / Number(windPlain), 0.97, 1e-5), said('WIND'));
+const windMinor = nodeDef(`${WIND.c.id}_${WIND.col}_1`)!.mul;
+check(`wind: one minor is ${Math.round((1 - windMinor) * 100)} per cent less out of you, on the ${WIND.c.name} at its own weapon`,
+  windTrade === WIND.c.id && near(Number(windTree) / Number(windPlain), windMinor, 1e-5), said('WIND'));
 
 for (const line of [...ok, ...bad]) console.log(line);
 if (bad.length) {

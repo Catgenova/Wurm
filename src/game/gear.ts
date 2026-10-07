@@ -238,7 +238,9 @@ export function weaponDamage(g: Game, def: WeaponDef, item: Item | null): number
   const might = (g.walks('power', 3) ? HARD_HANDS : 1) * g.furyMult();
   // And what its maker put into it: a Carpenter's Bowyer's Draw.
   const made = item ? markOf(item, 'damage') : 1;
-  return def.damage * edge * (0.55 + ql / 180) * wear * body * (1 + (skill + fighting) / 260) * might * made;
+  // And a fighting trade's mastery of this kind of weapon (a Berserker's Axe Mastery: `dmg:axes`).
+  const mastery = g.perk(`dmg:${def.kind}`, 1);
+  return def.damage * edge * (0.55 + ql / 180) * wear * body * (1 + (skill + fighting) / 260) * might * made * mastery;
 }
 
 /** How far a bow in these hands throws, in tiles: its own range, and further for its maker's mark (a Carpenter's True Bow). */

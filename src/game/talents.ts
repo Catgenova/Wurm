@@ -1,5 +1,6 @@
+import { KNIFE_BLEED, KNIFE_BLEED_SECS } from './fight';
 import type { SpellOn } from './patrons';
-import { percent } from './words';
+import { capital, numberWord, percent, times } from './words';
 
 /**
  * What a fighting trade gives: two spells and a passive at each of six tiers.
@@ -44,6 +45,15 @@ export const CLASS_LEARN_KILL = 5;
 /** How far a Sworn Blade's Guardian reaches from where you stand, in tiles. */
 export const GUARDIAN_REACH = 2;
 
+/** What a spell wants in your hands before it can be called: a shield in the off hand, or a weapon of a kind in the other. */
+export type SpellNeeds = 'shield' | 'axes' | 'mauls';
+/** As the spell's note says it first, and as its refusal says it is missing. */
+export const NEEDS_SAID: Record<SpellNeeds, { has: string; wants: string }> = {
+  shield: { has: 'With a shield in your off hand', wants: 'a shield in your off hand' },
+  axes: { has: 'With an axe in hand', wants: 'an axe in your hand' },
+  mauls: { has: 'With a maul in hand', wants: 'a maul in your hand' },
+};
+
 export interface ClassSpellDef {
   /** The id of the perk it is taken under, `<class>_<name>`, which is what the island keeps. */
   id: string;
@@ -59,8 +69,10 @@ export interface ClassSpellDef {
   on: readonly SpellOn[];
   /** The numbers behind what it does, which the island reads off its row and the note is written from. */
   fx: Readonly<Record<string, number>>;
-  /** What it does, in the game's numbers. */
+  /** What it does, in the game's numbers, beginning with what it wants in your hands when it wants something. */
   note: string;
+  /** What it wants in your hands; nothing when it can be called with anything or nothing. */
+  needs?: SpellNeeds;
 }
 
 /** A stretch of time as a spell note says it. */
@@ -72,10 +84,14 @@ const slug = (name: string): string => name.toLowerCase().replace(/[’']/g, '')
 
 const spellOf = (cls: string) => (
   num: number, name: string, cost: number, rest: number, on: readonly SpellOn[],
-  fx: Record<string, number>, note: (fx: Record<string, number>) => string,
-): ClassSpellDef => ({ id: `${cls}_${slug(name)}`, class: cls, num, name, cost, rest, on, fx, note: note(fx) });
+  fx: Record<string, number>, note: (fx: Record<string, number>) => string, needs?: SpellNeeds,
+): ClassSpellDef => ({
+  id: `${cls}_${slug(name)}`, class: cls, num, name, cost, rest, on, fx, needs,
+  note: needs ? `${NEEDS_SAID[needs].has}: ${note(fx)}` : capital(note(fx)),
+});
 
 const blade = spellOf('blade');
+const berserker = spellOf('berserker');
 
 /**
  * Every class spell there is, trade by trade, by the number each was picked
@@ -96,7 +112,7 @@ export const CLASS_SPELLS: ClassSpellDef[] = [
   blade(11, 'Hamstring', 0.1, 20, ['enemy'], { more: 0.8, pace: 0.5, secs: 10 },
     (fx) => `A blow at ${ofBlow(fx.more)}; for ${span(fx.secs)} it walks, hunts and flees at ${percent(fx.pace)} of its pace.`),
   blade(15, 'Shield Bash', 0.1, 12, ['enemy'], { more: 0.7, back: 2 },
-    (fx) => `With a shield in your off hand: a crushing blow at ${ofBlow(fx.more)} that knocks a heavy blow off its stroke and puts its next blow back ${span(fx.back)}.`),
+    (fx) => `a crushing blow at ${ofBlow(fx.more)} that knocks a heavy blow off its stroke and puts its next blow back ${span(fx.back)}.`, 'shield'),
   blade(29, 'Second Breath', 0, 180, ['self'], { stamina: 0.4 },
     (fx) => `Costs no stamina. ${percent(fx.stamina)} of a full bar of stamina back at once.`),
   blade(19, 'Deflect', 0.1, 25, ['self'], { share: 0.5, secs: 6 },
@@ -111,6 +127,32 @@ export const CLASS_SPELLS: ClassSpellDef[] = [
     (fx) => `Every creature within ${fx.reach} tiles of you that is hunting somebody turns on you and hunts only you for ${span(fx.secs)}.`),
   blade(28, 'Last Stand', 0, 600, ['self'], { below: 0.25, cut: 0.6, secs: 10 },
     (fx) => `Costs no stamina. Only below ${percent(fx.below)} of your health: for ${span(fx.secs)} you take ${percent(fx.cut)} less damage.`),
+
+  /* ---- The Berserker ---- */
+  berserker(18, 'Wild Swing', 0.05, 5, ['enemy'], { more: 1.4, miss: 2 },
+    (fx) => `A blow at ${ofBlow(fx.more)} that misses ${times(fx.miss)} as often as a swing does.`),
+  berserker(30, 'Shrug It Off', 0.1, 60, ['self'], { severity: 0.5 },
+    (fx) => `Your worst wound is ${percent(1 - fx.severity)} less severe, and it stops bleeding.`),
+  berserker(2, 'Rending Chop', 0.1, 12, ['enemy'], { more: 1.1 },
+    (fx) => `a blow at ${ofBlow(fx.more)} that bleeds it as a knife does, ${percent(KNIFE_BLEED)} of the blow a second for ${span(KNIFE_BLEED_SECS)}.`, 'axes'),
+  berserker(3, 'Skull Crack', 0.12, 15, ['enemy'], { more: 1.2, hold: 2, monster: 0.5 },
+    (fx) => `a blow at ${ofBlow(fx.more)} that holds it where it stands, neither moving nor striking, for ${span(fx.hold)}; a monster for ${span(fx.hold * fx.monster)}.`, 'mauls'),
+  berserker(21, 'Battle Rage', 0.15, 90, ['self'], { dealt: 1.3, taken: 1.2, secs: 15 },
+    (fx) => `For ${span(fx.secs)} you deal ${percent(fx.dealt - 1)} more damage and take ${percent(fx.taken - 1)} more.`),
+  berserker(29, 'Adrenaline', 0, 120, ['self'], { time: 0.85, secs: 10 },
+    (fx) => `Costs no stamina. For ${span(fx.secs)} a swing or a draw costs no stamina and takes ${percent(1 - fx.time)} less time.`),
+  berserker(20, 'Blood Price', 0, 30, ['enemy'], { health: 0.1, more: 2.5 },
+    (fx) => `Costs no stamina but ${percent(fx.health)} of your health: a blow at ${ofBlow(fx.more)}.`),
+  berserker(6, 'Execute', 0.15, 30, ['enemy'], { low: 0.25, more: 3, whole: 1 },
+    (fx) => `A blow at ${ofBlow(fx.more)} on a creature below ${percent(fx.low)} of its health, and at ${ofBlow(fx.whole)} on one above it.`),
+  berserker(8, 'Overhead Smash', 0.15, 20, ['enemy'], { more: 2.5, wind: 1.5 },
+    (fx) => `A crushing blow at ${ofBlow(fx.more)} that cannot miss; your own next swing comes ${span(fx.wind)} later.`),
+  berserker(14, 'Whirlwind', 0.25, 45, ['self'], { more: 0.9, blows: 2, reach: 2 },
+    (fx) => `${numberWord(fx.blows)} blows at ${ofBlow(fx.more)} on every enemy within ${fx.reach} tiles of you.`),
+  berserker(45, 'Earthshaker', 0.25, 60, ['self'], { more: 1, reach: 3, hold: 1 },
+    (fx) => `a blow at ${ofBlow(fx.more)} on every enemy within ${fx.reach} tiles of you, and each one held where it stands for ${span(fx.hold)}.`, 'mauls'),
+  berserker(50, 'Last Rage', 0, 600, ['self'], { below: 0.25, secs: 10 },
+    (fx) => `Costs no stamina. Only below ${percent(fx.below)} of your health: for ${span(fx.secs)} every blow you land is critical.`),
 ];
 export const CLASS_SPELL_BY_ID = new Map(CLASS_SPELLS.map((s) => [s.id, s]));
 export const classSpellsOf = (cls: string): ClassSpellDef[] => CLASS_SPELLS.filter((s) => s.class === cls);

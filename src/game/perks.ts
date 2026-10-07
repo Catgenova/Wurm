@@ -106,10 +106,10 @@ export type Fx = Record<string, number>;
 export const FX_RULE: Record<string, 'mul' | 'add'> = {
   time: 'mul', ql: 'mul', weight: 'mul', walk: 'mul', fail: 'mul', wear: 'mul', need: 'mul', bill: 'mul',
   grow: 'mul', rotate: 'mul', feed: 'mul', fill: 'mul', knack: 'mul', rot: 'mul', cool: 'mul', catch: 'mul', empty: 'mul', mend: 'mul',
-  bite: 'mul', cost: 'mul', worn: 'mul', life: 'mul', harm: 'mul', age: 'mul', wind: 'mul', severity: 'mul',
+  bite: 'mul', cost: 'mul', worn: 'mul', life: 'mul', harm: 'mul', age: 'mul', wind: 'mul', severity: 'mul', dmg: 'mul', swing: 'mul',
   bright: 'mul', thrift: 'mul', force: 'mul', keeps: 'mul', teach: 'mul', sturdy: 'mul',
   carry: 'add', serve: 'add', jobs: 'add', plus: 'add', bumper: 'add', fodder: 'add', tool: 'add', passes: 'add', hook: 'add', haul: 'add',
-  block: 'add',
+  block: 'add', leech: 'add',
 };
 
 export const fxFamily = (key: string): string => key.split(':')[0];
@@ -2071,6 +2071,48 @@ const BLADE: Seed[] = [
   },
 ];
 
+/*
+ * ---------------------------------------------------------------------------
+ * The Berserker: axes and mauls, hitting harder for every risk taken. As the
+ * Sworn Blade's, its spells have no numbers of their own here, and its
+ * passives are a hundred on from the numbers they were offered under.
+ * ---------------------------------------------------------------------------
+ */
+const BERSERKER: Seed[] = [
+  ...classSpellsOf('berserker').map((sp): Seed => ({ num: sp.num, name: sp.name, fx: {}, note: () => `${spellTerms(sp)} ${sp.note}` })),
+  {
+    num: 101, name: 'Axe Mastery',
+    fx: { 'dmg:axes': 1.1 },
+    note: (fx) => `A blow with an axe does ${percent(fx['dmg:axes'] - 1)} more damage.`,
+  },
+  {
+    num: 106, name: 'Maul Mastery',
+    fx: { 'dmg:mauls': 1.1 },
+    note: (fx) => `A blow with a maul does ${percent(fx['dmg:mauls'] - 1)} more damage.`,
+  },
+  {
+    num: 125, name: 'Executioner',
+    fx: { 'finish:below': 0.25, 'finish:dmg': 1.25 },
+    note: (fx) => `A blow on a creature below ${percent(fx['finish:below'])} of its health does ${percent(fx['finish:dmg'] - 1)} more damage.`,
+  },
+  {
+    num: 112, name: 'Pain Fuels',
+    fx: { 'pain:below': 0.5, 'pain:dmg': 1.15, 'pain:deep': 0.25, 'pain:deeper': 1.3 },
+    note: (fx) => `Below ${percent(fx['pain:below'])} of your health you deal ${percent(fx['pain:dmg'] - 1)} more damage, `
+      + `and below ${percent(fx['pain:deep'])} of it ${percent(fx['pain:deeper'] - 1)} more.`,
+  },
+  {
+    num: 130, name: 'Wild Strength',
+    fx: { 'swing:two_handed': 0.9 },
+    note: (fx) => `A swing of a two-handed weapon takes ${less(fx['swing:two_handed'])} less time.`,
+  },
+  {
+    num: 113, name: 'Thirst for Blood',
+    fx: { 'leech:blow': 0.01 },
+    note: (fx) => `Every blow you land on a creature gives you back ${percent(fx['leech:blow'])} of your health.`,
+  },
+];
+
 /** Every trade's perks, in the order they were picked. */
 const SEEDS: Record<string, Seed[]> = {
   terraformer: TERRAFORMER,
@@ -2088,6 +2130,7 @@ const SEEDS: Record<string, Seed[]> = {
   mender: MENDER,
   artisan: ARTISAN,
   blade: BLADE,
+  berserker: BERSERKER,
 };
 
 const slug = (name: string): string => name.toLowerCase().replace(/[’']/g, '').replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '');
@@ -2114,6 +2157,7 @@ export const TIERS: Record<string, number[][]> = {
   artisan: [[2, 3, 26], [7, 9, 10], [13, 27, 35], [4, 14, 34], [12, 46, 49], [28, 36, 48]],
   // Two spells and a passive to a tier, in order of what they are worth.
   blade: [[1, 32, 108], [2, 11, 111], [15, 29, 127], [19, 26, 123], [12, 31, 129], [33, 28, 109]],
+  berserker: [[18, 30, 101], [2, 3, 106], [21, 29, 125], [20, 6, 112], [8, 14, 130], [45, 50, 113]],
 };
 
 /** Every perk there is, tier by tier, and in each tier by the number it was picked under, as the island lists them. */

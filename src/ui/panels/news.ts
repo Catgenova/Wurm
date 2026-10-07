@@ -1143,6 +1143,22 @@ export const NEWS: News[] = [
       ].filter(Boolean);
     },
   },
+  {
+    n: 87,
+    day: '2026-10-07',
+    lines: () => {
+      const spells = classSpellsOf('berserker');
+      const first = perksOf('berserker').map((p) => CLASS_SPELL_BY_ID.get(p.id)).find((sp) => sp !== undefined);
+      const wants = spells.filter((sp) => sp.needs).map((sp) => sp.name);
+      return [
+        `The Berserker is on spells and passives too: ${numberWord(spells.length)} spells and ${numberWord(perksOf('berserker').length - spells.length)} passives `
+          + `in ${numberWord(CLASS_TIER_AT.length)} tiers on its own class level, as the Sworn Blade's are. Its tree and every node bought in it are gone; its rite stays.`,
+        first ? `${first.name}: ${spellTerms(first)} ${first.note}` : '',
+        wants.length ? `${listed(wants)} want the weapon they name in your hand, and are refused without it.` : '',
+        'A blow a fighting trade\'s spell strikes does what a swing of the weapon does besides: a maul staggers, a spear holds it off, a knife opens it up.',
+      ].filter(Boolean);
+    },
+  },
 ];
 
 /** The highest entry this browser has shown. */

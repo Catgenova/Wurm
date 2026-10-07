@@ -520,6 +520,8 @@ const OTHERS = new Set([
   'more_stones', 'amphora', 'potters_wheel', 'glaze_item', 'trade_book', 'circlet',
   // A Sworn Blade's: a block's stagger and ceiling, a wound's depth, a shield over somebody else.
   'stagger:block', 'block:shield', 'blockcap:shield', 'severity:wound', 'cover:share',
+  // A Berserker's: a two-handed swing, a creature far gone, a body far gone, a blow's health back.
+  'swing:two_handed', 'finish:below', 'finish:dmg', 'pain:below', 'pain:dmg', 'pain:deep', 'pain:deeper', 'leech:blow',
   ...STRIDE_KEYS,
 ]);
 const unnamed = PERKS.flatMap((p) => Object.keys(p.fx).filter((key) => {
@@ -538,8 +540,8 @@ const unnamed = PERKS.flatMap((p) => Object.keys(p.fx).filter((key) => {
   // And how slowly it rots set down, a thing or all food (a Fisher's fish, a Cook's food).
   if (fam === 'cool' && rest !== 'food') return !ITEM_DEFS[rest];
   if (fam === 'slope') return !['digging', 'masonry'].includes(rest);
-  // A swing of one kind of weapon, and what a stance takes or deals.
-  if (fam === 'wind') return !WEAPON_KINDS.has(rest);
+  // A swing of one kind of weapon and the damage it does, and what a stance takes or deals.
+  if (fam === 'wind' || fam === 'dmg') return !WEAPON_KINDS.has(rest);
   if (fam === 'stance') return !Object.keys(STANCE_TAKEN).some((st) => rest === `${st}_taken` || rest === `${st}_dealt`);
   return !OTHERS.has(key);
 }).map((key) => `${p.id} ${key}`));

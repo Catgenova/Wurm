@@ -70,6 +70,7 @@ const check = (what: string, passed: boolean, detail = ''): void => {
  */
 const NOT_A_RULE: Array<{ at: string; why: string }> = [
   { at: 'Two hands', why: 'a two-handed weapon, which `twoHanded` says; nothing counts the hands' },
+  { at: 'two-handed weapon', why: 'the kind of weapon, which `twoHanded` says; nothing counts the hands' },
   { at: 'double door', why: 'the name of a wall, not a multiplier' },
   { at: 'double-click', why: 'a way of clicking, not a multiplier' },
 ];
