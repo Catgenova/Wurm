@@ -72,9 +72,14 @@ export function fightBase(g: Game, def: Pick<ActionDef, 'id' | 'baseTime'>): num
 /** What a go of a fight costs in stamina, before the body's own share; null for every other job. */
 export function fightWind(g: Game, def: Pick<ActionDef, 'id'>): number | null {
   if (def.id !== 'attack_creature' && def.id !== 'shoot_creature') return null;
-  // Less for a sword in a Sworn Blade's hand (Light Sword), as `act_wind` has it.
-  const sword = def.id === 'attack_creature' && swungWith(g).def.kind === 'swords';
-  return swingWind(heftOf(g, def)) * (sword ? g.perk('wind:swords', 1) : 1);
+  /*
+   * Less for a sword in a Sworn Blade's hand (Light Sword) or a polearm in a
+   * Pikeman's (Light Haft), as `act_wind` has it: the swing of whatever is in
+   * your hand, and nothing for a fist.
+   */
+  const held = def.id === 'attack_creature' ? g.worn('weapon') : null;
+  const w = held && WEAPON_BY_ID.get(held.id);
+  return swingWind(heftOf(g, def)) * (w && !w.ammo ? g.perk(`wind:${w.kind}`, 1) : 1);
 }
 
 /**
@@ -138,8 +143,14 @@ export const blowEvery = (def: Pick<SpeciesDef, 'hunter' | 'monster' | 'defensiv
 export const meleeReach = (g: Game): number => {
   const held = g.worn('weapon');
   const w = held && WEAPON_BY_ID.get(held.id);
-  return w && !w.ammo ? Math.max(2.2, (w.range ?? 1) + 1.2) : 2.2;
+  // And further for a Pikeman's Long Reach, as `melee_reach` has it.
+  return w && !w.ammo ? reachOf(w) + g.perk(`length:${w.kind}`, 0) : FIST_REACH;
 };
+
+/** How far a pace and a bit reaches: bare hands, a bow, or anything shorter than a spear. */
+export const FIST_REACH = 2.2;
+/** How far a weapon reaches before anybody's perks: a pace and a bit, or its own length past that. */
+export const reachOf = (w: Pick<WeaponDef, 'range'>): number => Math.max(FIST_REACH, (w.range ?? 1) + 1.2);
 
 /** Nearer than this, a bow cannot be drawn on it. */
 export const DRAW_CLOSEST = 1.2;
@@ -229,6 +240,8 @@ export const WIND_UP = 1;
 export const HEAVY_HIT = 2.5;
 /** How near a creature's blow reaches, in tiles, its heavy one included. */
 export const HUNT_REACH = 1.1;
+/** How near a creature can reach you from: a throw for one that throws, a blow for anything else. The island's `beast_reach`. */
+export const beastReach = (def: Pick<SpeciesDef, 'throws'>): number => (def.throws ? THROW_REACH : HUNT_REACH);
 
 /* ---- Wounds in a fight --------------------------------------------------- */
 

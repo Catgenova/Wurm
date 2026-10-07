@@ -46,7 +46,7 @@
  * benefit check reads these functions as it reads any other note.
  */
 import { CLASSES, PERK_CLASSES, PERK_TIER_AT, PERKS_PER_TIER, tiersAtFor } from './classes';
-import { BLOCK_MOST, STANCE_DEALT, STANCE_TAKEN } from './fight';
+import { BLOCK_MOST, FIGHT_BACK_STILL, HUNT_REACH, reachOf, STANCE_DEALT, STANCE_TAKEN, THROW_REACH } from './fight';
 import { classSpellsOf, GUARDIAN_REACH, spellTerms } from './talents';
 import {
   ACTION_BY_ID, CHIP_CHANCE, CLEARED_TO, DIG_TILE_TIME, DREDGE_DEPTH, FLATTEN_STEP, GRASS_PER_CUT, MINE_COLLAPSE, MINE_DEPTH, PAN_ORES,
@@ -92,7 +92,7 @@ import { POND_EVERY } from './furniture';
 import { TRAPS } from './traps';
 import { BUTCHER_BAIT } from './butcher';
 import { SHEAR_FROM, SHEAR_WOOL, TAME_MOST } from './creatureActions';
-import { AGES, BREED_REST, CARE_BONUS, CARE_HOURS, COAX_STEP, GESTATION, HUNGER_RATE, OLD_AT } from './creatures';
+import { AGES, BREED_REST, CARE_BONUS, CARE_HOURS, COAX_STEP, GESTATION, HUNGER_RATE, OLD_AT, SPECIES } from './creatures';
 import { GROOM_HEAL, groomGain } from './husbandry';
 import { inheritChance, TRAIT_SLOTS, upgradeChance } from './traits';
 
@@ -109,7 +109,8 @@ export const FX_RULE: Record<string, 'mul' | 'add'> = {
   bite: 'mul', cost: 'mul', worn: 'mul', life: 'mul', harm: 'mul', age: 'mul', wind: 'mul', severity: 'mul', dmg: 'mul', swing: 'mul',
   bright: 'mul', thrift: 'mul', force: 'mul', keeps: 'mul', teach: 'mul', sturdy: 'mul',
   carry: 'add', serve: 'add', jobs: 'add', plus: 'add', bumper: 'add', fodder: 'add', tool: 'add', passes: 'add', hook: 'add', haul: 'add',
-  block: 'add', leech: 'add',
+  block: 'add', leech: 'add', length: 'add',
+  gap: 'mul', monster: 'mul', still: 'mul',
 };
 
 export const fxFamily = (key: string): string => key.split(':')[0];
@@ -2113,6 +2114,58 @@ const BERSERKER: Seed[] = [
   },
 ];
 
+/*
+ * ---------------------------------------------------------------------------
+ * The Pikeman: a spear's length, plate, and the ground between. As the other
+ * fighting trades', its spells have no numbers of their own here, and its
+ * passives are a hundred on from the numbers they were offered under.
+ * ---------------------------------------------------------------------------
+ */
+/** Every kind of creature that is a monster, which is what a Monster Hunter's blows are harder on. */
+const MONSTERS = Object.values(SPECIES).filter((sp) => sp.monster).map((sp) => sp.name.toLowerCase());
+/** A length in tiles, to the hundredth: 3.7, not 3.7000000000000002. */
+const tiles = (n: number): string => `${Number(n.toFixed(2))}`;
+const SPEAR = WEAPON_BY_ID.get('spear');
+if (!SPEAR) throw new Error('Long Reach is written for a spear, and there is no spear');
+const PIKEMAN: Seed[] = [
+  ...classSpellsOf('pikeman').map((sp): Seed => ({ num: sp.num, name: sp.name, fx: {}, note: () => `${spellTerms(sp)} ${sp.note}` })),
+  {
+    num: 129, name: 'Scarred',
+    fx: { 'severity:new': 0.8 },
+    note: (fx) => `A wound a blow opens on you starts ${less(fx['severity:new'])} less severe, so it bleeds and slows you less; `
+      + 'one already open deepens as it always did. What the blow takes off your health is the same.',
+  },
+  {
+    num: 105, name: 'Light Haft',
+    fx: { 'wind:polearms': 0.75 },
+    note: (fx) => `A swing of a polearm costs ${less(fx['wind:polearms'])} less stamina.`,
+  },
+  {
+    num: 121, name: 'Monster Hunter',
+    fx: { 'monster:dmg': 1.15 },
+    note: (fx) => `A blow or a shot that lands on a monster (${article(MONSTERS[0])} ${either(MONSTERS)}) does `
+      + `${percent(fx['monster:dmg'] - 1)} more damage.`,
+  },
+  {
+    num: 113, name: 'Bastion',
+    fx: { 'still:taken': 0.85 },
+    note: (fx) => `While your feet have not moved for ${secs(FIGHT_BACK_STILL)}, every blow that lands on you does `
+      + `${less(fx['still:taken'])} less damage.`,
+  },
+  {
+    num: 102, name: 'Long Reach',
+    fx: { 'length:polearms': 0.5 },
+    note: (fx) => `A polearm reaches ${tiles(fx['length:polearms'])} tiles further: a spear ${tiles(reachOf(SPEAR) + fx['length:polearms'])} `
+      + `tiles instead of ${tiles(reachOf(SPEAR))}.`,
+  },
+  {
+    num: 118, name: 'Reach Discipline',
+    fx: { 'gap:dmg': 1.2 },
+    note: (fx) => 'A blow or a shot that lands on a creature inside your reach and not yet inside its own reach of you '
+      + `(${HUNT_REACH} tiles, or ${THROW_REACH} for one that throws) does ${percent(fx['gap:dmg'] - 1)} more damage.`,
+  },
+];
+
 /** Every trade's perks, in the order they were picked. */
 const SEEDS: Record<string, Seed[]> = {
   terraformer: TERRAFORMER,
@@ -2131,6 +2184,7 @@ const SEEDS: Record<string, Seed[]> = {
   artisan: ARTISAN,
   blade: BLADE,
   berserker: BERSERKER,
+  pikeman: PIKEMAN,
 };
 
 const slug = (name: string): string => name.toLowerCase().replace(/[’']/g, '').replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '');
@@ -2158,6 +2212,7 @@ export const TIERS: Record<string, number[][]> = {
   // Two spells and a passive to a tier, in order of what they are worth.
   blade: [[1, 32, 108], [2, 11, 111], [15, 29, 127], [19, 26, 123], [12, 31, 129], [33, 28, 109]],
   berserker: [[18, 30, 101], [2, 3, 106], [21, 29, 125], [20, 6, 112], [8, 14, 130], [45, 50, 113]],
+  pikeman: [[38, 13, 129], [6, 5, 105], [33, 32, 121], [14, 19, 113], [2, 17, 102], [35, 3, 118]],
 };
 
 /** Every perk there is, tier by tier, and in each tier by the number it was picked under, as the island lists them. */

@@ -1655,6 +1655,19 @@ jobs:
             --outfile=node_modules/.cache/berserker.mjs --log-level=error
           node node_modules/.cache/berserker.mjs
 
+      - name: The Pikeman's spells and passives
+        run: |
+          # The third fighting trade on spells and passives. Both sides hold
+          # the same rows; every blow measured at its share of a swing's, the
+          # same roll asked twice; an Overreach as far past your reach as it
+          # says and no further; a creature slowed, warned off, dragged, pushed
+          # back by a blow or before its own, run through, and met at the edge
+          # of your reach; stamina back for everybody near; and every passive
+          # at the rule it changes, the browser's fold the island's.
+          npx esbuild supabase/test/pikeman.ts --bundle --platform=node --format=esm \
+            --outfile=node_modules/.cache/pikeman.mjs --log-level=error
+          node node_modules/.cache/pikeman.mjs
+
       - name: Glassblowing, glass panels, bottles and the stained glass wall
         run: |
           # The Artisan's fourth trade, at a hot smelter: sand melted into

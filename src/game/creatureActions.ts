@@ -10,7 +10,7 @@ import { furnitureCentre, furnitureName, vehicleOf } from './furniture';
 import { deedJobLine, emptyCrate, letOut, shutIn } from './creaturecrate';
 import { itemDef, itemName, rarityOf, type Mark } from './items';
 import { BANE_BONUS, banes, bowRange, hitChance, isBow, WEAPON_BY_ID, weaponDamage } from './gear';
-import { ARROWS, armsRefusal, BLINDSIDE, blowOf, CRIT_HIT, critChance, DRAW_CLOSEST, FALL_BACK, FIST, headBlow, headHide, headSide, hideTakes, nockedArrow, KNIFE_BLEED, KNIFE_BLEED_SECS, meleeReach, STAGGER_MAUL, STAGGER_POLE, stanceDealt, swungWith } from './fight';
+import { ARROWS, armsRefusal, beastReach, BLINDSIDE, blowOf, CRIT_HIT, critChance, DRAW_CLOSEST, FALL_BACK, FIST, headBlow, headHide, headSide, hideTakes, nockedArrow, KNIFE_BLEED, KNIFE_BLEED_SECS, meleeReach, STAGGER_MAUL, STAGGER_POLE, stanceDealt, swungWith } from './fight';
 import { matOfItem } from './materials';
 import { defaultKey } from './keybinds';
 
@@ -135,6 +135,23 @@ export const SHEAR_FEATHERS = 6;
 
 /** Harder at something whose mind is on another fight: a companion's, or somebody else's (`BLINDSIDE`). */
 const blindside = (c: Creature): number => (c.enemy !== null && c.enemy !== PLAYER_ATTACKER ? BLINDSIDE : 1);
+
+/**
+ * What your fighting trade's passives make of a blow you land on it, as
+ * `class_dealt` has them on the island (whose spells add their own there): a
+ * Berserker's Executioner on a creature far gone and Pain Fuels on a body far
+ * gone, and a Pikeman's Monster Hunter, and Reach Discipline on a creature
+ * inside your reach and not yet inside its own of you (`beastReach`).
+ */
+export function classDealt(g: Game, c: Creature): number {
+  const def = SPECIES[c.species];
+  const health = g.player.stats.health;
+  const d = Math.hypot(c.x - g.player.x, c.y - g.player.y);
+  return (c.health < maxHealth(c, def) * g.perk('finish:below', 0) ? g.perk('finish:dmg', 1) : 1)
+    * (health < g.perk('pain:deep', 0) ? g.perk('pain:deeper', 1) : health < g.perk('pain:below', 0) ? g.perk('pain:dmg', 1) : 1)
+    * (def.monster ? g.perk('monster:dmg', 1) : 1)
+    * (d <= meleeReach(g) && d > beastReach(def) ? g.perk('gap:dmg', 1) : 1);
+}
 
 /**
  * What a landed blow does besides its damage, by the kind of weapon it was:
@@ -533,7 +550,9 @@ export const CREATURE_ACTIONS: ActionDef[] = [
         // And now and then a critical one (`critChance`).
         const crit = g.rand() < critChance(g.skills.get(usable.kind), usable);
         const dmg = weaponDamage(g, usable, item) * bane * stanceDealt(g.settings.fightStance, (k, o) => g.perk(k, o))
-          * hideTakes(def.hide, blowOf(usable)) * blindside(c) * (0.75 + g.rand() * 0.5) * (crit ? CRIT_HIT : 1);
+          * hideTakes(def.hide, blowOf(usable)) * blindside(c) * (0.75 + g.rand() * 0.5) * (crit ? CRIT_HIT : 1)
+          // And what your fighting trade's passives make of it (`classDealt`).
+          * classDealt(g, c);
         g.creatures.hurt(g, c, dmg, 'player', crit);
         // And what the weapon does besides: a maul staggers, a spear holds it off, a knife opens it up (a fist none of these).
         if (c.health > 0 && usable.id !== FIST.id) sideBlow(g, c, usable.kind, dmg);
@@ -615,7 +634,7 @@ export const CREATURE_ACTIONS: ActionDef[] = [
         // And what the head is: a blunt crushes, a bodkin goes through a hide (`headBlow`, `headHide`).
         const dmg = weaponDamage(g, bow, held) * head.edge * bane * stanceDealt(g.settings.fightStance, (k, o) => g.perk(k, o))
           * hideTakes(def.hide, headBlow(shape, bow)) * headHide(shape, def.hide) * blindside(c)
-          * (0.6 + arrow.ql / 140) * (0.8 + g.rand() * 0.4) * (crit ? CRIT_HIT : 1);
+          * (0.6 + arrow.ql / 140) * (0.8 + g.rand() * 0.4) * (crit ? CRIT_HIT : 1) * classDealt(g, c);
         g.creatures.hurt(g, c, dmg, 'player', crit);
         g.damageItem(held, 0.25 * g.perk('worn:weapon', 1));
         // A broadhead bleeds it as a knife does, a blunt staggers it as a maul does (`headSide`).

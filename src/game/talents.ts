@@ -1,4 +1,4 @@
-import { KNIFE_BLEED, KNIFE_BLEED_SECS } from './fight';
+import { HUNT_REACH, KNIFE_BLEED, KNIFE_BLEED_SECS, THROW_REACH } from './fight';
 import type { SpellOn } from './patrons';
 import { capital, numberWord, percent, times } from './words';
 
@@ -92,6 +92,7 @@ const spellOf = (cls: string) => (
 
 const blade = spellOf('blade');
 const berserker = spellOf('berserker');
+const pikeman = spellOf('pikeman');
 
 /**
  * Every class spell there is, trade by trade, by the number each was picked
@@ -153,6 +154,39 @@ export const CLASS_SPELLS: ClassSpellDef[] = [
     (fx) => `a blow at ${ofBlow(fx.more)} on every enemy within ${fx.reach} tiles of you, and each one held where it stands for ${span(fx.hold)}.`, 'mauls'),
   berserker(50, 'Last Rage', 0, 600, ['self'], { below: 0.25, secs: 10 },
     (fx) => `Costs no stamina. Only below ${percent(fx.below)} of your health: for ${span(fx.secs)} every blow you land is critical.`),
+
+  /* ---- The Pikeman ---- */
+  pikeman(38, 'Warning Thrust', 0.06, 10, ['enemy'], { secs: 30 },
+    (fx) => `A creature within your reach that is not fighting you will not come for you for ${span(fx.secs)}, alone or with its pack, `
+      + 'unless you strike it first.'),
+  pikeman(13, 'Overreach', 0.08, 8, ['enemy'], { more: 1.1, past: 2, wind: 1 },
+    (fx) => `A blow at ${ofBlow(fx.more)} on an enemy up to ${fx.past} tiles past your reach; your own next swing comes ${span(fx.wind)} later.`),
+  pikeman(6, 'Sweep the Legs', 0.1, 15, ['enemy'], { more: 0.8, pace: 0.5, secs: 8 },
+    (fx) => `A blow at ${ofBlow(fx.more)}; for ${span(fx.secs)} it walks, hunts and flees at ${percent(fx.pace)} of its pace.`),
+  pikeman(5, 'Vital Thrust', 0.12, 20, ['enemy'], { more: 1.2, crit: 2 },
+    (fx) => `A blow at ${ofBlow(fx.more)} that is critical ${times(fx.crit)} as often as a swing is.`),
+  pikeman(33, 'Hook', 0.1, 15, ['enemy'], { reach: 4, pull: 2, least: 1 },
+    (fx) => `An enemy up to ${fx.reach} tiles off is dragged ${fx.pull} tiles towards you, no nearer than ${fx.least} tile${fx.least === 1 ? '' : 's'}, `
+      + 'over ground it could walk, and turns on you as if struck.'),
+  pikeman(32, 'Rally the Line', 0.15, 90, ['self'], { reach: 5, stamina: 0.2 },
+    (fx) => `You and everybody within ${fx.reach} tiles of you get ${percent(fx.stamina)} of a full bar of stamina back.`),
+  pikeman(14, 'Twin Thrust', 0.14, 20, ['enemy'], { more: 0.7, blows: 2 },
+    (fx) => `${numberWord(fx.blows)} blows at ${ofBlow(fx.more)} each, one after the other.`),
+  pikeman(19, 'Reach Advantage', 0.08, 15, ['enemy'], { more: 1.5, whole: 1 },
+    (fx) => `A blow at ${ofBlow(fx.more)} on a creature not yet within its own reach of you (${HUNT_REACH} tiles, or ${THROW_REACH} for one `
+      + `that throws), and at ${ofBlow(fx.whole)} on one that is.`),
+  pikeman(2, 'Skewer', 0.12, 15, ['enemy'], { more: 1.5, behind: 2, width: 0.5, through: 0.6 },
+    (fx) => `A blow at ${ofBlow(fx.more)}, and one at ${ofBlow(fx.through)} on every enemy up to ${fx.behind} tiles behind it and within `
+      + `${fx.width} tiles of the line of the thrust.`),
+  pikeman(17, 'Keep Away', 0.1, 20, ['self'], { secs: 10, push: 1 },
+    (fx) => `For ${span(fx.secs)} every blow you land pushes what it lands on ${fx.push} tile${fx.push === 1 ? '' : 's'} further from you, `
+      + 'over ground it could walk.'),
+  pikeman(35, 'Fend Off', 0.1, 20, ['self'], { secs: 8, push: 2 },
+    (fx) => `For ${span(fx.secs)} anything that comes within ${HUNT_REACH} tiles of you to strike is pushed ${fx.push} tiles back instead, `
+      + 'over ground it could walk.'),
+  pikeman(3, 'Brace for the Charge', 0.1, 20, ['self'], { secs: 6, more: 2, back: 2 },
+    (fx) => `For ${span(fx.secs)} the first creature that comes at you from outside your reach is stopped at the edge of it by a blow at `
+      + `${ofBlow(fx.more)}, and its next blow is put back ${span(fx.back)}.`),
 ];
 export const CLASS_SPELL_BY_ID = new Map(CLASS_SPELLS.map((s) => [s.id, s]));
 export const classSpellsOf = (cls: string): ClassSpellDef[] => CLASS_SPELLS.filter((s) => s.class === cls);

@@ -2432,7 +2432,9 @@ export class Game {
      */
     const a = this.action;
     const flank = a && isFightJob(a.def.id) && a.target.kind === 'creature' && by !== null && by !== PLAYER_ATTACKER && a.target.id !== by;
-    const hit = this.absorb(raw * stanceTaken(this.settings.fightStance, (k, o) => this.perk(k, o)) * (flank ? FLANK_HIT : 1), kind);
+    // And less on feet that have not moved for a Pikeman's Bastion, as `hurt_player` has it.
+    const still = this.time - this.movedAt >= FIGHT_BACK_STILL ? this.perk('still:taken', 1) : 1;
+    const hit = this.absorb(raw * stanceTaken(this.settings.fightStance, (k, o) => this.perk(k, o)) * (flank ? FLANK_HIT : 1) * still, kind);
     if (hit.blocked) {
       this.player.attackedAt = this.time;
       this.events.emit('hit', this.player.x, this.player.y, 0, 'taken');
@@ -2443,8 +2445,10 @@ export class Game {
     this.player.stats.health = Math.max(0, this.player.stats.health - hit.taken);
     this.player.attackedAt = this.time;
     this.events.emit('hit', this.player.x, this.player.y, hit.taken, 'taken');
-    // Less of a wound than of a blow for a Sworn Blade's Battle-Hardened; the health it takes is the same.
-    const wound = this.wound(kind, hit.part, hit.taken * this.perk('severity:wound', 1));
+    // Less of a wound than of a blow for a Sworn Blade's Battle-Hardened, and less of a fresh one for a
+    // Pikeman's Scarred; the health it takes is the same.
+    const fresh = !this.player.wounds.some((w) => w.kind === kind && w.part === hit.part && !w.infected);
+    const wound = this.wound(kind, hit.part, hit.taken * this.perk('severity:wound', 1) * (fresh ? this.perk('severity:new', 1) : 1));
     // A venomous bite leaves venom in what it opened (`VENOM_SECS`).
     if (from && this.creatures.species(from).venom) wound.venom = VENOM_SECS;
     const where = hit.worn ? `, though your ${itemName(hit.worn).toLowerCase()} takes the worst of it` : '';

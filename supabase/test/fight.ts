@@ -58,26 +58,28 @@ const near = (a: number, b: number, by = 1e-9): boolean => Math.abs(a - b) <= by
 /**
  * The first fighting trade that still has a tree with a column of this
  * channel, and the minor at the head of that column; none once every trade
- * that had one has moved to perks.
+ * that had one has moved to perks. `fits` says what else the trade must be
+ * for the channel to be measured on it.
  */
-const treed = (channel: string): { c: ClassDef; node: string; mul: number } | null => {
+const treed = (channel: string, fits: (c: ClassDef) => boolean = () => true): { c: ClassDef; node: string; mul: number } | null => {
   for (const c of COMBAT_CLASSES) {
-    if (PERK_CLASSES.has(c.id)) continue;
+    if (PERK_CLASSES.has(c.id) || !fits(c)) continue;
     const col = CLASS_COLUMNS[c.id].findIndex((x) => x.channel === channel);
     const n = col >= 0 ? nodeDef(`${c.id}_${col + 1}_1`) : undefined;
     if (n) return { c, node: n.id, mul: n.mul };
   }
   return null;
 };
-const AIM = treed('aim');
-const EDGE = treed('edge');
-const GUARD = treed('guard');
-/** A kind of weapon the trade does not cover, for the channel to leave alone. */
-const KINDS = [...new Set([...WEAPON_BY_ID.values()].map((x) => x.kind))].sort();
-const otherKind = (c: ClassDef): string => KINDS.find((k) => !c.skills.includes(k))!;
 /** A line of armour or the shield, covered by the trade or not. */
 const GUARDS = ['shields', 'chain_armour', 'plate_armour', 'leather_armour'];
 const guardOf = (c: ClassDef, mine: boolean): string => GUARDS.find((s) => c.skills.includes(s) === mine)!;
+const AIM = treed('aim');
+const EDGE = treed('edge');
+// Guard is measured on what it guards: a trade whose tree has it and that covers a line of armour or the shield.
+const GUARD = treed('guard', (c) => GUARDS.some((s) => c.skills.includes(s)));
+/** A kind of weapon the trade does not cover, for the channel to leave alone. */
+const KINDS = [...new Set([...WEAPON_BY_ID.values()].map((x) => x.kind))].sort();
+const otherKind = (c: ClassDef): string => KINDS.find((k) => !c.skills.includes(k))!;
 /** A Sworn Blade's first passive, taken in the middle of its rite. */
 const BLADE_PERK = perksOf('blade').find((p) => p.tier === 1 && Object.keys(p.fx).length > 0)!.id;
 

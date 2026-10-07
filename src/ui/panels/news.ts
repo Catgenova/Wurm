@@ -1159,6 +1159,21 @@ export const NEWS: News[] = [
       ].filter(Boolean);
     },
   },
+  {
+    n: 88,
+    day: '2026-10-07',
+    lines: () => {
+      const spells = classSpellsOf('pikeman');
+      const first = perksOf('pikeman').map((p) => CLASS_SPELL_BY_ID.get(p.id)).find((sp) => sp !== undefined);
+      return [
+        `The Pikeman is on spells and passives too: ${numberWord(spells.length)} spells and ${numberWord(perksOf('pikeman').length - spells.length)} passives `
+          + `in ${numberWord(CLASS_TIER_AT.length)} tiers on its own class level, as the Sworn Blade's and the Berserker's are. Its tree and every node bought `
+          + 'in it are gone; its rite stays.',
+        first ? `${first.name}: ${spellTerms(first)} ${first.note}` : '',
+        'In the game kept in this browser, a Berserker\'s Executioner and Pain Fuels now count on every blow you land, as they always did on an island.',
+      ].filter(Boolean);
+    },
+  },
 ];
 
 /** The highest entry this browser has shown. */
