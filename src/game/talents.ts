@@ -1,5 +1,6 @@
 // The reach of a spell on a creature is `SPELL_REACH`, which `patrons.ts` takes from `TARGET_RANGE`; read here from where it is
 // set, since `patrons.ts` reads this file.
+import { spellDef, spellForce } from './arcane';
 import { COMPANION_REACH, DRAW_CLOSEST, HUNT_REACH, KNIFE_BLEED, KNIFE_BLEED_SECS, STAGGER_MAUL, TARGET_RANGE as SPELL_REACH, THROW_REACH } from './fight';
 import type { SpellOn } from './patrons';
 import { capital, numberWord, percent, times } from './words';
@@ -49,10 +50,10 @@ export const GUARDIAN_REACH = 2;
 
 /**
  * What a spell wants in your hands before it can be called: a shield in the off hand, or a weapon of a kind in the other --
- * and for a Skirmisher's Hit and Run, a thrown weapon or a knife; and for a Beastmaster's, a companion at heel rather than
- * anything in the hand.
+ * and for a Skirmisher's Hit and Run, a thrown weapon or a knife; for a Beastmaster's, a companion at heel rather than
+ * anything in the hand; and for a Kindler's, a focus of the school's stones to cast it out of.
  */
-export type SpellNeeds = 'shield' | 'axes' | 'mauls' | 'archery' | 'throwing' | 'skirmish' | 'knives' | 'companion';
+export type SpellNeeds = 'shield' | 'axes' | 'mauls' | 'archery' | 'throwing' | 'skirmish' | 'knives' | 'companion' | 'kindling';
 /** As the spell's note says it first, and as its refusal says it is missing. */
 export const NEEDS_SAID: Record<SpellNeeds, { has: string; wants: string }> = {
   shield: { has: 'With a shield in your off hand', wants: 'a shield in your off hand' },
@@ -65,6 +66,8 @@ export const NEEDS_SAID: Record<SpellNeeds, { has: string; wants: string }> = {
   knives: { has: 'With a knife in hand', wants: 'a knife in your hand' },
   // A creature you keep that is following you: not in a crate, not working a deed, not in the traces or under a rider.
   companion: { has: 'With a companion following you', wants: 'a companion following you' },
+  // Any focus of a stone kindling works that is not worn through (`focus_for`), and casting a trade's spell does not wear it.
+  kindling: { has: 'With a garnet or ruby focus in your pack', wants: 'a garnet or ruby focus in your pack' },
 };
 
 export interface ClassSpellDef {
@@ -110,6 +113,24 @@ const archer = spellOf('archer');
 const skirmisher = spellOf('skirmisher');
 const chirurgeon = spellOf('chirurgeon');
 const beastmaster = spellOf('beastmaster');
+const kindler = spellOf('kindler');
+
+/** "fire at 80%": what share of a Kindler's fire a spell lands. */
+const fire = (m: number): string => `fire at ${ofBlow(m)}`;
+/**
+ * What fire at 100% does: an Ember's, out of the best garnet or ruby focus you carry, at your kindling (`spellForce`), from
+ * the bottom of both to the top.
+ */
+const EMBER = spellDef('ember')!;
+/** The least and the most a skill and a focus's quality can be, which the note gives fire at. */
+const FIRE_LOW = 1;
+const FIRE_TOP = 100;
+const FIRE_IS = `${capital(fire(1))} does ${Math.round(spellForce(EMBER, FIRE_LOW, FIRE_LOW, 1))} damage at ${FIRE_LOW} kindling `
+  + `with a QL ${FIRE_LOW} focus, up to ${Math.round(spellForce(EMBER, FIRE_TOP, FIRE_TOP, 1))} at ${FIRE_TOP} kindling with a QL `
+  + `${FIRE_TOP} focus, rising evenly with each.`;
+/** "burns 1% of its full health a second for 8 s": a burn, which is a bleed that a Kindler started (`class_burn`). */
+const burns = (each: number, secs: number): string => `burns ${percent(each)} of its full health a second for ${span(secs)}`;
+const BURN_LAST = 'a burn never takes the last of its health';
 
 /**
  * Every class spell there is, trade by trade, by the number each was picked
@@ -127,6 +148,10 @@ const beastmaster = spellOf('beastmaster');
  * fights -- its attack, half again at the top of its fighting, a third either
  * way as each one lands, and whatever is making its blows larger at the time
  * -- and "its reach" is how near it has to be to strike (`COMPANION_REACH`).
+ * A Kindler's are cast out of a focus: "fire" is an Ember out of the best
+ * garnet or ruby focus you carry, at your kindling, larger in a White Heat,
+ * and "a burn" is a bleed of a share of a creature's full health a second,
+ * which the stronger of two wins and which never takes the last of it.
  */
 export const CLASS_SPELLS: ClassSpellDef[] = [
   /* ---- The Sworn Blade ---- */
@@ -341,6 +366,41 @@ export const CLASS_SPELLS: ClassSpellDef[] = [
     (fx) => `A wild creature within ${fx.reach} tiles of you whose tame level is no more than your taming is tamed outright, as a tame `
       + 'that takes: it follows you, or goes into an empty creature crate in your pack if something follows you already. Never a '
       + 'monster.'),
+
+  /* ---- The Kindler ---- */
+  kindler(3, 'Scorch', 0.08, 12, ['enemy'], { reach: 8, fire: 0.8, each: 0.01, secs: 8 },
+    (fx) => `${fire(fx.fire)} on an enemy within ${fx.reach} tiles of you, and it ${burns(fx.each, fx.secs)}; ${BURN_LAST}. ${FIRE_IS}`,
+    'kindling'),
+  kindler(6, 'Heat Seeker', 0.1, 15, ['self'], { reach: 10, fire: 1 },
+    (fx) => `${fire(fx.fire)} on the enemy within ${fx.reach} tiles of you with the smallest share of its full health left, the `
+      + `nearest of two alike. ${FIRE_IS}`, 'kindling'),
+  kindler(11, 'Scald', 0.1, 20, ['enemy'], { reach: 8, fire: 0.7, pace: 0.6, secs: 6 },
+    (fx) => `${fire(fx.fire)} on an enemy within ${fx.reach} tiles of you; for ${span(fx.secs)} it walks, hunts and flees at `
+      + `${percent(fx.pace)} of its pace. ${FIRE_IS}`, 'kindling'),
+  kindler(5, 'Flash Fire', 0.1, 20, ['enemy'], { reach: 2, fire: 2 },
+    (fx) => `${fire(fx.fire)} on an enemy within ${fx.reach} tiles of you. ${FIRE_IS}`, 'kindling'),
+  kindler(44, 'Stoke', 0.05, 30, ['self'], { more: 1.5, secs: 60 },
+    (fx) => `the next spell of yours within ${span(fx.secs)} that deals fire deals ${percent(fx.more - 1)} more of it, on every `
+      + 'creature it lands on.', 'kindling'),
+  kindler(46, 'Firebrand', 0.2, 120, ['self'], { long: 2, secs: 30 },
+    (fx) => `for ${span(fx.secs)} every burn you start lasts ${times(fx.long)} as long.`, 'kindling'),
+  kindler(4, 'Immolate', 0.15, 30, ['enemy'], { reach: 8, each: 0.02, secs: 15 },
+    (fx) => `an enemy within ${fx.reach} tiles of you ${burns(fx.each, fx.secs)}; ${BURN_LAST}.`, 'kindling'),
+  kindler(10, 'Combust', 0.2, 45, ['enemy'], { reach: 8, more: 1.5 },
+    (fx) => `a burning enemy within ${fx.reach} tiles of you takes at once ${percent(fx.more)} of what its burn still had to do (its `
+      + 'burn a second times the seconds it had left), and stops burning and bleeding.', 'kindling'),
+  kindler(24, 'Blaze Aura', 0.2, 90, ['self'], { reach: 2, fire: 0.3, secs: 15 },
+    (fx) => `for ${span(fx.secs)}, ${fire(fx.fire)} a second on every enemy within ${fx.reach} tiles of you, as large as your fire is `
+      + `when you cast it. ${FIRE_IS}`, 'kindling'),
+  kindler(13, 'Inferno Bolt', 0.3, 120, ['enemy'], { reach: 10, fire: 3, each: 0.03, secs: 10 },
+    (fx) => `${fire(fx.fire)} on an enemy within ${fx.reach} tiles of you, and it ${burns(fx.each, fx.secs)}; ${BURN_LAST}. ${FIRE_IS}`,
+    'kindling'),
+  kindler(14, 'Meteor', 0.35, 180, ['enemy'], { reach: 12, fire: 4, splash: 1.5, wide: 3 },
+    (fx) => `${fire(fx.fire)} on an enemy within ${fx.reach} tiles of you, and ${fire(fx.splash)} on every other enemy within `
+      + `${fx.wide} tiles of it. ${FIRE_IS}`, 'kindling'),
+  kindler(26, 'Firestorm', 0.4, 300, ['self'], { reach: 6, fire: 1, each: 0.02, secs: 10 },
+    (fx) => `${fire(fx.fire)} on every enemy within ${fx.reach} tiles of you, and each ${burns(fx.each, fx.secs)}; ${BURN_LAST}. `
+      + FIRE_IS, 'kindling'),
 ];
 export const CLASS_SPELL_BY_ID = new Map(CLASS_SPELLS.map((s) => [s.id, s]));
 export const classSpellsOf = (cls: string): ClassSpellDef[] => CLASS_SPELLS.filter((s) => s.class === cls);

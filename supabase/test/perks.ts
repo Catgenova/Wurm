@@ -533,6 +533,8 @@ const OTHERS = new Set([
   // A Beastmaster's: the companion following you, what it can take and how it runs and strikes, how far from you it fights and
   // looks, and its share of a blow that lands on you.
   'kept:hardy', 'kept:soak', 'kept:speed', 'kept:haste', 'leash:companion', 'sight:companion', 'bond:share', 'bond:reach',
+  // A Kindler's: a striker set alight, what a spell costs, fire built up by casting, a burn's heat and length, and a burning striker.
+  'retort:each', 'retort:secs', 'cast:cost', 'momentum:step', 'momentum:most', 'momentum:secs', 'burn:rate', 'burn:secs', 'ward:burning',
   ...STRIDE_KEYS,
 ]);
 const unnamed = PERKS.flatMap((p) => Object.keys(p.fx).filter((key) => {

@@ -2007,6 +2007,8 @@ export interface Creature {
   bleedUntil: number;
   /** When the bleed running now was opened, which is where it runs from; missing on one kept before it was kept. */
   bleedFrom?: number;
+  /** The game time a burn a Kindler started on it stops, which is a bleed while it runs; missing on one never burned. */
+  burnUntil?: number;
   busyUntil: number;
   searchAt: number;
   /** Where it first had your scent, which is what the leash is tied to. */

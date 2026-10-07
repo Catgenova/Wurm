@@ -1729,6 +1729,24 @@ jobs:
             --outfile=node_modules/.cache/beastmaster.mjs --log-level=error
           node node_modules/.cache/beastmaster.mjs
 
+      - name: The Kindler's spells and passives
+        run: |
+          # The eighth fighting trade on spells and passives, and the first of
+          # the arcane. Both sides hold the same rows; every spell wants a
+          # garnet or ruby focus in your pack and casts out of the best of
+          # them; fire at 100% an Ember out of it, to the last bit; every
+          # spell's fire at its share within its reach and no further; a burn
+          # its share of the creature's health a second, marking it burning; a
+          # Stoke waiting for the next fire; a Firebrand's longer burns; a
+          # Combust taking what a burn had left at once; a Blaze Aura burning a
+          # round at a time on the clock; a Meteor's splash and a Firestorm
+          # reaching every enemy within them; the fire teaching the trade and
+          # the school; and every passive at the rule it changes, the browser's
+          # fold and burn the island's.
+          npx esbuild supabase/test/kindler.ts --bundle --platform=node --format=esm \
+            --outfile=node_modules/.cache/kindler.mjs --log-level=error
+          node node_modules/.cache/kindler.mjs
+
       - name: Glassblowing, glass panels, bottles and the stained glass wall
         run: |
           # The Artisan's fourth trade, at a hot smelter: sand melted into

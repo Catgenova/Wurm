@@ -32,7 +32,7 @@ import { bury, crumble, graveAt, graveRefusal, graveSays, GRAVE_MARK } from './g
 import { cropStageSeconds, RIPE, settleCrop, type Crop } from './farming';
 import { fieldClock, fieldRate, GLASSHOUSE_GROWTH, PLANTER_GROWTH } from './growth';
 import { underGlass } from './glasshouse';
-import { ageDef, bloodMul, BLOW_SHARE, CALL_WINDOW, Creatures, setLocalKept, FIGHT_BACK_GOES, HAUL_SKILL, isBaitFor, isShod, PLAYER_ATTACKER, PULL_DEFAULT, SHOE_PACE, SHOE_STEP, SPECIES, tackSpeed, type Creature, type CreatureJSON, type Stance } from './creatures';
+import { ageDef, bloodMul, BLOW_SHARE, CALL_WINDOW, Creatures, setLocalKept, FIGHT_BACK_GOES, HAUL_SKILL, isBaitFor, isShod, maxHealth, PLAYER_ATTACKER, PULL_DEFAULT, SHOE_PACE, SHOE_STEP, SPECIES, tackSpeed, type Creature, type CreatureJSON, type Stance } from './creatures';
 import { CRAFT_REACH, knackable, type CraftStock, type Station } from './recipes';
 import { Actor, type ActiveAction, type GuestSave } from './actor';
 import { HOST_ID, type PeerId } from '../net/protocol';
@@ -2442,9 +2442,12 @@ export class Game {
      */
     const a = this.action;
     const flank = a && isFightJob(a.def.id) && a.target.kind === 'creature' && by !== null && by !== PLAYER_ATTACKER && a.target.id !== by;
-    // And less on feet that have not moved for a Pikeman's Bastion, as `hurt_player` has it.
+    // And less on feet that have not moved for a Pikeman's Bastion, as `hurt_player` has it,
     const still = this.time - this.movedAt >= FIGHT_BACK_STILL ? this.perk('still:taken', 1) : 1;
-    const hit = this.absorb(raw * stanceTaken(this.settings.fightStance, (k, o) => this.perk(k, o)) * (flank ? FLANK_HIT : 1) * still, kind);
+    // and less from a creature that is burning for a Kindler's Flame Ward.
+    const ward = from && (from.burnUntil ?? 0) > this.time ? this.perk('ward:burning', 1) : 1;
+    const hit = this.absorb(raw * stanceTaken(this.settings.fightStance, (k, o) => this.perk(k, o)) * (flank ? FLANK_HIT : 1) * still * ward,
+      kind);
     if (hit.blocked) {
       this.player.attackedAt = this.time;
       this.events.emit('hit', this.player.x, this.player.y, 0, 'taken');
@@ -2452,6 +2455,9 @@ export class Game {
       this.fightBack();
       return;
     }
+    // Whatever landed it is set alight, for a Kindler's Burning Retort (`class_owed_pay`).
+    const retort = this.perk('retort:each', 0);
+    if (retort > 0 && from) this.burn(from, retort, this.perk('retort:secs', 0));
     // Less of it on you while your companion beside you takes its share, for a Beastmaster's Shared Wounds (`class_bond_take`).
     const lost = this.bondTake(hit.taken, from);
     this.player.stats.health = Math.max(0, this.player.stats.health - lost);
@@ -2466,6 +2472,23 @@ export class Game {
     const where = hit.worn ? `, though your ${itemName(hit.worn).toLowerCase()} takes the worst of it` : '';
     this.logMsg(`${what}${where}. You have ${woundText(wound)}.`, 'fight');
     this.fightBack();
+  }
+
+  /**
+   * A burn you start on a creature, as the island's `class_burn`: a bleed of a
+   * share of its full health a second, the stronger of it and any bleed
+   * already running, to the later end, and never the last of its health. More
+   * a second for a Searing Burn and longer for a Lingering Burn.
+   */
+  burn(c: Creature, each: number, secs: number): void {
+    if (c.health <= 0 || secs <= 0) return;
+    const rate = maxHealth(c, this.creatures.species(c)) * each * this.perk('burn:rate', 1);
+    const until = this.time + secs * this.perk('burn:secs', 1);
+    const running = c.bleedUntil > this.time;
+    c.bleedRate = running ? Math.max(c.bleedRate, rate) : rate;
+    if (!running) c.bleedFrom = this.time;
+    c.bleedUntil = Math.max(running ? c.bleedUntil : 0, until);
+    c.burnUntil = Math.max(c.burnUntil ?? 0, until);
   }
 
   /**

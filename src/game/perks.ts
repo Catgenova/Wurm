@@ -111,6 +111,7 @@ export const FX_RULE: Record<string, 'mul' | 'add'> = {
   carry: 'add', serve: 'add', jobs: 'add', plus: 'add', bumper: 'add', fodder: 'add', tool: 'add', passes: 'add', hook: 'add', haul: 'add',
   block: 'add', leech: 'add', length: 'add', save: 'add', crit: 'add', stamina: 'add',
   gap: 'mul', monster: 'mul', still: 'mul', closest: 'mul', ambush: 'mul', far: 'mul', bleed: 'mul', fester: 'mul',
+  burn: 'mul', ward: 'mul', cast: 'mul',
 };
 
 export const fxFamily = (key: string): string => key.split(':')[0];
@@ -2350,6 +2351,50 @@ const BEASTMASTER: Seed[] = [
   },
 ];
 
+/*
+ * The Kindler's. Its spells, and six passives on what it casts and what it
+ * starts burning: a creature that strikes you set alight, spells that cost
+ * less, fire that grows as you keep casting, burns that last longer and take
+ * more, and less from whatever is burning. A burn is a bleed a Kindler
+ * started (`class_burn`), and "your fire" is what its spells deal.
+ */
+const KINDLER: Seed[] = [
+  ...classSpellsOf('kindler').map((sp): Seed => ({ num: sp.num, name: sp.name, fx: {}, note: () => `${spellTerms(sp)} ${sp.note}` })),
+  {
+    num: 125, name: 'Burning Retort',
+    fx: { 'retort:each': 0.01, 'retort:secs': 3 },
+    note: (fx) => `Every creature that lands a blow on you burns ${percent(fx['retort:each'])} of its full health a second for `
+      + `${secs(fx['retort:secs'])}, as a burn you started; a burn never takes the last of its health.`,
+  },
+  {
+    num: 118, name: 'Deep Breath',
+    fx: { 'cast:cost': 0.8 },
+    note: (fx) => `Your spells cost ${less(fx['cast:cost'])} less stamina.`,
+  },
+  {
+    num: 106, name: 'Blaze Momentum',
+    fx: { 'momentum:step': 0.1, 'momentum:most': 0.3, 'momentum:secs': 5 },
+    note: (fx) => `Every spell you cast makes your fire ${percent(fx['momentum:step'])} larger, to at most `
+      + `${percent(fx['momentum:most'])}, until ${secs(fx['momentum:secs'])} go by without one; never the fire of the spell that `
+      + 'made it.',
+  },
+  {
+    num: 109, name: 'Lingering Burn',
+    fx: { 'burn:secs': 1.5 },
+    note: (fx) => `Every burn you start lasts ${percent(fx['burn:secs'] - 1)} longer.`,
+  },
+  {
+    num: 124, name: 'Flame Ward',
+    fx: { 'ward:burning': 0.7 },
+    note: (fx) => `You take ${less(fx['ward:burning'])} less from every blow of a creature that is burning.`,
+  },
+  {
+    num: 108, name: 'Searing Burn',
+    fx: { 'burn:rate': 1.5 },
+    note: (fx) => `Every burn you start takes ${percent(fx['burn:rate'] - 1)} more of the creature's health a second.`,
+  },
+];
+
 /** Every trade's perks, in the order they were picked. */
 const SEEDS: Record<string, Seed[]> = {
   terraformer: TERRAFORMER,
@@ -2373,6 +2418,7 @@ const SEEDS: Record<string, Seed[]> = {
   skirmisher: SKIRMISHER,
   chirurgeon: CHIRURGEON,
   beastmaster: BEASTMASTER,
+  kindler: KINDLER,
 };
 
 const slug = (name: string): string => name.toLowerCase().replace(/[’']/g, '').replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '');
@@ -2405,6 +2451,7 @@ export const TIERS: Record<string, number[][]> = {
   skirmisher: [[2, 3, 104], [31, 7, 107], [8, 12, 112], [4, 9, 110], [44, 36, 120], [10, 49, 102]],
   chirurgeon: [[1, 2, 101], [49, 4, 105], [43, 17, 104], [6, 19, 122], [46, 15, 106], [50, 20, 123]],
   beastmaster: [[1, 15, 106], [2, 28, 120], [27, 8, 101], [13, 18, 102], [32, 50, 108], [48, 41, 119]],
+  kindler: [[3, 6, 125], [11, 5, 118], [44, 46, 106], [4, 10, 109], [24, 13, 124], [14, 26, 108]],
 };
 
 /** Every perk there is, tier by tier, and in each tier by the number it was picked under, as the island lists them. */
