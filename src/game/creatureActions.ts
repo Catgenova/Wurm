@@ -6,7 +6,7 @@ import { numberWord } from './words';
 import { GENTLE_HAND } from './meditation';
 import { bestTier, traitList } from './traits';
 import type { Game } from './game';
-import { furnitureCentre, furnitureName, vehicleOf } from './furniture';
+import { furnitureCentre, furnitureName, tracesStoreyRefusal, vehicleOf } from './furniture';
 import { deedJobLine, emptyCrate, letOut, shutIn } from './creaturecrate';
 import { itemDef, itemName, rarityOf, type Mark } from './items';
 import { BANE_BONUS, banes, hitChance, isBow, WEAPON_BY_ID, weaponDamage } from './gear';
@@ -896,6 +896,8 @@ export const CREATURE_ACTIONS: ActionDef[] = [
       if (!c) return 'It is gone.';
       const f = vehicleFor(g, c);
       if (!f) return 'There is no cart or wagon here with an empty yoke.';
+      const storey = tracesStoreyRefusal(f);
+      if (storey) return storey;
       const [cx, cy] = furnitureCentre(f);
       if (Math.hypot(cx - g.player.x, cy - g.player.y) > 2.4) return `Stand by the ${furnitureName(f).toLowerCase()}.`;
       if (c.mode === 'stored') return `${c.name} is in a creature crate. Let it out first.`;
@@ -933,6 +935,11 @@ export const CREATURE_ACTIONS: ActionDef[] = [
     stamina: 0,
     baseTime: 0,
     applies: (t, g) => creatureOf(g, t)?.hitchedTo !== null && creatureOf(g, t) !== undefined,
+    check: (t, g) => {
+      const c = creatureOf(g, t);
+      const f = c && g.vehicleOfCreature(c);
+      return f ? tracesStoreyRefusal(f) : null;
+    },
     perform: (t, g) => {
       const c = creatureOf(g, t);
       if (!c) return;

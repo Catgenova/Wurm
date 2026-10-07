@@ -11,7 +11,13 @@
  *     anything but a staircase refused by the table;
  *   * walking onto one from below, which takes you up a storey as the wide
  *     one does;
- *   * and taking one out, in its own name.
+ *   * and taking one out, in its own name;
+ *   * and wheels: a wagon driven up a wide staircase from its foot, through a
+ *     doorway wide enough, and off its head onto the storey's floor or back
+ *     down off its foot -- never over its rails, up a single staircase or off
+ *     the edge of what is floored -- standing on the storey it was driven to
+ *     on the island, its team kept in the traces up there, and its reins not
+ *     taken from another storey, in the same words on both sides.
  *
  * Runs against the database the suite leaves behind, and puts it back.
  */
@@ -20,6 +26,11 @@ import { Game } from '../../src/game/game';
 import type { Target } from '../../src/game/actions';
 import { BUILD_ACTION_BY_ID } from '../../src/game/buildActions';
 import { floorBill, MATERIALS, SINGLE_STAIRS_NAME, SINGLE_STAIRS_SHARE, STAIRS_SHARE, takesAs } from '../../src/game/building';
+import { ACTION_BY_ID } from '../../src/game/actions';
+import { furnitureCentre, tracesStoreyRefusal } from '../../src/game/furniture';
+import { TOP_LEVELS } from '../../src/game/building';
+import { pathOptions } from '../../src/game/player';
+import { findPath } from '../../src/world/pathfinding';
 import { TileType } from '../../src/world/tiles';
 
 const psql = (sql: string): string =>
@@ -215,6 +226,93 @@ check('walking onto a finished single staircase from below takes you up a storey
 const removed = run(g, 'remove_floor', tile(44, 12, { floorKind: 'stairs' }));
 check('and it is taken out in its own name, on both sides', removed === out.get('remove') && removed.includes(SINGLE_STAIRS_NAME),
   `browser "${removed}", island "${out.get('remove')}"`);
+
+/* ---- wheels up a wide staircase ------------------------------------------------------------------ */
+
+/*
+ * The house again, a storey up: a wide plank staircase on its west tile
+ * climbed from the west, its foot out on the ground at 43,12; a finished
+ * floor on the middle tile, off its head; and a single staircase on the east
+ * tile, climbed from the south.
+ */
+const w3 = browserScene();
+const house = w3.buildings.list.values().next().value!;
+const done = (f: { needed: Record<string, number> }): void => { for (const k of Object.keys(f.needed)) f.needed[k] = 0; };
+done(w3.buildings.setFloor(house, 1, 44, 12, MAT, 'stairs', 'w'));
+done(w3.buildings.setFloor(house, 1, 45, 12, MAT, 'floor'));
+done(w3.buildings.setFloor(house, 1, 46, 12, MAT, 'stairs', 's', 'l'));
+const drive = (x0: number, y0: number, level: number, x1: number, y1: number): number | null => w3.driveRule(x0, y0, level, x1, y1);
+check('a wagon goes up a wide staircase from its foot, onto the storey over it', drive(43, 12, 0, 44, 12) === 1, `${drive(43, 12, 0, 44, 12)}`);
+check('and not onto it over its rails', drive(44, 13, 0, 44, 12) === null && drive(44, 11, 0, 44, 12) === null,
+  `${drive(44, 13, 0, 44, 12)}, ${drive(44, 11, 0, 44, 12)}`);
+check('off its head onto the floor up there, and back down off its foot', drive(44, 12, 1, 45, 12) === 1 && drive(44, 12, 1, 43, 12) === 0,
+  `${drive(44, 12, 1, 45, 12)}, ${drive(44, 12, 1, 43, 12)}`);
+check('and on a storey up, onto the head of a wide staircase only from its head', drive(45, 12, 1, 44, 12) === 1 && drive(44, 11, 1, 44, 12) === null,
+  `${drive(45, 12, 1, 44, 12)}, ${drive(44, 11, 1, 44, 12)}`);
+check('but up no single staircase, from its foot or along the storey, though a walker climbs it',
+  drive(46, 13, 0, 46, 12) === null && drive(45, 12, 1, 46, 12) === null && w3.stepRule(46, 13, 0, 46, 12) === 1,
+  `${drive(46, 13, 0, 46, 12)}, ${drive(45, 12, 1, 46, 12)}, walking ${w3.stepRule(46, 13, 0, 46, 12)}`);
+check('nor off the edge of what is floored up there', drive(45, 12, 1, 45, 13) === null && drive(45, 12, 1, 45, 11) === null,
+  `${drive(45, 12, 1, 45, 13)}, ${drive(45, 12, 1, 45, 11)}`);
+const door = w3.buildings.setWall(house, 0, 44, 12, 'w', 'solid', MAT);
+done(door);
+const walled = drive(43, 12, 0, 44, 12);
+door.type = 'door';
+const narrow = drive(43, 12, 0, 44, 12);
+door.type = 'double_door';
+const wide = drive(43, 12, 0, 44, 12);
+check('and up from its foot only through a doorway wide enough for wheels, as on the ground',
+  walled === null && narrow === null && wide === 1, `solid ${walled}, door ${narrow}, double door ${wide}`);
+const route = findPath(w3.world, 42, 12, 0, 45, 12, { ...pathOptions(w3.world, w3.driveRule, TOP_LEVELS), goalLevel: 1 });
+check('and a drive is found from the ground outside, in through the double door, up the flight and onto the floor over it',
+  !!route && route[route.length - 1].level === 1 && route.some((pt) => pt.x === 44 && pt.y === 12),
+  route ? route.map((pt) => `${pt.x},${pt.y}@${pt.level}`).join(' ') : 'no way');
+const up = w3.buildings.setWall(house, 1, 45, 12, 'e', 'solid', MAT);
+done(up);
+check('and a wall up there stops it as one does on the ground', drive(45, 12, 1, 46, 12) === null, `${drive(45, 12, 1, 46, 12)}`);
+
+// The wagon itself: a storey up beside the stair head on both sides, and Dane on the ground under it.
+const wagon = w3.addFurniture('wagon', 45, 12, 0, 0, 50, [], undefined, 's');
+// Where driving it up the flight leaves it (`updateTeam`): nothing is set down a storey up any other way.
+wagon.level = 1;
+const [wcx, wcy] = furnitureCentre(wagon);
+w3.player.x = wcx + 0.5;
+w3.player.y = wcy;
+w3.player.level = 0;
+const board = (g: Game): string => ACTION_BY_ID.get('board_vehicle')?.check?.({ kind: 'furniture', id: wagon.id } as Target, g) ?? 'ALLOWED';
+const unhitch = (g: Game): string => ACTION_BY_ID.get('unhitch_team')?.check?.({ kind: 'furniture', id: wagon.id } as Target, g) ?? 'ALLOWED';
+const boardBelow = board(w3);
+w3.player.level = 1;
+const unhitchUp = unhitch(w3);
+const wheels = answers(psql(`begin;
+create temp table said (k text, v text) on commit drop;
+do $b$
+declare w uuid; me uuid; v_id bigint;
+begin
+  ${ISLAND_SCENE}
+  insert into placed (world_id, kind, sub, x, y, sx, sy, cx, cy, ql, made_by, level)
+    values (w, 'furniture', 'wagon', 45, 12, 0, 0, ${wcx}, ${wcy}, 50, me, 1) returning id into v_id;
+  update player set x = ${wcx + 0.5}, y = ${wcy}, level = 0 where world_id = w and uid = me;
+  insert into said values ('boardBelow', coalesce(ride_refusal(w, me, 'board_vehicle', jsonb_build_object('kind', 'furniture', 'id', v_id)), 'ALLOWED'));
+  update player set level = 1 where world_id = w and uid = me;
+  insert into said values ('unhitchUp', coalesce(ride_refusal(w, me, 'unhitch_team', jsonb_build_object('kind', 'furniture', 'id', v_id)), 'ALLOWED'));
+  -- Driven: down to the ground with its driver, and up again.
+  update placed set driver = me where world_id = w and id = v_id;
+  update player set level = 0 where world_id = w and uid = me;
+  perform drag_along(w, me, 43.5, 12.5);
+  insert into said select 'dragDown', level::text from placed where world_id = w and id = v_id;
+  update player set level = 1 where world_id = w and uid = me;
+  perform drag_along(w, me, 45.5, 12.5);
+  insert into said select 'dragUp', level::text from placed where world_id = w and id = v_id;
+end $b$;
+select string_agg(k || '=' || coalesce(v, 'null'), E'\n~~\n' order by k) from said;
+rollback;`));
+check('nobody takes the reins of a wagon a storey up from the ground under it, on both sides',
+  boardBelow === 'Stand beside it first.' && boardBelow === wheels.get('boardBelow'), `browser "${boardBelow}", island "${wheels.get('boardBelow')}"`);
+check('and its team is not taken out of the traces up there, in the same words on both sides',
+  unhitchUp === tracesStoreyRefusal(wagon) && unhitchUp === wheels.get('unhitchUp'), `browser "${unhitchUp}", island "${wheels.get('unhitchUp')}"`);
+check('on the island a driven wagon stands on the storey its driver drove it to, and on the ground again after',
+  wheels.get('dragUp') === '1' && wheels.get('dragDown') === '0', `down: ${wheels.get('dragDown')}, up: ${wheels.get('dragUp')}`);
 
 console.log(`${good} ok, ${bad} failed`);
 if (bad) process.exit(1);

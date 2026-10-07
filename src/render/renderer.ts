@@ -3325,8 +3325,10 @@ export class Renderer {
           for (const cr of this.game.creatures.atTile(x, y)) {
             // One shut in a crate is drawn in the crate, by the crate.
             if (cr.mode === 'stored') continue;
+            // One in the traces of a wagon a storey up is up there with it (`driveStorey`).
+            const up = cr.hitchedTo !== null ? this.game.furniture.get(cr.hitchedTo)?.level ?? 0 : 0;
             this.take('creature', x, y, cam.worldToScreenX(cr.x, cr.y),
-              cam.worldToScreenY(cr.x, cr.y, deckHere ?? this.footAt(cr.x, cr.y)), null).creature = cr;
+              cam.worldToScreenY(cr.x, cr.y, up > 0 ? this.footOn(cr.x, cr.y, up) + up * WALL_HEIGHT : deckHere ?? this.footAt(cr.x, cr.y)), null).creature = cr;
           }
         }
         if (this.game.foundations.size) this.drawFoundation(x, y, lit);
@@ -3704,7 +3706,10 @@ export class Renderer {
     e.standing = standing;
   }
 
-  private pieceBase(f: { kind: string }, wx: number, wy: number): number {
+  private pieceBase(f: { kind: string; level?: number }, wx: number, wy: number): number {
+    // A wagon driven up a wide staircase stands on the floor of its storey, as a body up there does.
+    const up = f.level ?? 0;
+    if (up > 0) return this.footOn(wx, wy, up) + up * WALL_HEIGHT;
     const h = this.game.world.heightAt(wx, wy);
     return furnitureDef(f.kind).boat ? Math.max(h, 0) : this.standTop(wx, wy);
   }

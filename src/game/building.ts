@@ -358,6 +358,9 @@ export function borderOf(x: number, y: number, side: Side): Border {
   }
 }
 
+/** The side across a tile from each: where you come off the head of a flight climbed from the other. */
+export const OPPOSITE_SIDE: Record<Side, Side> = { n: 's', s: 'n', e: 'w', w: 'e' };
+
 /** Whether a step from one tile to its neighbour goes square across the tile's `side`: across that border, not round a corner. */
 export function acrossSide(side: Side, x0: number, y0: number, x1: number, y1: number): boolean {
   switch (side) {
@@ -1468,7 +1471,7 @@ export class Buildings {
    * a double door, an archway or a gate is not. Everything impassable is as
    * impassable as it ever was.
    */
-  blocksVehicle(x0: number, y0: number, x1: number, y1: number): boolean {
+  blocksVehicle(x0: number, y0: number, x1: number, y1: number, level = 0): boolean {
     if (!this.walls.size && !this.barred) return false;
     const dx = x1 - x0;
     const dy = y1 - y0;
@@ -1476,14 +1479,14 @@ export class Buildings {
     if (Math.abs(dx) + Math.abs(dy) === 1) {
       const border: Border =
         dx === 1 ? { x: x1, y: y0, dir: 'v' } : dx === -1 ? { x: x0, y: y0, dir: 'v' } : dy === 1 ? { x: x0, y: y1, dir: 'h' } : { x: x0, y: y0, dir: 'h' };
-      if (this.barred?.(0, border)) return true;
-      const w = this.wallOnBorder(0, border);
+      if (this.barred?.(level, border)) return true;
+      const w = this.wallOnBorder(level, border);
       if (!w || !isDone(w)) return false;
       const def = WALL_TYPE_BY_ID.get(this.seenType(w));
       return !(def?.passable ?? false) || !def?.wide || !!w.lowered;
     }
-    const viaX = !this.blocksVehicle(x0, y0, x1, y0) && !this.blocksVehicle(x1, y0, x1, y1);
-    const viaY = !this.blocksVehicle(x0, y0, x0, y1) && !this.blocksVehicle(x0, y1, x1, y1);
+    const viaX = !this.blocksVehicle(x0, y0, x1, y0, level) && !this.blocksVehicle(x1, y0, x1, y1, level);
+    const viaY = !this.blocksVehicle(x0, y0, x0, y1, level) && !this.blocksVehicle(x0, y1, x1, y1, level);
     return !(viaX || viaY);
   }
 

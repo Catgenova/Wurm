@@ -18,7 +18,7 @@ import type { ItemRow } from '../net/island';
 import { packed, type Aged } from '../net/packed';
 import { DROWN_RATE, DROWN_WARN, EXHAUSTED, HEAL_FED, HEAL_RATE, HUNGER_RATE, SWIM_LEARN, SWIM_WIND, THIRST_RATE, WIND_PER_LEVEL, WIND_REST, WIND_STARVING, WIND_WALK } from './body';
 import { markName, MARK_CAP, MARK_COLOURS, type Marker } from './marks';
-import { acrossSide, Buildings, CELLAR_DECAY, CELLAR_FLOOR, CELLAR_LEVEL, connectsDown, floorKind, floorOf, INDOORS_DECAY, isDone, progressOf, roofShapeDef, TOP_LEVELS, WALL_HEIGHT, walkableKind, type BuildingsJSON, type Building, type Wall, type Side } from './building';
+import { acrossSide, Buildings, OPPOSITE_SIDE, type FloorTile, CELLAR_DECAY, CELLAR_FLOOR, CELLAR_LEVEL, connectsDown, floorKind, floorOf, INDOORS_DECAY, isDone, progressOf, roofShapeDef, TOP_LEVELS, WALL_HEIGHT, walkableKind, type BuildingsJSON, type Building, type Wall, type Side } from './building';
 import { CELLAR_DAYLIGHT, cellarGate, cellarPieceOk, targetFloor } from './cellar';
 import { jettyBase } from './frame';
 import { crateCentre, crateName, crateCapacity, crateUnits, STORE_REACH, SUBTILES, subtileOf, type CrateKind, type PlacedCrate } from './crates';
@@ -1308,6 +1308,11 @@ export class Game {
    * no fords, no stairs, no climbing anything a horse would baulk at.
    */
   readonly driveRule = (x0: number, y0: number, level: number, x1: number, y1: number): number | null => {
+    // Up a wide staircase, from its foot, onto the storey over the one you are on (`wideFlightUp`).
+    const up = this.wideFlightUp(x0, y0, level, x1, y1);
+    if (up !== undefined) return up;
+    // Up there, on the building's own floors (`driveStorey`).
+    if (level > 0) return this.driveStorey(x0, y0, level, x1, y1);
     if (level !== 0) return null;
     // A deck on piers takes feet, not wheels (`pier_step`).
     if (this.buildings.pierTiles.size && this.buildings.onPiers(x1, y1)) return null;
@@ -1335,6 +1340,62 @@ export class Game {
     // Wheels get the bare cap: no team makes a cart stand on a wall.
     return groundStep(this.world, x0, y0, x1, y1, this.vehicleStep(this.driving())) && standsOn(this.world, x1, y1) ? 0 : null;
   };
+
+  /** A finished wide staircase in a tile's floor slot at a storey: the one wheels take. A single one is too narrow for them. */
+  private wideFlight(x: number, y: number, level: number): FloorTile | undefined {
+    const f = this.buildings.floor(level, x, y);
+    return f && isDone(f) && floorKind(f) === 'stairs' && !f.hand ? f : undefined;
+  }
+
+  /**
+   * A step onto a wide staircase going up from the storey you are on: taken
+   * from its foot, the side it is climbed from, through a doorway wide enough
+   * for wheels, it is the storey over this one; from any other side it is its
+   * rails, and nothing on wheels goes over them. Undefined where no wide
+   * flight goes up from the tile.
+   */
+  private wideFlightUp(x0: number, y0: number, level: number, x1: number, y1: number): number | null | undefined {
+    if (level < 0) return undefined;
+    const f = this.wideFlight(x1, y1, level + 1);
+    if (!f) return undefined;
+    if (!acrossSide(f.facing ?? 's', x1, y1, x0, y0)) return null;
+    if (this.buildings.blocksVehicle(x0, y0, x1, y1, level)) return null;
+    // From the ground, the ground it is driven off still has to take wheels.
+    if (level === 0 && !this.vehicleGround(x0, y0)) return null;
+    return level + 1;
+  }
+
+  /**
+   * Driving a storey up. Wheels go on the building's finished floors and its
+   * wide staircases and on nothing else -- not a roof, a ladder's hatch or a
+   * single staircase -- and through its doorways only where they are wide
+   * enough, as on the ground. On a wide staircase you go on off its head, or
+   * back down off its foot onto the storey under it; never over its rails.
+   */
+  private driveStorey(x0: number, y0: number, level: number, x1: number, y1: number): number | null {
+    const b = this.buildings;
+    const here = this.wideFlight(x0, y0, level);
+    if (here) {
+      const facing = here.facing ?? 's';
+      if (acrossSide(facing, x0, y0, x1, y1)) {
+        const below = level - 1;
+        if (below === 0) return this.driveRule(x0, y0, 0, x1, y1) === 0 ? 0 : null;
+        if (b.blocksVehicle(x0, y0, x1, y1, below)) return null;
+        return this.floorTakesWheels(x1, y1, below) ? below : null;
+      }
+      if (!acrossSide(OPPOSITE_SIDE[facing], x0, y0, x1, y1)) return null;
+    }
+    if (b.blocksVehicle(x0, y0, x1, y1, level)) return null;
+    const there = this.wideFlight(x1, y1, level);
+    if (there) return acrossSide(OPPOSITE_SIDE[there.facing ?? 's'], x1, y1, x0, y0) ? level : null;
+    return this.floorTakesWheels(x1, y1, level) ? level : null;
+  }
+
+  /** Whether a tile's floor at a storey takes wheels: a finished floor, and not a roof, a staircase or a ladder. */
+  private floorTakesWheels(x: number, y: number, level: number): boolean {
+    const f = this.buildings.floor(level, x, y);
+    return !!f && isDone(f) && floorKind(f) === 'floor';
+  }
 
   /**
    * The rule for riding. A mount takes a slope a walker would balk at, the
@@ -1564,7 +1625,8 @@ export class Game {
   /** How the player may move right now, how many storeys they may cross, and how many under the ground (a cellar). */
   movement(): { rule: (x0: number, y0: number, level: number, x1: number, y1: number) => number | null; levels: number; below: number } {
     if (this.afloat()) return { rule: this.sailRule, levels: 1, below: 0 };
-    if (this.driving()) return { rule: this.driveRule, levels: 1, below: 0 };
+    // Wheels go up wide staircases, so a drive crosses storeys as a walk does (`driveStorey`).
+    if (this.driving()) return { rule: this.driveRule, levels: TOP_LEVELS, below: 0 };
     if (this.mounted()) return { rule: this.rideRule, levels: 1, below: 0 };
     return { rule: this.stepRule, levels: TOP_LEVELS, below: this.buildings.cellars.size ? -CELLAR_LEVEL : 0 };
   }
@@ -6824,15 +6886,19 @@ export class Game {
     const def = furnitureDef(f.kind);
     const x = Math.floor(this.player.x);
     const y = Math.floor(this.player.y);
-    if (this.vehicleGround(x, y)) {
+    // Up a storey the floor under you is what it stands on, the ground or none (`driveStorey`).
+    const storey = Math.max(0, this.player.level);
+    if (storey > 0 || this.vehicleGround(x, y)) {
       const [sx, sy] = subtileOf(x, y, this.player.x, this.player.y);
       const [ax, ay] = furnitureAnchor(f.kind, sx - Math.floor(def.w / 2), sy - Math.floor(def.h / 2));
-      if (f.x !== x || f.y !== y || f.sx !== ax || f.sy !== ay) {
+      if (f.x !== x || f.y !== y || f.sx !== ax || f.sy !== ay || (f.level ?? 0) !== storey) {
         const from = { x: f.x, y: f.y };
         f.x = x;
         f.y = y;
         f.sx = ax;
         f.sy = ay;
+        if (storey > 0) f.level = storey;
+        else delete f.level;
         this.placed.furniture.moved(f, from.x, from.y);
         this.events.emit('world', from.x, from.y);
         this.events.emit('world', f.x, f.y);
@@ -7024,7 +7090,8 @@ export class Game {
        */
       const at = { id: r.id, x: r.x, y: r.y, sx: r.sx, sy: r.sy, mine: r.mine };
       // Down in a cellar: only furniture goes down there, and says so.
-      const down = (r.level ?? 0) < 0 ? { level: CELLAR_LEVEL } : {};
+      // Down in a cellar, or a storey up: a wagon driven up a wide staircase (`driveStorey`).
+      const down = (r.level ?? 0) < 0 ? { level: CELLAR_LEVEL } : (r.level ?? 0) > 0 ? { level: r.level as number } : {};
       if (r.kind === 'campfire' || r.kind === 'fire') {
         this.campfires.set(r.id, { ...at, fuel: r.fuel ?? 0, lit: !!r.lit, ash: r.ash ?? 0 });
       } else if (r.kind === 'smelter') {

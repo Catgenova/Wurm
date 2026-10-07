@@ -8,6 +8,7 @@ import {
   furnitureCentre,
   furnitureDef,
   furnitureName,
+  tracesStoreyRefusal,
   holdsLiquid,
   freeSeat,
   isBoat,
@@ -326,7 +327,8 @@ export const PLACEABLE_ACTIONS: ActionDef[] = [
       const here = g.player.aboard === f.id;
       if (g.player.aboard !== null && !here) return 'You are aboard another vessel. Step ashore first.';
       if (f.helmAway && isBoat(f) && !here) return 'Somebody else has the helm.';
-      if (!here && !nearPiece(g, f)) return 'Stand beside it first.';
+      // A wagon driven up a wide staircase is beside you only on its own storey.
+      if (!here && (!nearPiece(g, f) || Math.max(0, f.level ?? 0) !== Math.max(0, g.player.level))) return 'Stand beside it first.';
       if (g.driving()) return 'You are already driving something.';
       // A padlock on her keeps her helm, or the reins, to whoever has its key.
       const shut = g.lockRefusal(f);
@@ -485,7 +487,8 @@ export const PLACEABLE_ACTIONS: ActionDef[] = [
     check: (t, g) => {
       const f = pieceOf(g, t);
       if (!f) return 'It is gone.';
-      return nearPiece(g, f) ? null : 'Stand beside it first.';
+      if (!nearPiece(g, f)) return 'Stand beside it first.';
+      return tracesStoreyRefusal(f);
     },
     perform: (t, g) => {
       const f = pieceOf(g, t);

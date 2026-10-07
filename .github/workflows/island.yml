@@ -1787,7 +1787,7 @@ jobs:
             --outfile=node_modules/.cache/warder.mjs --log-level=error
           node node_modules/.cache/warder.mjs
 
-      - name: The single staircase
+      - name: The single staircase, and wagons up wide ones
         run: |
           # The second model of every flight, half the tile wide, up the half
           # on your left or your right as you climb. Its bill in every material
@@ -1796,6 +1796,11 @@ jobs:
           # is no hand taken as none; no hand on a ladder, and none let into
           # the table on anything but a staircase; the hand in the ground read;
           # walked up a storey as the wide one is, and taken out by its name.
+          # And wheels: a wagon up a wide staircase from its foot, through a
+          # doorway wide enough, off its head onto the floor and back down;
+          # not over its rails, up a single one or off the floor's edge; on
+          # the island standing on the storey it was driven to, its team kept
+          # in the traces up there and its reins not taken from below.
           npx esbuild supabase/test/stairs.ts --bundle --platform=node --format=esm \
             --outfile=node_modules/.cache/stairs.mjs --log-level=error
           node node_modules/.cache/stairs.mjs

@@ -1310,6 +1310,16 @@ export const NEWS: News[] = [
       ];
     },
   },
+  {
+    n: 97,
+    day: '2026-10-07',
+    lines: () => [
+      'Carts and wagons go up wide staircases, indoors: drive onto a finished wide staircase from its foot, through an arch, '
+        + 'a double door or a gate, and you come off its head onto the storey over it, and drive on its finished floors.',
+      `No ${SINGLE_STAIRS_NAME}, ladder or roof takes wheels, nor does a staircase's side. The team goes up and down with its `
+        + 'wagon, and goes into and out of the traces on the ground floor only.',
+    ],
+  },
 ];
 
 /** The highest entry this browser has shown. */

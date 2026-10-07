@@ -779,6 +779,14 @@ export function furnitureAnchor(kind: string, sx: number, sy: number, facing: Si
 /** The vehicle a piece is, if it is one. */
 export const vehicleOf = (f: { kind: string }): VehicleDef | undefined => furnitureDef(f.kind).vehicle;
 export const isVehicle = (f: { kind: string }): boolean => !!furnitureDef(f.kind).vehicle;
+/**
+ * Why a team is not put into or taken out of the traces of a vehicle standing
+ * a storey up, where it was driven up a wide staircase, or null on the ground:
+ * the team goes up and down with it and nowhere on its own. The island's
+ * `ride_refusal` says the same.
+ */
+export const tracesStoreyRefusal = (f: PlacedFurniture): string | null =>
+  (f.level ?? 0) > 0 ? `Bring the ${furnitureName(f).toLowerCase()} down to the ground floor first: a team goes into and out of the traces on the ground.` : null;
 /** The boat a piece is, if it is one. */
 export const boatOf = (f: { kind: string }): BoatDef | undefined => furnitureDef(f.kind).boat;
 export const isBoat = (f: { kind: string }): boolean => !!furnitureDef(f.kind).boat;
