@@ -5,6 +5,7 @@ import {
   describeNeeds,
   scaledBill,
   FLOOR_KIND_NAMES,
+  floorName,
   floorKind,
   isDone,
   MATERIAL_BY_ID,
@@ -833,13 +834,14 @@ export const BUILD_ACTIONS: ActionDef[] = [
        */
       if (kind === 'roof' && !b.roof) b.roof = t.roofShape ?? 'hip';
       if (flooringUnder(g, t, level, kind)) g.logMsg('You take up the flooring there.', 'event');
-      const floor = g.buildings.setFloor(b, level, t.x, t.y, t.material, kind, kind === 'stairs' || kind === 'ladder' ? t.side : undefined);
+      const floor = g.buildings.setFloor(b, level, t.x, t.y, t.material, kind, kind === 'stairs' || kind === 'ladder' ? t.side : undefined,
+        kind === 'stairs' ? t.hand : undefined);
       glassResync(g);
       // The ground floor of a tile on piers is its deck, and the piers under it go on its bill (`piers.ts`).
       const piers = level === 0 && kind === 'floor' && g.buildings.onPiers(t.x, t.y);
       if (piers) Object.assign(floor, billPlus(floor, pierBill(t.material, g.pierDropAt(t.x, t.y))));
       const shape = kind === 'roof' ? `${roofShapeDef(b).name.toLowerCase()} ` : '';
-      const what = kind === 'ladder' ? 'ladder' : `${shape}${material(t.material)?.name.toLowerCase()} ${piers ? 'deck on piers' : FLOOR_KIND_NAMES[kind]}`;
+      const what = kind === 'ladder' ? 'ladder' : `${shape}${material(t.material)?.name.toLowerCase()} ${piers ? 'deck on piers' : floorName(floor)}`;
       g.logMsg(`You plan a ${what}. It needs ${needsText(floor)}.`, 'event');
       g.events.emit('world', t.x, t.y);
     },
@@ -879,12 +881,12 @@ export const BUILD_ACTIONS: ActionDef[] = [
       // Floors are paving; stairs, ladders and roofs are carpentry or masonry by material.
       g.gainSkill(kind === 'floor' ? 'paving' : kind === 'ladder' ? 'carpentry' : (mat?.skill ?? 'carpentry'), 0.4);
       g.events.emit('world', t.x, t.y);
-      const what = kind === 'ladder' ? 'ladder' : `${mat?.name.toLowerCase()} ${FLOOR_KIND_NAMES[kind]}`;
+      const what = kind === 'ladder' ? 'ladder' : `${mat?.name.toLowerCase()} ${floorName(floor)}`;
       if (isDone(floor)) {
         g.logMsg(`You finish the ${what}.`, 'event');
         return false;
       }
-      g.logMsg(`You work ${materialName(used, 1)} into the ${FLOOR_KIND_NAMES[kind]}. Still needed: ${needsText(floor)}.`, 'event');
+      g.logMsg(`You work ${materialName(used, 1)} into the ${floorName(floor)}. Still needed: ${needsText(floor)}.`, 'event');
       return nextAvailable(g, floor, t) !== null;
     },
   },
@@ -942,7 +944,7 @@ export const BUILD_ACTIONS: ActionDef[] = [
       glassResync(g);
       const p = g.player;
       if (p.tileX === t.x && p.tileY === t.y && p.level >= level && level > 0) p.level = level - 1;
-      g.logMsg(`You remove the ${FLOOR_KIND_NAMES[floorKind(floor)]}.`, 'event');
+      g.logMsg(`You remove the ${floorName(floor)}.`, 'event');
       g.events.emit('world', t.x, t.y);
     },
   },

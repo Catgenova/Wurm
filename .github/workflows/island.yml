@@ -1787,6 +1787,19 @@ jobs:
             --outfile=node_modules/.cache/warder.mjs --log-level=error
           node node_modules/.cache/warder.mjs
 
+      - name: The single staircase
+        run: |
+          # The second model of every flight, half the tile wide, up the half
+          # on your left or your right as you climb. Its bill in every material
+          # a flight is built in the same on both sides, and under the wide
+          # one's; planned with its hand, a wide one without, and a hand that
+          # is no hand taken as none; no hand on a ladder, and none let into
+          # the table on anything but a staircase; the hand in the ground read;
+          # walked up a storey as the wide one is, and taken out by its name.
+          npx esbuild supabase/test/stairs.ts --bundle --platform=node --format=esm \
+            --outfile=node_modules/.cache/stairs.mjs --log-level=error
+          node node_modules/.cache/stairs.mjs
+
       - name: Glassblowing, glass panels, bottles and the stained glass wall
         run: |
           # The Artisan's fourth trade, at a hot smelter: sand melted into

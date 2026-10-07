@@ -7,7 +7,9 @@ import { BUILD_ACTION_BY_ID, layingBill, materialName } from '../game/buildActio
 import {
   describeNeeds,
   FENCE_TYPES,
-  FLOOR_KIND_NAMES,
+  floorName,
+  SINGLE_STAIRS_NAME,
+  type StairHand,
   floorBill,
   floorKind,
   GLASS_ROOF,
@@ -160,7 +162,10 @@ function gateEntries(g: Game, t: Extract<Target, { kind: 'tile' }>): MenuItem[] 
  * with Q and E, `place` starting it), built, and taken out. Only over a
  * cellar tile.
  */
-function cellarEntries(g: Game, base: Extract<Target, { kind: 'tile' }>, side: Side, place: (material: string, kind: 'stairs' | 'ladder') => void): MenuItem[] {
+/** What Q and E do to a single staircase being placed (`rotatePlacing`). */
+const SINGLE_TURNS = 'Q and E choose the side to climb from and the half of the tile';
+
+function cellarEntries(g: Game, base: Extract<Target, { kind: 'tile' }>, side: Side, place: (material: string, kind: 'stairs' | 'ladder', hand?: StairHand) => void): MenuItem[] {
   const bld = g.buildings;
   if (!bld.cellar(base.x, base.y)) return [];
   const entries: MenuItem[] = [];
@@ -174,7 +179,7 @@ function cellarEntries(g: Game, base: Extract<Target, { kind: 'tile' }>, side: S
   const kind = flight ? floorKind(flight) : null;
   if (flight && (kind === 'stairs' || kind === 'ladder')) {
     const t: Target = { ...base, floorKind: kind, down: true };
-    const what = `${FLOOR_KIND_NAMES[kind]} down`;
+    const what = `${floorName(flight)} down`;
     if (!isDone(flight)) entries.push(...item(ACTION_BY_ID.get('build_floor'), t, `Build ${what} · needs ${describeNeeds(flight, materialName)}`));
     entries.push(...item(ACTION_BY_ID.get('remove_floor'), t, `Remove ${what}`));
     return entries;
@@ -189,6 +194,7 @@ function cellarEntries(g: Game, base: Extract<Target, { kind: 'tile' }>, side: S
     const here = said[['n', 'e', 's', 'w'].indexOf(side)];
     const why = (foot(here) ? said.find((r) => !foot(r)) : undefined) ?? here ?? '';
     entries.push({ label: 'Plan staircase down', hint: why, disabled: true });
+    entries.push({ label: `Plan ${SINGLE_STAIRS_NAME} down`, hint: why, disabled: true });
     entries.push({ label: 'Plan ladder down', hint: why, disabled: true });
     return entries;
   }
@@ -198,6 +204,14 @@ function cellarEntries(g: Game, base: Extract<Target, { kind: 'tile' }>, side: S
       label: m.name,
       note: `${describeNeeds(floorBill(m.id, 'stairs'), materialName)} · Q and E choose the side`,
       onSelect: () => place(m.id, 'stairs'),
+    })),
+  });
+  entries.push({
+    label: `Plan ${SINGLE_STAIRS_NAME} down`,
+    children: MATERIALS.filter((m) => takesAs(m, { floor: 'stairs' })).map((m) => ({
+      label: m.name,
+      note: `${describeNeeds(floorBill(m.id, 'stairs', undefined, 'l'), materialName)} · ${SINGLE_TURNS}`,
+      onSelect: () => place(m.id, 'stairs', 'l'),
     })),
   });
   entries.push({
@@ -215,7 +229,7 @@ function cellarEntries(g: Game, base: Extract<Target, { kind: 'tile' }>, side: S
  */
 type Placing =
   | { kind: 'furniture'; itemUid: number; piece: string; material?: string; facing: Side }
-  | { kind: 'stairs'; x: number; y: number; cx: number; cy: number; level: number; material: string; floorKind: 'stairs' | 'ladder'; side: Side; down?: boolean };
+  | { kind: 'stairs'; x: number; y: number; cx: number; cy: number; level: number; material: string; floorKind: 'stairs' | 'ladder'; side: Side; down?: boolean; hand?: StairHand };
 
 /**
  * Where a stack at hand is, on its menu row, when it is not on you: "in the
@@ -736,11 +750,16 @@ export class UI {
     this.game.logMsg(`The ${itemName(item).toLowerCase()} follows the cursor: Q and E turn it, a click sets it down, Escape keeps it.`, 'info');
   }
 
-  /** Plan a staircase or a ladder on a tile, up to the storey over it or down to the cellar under it (`down`): the side to climb from turns with Q and E. */
-  startPlacingStairs(base: Target, level: number, material: string, floorKind: 'stairs' | 'ladder', side: Side, down = false): void {
+  /**
+   * Plan a staircase or a ladder on a tile, up to the storey over it or down
+   * to the cellar under it (`down`): the side to climb from turns with Q and
+   * E, and for a single staircase (`hand`) the half of the tile it runs up.
+   */
+  startPlacingStairs(base: Target, level: number, material: string, floorKind: 'stairs' | 'ladder', side: Side, down = false, hand?: StairHand): void {
     if (base.kind !== 'tile') return;
-    this.placing = { kind: 'stairs', x: base.x, y: base.y, cx: base.cx, cy: base.cy, level, material, floorKind, side, down };
-    this.game.logMsg('Q and E choose the side to climb from, a click plans it, Escape lets it go.', 'info');
+    const single = floorKind === 'stairs' ? hand : undefined;
+    this.placing = { kind: 'stairs', x: base.x, y: base.y, cx: base.cx, cy: base.cy, level, material, floorKind, side, down, hand: single };
+    this.game.logMsg(single ? `${SINGLE_TURNS}, a click plans it, Escape lets it go.` : 'Q and E choose the side to climb from, a click plans it, Escape lets it go.', 'info');
   }
 
   /** A quarter turn of what is being placed: to the right for +1, to the left for -1. */
@@ -748,7 +767,15 @@ export class UI {
     const p = this.placing;
     if (!p) return;
     if (p.kind === 'furniture') p.facing = turnedFacing(p.facing, step);
-    else p.side = turnedFacing(p.side, step);
+    else if (p.hand) {
+      // A single staircase goes round the tile a half at a time: across to the other half, then a quarter turn on.
+      const [first, second]: [StairHand, StairHand] = step > 0 ? ['l', 'r'] : ['r', 'l'];
+      if (p.hand === first) p.hand = second;
+      else {
+        p.hand = first;
+        p.side = turnedFacing(p.side, step);
+      }
+    } else p.side = turnedFacing(p.side, step);
   }
 
   cancelPlacing(): void {
@@ -765,8 +792,8 @@ export class UI {
     }
     if (p.kind === 'stairs') {
       const plan = ACTION_BY_ID.get('plan_floor');
-      const target: Target = { kind: 'tile', x: p.x, y: p.y, cx: p.cx, cy: p.cy, side: p.side, material: p.material, floorKind: p.floorKind, down: p.down };
-      this.renderer.ghost = { kind: 'stairs', x: p.x, y: p.y, level: p.level, material: p.material, floorKind: p.floorKind, side: p.side, ok: !(plan?.check?.(target, this.game) ?? null) };
+      const target: Target = { kind: 'tile', x: p.x, y: p.y, cx: p.cx, cy: p.cy, side: p.side, material: p.material, floorKind: p.floorKind, down: p.down, hand: p.hand };
+      this.renderer.ghost = { kind: 'stairs', x: p.x, y: p.y, level: p.level, material: p.material, floorKind: p.floorKind, side: p.side, hand: p.hand, ok: !(plan?.check?.(target, this.game) ?? null) };
       return;
     }
     if (!pick) {
@@ -788,7 +815,7 @@ export class UI {
     }
     if (p.kind === 'stairs') {
       const plan = ACTION_BY_ID.get('plan_floor');
-      const target: Target = { kind: 'tile', x: p.x, y: p.y, cx: p.cx, cy: p.cy, side: p.side, material: p.material, floorKind: p.floorKind, down: p.down };
+      const target: Target = { kind: 'tile', x: p.x, y: p.y, cx: p.cx, cy: p.cy, side: p.side, material: p.material, floorKind: p.floorKind, down: p.down, hand: p.hand };
       const reason = plan?.check?.(target, this.game) ?? null;
       if (reason) {
         this.game.logMsg(reason, 'error');
@@ -944,7 +971,7 @@ export class UI {
       if (floor) {
         const k = floorKind(floor);
         const mat = MATERIALS.find((m) => m.id === floor.material)?.name.toLowerCase() ?? floor.material;
-        lines.push(`${k === 'ladder' ? 'ladder' : `${mat} ${FLOOR_KIND_NAMES[k]}`}${isDone(floor) ? '' : ` · ${Math.round(progressOf(floor) * 100)}% built`}`);
+        lines.push(`${k === 'ladder' ? 'ladder' : `${mat} ${floorName(floor)}`}${isDone(floor) ? '' : ` · ${Math.round(progressOf(floor) * 100)}% built`}`);
       }
       const roof = this.game.buildings.floor(b.levels, pick.x, pick.y);
       if (roof) lines.push(`${roof.material === GLASS_ROOF.id ? 'glass roof' : 'roof'}${isDone(roof) ? '' : ` · ${Math.round(progressOf(roof) * 100)}% built`}`);
@@ -2785,7 +2812,7 @@ export class UI {
     if (flightDown) {
       // Below.
     } else if (floor) {
-      const what = deck ? 'deck' : floorKind(floor) === 'floor' && level === 0 ? 'flooring' : FLOOR_KIND_NAMES[floorKind(floor)];
+      const what = deck ? 'deck' : floorKind(floor) === 'floor' && level === 0 ? 'flooring' : floorName(floor);
       if (!isDone(floor)) entries.push(item(act('build_floor'), base, `Build ${what} · needs ${describeNeeds(floor, materialName)}`));
       entries.push(item(act('remove_floor'), base, `Remove ${what}`));
     } else {
@@ -2814,8 +2841,10 @@ export class UI {
         });
         if (level > 0) {
           const stairs = cellarReason(g, plan, { ...withSide, material: 'log', floorKind: 'stairs' });
-          if (stairs) entries.push({ label: `Plan staircase (up from the ${sideName})`, hint: stairs, disabled: true });
-          else {
+          if (stairs) {
+            entries.push({ label: `Plan staircase (up from the ${sideName})`, hint: stairs, disabled: true });
+            entries.push({ label: `Plan ${SINGLE_STAIRS_NAME} (up from the ${sideName})`, hint: stairs, disabled: true });
+          } else {
             // The side to climb from is chosen on the tile: Q and E turn it, a click plans it.
             entries.push({
               label: 'Plan staircase',
@@ -2823,6 +2852,15 @@ export class UI {
                 label: m.name,
                 note: `${describeNeeds(floorBill(m.id, 'stairs'), materialName)} · Q and E choose the side`,
                 onSelect: () => this.startPlacingStairs(base, level, m.id, 'stairs', side),
+              })),
+            });
+            // Half the tile wide, up the half on the left or the right as you climb: Q and E take it round the tile.
+            entries.push({
+              label: `Plan ${SINGLE_STAIRS_NAME}`,
+              children: MATERIALS.filter((m) => takesAs(m, { floor: 'stairs' })).map((m) => ({
+                label: m.name,
+                note: `${describeNeeds(floorBill(m.id, 'stairs', undefined, 'l'), materialName)} · ${SINGLE_TURNS}`,
+                onSelect: () => this.startPlacingStairs(base, level, m.id, 'stairs', side, false, 'l'),
               })),
             });
             entries.push({
@@ -2834,7 +2872,7 @@ export class UI {
         }
       }
     }
-    entries.push(...cellarEntries(g, base, side, (material, kind) => this.startPlacingStairs(base, 0, material, kind, side, true)));
+    entries.push(...cellarEntries(g, base, side, (material, kind, hand) => this.startPlacingStairs(base, 0, material, kind, side, true, hand)));
     const roof = bld.floor(b.levels, x, y);
     const roofTarget: Target = { ...base, floorKind: 'roof' };
     if (roof) {

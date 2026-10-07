@@ -17,7 +17,7 @@ import { gateJobWords, gateReach, HIDDEN_DOOR_IRON, HIDDEN_DOOR_LAPSE } from '..
 import { HOARD_LUMPS, HOARD_MORE } from '../../game/butcher';
 import {
   CELLAR_DECAY, CELLAR_DEPTH, CELLAR_SOIL, COLUMN_SHARE, columnBill, floorBill, GLASS_ROOF, HEFT_WORDS, INDOORS_DECAY, INDOORS_REST, JETTY_REACH, MATERIALS as WALL_MATERIALS, onlySaid, takesAs,
-  MAX_LEVELS, RAILING_HEIGHT, roofShapeDef, roofShapeOf, SIDE_NAMES, WALL_HEIGHT, wallBill, WALL_TYPE_BY_ID, WALL_TYPES,
+  MAX_LEVELS, RAILING_HEIGHT, roofShapeDef, SINGLE_STAIRS_NAME, SINGLE_STAIRS_SHARE, STAIRS_SHARE, roofShapeOf, SIDE_NAMES, WALL_HEIGHT, wallBill, WALL_TYPE_BY_ID, WALL_TYPES,
 } from '../../game/building';
 import { CELLAR_ACTION_BY_ID, CELLAR_DAYLIGHT, cellarOutdoor } from '../../game/cellar';
 import { materialName } from '../../game/buildActions';
@@ -1088,6 +1088,10 @@ export function helpText(): string {
     door in its place.
     On an upper storey, plan a <b>staircase</b> or <b>ladder</b> instead of a plain floor to climb up:
     walk onto it from below and you are upstairs, step off it toward the ground and you are down again.
+    Every material a flight is built in makes a staircase in both widths: the wide one, the width of its tile, for
+    ${percent(STAIRS_SHARE)} of a solid wall's materials, and the <b>${SINGLE_STAIRS_NAME}</b>, half the tile wide, for
+    ${percent(SINGLE_STAIRS_SHARE)}. A ${SINGLE_STAIRS_NAME} runs up the half of its tile on your left or your right as you
+    climb it, and the other half is the stairwell beside it; it takes you up and down just as the wide one does.
     Once the top storey's walls are done you can <b>Plan roof</b> tile by tile; neighbouring roof tiles
     join into ridges and hips.</p>
     <p>A roof can be laid in <b>glass</b>: <b>Plan roof</b> offers it beside the building materials, glass panels on timber
@@ -1274,7 +1278,8 @@ export function helpText(): string {
     the piece follows the cursor until you click it down &mdash; <b>Q</b> and <b>E</b> turn it ${share(1 / SIDES)}, Escape
     keeps it. A piece stands the way it was set however the view is turned, and <b>Turn it</b> on a standing
     piece turns it ${share(1 / SIDES)} round. Staircases and ladders are planned the same way, Q and E
-    choosing the side you climb from.</p>
+    choosing the side you climb from; on a ${SINGLE_STAIRS_NAME} they choose the half of the tile too, going round it a half at a
+    time.</p>
     <p>${NumberWord(HOLDERS.length)} of them hold things: ${listed(HOLDERS.map((f, i) => `${f.name.endsWith('s') ? '' : 'a '}${f.name.toLowerCase()} ${i === 0 ? 'takes ' : ''}${f.capacity}`))},
     where a plank crate takes ${CRATE_DEFS.plank.capacity}. The <b>larder</b> is the only one of them that is fussy: it takes food and drink, raw
     or cooked, and the flour, dough and cornmeal a kitchen bakes from &mdash; and nothing else.

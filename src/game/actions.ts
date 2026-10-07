@@ -53,7 +53,7 @@ import { MEDITATION_ACTIONS } from './meditation';
 import { SPECIES, type Stance } from './creatures';
 import { BOTANIZE_TABLE, BOTANIZE_WATER_TABLE, EMPTY_CHANCE, FIND_CHECK, FORAGE_TABLE, listOf, rollsAt, rollTable } from './forage';
 import { atWaterEdge, WATER_GARDEN_ACTIONS } from './watergarden';
-import { CELLAR_DEPTH, CELLAR_LEVEL, floorOf, type FloorKind, type RoofShape, type Side, type WallType } from './building';
+import { CELLAR_DEPTH, CELLAR_LEVEL, floorOf, type FloorKind, type RoofShape, type Side, type StairHand, type WallType } from './building';
 import { DEED_RADIUS, rankAtLeast, type Game } from './game';
 import { materialOfItem } from './materials';
 import { boonOf, boonTime, clockLeft } from './boons';
@@ -83,6 +83,8 @@ export type Target =
       wallType?: WallType;
       material?: string;
       floorKind?: FloorKind;
+      /** For a single staircase, the half of the tile it runs up; none for the wide one (`StairHand`). */
+      hand?: StairHand;
       /** Which shape of roof, when a roof is what is being planned. */
       roofShape?: RoofShape;
       /** The building a storey job is for, on a tile out past its footprint: a jetty's (`frame.ts`). */

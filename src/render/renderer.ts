@@ -24,6 +24,7 @@ import {
   type Column,
   type Border,
   type FloorTile,
+  type StairHand,
   type MaterialDef,
   type Side,
   type Wall,
@@ -150,7 +151,7 @@ import {
  */
 export type Ghost =
   | { kind: 'furniture'; piece: string; material?: string; x: number; y: number; sx: number; sy: number; facing: Side; ok: boolean }
-  | { kind: 'stairs'; x: number; y: number; level: number; material: string; floorKind: 'stairs' | 'ladder'; side: Side; ok: boolean };
+  | { kind: 'stairs'; x: number; y: number; level: number; material: string; floorKind: 'stairs' | 'ladder'; side: Side; hand?: StairHand; ok: boolean };
 
 export interface Pick {
   x: number;
@@ -4372,7 +4373,8 @@ export class Renderer {
         ctx.fill();
       }
     } else {
-      const tile: FloorTile = { building: 0, level: ghost.level, x: ghost.x, y: ghost.y, material: ghost.material, kind: ghost.floorKind, facing: ghost.side, ...floorBill(ghost.material, ghost.floorKind) };
+      const hand = ghost.floorKind === 'stairs' ? ghost.hand : undefined;
+      const tile: FloorTile = { building: 0, level: ghost.level, x: ghost.x, y: ghost.y, material: ghost.material, kind: ghost.floorKind, facing: ghost.side, ...(hand ? { hand } : {}), ...floorBill(ghost.material, ghost.floorKind, undefined, hand) };
       const base = this.game.buildings.buildingAt(ghost.x, ghost.y)?.deck ?? world.getHeight(ghost.x, ghost.y);
       if (ghost.level === 0 && !below && this.game.buildings.cellarDone(ghost.x, ghost.y)) this.drawOpening(tile, ghost.x, ghost.y, base, 0.6);
       else if (ghost.floorKind === 'stairs') this.drawStairs(tile, ghost.x, ghost.y, base, 0.6);
@@ -4724,7 +4726,7 @@ export class Renderer {
       stamp += `;${t.x},${t.y},${t.dug},${t.building}`;
       // And the flight standing in it, for the shade it throws on the floor.
       const f = bld.floor(0, t.x, t.y);
-      if (f && floorKind(f) === 'stairs') stamp += f.facing ?? 's';
+      if (f && floorKind(f) === 'stairs') stamp += (f.facing ?? 's') + (f.hand ?? '');
     }
     if (stamp !== this.cellarStamp) {
       this.cellarStamp = stamp;
@@ -5096,10 +5098,10 @@ export class Renderer {
       const wall = bld.wall(0, x, y, side);
       walls += wall && isDone(wall) ? side : '-';
       const next = bld.floor(0, x + ox, y + oy);
-      if (next && floorKind(next) === 'stairs') walls += next.facing ?? 's';
+      if (next && floorKind(next) === 'stairs') walls += (next.facing ?? 's') + (next.hand ?? '');
     }
     // Inside the hole, laid once: everything under the ground floor's plane, each part shaded by how deep it is.
-    const stamp = `${cam.rotation}|${cam.zoom}|${this.canvas.dpr}|${bld.cellar(x, y)?.dug}|${floor.kind}${floor.facing}${floor.material}`
+    const stamp = `${cam.rotation}|${cam.zoom}|${this.canvas.dpr}|${bld.cellar(x, y)?.dug}|${floor.kind}${floor.facing}${floor.hand ?? ''}${floor.material}`
       + `${floor.dye ?? ''}${isDone(floor) ? 1 : 0}|${against.join('')}|${walls}`;
     const key = `${x},${y}`;
     const anchor: [number, number] = hole[0];
@@ -5237,6 +5239,22 @@ export class Renderer {
   private static wayEnds(x: number, y: number, facing: Side, ladder: boolean): [[number, number], [number, number]] {
     const s0 = ladder ? 0.4 : 0, s1 = ladder ? 0.985 : 1;
     return [Renderer.stairPoint(x, y, facing, 0.5, s0), Renderer.stairPoint(x, y, facing, 0.5, s1)];
+  }
+
+  /**
+   * The stretch across its tile a flight takes, in `stairPoint`'s coordinate
+   * across: the whole of it for the wide one, and for a single one the half
+   * on the hand it names as you climb -- which end of the run across that is
+   * turns with the side it is climbed from.
+   */
+  static stairSpan(facing: Side, hand?: StairHand): [number, number] {
+    if (!hand) return [0, 1];
+    const [ox, oy] = Renderer.stairPoint(0, 0, facing, 0, 0);
+    const [ux, uy] = Renderer.stairPoint(0, 0, facing, 0, 1);
+    const [cx, cy] = Renderer.stairPoint(0, 0, facing, 1, 0);
+    // Your left as you climb, with y running south: the climb turned a quarter.
+    const highIsLeft = (cx - ox) * (uy - oy) - (cy - oy) * (ux - ox) > 0;
+    return (hand === 'l') === highIsLeft ? [0.5, 1] : [0, 0.5];
   }
 
   /** World point on a tile from a coordinate across (t) and away from the climbing side (s). */
@@ -5508,25 +5526,36 @@ export class Renderer {
     const treadLit = 1.12, riserLit = this.faceLight(cx, cy), sideLit = this.faceLight(ux, uy);
     const risersShow = cam.nearSide(-ux, -uy) > 0;
     const near: 0 | 1 = cam.nearSide(cx, cy) > 0 ? 1 : 0;
+    /*
+     * The stretch of the tile it takes across: all of it, or for a single
+     * staircase the half it runs up, its other side open on the stairwell
+     * beside it in the middle of the tile, where no wall and no flight is.
+     */
+    const span = Renderer.stairSpan(facing, floor.hand);
+    const atEdge = (t: 0 | 1): boolean => span[t] === t;
     /** The border a side of the flight runs along. */
     const sideBorder = (t: 0 | 1): Border => {
       const [a, b] = [W(t, 0), W(t, 1)];
       return Math.abs(a[0] - b[0]) < 1e-9 ? { dir: 'v', x: a[0], y: Math.min(a[1], b[1]) } : { dir: 'h', x: Math.min(a[0], b[0]), y: a[1] };
     };
     const walled = (t: 0 | 1): boolean => {
+      if (!atEdge(t)) return false;
       const w = bld.wallOnBorder(floor.level - 1, sideBorder(t));
       return !!w && isDone(w);
     };
-    /** Whether a flight beside it on side `t` goes up the same way, making one wide flight with it. */
+    /** Whether a flight beside it on side `t` goes up the same way and runs up against it, making one wider flight with it. */
     const joined = (t: 0 | 1): boolean => {
+      if (!atEdge(t)) return false;
       const [nx, ny] = t ? [cx, cy] : [-cx, -cy];
       const f = bld.floor(floor.level, x + Math.round(nx), y + Math.round(ny));
-      return !!f && floorKind(f) === 'stairs' && (f.facing ?? 's') === facing;
+      if (!f || floorKind(f) !== 'stairs' || (f.facing ?? 's') !== facing) return false;
+      const theirs = Renderer.stairSpan(facing, f.hand);
+      return t ? theirs[0] === 0 : theirs[1] === 1;
     };
     /** Whether a side stands open to the room: no wall along it, and no flight beside it. */
     const open = (t: 0 | 1): boolean => !walled(t) && !joined(t);
     // Against a wall, the flight stops at the wall's face.
-    const tLo = walled(0) ? WALL_THICK : 0, tHi = walled(1) ? 1 - WALL_THICK : 1;
+    const tLo = walled(0) ? WALL_THICK : span[0], tHi = walled(1) ? 1 - WALL_THICK : span[1];
     const tNear = near ? tHi : tLo, tFar = near ? tLo : tHi;
     const NOSE = st.proud ? 0.03 : 0, NOSE_H = st.proud ? 1.3 : 0;
     const hTop = (i: number): number => h0 + (i + 1) * rise;
@@ -5789,8 +5818,8 @@ export class Renderer {
     }
     // The steps, back to front.
     const order = Array.from({ length: N }, (_, i) => i).sort((a, b) => {
-      const [ax, ay] = W(0.5, (a + 0.5) / N);
-      const [bx, by] = W(0.5, (b + 0.5) / N);
+      const [ax, ay] = W((tLo + tHi) / 2, (a + 0.5) / N);
+      const [bx, by] = W((tLo + tHi) / 2, (b + 0.5) / N);
       return cam.rotateX(ax, ay) + cam.rotateY(ax, ay) - (cam.rotateX(bx, by) + cam.rotateY(bx, by));
     });
     if (whole) for (const i of order) step(i);
@@ -5817,7 +5846,7 @@ export class Renderer {
     }
     if (nearOpen && st.rail !== 'parapet') rail(tNear + (near ? -0.05 : 0.05));
     if (!done && whole) {
-      poly([P(0, 0, h1), P(1, 0, h1), P(1, 1, h1), P(0, 1, h1)]);
+      poly([P(span[0], 0, h1), P(span[1], 0, h1), P(span[1], 1, h1), P(span[0], 1, h1)]);
       ctx.strokeStyle = PLAN_COLOR;
       ctx.lineWidth = 1;
       ctx.setLineDash([4, 3]);

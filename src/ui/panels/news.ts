@@ -5,7 +5,7 @@ import {
 import { BACK_PACE, BACK_SLACK, CIRCLE_R, COWARD_AT, COWARD_DRAG, DRAW_WALK, FALL_BACK, GUARD_RANGE, HUNTER_TURN, KEEP_OFF, MONSTER_TURN, PACK_CALL, PACK_MOST, THROW_HIT, THROW_REACH } from '../../game/fight';
 import { FIGHT_QUIET, ARM_SLOW_MOST, ARMOUR_VS, armourSays, BLINDSIDE, blowSays, CROWD_BLOCK, FLANK_HIT, HEAVY_EVERY, HEAVY_HIT, HIDE_NAMES, HIDES, hideSays, LEG_SLOW_MOST, sideOf, WIND_UP, BLOW_DEFENSIVE, BLOW_HUNTER, BLOW_PREY, FIGHT_BACK_STILL, FIGHT_GIVE_UP, FIGHT_LEASH, FIGHT_STANCE_NAMES, FIGHT_STANCES, FIST, FOLLOW_RANGE, stanceSays, SWING_WIND, SWING_WIND_KG, TARGET_RANGE, TIRED_AT, TIRED_SLOW } from '../../game/fight';
 import {
-  CELLAR_DECAY, CELLAR_DEPTH, CELLAR_SOIL, COLUMN_SHARE, columnBill, floorBill, GLASS_ROOF, heftWord, onlySaid, takesAs, INDOORS_DECAY, INDOORS_REST, JETTY_REACH, MATERIAL_BY_ID, MATERIALS as WALL_MATERIALS, RAILING_HEIGHT,
+  CELLAR_DECAY, CELLAR_DEPTH, CELLAR_SOIL, COLUMN_SHARE, SINGLE_STAIRS_NAME, SINGLE_STAIRS_SHARE, STAIRS_SHARE, columnBill, floorBill, GLASS_ROOF, heftWord, onlySaid, takesAs, INDOORS_DECAY, INDOORS_REST, JETTY_REACH, MATERIAL_BY_ID, MATERIALS as WALL_MATERIALS, RAILING_HEIGHT,
   roofShapeDef, roofShapeOf, WALL_HEIGHT, WALL_TYPE_BY_ID, wallBill as typeBill,
 } from '../../game/building';
 import { CELLAR_DAYLIGHT } from '../../game/cellar';
@@ -1293,6 +1293,21 @@ export const NEWS: News[] = [
           + `focus, up to ${percent(skinOf(spellForce(aegis, FIRE_TOP, FIRE_TOP, 1)))} at ${FIRE_TOP} with a QL ${FIRE_TOP} one, and every `
           + 'skin already laid is brought down the same.',
       ].filter(Boolean);
+    },
+  },
+  {
+    n: 96,
+    day: '2026-10-07',
+    lines: () => {
+      const staired = WALL_MATERIALS.filter((m) => takesAs(m, { floor: 'stairs' }));
+      const plank = (hand?: 'l'): string => billWords(Object.entries(floorBill('plank', 'stairs', undefined, hand).needed));
+      return [
+        `A second staircase, the ${SINGLE_STAIRS_NAME}, in all ${numberWord(staired.length)} materials a flight is built in: half the tile `
+          + `wide, up the half on your left or your right as you climb, with the stairwell beside it. Upper storey → `
+          + `Plan ${SINGLE_STAIRS_NAME}, and Q and E take it round the tile a half at a time.`,
+        `It costs ${percent(SINGLE_STAIRS_SHARE)} of a solid wall's materials where the wide one costs ${percent(STAIRS_SHARE)}: `
+          + `${plank('l')} in plank, against ${plank()}. It takes you up and down as the wide one does.`,
+      ];
     },
   },
 ];

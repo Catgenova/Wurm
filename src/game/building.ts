@@ -418,6 +418,19 @@ export interface Wall extends Bill {
  */
 export type FloorKind = 'floor' | 'stairs' | 'ladder' | 'roof';
 export const FLOOR_KIND_NAMES: Record<FloorKind, string> = { floor: 'floor', stairs: 'staircase', ladder: 'ladder', roof: 'roof' };
+/**
+ * Which half of its tile a single staircase runs up: the half on your left as
+ * you climb it, or the one on your right. A staircase with no hand is the
+ * wide one, the width of the tile.
+ */
+export type StairHand = 'l' | 'r';
+export const STAIR_HANDS: readonly StairHand[] = ['l', 'r'];
+/** What a single staircase is called, beside the wide one's `FLOOR_KIND_NAMES.stairs`. */
+export const SINGLE_STAIRS_NAME = 'single staircase';
+/** What a floor slot is called: a staircase with a hand is a single one. */
+export const floorNameOf = (kind: FloorKind, hand?: StairHand | null): string =>
+  kind === 'stairs' && hand ? SINGLE_STAIRS_NAME : FLOOR_KIND_NAMES[kind];
+export const floorName = (f: FloorTile): string => floorNameOf(floorKind(f), f.hand);
 
 export interface FloorTile extends Bill {
   building: number;
@@ -428,6 +441,8 @@ export interface FloorTile extends Bill {
   kind?: FloorKind;
   /** For stairs and ladders: the side where you step on from below. */
   facing?: Side;
+  /** For a single staircase: the half of the tile it runs up (`StairHand`). None on the wide one. */
+  hand?: StairHand;
   /** The colour it has been painted, if it has. */
   dye?: string;
 }
@@ -606,17 +621,21 @@ export const wallBill = (material: string, type: WallType, scale = 1): Bill => {
 /** Planks in a ladder, whatever the house it climbs is built of. */
 export const LADDER_PLANKS = 8;
 
+/** A wide staircase's share of a solid wall's bill, and a single one's: half the width, so less of it, but the same climb. */
+export const STAIRS_SHARE = 0.75;
+export const SINGLE_STAIRS_SHARE = 0.5;
+
 /**
- * Materials for a floor slot: a floor takes half a wall, stairs three
- * quarters, a ladder `LADDER_PLANKS` planks whatever the house is of, and a
- * roof whatever its shape costs — a gable least, because a gable end is wall
- * rather than roof, and a flat deck most, because a thing you walk on is built
- * like a floor.
+ * Materials for a floor slot: a floor takes half a wall, a wide staircase
+ * three quarters and a single one half, a ladder `LADDER_PLANKS` planks
+ * whatever the house is of, and a roof whatever its shape costs — a gable
+ * least, because a gable end is wall rather than roof, and a flat deck most,
+ * because a thing you walk on is built like a floor.
  */
-export function floorBill(material: string, kind: FloorKind = 'floor', roof: RoofShape = 'hip'): Bill {
+export function floorBill(material: string, kind: FloorKind = 'floor', roof: RoofShape = 'hip', hand?: StairHand | null): Bill {
   if (kind === 'ladder') return { needed: { plank: LADDER_PLANKS }, total: { plank: LADDER_PLANKS } };
   if (kind === 'roof') return scaledBill(material, ROOF_SHAPE_BY_ID.get(roof)?.factor ?? 0.5);
-  return scaledBill(material, kind === 'stairs' ? 0.75 : 0.5);
+  return scaledBill(material, kind === 'stairs' ? (hand ? SINGLE_STAIRS_SHARE : STAIRS_SHARE) : 0.5);
 }
 
 /**
@@ -885,8 +904,9 @@ export class Buildings {
     return this.floors.get(floorKey(level, x, y));
   }
 
-  setFloor(b: Building, level: number, x: number, y: number, material: string, kind: FloorKind = 'floor', facing?: Side): FloorTile {
-    const f: FloorTile = { building: b.id, level, x, y, material, kind, facing, ...floorBill(material, kind, roofShapeOf(b)) };
+  setFloor(b: Building, level: number, x: number, y: number, material: string, kind: FloorKind = 'floor', facing?: Side, hand?: StairHand): FloorTile {
+    const single = kind === 'stairs' && hand && STAIR_HANDS.includes(hand) ? hand : undefined;
+    const f: FloorTile = { building: b.id, level, x, y, material, kind, facing, ...(single ? { hand: single } : {}), ...floorBill(material, kind, roofShapeOf(b), single) };
     this.floors.set(floorKey(level, x, y), f);
     if (level > 0 && !this.tileIndex.has(tileKey(x, y))) this.jettyIndex.set(tileKey(x, y), b.id);
     return f;
