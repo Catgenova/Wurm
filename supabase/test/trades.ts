@@ -76,9 +76,9 @@ begin
   /*
    * The refusal, read before any skill is raised.
    *
-   * It has to be first, because the two trades taken below are the two whose
-   * names begin with a vowel -- artisan and archer -- and a trade that has
-   * been earned has no refusal to read. A coalesce rather than a bare
+   * It has to come before any skill is raised, because a trade that has been
+   * earned has no refusal to read; the archer is asked because its name begins
+   * with a vowel. A coalesce rather than a bare
    * concatenation, so that a null arrives as the word "none" and fails one
    * check by name, instead of deleting the whole line and failing every check
    * that reads it. That is this afternoon's lesson, and it costs one call.
@@ -99,11 +99,14 @@ begin
    *
    * Which two is immaterial: the panel draws whatever the island answers, so
    * they are whichever sort first and every assertion reads the answer rather
-   * than assuming a name.
+   * than assuming a name. The fighting one is the first still on a tree: the
+   * fighting trades are moving to spells and passives one at a time, and the
+   * nodes asked of below are a tree's.
    */
   select c.id into v_cls from class_def c where c.kind = 'craft' order by c.id limit 1;
   select c.id into v_fight from class_def c where c.kind = 'combat'
-   and exists (select 1 from rite_def r where r.class = c.id) order by c.id limit 1;
+   and exists (select 1 from rite_def r where r.class = c.id)
+   and exists (select 1 from class_node n where n.class = c.id) order by c.id limit 1;
   insert into skill (world_id, uid, id, value)
   select w.world_id, w.uid, cs.skill, 80 from class_skill cs
    where cs.class in (v_cls, v_fight)
