@@ -1668,6 +1668,20 @@ jobs:
             --outfile=node_modules/.cache/pikeman.mjs --log-level=error
           node node_modules/.cache/pikeman.mjs
 
+      - name: The Archer's spells and passives
+        run: |
+          # The fourth fighting trade on spells and passives. Both sides hold
+          # the same rows; every shot measured at its share of a draw's, the
+          # same roll asked twice, an arrow out of the pack for each; a Long
+          # Shot and a Point Blank as far or as near as they say and no
+          # further; a creature slowed, held, exposed to everybody's blows; a
+          # decoy struck instead of you; a next shot that cannot miss; a shot
+          # refused without a bow or arrows; and every passive at the rule it
+          # changes, the browser's fold the island's.
+          npx esbuild supabase/test/archer.ts --bundle --platform=node --format=esm \
+            --outfile=node_modules/.cache/archer.mjs --log-level=error
+          node node_modules/.cache/archer.mjs
+
       - name: Glassblowing, glass panels, bottles and the stained glass wall
         run: |
           # The Artisan's fourth trade, at a hot smelter: sand melted into

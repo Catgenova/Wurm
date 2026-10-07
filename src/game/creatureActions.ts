@@ -9,8 +9,8 @@ import type { Game } from './game';
 import { furnitureCentre, furnitureName, vehicleOf } from './furniture';
 import { deedJobLine, emptyCrate, letOut, shutIn } from './creaturecrate';
 import { itemDef, itemName, rarityOf, type Mark } from './items';
-import { BANE_BONUS, banes, bowRange, hitChance, isBow, WEAPON_BY_ID, weaponDamage } from './gear';
-import { ARROWS, armsRefusal, beastReach, BLINDSIDE, blowOf, CRIT_HIT, critChance, DRAW_CLOSEST, FALL_BACK, FIST, headBlow, headHide, headSide, hideTakes, nockedArrow, KNIFE_BLEED, KNIFE_BLEED_SECS, meleeReach, STAGGER_MAUL, STAGGER_POLE, stanceDealt, swungWith } from './fight';
+import { BANE_BONUS, banes, hitChance, isBow, WEAPON_BY_ID, weaponDamage } from './gear';
+import { ARROWS, armsRefusal, beastReach, BLINDSIDE, blowOf, bowReach, CRIT_HIT, critChance, drawClosest, FALL_BACK, FIST, headBlow, headHide, headSide, hideTakes, nockedArrow, KNIFE_BLEED, KNIFE_BLEED_SECS, meleeReach, STAGGER_MAUL, STAGGER_POLE, stanceDealt, swungWith } from './fight';
 import { matOfItem } from './materials';
 import { defaultKey } from './keybinds';
 
@@ -602,8 +602,8 @@ export const CREATURE_ACTIONS: ActionDef[] = [
       const bow = held && WEAPON_BY_ID.get(held.id);
       if (!held || !bow?.ammo) return 'You have no bow in your hands.';
       const d = Math.hypot(c.x - g.player.x, c.y - g.player.y);
-      if (d > bowRange(bow, held)) return `Too far for a ${itemName(held).toLowerCase()}.`;
-      if (d < DRAW_CLOSEST) return 'It is too close to draw on.';
+      if (d > bowReach(g, bow, held)) return `Too far for a ${itemName(held).toLowerCase()}.`;
+      if (d < drawClosest(g)) return 'It is too close to draw on.';
       return null;
     },
     perform: (t, g) => {
@@ -620,7 +620,7 @@ export const CREATURE_ACTIONS: ActionDef[] = [
       // Picking a target out of the dark at range is the hardest looking there is.
       g.fought(DARK_SHOT);
       // The far end of a bow's range is a far harder shot than the near end.
-      const reach = 1 - (d / bowRange(bow, held)) * 0.35;
+      const reach = 1 - (d / bowReach(g, bow, held)) * 0.35;
       const landed = g.rand() <= hitChance(g, bow, held) * reach * bloodMul(c, 'evade');
       g.gainSkill('fighting', tryGain(landed, SHOT_FIGHT));
       g.gainSkill('archery', tryGain(landed, SHOT_ARCHERY));
@@ -634,9 +634,14 @@ export const CREATURE_ACTIONS: ActionDef[] = [
         // And what the head is: a blunt crushes, a bodkin goes through a hide (`headBlow`, `headHide`).
         const dmg = weaponDamage(g, bow, held) * head.edge * bane * stanceDealt(g.settings.fightStance, (k, o) => g.perk(k, o))
           * hideTakes(def.hide, headBlow(shape, bow)) * headHide(shape, def.hide) * blindside(c)
-          * (0.6 + arrow.ql / 140) * (0.8 + g.rand() * 0.4) * (crit ? CRIT_HIT : 1) * classDealt(g, c);
+          * (0.6 + arrow.ql / 140) * (0.8 + g.rand() * 0.4) * (crit ? CRIT_HIT : 1) * classDealt(g, c)
+          // And harder on one that is not after you, for an Archer's Ambush (`class_ambush`).
+          * (c.enemy !== PLAYER_ATTACKER ? g.perk('ambush:dmg', 1) : 1);
         g.creatures.hurt(g, c, dmg, 'player', crit);
         g.damageItem(held, 0.25 * g.perk('worn:weapon', 1));
+        // And now and then the arrow back in your pack, for an Archer's Arrow Saver (`class_arrow_saved`).
+        const save = g.perk('save:arrow', 0);
+        if (save > 0 && g.rand() < save) g.inventory.add(arrow.id, { ql: arrow.ql, extra: arrow.extra, rare: arrow.rare, maker: arrow.maker });
         // A broadhead bleeds it as a knife does, a blunt staggers it as a maul does (`headSide`).
         const side = headSide(shape);
         if (side && c.health > 0) sideBlow(g, c, side, dmg);
@@ -645,7 +650,7 @@ export const CREATURE_ACTIONS: ActionDef[] = [
       if (c.health <= 0) return false;
       // Shot at, it comes for you, as anything struck does.
       g.creatures.engage(g, c);
-      return !!nockedArrow(g) && Math.hypot(c.x - g.player.x, c.y - g.player.y) <= bowRange(bow, held);
+      return !!nockedArrow(g) && Math.hypot(c.x - g.player.x, c.y - g.player.y) <= bowReach(g, bow, held);
     },
   },
   {

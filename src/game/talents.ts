@@ -1,4 +1,6 @@
-import { HUNT_REACH, KNIFE_BLEED, KNIFE_BLEED_SECS, THROW_REACH } from './fight';
+// The reach of a spell on a creature is `SPELL_REACH`, which `patrons.ts` takes from `TARGET_RANGE`; read here from where it is
+// set, since `patrons.ts` reads this file.
+import { DRAW_CLOSEST, HUNT_REACH, KNIFE_BLEED, KNIFE_BLEED_SECS, TARGET_RANGE as SPELL_REACH, THROW_REACH } from './fight';
 import type { SpellOn } from './patrons';
 import { capital, numberWord, percent, times } from './words';
 
@@ -46,12 +48,14 @@ export const CLASS_LEARN_KILL = 5;
 export const GUARDIAN_REACH = 2;
 
 /** What a spell wants in your hands before it can be called: a shield in the off hand, or a weapon of a kind in the other. */
-export type SpellNeeds = 'shield' | 'axes' | 'mauls';
+export type SpellNeeds = 'shield' | 'axes' | 'mauls' | 'archery';
 /** As the spell's note says it first, and as its refusal says it is missing. */
 export const NEEDS_SAID: Record<SpellNeeds, { has: string; wants: string }> = {
   shield: { has: 'With a shield in your off hand', wants: 'a shield in your off hand' },
   axes: { has: 'With an axe in hand', wants: 'an axe in your hand' },
   mauls: { has: 'With a maul in hand', wants: 'a maul in your hand' },
+  // A shot also wants an arrow to loose, which its refusal says when there is none.
+  archery: { has: 'With a bow in hand', wants: 'a bow in your hands' },
 };
 
 export interface ClassSpellDef {
@@ -93,6 +97,7 @@ const spellOf = (cls: string) => (
 const blade = spellOf('blade');
 const berserker = spellOf('berserker');
 const pikeman = spellOf('pikeman');
+const archer = spellOf('archer');
 
 /**
  * Every class spell there is, trade by trade, by the number each was picked
@@ -100,7 +105,10 @@ const pikeman = spellOf('pikeman');
  *
  * "A blow" is a blow with what is in your hand, as a swing of it lands: its
  * damage, your stance, the creature's hide and a critical one now and then,
- * all as they are, and then the share the spell names.
+ * all as they are, and then the share the spell names. "A shot" is the same
+ * of a draw of the bow in your hand: an arrow loosed, the one a draw would
+ * nock, at an enemy within the bow's range and no nearer than a draw can be
+ * made, landing less often at the far end of the range as a draw does.
  */
 export const CLASS_SPELLS: ClassSpellDef[] = [
   /* ---- The Sworn Blade ---- */
@@ -187,6 +195,35 @@ export const CLASS_SPELLS: ClassSpellDef[] = [
   pikeman(3, 'Brace for the Charge', 0.1, 20, ['self'], { secs: 6, more: 2, back: 2 },
     (fx) => `For ${span(fx.secs)} the first creature that comes at you from outside your reach is stopped at the edge of it by a blow at `
       + `${ofBlow(fx.more)}, and its next blow is put back ${span(fx.back)}.`),
+
+  /* ---- The Archer ---- */
+  archer(2, 'Quick Shot', 0.06, 6, ['enemy'], { more: 0.8, sooner: 1 },
+    (fx) => `a shot at ${ofBlow(fx.more)}; your own next draw comes ${span(fx.sooner)} sooner.`, 'archery'),
+  archer(1, 'Aimed Shot', 0.08, 8, ['enemy'], { more: 1.4 },
+    (fx) => `a shot at ${ofBlow(fx.more)} that cannot miss.`, 'archery'),
+  archer(29, 'Read the Wind', 0.06, 30, ['self'], { secs: 30, crit: 2 },
+    (fx) => `Your next shot within ${span(fx.secs)}, a draw's or a spell's, cannot miss and is critical ${times(fx.crit)} as often.`),
+  archer(9, 'Long Shot', 0.1, 15, ['enemy'], { more: 1.1, range: 1.5 },
+    (fx) => `a shot at ${ofBlow(fx.more)} on an enemy up to ${times(fx.range)} your bow's range off, landing as often as one at the near end does.`,
+    'archery'),
+  archer(6, 'Crippling Shot', 0.1, 15, ['enemy'], { more: 0.8, pace: 0.5, secs: 8 },
+    (fx) => `a shot at ${ofBlow(fx.more)}; for ${span(fx.secs)} it walks, hunts and flees at ${percent(fx.pace)} of its pace.`, 'archery'),
+  archer(10, 'Point Blank', 0.08, 10, ['enemy'], { more: 1.6, reach: 2 },
+    (fx) => `a shot at ${ofBlow(fx.more)} on an enemy within ${fx.reach} tiles of you, nearer than a draw can be made (${DRAW_CLOSEST} tiles) as well.`,
+    'archery'),
+  archer(3, 'Twin Arrows', 0.14, 20, ['enemy'], { more: 0.75, arrows: 2 },
+    (fx) => `${numberWord(fx.arrows)} arrows loosed at once, each a shot at ${ofBlow(fx.more)}.`, 'archery'),
+  archer(7, 'Pinning Shot', 0.14, 25, ['enemy'], { more: 0.9, hold: 2, monster: 0.5 },
+    (fx) => `a shot at ${ofBlow(fx.more)} that holds it where it stands, neither moving nor striking, for ${span(fx.hold)}; a monster for `
+      + `${span(fx.hold * fx.monster)}.`, 'archery'),
+  archer(14, 'Expose', 0.15, 60, ['enemy'], { more: 1.15, secs: 15 },
+    (fx) => `An enemy within ${SPELL_REACH} tiles: for ${span(fx.secs)} every blow and shot a person lands on it does ${percent(fx.more - 1)} more damage.`),
+  archer(25, 'Decoy', 0.12, 45, ['self'], { secs: 6 },
+    (fx) => `For ${span(fx.secs)} every creature that strikes at you strikes a decoy at your feet instead, and nothing lands on you.`),
+  archer(48, 'Snipe', 0.2, 60, ['enemy'], { more: 3 },
+    (fx) => `a shot at ${ofBlow(fx.more)} on a creature that is not after anybody.`, 'archery'),
+  archer(49, 'Deadeye', 0.3, 300, ['self'], { time: 0.6, secs: 10 },
+    (fx) => `For ${span(fx.secs)} a draw takes ${percent(1 - fx.time)} less time.`),
 ];
 export const CLASS_SPELL_BY_ID = new Map(CLASS_SPELLS.map((s) => [s.id, s]));
 export const classSpellsOf = (cls: string): ClassSpellDef[] => CLASS_SPELLS.filter((s) => s.class === cls);

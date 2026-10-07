@@ -524,6 +524,8 @@ const OTHERS = new Set([
   'swing:two_handed', 'finish:below', 'finish:dmg', 'pain:below', 'pain:dmg', 'pain:deep', 'pain:deeper', 'leech:blow',
   // A Pikeman's: a fresh wound's depth, a monster, feet that have not moved, a creature between your reach and its own.
   'severity:new', 'monster:dmg', 'still:taken', 'gap:dmg',
+  // An Archer's: an arrow back, the nearest a bow is drawn, a creature not after you, a walk while drawing.
+  'save:arrow', 'closest:draw', 'ambush:dmg', 'pace:draw',
   ...STRIDE_KEYS,
 ]);
 const unnamed = PERKS.flatMap((p) => Object.keys(p.fx).filter((key) => {
@@ -542,21 +544,23 @@ const unnamed = PERKS.flatMap((p) => Object.keys(p.fx).filter((key) => {
   // And how slowly it rots set down, a thing or all food (a Fisher's fish, a Cook's food).
   if (fam === 'cool' && rest !== 'food') return !ITEM_DEFS[rest];
   if (fam === 'slope') return !['digging', 'masonry'].includes(rest);
-  // A swing of one kind of weapon, the damage it does and how far it reaches, and what a stance takes or deals.
-  if (fam === 'wind' || fam === 'dmg' || fam === 'length') return !WEAPON_KINDS.has(rest);
+  // A swing of one kind of weapon, the damage it does, how far it reaches or a bow's draw carries, and what a stance takes or deals.
+  if (fam === 'wind' || fam === 'dmg' || fam === 'length' || fam === 'far') return !WEAPON_KINDS.has(rest);
   if (fam === 'stance') return !Object.keys(STANCE_TAKEN).some((st) => rest === `${st}_taken` || rest === `${st}_dealt`);
   return !OTHERS.has(key);
 }).map((key) => `${p.id} ${key}`));
 check('every key names a job, a thing or a rule that exists', unnamed.length === 0, unnamed.join('; '));
 const wired = say('WIRED').split('|').map((s) => s.split(':'));
 /*
- * Save the ground a walker is slowed on, which the island has never read: it
- * holds a body to the pace it could go anywhere (`travel_speed`), so a
- * Forester's Woodsman's Stride is the browser's pace alone, and has nothing on
- * the island to change.
+ * Save the ground a walker is slowed on and a walk while drawing a bow, which
+ * the island has never read: it holds a body to the pace it could go anywhere
+ * (`travel_speed`), so a Forester's Woodsman's Stride and an Archer's Mobile
+ * Archer are the browser's pace alone, and have nothing on the island to
+ * change.
  */
+const PACE_KEYS = [...STRIDE_KEYS, 'pace:draw'];
 const dead = wired.filter((w) => Number(w[w.length - 1]) === 0).map((w) => w.slice(0, -1).join(':'))
-  .filter((key) => !STRIDE_KEYS.includes(key));
+  .filter((key) => !PACE_KEYS.includes(key));
 check('and every key is read by a rule on the island', wired.length > 0 && dead.length === 0,
   dead.length ? `nothing reads ${dead.join(', ')}` : `${wired.length} keys`);
 

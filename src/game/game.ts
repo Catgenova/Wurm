@@ -3429,8 +3429,8 @@ export class Game {
     p.speedMul = boat ? this.boatSpeed(boat) / BASE_SPEED : driven ? this.vehicleSpeed(driven) / BASE_SPEED : up ? this.mountSpeed(up) / BASE_SPEED : 1;
     // And on your own feet, what a wound to a leg or a foot leaves of your pace (`legPace`).
     p.legPace = legPace(p.wounds);
-    // And drawing a bow, a walk at `DRAW_WALK` of it: the draw goes on as you go.
-    p.drawPace = this.drawingBow() ? DRAW_WALK : 1;
+    // And drawing a bow, a walk at `DRAW_WALK` of it, or more for an Archer's Mobile Archer: the draw goes on as you go.
+    p.drawPace = this.drawingBow() ? this.perk('pace:draw', DRAW_WALK) : 1;
     // Only wheels feel the ground: a boat is on water and feet are feet.
     p.wheelLoad = driven ? this.vehicleLoad(driven) : 0;
     // And whether your own feet are in the water at all, which is the whole of

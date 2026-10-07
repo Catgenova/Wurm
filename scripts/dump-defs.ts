@@ -53,7 +53,7 @@ import { WOUND_BY_WEAPON, WOUND_KINDS } from '../src/game/wounds';
 import { BUTCHER_PARTS, HOARD_METALS } from '../src/game/butcher';
 import { CRATE_DEFS } from '../src/game/crates';
 import { ARROWS, BODKIN_HIDE, BURN_WEAR, CRIT_BASE, CRIT_HIT, CRIT_KNIFE, CRIT_PER_SKILL, DODGE_GAIN, DODGE_MOST, DODGE_FROM, DODGE_PER_CONTROL, DODGE_PER_KG, THREAT_HOLD, VENOM_DRAIN, VENOM_SECS } from '../src/game/fight';
-import { BACK_PACE, BACK_SLACK, CIRCLE_ARC, CIRCLE_R, COWARD_AT, COWARD_DRAG, FALL_BACK, FLEE_PACE, FLEE_SECS, GUARD_RANGE, HUNTER_TURN, KEEP_OFF, MONSTER_TURN, PACK_CALL, PACK_MOST, PACK_RANGE, THROW_HIT, THROW_REACH } from '../src/game/fight';
+import { BACK_PACE, BACK_SLACK, CIRCLE_ARC, CIRCLE_R, COWARD_AT, COWARD_DRAG, DRAW_CLOSEST, FALL_BACK, FLEE_PACE, FLEE_SECS, GUARD_RANGE, HUNTER_TURN, KEEP_OFF, MONSTER_TURN, PACK_CALL, PACK_MOST, PACK_RANGE, THROW_HIT, THROW_REACH } from '../src/game/fight';
 import { ARM_SLOW, ARM_SLOW_MOST, ARMOUR_VS, BLINDSIDE, BLOW_DEFENSIVE, BLOW_HUNTER, BLOW_KINDS, BLOW_PREY, CROWD_BLOCK, FIGHT_BACK_STILL, FIGHT_GIVE_UP, FIGHT_LEASH, FIGHT_STANCES, FIST, FLANK_HIT, HEAVY_EVERY, HEAVY_HIT, HIDE_TAKES, HIDES, HUNT_REACH, KNIFE_BLEED, KNIFE_BLEED_SECS, STAGGER_MAUL, STAGGER_POLE, STANCE_DEALT, STANCE_TAKEN, SWING_WIND, SWING_WIND_KG, TIRED_AT, TIRED_SLOW, WIND_UP } from '../src/game/fight';
 import { METALS, MOULDS, ORE_PER_LUMP, RARE_LUMP_FACTOR, RARE_METALS } from '../src/game/metal';
 import { POTTERY } from '../src/game/kiln';
@@ -1447,6 +1447,8 @@ for (const [fn, v] of [
   ['keep_off', KEEP_OFF], ['throw_reach', THROW_REACH], ['throw_hit', THROW_HIT], ['back_slack', BACK_SLACK], ['back_pace', BACK_PACE],
   ['hunter_turn', HUNTER_TURN], ['monster_turn', MONSTER_TURN], ['coward_at', COWARD_AT], ['coward_drag', COWARD_DRAG],
   ['flee_pace', FLEE_PACE], ['flee_secs', FLEE_SECS],
+  /* And the nearest a bow can be drawn on anything. */
+  ['draw_closest', DRAW_CLOSEST],
   /* Dodging a blow: per point of body control, less per kilogram of armour,
      never more than; and what a dodge teaches. A critical blow: its chance,
      more per point of skill, a knife's share more, and what it lands for. A

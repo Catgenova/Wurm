@@ -46,7 +46,7 @@
  * benefit check reads these functions as it reads any other note.
  */
 import { CLASSES, PERK_CLASSES, PERK_TIER_AT, PERKS_PER_TIER, tiersAtFor } from './classes';
-import { BLOCK_MOST, FIGHT_BACK_STILL, HUNT_REACH, reachOf, STANCE_DEALT, STANCE_TAKEN, THROW_REACH } from './fight';
+import { BLOCK_MOST, DRAW_CLOSEST, DRAW_WALK, FIGHT_BACK_STILL, HUNT_REACH, reachOf, STANCE_DEALT, STANCE_TAKEN, THROW_REACH } from './fight';
 import { classSpellsOf, GUARDIAN_REACH, spellTerms } from './talents';
 import {
   ACTION_BY_ID, CHIP_CHANCE, CLEARED_TO, DIG_TILE_TIME, DREDGE_DEPTH, FLATTEN_STEP, GRASS_PER_CUT, MINE_COLLAPSE, MINE_DEPTH, PAN_ORES,
@@ -109,8 +109,8 @@ export const FX_RULE: Record<string, 'mul' | 'add'> = {
   bite: 'mul', cost: 'mul', worn: 'mul', life: 'mul', harm: 'mul', age: 'mul', wind: 'mul', severity: 'mul', dmg: 'mul', swing: 'mul',
   bright: 'mul', thrift: 'mul', force: 'mul', keeps: 'mul', teach: 'mul', sturdy: 'mul',
   carry: 'add', serve: 'add', jobs: 'add', plus: 'add', bumper: 'add', fodder: 'add', tool: 'add', passes: 'add', hook: 'add', haul: 'add',
-  block: 'add', leech: 'add', length: 'add',
-  gap: 'mul', monster: 'mul', still: 'mul',
+  block: 'add', leech: 'add', length: 'add', save: 'add',
+  gap: 'mul', monster: 'mul', still: 'mul', closest: 'mul', ambush: 'mul', far: 'mul',
 };
 
 export const fxFamily = (key: string): string => key.split(':')[0];
@@ -2166,6 +2166,54 @@ const PIKEMAN: Seed[] = [
   },
 ];
 
+/*
+ * ---------------------------------------------------------------------------
+ * The Archer: the bow, the eye and leather. As the other fighting trades',
+ * its spells have no numbers of their own here, and its passives are a
+ * hundred on from the numbers they were offered under.
+ * ---------------------------------------------------------------------------
+ */
+/** Every bow there is, shortest reach first: what a Long Draw is measured on. */
+const DRAWN = WEAPONS.filter((w) => w.ammo).sort((a, b) => (a.range ?? 0) - (b.range ?? 0));
+const ARCHER: Seed[] = [
+  ...classSpellsOf('archer').map((sp): Seed => ({ num: sp.num, name: sp.name, fx: {}, note: () => `${spellTerms(sp)} ${sp.note}` })),
+  {
+    num: 108, name: 'Arrow Saver',
+    fx: { 'save:arrow': 0.25 },
+    note: (fx) => `An arrow that lands on a creature comes back to your pack ${oneIn(fx['save:arrow'])} times.`,
+  },
+  {
+    num: 107, name: 'Close Quarters',
+    fx: { 'closest:draw': 0.5 },
+    note: (fx) => `You can draw a bow on a creature ${tiles(DRAW_CLOSEST * fx['closest:draw'])} tiles off, instead of no nearer than ${DRAW_CLOSEST}.`,
+  },
+  {
+    num: 114, name: 'Ambush',
+    fx: { 'ambush:dmg': 1.5 },
+    note: (fx) => 'A shot that lands on a creature that is not after you, one that has not noticed you or is after somebody else, '
+      + `does ${percent(fx['ambush:dmg'] - 1)} more damage.`,
+  },
+  {
+    num: 124, name: 'Mobile Archer',
+    fx: { 'pace:draw': 0.8 },
+    note: (fx) => `While you draw a bow you walk at ${percent(fx['pace:draw'])} of your pace, instead of ${percent(DRAW_WALK)}.`,
+  },
+  {
+    num: 101, name: 'Bow Mastery',
+    fx: { 'dmg:archery': 1.1 },
+    note: (fx) => `A shot does ${percent(fx['dmg:archery'] - 1)} more damage.`,
+  },
+  {
+    num: 102, name: 'Long Draw',
+    fx: { 'far:archery': 1.15 },
+    note: (fx) => {
+      const [near, far] = [DRAWN[0], DRAWN[DRAWN.length - 1]];
+      return `Your bow reaches ${percent(fx['far:archery'] - 1)} further: a ${itemName(near.id)} ${tiles((near.range ?? 0) * fx['far:archery'])} tiles `
+        + `instead of ${near.range}, a ${itemName(far.id)} ${tiles((far.range ?? 0) * fx['far:archery'])} instead of ${far.range}.`;
+    },
+  },
+];
+
 /** Every trade's perks, in the order they were picked. */
 const SEEDS: Record<string, Seed[]> = {
   terraformer: TERRAFORMER,
@@ -2185,6 +2233,7 @@ const SEEDS: Record<string, Seed[]> = {
   blade: BLADE,
   berserker: BERSERKER,
   pikeman: PIKEMAN,
+  archer: ARCHER,
 };
 
 const slug = (name: string): string => name.toLowerCase().replace(/[’']/g, '').replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '');
@@ -2213,6 +2262,7 @@ export const TIERS: Record<string, number[][]> = {
   blade: [[1, 32, 108], [2, 11, 111], [15, 29, 127], [19, 26, 123], [12, 31, 129], [33, 28, 109]],
   berserker: [[18, 30, 101], [2, 3, 106], [21, 29, 125], [20, 6, 112], [8, 14, 130], [45, 50, 113]],
   pikeman: [[38, 13, 129], [6, 5, 105], [33, 32, 121], [14, 19, 113], [2, 17, 102], [35, 3, 118]],
+  archer: [[2, 1, 108], [29, 9, 107], [6, 10, 114], [3, 7, 124], [14, 25, 101], [48, 49, 102]],
 };
 
 /** Every perk there is, tier by tier, and in each tier by the number it was picked under, as the island lists them. */

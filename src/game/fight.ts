@@ -154,6 +154,10 @@ export const reachOf = (w: Pick<WeaponDef, 'range'>): number => Math.max(FIST_RE
 
 /** Nearer than this, a bow cannot be drawn on it. */
 export const DRAW_CLOSEST = 1.2;
+/** And nearer for an Archer's Close Quarters, as `fight_refusal` has it. */
+export const drawClosest = (g: Game): number => DRAW_CLOSEST * g.perk('closest:draw', 1);
+/** How far the bow in your hand reaches: its own range and its maker's mark, and further for an Archer's Long Draw (`bow_range`). */
+export const bowReach = (g: Game, def: WeaponDef, item: Item | null): number => bowRange(def, item) * g.perk(`far:${def.kind}`, 1);
 
 /**
  * Whether a fight with it can be had from where you stand: inside a swing's
@@ -164,7 +168,7 @@ export function inFightReach(g: Game, job: string, c: { x: number; y: number }):
   if (job === 'attack_creature') return d <= meleeReach(g);
   const held = g.worn('weapon');
   const bow = held && WEAPON_BY_ID.get(held.id);
-  return !!held && !!bow?.ammo && d <= bowRange(bow, held) && d >= DRAW_CLOSEST;
+  return !!held && !!bow?.ammo && d <= bowReach(g, bow, held) && d >= drawClosest(g);
 }
 
 /** What stops a fight wherever it stands: a shot with no bow in hand, or no arrows for it. */

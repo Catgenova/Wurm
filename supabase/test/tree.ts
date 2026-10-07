@@ -18,18 +18,17 @@
  *   * the island's fold is the browser's `foldNodes` to the last bit, not to
  *     within a whisker;
  *   * a node tells on its own trade's skills and on nothing else;
- *   * and the two of the four channels a trade still has a column of actually
- *     move the number they claim to, measured at the site that reads them:
- *     `act_duration` for hands and `spend_wind` for wind. Learning and
- *     fineness were craft trades' columns, and every craft trade has moved to
- *     perks: the channels are still read where they were, and nothing buys
- *     them.
+ *   * and hands, the one of the four channels a trade still has a column of,
+ *     actually moves the number it claims to, measured at the site that reads
+ *     it: `act_duration`. Learning and fineness were craft trades' columns,
+ *     and every craft trade has moved to perks; wind was the Berserker's, the
+ *     Pikeman's and the Archer's, and all three have moved too. Those channels
+ *     are still read where they were, and nothing buys them.
  *
  * The trade walked through it is the first fighting trade still on a tree with
- * a column of hands, and wind is measured on the first with a column of wind:
- * every craft trade has moved to perks, and the fighting trades are moving one
- * at a time (`talents.ts`), so which trade that is is asked of the rulebook
- * rather than written here.
+ * a column of hands: every craft trade has moved to perks, and the fighting
+ * trades are moving one at a time (`talents.ts`), so which trade that is is
+ * asked of the rulebook rather than written here.
  *
  * Runs against the database the suite leaves behind.
  */
@@ -38,7 +37,6 @@ import {
   CLASS_COLUMNS, CLASS_NODES, CHANNELS, CLASS_POINTS_MAX, COLUMN_COST, CLASSES, COMBAT_CLASSES,
   classPoints, foldNodes, nodeDef, nodeRefusal, PERK_CLASSES, type ClassDef,
 } from '../../src/game/classes';
-import { WEAPONS } from '../../src/game/gear';
 
 const psql = (sql: string): string =>
   execFileSync('psql', ['-v', 'ON_ERROR_STOP=1', '-X', '-q', '-t', '-A', '-f', '-'], {
@@ -79,10 +77,6 @@ const [OTHER_A, OTHER_B] = [1, 2, 3].filter((col) => col !== HAND.col);
 const DOWN = COMBAT_CLASSES.find((c) => !PERK_CLASSES.has(c.id) && c.id !== T)!;
 /** Somebody else's node altogether. */
 const THEIRS = CLASS_NODES.find((n) => n.class === DOWN.id && n.rank === 1)!.id;
-const WIND = treedWith('wind');
-/** What the wind trade fights with, and the go that spends wind with it: a bow is drawn, anything else swung. */
-const WIND_WEAPON = WEAPONS.find((w) => w.kind === WIND.c.main)!;
-const WIND_GO = WIND_WEAPON.ammo ? 'shoot_creature' : 'attack_creature';
 
 const out = psql(`
 begin;
@@ -110,7 +104,7 @@ insert into said select 'WIRED|' || string_agg(ch.id || ':' || (
 
 -- 2. Somebody to hand a tree to.
 do $$
-declare w record; v jsonb; v_a double precision; v_b double precision;
+declare w record; v jsonb;
 begin
   /*
    * A named body rather than whichever row the heap hands over first, and a
@@ -184,33 +178,6 @@ begin
     || coalesce((select class_mul->>'hands' from player
                   where world_id = w.world_id and uid = w.uid), 'gone')
     from player_node where world_id = w.world_id and uid = w.uid;
-
-  -- 4. Wind, with the body pinned so the only thing that moved is the node: on
-  -- the first trade on a tree with a column of it, at a go with its own weapon.
-  insert into skill (world_id, uid, id, value) values (w.world_id, w.uid, '${WIND.c.main}', 100)
-    on conflict (world_id, uid, id) do update set value = 100;
-  perform rpc_take_class(w.world_id, '${WIND.c.id}');
-  delete from player_node where world_id = w.world_id and uid = w.uid;
-  perform class_fold(w.world_id, w.uid);
-  update player set equipped = jsonb_build_object('weapon', give(w.world_id, w.uid, '${WIND_WEAPON.id}', 1, 40))
-    where world_id = w.world_id and uid = w.uid;
-  insert into skill (world_id, uid, id, value) values (w.world_id, w.uid, 'body_stamina', 20)
-    on conflict (world_id, uid, id) do update set value = 20;
-  update player set stats = jsonb_set(coalesce(stats, '{}'::jsonb), '{stamina}', to_jsonb(1.0::double precision)),
-         body_at = now()
-    where world_id = w.world_id and uid = w.uid;
-  perform spend_wind(w.world_id, w.uid, '${WIND_GO}');
-  select 1 - (stats->>'stamina')::double precision into v_a from player
-    where world_id = w.world_id and uid = w.uid;
-  perform rpc_take_node(w.world_id, '${WIND.c.id}_${WIND.col}_1');
-  update skill set value = 20 where world_id = w.world_id and uid = w.uid and id = 'body_stamina';
-  update player set stats = jsonb_set(stats, '{stamina}', to_jsonb(1.0::double precision)), body_at = now()
-    where world_id = w.world_id and uid = w.uid;
-  perform spend_wind(w.world_id, w.uid, '${WIND_GO}');
-  select 1 - (stats->>'stamina')::double precision into v_b from player
-    where world_id = w.world_id and uid = w.uid;
-  insert into said values ('WIND|' || coalesce(v_a::text, 'none') || '|' || coalesce(v_b::text, 'none')
-    || '|' || coalesce((select combat_class from player where world_id = w.world_id and uid = w.uid), 'none'));
 end $$;
 
 select * from said;
@@ -296,11 +263,6 @@ check('twelve spent, and the thirteenth point is refused in the same words',
 
 check('putting the trade down puts the whole tree down with it',
   said('CLEARED') === '0|gone', said('CLEARED'));
-
-const [windPlain, windTree, windTrade] = said('WIND').split('|');
-const windMinor = nodeDef(`${WIND.c.id}_${WIND.col}_1`)!.mul;
-check(`wind: one minor is ${Math.round((1 - windMinor) * 100)} per cent less out of you, on the ${WIND.c.name} at its own weapon`,
-  windTrade === WIND.c.id && near(Number(windTree) / Number(windPlain), windMinor, 1e-5), said('WIND'));
 
 for (const line of [...ok, ...bad]) console.log(line);
 if (bad.length) {
