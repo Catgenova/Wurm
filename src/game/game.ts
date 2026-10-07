@@ -11,6 +11,7 @@ import { yearOf } from '../world/calendar';
 import { oreAt } from '../world/ore';
 import { World } from '../world/world';
 import { ACTIONS, ACTION_BY_ID, SPOIL_ORDER, spoilFrom, TEACHES_NOTHING, TRY_LEARN, type ActionDef, type Target } from './actions';
+import { riposte } from './creatureActions';
 import { aimPin, BELT_MAX, loopsFor, pinLabel, type BeltPin } from './belt';
 import { bodyForward } from '../net/felt';
 import type { ItemRow } from '../net/island';
@@ -2367,6 +2368,12 @@ export class Game {
     return { taken: raw * (1 - Math.min(0.92, soak * hide * ARMOUR_VS[def.cls][kind])), part, worn: item, blocked: false };
   }
 
+  /** A walk on foot this many times as quick for so many seconds, as a spell the island cast says (a Skirmisher's Hit and Run). */
+  spedUp(mul: number, secs: number): void {
+    this.paceMul = mul;
+    this.paceUntil = this.time + secs;
+  }
+
   /** Your chance of dodging a creature's blow just now (`dodgeChance`): body control past where it starts, less the kilograms of armour on you. */
   dodge(): number {
     const kg = this.wornArmour().reduce((n, { item }) => n + itemDef(item.id).weight, 0);
@@ -2420,6 +2427,9 @@ export class Game {
       this.gainSkill('body_control', DODGE_GAIN);
       this.player.attackedAt = this.time;
       this.logMsg(`You dodge the ${from ? this.creatures.species(from).name.toLowerCase() : 'blow'}.`, 'fight');
+      // And answer it, for a Skirmisher's Riposte (`class_riposte`).
+      const share = this.perk('riposte:blow', 0);
+      if (share > 0 && from) riposte(this, from, share);
       this.fightBack();
       return;
     }
@@ -2495,6 +2505,9 @@ export class Game {
 
   /** When your feet last moved, which is what `fightBack` asks of a bite. */
   private movedAt = -Infinity;
+  /** A spell's quicker walk on foot (a Skirmisher's Hit and Run), and the game time it ends. */
+  private paceMul = 1;
+  private paceUntil = -Infinity;
 
   /**
    * The creature you are fighting, or null.
@@ -3431,6 +3444,8 @@ export class Game {
     p.legPace = legPace(p.wounds);
     // And drawing a bow, a walk at `DRAW_WALK` of it, or more for an Archer's Mobile Archer: the draw goes on as you go.
     p.drawPace = this.drawingBow() ? this.perk('pace:draw', DRAW_WALK) : 1;
+    // And quicker while a spell's walk holds, as the island's `travel_speed` lets it be.
+    p.spellPace = this.time < this.paceUntil ? this.paceMul : 1;
     // Only wheels feel the ground: a boat is on water and feet are feet.
     p.wheelLoad = driven ? this.vehicleLoad(driven) : 0;
     // And whether your own feet are in the water at all, which is the whole of

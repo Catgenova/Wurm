@@ -46,7 +46,7 @@
  * benefit check reads these functions as it reads any other note.
  */
 import { CLASSES, PERK_CLASSES, PERK_TIER_AT, PERKS_PER_TIER, tiersAtFor } from './classes';
-import { BLOCK_MOST, DRAW_CLOSEST, DRAW_WALK, FIGHT_BACK_STILL, HUNT_REACH, reachOf, STANCE_DEALT, STANCE_TAKEN, THROW_REACH } from './fight';
+import { BLOCK_MOST, CRIT_HIT, DRAW_CLOSEST, DRAW_WALK, FIGHT_BACK_STILL, HUNT_REACH, KNIFE_BLEED_SECS, reachOf, STANCE_DEALT, STANCE_TAKEN, THROW_REACH } from './fight';
 import { classSpellsOf, GUARDIAN_REACH, spellTerms } from './talents';
 import {
   ACTION_BY_ID, CHIP_CHANCE, CLEARED_TO, DIG_TILE_TIME, DREDGE_DEPTH, FLATTEN_STEP, GRASS_PER_CUT, MINE_COLLAPSE, MINE_DEPTH, PAN_ORES,
@@ -109,8 +109,8 @@ export const FX_RULE: Record<string, 'mul' | 'add'> = {
   bite: 'mul', cost: 'mul', worn: 'mul', life: 'mul', harm: 'mul', age: 'mul', wind: 'mul', severity: 'mul', dmg: 'mul', swing: 'mul',
   bright: 'mul', thrift: 'mul', force: 'mul', keeps: 'mul', teach: 'mul', sturdy: 'mul',
   carry: 'add', serve: 'add', jobs: 'add', plus: 'add', bumper: 'add', fodder: 'add', tool: 'add', passes: 'add', hook: 'add', haul: 'add',
-  block: 'add', leech: 'add', length: 'add', save: 'add',
-  gap: 'mul', monster: 'mul', still: 'mul', closest: 'mul', ambush: 'mul', far: 'mul',
+  block: 'add', leech: 'add', length: 'add', save: 'add', crit: 'add',
+  gap: 'mul', monster: 'mul', still: 'mul', closest: 'mul', ambush: 'mul', far: 'mul', bleed: 'mul',
 };
 
 export const fxFamily = (key: string): string => key.split(':')[0];
@@ -2214,6 +2214,55 @@ const ARCHER: Seed[] = [
   },
 ];
 
+/*
+ * ---------------------------------------------------------------------------
+ * The Skirmisher: the thrown weapon, the knife and the feet. As the other
+ * fighting trades', its spells have no numbers of their own here, and its
+ * passives are a hundred on from the numbers they were offered under.
+ * ---------------------------------------------------------------------------
+ */
+/** Every weapon that is thrown, shortest reach first: what a Long Arm is measured on. */
+const THROWN = WEAPONS.filter((w) => w.thrown).sort((a, b) => reachOf(a) - reachOf(b));
+const SKIRMISHER: Seed[] = [
+  ...classSpellsOf('skirmisher').map((sp): Seed => ({ num: sp.num, name: sp.name, fx: {}, note: () => `${spellTerms(sp)} ${sp.note}` })),
+  {
+    num: 104, name: 'Light Throw',
+    fx: { 'wind:throwing': 0.75 },
+    note: (fx) => `A swing of a javelin or a throwing axe costs ${less(fx['wind:throwing'])} less stamina.`,
+  },
+  {
+    num: 107, name: 'Keen Edge',
+    fx: { 'crit:throwing': 0.04 },
+    note: (fx) => `A blow of a javelin or a throwing axe that lands is critical ${Math.round(fx['crit:throwing'] * 100)} percentage points more often.`,
+  },
+  {
+    num: 112, name: 'Lethal',
+    fx: { 'crithit:knives': 2.25 },
+    note: (fx) => `A critical blow of a knife lands ${fx['crithit:knives']} times as hard, instead of ${CRIT_HIT}.`,
+  },
+  {
+    num: 110, name: 'Long Bleed',
+    fx: { 'bleed:secs': 1.5 },
+    note: (fx) => `Every bleed you open lasts ${secs(KNIFE_BLEED_SECS * fx['bleed:secs'])} instead of ${secs(KNIFE_BLEED_SECS)}: `
+      + 'a knife’s, a broadhead arrow’s and a Gut Throw’s.',
+  },
+  {
+    num: 120, name: 'Riposte',
+    fx: { 'riposte:blow': 0.5 },
+    note: (fx) => `Every creature’s blow you dodge is answered with a blow at ${percent(fx['riposte:blow'])} of a swing’s from what you hold, `
+      + 'when it is within your reach.',
+  },
+  {
+    num: 102, name: 'Long Arm',
+    fx: { 'length:throwing': 1 },
+    note: (fx) => {
+      const by = fx['length:throwing'];
+      return `A javelin or a throwing axe reaches ${tiles(by)} tile${by === 1 ? '' : 's'} further: `
+        + THROWN.map((w) => `a ${itemName(w.id)} ${tiles(reachOf(w) + by)} tiles instead of ${tiles(reachOf(w))}`).join(', ') + '.';
+    },
+  },
+];
+
 /** Every trade's perks, in the order they were picked. */
 const SEEDS: Record<string, Seed[]> = {
   terraformer: TERRAFORMER,
@@ -2234,6 +2283,7 @@ const SEEDS: Record<string, Seed[]> = {
   berserker: BERSERKER,
   pikeman: PIKEMAN,
   archer: ARCHER,
+  skirmisher: SKIRMISHER,
 };
 
 const slug = (name: string): string => name.toLowerCase().replace(/[’']/g, '').replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '');
@@ -2263,6 +2313,7 @@ export const TIERS: Record<string, number[][]> = {
   berserker: [[18, 30, 101], [2, 3, 106], [21, 29, 125], [20, 6, 112], [8, 14, 130], [45, 50, 113]],
   pikeman: [[38, 13, 129], [6, 5, 105], [33, 32, 121], [14, 19, 113], [2, 17, 102], [35, 3, 118]],
   archer: [[2, 1, 108], [29, 9, 107], [6, 10, 114], [3, 7, 124], [14, 25, 101], [48, 49, 102]],
+  skirmisher: [[2, 3, 104], [31, 7, 107], [8, 12, 112], [4, 9, 110], [44, 36, 120], [10, 49, 102]],
 };
 
 /** Every perk there is, tier by tier, and in each tier by the number it was picked under, as the island lists them. */

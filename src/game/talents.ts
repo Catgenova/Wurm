@@ -1,6 +1,6 @@
 // The reach of a spell on a creature is `SPELL_REACH`, which `patrons.ts` takes from `TARGET_RANGE`; read here from where it is
 // set, since `patrons.ts` reads this file.
-import { DRAW_CLOSEST, HUNT_REACH, KNIFE_BLEED, KNIFE_BLEED_SECS, TARGET_RANGE as SPELL_REACH, THROW_REACH } from './fight';
+import { DRAW_CLOSEST, HUNT_REACH, KNIFE_BLEED, KNIFE_BLEED_SECS, STAGGER_MAUL, TARGET_RANGE as SPELL_REACH, THROW_REACH } from './fight';
 import type { SpellOn } from './patrons';
 import { capital, numberWord, percent, times } from './words';
 
@@ -47,8 +47,11 @@ export const CLASS_LEARN_KILL = 5;
 /** How far a Sworn Blade's Guardian reaches from where you stand, in tiles. */
 export const GUARDIAN_REACH = 2;
 
-/** What a spell wants in your hands before it can be called: a shield in the off hand, or a weapon of a kind in the other. */
-export type SpellNeeds = 'shield' | 'axes' | 'mauls' | 'archery';
+/**
+ * What a spell wants in your hands before it can be called: a shield in the off hand, or a weapon of a kind in the other --
+ * and for a Skirmisher's Hit and Run, a thrown weapon or a knife.
+ */
+export type SpellNeeds = 'shield' | 'axes' | 'mauls' | 'archery' | 'throwing' | 'skirmish';
 /** As the spell's note says it first, and as its refusal says it is missing. */
 export const NEEDS_SAID: Record<SpellNeeds, { has: string; wants: string }> = {
   shield: { has: 'With a shield in your off hand', wants: 'a shield in your off hand' },
@@ -56,6 +59,8 @@ export const NEEDS_SAID: Record<SpellNeeds, { has: string; wants: string }> = {
   mauls: { has: 'With a maul in hand', wants: 'a maul in your hand' },
   // A shot also wants an arrow to loose, which its refusal says when there is none.
   archery: { has: 'With a bow in hand', wants: 'a bow in your hands' },
+  throwing: { has: 'With a javelin or a throwing axe in hand', wants: 'a javelin or a throwing axe in your hand' },
+  skirmish: { has: 'With a javelin, a throwing axe or a knife in hand', wants: 'a javelin, a throwing axe or a knife in your hand' },
 };
 
 export interface ClassSpellDef {
@@ -98,6 +103,7 @@ const blade = spellOf('blade');
 const berserker = spellOf('berserker');
 const pikeman = spellOf('pikeman');
 const archer = spellOf('archer');
+const skirmisher = spellOf('skirmisher');
 
 /**
  * Every class spell there is, trade by trade, by the number each was picked
@@ -108,7 +114,9 @@ const archer = spellOf('archer');
  * all as they are, and then the share the spell names. "A shot" is the same
  * of a draw of the bow in your hand: an arrow loosed, the one a draw would
  * nock, at an enemy within the bow's range and no nearer than a draw can be
- * made, landing less often at the far end of the range as a draw does.
+ * made, landing less often at the far end of the range as a draw does. "A
+ * throw" is a blow with the javelin or the throwing axe in your hand, which
+ * fights from where you stand at an enemy within its reach.
  */
 export const CLASS_SPELLS: ClassSpellDef[] = [
   /* ---- The Sworn Blade ---- */
@@ -224,6 +232,37 @@ export const CLASS_SPELLS: ClassSpellDef[] = [
     (fx) => `a shot at ${ofBlow(fx.more)} on a creature that is not after anybody.`, 'archery'),
   archer(49, 'Deadeye', 0.3, 300, ['self'], { time: 0.6, secs: 10 },
     (fx) => `For ${span(fx.secs)} a draw takes ${percent(1 - fx.time)} less time.`),
+
+  /* ---- The Skirmisher ---- */
+  skirmisher(2, 'Snap Throw', 0.05, 5, ['enemy'], { more: 0.8, sooner: 1 },
+    (fx) => `a throw at ${ofBlow(fx.more)}; your own next swing comes ${span(fx.sooner)} sooner.`, 'throwing'),
+  skirmisher(3, 'Long Throw', 0.1, 15, ['enemy'], { more: 1.1, past: 2 },
+    (fx) => `a throw at ${ofBlow(fx.more)} on an enemy up to ${fx.past} tiles past your reach.`, 'throwing'),
+  skirmisher(31, 'Hit and Run', 0.12, 30, ['enemy'], { more: 1, pace: 1.4, secs: 5 },
+    (fx) => `a throw or a knife blow at ${ofBlow(fx.more)}, and for ${span(fx.secs)} you walk ${percent(fx.pace - 1)} faster.`, 'skirmish'),
+  skirmisher(7, 'Heavy Throw', 0.12, 20, ['enemy'], { more: 1.4 },
+    (fx) => `a throw at ${ofBlow(fx.more)} that staggers it as a maul does: a heavy blow knocked off its stroke, and its next blow `
+      + `put back ${span(STAGGER_MAUL)}.`, 'throwing'),
+  skirmisher(8, 'Gut Throw', 0.12, 20, ['enemy'], { more: 0.9 },
+    (fx) => `a throw at ${ofBlow(fx.more)} that bleeds it as a knife does, ${percent(KNIFE_BLEED)} of the throw a second for `
+      + `${span(KNIFE_BLEED_SECS)}.`, 'throwing'),
+  skirmisher(12, 'Parting Throw', 0.1, 20, ['enemy'], { more: 1, leap: 3 },
+    (fx) => `a throw at ${ofBlow(fx.more)}, and you leap ${fx.leap} tiles straight back from it, over ground you could walk.`, 'throwing'),
+  skirmisher(4, 'Double Throw', 0.14, 20, ['enemy'], { more: 0.7, throws: 2 },
+    (fx) => `${numberWord(fx.throws)} throws at ${ofBlow(fx.more)} each, one after the other.`, 'throwing'),
+  skirmisher(9, 'Ricochet', 0.15, 25, ['enemy'], { more: 1, reach: 3, glance: 0.6 },
+    (fx) => `a throw at ${ofBlow(fx.more)} that, when it lands, glances on to the nearest other enemy within ${fx.reach} tiles of it `
+      + `at ${ofBlow(fx.glance)}.`, 'throwing'),
+  skirmisher(44, 'Opportunist', 0.1, 30, ['self'], { more: 1.3, secs: 10 },
+    (fx) => `For ${span(fx.secs)} every blow, throw and shot of yours on a creature fighting somebody else does `
+      + `${percent(fx.more - 1)} more damage.`),
+  skirmisher(36, 'Fade', 0.1, 45, ['self'], { secs: 10 },
+    (fx) => `Every creature hunting you loses you, and will not come for you again for ${span(fx.secs)} unless you strike it.`),
+  skirmisher(10, 'Fan of Blades', 0.22, 45, ['enemy'], { more: 0.6, reach: 3 },
+    (fx) => `a throw at ${ofBlow(fx.more)} at the enemy you aim at and at every other enemy within ${fx.reach} tiles of it.`, 'throwing'),
+  skirmisher(49, 'Marked for Death', 0.15, 60, ['enemy'], { crit: 2, secs: 15 },
+    (fx) => `An enemy within ${SPELL_REACH} tiles: for ${span(fx.secs)} every blow, throw and shot a person lands on it is critical `
+      + `${times(fx.crit)} as often.`),
 ];
 export const CLASS_SPELL_BY_ID = new Map(CLASS_SPELLS.map((s) => [s.id, s]));
 export const classSpellsOf = (cls: string): ClassSpellDef[] => CLASS_SPELLS.filter((s) => s.class === cls);

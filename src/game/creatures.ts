@@ -2012,6 +2012,8 @@ export interface Creature {
   /** Health it is bleeding a second from a knife, and the game time it stops. */
   bleedRate: number;
   bleedUntil: number;
+  /** When the bleed running now was opened, which is where it runs from; missing on one kept before it was kept. */
+  bleedFrom?: number;
   busyUntil: number;
   searchAt: number;
   /** Where it first had your scent, which is what the leash is tied to. */
@@ -3207,7 +3209,7 @@ export class Creatures {
      * A knife's bleeding, for the part of the time banked that it ran, and
      * never the last of it: what finishes a thing is a blow (`KNIFE_BLEED`).
      */
-    const from = Math.max(game.time - elapsed, c.bleedUntil - KNIFE_BLEED_SECS);
+    const from = Math.max(game.time - elapsed, c.bleedFrom ?? c.bleedUntil - KNIFE_BLEED_SECS);
     const secs = Math.min(game.time, c.bleedUntil) - from;
     if (secs > 0) {
       if (c.health > 1) c.health = Math.max(1, c.health - c.bleedRate * secs);

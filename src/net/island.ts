@@ -568,6 +568,8 @@ export interface FaithSaid {
   stamina?: number;
   /** Where a spell put your body (a Sworn Blade's Lunge), for the browser to go to. */
   put?: { x: number; y: number; level: number };
+  /** A walk a spell made quicker for a while (a Skirmisher's Hit and Run), for the browser to walk at. */
+  pace?: { mul: number; secs: number };
   /** What a door just did, when it did something. */
   took?: string;
   cast?: string;
@@ -790,6 +792,8 @@ export interface IslandHooks {
    * whatever it rode, drove, pulled or was aboard as well.
    */
   moved?: (x: number, y: number, level: number, letGo?: boolean) => void;
+  /** A spell made your walk on foot this many times as quick for so many seconds. */
+  paced?: (mul: number, secs: number) => void;
   /**
    * The crates your own ask touched, laid down without touching anything else.
    *
@@ -2814,6 +2818,9 @@ export class Island {
   async castSpell(slot: number, target: Record<string, unknown>): Promise<FaithSaid | null> {
     const said = await this.faithDoor('rpc_cast_spell', { p_slot: slot, p_target: target });
     if (said && !said.why && said.put && typeof said.put.x === 'number' && typeof said.put.y === 'number') this.follow(said.put);
+    if (said && !said.why && said.pace && typeof said.pace.mul === 'number' && typeof said.pace.secs === 'number') {
+      this.hooks.paced?.(said.pace.mul, said.pace.secs);
+    }
     return said;
   }
 

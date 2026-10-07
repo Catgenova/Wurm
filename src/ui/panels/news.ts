@@ -1188,6 +1188,20 @@ export const NEWS: News[] = [
       ].filter(Boolean);
     },
   },
+  {
+    n: 90,
+    day: '2026-10-07',
+    lines: () => {
+      const spells = classSpellsOf('skirmisher');
+      const first = perksOf('skirmisher').map((p) => CLASS_SPELL_BY_ID.get(p.id)).find((sp) => sp !== undefined);
+      return [
+        `The Skirmisher is on spells and passives too: ${numberWord(spells.length)} spells and `
+          + `${numberWord(perksOf('skirmisher').length - spells.length)} passives in ${numberWord(CLASS_TIER_AT.length)} tiers on its own class level, `
+          + 'as the Sworn Blade’s, the Berserker’s, the Pikeman’s and the Archer’s are. Its tree and every node bought in it are gone; its rite stays.',
+        first ? `${first.name}: ${spellTerms(first)} ${first.note}` : '',
+      ].filter(Boolean);
+    },
+  },
 ];
 
 /** The highest entry this browser has shown. */

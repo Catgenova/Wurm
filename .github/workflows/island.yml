@@ -1682,6 +1682,22 @@ jobs:
             --outfile=node_modules/.cache/archer.mjs --log-level=error
           node node_modules/.cache/archer.mjs
 
+      - name: The Skirmisher's spells and passives
+        run: |
+          # The fifth fighting trade on spells and passives. Both sides hold
+          # the same rows; every throw measured at its share of a swing's, the
+          # same roll asked twice; a Long Throw as far past your reach as it
+          # says and no further; two throws one after the other; a creature
+          # staggered, bled, glanced on from, and every one near it thrown at;
+          # a leap back; a quicker walk on the island's pace and in the answer
+          # the browser walks at; a creature marked for everybody's criticals;
+          # everything hunting you losing you; a throw refused without a
+          # javelin or a throwing axe; and every passive at the rule it
+          # changes, the browser's fold the island's.
+          npx esbuild supabase/test/skirmisher.ts --bundle --platform=node --format=esm \
+            --outfile=node_modules/.cache/skirmisher.mjs --log-level=error
+          node node_modules/.cache/skirmisher.mjs
+
       - name: Glassblowing, glass panels, bottles and the stained glass wall
         run: |
           # The Artisan's fourth trade, at a hot smelter: sand melted into

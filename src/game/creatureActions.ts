@@ -10,7 +10,7 @@ import { furnitureCentre, furnitureName, vehicleOf } from './furniture';
 import { deedJobLine, emptyCrate, letOut, shutIn } from './creaturecrate';
 import { itemDef, itemName, rarityOf, type Mark } from './items';
 import { BANE_BONUS, banes, hitChance, isBow, WEAPON_BY_ID, weaponDamage } from './gear';
-import { ARROWS, armsRefusal, beastReach, BLINDSIDE, blowOf, bowReach, CRIT_HIT, critChance, drawClosest, FALL_BACK, FIST, headBlow, headHide, headSide, hideTakes, nockedArrow, KNIFE_BLEED, KNIFE_BLEED_SECS, meleeReach, STAGGER_MAUL, STAGGER_POLE, stanceDealt, swungWith } from './fight';
+import { ARROWS, armsRefusal, beastReach, BLINDSIDE, blowOf, bowReach, critMul, drawClosest, FALL_BACK, FIST, headBlow, headHide, headSide, hideTakes, nockedArrow, KNIFE_BLEED, KNIFE_BLEED_SECS, meleeReach, myCritChance, STAGGER_MAUL, STAGGER_POLE, stanceDealt, swungWith } from './fight';
 import { matOfItem } from './materials';
 import { defaultKey } from './keybinds';
 
@@ -167,8 +167,36 @@ function sideBlow(g: Game, c: Creature, kind: string, dmg: number): void {
   } else if (kind === 'polearms') c.cooldown = Math.max(0, c.cooldown) + STAGGER_POLE;
   else if (kind === 'knives') {
     c.bleedRate = Math.max(c.bleedRate, dmg * KNIFE_BLEED);
-    c.bleedUntil = g.time + KNIFE_BLEED_SECS;
+    // Longer for a Skirmisher's Long Bleed (`side_blow`), and running from now.
+    c.bleedFrom = g.time;
+    c.bleedUntil = g.time + KNIFE_BLEED_SECS * g.perk('bleed:secs', 1);
   }
+}
+
+/**
+ * A blow at a share of a swing's from what you hold, on a creature within
+ * your reach, as the island's `class_riposte` strikes it: a Skirmisher's
+ * Riposte, when a creature's blow at you is dodged.
+ */
+export function riposte(g: Game, c: Creature, share: number): void {
+  if (c.health <= 0 || Math.hypot(c.x - g.player.x, c.y - g.player.y) > meleeReach(g)) return;
+  const def = SPECIES[c.species];
+  const { def: usable, item } = swungWith(g);
+  if (g.rand() > hitChance(g, usable, item) * bloodMul(c, 'evade')) {
+    g.logMsg(`You answer the ${def.name.toLowerCase()} and miss.`, 'fight');
+    return;
+  }
+  const bane = banes(item) && def.glow ? BANE_BONUS : 1;
+  const crit = g.rand() < myCritChance(g, usable);
+  const dmg = weaponDamage(g, usable, item) * bane * stanceDealt(g.settings.fightStance, (k, o) => g.perk(k, o))
+    * hideTakes(def.hide, blowOf(usable)) * blindside(c) * (0.75 + g.rand() * 0.5) * (crit ? critMul(g, usable) : 1)
+    * classDealt(g, c) * share;
+  g.creatures.hurt(g, c, dmg, 'player', crit);
+  if (c.health > 0 && usable.id !== FIST.id) sideBlow(g, c, usable.kind, dmg);
+  if (item) g.damageItem(item, 0.35 * g.perk('worn:weapon', 1));
+  g.logMsg(c.health > 0
+    ? `You answer the ${def.name.toLowerCase()}${crit ? ' with a critical blow' : ''}. It is down to ${Math.ceil(c.health)} of ${maxHealth(c, def)}.`
+    : `You answer the ${def.name.toLowerCase()}, and it dies.`, 'fight');
 }
 
 export const CREATURE_ACTIONS: ActionDef[] = [
@@ -547,10 +575,10 @@ export const CREATURE_ACTIONS: ActionDef[] = [
          * of an edge, a point or a weight, and harder at something whose mind is
          * on another fight (`fight.ts`).
          */
-        // And now and then a critical one (`critChance`).
-        const crit = g.rand() < critChance(g.skills.get(usable.kind), usable);
+        // And now and then a critical one (`myCritChance`), harder for a Skirmisher's Lethal on a knife (`critMul`).
+        const crit = g.rand() < myCritChance(g, usable);
         const dmg = weaponDamage(g, usable, item) * bane * stanceDealt(g.settings.fightStance, (k, o) => g.perk(k, o))
-          * hideTakes(def.hide, blowOf(usable)) * blindside(c) * (0.75 + g.rand() * 0.5) * (crit ? CRIT_HIT : 1)
+          * hideTakes(def.hide, blowOf(usable)) * blindside(c) * (0.75 + g.rand() * 0.5) * (crit ? critMul(g, usable) : 1)
           // And what your fighting trade's passives make of it (`classDealt`).
           * classDealt(g, c);
         g.creatures.hurt(g, c, dmg, 'player', crit);
@@ -630,11 +658,11 @@ export const CREATURE_ACTIONS: ActionDef[] = [
         // The stave throws it; the head is what goes in. Both have a say.
         const head = matOfItem(arrow);
         const bane = head.bane && def.glow ? BANE_BONUS : 1;
-        const crit = g.rand() < critChance(g.skills.get('archery'), bow);
+        const crit = g.rand() < myCritChance(g, bow);
         // And what the head is: a blunt crushes, a bodkin goes through a hide (`headBlow`, `headHide`).
         const dmg = weaponDamage(g, bow, held) * head.edge * bane * stanceDealt(g.settings.fightStance, (k, o) => g.perk(k, o))
           * hideTakes(def.hide, headBlow(shape, bow)) * headHide(shape, def.hide) * blindside(c)
-          * (0.6 + arrow.ql / 140) * (0.8 + g.rand() * 0.4) * (crit ? CRIT_HIT : 1) * classDealt(g, c)
+          * (0.6 + arrow.ql / 140) * (0.8 + g.rand() * 0.4) * (crit ? critMul(g, bow) : 1) * classDealt(g, c)
           // And harder on one that is not after you, for an Archer's Ambush (`class_ambush`).
           * (c.enemy !== PLAYER_ATTACKER ? g.perk('ambush:dmg', 1) : 1);
         g.creatures.hurt(g, c, dmg, 'player', crit);

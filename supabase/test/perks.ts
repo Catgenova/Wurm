@@ -526,6 +526,8 @@ const OTHERS = new Set([
   'severity:new', 'monster:dmg', 'still:taken', 'gap:dmg',
   // An Archer's: an arrow back, the nearest a bow is drawn, a creature not after you, a walk while drawing.
   'save:arrow', 'closest:draw', 'ambush:dmg', 'pace:draw',
+  // A Skirmisher's: how long a bleed you open runs, and a blow you dodge answered.
+  'bleed:secs', 'riposte:blow',
   ...STRIDE_KEYS,
 ]);
 const unnamed = PERKS.flatMap((p) => Object.keys(p.fx).filter((key) => {
@@ -544,8 +546,9 @@ const unnamed = PERKS.flatMap((p) => Object.keys(p.fx).filter((key) => {
   // And how slowly it rots set down, a thing or all food (a Fisher's fish, a Cook's food).
   if (fam === 'cool' && rest !== 'food') return !ITEM_DEFS[rest];
   if (fam === 'slope') return !['digging', 'masonry'].includes(rest);
-  // A swing of one kind of weapon, the damage it does, how far it reaches or a bow's draw carries, and what a stance takes or deals.
-  if (fam === 'wind' || fam === 'dmg' || fam === 'length' || fam === 'far') return !WEAPON_KINDS.has(rest);
+  // A swing of one kind of weapon, the damage it does, how far it reaches or a bow's draw carries, how often and how hard it is
+  // critical, and what a stance takes or deals.
+  if (['wind', 'dmg', 'length', 'far', 'crit', 'crithit'].includes(fam)) return !WEAPON_KINDS.has(rest);
   if (fam === 'stance') return !Object.keys(STANCE_TAKEN).some((st) => rest === `${st}_taken` || rest === `${st}_dealt`);
   return !OTHERS.has(key);
 }).map((key) => `${p.id} ${key}`));

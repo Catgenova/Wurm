@@ -191,6 +191,8 @@ export class Player {
   legPace = 1;
   /** What drawing a bow leaves of your pace on foot (`DRAW_WALK`). */
   drawPace = 1;
+  /** What a spell adds to your pace on foot while it holds: a Skirmisher's Hit and Run. One otherwise. */
+  spellPace = 1;
   /**
    * And what a Forester's Woodsman's Stride is worth on ground that slows a
    * walker, tile by tile (`walk:` and the tile's name), on foot: nothing, so
@@ -294,7 +296,7 @@ export class Player {
     // Your own legs on a made road, if a trade has taught them one.
     if (this.speedMul === 1 && this.roadPace !== 1 && ROAD_TILES.includes(under)) speed *= this.roadPace;
     // And through brush, if a trade has taught them that.
-    if (this.speedMul === 1) speed *= (this.tilePace[under] ?? 1) * this.legPace * this.drawPace;
+    if (this.speedMul === 1) speed *= (this.tilePace[under] ?? 1) * this.legPace * this.drawPace * this.spellPace;
     if (this.swimming) speed *= this.swimSpeed;
     if (this.stats.stamina < 0.1) speed *= 0.5;
     if (this.burden > 0) speed /= 1 + this.burden;

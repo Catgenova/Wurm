@@ -322,6 +322,7 @@ export async function startIsland(params: URLSearchParams, tell: Telling): Promi
   // Where the island put the body, which is only ever somewhere we did not put
   // it ourselves: dying does, and so does a keeper of the island moving a
   // stuck body, which takes it off whatever it was on as well.
+  island.hooks.paced = (mul, secs) => game.spedUp(mul, secs);
   island.hooks.moved = (x, y, level, letGo) => {
     if (letGo) game.letGoOfAll();
     game.putBody(x, y, level);

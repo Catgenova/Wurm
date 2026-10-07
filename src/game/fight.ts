@@ -409,6 +409,11 @@ export const CRIT_HIT = 1.75;
 /** The chance a landed blow of this weapon is critical, at this skill with it. */
 export const critChance = (skill: number, w: WeaponDef): number =>
   (CRIT_BASE + skill * CRIT_PER_SKILL) * (w.kind === 'knives' && w.id !== FIST.id ? CRIT_KNIFE : 1);
+/** Yours with it: at your skill, and more for a Skirmisher's Keen Edge on a thrown weapon (`my_crit_chance`). */
+export const myCritChance = (g: Game, w: WeaponDef): number =>
+  critChance(g.skills.get(w.kind), w) + (w.id === FIST.id ? 0 : g.perk(`crit:${w.kind}`, 0));
+/** How hard a critical one of yours with it lands: `CRIT_HIT`, or more for a Skirmisher's Lethal on a knife (`crit_mul`). */
+export const critMul = (g: Game, w: WeaponDef): number => (w.id === FIST.id ? CRIT_HIT : g.perk(`crithit:${w.kind}`, CRIT_HIT));
 
 /* ---- Arrow heads -------------------------------------------------------------- */
 
