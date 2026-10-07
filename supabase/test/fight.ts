@@ -77,6 +77,8 @@ const AIM = treed('aim');
 const EDGE = treed('edge');
 // Guard is measured on what it guards: a trade whose tree has it and that covers a line of armour or the shield.
 const GUARD = treed('guard', (c) => GUARDS.some((s) => c.skills.includes(s)));
+/** Knit, on the first fighting trade still on a tree with a column of it, and on first aid, which no fighting trade covers. */
+const KNIT = treed('knit');
 /** A kind of weapon the trade does not cover, for the channel to leave alone. */
 const KINDS = [...new Set([...WEAPON_BY_ID.values()].map((x) => x.kind))].sort();
 const otherKind = (c: ClassDef): string => KINDS.find((k) => !c.skills.includes(k))!;
@@ -213,15 +215,16 @@ ${GUARD ? `
     || '|' || class_mul(w.world_id, w.uid, 'guard', '${guardOf(GUARD.c, false)}'));` : ''}
 
   -- knit, and the skill that closes a wound.
+${KNIT ? `
   update player set combat_class = null, class_mul = null where world_id = w.world_id and uid = w.uid;
   delete from player_node where world_id = w.world_id and uid = w.uid;
-  insert into skill (world_id, uid, id, value) values (w.world_id, w.uid, 'chirurgy', 60)
+  insert into skill (world_id, uid, id, value) values (w.world_id, w.uid, '${KNIT.c.main}', 60)
     on conflict (world_id, uid, id) do update set value = 60;
   perform give_coins(w.world_id, w.uid, class_change_cost()::bigint);
-  perform rpc_take_class(w.world_id, 'chirurgeon');
-  perform rpc_take_node(w.world_id, 'chirurgeon_1_1');
-  insert into said values ('KNIT|' || class_mul(w.world_id, w.uid, 'knit', 'chirurgy')
-    || '|' || class_mul(w.world_id, w.uid, 'knit', 'first_aid'));
+  perform rpc_take_class(w.world_id, '${KNIT.c.id}');
+  perform rpc_take_node(w.world_id, '${KNIT.node}');
+  insert into said values ('KNIT|' || class_mul(w.world_id, w.uid, 'knit', '${KNIT.c.main}')
+    || '|' || class_mul(w.world_id, w.uid, 'knit', 'first_aid'));` : ''}
   insert into said select 'CLOSES|' || (select count(*) from pg_proc p join pg_namespace n
       on n.oid = p.pronamespace where n.nspname = 'public' and p.prokind = 'f'
        and p.proname = 'wounds_settle'
@@ -351,9 +354,13 @@ check('a perk taken in the middle of a rite does not put the rite out',
 check('and when its hour is up it stops',
   near(Number(said('LAPSED')), 1, 1e-9), said('LAPSED'));
 
-const [knitMine, knitTheirs] = said('KNIT').split('|').map(Number);
-check('knit tells on chirurgy and not on the forager’s first aid',
-  knitMine > 1 && knitTheirs === 1, `chirurgy ×${knitMine}, first aid ×${knitTheirs}`);
+if (KNIT) {
+  const [knitMine, knitTheirs] = said('KNIT').split('|').map(Number);
+  check(`knit tells on ${KNIT.c.main} and not on the forager’s first aid`,
+    knitMine > 1 && knitTheirs === 1, `${KNIT.c.main} ×${knitMine}, first aid ×${knitTheirs}`);
+} else {
+  check(`knit: ${moved('knit')}`, said('KNIT') === 'MISSING', said('KNIT'));
+}
 check('and a wound is closed by chirurgy now', said('CLOSES') === '1', said('CLOSES'));
 check('with the dressing of one taught by it too',
   said('ACTIONS') === 'bind_wound:chirurgy,clean_wound:chirurgy,treat_creature:chirurgy',

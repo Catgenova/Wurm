@@ -109,8 +109,8 @@ export const FX_RULE: Record<string, 'mul' | 'add'> = {
   bite: 'mul', cost: 'mul', worn: 'mul', life: 'mul', harm: 'mul', age: 'mul', wind: 'mul', severity: 'mul', dmg: 'mul', swing: 'mul',
   bright: 'mul', thrift: 'mul', force: 'mul', keeps: 'mul', teach: 'mul', sturdy: 'mul',
   carry: 'add', serve: 'add', jobs: 'add', plus: 'add', bumper: 'add', fodder: 'add', tool: 'add', passes: 'add', hook: 'add', haul: 'add',
-  block: 'add', leech: 'add', length: 'add', save: 'add', crit: 'add',
-  gap: 'mul', monster: 'mul', still: 'mul', closest: 'mul', ambush: 'mul', far: 'mul', bleed: 'mul',
+  block: 'add', leech: 'add', length: 'add', save: 'add', crit: 'add', stamina: 'add',
+  gap: 'mul', monster: 'mul', still: 'mul', closest: 'mul', ambush: 'mul', far: 'mul', bleed: 'mul', fester: 'mul',
 };
 
 export const fxFamily = (key: string): string => key.split(':')[0];
@@ -2263,6 +2263,50 @@ const SKIRMISHER: Seed[] = [
   },
 ];
 
+/*
+ * ---------------------------------------------------------------------------
+ * The Chirurgeon: the dressing, the wound and cloth. As the other fighting
+ * trades', its spells have no numbers of their own here, and its passives are
+ * a hundred on from the numbers they were offered under.
+ * ---------------------------------------------------------------------------
+ */
+const CHIRURGEON: Seed[] = [
+  ...classSpellsOf('chirurgeon').map((sp): Seed => ({ num: sp.num, name: sp.name, fx: {}, note: () => `${spellTerms(sp)} ${sp.note}` })),
+  {
+    num: 101, name: 'Field Surgeon',
+    fx: { dress_others: 1 },
+    note: () => 'You can dress the wounds of somebody standing beside you, at your first aid and with your dressings, as a Naturalist’s '
+      + 'Field Medic can.',
+  },
+  {
+    num: 105, name: 'Quick Bandage',
+    fx: { 'time:bind_wound': 0.7 },
+    note: (fx) => `A dressing takes ${less(fx['time:bind_wound'])} less time: ${secs(base('bind_wound') * fx['time:bind_wound'])} instead of `
+      + `${secs(base('bind_wound'))}.`,
+  },
+  {
+    num: 104, name: 'Clean Cloth',
+    fx: { 'fester:bind_wound': 0.5 },
+    note: (fx) => `A wound you dress goes bad ${share(fx['fester:bind_wound'])} as often while your dressing is on it, whoever's it is.`,
+  },
+  {
+    num: 122, name: 'Bedside Manner',
+    fx: { 'stamina:bind_wound': 0.1 },
+    note: (fx) => `A dressing you put on gives whoever it is on ${percent(fx['stamina:bind_wound'])} of their stamina back.`,
+  },
+  {
+    num: 106, name: 'Sure Dressing',
+    fx: { 'fail:bind_wound': 0 },
+    note: () => `A dressing of yours never slips (now a check at difficulty ${DRESS_CHECK}).`,
+  },
+  {
+    num: 123, name: 'Triage Instinct',
+    fx: { 'triage:below': 0.3, 'triage:heal': 1.5 },
+    note: (fx) => `A dressing on somebody below ${percent(fx['triage:below'])} of their health puts back ${percent(fx['triage:heal'] - 1)} `
+      + 'more health.',
+  },
+];
+
 /** Every trade's perks, in the order they were picked. */
 const SEEDS: Record<string, Seed[]> = {
   terraformer: TERRAFORMER,
@@ -2284,6 +2328,7 @@ const SEEDS: Record<string, Seed[]> = {
   pikeman: PIKEMAN,
   archer: ARCHER,
   skirmisher: SKIRMISHER,
+  chirurgeon: CHIRURGEON,
 };
 
 const slug = (name: string): string => name.toLowerCase().replace(/[’']/g, '').replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '');
@@ -2314,6 +2359,7 @@ export const TIERS: Record<string, number[][]> = {
   pikeman: [[38, 13, 129], [6, 5, 105], [33, 32, 121], [14, 19, 113], [2, 17, 102], [35, 3, 118]],
   archer: [[2, 1, 108], [29, 9, 107], [6, 10, 114], [3, 7, 124], [14, 25, 101], [48, 49, 102]],
   skirmisher: [[2, 3, 104], [31, 7, 107], [8, 12, 112], [4, 9, 110], [44, 36, 120], [10, 49, 102]],
+  chirurgeon: [[1, 2, 101], [49, 4, 105], [43, 17, 104], [6, 19, 122], [46, 15, 106], [50, 20, 123]],
 };
 
 /** Every perk there is, tier by tier, and in each tier by the number it was picked under, as the island lists them. */

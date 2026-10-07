@@ -47,8 +47,9 @@ function dressingFor(g: Game, w: Wound | null): { item: Item; herb: string } | n
   return cloth ? { item: cloth, herb: '' } : null;
 }
 
-/** What dressing somebody else is refused without, in the island's words (a Naturalist's Field Medic). */
-export const FIELD_MEDIC_SAYS = 'Dressing somebody else\'s wounds wants a Naturalist who has learned Field Medic.';
+/** What dressing somebody else is refused without, in the island's words (a Naturalist's Field Medic, a Chirurgeon's Field Surgeon). */
+export const FIELD_MEDIC_SAYS = 'Dressing somebody else\'s wounds wants a Naturalist who has learned Field Medic, or a Chirurgeon who has learned '
+  + 'Field Surgeon.';
 
 /** Who a person target is, as far as this machine knows: a name and where they stand. */
 const personOf = (g: Game, t: Target): { name: string } | undefined =>
@@ -96,17 +97,24 @@ export const FIRST_AID_ACTIONS: ActionDef[] = [
       const suits = use.herb === WOUND_KINDS[w.kind].herb;
       // Slips half as often for a Naturalist's Sure Hands.
       const clean = g.sureCheck('bind_wound', 'first_aid', DRESS_CHECK, use.item.ql, g.mindEase());
-      // Cloth holds a dressing on. The right herb closes the wound.
-      const healed = healAmount(g.skills.get('first_aid'), use.item.ql) * (clean ? 1 : 0.35) * (suits ? SUITS_HEAL : use.herb ? HERB_HEAL : 1);
+      // Cloth holds a dressing on. The right herb closes the wound. And more on a body far gone, for a Chirurgeon's Triage Instinct.
+      const triage = g.player.stats.health < g.perk('triage:below', 0) ? g.perk('triage:heal', 1) : 1;
+      const healed = healAmount(g.skills.get('first_aid'), use.item.ql) * (clean ? 1 : 0.35) * (suits ? SUITS_HEAL : use.herb ? HERB_HEAL : 1) * triage;
       g.player.stats.health = Math.min(1, g.player.stats.health + healed);
+      // And wind back for a Chirurgeon's Bedside Manner.
+      g.player.stats.stamina = Math.min(1, g.player.stats.stamina + g.perk('stamina:bind_wound', 0));
       w.severity = Math.max(0, w.severity - healed);
       w.dressing = clean ? use.herb : w.dressing;
       if (clean) {
         w.bleeding = false;
-        // And closes faster for the hands that dressed it (a Naturalist's Quick Mend).
+        // And closes faster for the hands that dressed it (a Naturalist's Quick Mend),
         const mend = g.perk('mend:bind_wound', 1);
         if (mend !== 1) w.mend = mend;
         else delete w.mend;
+        // and goes bad less often under them (a Chirurgeon's Clean Cloth).
+        const fester = g.perk('fester:bind_wound', 1);
+        if (fester !== 1) w.fester = fester;
+        else delete w.fester;
       }
       g.gainSkill('first_aid', tryGain(clean, BANDAGE_GAIN));
       g.note('dressed');

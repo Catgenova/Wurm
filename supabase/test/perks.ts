@@ -528,6 +528,8 @@ const OTHERS = new Set([
   'save:arrow', 'closest:draw', 'ambush:dmg', 'pace:draw',
   // A Skirmisher's: how long a bleed you open runs, and a blow you dodge answered.
   'bleed:secs', 'riposte:blow',
+  // A Chirurgeon's: a dressing's wound going bad, wind back for it, and more of it on a body far gone.
+  'fester:bind_wound', 'stamina:bind_wound', 'triage:below', 'triage:heal',
   ...STRIDE_KEYS,
 ]);
 const unnamed = PERKS.flatMap((p) => Object.keys(p.fx).filter((key) => {

@@ -60,6 +60,8 @@ export interface Wound {
   mend?: number;
   /** A salve rubbed in over the dressing: it will not go bad while it is on. */
   salved?: boolean;
+  /** How much less often it goes bad for the hands that dressed it (a Chirurgeon's Clean Cloth); absent is the rule's chance. */
+  fester?: number;
   /** Seconds of venom left in it from a venomous bite, which takes health until it runs out or the wound is dressed (`VENOM_DRAIN`). */
   venom?: number;
 }
@@ -126,7 +128,7 @@ export function festerChance(w: Wound): number {
   if (w.infected || w.dressing === WOUND_KINDS[w.kind].herb || w.salved) return 0;
   const k = WOUND_KINDS[w.kind];
   const guard = w.dressing === null ? 1 : w.dressing === '' ? FESTER_CLOTH : FESTER_WRONG;
-  return k.fester * guard * (0.3 + w.severity * 2) / 60;
+  return k.fester * guard * (w.fester ?? 1) * (0.3 + w.severity * 2) / 60;
 }
 
 /** A dressed wound that could still go bad: what a salve is for. Covered by the herb that suits it, it never will. */

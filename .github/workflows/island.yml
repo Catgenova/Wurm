@@ -1698,6 +1698,21 @@ jobs:
             --outfile=node_modules/.cache/skirmisher.mjs --log-level=error
           node node_modules/.cache/skirmisher.mjs
 
+      - name: The Chirurgeon's spells and passives
+        run: |
+          # The sixth fighting trade on spells and passives. Both sides hold
+          # the same rows; every heal its share back on you or on somebody
+          # within its reach, and no further; every wound it closes closed by
+          # its share, the worst one or every one; a heal over time a second
+          # at a time; a dressing in a Surgeon's Hands twice as large, the
+          # same roll asked twice; a creature bled, one or all near you; a
+          # knife blow that gives back what it takes; a heal teaching the
+          # trade only in a fight; and every passive at the dressing it
+          # changes, the browser's fold the island's.
+          npx esbuild supabase/test/chirurgeon.ts --bundle --platform=node --format=esm \
+            --outfile=node_modules/.cache/chirurgeon.mjs --log-level=error
+          node node_modules/.cache/chirurgeon.mjs
+
       - name: Glassblowing, glass panels, bottles and the stained glass wall
         run: |
           # The Artisan's fourth trade, at a hot smelter: sand melted into

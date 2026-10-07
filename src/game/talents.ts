@@ -51,7 +51,7 @@ export const GUARDIAN_REACH = 2;
  * What a spell wants in your hands before it can be called: a shield in the off hand, or a weapon of a kind in the other --
  * and for a Skirmisher's Hit and Run, a thrown weapon or a knife.
  */
-export type SpellNeeds = 'shield' | 'axes' | 'mauls' | 'archery' | 'throwing' | 'skirmish';
+export type SpellNeeds = 'shield' | 'axes' | 'mauls' | 'archery' | 'throwing' | 'skirmish' | 'knives';
 /** As the spell's note says it first, and as its refusal says it is missing. */
 export const NEEDS_SAID: Record<SpellNeeds, { has: string; wants: string }> = {
   shield: { has: 'With a shield in your off hand', wants: 'a shield in your off hand' },
@@ -61,6 +61,7 @@ export const NEEDS_SAID: Record<SpellNeeds, { has: string; wants: string }> = {
   archery: { has: 'With a bow in hand', wants: 'a bow in your hands' },
   throwing: { has: 'With a javelin or a throwing axe in hand', wants: 'a javelin or a throwing axe in your hand' },
   skirmish: { has: 'With a javelin, a throwing axe or a knife in hand', wants: 'a javelin, a throwing axe or a knife in your hand' },
+  knives: { has: 'With a knife in hand', wants: 'a knife in your hand' },
 };
 
 export interface ClassSpellDef {
@@ -104,6 +105,7 @@ const berserker = spellOf('berserker');
 const pikeman = spellOf('pikeman');
 const archer = spellOf('archer');
 const skirmisher = spellOf('skirmisher');
+const chirurgeon = spellOf('chirurgeon');
 
 /**
  * Every class spell there is, trade by trade, by the number each was picked
@@ -263,6 +265,38 @@ export const CLASS_SPELLS: ClassSpellDef[] = [
   skirmisher(49, 'Marked for Death', 0.15, 60, ['enemy'], { crit: 2, secs: 15 },
     (fx) => `An enemy within ${SPELL_REACH} tiles: for ${span(fx.secs)} every blow, throw and shot a person lands on it is critical `
       + `${times(fx.crit)} as often.`),
+
+  /* ---- The Chirurgeon ---- */
+  chirurgeon(1, 'Field Dressing', 0.06, 8, ['self', 'player'], { heal: 0.1, reach: 2 },
+    (fx) => `You or somebody within ${fx.reach} tiles of you gets ${percent(fx.heal)} of their health back, and their worst bleeding `
+      + 'wound stops bleeding.'),
+  chirurgeon(2, 'Quick Stitch', 0.08, 10, ['self', 'player'], { close: 0.3, reach: 2 },
+    (fx) => `The worst wound on you or on somebody within ${fx.reach} tiles of you closes by ${percent(fx.close)} of its severity.`),
+  chirurgeon(49, 'Leech', 0.12, 20, ['enemy'], { more: 0.8 },
+    (fx) => `a knife blow at ${ofBlow(fx.more)}, and you get back as large a share of your health as it takes of the creature's.`, 'knives'),
+  chirurgeon(4, 'Regenerate', 0.15, 45, ['self', 'player'], { each: 0.02, secs: 15, reach: 4 },
+    (fx) => `You or somebody within ${fx.reach} tiles of you gets ${percent(fx.each)} of their health back a second for ${span(fx.secs)}.`),
+  chirurgeon(43, 'Toxin', 0.12, 30, ['enemy'], { each: 0.01, secs: 20, reach: 4 },
+    (fx) => `An enemy within ${fx.reach} tiles of you bleeds ${percent(fx.each)} of its full health a second for ${span(fx.secs)}; `
+      + 'a bleed never takes the last of it.'),
+  chirurgeon(17, 'Surgeon’s Hands', 0.12, 60, ['self'], { more: 2, secs: 20 },
+    (fx) => `For ${span(fx.secs)} every dressing you put on puts back ${times(fx.more)} as much health.`),
+  chirurgeon(6, 'Healing Circle', 0.25, 60, ['self'], { heal: 0.15, reach: 4 },
+    (fx) => `You and everybody within ${fx.reach} tiles of you get ${percent(fx.heal)} of your health back.`),
+  chirurgeon(19, 'Mass Dressing', 0.25, 60, ['self'], { close: 0.2, reach: 3 },
+    (fx) => `On you and everybody within ${fx.reach} tiles of you, the worst wound stops bleeding and closes by ${percent(fx.close)} of `
+      + 'its severity.'),
+  chirurgeon(46, 'Plague', 0.2, 60, ['self'], { each: 0.01, secs: 10, reach: 4 },
+    (fx) => `Every enemy within ${fx.reach} tiles of you bleeds ${percent(fx.each)} of its full health a second for ${span(fx.secs)}; `
+      + 'a bleed never takes the last of it.'),
+  chirurgeon(15, 'Battlefield Surgery', 0.3, 120, ['self', 'player'], { close: 0.5, heal: 0.2, reach: 2 },
+    (fx) => `Every wound on you or on somebody within ${fx.reach} tiles of you closes by ${percent(fx.close)} of its severity, and they `
+      + `get ${percent(fx.heal)} of their health back.`),
+  chirurgeon(50, 'Restoration', 0.3, 300, ['self'], { heal: 0.3 },
+    (fx) => `Every wound on you closes, and you get ${percent(fx.heal)} of your health back.`),
+  chirurgeon(20, 'Miracle Worker', 0.4, 600, ['self', 'player'], { heal: 0.5, reach: 4 },
+    (fx) => `Every wound on you or on somebody within ${fx.reach} tiles of you closes, with whatever bleeding and venom was in it, and `
+      + `they get ${percent(fx.heal)} of their health back.`),
 ];
 export const CLASS_SPELL_BY_ID = new Map(CLASS_SPELLS.map((s) => [s.id, s]));
 export const classSpellsOf = (cls: string): ClassSpellDef[] => CLASS_SPELLS.filter((s) => s.class === cls);

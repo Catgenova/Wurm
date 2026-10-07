@@ -1,15 +1,16 @@
 /**
  * Nine nodes to a trade.
  *
- * Each trade that has not moved to perks (`PERK_CLASSES`), which is every
- * fighting trade and no craft trade, carries three columns of three: two minor at a point each and a major over them at three,
- * which wants the two under it first. A trade is worth two points at fifty and twelve at a hundred, so
- * twelve buys two whole columns and two over -- never all three.
+ * Each trade that has not moved to perks (`PERK_CLASSES`) -- the Beastmaster
+ * and the three schools of the art, now that every craft trade and the other
+ * fighting trades have -- carries three columns of three: two minor at a point
+ * each and a major over them at three, which wants the two under it first. A
+ * trade is worth two points at fifty and twelve at a hundred, so twelve buys
+ * two whole columns and two over -- never all three.
  *
  * What this asks:
  *
- *   * both sides hold the same nodes, field for field, and the same four
- *     channels;
+ *   * both sides hold the same nodes, field for field, and the same channels;
  *   * the point rule is the same arithmetic on both sides, and the budget is
  *     deliberately smaller than the tree;
  *   * all four refusals are the same sentence on both sides -- the major
@@ -17,24 +18,24 @@
  *     you cannot afford;
  *   * the island's fold is the browser's `foldNodes` to the last bit, not to
  *     within a whisker;
- *   * a node tells on its own trade's skills and on nothing else;
- *   * and hands, the one of the four channels a trade still has a column of,
- *     actually moves the number it claims to, measured at the site that reads
- *     it: `act_duration`. Learning and fineness were craft trades' columns,
- *     and every craft trade has moved to perks; wind was the Berserker's, the
- *     Pikeman's and the Archer's, and all three have moved too. Those channels
- *     are still read where they were, and nothing buys them.
+ *   * and a node tells on its own trade's skills and on nothing else.
  *
- * The trade walked through it is the first fighting trade still on a tree with
- * a column of hands: every craft trade has moved to perks, and the fighting
- * trades are moving one at a time (`talents.ts`), so which trade that is is
- * asked of the rulebook rather than written here.
+ * What each channel does at the site that reads it is asked where that site
+ * is: a keeper's fang and hide in `fight.ts`, the schools' force, reach and
+ * thrift in `arcane.ts`. Hands, learning, wind and fineness were the columns
+ * of trades that have moved to perks; those channels are still read where
+ * they were, and nothing buys them.
+ *
+ * The trade walked through it is the first fighting trade still on a tree, on
+ * its first column, and the one it is put down for the next: the trades are
+ * moving to perks one at a time (`talents.ts`), so which they are is asked of
+ * the rulebook rather than written here.
  *
  * Runs against the database the suite leaves behind.
  */
 import { execFileSync } from 'node:child_process';
 import {
-  CLASS_COLUMNS, CLASS_NODES, CHANNELS, CLASS_POINTS_MAX, COLUMN_COST, CLASSES, COMBAT_CLASSES,
+  CLASS_COLUMNS, CLASS_NODES, CHANNELS, CLASS_POINTS_MAX, COLUMN_COST, CLASSES,
   classPoints, foldNodes, nodeDef, nodeRefusal, PERK_CLASSES, type ClassDef,
 } from '../../src/game/classes';
 
@@ -59,22 +60,19 @@ const check = (what: string, passed: boolean, detail = ''): void => {
 /* An item's quality is a `real`, so a ratio drawn back out of one is close. */
 const near = (a: number, b: number, by = 1e-6): boolean => Math.abs(a - b) <= by;
 
-/** The first fighting trade still on a tree with a column of this channel, and which column it is. */
-const treedWith = (channel: string): { c: ClassDef; col: number } => {
-  for (const c of COMBAT_CLASSES) {
-    if (PERK_CLASSES.has(c.id)) continue;
-    const col = CLASS_COLUMNS[c.id].findIndex((x) => x.channel === channel) + 1;
-    if (col > 0) return { c, col };
-  }
-  throw new Error(`no fighting trade has a tree with ${channel} in it any more`);
-};
-const HAND = treedWith('hands');
+/** The fighting trades still on a tree, in the order the rulebook lists them. */
+const TREED = CLASSES.filter((c) => c.kind === 'combat' && !PERK_CLASSES.has(c.id));
+if (TREED.length < 2) throw new Error('fewer than two fighting trades are still on a tree: walk one and put it down for another');
+/** The trade walked through, and the column of it taken whole: its first. */
+const HAND: { c: ClassDef; col: number } = { c: TREED[0], col: 1 };
 const T = HAND.c.id;
-/** A node of the hands trade: its column of hands, or another. */
+/** What that column leans on. */
+const CH = CLASS_COLUMNS[T][HAND.col - 1].channel;
+/** A node of the trade walked: its first column, or another. */
 const node = (col: number, rank: number): string => `${T}_${col}_${rank}`;
 const [OTHER_A, OTHER_B] = [1, 2, 3].filter((col) => col !== HAND.col);
 /** Another fighting trade on a tree, to put the first down for. */
-const DOWN = COMBAT_CLASSES.find((c) => !PERK_CLASSES.has(c.id) && c.id !== T)!;
+const DOWN = TREED[1];
 /** Somebody else's node altogether. */
 const THEIRS = CLASS_NODES.find((n) => n.class === DOWN.id && n.rank === 1)!.id;
 
@@ -148,16 +146,11 @@ begin
   perform rpc_take_node(w.world_id, '${node(HAND.col, 2)}');
   v := rpc_take_node(w.world_id, '${node(HAND.col, 3)}');
   insert into said values ('COLUMN|' || coalesce(v->>'took', 'nothing') || '|' || (v->>'left'));
-  insert into said select 'FOLD|' || (class_mul->>'hands') from player
+  insert into said select 'FOLD|' || (class_mul->>'${CH}') from player
     where world_id = w.world_id and uid = w.uid;
-  insert into said values ('SCOPE|' || class_mul(w.world_id, w.uid, 'hands', '${HAND.c.main}')
-    || '|' || class_mul(w.world_id, w.uid, 'hands', 'masonry')
-    || '|' || class_mul(w.world_id, w.uid, 'hands', null));
-
-  -- Hands, at the arithmetic every one of its three sites hands to act_duration.
-  insert into said values ('HANDS|' || act_duration(8, 100, 0, control_speed(w.world_id, w.uid))
-    || '|' || act_duration(8, 100, 0, control_speed(w.world_id, w.uid)
-                * class_mul(w.world_id, w.uid, 'hands', '${HAND.c.main}')));
+  insert into said values ('SCOPE|' || class_mul(w.world_id, w.uid, '${CH}', '${HAND.c.main}')
+    || '|' || class_mul(w.world_id, w.uid, '${CH}', 'masonry')
+    || '|' || class_mul(w.world_id, w.uid, '${CH}', null));
 
   -- And the twelfth point, which does not stretch to a third column.
   perform rpc_take_node(w.world_id, '${node(OTHER_A, 1)}');
@@ -175,7 +168,7 @@ begin
   perform give_coins(w.world_id, w.uid, class_change_cost()::bigint * 3);
   perform rpc_take_class(w.world_id, '${DOWN.id}');
   insert into said select 'CLEARED|' || count(*) || '|'
-    || coalesce((select class_mul->>'hands' from player
+    || coalesce((select class_mul->>'${CH}' from player
                   where world_id = w.world_id and uid = w.uid), 'gone')
     from player_node where world_id = w.world_id and uid = w.uid;
 end $$;
@@ -242,18 +235,14 @@ check('one you already have, ditto',
 
 const handColumn = [1, 2, 3].map((rank) => node(HAND.col, rank));
 check('a column taken in order leaves seven of the twelve', said('COLUMN') === `${node(HAND.col, 3)}|7`, said('COLUMN'));
-check('and the island’s fold is the browser’s, to the last bit',
-  said('FOLD') === String(foldNodes(handColumn).hands),
-  `island ${said('FOLD')}, browser ${foldNodes(handColumn).hands}`);
+check(`and the island’s fold is the browser’s, to the last bit (${CH})`,
+  said('FOLD') === String(foldNodes(handColumn)[CH]),
+  `island ${said('FOLD')}, browser ${foldNodes(handColumn)[CH]}`);
 
 const [onMine, onStone, onNeither] = said('SCOPE').split('|').map(Number);
 check('a node tells on its own trade’s skills and on nothing else',
-  onMine < 1 && onStone === 1 && onNeither === 1,
+  near(onMine, foldNodes(handColumn)[CH] ?? 1) && onMine !== 1 && onStone === 1 && onNeither === 1,
   `${HAND.c.main} ${onMine}, masonry ${onStone}, no trade at all ${onNeither}`);
-
-const [handsPlain, handsTree] = said('HANDS').split('|').map(Number);
-check('hands: a whole column takes a sixth off the time a go takes',
-  near(handsTree / handsPlain, 0.97 * 0.96 * 0.9), `${handsPlain} → ${handsTree}`);
 
 const [spent, broke] = said('SPENT').split('|');
 check('twelve spent, and the thirteenth point is refused in the same words',
