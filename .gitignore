@@ -6,3 +6,6 @@ dist/
 
 # Bundled tools, built on demand by the scripts that run them.
 tools/.*.mjs
+
+# Every migration in one file (`npm run db:bundle`): past GitHub's hundred megabytes, so written on demand.
+supabase/all.sql

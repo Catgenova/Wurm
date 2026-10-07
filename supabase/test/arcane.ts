@@ -27,12 +27,20 @@
 import { execFileSync } from 'node:child_process';
 import {
   SCHOOLS, SPELLS, spellDef, spellWear, spellForce, spellSecs, spellRange,
-  landEase, spellRefusal,
+  landEase, spellRefusal, spellsOf,
 } from '../../src/game/arcane';
-import { CLASS_NODES } from '../../src/game/classes';
+import { CLASS_NODES, classDef } from '../../src/game/classes';
 
-/** The first node of the Binder's thrift column, which is what is asked of thrift now the Kindler has no tree. */
-const THRIFT_NODE = CLASS_NODES.find((n) => n.class === 'binder' && n.channel === 'thrift' && n.rank === 1)!;
+/**
+ * The first node of a thrift column on a trade still on a tree, which is what
+ * thrift is asked of now the Kindler and the Binder have none; its school, the
+ * first spell of it, and another school to ask it does nothing on.
+ */
+const THRIFT_NODE = CLASS_NODES.find((n) => n.channel === 'thrift' && n.rank === 1)!;
+const THRIFT_SCHOOL = SCHOOLS.find((sc) => sc.skill === classDef(THRIFT_NODE.class)!.main)!;
+const THRIFT_SPELL = spellsOf(THRIFT_SCHOOL.id).find((s) => s.level === 1)!;
+const THRIFT_GEM = THRIFT_SPELL.gem[0].toUpperCase() + THRIFT_SPELL.gem.slice(1);
+const NOT_THRIFT = SCHOOLS.find((sc) => sc.id !== THRIFT_SCHOOL.id)!;
 
 const psql = (sql: string): string =>
   execFileSync('psql', ['-v', 'ON_ERROR_STOP=1', '-X', '-q', '-t', '-A', '-f', '-'], {
@@ -152,18 +160,19 @@ begin
   update item set rare = null where id = f;
 
   /*
-   * Thrift, on this school and on nobody else's. The Kindler's tree went to
-   * spells and passives, so it is asked of a Binder's, on a sapphire cut as
-   * well as the garnet, and the Kindler taken back up after.
+   * Thrift, on this school and on nobody else's. The Kindler's and the
+   * Binder's trees went to spells and passives, so it is asked of the trade
+   * still on a tree (THRIFT_NODE), on a stone of its school cut as well as the
+   * garnet, and the Kindler taken back up after.
    */
-  update player set combat_class = 'binder', class_mul = null where world_id = w.world_id and uid = w.uid;
+  update player set combat_class = '${THRIFT_NODE.class}', class_mul = null where world_id = w.world_id and uid = w.uid;
   insert into player_node (world_id, uid, node) values (w.world_id, w.uid, '${THRIFT_NODE.id}');
   perform class_fold(w.world_id, w.uid);
-  f2 := give(w.world_id, w.uid, 'focus', 1, 70, 'Sapphire');
-  insert into said values ('THRIFT|' || class_mul(w.world_id, w.uid, 'thrift', 'binding')
-    || '|' || class_mul(w.world_id, w.uid, 'thrift', 'kindling')
-    || '|' || spell_wear(w.world_id, w.uid, (select d from spell_def d where id = 'snare'),
-                         focus_for(w.world_id, w.uid, 'sapphire')));
+  f2 := give(w.world_id, w.uid, 'focus', 1, 70, '${THRIFT_GEM}');
+  insert into said values ('THRIFT|' || class_mul(w.world_id, w.uid, 'thrift', '${THRIFT_SCHOOL.skill}')
+    || '|' || class_mul(w.world_id, w.uid, 'thrift', '${NOT_THRIFT.skill}')
+    || '|' || spell_wear(w.world_id, w.uid, (select d from spell_def d where id = '${THRIFT_SPELL.id}'),
+                         focus_for(w.world_id, w.uid, '${THRIFT_SPELL.gem}')));
   delete from player_node where world_id = w.world_id and uid = w.uid;
   update player set combat_class = 'kindler', class_mul = null where world_id = w.world_id and uid = w.uid;
   perform class_fold(w.world_id, w.uid);
@@ -187,9 +196,10 @@ begin
       || (v_was - (select health from creature where world_id = w.world_id and id = r.id)) || '|'
       || (select dmg from item where id = f);
 
-    -- A hold pushes its next turn out past now.
+    -- A hold pushes its next turn out past now, out of a sapphire.
     update player set combat_class = 'binder', class_mul = null where world_id = w.world_id and uid = w.uid;
     perform class_fold(w.world_id, w.uid);
+    perform give(w.world_id, w.uid, 'focus', 1, 70, 'Sapphire');
     update creature set until = now() - interval '1 minute' where world_id = w.world_id and id = r.id;
     v := rpc_spell(w.world_id, 'snare', jsonb_build_object('id', r.id));
     insert into said select 'HOLD|' || coalesce(v->>'cast', v->>'why') || '|'
@@ -278,8 +288,9 @@ check('and a rarer find holds more casts', Number(said('FIND')) < cut70,
 
 const [thriftMine, thriftTheirs, thriftWear] = said('THRIFT').split('|').map(Number);
 check('thrift tells on your own school and on nobody else’s',
-  near(thriftMine, THRIFT_NODE.mul) && thriftTheirs === 1 && near(thriftWear, spellWear(snare, ql, 1, ease, THRIFT_NODE.mul), 1e-9),
-  `binding ×${thriftMine}, kindling ×${thriftTheirs}, and the wear fell to ${thriftWear}`);
+  near(thriftMine, THRIFT_NODE.mul) && thriftTheirs === 1
+    && near(thriftWear, spellWear(THRIFT_SPELL, ql, 1, ease, THRIFT_NODE.mul), 1e-9),
+  `${THRIFT_SCHOOL.skill} ×${thriftMine}, ${NOT_THRIFT.skill} ×${thriftTheirs}, and the wear fell to ${thriftWear}`);
 
 if (said('BURN') === 'MISSING') {
   check('a burn takes health off a beast and wears the stone', false, 'no creature to cast at');

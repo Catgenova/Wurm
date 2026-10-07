@@ -18,7 +18,7 @@
  * is the browser's to move, so `reach` and `laden` are noted here; `wounded` is
  * noted by nothing that reads it.
  */
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import { ALL_GOALS, JOURNAL } from '../../src/game/journal';
 import { FISH } from '../../src/game/fishing';
 
@@ -32,7 +32,13 @@ const OURS: Record<string, string> = {
 // Read off the repository rather than off the bundle: esbuild puts this in
 // `node_modules/.cache`, so `import.meta.url` points at somewhere with no
 // rules in it. Both files are named from the root the test is run from.
-const sql = readFileSync('supabase/all.sql', 'utf8');
+/*
+ * Every migration, in order: what `supabase/all.sql` bundles, read off the
+ * migrations themselves, since the bundle is past what GitHub keeps in one
+ * file and is no longer committed.
+ */
+const sql = readdirSync('supabase/migrations').filter((f) => f.endsWith('.sql')).sort()
+  .map((f) => readFileSync(`supabase/migrations/${f}`, 'utf8')).join('\n');
 
 /*
  * What the island notes, read off the rules themselves rather than off a list

@@ -9,12 +9,12 @@
  * examine line all said 5, and nothing anywhere noticed for as long as it took
  * somebody to ask.
  *
- * So this reads the numbers out of the TypeScript and out of `all.sql` and
+ * So this reads the numbers out of the TypeScript and out of the migrations and
  * puts them side by side — and then rolls the browser's own `liftRarity` a
  * quarter of a million times to show that a pass up the ladder is one step or
  * none, at the odds of making one outright.
  */
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import { RARITIES, RARITY_LIFT, RARITY_ODDS, RARITY_WORD, liftRarity, rarityChance } from '../../src/game/items';
 
 let bad = 0;
@@ -84,7 +84,13 @@ for (let step = 0; step < RARITIES.length; step++) {
  * from these very constants, so a disagreement here is somebody having edited
  * the generated SQL or the generator having drifted from what it reads.
  */
-const sql = readFileSync('supabase/all.sql', 'utf8');
+/*
+ * Every migration, in order: what `supabase/all.sql` bundles, read off the
+ * migrations themselves, since the bundle is past what GitHub keeps in one
+ * file and is no longer committed.
+ */
+const sql = readdirSync('supabase/migrations').filter((f) => f.endsWith('.sql')).sort()
+  .map((f) => readFileSync(`supabase/migrations/${f}`, 'utf8')).join('\n');
 /**
  * id, ord, boost, keep, ceiling, odds, word, lift — and the last two are prose
  * with commas in it, so the split has to know where the quotes are. A regex

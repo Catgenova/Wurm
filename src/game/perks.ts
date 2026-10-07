@@ -79,7 +79,7 @@ import { MAP_ODDS } from './treasure';
 import { CRAFT_REACH, DISTIL_BUCKETS, isDish, RECIPES, TAILOR_SKILLS, TRADE_BOOK_AT, TRADE_BOOK_SKILLS, type Recipe } from './recipes';
 import { BUSH_DEFS, ROAD_TILES, ROCK_VARIANTS, TILE_DEFS, TileType, TREE_AGES, TREE_DAWN_UTC, TREE_DEFS } from '../world/tiles';
 import { walkKey } from './player';
-import { article, capital, listed, numberWord, percent, share, spanWords, times } from './words';
+import { article, capital, listed, listedOr, numberWord, percent, share, spanWords, times } from './words';
 import { helpingOf, NUTRIENTS, TABLE_BEST } from './nutrition';
 import { BREWS } from './brewing';
 import { boonTime, TINCTURE_BONUS, TINCTURE_SECONDS } from './boons';
@@ -111,7 +111,7 @@ export const FX_RULE: Record<string, 'mul' | 'add'> = {
   carry: 'add', serve: 'add', jobs: 'add', plus: 'add', bumper: 'add', fodder: 'add', tool: 'add', passes: 'add', hook: 'add', haul: 'add',
   block: 'add', leech: 'add', length: 'add', save: 'add', crit: 'add', stamina: 'add',
   gap: 'mul', monster: 'mul', still: 'mul', closest: 'mul', ambush: 'mul', far: 'mul', bleed: 'mul', fester: 'mul',
-  burn: 'mul', ward: 'mul', cast: 'mul',
+  burn: 'mul', ward: 'mul', cast: 'mul', bind: 'mul', chill: 'mul',
 };
 
 export const fxFamily = (key: string): string => key.split(':')[0];
@@ -2395,6 +2395,52 @@ const KINDLER: Seed[] = [
   },
 ];
 
+/*
+ * The Binder's. Its spells, and six passives on what it holds and what holds
+ * it back: a further reach, a slow after a hold, longer holds, a held
+ * creature taking more, less taken standing still, and less from a creature
+ * that is held, rooted or slowed. A hold is a Snare's share out of the focus
+ * (`talents.ts`), and Unmoved is the rule a Pikeman's Bastion already is.
+ */
+/** The Binder's spells that hold, which its passives on a hold change; a Snare out of the school is not one of them. */
+const BINDER_HOLDS = classSpellsOf('binder').filter((sp) => 'hold' in sp.fx).map((sp) => sp.name);
+const BINDER: Seed[] = [
+  ...classSpellsOf('binder').map((sp): Seed => ({ num: sp.num, name: sp.name, fx: {}, note: () => `${spellTerms(sp)} ${sp.note}` })),
+  {
+    num: 108, name: 'Far Reach',
+    fx: { 'reach:spell': 3 },
+    note: (fx) => `Every spell of yours cast at a creature reaches ${fx['reach:spell']} tiles further.`,
+  },
+  {
+    num: 103, name: 'Lingering Chill',
+    fx: { 'chill:pace': 0.7, 'chill:secs': 5 },
+    note: (fx) => `When your ${listedOr(BINDER_HOLDS)} ends, the creature walks, hunts and flees at ${percent(fx['chill:pace'])} of its `
+      + `pace for ${secs(fx['chill:secs'])}.`,
+  },
+  {
+    num: 101, name: 'Firm Grip',
+    fx: { 'bind:secs': 1.2 },
+    note: (fx) => `Your ${listed(BINDER_HOLDS)} hold ${percent(fx['bind:secs'] - 1)} longer.`,
+  },
+  {
+    num: 105, name: 'Brittle Hold',
+    fx: { 'bind:brittle': 1.2 },
+    note: (fx) => `A creature held by your ${listedOr(BINDER_HOLDS)} takes ${percent(fx['bind:brittle'] - 1)} more from everything that `
+      + 'strikes it while the hold lasts: blows, shots, throws, fire and shatter.',
+  },
+  {
+    num: 117, name: 'Unmoved',
+    fx: { 'still:taken': 0.85 },
+    note: (fx) => `While your feet have not moved for ${secs(FIGHT_BACK_STILL)}, every blow that lands on you does `
+      + `${less(fx['still:taken'])} less damage.`,
+  },
+  {
+    num: 122, name: 'Frost Ward',
+    fx: { 'ward:stilled': 0.7 },
+    note: (fx) => `You take ${less(fx['ward:stilled'])} less from every blow of a creature that is held, rooted or slowed.`,
+  },
+];
+
 /** Every trade's perks, in the order they were picked. */
 const SEEDS: Record<string, Seed[]> = {
   terraformer: TERRAFORMER,
@@ -2419,6 +2465,7 @@ const SEEDS: Record<string, Seed[]> = {
   chirurgeon: CHIRURGEON,
   beastmaster: BEASTMASTER,
   kindler: KINDLER,
+  binder: BINDER,
 };
 
 const slug = (name: string): string => name.toLowerCase().replace(/[’']/g, '').replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '');
@@ -2452,6 +2499,7 @@ export const TIERS: Record<string, number[][]> = {
   chirurgeon: [[1, 2, 101], [49, 4, 105], [43, 17, 104], [6, 19, 122], [46, 15, 106], [50, 20, 123]],
   beastmaster: [[1, 15, 106], [2, 28, 120], [27, 8, 101], [13, 18, 102], [32, 50, 108], [48, 41, 119]],
   kindler: [[3, 6, 125], [11, 5, 118], [44, 46, 106], [4, 10, 109], [24, 13, 124], [14, 26, 108]],
+  binder: [[1, 29, 108], [6, 36, 103], [20, 21, 101], [8, 27, 105], [2, 35, 117], [16, 15, 122]],
 };
 
 /** Every perk there is, tier by tier, and in each tier by the number it was picked under, as the island lists them. */

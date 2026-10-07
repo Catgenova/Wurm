@@ -39,8 +39,9 @@ import { ALIGNMENT_NAMES, BAR_SLOTS, FAITH_SPELLS, FAITH_TIER_AT, PATRON_AT, PAT
 import { article, capital, finePercent, listed, listedOr, NumberWord, numberWord, percent, share, spanWords, times } from '../../game/words';
 import { ANCIENT_EFFECTS, ANCIENT_PLUS, BAUBLE_HIGH, BAUBLE_LOW, BAUBLE_SHARE, BAUBLE_TIERS, baubleTimes, REGRET_SHARE, YIELD_TIMES } from '../../game/baubles';
 import { CLASS_CHANGE_COST, CLASS_TIER_AT, CLASSES, PERK_CLASSES, PERK_TIER_AT, PERKS_PER_TIER } from '../../game/classes';
+import { spellsOf } from '../../game/arcane';
 import { perksOf } from '../../game/perks';
-import { CLASS_LEARN_BLOW, CLASS_LEARN_KILL, CLASS_LEVEL_START, CLASS_SPELL_BY_ID, classSpellsOf, spellTerms } from '../../game/talents';
+import { CLASS_LEARN_BLOW, CLASS_LEARN_KILL, CLASS_LEVEL_START, CLASS_SPELL_BY_ID, CLASS_SPELLS, classSpellsOf, spellTerms } from '../../game/talents';
 import { HUSBANDRY_ACTIONS } from '../../game/husbandry';
 import { TINCTURE_BONUS, TINCTURE_SECONDS } from '../../game/boons';
 import { TINCTURE_NAMES } from '../../game/remedies';
@@ -1248,6 +1249,27 @@ export const NEWS: News[] = [
         first ? `${first.name}: ${spellTerms(first)} ${first.note}` : '',
         'A Kindler’s spell is cast out of the best garnet or ruby focus in your pack and does not wear it; every cast teaches kindling, '
           + 'as an Ember does.',
+      ].filter(Boolean);
+    },
+  },
+  {
+    n: 94,
+    day: '2026-10-07',
+    lines: () => {
+      const spells = classSpellsOf('binder');
+      const first = perksOf('binder').map((p) => CLASS_SPELL_BY_ID.get(p.id)).find((sp) => sp !== undefined);
+      const before = CLASSES.filter((c) => c.kind === 'combat' && c.id !== 'binder' && PERK_CLASSES.has(c.id)).map((c) => `the ${c.name}’s`);
+      return [
+        `The Binder is on spells and passives too: ${numberWord(spells.length)} spells and `
+          + `${numberWord(perksOf('binder').length - spells.length)} passives in ${numberWord(CLASS_TIER_AT.length)} tiers on its own class `
+          + `level, as ${listed(before)} are. Its tree and every node bought in it are gone; its rite stays.`,
+        first ? `${first.name}: ${spellTerms(first)} ${first.note}` : '',
+        'A Binder’s spell is cast out of the best sapphire or diamond focus in your pack and does not wear it; every cast teaches binding, '
+          + 'as a Snare does.',
+        `A hold put on by ${listed([...CLASS_SPELLS.filter((sp) => 'hold' in sp.fx), ...spellsOf('binding')].map((sp) => sp.name))} `
+          + 'no longer ends when a blow turns the creature held on whoever struck it: it holds for as long as the spell says.',
+        'After a blow, a shot, a fire or a shatter, the sentence says what the creature is truly down to, counting everything that '
+          + 'made it take more than the blow.',
       ].filter(Boolean);
     },
   },

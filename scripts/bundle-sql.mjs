@@ -6,7 +6,9 @@
  * is those ten files, concatenated, so setting a project up by hand is a
  * single copy and a single Run.
  *
- * Generated. Change a migration, run `npm run db:bundle`, commit both.
+ * Generated, and not committed: every migration together is past the hundred
+ * megabytes GitHub keeps in one file. `npm run build` and `npm run db:bundle`
+ * write it; the migrations are what is committed.
  */
 import { readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';

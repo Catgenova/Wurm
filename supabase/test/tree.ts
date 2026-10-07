@@ -1,12 +1,12 @@
 /**
  * Nine nodes to a trade.
  *
- * Each trade that has not moved to perks (`PERK_CLASSES`) -- the Beastmaster
- * and the three schools of the art, now that every craft trade and the other
- * fighting trades have -- carries three columns of three: two minor at a point
- * each and a major over them at three, which wants the two under it first. A
- * trade is worth two points at fifty and twelve at a hundred, so twelve buys
- * two whole columns and two over -- never all three.
+ * Each trade that has not moved to perks (`PERK_CLASSES`) -- the Warder, now
+ * that every craft trade and the other fighting trades have -- carries three
+ * columns of three: two minor at a point each and a major over them at three,
+ * which wants the two under it first. A trade is worth two points at fifty and
+ * twelve at a hundred, so twelve buys two whole columns and two over -- never
+ * all three.
  *
  * What this asks:
  *
@@ -21,15 +21,15 @@
  *   * and a node tells on its own trade's skills and on nothing else.
  *
  * What each channel does at the site that reads it is asked where that site
- * is: a keeper's fang and hide in `fight.ts`, the schools' force, reach and
- * thrift in `arcane.ts`. Hands, learning, wind and fineness were the columns
- * of trades that have moved to perks; those channels are still read where
- * they were, and nothing buys them.
+ * is: the schools' force, reach and thrift in `arcane.ts`. Every other
+ * channel was a column of a trade that has moved to perks; those channels are
+ * still read where they were, and nothing buys them.
  *
  * The trade walked through it is the first fighting trade still on a tree, on
- * its first column, and the one it is put down for the next: the trades are
- * moving to perks one at a time (`talents.ts`), so which they are is asked of
- * the rulebook rather than written here.
+ * its first column, and it is put down for the first other fighting trade,
+ * after which its own nodes are somebody else's: the trades are moving to
+ * perks one at a time (`talents.ts`), so which they are is asked of the
+ * rulebook rather than written here.
  *
  * Runs against the database the suite leaves behind.
  */
@@ -62,7 +62,7 @@ const near = (a: number, b: number, by = 1e-6): boolean => Math.abs(a - b) <= by
 
 /** The fighting trades still on a tree, in the order the rulebook lists them. */
 const TREED = CLASSES.filter((c) => c.kind === 'combat' && !PERK_CLASSES.has(c.id));
-if (TREED.length < 2) throw new Error('fewer than two fighting trades are still on a tree: walk one and put it down for another');
+if (TREED.length < 1) throw new Error('no fighting trade is still on a tree: there is nothing left for this suite to walk');
 /** The trade walked through, and the column of it taken whole: its first. */
 const HAND: { c: ClassDef; col: number } = { c: TREED[0], col: 1 };
 const T = HAND.c.id;
@@ -71,10 +71,8 @@ const CH = CLASS_COLUMNS[T][HAND.col - 1].channel;
 /** A node of the trade walked: its first column, or another. */
 const node = (col: number, rank: number): string => `${T}_${col}_${rank}`;
 const [OTHER_A, OTHER_B] = [1, 2, 3].filter((col) => col !== HAND.col);
-/** Another fighting trade on a tree, to put the first down for. */
-const DOWN = TREED[1];
-/** Somebody else's node altogether. */
-const THEIRS = CLASS_NODES.find((n) => n.class === DOWN.id && n.rank === 1)!.id;
+/** Another fighting trade, on a tree or not, to put the first down for. */
+const DOWN = CLASSES.find((c) => c.kind === 'combat' && c.id !== T)!;
 
 const out = psql(`
 begin;
@@ -138,7 +136,6 @@ begin
 
   -- The four refusals, in the island's words.
   insert into said values ('ORDER|' || coalesce(rpc_take_node(w.world_id, '${node(HAND.col, 3)}')->>'why', 'IT WENT THROUGH'));
-  insert into said values ('THEIRS|' || coalesce(rpc_take_node(w.world_id, '${THEIRS}')->>'why', 'IT WENT THROUGH'));
   perform rpc_take_node(w.world_id, '${node(HAND.col, 1)}');
   insert into said values ('TWICE|' || coalesce(rpc_take_node(w.world_id, '${node(HAND.col, 1)}')->>'why', 'IT WENT THROUGH'));
 
@@ -162,7 +159,7 @@ begin
     || '|' || coalesce(rpc_take_node(w.world_id, '${node(OTHER_B, 3)}')->>'why', 'IT WENT THROUGH'));
 
   -- 3. Putting the trade down puts the tree down, which is the only undo: for
-  -- another fighting trade on a tree, open at sixty in its main skill.
+  -- another fighting trade, open at sixty in its main skill.
   insert into skill (world_id, uid, id, value) values (w.world_id, w.uid, '${DOWN.main}', 60)
     on conflict (world_id, uid, id) do update set value = 60;
   perform give_coins(w.world_id, w.uid, class_change_cost()::bigint * 3);
@@ -171,6 +168,8 @@ begin
     || coalesce((select class_mul->>'${CH}' from player
                   where world_id = w.world_id and uid = w.uid), 'gone')
     from player_node where world_id = w.world_id and uid = w.uid;
+  -- And the tree is somebody else's now: its first node is refused as another trade's.
+  insert into said values ('THEIRS|' || coalesce(rpc_take_node(w.world_id, '${node(HAND.col, 1)}')->>'why', 'IT WENT THROUGH'));
 end $$;
 
 select * from said;
@@ -228,8 +227,9 @@ const mine = (taken: string[], id: string): string =>
   nodeRefusal(nodeDef(id)!, T, taken, 12) ?? 'open';
 check(`the major wants the minor under it, in the same words on both sides (${HAND.c.name})`,
   said('ORDER') === mine([], node(HAND.col, 3)) && said('ORDER') === `${nodeDef(node(HAND.col, 2))!.name} comes first.`, said('ORDER'));
-check('another trade’s node is not yours, ditto',
-  said('THEIRS') === mine([], THEIRS), said('THEIRS'));
+check(`another trade’s node is not yours, ditto (the ${HAND.c.name.toLowerCase()}’s, once you are a ${DOWN.name.toLowerCase()})`,
+  said('THEIRS') === nodeRefusal(nodeDef(node(HAND.col, 1))!, DOWN.id, [], 12)
+    && said('THEIRS') === `That is the ${HAND.c.name.toLowerCase()}’s, and you are not one.`, said('THEIRS'));
 check('one you already have, ditto',
   said('TWICE') === mine([node(HAND.col, 1)], node(HAND.col, 1)), said('TWICE'));
 

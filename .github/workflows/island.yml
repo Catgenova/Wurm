@@ -185,9 +185,11 @@ jobs:
       # `git status` about the whole directory catches both.
       - name: The definitions are still what the TypeScript says
         run: |
+          # The bundle of every migration (`npm run db:bundle`) is past the
+          # hundred megabytes GitHub keeps in one file, so it is written on
+          # demand and not committed; nothing here is asked of it.
           npm run defs
-          npm run db:bundle
-          dirty=$(git status --porcelain supabase/migrations supabase/defs-state.sql supabase/all.sql)
+          dirty=$(git status --porcelain supabase/migrations supabase/defs-state.sql)
           if [ -n "$dirty" ]; then
             echo "$dirty"
             echo "::error::The generated SQL is out of date. Run 'npm run defs' and 'npm run build', and commit what they write."
@@ -1746,6 +1748,27 @@ jobs:
           npx esbuild supabase/test/kindler.ts --bundle --platform=node --format=esm \
             --outfile=node_modules/.cache/kindler.mjs --log-level=error
           node node_modules/.cache/kindler.mjs
+
+      - name: The Binder's spells and passives
+        run: |
+          # The ninth fighting trade on spells and passives, and the second of
+          # the arcane. Both sides hold the same rows; every spell wants a
+          # sapphire or diamond focus in your pack; a hold at 100% a Snare out
+          # of it and a shatter at 100% an Ember's force, to the last bit; a
+          # Bind and a Lock at their share, half on a monster, within their
+          # reach and no further, and a blow that turns a held creature on you
+          # not freeing it; a Shatter twice as large on one held; a Root taking
+          # no step where a creature tied to nothing walks on, and still
+          # striking; a Tether no further than its tether; Heavy Limbs, Dull
+          # Claws and Brittle at their shares, and the sentence after a shatter
+          # or a blow on a Brittle one saying what it is truly down to; a
+          # Snare out of the school counted a hold; Still Skin and Stillness on
+          # you; a Mire and a Mass Root on everything within their width; a
+          # Long Hold's longer holds and reach; and every passive at the rule
+          # it changes, the browser's fold the island's.
+          npx esbuild supabase/test/binder.ts --bundle --platform=node --format=esm \
+            --outfile=node_modules/.cache/binder.mjs --log-level=error
+          node node_modules/.cache/binder.mjs
 
       - name: Glassblowing, glass panels, bottles and the stained glass wall
         run: |

@@ -1,9 +1,9 @@
 // The reach of a spell on a creature is `SPELL_REACH`, which `patrons.ts` takes from `TARGET_RANGE`; read here from where it is
 // set, since `patrons.ts` reads this file.
-import { spellDef, spellForce } from './arcane';
+import { spellDef, spellForce, spellSecs } from './arcane';
 import { COMPANION_REACH, DRAW_CLOSEST, HUNT_REACH, KNIFE_BLEED, KNIFE_BLEED_SECS, STAGGER_MAUL, TARGET_RANGE as SPELL_REACH, THROW_REACH } from './fight';
 import type { SpellOn } from './patrons';
-import { capital, numberWord, percent, times } from './words';
+import { capital, numberWord, percent, share, times } from './words';
 
 /**
  * What a fighting trade gives: two spells and a passive at each of six tiers.
@@ -51,9 +51,10 @@ export const GUARDIAN_REACH = 2;
 /**
  * What a spell wants in your hands before it can be called: a shield in the off hand, or a weapon of a kind in the other --
  * and for a Skirmisher's Hit and Run, a thrown weapon or a knife; for a Beastmaster's, a companion at heel rather than
- * anything in the hand; and for a Kindler's, a focus of the school's stones to cast it out of.
+ * anything in the hand; and for a Kindler's or a Binder's, a focus of the school's stones to cast it out of.
  */
-export type SpellNeeds = 'shield' | 'axes' | 'mauls' | 'archery' | 'throwing' | 'skirmish' | 'knives' | 'companion' | 'kindling';
+export type SpellNeeds = 'shield' | 'axes' | 'mauls' | 'archery' | 'throwing' | 'skirmish' | 'knives' | 'companion' | 'kindling'
+  | 'binding';
 /** As the spell's note says it first, and as its refusal says it is missing. */
 export const NEEDS_SAID: Record<SpellNeeds, { has: string; wants: string }> = {
   shield: { has: 'With a shield in your off hand', wants: 'a shield in your off hand' },
@@ -68,6 +69,7 @@ export const NEEDS_SAID: Record<SpellNeeds, { has: string; wants: string }> = {
   companion: { has: 'With a companion following you', wants: 'a companion following you' },
   // Any focus of a stone kindling works that is not worn through (`focus_for`), and casting a trade's spell does not wear it.
   kindling: { has: 'With a garnet or ruby focus in your pack', wants: 'a garnet or ruby focus in your pack' },
+  binding: { has: 'With a sapphire or diamond focus in your pack', wants: 'a sapphire or diamond focus in your pack' },
 };
 
 export interface ClassSpellDef {
@@ -114,20 +116,35 @@ const skirmisher = spellOf('skirmisher');
 const chirurgeon = spellOf('chirurgeon');
 const beastmaster = spellOf('beastmaster');
 const kindler = spellOf('kindler');
+const binder = spellOf('binder');
 
 /** "fire at 80%": what share of a Kindler's fire a spell lands. */
 const fire = (m: number): string => `fire at ${ofBlow(m)}`;
-/**
- * What fire at 100% does: an Ember's, out of the best garnet or ruby focus you carry, at your kindling (`spellForce`), from
- * the bottom of both to the top.
- */
-const EMBER = spellDef('ember')!;
-/** The least and the most a skill and a focus's quality can be, which the note gives fire at. */
+/** "shatter at 80%": what share of a Binder's shatter a spell lands. */
+const shatter = (m: number): string => `shatter at ${ofBlow(m)}`;
+/** The least and the most a skill and a focus's quality can be, which the notes give a spell's numbers at. */
 const FIRE_LOW = 1;
 const FIRE_TOP = 100;
-const FIRE_IS = `${capital(fire(1))} does ${Math.round(spellForce(EMBER, FIRE_LOW, FIRE_LOW, 1))} damage at ${FIRE_LOW} kindling `
-  + `with a QL ${FIRE_LOW} focus, up to ${Math.round(spellForce(EMBER, FIRE_TOP, FIRE_TOP, 1))} at ${FIRE_TOP} kindling with a QL `
-  + `${FIRE_TOP} focus, rising evenly with each.`;
+/**
+ * What a school's damage at 100% does: an Ember's, out of the best focus of the school's stones you carry, at the school's
+ * skill (`spellForce`), from the bottom of both to the top.
+ */
+const EMBER = spellDef('ember')!;
+const emberIs = (at100: string, skill: string): string =>
+  `${capital(at100)} does ${Math.round(spellForce(EMBER, FIRE_LOW, FIRE_LOW, 1))} damage at ${FIRE_LOW} ${skill} with a QL `
+  + `${FIRE_LOW} focus, up to ${Math.round(spellForce(EMBER, FIRE_TOP, FIRE_TOP, 1))} at ${FIRE_TOP} ${skill} with a QL ${FIRE_TOP} `
+  + 'focus, rising evenly with each.';
+const FIRE_IS = emberIs(fire(1), 'kindling');
+const SHATTER_IS = emberIs(shatter(1), 'binding');
+/**
+ * What a hold at 100% is: a Snare's, out of your focus at your binding (`spellSecs`), from the bottom of binding to the top.
+ * Held is neither moving nor striking; rooted, not moving but striking anything within its reach.
+ */
+const SNARE = spellDef('snare')!;
+const held = (m: number): string => `held at ${ofBlow(m)}, neither moving nor striking`;
+const HOLD_IS = `A hold at ${ofBlow(1)} lasts ${Number(spellSecs(SNARE, FIRE_LOW, 1).toFixed(1))} s at ${FIRE_LOW} binding, up to `
+  + `${Number(spellSecs(SNARE, FIRE_TOP, 1).toFixed(1))} s at ${FIRE_TOP} binding, rising evenly with it.`;
+const ROOTED = 'it cannot move, but strikes and throws at anything within its reach';
 /** "burns 1% of its full health a second for 8 s": a burn, which is a bleed that a Kindler started (`class_burn`). */
 const burns = (each: number, secs: number): string => `burns ${percent(each)} of its full health a second for ${span(secs)}`;
 const BURN_LAST = 'a burn never takes the last of its health';
@@ -151,7 +168,11 @@ const BURN_LAST = 'a burn never takes the last of its health';
  * A Kindler's are cast out of a focus: "fire" is an Ember out of the best
  * garnet or ruby focus you carry, at your kindling, larger in a White Heat,
  * and "a burn" is a bleed of a share of a creature's full health a second,
- * which the stronger of two wins and which never takes the last of it.
+ * which the stronger of two wins and which never takes the last of it. A
+ * Binder's too, out of a sapphire or diamond: "held at N%" is that share of a
+ * Snare's hold out of it at your binding, longer in a Long Hold, and
+ * "shatter" is an Ember's force out of it at your binding. Every reach and
+ * width of a Binder's is a Long Hold's further.
  */
 export const CLASS_SPELLS: ClassSpellDef[] = [
   /* ---- The Sworn Blade ---- */
@@ -401,6 +422,39 @@ export const CLASS_SPELLS: ClassSpellDef[] = [
   kindler(26, 'Firestorm', 0.4, 300, ['self'], { reach: 6, fire: 1, each: 0.02, secs: 10 },
     (fx) => `${fire(fx.fire)} on every enemy within ${fx.reach} tiles of you, and each ${burns(fx.each, fx.secs)}; ${BURN_LAST}. `
       + FIRE_IS, 'kindling'),
+
+  /* ---- The Binder ---- */
+  binder(1, 'Bind', 0.05, 8, ['enemy'], { reach: 8, hold: 0.4, monster: 0.5 },
+    (fx) => `an enemy within ${fx.reach} tiles of you is ${held(fx.hold)}; a monster for ${share(fx.monster)} as long. ${HOLD_IS}`,
+    'binding'),
+  binder(29, 'Shatter', 0.1, 15, ['enemy'], { reach: 8, shatter: 1, held: 2 },
+    (fx) => `${shatter(fx.shatter)} on an enemy within ${fx.reach} tiles of you, or ${shatter(fx.held)} on one that is held. ${SHATTER_IS}`,
+    'binding'),
+  binder(6, 'Root', 0.06, 10, ['enemy'], { reach: 8, secs: 8 },
+    (fx) => `an enemy within ${fx.reach} tiles of you is rooted for ${span(fx.secs)}: ${ROOTED}.`, 'binding'),
+  binder(36, 'Stillness', 0.08, 30, ['self'], {},
+    () => 'every wound on you stops bleeding.', 'binding'),
+  binder(20, 'Heavy Limbs', 0.1, 20, ['enemy'], { reach: 8, often: 0.7, secs: 10 },
+    (fx) => `for ${span(fx.secs)} an enemy within ${fx.reach} tiles of you strikes ${percent(1 - fx.often)} less often.`, 'binding'),
+  binder(21, 'Dull Claws', 0.1, 20, ['enemy'], { reach: 8, dealt: 0.7, secs: 10 },
+    (fx) => `for ${span(fx.secs)} every blow an enemy within ${fx.reach} tiles of you lands, on you or on anything else, is `
+      + `${percent(1 - fx.dealt)} smaller.`, 'binding'),
+  binder(8, 'Tether', 0.08, 20, ['enemy'], { reach: 8, leash: 3, secs: 15 },
+    (fx) => `for ${span(fx.secs)} an enemy within ${fx.reach} tiles of you cannot go more than ${fx.leash} tiles from where it stood.`,
+    'binding'),
+  binder(27, 'Brittle', 0.12, 30, ['enemy'], { reach: 8, taken: 1.25, secs: 10 },
+    (fx) => `for ${span(fx.secs)} an enemy within ${fx.reach} tiles of you takes ${percent(fx.taken - 1)} more from everything that `
+      + 'strikes it: blows, shots, throws, fire and shatter.', 'binding'),
+  binder(2, 'Lock', 0.1, 20, ['enemy'], { reach: 8, hold: 1, monster: 0.5 },
+    (fx) => `an enemy within ${fx.reach} tiles of you is ${held(fx.hold)}; a monster for ${share(fx.monster)} as long. ${HOLD_IS}`,
+    'binding'),
+  binder(35, 'Still Skin', 0.12, 45, ['self'], { cut: 0.2, secs: 10 },
+    (fx) => `for ${span(fx.secs)} you take ${percent(fx.cut)} less from every blow.`, 'binding'),
+  binder(16, 'Mire', 0.15, 30, ['self'], { reach: 4, pace: 0.6, secs: 10 },
+    (fx) => `every enemy within ${fx.reach} tiles of you walks, hunts and flees at ${percent(fx.pace)} of its pace for ${span(fx.secs)}.`,
+    'binding'),
+  binder(15, 'Mass Root', 0.18, 40, ['self'], { reach: 4, secs: 6 },
+    (fx) => `every enemy within ${fx.reach} tiles of you is rooted for ${span(fx.secs)}: ${ROOTED}.`, 'binding'),
 ];
 export const CLASS_SPELL_BY_ID = new Map(CLASS_SPELLS.map((s) => [s.id, s]));
 export const classSpellsOf = (cls: string): ClassSpellDef[] => CLASS_SPELLS.filter((s) => s.class === cls);

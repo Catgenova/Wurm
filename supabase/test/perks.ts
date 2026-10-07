@@ -535,6 +535,9 @@ const OTHERS = new Set([
   'kept:hardy', 'kept:soak', 'kept:speed', 'kept:haste', 'leash:companion', 'sight:companion', 'bond:share', 'bond:reach',
   // A Kindler's: a striker set alight, what a spell costs, fire built up by casting, a burn's heat and length, and a burning striker.
   'retort:each', 'retort:secs', 'cast:cost', 'momentum:step', 'momentum:most', 'momentum:secs', 'burn:rate', 'burn:secs', 'ward:burning',
+  // A Binder's: how far a spell aimed at a creature reaches, a creature's pace once a hold ends and for how long, how long a hold
+  // lasts and what a held creature takes, and a striker held, rooted or slowed.
+  'reach:spell', 'chill:pace', 'chill:secs', 'bind:secs', 'bind:brittle', 'ward:stilled',
   ...STRIDE_KEYS,
 ]);
 const unnamed = PERKS.flatMap((p) => Object.keys(p.fx).filter((key) => {
