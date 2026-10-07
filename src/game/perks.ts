@@ -46,7 +46,7 @@
  * benefit check reads these functions as it reads any other note.
  */
 import { CLASSES, PERK_CLASSES, PERK_TIER_AT, PERKS_PER_TIER, tiersAtFor } from './classes';
-import { BLOCK_MOST, CRIT_HIT, DRAW_CLOSEST, DRAW_WALK, FIGHT_BACK_STILL, HUNT_REACH, KNIFE_BLEED_SECS, reachOf, STANCE_DEALT, STANCE_TAKEN, THROW_REACH } from './fight';
+import { BLOCK_MOST, COMPANION_BLOW, COMPANION_LEASH, COMPANION_SIGHT, CRIT_HIT, DRAW_CLOSEST, DRAW_WALK, FIGHT_BACK_STILL, HUNT_REACH, KNIFE_BLEED_SECS, reachOf, STANCE_DEALT, STANCE_TAKEN, THROW_REACH } from './fight';
 import { classSpellsOf, GUARDIAN_REACH, spellTerms } from './talents';
 import {
   ACTION_BY_ID, CHIP_CHANCE, CLEARED_TO, DIG_TILE_TIME, DREDGE_DEPTH, FLATTEN_STEP, GRASS_PER_CUT, MINE_COLLAPSE, MINE_DEPTH, PAN_ORES,
@@ -2307,6 +2307,49 @@ const CHIRURGEON: Seed[] = [
   },
 ];
 
+/*
+ * The Beastmaster's. Its spells, and six passives on the companion following
+ * you: what it can take, how it runs and strikes, how far it fights from you,
+ * and a share of what lands on you. A beast you keep wears its keeper's
+ * `kept:` numbers (`kept_of`), and these four read only while it follows you.
+ */
+const BEASTMASTER: Seed[] = [
+  ...classSpellsOf('beastmaster').map((sp): Seed => ({ num: sp.num, name: sp.name, fx: {}, note: () => `${spellTerms(sp)} ${sp.note}` })),
+  {
+    num: 106, name: 'Fleet',
+    fx: { 'kept:speed': 1.3 },
+    note: (fx) => `Your companion runs ${percent(fx['kept:speed'] - 1)} faster.`,
+  },
+  {
+    num: 120, name: 'Long Leash',
+    fx: { 'leash:companion': 14, 'sight:companion': 8 },
+    note: (fx) => `Your companion keeps up a fight up to ${fx['leash:companion']} tiles from you instead of ${COMPANION_LEASH}, and, `
+      + `guarding you or aggressive, goes for a creature up to ${fx['sight:companion']} tiles from you instead of ${COMPANION_SIGHT}.`,
+  },
+  {
+    num: 101, name: 'Thick Hide',
+    fx: { 'kept:hardy': 1.2 },
+    note: (fx) => `Your companion has ${percent(fx['kept:hardy'] - 1)} more health.`,
+  },
+  {
+    num: 102, name: 'Hardy Stock',
+    fx: { 'kept:soak': 0.85 },
+    note: (fx) => `Your companion takes ${less(fx['kept:soak'])} less from every blow.`,
+  },
+  {
+    num: 108, name: 'Quick Paws',
+    fx: { 'kept:haste': 1.15 },
+    note: (fx) => `Your companion strikes ${percent(fx['kept:haste'] - 1)} more often: every `
+      + `${Number((COMPANION_BLOW / fx['kept:haste']).toFixed(2))} s instead of every ${secs(COMPANION_BLOW)}.`,
+  },
+  {
+    num: 119, name: 'Shared Wounds',
+    fx: { 'bond:share': 0.2, 'bond:reach': 4 },
+    note: (fx) => `While your companion is within ${fx['bond:reach']} tiles of you, it takes ${percent(fx['bond:share'])} of every `
+      + 'blow that lands on you instead of you.',
+  },
+];
+
 /** Every trade's perks, in the order they were picked. */
 const SEEDS: Record<string, Seed[]> = {
   terraformer: TERRAFORMER,
@@ -2329,6 +2372,7 @@ const SEEDS: Record<string, Seed[]> = {
   archer: ARCHER,
   skirmisher: SKIRMISHER,
   chirurgeon: CHIRURGEON,
+  beastmaster: BEASTMASTER,
 };
 
 const slug = (name: string): string => name.toLowerCase().replace(/[’']/g, '').replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '');
@@ -2360,6 +2404,7 @@ export const TIERS: Record<string, number[][]> = {
   archer: [[2, 1, 108], [29, 9, 107], [6, 10, 114], [3, 7, 124], [14, 25, 101], [48, 49, 102]],
   skirmisher: [[2, 3, 104], [31, 7, 107], [8, 12, 112], [4, 9, 110], [44, 36, 120], [10, 49, 102]],
   chirurgeon: [[1, 2, 101], [49, 4, 105], [43, 17, 104], [6, 19, 122], [46, 15, 106], [50, 20, 123]],
+  beastmaster: [[1, 15, 106], [2, 28, 120], [27, 8, 101], [13, 18, 102], [32, 50, 108], [48, 41, 119]],
 };
 
 /** Every perk there is, tier by tier, and in each tier by the number it was picked under, as the island lists them. */

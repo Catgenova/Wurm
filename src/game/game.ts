@@ -32,7 +32,7 @@ import { bury, crumble, graveAt, graveRefusal, graveSays, GRAVE_MARK } from './g
 import { cropStageSeconds, RIPE, settleCrop, type Crop } from './farming';
 import { fieldClock, fieldRate, GLASSHOUSE_GROWTH, PLANTER_GROWTH } from './growth';
 import { underGlass } from './glasshouse';
-import { ageDef, bloodMul, CALL_WINDOW, Creatures, setLocalKept, FIGHT_BACK_GOES, HAUL_SKILL, isBaitFor, isShod, PLAYER_ATTACKER, PULL_DEFAULT, SHOE_PACE, SHOE_STEP, SPECIES, tackSpeed, type Creature, type CreatureJSON, type Stance } from './creatures';
+import { ageDef, bloodMul, BLOW_SHARE, CALL_WINDOW, Creatures, setLocalKept, FIGHT_BACK_GOES, HAUL_SKILL, isBaitFor, isShod, PLAYER_ATTACKER, PULL_DEFAULT, SHOE_PACE, SHOE_STEP, SPECIES, tackSpeed, type Creature, type CreatureJSON, type Stance } from './creatures';
 import { CRAFT_REACH, knackable, type CraftStock, type Station } from './recipes';
 import { Actor, type ActiveAction, type GuestSave } from './actor';
 import { HOST_ID, type PeerId } from '../net/protocol';
@@ -2452,9 +2452,11 @@ export class Game {
       this.fightBack();
       return;
     }
-    this.player.stats.health = Math.max(0, this.player.stats.health - hit.taken);
+    // Less of it on you while your companion beside you takes its share, for a Beastmaster's Shared Wounds (`class_bond_take`).
+    const lost = this.bondTake(hit.taken, from);
+    this.player.stats.health = Math.max(0, this.player.stats.health - lost);
     this.player.attackedAt = this.time;
-    this.events.emit('hit', this.player.x, this.player.y, hit.taken, 'taken');
+    this.events.emit('hit', this.player.x, this.player.y, lost, 'taken');
     // Less of a wound than of a blow for a Sworn Blade's Battle-Hardened, and less of a fresh one for a
     // Pikeman's Scarred; the health it takes is the same.
     const fresh = !this.player.wounds.some((w) => w.kind === kind && w.part === hit.part && !w.infected);
@@ -2464,6 +2466,21 @@ export class Game {
     const where = hit.worn ? `, though your ${itemName(hit.worn).toLowerCase()} takes the worst of it` : '';
     this.logMsg(`${what}${where}. You have ${woundText(wound)}.`, 'fight');
     this.fightBack();
+  }
+
+  /**
+   * What of a creature's blow comes off your health once your companion has
+   * taken its share, for a Beastmaster's Shared Wounds: within the reach it
+   * names of you, the share of what landed, in its own health at what a blow
+   * of a creature's is to yours (`BLOW_SHARE`), and taken as any blow is. The
+   * wound it opens on you is the blow's. The island's `class_bond_take`.
+   */
+  private bondTake(taken: number, from: Creature | undefined): number {
+    const share = this.perk('bond:share', 0);
+    const c = share > 0 && from ? this.creatures.active() : undefined;
+    if (!c || !from || c.health <= 0 || Math.hypot(c.x - this.player.x, c.y - this.player.y) > this.perk('bond:reach', 0)) return taken;
+    this.creatures.hurt(this, c, (taken * share) / BLOW_SHARE, from);
+    return taken * (1 - share);
   }
 
   /**

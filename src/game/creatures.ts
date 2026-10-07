@@ -22,7 +22,7 @@ import { auraMul, breedTraits, channelOf, CHANNELS, pct, rollTraits, traitList, 
 import { ACTION_FLOOR, ACTION_PACE, WORKER_WEIGHT } from './pace';
 import { world } from './pace';
 import { emptyCrate, shutIn, standingCrate } from './creaturecrate';
-import { BACK_PACE, BACK_SLACK, blowEvery, THREAT_HOLD, circlePoint, CIRCLE_ARC, CIRCLE_R, COWARD_DRAG, FIGHT_GIVE_UP, FIGHT_LEASH, FLEE_PACE, FLEE_SECS, GUARD_RANGE, HEAVY_EVERY, HEAVY_HIT, HUNT_REACH, KEEP_OFF, KNIFE_BLEED_SECS, PACK_CALL, PACK_MOST, PACK_RANGE, slotAngle, THROW_HIT, THROW_REACH, turnsAt, turnTo, WIND_UP, type Hide } from './fight';
+import { BACK_PACE, BACK_SLACK, blowEvery, THREAT_HOLD, circlePoint, CIRCLE_ARC, CIRCLE_R, COMPANION_BLOW, COMPANION_LEASH, COMPANION_PACE, COMPANION_REACH, COMPANION_SIGHT, COWARD_DRAG, FIGHT_GIVE_UP, FIGHT_LEASH, FLEE_PACE, FLEE_SECS, GUARD_RANGE, HEAVY_EVERY, HEAVY_HIT, HUNT_REACH, KEEP_OFF, KNIFE_BLEED_SECS, PACK_CALL, PACK_MOST, PACK_RANGE, slotAngle, THROW_HIT, THROW_REACH, turnsAt, turnTo, WIND_UP, type Hide } from './fight';
 
 /**
  * Wildermon: creatures that roam the wild, can be tamed with the taming
@@ -213,28 +213,9 @@ export const PLAYER_ATTACKER = -1;
 export const STANCES: Stance[] = ['passive', 'defensive', 'aggressive'];
 export const COMPANION_STANCES: Stance[] = ['passive', 'defensive', 'guard', 'aggressive'];
 export const STANCE_NAMES: Record<Stance, string> = { passive: 'Passive', defensive: 'Defensive', aggressive: 'Aggressive', guard: 'Guarding you' };
-/**
- * A companion at heel, and what it does about company.
- *
- * An aggressive one goes for anything wild within `COMPANION_SIGHT` of you;
- * either sort drops a fight that has got `COMPANION_LEASH` from you; it
- * strikes from `COMPANION_REACH` every `COMPANION_BLOW` seconds and runs at
- * `COMPANION_PACE` times its walk on the way; and a blow at it or at you is
- * remembered for `BLOW_MEMORY` seconds, which is also how long a defensive
- * worker on a deed remembers one.
- *
- * These were literals in `updateActive`, which was fine while the browser
- * owned the wildlife. It does not any more: the island parked a companion
- * at its keeper's feet and had no rule for what it does about company, so
- * reported as "aggressive and defensive wildermon companions don't
- * attack". They are crossed now, and the island's `companion_settle` walks
- * and strikes off the same six numbers.
- */
-export const COMPANION_SIGHT = 5;
-export const COMPANION_LEASH = 9;
-export const COMPANION_REACH = 0.9;
-export const COMPANION_BLOW = 1.2;
-export const COMPANION_PACE = 1.3;
+/** A companion's numbers, which are the fight's (`fight.ts`), said again here where its keepers have always looked for them. */
+export { COMPANION_SIGHT, COMPANION_LEASH, COMPANION_REACH, COMPANION_BLOW, COMPANION_PACE };
+/** How long a blow at a companion or at you is remembered; also how long a defensive worker on a deed remembers one. */
 export const BLOW_MEMORY = 8;
 /**
  * How many swings you turn on something with when it bites you: enough to
@@ -1750,6 +1731,18 @@ export const keptOf = (c: { mode: CreatureMode; kept?: Record<string, number> | 
   return c.mode === 'wild' ? dflt : LOCAL_KEPT[key] ?? dflt;
 };
 
+/** The channels a Beastmaster's passives move, and the keeper's number for each: Thick Hide, Hardy Stock, Fleet and Quick Paws. */
+const COMPANION_KEPT: Partial<Record<TraitChannel, string>> = { hardy: 'kept:hardy', soak: 'kept:soak', speed: 'kept:speed', haste: 'kept:haste' };
+/**
+ * What its keeper's trade makes of a companion on one channel, while it
+ * follows its keeper and only then: one in a crate or on a deed is a beast
+ * like any other. The island's `beast_mul` asks the same of `kept`.
+ */
+export const companionMul = (c: { mode: CreatureMode; kept?: Record<string, number> | null }, channel: TraitChannel): number => {
+  const key = COMPANION_KEPT[channel];
+  return key !== undefined && c.mode === 'active' ? keptOf(c, key, 1) : 1;
+};
+
 /** How old a creature is now. Its keeper's Long-lived keeps it grown longer. */
 export const ageOf = (c: Creature, now: number): Age => {
   // Nothing born before the clock started has an age worth working out: what
@@ -1815,9 +1808,9 @@ export function raritySays(c: Pick<Creature, 'rare'>): string {
 /** Its own blood on one channel, as rare as it is, with nothing communal in it. */
 export const bloodMul = (c: Creature, channel: TraitChannel): number => traitMul(c.traits, channel) * rarityMul(c, channel);
 
-/** What it can take, once its blood is counted. */
+/** What it can take, once its blood is counted, and its keeper's Thick Hide while it follows them. */
 export const maxHealth = (c: Creature, species: SpeciesDef): number =>
-  Math.round(species.health * bloodMul(c, 'hardy'));
+  Math.round(species.health * bloodMul(c, 'hardy') * companionMul(c, 'hardy'));
 /** What its attack lands for. */
 export const attackOf = (c: Creature, species: SpeciesDef): number => species.attack * bloodMul(c, 'tough');
 /** What a creature's attack takes off a player it lands on, as a share of a life, before armour. */
@@ -2708,9 +2701,9 @@ export class Creatures {
     return m;
   }
 
-  /** Everything that bears on how fast it moves. */
+  /** Everything that bears on how fast it moves: and its keeper's Fleet while it follows them. */
   speedMul(c: Creature): number {
-    return bloodMul(c, 'speed') * this.aura(c, 'speed');
+    return bloodMul(c, 'speed') * this.aura(c, 'speed') * companionMul(c, 'speed');
   }
 
   /** Everything that bears on how fast it gets a task done: blood, herd, and how it is kept. */
@@ -2728,9 +2721,9 @@ export class Creatures {
     return bloodMul(c, 'yield') * this.aura(c, 'yield');
   }
 
-  /** Its blood and its herd together on one channel: what a fight rule reads. */
+  /** Its blood and its herd together on one channel: what a fight rule reads; and its keeper's trade while it follows them. */
   mul(c: Creature, channel: TraitChannel): number {
-    return bloodMul(c, channel) * this.aura(c, channel);
+    return bloodMul(c, channel) * this.aura(c, channel) * companionMul(c, channel);
   }
 
   /** The player's companion. */
@@ -4801,6 +4794,9 @@ export class Creatures {
     if (this.comeWhenCalled(c, dt, game)) return;
     // Fallen back (`FALL_BACK`): at your side, and no fight of its own until the time is up.
     // A passive one fights only what it is told to (`order_attack`), which is the one way it has an enemy.
+    // As far as it looks and as far as it follows a fight: further for a Beastmaster's Long Leash.
+    const sight = game.perk('sight:companion', COMPANION_SIGHT);
+    const leash = game.perk('leash:companion', COMPANION_LEASH);
     if (game.time < c.heelUntil) c.enemy = null;
     else if (c.enemy === null && c.stance !== 'passive') {
       let found: Creature | null = null;
@@ -4809,7 +4805,7 @@ export class Creatures {
         let bestD = Infinity;
         for (const o of this.onYou(game)) {
           const d = Math.hypot(o.x - p.x, o.y - p.y);
-          if (quarry(o) && d <= COMPANION_SIGHT && d < bestD) {
+          if (quarry(o) && d <= sight && d < bestD) {
             bestD = d;
             found = o;
           }
@@ -4822,7 +4818,7 @@ export class Creatures {
         for (const o of this.list.values()) {
           if (o.id === c.id || !quarry(o)) continue;
           const d = Math.hypot(o.x - p.x, o.y - p.y);
-          if (d <= COMPANION_SIGHT && d < bestD) {
+          if (d <= sight && d < bestD) {
             bestD = d;
             found = o;
           }
@@ -4841,7 +4837,7 @@ export class Creatures {
     }
     if (c.enemy !== null) {
       const e = c.enemy === PLAYER_ATTACKER ? undefined : this.list.get(c.enemy);
-      if (!e || !quarry(e) || Math.hypot(e.x - p.x, e.y - p.y) > (c.stance === 'guard' ? GUARD_RANGE : COMPANION_LEASH)) {
+      if (!e || !quarry(e) || Math.hypot(e.x - p.x, e.y - p.y) > (c.stance === 'guard' ? GUARD_RANGE : leash)) {
         c.enemy = null;
       } else {
         const d = Math.hypot(e.x - c.x, e.y - c.y);

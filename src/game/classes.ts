@@ -60,7 +60,7 @@ export const CLASS_CHANGE_COST = 500;
  * each with two spells and a passive at each tier (`talents.ts`), and their
  * tiers open on the trade's own level rather than a skill (`CLASS_TIER_AT`).
  */
-export const PERK_CLASSES: ReadonlySet<string> = new Set(['terraformer', 'miner', 'mason', 'carpenter', 'smith', 'forester', 'farmer', 'cook', 'tailor', 'herdsman', 'naturalist', 'fisher', 'mender', 'artisan', 'blade', 'berserker', 'pikeman', 'archer', 'skirmisher', 'chirurgeon']);
+export const PERK_CLASSES: ReadonlySet<string> = new Set(['terraformer', 'miner', 'mason', 'carpenter', 'smith', 'forester', 'farmer', 'cook', 'tailor', 'herdsman', 'naturalist', 'fisher', 'mender', 'artisan', 'blade', 'berserker', 'pikeman', 'archer', 'skirmisher', 'chirurgeon', 'beastmaster']);
 
 /**
  * The six tiers, as the skill each one opens at.

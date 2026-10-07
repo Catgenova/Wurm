@@ -1218,6 +1218,22 @@ export const NEWS: News[] = [
       ].filter(Boolean);
     },
   },
+  {
+    n: 92,
+    day: '2026-10-07',
+    lines: () => {
+      const spells = classSpellsOf('beastmaster');
+      const first = perksOf('beastmaster').map((p) => CLASS_SPELL_BY_ID.get(p.id)).find((sp) => sp !== undefined);
+      return [
+        `The Beastmaster is on spells and passives too: ${numberWord(spells.length)} spells and `
+          + `${numberWord(perksOf('beastmaster').length - spells.length)} passives in ${numberWord(CLASS_TIER_AT.length)} tiers on its own class `
+          + 'level, as the Sworn Blade’s, the Berserker’s, the Pikeman’s, the Archer’s, the Skirmisher’s and the Chirurgeon’s are. Its tree '
+          + 'and every node bought in it are gone; its rite stays.',
+        first ? `${first.name}: ${spellTerms(first)} ${first.note}` : '',
+        'Every blow your companion lands teaches a Beastmaster’s trade, as a blow of your own does.',
+      ].filter(Boolean);
+    },
+  },
 ];
 
 /** The highest entry this browser has shown. */

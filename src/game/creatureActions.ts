@@ -380,7 +380,7 @@ export const CREATURE_ACTIONS: ActionDef[] = [
     verb: 'instructing',
     instant: true,
     hidden: true,
-    rangeFor: () => COMPANION_LEASH,
+    rangeFor: (g) => g.perk('leash:companion', COMPANION_LEASH),
     stamina: 0,
     baseTime: 0,
     applies: (t, g) => creatureOf(g, t)?.mode === 'active',
@@ -402,7 +402,7 @@ export const CREATURE_ACTIONS: ActionDef[] = [
     verb: 'instructing',
     instant: true,
     hidden: true,
-    rangeFor: () => COMPANION_LEASH,
+    rangeFor: (g) => g.perk('leash:companion', COMPANION_LEASH),
     stamina: 0,
     baseTime: 0,
     applies: (t, g) => creatureOf(g, t)?.mode === 'active',
@@ -411,7 +411,9 @@ export const CREATURE_ACTIONS: ActionDef[] = [
       if (!c || c.mode !== 'active') return 'Only a companion takes orders like that.';
       const foe = isCreature(t) && typeof t.foe === 'number' ? g.creatures.get(t.foe) : undefined;
       if (!foe || foe.mode !== 'wild' || foe.hitchedTo !== null) return `Mark something wild first (${defaultKey('fight_mark')}), or fight it.`;
-      if (Math.hypot(foe.x - g.player.x, foe.y - g.player.y) > COMPANION_LEASH) return `It is more than ${COMPANION_LEASH} tiles from you.`;
+      // As far as it follows a fight: further for a Beastmaster's Long Leash.
+      const leash = g.perk('leash:companion', COMPANION_LEASH);
+      if (Math.hypot(foe.x - g.player.x, foe.y - g.player.y) > leash) return `It is more than ${leash} tiles from you.`;
       return null;
     },
     perform: (t, g) => {
@@ -429,7 +431,7 @@ export const CREATURE_ACTIONS: ActionDef[] = [
     verb: 'instructing',
     instant: true,
     hidden: true,
-    rangeFor: () => COMPANION_LEASH,
+    rangeFor: (g) => g.perk('leash:companion', COMPANION_LEASH),
     stamina: 0,
     baseTime: 0,
     applies: (t, g) => creatureOf(g, t)?.mode === 'active',

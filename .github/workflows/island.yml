@@ -1713,6 +1713,22 @@ jobs:
             --outfile=node_modules/.cache/chirurgeon.mjs --log-level=error
           node node_modules/.cache/chirurgeon.mjs
 
+      - name: The Beastmaster's spells and passives
+        run: |
+          # The seventh fighting trade on spells and passives. Both sides hold
+          # the same rows; every blow a spell has your companion strike its own
+          # blow at its share, the same roll asked twice, within its reach or as
+          # far as a Pounce leaps and no further; a creature put back, held or
+          # bled; every wild thing near it, or everything hunting you, turned
+          # on it; its health back; its blows larger and quicker while a spell
+          # holds; a creature that strikes you answered; a blow on either of
+          # you split between you; a wild creature tamed outright, into a crate
+          # when something follows you; its blows teaching the trade; and every
+          # passive at the rule it changes, the browser's fold the island's.
+          npx esbuild supabase/test/beastmaster.ts --bundle --platform=node --format=esm \
+            --outfile=node_modules/.cache/beastmaster.mjs --log-level=error
+          node node_modules/.cache/beastmaster.mjs
+
       - name: Glassblowing, glass panels, bottles and the stained glass wall
         run: |
           # The Artisan's fourth trade, at a hot smelter: sand melted into

@@ -368,6 +368,30 @@ export const FLEE_SECS = 6;
 
 /* ---- Your companion's orders ------------------------------------------------ */
 
+/**
+ * A companion at heel, and what it does about company.
+ *
+ * An aggressive one goes for anything wild within `COMPANION_SIGHT` of you;
+ * either sort drops a fight that has got `COMPANION_LEASH` from you; it
+ * strikes from `COMPANION_REACH` every `COMPANION_BLOW` seconds and runs at
+ * `COMPANION_PACE` times its walk on the way; and a blow at it or at you is
+ * remembered for `BLOW_MEMORY` seconds (`creatures.ts`), which is also how
+ * long a defensive worker on a deed remembers one.
+ *
+ * These were literals in `updateActive`, which was fine while the browser
+ * owned the wildlife. It does not any more: the island parked a companion
+ * at its keeper's feet and had no rule for what it does about company, so
+ * reported as "aggressive and defensive wildermon companions don't
+ * attack". They are crossed now, and the island's `companion_settle` walks
+ * and strikes off the same six numbers. Here rather than in `creatures.ts`,
+ * which says them again, so that a Beastmaster's spells and passives can
+ * read them (`talents.ts`, `perks.ts`).
+ */
+export const COMPANION_SIGHT = 5;
+export const COMPANION_LEASH = 9;
+export const COMPANION_REACH = 0.9;
+export const COMPANION_BLOW = 1.2;
+export const COMPANION_PACE = 1.3;
 /** A guarding companion gives up a fight that has got this many tiles from you. */
 export const GUARD_RANGE = 4;
 /** Fall back: it leaves its fight, comes to your side, and starts no fight for this many seconds. */

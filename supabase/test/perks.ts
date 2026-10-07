@@ -530,6 +530,9 @@ const OTHERS = new Set([
   'bleed:secs', 'riposte:blow',
   // A Chirurgeon's: a dressing's wound going bad, wind back for it, and more of it on a body far gone.
   'fester:bind_wound', 'stamina:bind_wound', 'triage:below', 'triage:heal',
+  // A Beastmaster's: the companion following you, what it can take and how it runs and strikes, how far from you it fights and
+  // looks, and its share of a blow that lands on you.
+  'kept:hardy', 'kept:soak', 'kept:speed', 'kept:haste', 'leash:companion', 'sight:companion', 'bond:share', 'bond:reach',
   ...STRIDE_KEYS,
 ]);
 const unnamed = PERKS.flatMap((p) => Object.keys(p.fx).filter((key) => {

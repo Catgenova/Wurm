@@ -1,6 +1,6 @@
 // The reach of a spell on a creature is `SPELL_REACH`, which `patrons.ts` takes from `TARGET_RANGE`; read here from where it is
 // set, since `patrons.ts` reads this file.
-import { DRAW_CLOSEST, HUNT_REACH, KNIFE_BLEED, KNIFE_BLEED_SECS, STAGGER_MAUL, TARGET_RANGE as SPELL_REACH, THROW_REACH } from './fight';
+import { COMPANION_REACH, DRAW_CLOSEST, HUNT_REACH, KNIFE_BLEED, KNIFE_BLEED_SECS, STAGGER_MAUL, TARGET_RANGE as SPELL_REACH, THROW_REACH } from './fight';
 import type { SpellOn } from './patrons';
 import { capital, numberWord, percent, times } from './words';
 
@@ -49,9 +49,10 @@ export const GUARDIAN_REACH = 2;
 
 /**
  * What a spell wants in your hands before it can be called: a shield in the off hand, or a weapon of a kind in the other --
- * and for a Skirmisher's Hit and Run, a thrown weapon or a knife.
+ * and for a Skirmisher's Hit and Run, a thrown weapon or a knife; and for a Beastmaster's, a companion at heel rather than
+ * anything in the hand.
  */
-export type SpellNeeds = 'shield' | 'axes' | 'mauls' | 'archery' | 'throwing' | 'skirmish' | 'knives';
+export type SpellNeeds = 'shield' | 'axes' | 'mauls' | 'archery' | 'throwing' | 'skirmish' | 'knives' | 'companion';
 /** As the spell's note says it first, and as its refusal says it is missing. */
 export const NEEDS_SAID: Record<SpellNeeds, { has: string; wants: string }> = {
   shield: { has: 'With a shield in your off hand', wants: 'a shield in your off hand' },
@@ -62,6 +63,8 @@ export const NEEDS_SAID: Record<SpellNeeds, { has: string; wants: string }> = {
   throwing: { has: 'With a javelin or a throwing axe in hand', wants: 'a javelin or a throwing axe in your hand' },
   skirmish: { has: 'With a javelin, a throwing axe or a knife in hand', wants: 'a javelin, a throwing axe or a knife in your hand' },
   knives: { has: 'With a knife in hand', wants: 'a knife in your hand' },
+  // A creature you keep that is following you: not in a crate, not working a deed, not in the traces or under a rider.
+  companion: { has: 'With a companion following you', wants: 'a companion following you' },
 };
 
 export interface ClassSpellDef {
@@ -106,6 +109,7 @@ const pikeman = spellOf('pikeman');
 const archer = spellOf('archer');
 const skirmisher = spellOf('skirmisher');
 const chirurgeon = spellOf('chirurgeon');
+const beastmaster = spellOf('beastmaster');
 
 /**
  * Every class spell there is, trade by trade, by the number each was picked
@@ -118,7 +122,11 @@ const chirurgeon = spellOf('chirurgeon');
  * nock, at an enemy within the bow's range and no nearer than a draw can be
  * made, landing less often at the far end of the range as a draw does. "A
  * throw" is a blow with the javelin or the throwing axe in your hand, which
- * fights from where you stand at an enemy within its reach.
+ * fights from where you stand at an enemy within its reach. A Beastmaster's
+ * spells are your companion's: "its own blow" is the blow it strikes when it
+ * fights -- its attack, half again at the top of its fighting, a third either
+ * way as each one lands, and whatever is making its blows larger at the time
+ * -- and "its reach" is how near it has to be to strike (`COMPANION_REACH`).
  */
 export const CLASS_SPELLS: ClassSpellDef[] = [
   /* ---- The Sworn Blade ---- */
@@ -297,6 +305,42 @@ export const CLASS_SPELLS: ClassSpellDef[] = [
   chirurgeon(20, 'Miracle Worker', 0.4, 600, ['self', 'player'], { heal: 0.5, reach: 4 },
     (fx) => `Every wound on you or on somebody within ${fx.reach} tiles of you closes, with whatever bleeding and venom was in it, and `
       + `they get ${percent(fx.heal)} of their health back.`),
+
+  /* ---- The Beastmaster ---- */
+  beastmaster(1, 'Sic', 0.05, 6, ['enemy'], { more: 1.3 },
+    (fx) => `your companion strikes an enemy within its reach (${COMPANION_REACH} tiles of it) at once, a blow at ${ofBlow(fx.more)} of its `
+      + 'own.', 'companion'),
+  beastmaster(15, 'Lick Wounds', 0.06, 15, ['self'], { heal: 0.15 },
+    (fx) => `your companion gets ${percent(fx.heal)} of its health back.`, 'companion'),
+  beastmaster(2, 'Pounce', 0.08, 12, ['enemy'], { reach: 5, more: 1, back: 0.5 },
+    (fx) => `your companion leaps onto an enemy up to ${fx.reach} tiles from it, over ground it could run, and strikes it at `
+      + `${ofBlow(fx.more)} of its own blow; the enemy's next blow is put back ${span(fx.back)}.`, 'companion'),
+  beastmaster(28, 'Snarl', 0.08, 15, ['self'], { reach: 4 },
+    (fx) => `every wild creature within ${fx.reach} tiles of your companion turns on it.`, 'companion'),
+  beastmaster(27, 'Guard Me', 0.1, 30, ['self'], { reach: 6 },
+    (fx) => `your companion leaps to your side, and every creature within ${fx.reach} tiles of you that is hunting you turns on it.`,
+    'companion'),
+  beastmaster(8, 'Drag Down', 0.15, 40, ['enemy'], { more: 0.5, hold: 4 },
+    (fx) => `your companion strikes an enemy within its reach at ${ofBlow(fx.more)} of its own blow, and holds it where it stands, `
+      + `neither moving nor striking, for ${span(fx.hold)}.`, 'companion'),
+  beastmaster(13, 'Disembowel', 0.18, 60, ['enemy'], { more: 1, each: 0.3, secs: 8 },
+    (fx) => `your companion strikes an enemy within its reach at ${ofBlow(fx.more)} of its own blow, and the enemy bleeds `
+      + `${percent(fx.each)} of the blow a second for ${span(fx.secs)}; a bleed never takes the last of it.`, 'companion'),
+  beastmaster(18, 'Bloodlust', 0.15, 60, ['self'], { more: 1.4, secs: 15 },
+    (fx) => `for ${span(fx.secs)} your companion's blows are ${percent(fx.more - 1)} larger.`, 'companion'),
+  beastmaster(32, 'Vengeance', 0.15, 90, ['self'], { more: 0.6, reach: 5, secs: 20 },
+    (fx) => `for ${span(fx.secs)}, every creature that lands a blow on you is struck back by your companion at ${ofBlow(fx.more)} of `
+      + `its own blow, when it is within ${fx.reach} tiles of it.`, 'companion'),
+  beastmaster(50, 'Feral Bond', 0.25, 600, ['self'], { share: 0.5, secs: 30 },
+    (fx) => `for ${span(fx.secs)} every blow that lands on you or on your companion is split between you, ${percent(fx.share)} `
+      + 'to each.', 'companion'),
+  beastmaster(48, 'Primal Fury', 0.3, 300, ['self'], { more: 1.75, quick: 1.5, secs: 20 },
+    (fx) => `for ${span(fx.secs)} your companion's blows are ${percent(fx.more - 1)} larger and come ${percent(fx.quick - 1)} more often.`,
+    'companion'),
+  beastmaster(41, 'Call of the Wild', 0.4, 900, ['enemy'], { reach: 4 },
+    (fx) => `A wild creature within ${fx.reach} tiles of you whose tame level is no more than your taming is tamed outright, as a tame `
+      + 'that takes: it follows you, or goes into an empty creature crate in your pack if something follows you already. Never a '
+      + 'monster.'),
 ];
 export const CLASS_SPELL_BY_ID = new Map(CLASS_SPELLS.map((s) => [s.id, s]));
 export const classSpellsOf = (cls: string): ClassSpellDef[] => CLASS_SPELLS.filter((s) => s.class === cls);

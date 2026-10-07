@@ -79,6 +79,10 @@ const EDGE = treed('edge');
 const GUARD = treed('guard', (c) => GUARDS.some((s) => c.skills.includes(s)));
 /** Knit, on the first fighting trade still on a tree with a column of it, and on first aid, which no fighting trade covers. */
 const KNIT = treed('knit');
+/** Fang and hide, a keeper's trade on the animal, on the first fighting trade still on a tree with both. */
+const FANG = treed('fang', (c) => CLASS_COLUMNS[c.id].some((x) => x.channel === 'hide'));
+const HIDE = FANG && CLASS_COLUMNS[FANG.c.id].some((x) => x.channel === 'hide')
+  ? { node: `${FANG.c.id}_${CLASS_COLUMNS[FANG.c.id].findIndex((x) => x.channel === 'hide') + 1}_1` } : null;
 /** A kind of weapon the trade does not cover, for the channel to leave alone. */
 const KINDS = [...new Set([...WEAPON_BY_ID.values()].map((x) => x.kind))].sort();
 const otherKind = (c: ClassDef): string => KINDS.find((k) => !c.skills.includes(k))!;
@@ -249,17 +253,18 @@ ${KNIT ? `
     delete from player_node where world_id = w.world_id and uid = w.uid;
     insert into skill (world_id, uid, id, value) values (w.world_id, w.uid, 'soul_strength', 60)
       on conflict (world_id, uid, id) do update set value = 60;
+${FANG && HIDE ? `
     perform give_coins(w.world_id, w.uid, class_change_cost()::bigint);
-    perform rpc_take_class(w.world_id, 'beastmaster');
-    perform rpc_take_node(w.world_id, 'beastmaster_2_1');
-    perform rpc_take_node(w.world_id, 'beastmaster_1_1');
+    perform rpc_take_class(w.world_id, '${FANG.c.id}');
+    perform rpc_take_node(w.world_id, '${FANG.node}');
+    perform rpc_take_node(w.world_id, '${HIDE.node}');
     select * into v_c from creature where world_id = w.world_id and id = v_c.id;
     -- Creature health rounds to a whole number, so a ratio out of it is the
     -- multiplier plus whatever the rounding did. The channel itself is asked
     -- exactly; the health is asked only to have moved the right way.
     insert into said values ('BEAST|' || (attack_of(v_c) / a)
-      || '|' || class_mul(w.world_id, w.uid, 'hide', 'soul_strength')
-      || '|' || (case when max_health(v_c) > c then 'up' else 'no' end));
+      || '|' || class_mul(w.world_id, w.uid, 'hide', '${FANG.c.main}')
+      || '|' || (case when max_health(v_c) > c then 'up' else 'no' end));` : ''}
     -- and an animal with no keeper is nobody's business
     update creature set keeper = null where world_id = w.world_id and id = v_c.id;
     select * into v_c from creature where world_id = w.world_id and id = v_c.id;
@@ -366,13 +371,17 @@ check('with the dressing of one taught by it too',
   said('ACTIONS') === 'bind_wound:chirurgy,clean_wound:chirurgy,treat_creature:chirurgy',
   said('ACTIONS'));
 
-if (said('BEAST') === 'MISSING') {
-  check('a beastmaster’s animal bites harder and takes more killing', false, 'no creature to try it on');
+if (said('STRAY') === 'MISSING') {
+  check('a keeper’s trade is on the animal, and an animal with no keeper is nobody’s business', false, 'no creature to try it on');
 } else {
-  const [fang, hide, went] = said('BEAST').split('|');
-  check('a beastmaster’s animal bites harder and takes more killing',
-    near(Number(fang), 1.04, 1e-9) && near(Number(hide), 1.04, 1e-9) && went === 'up',
-    `fang ×${fang}, hide ×${hide}, health went ${went}`);
+  if (FANG && HIDE) {
+    const [fang, hide, went] = said('BEAST').split('|');
+    check(`a ${FANG.c.name}’s animal bites harder and takes more killing`,
+      near(Number(fang), FANG.mul, 1e-9) && near(Number(hide), nodeDef(HIDE.node)!.mul, 1e-9) && went === 'up',
+      `fang ×${fang}, hide ×${hide}, health went ${went}`);
+  } else {
+    check(`fang and hide: ${moved('fang and hide')}`, said('BEAST') === 'MISSING', said('BEAST'));
+  }
   check('and an animal with no keeper is nobody’s business',
     Number(said('STRAY')) === 1, said('STRAY'));
 }
