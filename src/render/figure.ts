@@ -1855,6 +1855,8 @@ export interface Rig {
   open: [boolean, boolean];
   /** Each hand hanging loose, neither open nor closed: walking with nothing in it. */
   loose: [boolean, boolean];
+  /** And how far a loose hand's fingers are curled in toward the palm, from hanging straight (nought) to closed (one): see `curled`. */
+  curl: [number, number];
   /** The hands wanted for something else -- work, the water, the reins, a wave or a hop -- and whatever they held put away. */
   stowed: boolean;
   /** Which shoulder something heavy is carried over: the right (1), or the left (0) from where the right would put it behind the head. */
@@ -1874,7 +1876,7 @@ function rest(): Rig {
     at: [0, 0, 0], pelvis: [0, 0, 0], spine: [0, 0, 0], chest: [0, 0, 0], neck: [0, 0, 0], head: [0, 0, 0],
     arm: [[4, 8, 0], [4, 8, 0]], elbow: [10, 10], hand: [[0, 0, 0], [0, 0, 0]],
     leg: [[0, 2, 0], [0, 2, 0]], knee: [3, 3], foot: [0, 0], flat: [true, true],
-    tail: [0, 0, 0], lift: 0, sink: 0, blink: false, reins: false, tool: false, lefty: false, shrug: [0, 0], open: [false, false], loose: [false, false], stowed: false, carried: 1, spin: 0,
+    tail: [0, 0, 0], lift: 0, sink: 0, blink: false, reins: false, tool: false, lefty: false, shrug: [0, 0], open: [false, false], loose: [false, false], curl: [0, 0], stowed: false, carried: 1, spin: 0,
   };
 }
 
@@ -1899,6 +1901,7 @@ function mirror(r: Rig): void {
   r.shrug = [r.shrug[1], r.shrug[0]];
   r.open = [r.open[1], r.open[0]];
   r.loose = [r.loose[1], r.loose[0]];
+  r.curl = [r.curl[1], r.curl[0]];
   if (r.plant) r.plant = [r.plant[1], r.plant[0]];
   r.lefty = !r.lefty;
 }
@@ -2018,6 +2021,19 @@ function plant(r: Rig, fr: Frame, k: number, ankle: V3): void {
   const roll = Math.atan2(-x, -z);
   r.leg[k] = [pitch / DEG, (-s * roll) / DEG, r.leg[k][2]];
   r.knee[k] = knee / DEG;
+}
+
+/**
+ * Which way leg `k`'s foot points along the ground as `r` has it, in
+ * degrees round to the left from straight ahead: the hips, the leg and the
+ * foot kept level, as `skeleton` puts them together.
+ */
+function footYaw(r: Rig, fr: Frame, k: number): number {
+  const T = fr.tall, s = k ? 1 : -1, [lp, la, lt] = r.leg[k];
+  const pelvis = joint(ROOT, [r.at[0], r.at[1], HIP * T + r.at[2]], ...r.pelvis);
+  const knee = joint(joint(pelvis, [s * fr.hi, 0, -0.1], lp, -s * la, s * lt), [0, 0, -THIGH * T], -r.knee[k]);
+  const ankle = joint(knee, [0, 0, -SHIN * T], (r.flat[k] ? -(r.pelvis[0] + lp - r.knee[k]) : 0) + r.foot[k]);
+  return Math.atan2(-ankle.m[1], ankle.m[4]) / DEG;
 }
 
 /**
@@ -2156,10 +2172,10 @@ const RUN_LEG: Key[] = [
   { at: 0.1, v: [8, 34, 0] },
   { at: 0.2, v: [-8, 28, -6] },
   { at: 0.31, v: [-25, 14, -32] },
-  { at: 0.42, v: [-18, 72, -30] },
-  { at: 0.55, v: [8, 118, -12] },
-  { at: 0.67, v: [42, 104, 0] },
-  { at: 0.79, v: [54, 58, 8] },
+  { at: 0.42, v: [-17, 66, -30] },
+  { at: 0.55, v: [12, 96, -12] },
+  { at: 0.67, v: [38, 76, 0] },
+  { at: 0.79, v: [48, 48, 8] },
   { at: 0.89, v: [38, 22, 10] },
   { at: 0.95, v: [28, 14, 8] },
 ];
@@ -2259,50 +2275,90 @@ function walk(r: Rig, phi: number, g: number, fr: Frame): void {
     const by = -z - Math.sqrt(Math.max(0, reach * reach - y * y));
     if (by > -0.06) H -= on * (by > 0.06 ? by : ((by + 0.06) * (by + 0.06)) / 0.24);
   }
+  // The hips turn with the leading leg, and drop on the side whose leg is off the ground, most just after the other heel takes the
+  // weight; the body goes over the foot it is on, most of a hand's breadth to each side at a walk. The back takes the hips' turn and
+  // drop back out, so the lean is along the way of going and the shoulders turn against the hips from square.
+  const hips = hipsAt(u0);
+  r.pelvis = [tip, drop, hips];
+  r.at = [-L(0.3, 0.12) * Math.sin(TAU * (u0 - 0.02)), 0, 0];
+  /*
+   * The legs put where the feet go, in the round. The ankle was solved in
+   * the leg's own fore-and-aft plane alone, which the hips' turn swings
+   * from side to side: a planted foot twisted seven degrees either way and
+   * its ball skated a hand's breadth across the ground under every step.
+   * Now each foot has a line along the ground -- out to its own side, a
+   * little wider at a walk than at a run -- and is turned out a few
+   * degrees, and the ankle is put on that line in three dimensions from
+   * wherever the hips are, the leg turned against the hips' turn so the
+   * foot keeps pointing the same way: on the ground, at the even pace the
+   * keys imply; in the air, where the keyed thigh and knee carry it.
+   */
+  const pelvisXf = joint(ROOT, [r.at[0], r.at[1], HIP * T], ...r.pelvis);
+  const ground = HIP * T - 0.1 - H;
   r.plant = [0, 0];
   for (let k = 0; k < 2; k++) {
     const { u, q, on } = legs[k];
-    let [thigh, knee] = q;
+    const s = k ? 1 : -1;
+    // A degree and a half more out on the left than the right: nobody's two feet are the same.
+    const out = L(5, 2) + (k ? 0 : 1.5), yaw = -s * out;
+    const lineX = s * (fr.hi + L(0.28, 0.1));
+    r.leg[k] = [0, 0, -out - s * hips];
+    // In the air: the keyed thigh and knee from the hip.
+    const hip = place(pelvisXf, [s * fr.hi, 0, -0.1]);
+    const air: V3 = [lineX, hip[1] + A * Math.sin(q[0] * DEG) + B * Math.sin((q[0] - q[1]) * DEG), hip[2] - A * Math.cos(q[0] * DEG) - B * Math.cos((q[0] - q[1]) * DEG)];
+    let at = air;
     if (on > 0) {
-      // The leg that puts the ankle there: the knee's bend from how far it is, and the thigh from which way.
-      const [y, z] = ankleOf(k, u, q[2], H);
-      const d = Math.min(reach, Math.hypot(y, z));
-      const bend = Math.acos(Math.max(-1, Math.min(1, (d * d - A * A - B * B) / (2 * A * B))));
-      const at = Math.atan2(y, -z) - Math.atan2(-B * Math.sin(bend), A + B * Math.cos(bend));
-      thigh += on * (at / DEG - thigh);
-      knee += on * (bend / DEG - knee);
+      // On the ground: the heel it rolls over on the track while the toe is up, the toe once the heel has lifted.
+      const a = q[2];
+      const [py, pz] = a >= 0 ? sole(HEEL, a) : sole(TOE, a);
+      const down: V3 = [lineX, hipY(k, 0) + heel0 - pace * u + (a >= 0 ? 0 : TOE[1] - HEEL[1]) - py, ground - pz];
+      at = [air[0] + on * (down[0] - air[0]), air[1] + on * (down[1] - air[1]), air[2] + on * (down[2] - air[2])];
     }
-    r.leg[k] = [thigh - tip, L(2.5, 1.2), 0];
-    r.knee[k] = knee;
     r.foot[k] = q[2];
+    plant(r, fr, k, at);
+    // The leg rolled out from the hips tips a foot peeling up off its heel round toward the other: turned back by however far it is.
+    let miss = footYaw(r, fr, k) - yaw;
+    miss -= 360 * Math.round(miss / 360);
+    r.leg[k][2] -= s * miss;
+    plant(r, fr, k, at);
     r.plant[k] = on;
     // The arm against the leg, so with the other leg: forward as that heel comes down, a moment behind it, and the forearm a moment
     // behind the upper arm again -- still folding forward as the arm starts back, and opening behind as it starts forward.
     const v = frac(u + 0.5);
     const swing = Math.cos(TAU * (v - L(0.04, 0.03)));
-    const follow = Math.cos(TAU * (v - L(0.12, 0.09)));
-    r.arm[k] = [L(3, 6) + L(20, 40) * swing, L(6, 9) - L(0, 4) * Math.max(0, swing), L(3, 20)];
-    r.elbow[k] = L(20, 90) + L(12, 18) * follow;
-    // The hand hanging loose trails the swing walking; closed in a fist at a run, it goes with the forearm.
+    const follow = Math.cos(TAU * (v - L(0.12, 0.06)));
+    const fore = Math.max(0, swing);
+    // The right arm swings a little further than the left, as most people's does.
+    const reach = k ? 1.08 : 1;
+    /*
+     * Swung in across the body a little as it comes forward, and the
+     * shoulder lifted with it, rather than straight fore and aft like a
+     * pendulum: seen from in front or behind, that was two tubes hanging
+     * still. At a run the elbow is keyed against the shoulder -- most bent
+     * with the arm forward and the fist up at the chest, opening as it goes
+     * back -- and the shoulder goes no further forward than puts the fist
+     * there; how far the elbow is bent comes in with the square of the
+     * gait, so half way to a run is not a pair of forearms held up still.
+     */
+    r.arm[k] = [L(3, 4) + reach * (swing > 0 ? L(20, 30) : L(19, 34)) * swing, L(6, 9) - L(8, 12) * fore, L(3, 16) + L(4, 8) * fore];
+    r.elbow[k] = 18 + 12 * Math.max(0, follow) + g * g * (66 + 24 * follow - 12 * Math.max(0, follow));
+    r.shrug[k] = L(0.14, 0.24) * fore;
+    // The hand hanging loose trails the swing walking; curling closed with the gait into a fist at a run, it goes with the forearm.
     r.hand[k] = [L(7, 2) * Math.cos(TAU * (v - 0.22)), 0, 0];
-    r.loose[k] = g < 0.5;
+    r.loose[k] = true;
+    r.curl[k] = g;
   }
-  // The hips turn with the leading leg, and drop on the side whose leg is off the ground, most just after the other heel takes the
-  // weight; the body goes over the foot it is on. The back takes the hips' turn and drop back out, so the lean is along the way of
-  // going and the shoulders turn against the hips from square.
-  const hips = hipsAt(u0);
   // At a run the body gives forward a little at each landing, sunk on the knee, and comes up straight off the toe.
   const give = L(0.5, 1.5) * (0.5 - 0.5 * Math.cos(TAU * Math.min(1, step / L(0.6, 0.64))));
-  r.pelvis = [tip, drop, hips];
   r.spine = [-L(2, 1) - give, -0.6 * drop, -hips];
   const turn = L(6, 13) * Math.cos(TAU * (u0 - 0.03));
-  r.chest = [-L(0.5, 1), -0.25 * drop, turn];
+  // And the shoulders roll against the hips, more at a run, where the arms drive.
+  r.chest = [-L(0.5, 1), -0.25 * drop + L(0.6, 1.6) * Math.sin(TAU * (u0 + 0.05)), turn];
   // The head held level and looking ahead, the neck taking most of what the body under it turns and tips.
   const pitch = tip + r.spine[0] + r.chest[0], roll = drop + r.spine[1] + r.chest[1];
   const ahead = -L(1, 3) - pitch;
   r.neck = [0.6 * ahead, -0.6 * roll, -0.55 * turn];
   r.head = [0.4 * ahead, -0.4 * roll, -0.38 * turn];
-  r.at = [-L(0.16, 0.05) * Math.sin(TAU * u0), 0, 0];
   // Carried at that height, the feet that are down kept on the ground by their knees for whatever the hips' roll leaves (`plantFoot`).
   r.hover = { h: H - H0, w: 1, thigh: 0, knee: 0, g };
   // Hair that hangs bouncing with the steps, and streaming out behind at a run.
@@ -3119,21 +3175,26 @@ function carrying(r: Rig, held: Weapon | undefined, shield: boolean, g: number):
   const steady = (k: number, keep: number, fore = L(3, 6)): void => {
     r.arm[k][0] = fore + keep * (r.arm[k][0] - L(3, 6));
   };
+  // The elbow's swing about its middle, as the free arm has it (see `walk`).
+  const bend = (k: number): number => r.elbow[k] - (18 + 6 + g * g * 66);
   if (held?.carry === 'fist') {
-    const e = r.elbow[1] - L(20, 90);
-    steady(1, L(0.55, 0.45), L(3, 10));
-    r.arm[1][1] += L(6, 9);
+    // At a run the sword arm still drives, the elbow working with it, rather than hanging dead at the side.
+    const e = bend(1);
+    steady(1, L(0.55, 0.6), L(3, 10));
+    // Further out from the body the further back it swings, so the fist and the blade go by the thigh and not into it.
+    r.arm[1][1] += L(6, 9) + 0.45 * Math.max(0, L(3, 10) - r.arm[1][0]);
     r.arm[1][2] = L(0, 6);
-    r.elbow[1] = L(24, 46) + 0.4 * e;
+    r.elbow[1] = L(24, 46) + L(0.4, 0.5) * e;
   } else if (held?.carry === 'staff') {
-    const e = r.elbow[1] - L(20, 90);
+    // Out from the hip and the elbow bent up a little more, so the butt rides beside the stride and not among the feet.
+    const e = bend(1);
     steady(1, L(0.25, 0.2), L(-4, -2));
-    r.arm[1][1] += 9;
+    r.arm[1][1] += 15;
     r.arm[1][2] = 0;
-    r.elbow[1] = L(44, 52) + 0.2 * e;
+    r.elbow[1] = L(50, 56) + 0.2 * e;
   }
   if (shield && held?.carry !== 'bow') {
-    const e = r.elbow[0] - L(20, 90);
+    const e = bend(0);
     steady(0, L(0.3, 0.3), L(8, 14));
     r.arm[0][1] += L(5, 4);
     r.arm[0][2] = L(0, 10);
@@ -3189,6 +3250,7 @@ const doing = (p: FigurePose): string => (p.swimming ? (p.moving ? 'swim' : 'tre
 /** Seconds to blend from one thing to the next, and to come round one eighth of a turn. */
 const BLEND = 0.22;
 const TURN = 0.11;
+const TURN_STANDING = 0.16;
 
 function mixRig(a: Rig, b: Rig, w: number): Rig {
   const n = (x: number, y: number): number => x + (y - x) * w;
@@ -3212,7 +3274,12 @@ function mixRig(a: Rig, b: Rig, w: number): Rig {
     // Carried on the curve as much as the walk being blended into or out of is, so that stopping in the air at a run comes down
     // over the blend rather than dropping onto the lower foot at once.
     hover: b.hover ? { ...b.hover, w: b.hover.w * w } : a.hover && { ...a.hover, w: a.hover.w * (1 - w) },
-    shrug: [n(a.shrug[0], b.shrug[0]), n(a.shrug[1], b.shrug[1])], open: b.open, loose: b.loose, stowed: b.stowed, carried: b.carried, spin: b.spin,
+    shrug: [n(a.shrug[0], b.shrug[0]), n(a.shrug[1], b.shrug[1])],
+    // A hand changes from one shape to another three quarters of the way through, a loose one curling closed toward the fist it is
+    // to become before then, rather than at the start, where a running fist opened in a frame as the body began to stop.
+    open: w < 0.75 ? a.open : b.open, loose: w < 0.75 ? a.loose : b.loose,
+    curl: [n(a.loose[0] ? a.curl[0] : 1, b.loose[0] ? b.curl[0] : 1), n(a.loose[1] ? a.curl[1] : 1, b.loose[1] ? b.curl[1] : 1)],
+    stowed: b.stowed, carried: b.carried, spin: b.spin,
     plant: b.plant ? [b.plant[0] * w, b.plant[1] * w] : a.plant && [a.plant[0] * (1 - w), a.plant[1] * (1 - w)],
   };
 }
@@ -3231,6 +3298,11 @@ interface Held {
   seen: number;
   /** How far the head and shoulders are turned ahead of the body toward where it is turning, in degrees: see `settle`. */
   lead: number;
+  /** What it was doing before, and at what gait it last walked: a stop from a run brakes, a start shifts the weight first. */
+  was: string;
+  gait: number;
+  /** Its feet as drawn: see `footed`. */
+  feet?: Foot[];
 }
 
 const held = new Map<string, Held>();
@@ -3243,28 +3315,51 @@ function settle(id: string, p: FigurePose, target: Rig, now: number): { rig: Rig
   let h = held.get(id);
   // A body not drawn for a while -- off screen, or just arrived -- starts where it is.
   if (!h || now - h.seen > 0.5) {
-    h = { doing: doing(p), rig: target, from: target, since: -1, facing: goal, goal, turnFrom: goal, turnSince: -1, seen: now, lead: 0 };
+    h = { doing: doing(p), rig: target, from: target, since: -1, facing: goal, goal, turnFrom: goal, turnSince: -1, seen: now, lead: 0, was: doing(p), gait: 0 };
     held.set(id, h);
     if (held.size > 256) for (const [k, v] of held) if (now - v.seen > 5) held.delete(k);
   }
   const dt = Math.max(0, Math.min(0.1, now - h.seen));
   h.seen = now;
   if (doing(p) !== h.doing) {
+    h.was = h.doing;
     h.doing = doing(p);
     h.from = h.rig;
     h.since = now;
   }
-  const w = ease(Math.min(1, Math.max(0, (now - h.since) / BLEND)));
+  if (h.doing === 'walk') h.gait = Math.max(0, Math.min(1, p.gait ?? 0));
+  // Stopping from a run takes longer than from a walk: the body brakes over a step rather than standing up out of the stride.
+  const stopping = h.was === 'walk' && h.doing === 'idle', starting = h.was === 'idle' && h.doing === 'walk';
+  const x = Math.min(1, Math.max(0, (now - h.since) / (BLEND * (stopping ? 1 + 0.8 * h.gait : 1))));
+  const w = ease(x);
   h.rig = w < 1 ? mixRig(h.from, target, w) : target;
+  if (w < 1 && stopping && h.gait > 0) {
+    /*
+     * Braking out of a run: the hips carried on forward over the leading
+     * foot and the body leant back against it, sunk on the knees, and then
+     * stood back up over both feet as the other comes up beside it.
+     */
+    const brake = h.gait * Math.sin(Math.PI * x), r = h.rig;
+    h.rig = { ...r, at: [r.at[0], r.at[1] + 0.9 * brake * (1 - x), r.at[2] - 0.45 * brake], pelvis: [r.pelvis[0] + 5 * brake, r.pelvis[1], r.pelvis[2]], spine: [r.spine[0] + 3 * brake, r.spine[1], r.spine[2]], neck: [r.neck[0] - 4 * brake, r.neck[1], r.neck[2]] };
+  } else if (w < 1 && starting) {
+    /*
+     * Setting off: the weight goes over onto the foot that stays down
+     * before the other lifts -- the hips across to it and a little down --
+     * and the body tips into the way of going.
+     */
+    const r = h.rig, on = target.plant ? (target.plant[1] > target.plant[0] ? 1 : -1) : 1, shift = Math.sin(Math.PI * Math.min(1, x * 1.6));
+    h.rig = { ...r, at: [r.at[0] + 0.35 * on * shift, r.at[1], r.at[2] - 0.15 * shift], pelvis: [r.pelvis[0] - 3 * shift, r.pelvis[1] - 2.5 * on * shift, r.pelvis[2]] };
+  }
   if (goal !== h.goal) {
     h.goal = goal;
     h.turnFrom = h.facing;
     h.turnSince = now;
   }
-  // The short way round, at an eighth of a turn per TURN seconds.
+  // The short way round, at an eighth of a turn per TURN seconds; standing, more slowly, for the feet to step round under it.
   let d = h.goal - h.turnFrom;
   d -= 8 * Math.round(d / 8);
-  const k = Math.min(1, Math.max(0, (now - h.turnSince) / (TURN * Math.max(1, Math.abs(d)))));
+  const k = Math.min(1, Math.max(0, (now - h.turnSince) / ((p.moving ? TURN : TURN_STANDING) * Math.max(1, Math.abs(d)))));
+  const was = h.facing;
   h.facing = k < 1 ? h.turnFrom + d * ease(k) : h.goal;
   /*
    * Turned as a body turns rather than as a figure on a turntable: the head
@@ -3279,8 +3374,14 @@ function settle(id: string, p: FigurePose, target: Rig, now: number): { rig: Rig
   const want = Math.max(-LEAD_MOST, Math.min(LEAD_MOST, togo * 45 * LEAD));
   h.lead += (want - h.lead) * Math.min(1, dt * LEAD_RATE);
   if (Math.abs(h.lead) < 0.05) h.lead = 0;
-  const rig = h.lead ? turnedAhead(h.rig, h.lead) : h.rig;
-  return { rig, facing: h.facing, changing: w < 1 || k < 1 || h.lead !== 0 };
+  const led = h.lead ? turnedAhead(h.rig, h.lead) : h.rig;
+  // Everything on the ground goes round the other way in the body's frame as the body turns: a turn to the right, up the facings,
+  // is the ground going round to the left.
+  let turned = h.facing - was;
+  turned -= 8 * Math.round(turned / 8);
+  const changing = w < 1 || k < 1 || h.lead !== 0;
+  const { rig, busy } = footed(h, led, p.moving && !p.swimming && !p.driving ? target : undefined, frameOf(p.look ?? DEFAULT_LOOK), changing, -turned * 45, -togo * 45, now, dt);
+  return { rig, facing: h.facing, changing: changing || busy };
 }
 
 /** How far ahead of the body the head and shoulders turn, as a share of the turn still to come, and at most, in degrees; and how quickly they follow it, per second. */
@@ -3296,6 +3397,221 @@ function turnedAhead(r: Rig, lead: number): Rig {
 }
 
 type Bones = Record<string, Xf>;
+
+/*
+ * Feet that stay put through a change. Blending one pose into the next, or
+ * turning, was done joint by joint, and whatever a foot on the ground was
+ * doing went with it: stopping, both feet skated two or three tenths of a
+ * metre into the standing pose in a fifth of a second; turning on the spot,
+ * the body went round on its feet like a figure on a turntable; starting,
+ * the legs scissored out of the stance with both feet sliding. Now each foot
+ * is kept where it is on the ground for as long as the pose being drawn has
+ * it on the ground, and the legs are solved to it from wherever the hips have
+ * gone. A foot left more than a little way from where the pose wants it --
+ * by a stop, a start, a turn -- takes a step there, one foot at a time and
+ * never both off the ground at once; one turned far from its way pivots on
+ * its ball. A foot the pose lifts, a walk's swing, goes where the pose takes
+ * it, and comes down there.
+ */
+
+/** A foot as drawn: its ankle in the body's frame over the ground, which way it points, and a step it is taking. */
+interface Foot {
+  at: V3;
+  yaw: number;
+  /** Where the pose being drawn has it, last time, and whether that was on the ground; and where the walk being blended into has it. */
+  want: V3;
+  down: boolean;
+  ground: V3;
+  planted: boolean;
+  /** How far it is held up off where a blend carries it, for being carried along the ground: see `footed`. */
+  raise: number;
+  step?: { since: number; from: V3; yaw: number; lift: number; time: number };
+}
+
+/** How far a foot on the ground may be from where the pose wants it, along the ground and turned, while things are changing and once they have settled, before it steps there. */
+const STEP_OFF = 0.55, STEP_TURNED = 18;
+const SETTLED_OFF = 0.22, SETTLED_TURNED = 7;
+/** How far a foot kept on the ground may be turned against the leg before it pivots on its ball, in degrees, and how fast it pivots then, in degrees a second. */
+const PIVOT_FROM = 40, PIVOT_RATE = 600;
+/** Where the ball of the foot is, from the ankle, along the ground: what a foot pivots on. */
+const BALL = 1.15;
+
+/** Which way an ankle's foot points along the ground, in degrees round to the left of straight ahead. */
+const yawOf = (x: Xf): number => Math.atan2(-x.m[1], x.m[4]) / DEG;
+const wrapDeg = (a: number): number => a - 360 * Math.round(a / 360);
+
+/**
+ * The pose `rig` with its feet kept on the ground (see above), for the body
+ * `h` drawn now; `turned` is how far round to the left everything fixed on
+ * the ground has gone in the body's frame since it was last drawn, by the
+ * body turning, and `togo` how far it has still to go; and `walking` the
+ * walk, while the ground is going by under it. Busy while a foot is
+ * anywhere but where the pose has it.
+ */
+function footed(h: Held, rig: Rig, walking: Rig | undefined, fr: Frame, changing: boolean, turned: number, togo: number, now: number, dt: number): { rig: Rig; busy: boolean } {
+  const moving = !!walking;
+  if (rig.sink > 0 || rig.sit || rig.lift > 0) {
+    h.feet = undefined;
+    return { rig, busy: false };
+  }
+  const b = skeleton(fr, rig);
+  const want = [0, 1].map((k) => {
+    const a = b[`ankle${k}`];
+    let low = Infinity;
+    for (const p of SOLE) low = Math.min(low, place(a, p)[2]);
+    // A blend into standing brings a foot down over its length, and it is as good as down well before the end of it.
+    return { at: a.t, yaw: yawOf(a), down: low < (changing && !walking ? 0.3 : 0.08), low: low - a.t[2] };
+  });
+  // Where the walk itself has the feet, blended into or not, for how fast the ground is going by under it; walking, a foot is on
+  // the ground while the walk has it planted, whatever the blend into it has.
+  const wb = walking && walking !== rig ? skeleton(fr, walking) : b;
+  const ground = [0, 1].map((k) => ({ at: wb[`ankle${k}`].t, planted: !!walking?.plant && walking.plant[k] > 0.5 }));
+  if (walking) for (let k = 0; k < 2; k++) want[k].down = ground[k].planted;
+  else if (rig.plant && rig.hover && rig.hover.w > 0.5) for (let k = 0; k < 2; k++) want[k].down = rig.plant[k] > 0.5;
+  if (!h.feet) {
+    h.feet = want.map((w, k) => ({ at: w.at, yaw: w.yaw, want: w.at, down: w.down, ground: ground[k].at, planted: ground[k].planted, raise: 0 }));
+    return { rig, busy: false };
+  }
+  const feet = h.feet;
+  // How far each was out of place last time, for whether it still moves against the pose.
+  const was = feet.map((f) => [f.at[0] - f.want[0], f.at[1] - f.want[1], f.at[2] - f.want[2], f.yaw]);
+  // The ground going back under a walking body: as a foot the walk has planted goes back, both before and now -- its own, which
+  // rolls over the heel and onto the toe as it goes, or the other's.
+  const went = [0, 1].map((k) => (moving && feet[k].planted ? [ground[k].at[0] - feet[k].ground[0], ground[k].at[1] - feet[k].ground[1]] : undefined));
+  const [gx, gy] = (ground[0].planted && went[0]) || (ground[1].planted && went[1]) || [0, 0];
+  const c = Math.cos(turned * DEG), sn = Math.sin(turned * DEG);
+  const round = (p: V3): V3 => [p[0] * c - p[1] * sn, p[0] * sn + p[1] * c, p[2]];
+  /*
+   * Where a foot is to step to: where the pose has it once the turn still to
+   * come has gone round under it -- as far as a quarter turn of it, so that
+   * a foot does not step round into the other's place -- so that a step
+   * taken in the middle of a turn puts the foot down where it will be
+   * wanted at the end of it, rather than where it is wanted now.
+   */
+  const lead = Math.max(-90, Math.min(90, togo)) * DEG, lc = Math.cos(-lead), ls = Math.sin(-lead);
+  const aim = want.map((w) => ({ at: [w.at[0] * lc - w.at[1] * ls, w.at[0] * ls + w.at[1] * lc, w.at[2]] as V3, yaw: w.yaw - lead / DEG }));
+  for (let k = 0; k < 2; k++) {
+    const f = feet[k], w = want[k];
+    // Fixed on the ground: round with the turn, and back with the ground going by if it is on it.
+    const q = round(f.at);
+    const g = went[k] ?? [gx, gy];
+    f.at = f.down && w.down ? [q[0] + g[0], q[1] + g[1], q[2]] : q;
+    f.yaw += turned;
+    if (f.step) {
+      // Stepping: up off the ground and over to where the pose wants it now, and down; what it stepped from turned with the body.
+      const s = f.step;
+      s.from = round(s.from);
+      s.yaw += turned;
+      const t = Math.min(1, (now - s.since) / s.time), e = ease(t), to = aim[k];
+      f.at = [s.from[0] + (to.at[0] - s.from[0]) * e, s.from[1] + (to.at[1] - s.from[1]) * e, s.from[2] + (to.at[2] - s.from[2]) * e + s.lift * Math.sin(Math.PI * t)];
+      // Round the outside of the other foot, rather than through it, where it is in the way: stepping round in a turn.
+      const o = feet[1 - k].at, dx = to.at[0] - s.from[0], dy = to.at[1] - s.from[1], L = Math.hypot(dx, dy);
+      if (L > 0.3) {
+        const along = Math.max(0, Math.min(1, ((o[0] - s.from[0]) * dx + (o[1] - s.from[1]) * dy) / (L * L)));
+        const side = ((o[0] - s.from[0]) * dy - (o[1] - s.from[1]) * dx) / L;
+        const clear = 1.5 - Math.abs(side);
+        if (clear > 0 && along > 0 && along < 1) {
+          const by = clear * Math.sin(Math.PI * t) * (side > 0 ? -1 : 1);
+          f.at = [f.at[0] + (dy / L) * by, f.at[1] - (dx / L) * by, f.at[2]];
+        }
+      }
+      f.yaw = s.yaw + wrapDeg(to.yaw - s.yaw) * e;
+      if (t >= 1) f.step = undefined;
+    } else if (f.down && Math.hypot(f.at[0] - w.at[0], f.at[1] - w.at[1]) > (moving ? 0.9 : 0.3) && (!w.down || (moving && feet[1 - k].down))) {
+      /*
+       * Lifted by the pose from somewhere else than the pose has it, or,
+       * walking, kept so far from where the walk has it that the leg would
+       * soon not reach it, the other foot being down: a quick step up off
+       * the ground and over to it, rather than slid there low as a blend
+       * carries it.
+       */
+      const off = Math.hypot(f.at[0] - w.at[0], f.at[1] - w.at[1]);
+      f.step = { since: now - dt, from: f.at, yaw: f.yaw, lift: Math.min(0.9, 0.35 + 0.1 * off), time: 0.12 + 0.03 * Math.min(4, off) };
+      const e = ease(dt / f.step.time);
+      f.at = [f.at[0] + (w.at[0] - f.at[0]) * e, f.at[1] + (w.at[1] - f.at[1]) * e, f.at[2] + f.step.lift * Math.sin((Math.PI * dt) / f.step.time)];
+    } else if (!w.down) {
+      /*
+       * Lifted by the pose: carried with it, and however far it was out of
+       * place made up while it is in the air. While one pose is blended into
+       * another, a foot the blend carries along low over the ground -- into
+       * a walk's first stride, or round to the stance -- is lifted clear of
+       * it by how fast it goes, rather than slid.
+       */
+      const was = round(f.want), u = 1 - Math.min(1, dt * 14);
+      const speed = dt > 0 ? Math.hypot(w.at[0] - was[0] - gx, w.at[1] - was[1] - gy) / dt : 0;
+      const raised = f.raise;
+      f.raise += ((changing ? Math.min(0.6, 0.035 * speed) : 0) - f.raise) * Math.min(1, dt * 20);
+      f.at = [w.at[0] + (f.at[0] - was[0]) * u, w.at[1] + (f.at[1] - was[1]) * u, w.at[2] + (f.at[2] - raised - was[2]) * u + f.raise];
+      f.yaw = w.yaw + wrapDeg(f.yaw - w.yaw) * u;
+    } else if (moving && !f.down && Math.hypot(f.at[0] - w.at[0], f.at[1] - w.at[1]) > 0.3) {
+      // Walking, a foot not yet back where the walk has it is not put down short of it.
+      w.down = false;
+      const was = round(f.want), u = 1 - Math.min(1, dt * 20);
+      f.at = [w.at[0] + (f.at[0] - was[0]) * u, w.at[1] + (f.at[1] - was[1]) * u, w.at[2] + (f.at[2] - was[2]) * u + (1 - u) * 0.25];
+      f.yaw = w.yaw + wrapDeg(f.yaw - w.yaw) * u;
+    } else {
+      // On the ground: kept there, at the height and the roll the pose has it, and turned on its ball if it is twisted too far; and
+      // just put down, put down where the pose puts it, less whatever it was still out of place by in the air.
+      if (!f.down) {
+        const was = round(f.want);
+        f.at = [w.at[0] + f.at[0] - was[0], w.at[1] + f.at[1] - was[1], w.at[2]];
+      }
+      f.at[2] = w.at[2];
+      const twist = wrapDeg(f.yaw - w.yaw);
+      if (Math.abs(twist) > PIVOT_FROM) {
+        const by = -Math.sign(twist) * Math.min(Math.abs(twist) - PIVOT_FROM, PIVOT_RATE * dt);
+        const a0 = f.yaw * DEG, a1 = (f.yaw + by) * DEG;
+        const ball: Pt = [f.at[0] - Math.sin(a0) * BALL, f.at[1] + Math.cos(a0) * BALL];
+        f.at = [ball[0] + Math.sin(a1) * BALL, ball[1] - Math.cos(a1) * BALL, f.at[2]];
+        f.yaw += by;
+      }
+    }
+  }
+  // A foot too far from where the pose wants it, with the other on the ground to stand on, steps there: the further out of place
+  // first. Not while walking, where the walk's own next step takes it.
+  if (!moving && !feet[0].step && !feet[1].step) {
+    const settled = !changing && Math.abs(turned) < 1e-3;
+    const off = [0, 1].map((k) => Math.hypot(feet[k].at[0] - aim[k].at[0], feet[k].at[1] - aim[k].at[1]));
+    const far = [0, 1].map((k) => want[k].down && (settled ? off[k] > SETTLED_OFF || Math.abs(wrapDeg(feet[k].yaw - aim[k].yaw)) > SETTLED_TURNED : off[k] > STEP_OFF || Math.abs(wrapDeg(feet[k].yaw - aim[k].yaw)) > STEP_TURNED));
+    const k = far[0] && far[1] ? (off[0] >= off[1] ? 0 : 1) : far[0] ? 0 : far[1] ? 1 : -1;
+    if (k >= 0 && want[1 - k].down) {
+      const f = feet[k];
+      f.step = { since: now, from: f.at, yaw: f.yaw, lift: Math.min(0.9, 0.3 + 0.12 * off[k]), time: 0.17 + 0.035 * Math.min(4, off[k]) };
+    }
+  }
+  // Drawn otherwise than the pose has it while any foot is out of place; and changing, to be drawn again at once, while any is
+  // stepping or still moving against the pose -- not for one left a little out of place, standing.
+  let off = false, busy = false, lowest = Infinity;
+  for (let k = 0; k < 2; k++) {
+    const f = feet[k], w = want[k], o = was[k];
+    f.want = w.at;
+    f.down = w.down && !f.step;
+    if (w.down || f.step) f.raise = 0;
+    f.ground = ground[k].at;
+    f.planted = ground[k].planted;
+    const d: V3 = [f.at[0] - w.at[0], f.at[1] - w.at[1], f.at[2] - w.at[2]];
+    if (f.step || Math.hypot(d[0], d[1], d[2]) > 0.01 || Math.abs(wrapDeg(f.yaw - w.yaw)) > 0.3) off = true;
+    if (f.step || Math.hypot(d[0] - o[0], d[1] - o[1], d[2] - o[2]) > 0.003 || Math.abs(wrapDeg(f.yaw - o[3])) > 0.2) busy = true;
+    lowest = Math.min(lowest, f.at[2] + w.low);
+  }
+  busy &&= off;
+  if (!off) return { rig, busy };
+  /*
+   * The legs solved to the feet from where the hips are, in the frame the
+   * pose is stood in, which is the ground's once the hips are at the height
+   * the pose put them: carried on its curve no longer, but let down if a leg
+   * cannot reach a foot kept behind it, and held up off the ground where
+   * the pose has both feet in the air.
+   */
+  const r: Rig = { ...rig, at: [rig.at[0], rig.at[1], b.pelvis.t[2] - HIP * fr.tall], leg: [[...rig.leg[0]], [...rig.leg[1]]], knee: [rig.knee[0], rig.knee[1]], hover: undefined, plant: undefined };
+  for (let k = 0; k < 2; k++) {
+    r.leg[k][2] += (k ? 1 : -1) * wrapDeg(feet[k].yaw - want[k].yaw);
+    if (!feet[k].step && want[k].down) r.at[2] = Math.min(r.at[2], hipsFor(r, fr, k, feet[k].at, 4));
+  }
+  for (let k = 0; k < 2; k++) plant(r, fr, k, feet[k].at);
+  r.lift = Math.max(0, lowest);
+  return { rig: r, busy };
+}
 
 /** The sole's corners in the ankle's frame: what is stood on. */
 const SOLE: V3[] = [[-0.37, -0.58, -0.75], [0.37, -0.58, -0.75], [0.35, 1.72, -0.75], [-0.35, 1.72, -0.75]];
@@ -5516,8 +5832,9 @@ const WEAPONS: Record<string, () => Weapon> = {
   // Two-handed: a long grip, a long guard, and a blade to match, carried on the shoulder.
   long_sword: () => bladed({
     carry: 'shoulder', stow: 'back', from: -1.7, to: 10.6, fist: -0.2, reach: 3.1, tilt: 70, out: 28, spin: 90, slant: 42,
-    // From behind: straight up off the shoulder and a little forward three-quarters away, and back at a slant square behind.
-    stage: { 0: [1, 16, 0], 2: [0.85, 0, 0, 0.8], 3: [0.4, 14, 0], 4: [0.35, 25, 0], 5: [0.4, 14, 0], 6: [0.85, 0, 0, 0.8] },
+    // From behind: straight up off the shoulder and a little forward three-quarters away, and back at a slant square behind. Side on
+    // and three-quarters on, more upright and further back over the shoulder, so the blade rises behind the jaw and not across it.
+    stage: { 0: [1, 16, 0], 1: [0.7, 0, 0, 1], 2: [0.7, 0, 0, 1.2], 3: [0.4, 14, 0], 4: [0.35, 25, 0], 5: [0.4, 14, 0], 6: [0.7, 0, 0, 1.2], 7: [0.7, 0, 0, 1] },
     grip: shaft([[-1.3, 0.17], [0.62, 0.16]], 'grip', 6),
     hilt: join(pommelOf(-1.48, 0.27), guardOf(0.7, 1.25), box([-0.16, -0.3, 0.6], [0.16, 0.3, 0.98], 'fitting')),
     blade: join(
@@ -5560,8 +5877,9 @@ const WEAPONS: Record<string, () => Weapon> = {
     carry: 'shoulder', stow: 'back', headUp: true, from: -4.2, to: 6.8, fist: -3.3, reach: 2.8, tilt: 34, out: 64, spin: 150, slant: 38,
     // Three-quarters away, all but upright with the bit turned to the viewer, where lying back it would be edge on beside the cheek;
     // side on, lying further back, so the haft goes over the shoulder below the jaw rather than across the throat; from behind,
-    // standing up out from the shoulder, where lying back it points at the viewer and the bit sits on the shoulder with no haft.
-    stage: { 2: [1, -40, 0, 0.8], 3: [1.6, -44, 0], 4: [0.7, -16, 0], 5: [1.6, -44, 0], 6: [1, -40, 0, 0.8] },
+    // standing up out from the shoulder, where lying back it points at the viewer and the bit sits on the shoulder with no haft; and
+    // from in front, more upright and back over the shoulder, so the haft from the fist goes up beside the jaw rather than across it.
+    stage: { 0: [1, -30, 0, 0.6], 1: [1, -30, 0, 0.6], 2: [1.15, -45, 0, 1.2], 3: [1.6, -44, 0], 4: [0.7, -16, 0], 5: [1.6, -44, 0], 6: [1.15, -45, 0, 1.2], 7: [1, -30, 0, 0.6] },
     grip: shaft([[-4.1, 0.19], [-0.7, 0.18], [0.6, 0.175]], 'grip', 5),
     head: join(
       shaft([[0.6, 0.175], [5.9, 0.16]], 'wood', 5),
@@ -5587,7 +5905,8 @@ const WEAPONS: Record<string, () => Weapon> = {
   maul: () => ({
     // Slung head up, as a hammer is carried: head down on the back it is a spade, and at the hip a satchel.
     carry: 'shoulder', stow: 'back', headUp: true, from: -4.3, to: 5.9, fist: -3.4, reach: 2.8, tilt: 40, out: 64, spin: 90, slant: 36,
-    stage: { 2: [1, -40, 0, 0.8], 3: [1.6, -44, 0], 4: [0.7, -16, 0], 5: [1.6, -44, 0], 6: [1, -40, 0, 0.8] },
+    // Staged as the battle axe is.
+    stage: { 0: [1, -30, 0, 0.8], 1: [1, -30, 0, 0.8], 2: [1, -45, 0, 1.2], 3: [1.6, -44, 0], 4: [0.7, -16, 0], 5: [1.6, -44, 0], 6: [1, -45, 0, 1.2], 7: [1, -30, 0, 0.8] },
     grip: shaft([[-4.2, 0.19], [-0.8, 0.18], [0.6, 0.175]], 'grip', 5),
     head: join(
       shaft([[0.6, 0.175], [4.9, 0.17]], 'wood', 5),
@@ -5850,7 +6169,14 @@ function shoulder(r: Rig, fr: Frame, w: Weapon, k: number, facing: number): void
   const T = fr.tall, s = k ? 1 : -1;
   const chest = joint(joint(ROOT, [0, 0, SPINE * T], ...r.spine), [0, 0, CHEST * T], ...r.chest);
   const [keep, wider, turn, back = 0] = w.stage?.[((Math.round(facing) % 8) + 8) % 8] ?? [1, 0, 0];
-  const tilt = (w.tilt ?? 45) * keep * DEG, out = ((w.out ?? 12) + wider) * DEG;
+  /*
+   * A weight on the shoulder is not welded to it: as the body drops onto
+   * each foot it goes on down a little after it, tipping back over the
+   * shoulder, and comes up again as the body rises -- a few degrees at a
+   * walk, more at a run.
+   */
+  const sag = r.hover ? (-0.2 - r.hover.h) * (3 + 6 * r.hover.g) : 0;
+  const tilt = ((w.tilt ?? 45) * keep + sag) * DEG, out = ((w.out ?? 12) + wider) * DEG;
   r.spin = turn;
   // Back from upright by the tilt, and leaning out from the head by `out`, so what is behind the shoulder clears the skull.
   const d = unit([s * Math.sin(out) * Math.cos(tilt), -Math.sin(tilt), Math.cos(out) * Math.cos(tilt)]);
@@ -5874,9 +6200,11 @@ function shoulder(r: Rig, fr: Frame, w: Weapon, k: number, facing: number): void
  * right hand nearest, forward is at the viewer, and three-quarters away with
  * it furthest, forward is behind the body; from behind, forward is away. At
  * each the blade is turned out to where its length shows, and between them
- * it comes round smoothly as the body turns.
+ * it comes round smoothly as the body turns -- never more than about fifty
+ * degrees from one facing to the next, where it was ninety, and turning the
+ * body through an eighth swung the blade round in two frames.
  */
-const FIST_OUT = [58, 130, 38, 38, 70, 130, 38, 38];
+const FIST_OUT = [52, 100, 46, 40, 62, 100, 46, 42];
 const fistOut = (facing: number): number => byFacing(FIST_OUT, facing);
 /** How far down from level a blade in the fist points, and how much of the arm's swing it takes, in degrees and as a share. */
 const FIST_DOWN = 30, FIST_SWING = 0.4;
@@ -5904,8 +6232,11 @@ const BOW_CLEAR = 1.8;
  * whoever is looking and an upright bow at the hip stands up across the face.
  */
 const BOW_AHEAD = [0.45, 0.45, 0.45, -0.3, -0.35, 0.8, 1.7, 0.2];
-/** And how much further out to the left than the hip: three-quarters on from the left, the width is what takes it off the face. */
-const BOW_WIDE = [0.6, 0.5, 0, 1.3, 1.0, 0, 0.3, 2.6];
+/**
+ * And how much further out to the left than the hip: three-quarters on from the left, the width is what takes it off the face; from
+ * in front and three-quarters on from the right, it keeps the lower limb off the left shin and thigh.
+ */
+const BOW_WIDE = [0.9, 0.8, 0, 1.3, 1.0, 0.4, 0.3, 2.6];
 /** How much further forward a bow is held at a run, at each facing, for each unit it is lifted: see `bowArm`. */
 const BOW_RUN_AHEAD = [0.7, 0.7, 0.3, 0, 0, 0, 0.3, 0.7];
 /** How much higher again a bow is held at each facing: see `bowArm`. */
@@ -6077,6 +6408,28 @@ function wielded(xf: Xf, wrist: Xf, fist: V3, w: number): Xf {
   const dir = mix(col(xf.m, 2), n(mv(wrist.m, [0, 0.87, -0.5])));
   const out = mix(col(xf.m, 0), n(mv(wrist.m, [1, 0, 0])));
   return { m: aimed(ROOT, [0, 0, 0], dir, out).m, t: fist };
+}
+
+/**
+ * How far the length of something held, from `a` to `b`, is clear of the
+ * legs as `b` has them -- the thighs and the shins, each as thick as it is,
+ * and a little more -- in units: below nought, it goes through one.
+ */
+function legRoom(bones: Bones, a: V3, b: V3): number {
+  const d: V3 = [b[0] - a[0], b[1] - a[1], b[2] - a[2]], dd = dot(d, d) || 1;
+  let least = Infinity;
+  for (let k = 0; k < 2; k++) {
+    for (const [p, q, r] of [[bones[`hip${k}`].t, bones[`knee${k}`].t, 1.15], [bones[`knee${k}`].t, bones[`ankle${k}`].t, 0.95]] as Array<[V3, V3, number]>) {
+      // Sampled along the held thing, the nearest point of the bone to each.
+      const e: V3 = [q[0] - p[0], q[1] - p[1], q[2] - p[2]], ee = dot(e, e) || 1;
+      for (let i = 0; i <= 8; i++) {
+        const x: V3 = [a[0] + (d[0] * i) / 8, a[1] + (d[1] * i) / 8, a[2] + (d[2] * i) / 8];
+        const t = Math.max(0, Math.min(1, ((x[0] - p[0]) * e[0] + (x[1] - p[1]) * e[1] + (x[2] - p[2]) * e[2]) / ee));
+        least = Math.min(least, Math.hypot(x[0] - p[0] - e[0] * t, x[1] - p[1] - e[1] * t, x[2] - p[2] - e[2] * t) - r);
+      }
+    }
+  }
+  return dd > 0 ? least : Infinity;
 }
 
 /** A frame turned by a matrix, whose columns are where its x, y and z go, at `at`. */
@@ -6337,7 +6690,7 @@ function wield(out: Part[], named: Map<string, Part[]>, r: Rig, b: Bones, gear: 
     } else if (!r.stowed && arm.carry === 'fist') {
       // A blade forward and down and out from the body, set off the hips rather than the forearm so it keeps to a line that shows its
       // length whichever way the body is seen, and tipped forward and back with the arm's swing by a share of it.
-      const out = fistOut(facing) * DEG;
+      let out = fistOut(facing) * DEG;
       const fist = place(b.wrist1, [0, 0, GRIP]);
       const aim = (down: number): Xf => {
         const tip = down - FIST_SWING * (r.arm[1][0] - 3) * DEG;
@@ -6351,6 +6704,34 @@ function wield(out: Part[], named: Map<string, Part[]>, r: Rig, b: Bones, gear: 
       let xf = aim(down);
       // Raised toward level, a step at a time, wherever that would put its point in the ground.
       for (let q = 0; q < 9 && place(xf, [0, 0, arm.to])[2] < 0.5; q++) xf = aim((down -= 8 * DEG));
+      /*
+       * And wherever it would go through a leg -- at the back of the arm's
+       * swing the blade lay through the near thigh, and side on across both
+       * shins -- turned and tipped as little as clears it: the nearest of a
+       * few ways round to where it is that does, or failing that the one
+       * that comes nearest, the grip's end below the fist counted as well as
+       * the blade.
+       */
+      const room = (x: Xf): number => Math.min(legRoom(b, place(x, [0, 0, 0.6]), place(x, [0, 0, arm.to])), legRoom(b, place(x, [0, 0, arm.from]), place(x, [0, 0, -0.6])));
+      let clear = room(xf);
+      if (clear < 0) {
+        const at = out, low = down;
+        let price = Infinity;
+        for (const turn of [0, 12, -12, 24, -24, 36]) {
+          for (const tip of [0, -12, 12, -24, 24]) {
+            if (low + tip * DEG < -20 * DEG) continue;
+            out = at + turn * DEG;
+            const x = aim(low + tip * DEG);
+            if (place(x, [0, 0, arm.to])[2] < 0.5) continue;
+            const c = room(x), p = Math.abs(turn) + Math.abs(tip);
+            if (c >= 0 ? clear < 0 || p < price : clear < 0 && c > clear) {
+              xf = x;
+              clear = c;
+              price = c >= 0 ? p : Infinity;
+            }
+          }
+        }
+      }
       // A blow struck by a spell: carried by the forearm, `wield` of the way, so the swing of the arm swings it.
       if ((r.wield ?? 0) > 0) xf = wielded(xf, b.wrist1, fist, Math.min(1, r.wield ?? 0));
       const grip = bit(arm.grip, xf, 0.02);
@@ -6359,10 +6740,30 @@ function wield(out: Part[], named: Map<string, Part[]>, r: Rig, b: Bones, gear: 
     } else if (!r.stowed) {
       const hand = arm.carry === 'bow' ? 0 : 1;
       // A staff leant out from the body as well as forward, so its shaft passes beside the face rather than across it.
-      const dir: V3 = arm.carry === 'staff' ? staffUp(facing, arm.lean ?? 0) : bowUp(facing);
+      const up: V3 = arm.carry === 'staff' ? staffUp(facing, arm.lean ?? 0) : bowUp(facing);
       // A bow turned about its stave from where it is seen, so its bend shows rather than its edge (see `BOW_TURN`).
       const turn = arm.carry === 'bow' ? byFacing(BOW_TURN, facing) * DEG : 0;
-      const xf: Xf = { m: aimed(b.pelvis, [0, 0, 0], dir, [Math.cos(turn), -Math.sin(turn), 0]).m, t: place(b[`wrist${hand}`], [0, 0, GRIP]) };
+      const at = place(b[`wrist${hand}`], [0, 0, GRIP]);
+      const frame = (dir: V3): Xf => ({ m: aimed(b.pelvis, [0, 0, 0], dir, [Math.cos(turn), -Math.sin(turn), 0]).m, t: at });
+      let xf = frame(up);
+      /*
+       * The lower end -- a spear's butt, a bow's lower limb -- swung out
+       * from the body about the hand, a few degrees at a time, wherever it
+       * would go through a leg: it went through the shin at a walk and the
+       * thigh at a run. The top comes in by as much, never so far that it
+       * comes in over the head.
+       */
+      const head = place(b.head, [0, 0.1, 1.6]);
+      const s = hand ? 1 : -1;
+      for (let q = 1; q <= 5 && legRoom(b, place(xf, [0, 0, arm.from]), place(xf, [0, 0, -0.6])) < 0; q++) {
+        const a = q * 5 * DEG, c = Math.cos(a), sn = Math.sin(a);
+        // About the hips' forward axis, the top toward the body's middle.
+        const dir: V3 = [up[0] * c - s * up[2] * sn, up[1], up[2] * c + s * up[0] * sn];
+        const next = frame(dir);
+        const top = place(next, [0, 0, arm.to]);
+        if (Math.hypot(top[0] - head[0], top[1] - head[1]) < 2.2 && top[2] > head[2] - 2) break;
+        xf = next;
+      }
       const grip = bit(arm.grip, xf, 0.02);
       bit(arm.head, xf, 0.035);
       for (const h of named.get(`hand${hand}`) ?? []) h.after = grip;
@@ -6425,9 +6826,21 @@ function wield(out: Part[], named: Map<string, Part[]>, r: Rig, b: Bones, gear: 
     const P = s.id === 'wooden_shield' && !s.dye ? weatheredOf(gearPalette(pal, s)) : gearPalette(pal, s);
     const rare = s.rare || undefined, seed = DRESSED.indexOf('offhand') + 1;
     if (!r.stowed && !(arm && arm.carry === 'bow')) {
-      // On the left forearm, its face out to the left and a little forward, where it reads from the front, and the hand behind it.
-      const n = unit([-0.62, 0.78, 0]);
-      const xf = framed(b.elbow0, [n[0] * 0.78, n[1] * 0.78, -1.25], cross([0, 0, 1], n), [0, 0, 1], n);
+      /*
+       * On the left forearm, its face out to the left and a little forward,
+       * where it reads from the front, and the hand behind it. Which way it
+       * faces is the chest's, not the forearm's: turned with the forearm, a
+       * forearm brought up level at a run laid it flat like a tray, and it
+       * see-sawed with the swing. Tipped a third of the way toward square
+       * to the forearm, which is as much as keeps the arm along the back of
+       * it, and its top as near the chest's up as that allows.
+       */
+      const fa = mv(b.elbow0.m, [0, 0, -1]), want = mv(b.chest.m, unit([-0.62, 0.78, 0])), lift = mv(b.chest.m, [0, 0, 1]);
+      const along = dot(want, fa) / 3;
+      const n = unit([want[0] - fa[0] * along, want[1] - fa[1] * along, want[2] - fa[2] * along]);
+      const y = unit([lift[0] - n[0] * dot(lift, n), lift[1] - n[1] * dot(lift, n), lift[2] - n[2] * dot(lift, n)]), x = cross(y, n);
+      const mid = place(b.elbow0, [0, 0, -1.25]);
+      const xf: Xf = { m: [x[0], y[0], n[0], x[1], y[1], n[1], x[2], y[2], n[2]], t: [mid[0] + n[0] * 0.78, mid[1] + n[1] * 0.78, mid[2] + n[2] * 0.78] };
       out.push({ mesh: shield, xf, bias: 0.06, pal: P, rare, seed, front: [0, 0, 1], after: on('lower0', 'hand0') });
     } else {
       const xf = framed(b.chest, [0, behind - 0.36, 0.55], [1, 0, 0], [0, 0, 1], [0, -1, 0]);
@@ -6446,6 +6859,25 @@ function wield(out: Part[], named: Map<string, Part[]>, r: Rig, b: Bones, gear: 
     out.push(...straps);
     for (const p of back) p.after = [...under, ...straps, ...(p !== slung && slung ? [slung] : [])];
   }
+}
+
+/**
+ * A loose hand's fingers curled in toward the palm by `c`, from hanging
+ * straight (nought) to closed on themselves (one): turned about the
+ * knuckles, all of it past them and none above. Walking into a run the hand
+ * closes as the gait comes up, where it was loose up to half way and a fist
+ * from there, and flickered between the two wherever the gait wavered
+ * across the middle.
+ */
+const KNUCKLE = -0.45 * HAND;
+function curled(v: V3[], k: number, c: number): V3[] {
+  const s = k ? 1 : -1, most = 85 * DEG * c;
+  return v.map(([x, y, z]) => {
+    const share = Math.max(0, Math.min(1, (KNUCKLE - z) / 0.25));
+    if (!share) return [x, y, z];
+    const a = share * most, cs = Math.cos(a), sn = Math.sin(a), dz = z - KNUCKLE;
+    return [x * cs + s * dz * sn, y, KNUCKLE + dz * cs - s * x * sn];
+  });
 }
 
 function partsOf(kit: Kit, r: Rig, b: Bones, gear?: GearLook, pal?: Palette, facing = 0, lod = kit.fr.lod): Part[] {
@@ -6489,7 +6921,7 @@ function partsOf(kit: Kit, r: Rig, b: Bones, gear?: GearLook, pal?: Palette, fac
     parts.push(
       name(`upper${k}`, { mesh: k ? kit.upper : mirrored(kit.upper), xf: b[`arm${k}`], bias: 0, convex: true }),
       name(`lower${k}`, { mesh: kit.lower, xf: b[`elbow${k}`], bias: 0.02 }),
-      name(`hand${k}`, { mesh: r.open[k] ? kit.open[k] : r.loose[k] ? kit.loose[k] : kit.hands[k], xf: b[`wrist${k}`], bias: 0.03 }),
+      name(`hand${k}`, { mesh: r.open[k] ? kit.open[k] : r.loose[k] ? kit.loose[k] : kit.hands[k], v: !r.open[k] && r.loose[k] && r.curl[k] > 0.02 ? curled(kit.loose[k].v, k, r.curl[k]) : undefined, xf: b[`wrist${k}`], bias: 0.03 }),
     );
     const bend = kneeBend(b, k);
     const shin = name(`shin${k}`, { mesh: kit.shin, xf: b[`knee${k}`], v: kneeBent(kit.shin.v, bend, true), bias: 0, convex: true });
