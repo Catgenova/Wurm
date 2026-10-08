@@ -2,7 +2,7 @@ import { tryGain } from './learn';
 import type { ActionDef, Target } from './actions';
 import { SUBTILES } from './crates';
 import type { Game } from './game';
-import { itemDef, makersMark, rarityOf, rollRarity, RARITY_WORD } from './items';
+import { itemDef, makersMark, rarityOf, rollRarity, RARITY_ODDS, RARITY_WORD } from './items';
 import { matOf, matOfItem, workingQl } from './materials';
 import { metalOfItem } from './melt';
 import { COIN_DIFFICULTY, COIN_METALS, COINS_PER_LUMP, DIE_WEAR, isCasting, isMetalStock, METAL_BY_ID, METAL_BY_LUMP, metalOfBar, MOULD_BY_MAKES, type MouldDef } from './metal';
@@ -262,7 +262,8 @@ export const ANVIL_ACTIONS: ActionDef[] = [
       // Maker, Temper Bath), which goes with it into whatever it is fitted to.
       const mark = makersMark((k, d) => g.perk(k, d), def.makes);
       const made = g.inventory.add(def.makes, { ql, extra: casting.extra, count: per, mark });
-      const rare = rollRarity(g.rand);
+      // Rarer odds for a Smith's Master's Mark, as `rare:smith` has it on the island.
+      const rare = rollRarity(g.rand, g.perk('rare:smith', RARITY_ODDS[0]));
       if (rare) {
         made.rare = rare;
         made.maker = g.player.name;

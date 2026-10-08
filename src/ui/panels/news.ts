@@ -38,9 +38,9 @@ import { REPORTS_A_SESSION } from '../../net/errors';
 import { ALIGNMENT_NAMES, BAR_SLOTS, FAITH_SPELLS, FAITH_TIER_AT, PATRON_AT, PATRONS, SCHOOL_NAMES, slotsFor, SPELL_ON_WORDS, SPELL_ONS, SPELL_REACH, SPELLS_PER_TIER } from '../../game/patrons';
 import { article, capital, finePercent, listed, listedOr, NumberWord, numberWord, percent, share, spanWords, times } from '../../game/words';
 import { ANCIENT_EFFECTS, ANCIENT_PLUS, BAUBLE_HIGH, BAUBLE_LOW, BAUBLE_SHARE, BAUBLE_TIERS, baubleTimes, REGRET_SHARE, YIELD_TIMES } from '../../game/baubles';
-import { CLASS_CHANGE_COST, CLASS_TIER_AT, CLASSES, PERK_CLASSES, PERK_TIER_AT, PERKS_PER_TIER } from '../../game/classes';
+import { CLASS_CHANGE_COST, CLASS_TIER_AT, CLASSES, PERK_CLASSES, PERK_TIER_AT, PERKS_PER_TIER, tiersAtFor } from '../../game/classes';
 import { spellDef, spellForce, spellsOf } from '../../game/arcane';
-import { perksOf } from '../../game/perks';
+import { PERK_BY_ID, perksOf } from '../../game/perks';
 import { CLASS_LEARN_BLOW, CLASS_LEARN_KILL, CLASS_LEVEL_START, CLASS_SPELL_BY_ID, CLASS_SPELLS, classSpellsOf, FIRE_LOW, FIRE_TOP, skinOf, spellTerms } from '../../game/talents';
 import { HUSBANDRY_ACTIONS } from '../../game/husbandry';
 import { TINCTURE_BONUS, TINCTURE_SECONDS } from '../../game/boons';
@@ -1319,6 +1319,29 @@ export const NEWS: News[] = [
       `No ${SINGLE_STAIRS_NAME}, ladder or roof takes wheels, nor does a staircase's side. The team goes up and down with its `
         + 'wagon, and goes into and out of the traces on the ground floor only.',
     ],
+  },
+  {
+    n: 98,
+    day: '2026-10-08',
+    lines: () => {
+      const said = (id: string): string => {
+        const p = PERK_BY_ID.get(id)!;
+        const cls = CLASSES.find((c) => c.id === p.class)!;
+        const at = tiersAtFor(cls.kind)[p.tier - 1];
+        return `${cls.name}, ${p.name}, tier ${p.tier} (at ${cls.kind === 'combat' ? 'class level' : 'skill'} ${at}): ${p.note}`;
+      };
+      return [
+        'Some classes’ perks are changed. Anybody who had taken one that moved or went has that tier open to choose again.',
+        `New: ${said('smith_masters_mark')} It takes the place of Long Shift.`,
+        `New: ${said('cook_quick_kitchen')} It takes the place of the Cook’s Cool Pack.`,
+        `New: ${said('binder_hard_edges')} It takes the place of Unmoved.`,
+        `Moved: ${said('archer_bow_mastery')} ${said('archer_arrow_saver')}`,
+        `Better: ${said('artisan_gem_eye')}`,
+        'Renamed, where two trades had a perk of the same name: the Mason’s Nothing Wasted is Careful Builder, the Herdsman’s Any Bait '
+          + 'is Any Offering, and the Artisan’s Gem Eye is Gem Finder. Whoever had them keeps them.',
+        `${CLASS_SPELL_BY_ID.get('chirurgeon_healing_circle')!.name} now says what it does: ${CLASS_SPELL_BY_ID.get('chirurgeon_healing_circle')!.note}`,
+      ];
+    },
   },
 ];
 

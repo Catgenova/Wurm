@@ -352,7 +352,7 @@ export const CLASS_SPELLS: ClassSpellDef[] = [
   chirurgeon(17, 'Surgeon’s Hands', 0.12, 60, ['self'], { more: 2, secs: 20 },
     (fx) => `For ${span(fx.secs)} every dressing you put on puts back ${times(fx.more)} as much health.`),
   chirurgeon(6, 'Healing Circle', 0.25, 60, ['self'], { heal: 0.15, reach: 4 },
-    (fx) => `You and everybody within ${fx.reach} tiles of you get ${percent(fx.heal)} of your health back.`),
+    (fx) => `You and everybody within ${fx.reach} tiles of you each get back ${percent(fx.heal)} of their own full health.`),
   chirurgeon(19, 'Mass Dressing', 0.25, 60, ['self'], { close: 0.2, reach: 3 },
     (fx) => `On you and everybody within ${fx.reach} tiles of you, the worst wound stops bleeding and closes by ${percent(fx.close)} of `
       + 'its severity.'),

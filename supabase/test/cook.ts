@@ -13,8 +13,9 @@
  *     Filling put on a dish, which stack it by them;
  *   * eating: what a marked dish fills, feeds and gives, and Balanced Diet's
  *     fuller table;
- *   * the ground: Long-lasting's and Cool Pack's slower rot, and a handful set
- *     down that keeps what the pile it came off had;
+ *   * the ground: Long-lasting's slower rot, and a handful set down that
+ *     keeps what the pile it came off had;
+ *   * Quick Kitchen's time off every cooking recipe;
  *   * the knife: Full Carcass, Prime Cuts, Hide Keeper and Bait Maker;
  *   * the barrel: Strong Brew stamped, drawn off, drunk, poured together and
  *     emptied;
@@ -253,17 +254,12 @@ begin
   ${clear('stew')};
   update player set nutrition = '{}'::jsonb, boons = '[]'::jsonb where world_id = w and uid = u;
 
-  /* ---- The ground: Long-lasting and Cool Pack, and a handful set down. ---- */
+  /* ---- The ground: Long-lasting, and a handful set down. ---- */
   perform pg_temp.hold(w, u, '{}');
   v_it := give(w, u, 'stew', 1, ${HANDS});
   ${item('drop', 'v_it')};
-  v_t := coalesce((select cool::text from item where id = v_it), 'none') || ':' || (select ground_decay_rate(i) from item i where i.id = v_it);
-  delete from item where id = v_it;
-  ${hold('Cool Pack')};
-  v_it := give(w, u, 'stew', 1, ${HANDS});
-  ${item('drop', 'v_it')};
   v_row := v_it;
-  v_t := v_t || '|' || coalesce((select cool::text from item where id = v_it), 'none') || ':' || (select ground_decay_rate(i) from item i where i.id = v_it);
+  v_t := coalesce((select cool::text from item where id = v_it), 'none') || ':' || (select ground_decay_rate(i) from item i where i.id = v_it);
   -- Two of a marked pile of four.
   v_it := give(w, u, 'stew', 4, ${HANDS}, null, 'rare', null, null, '{"rot": 0.5}'::jsonb);
   ${item('drop', 'v_it', ", 'count', 2")};
@@ -281,6 +277,13 @@ begin
   insert into said values ('GROUND', v_t || '|' || coalesce((select holder || ':' || coalesce(cool::text, 'none') from item where id = v_row), 'gone'));
   ${clear('stew', 'bone')};
   delete from item where world_id = w and holder = 'ground' and gx between 0 and 15 and gy between 0 and 15;
+
+  /* ---- Quick Kitchen: a cooking recipe's time, and one that is not cooking. ---- */
+  perform pg_temp.hold(w, u, '{}');
+  v_t := pk(w, u, ${q(`time:${RECIPES.find((r) => r.skill === 'cooking')!.id}`)}, 1)::text;
+  ${hold('Quick Kitchen')};
+  insert into said values ('KITCHEN', v_t || '|' || pk(w, u, ${q(`time:${RECIPES.find((r) => r.skill === 'cooking')!.id}`)}, 1)
+    || '|' || pk(w, u, ${q(`time:${RECIPES.find((r) => r.skill !== 'cooking')!.id}`)}, 1));
 
   /* ---- The knife: half a cobbe without the perks; all of it, finer and with bait, with them. ---- */
   perform give(w, u, 'butchering_knife', 1, 50);
@@ -480,18 +483,15 @@ check('and the helping that fills the table says what it is worth to the one eat
 
 /* ---- The ground -------------------------------------------------------------------------- */
 
-const [gPlain, gCool, gHandful, gBone, gPicked] = say('GROUND').split('|');
+const [gPlain, gHandful, gBone, gPicked] = say('GROUND').split('|');
 const [plainCool, plainRate] = gPlain.split(':');
-const [coolCool, coolRate] = gCool.split(':');
-const cool = P('Cool Pack').fx['cool:food'];
-check(`${P('Cool Pack').name}: food set down rots at ${cool} of its pace, and without it at its own`,
-  plainCool === 'none' && near(Number(coolCool), cool) && near(Number(coolRate), Number(plainRate) * cool, 1e-6), `${gPlain} / ${gCool}`);
+check('food set down rots at its own pace, with nothing to cool it', plainCool === 'none' && Number(plainRate) > 0, gPlain);
 const handful = gHandful.split(':');
 const handfulMark = json(handful.slice(1, -4).join(':'));
 const [hRare, hCool, hRate, hLeft] = handful.slice(-4);
-check(`${P('Long-lasting').name}: two of a marked, rare pile of four set down keep the mark and the rarity, and rot at the mark's and the pack's pace both`,
-  handful[0] === '2' && sameMark(handfulMark, { rot: 0.5 }) && hRare === 'rare' && near(Number(hCool), cool)
-    && near(Number(hRate), Number(plainRate) * 0.5 * cool * Number(say('RAREKEEP')), 1e-6) && hLeft === '2', `${gHandful} (rare keeps ${say('RAREKEEP')})`);
+check(`${P('Long-lasting').name}: two of a marked, rare pile of four set down keep the mark and the rarity, and rot at the mark's pace`,
+  handful[0] === '2' && sameMark(handfulMark, { rot: 0.5 }) && hRare === 'rare' && hCool === 'none'
+    && near(Number(hRate), Number(plainRate) * 0.5 * Number(say('RAREKEEP')), 1e-6) && hLeft === '2', `${gHandful} (rare keeps ${say('RAREKEEP')})`);
 check('what is not food is set down as it was', gBone === 'none', gBone);
 check('and picked up again, it keeps nothing of how it lay', gPicked === 'player:none', gPicked);
 
@@ -586,15 +586,16 @@ check('the browser fills, feeds and gives a knack off a marked stew as the islan
   near(game.player.stats.hunger, eatMarked[0], 1e-4) && near(game.player.nutrition.flesh, eatMarked[1], 1e-4)
     && (knackLeft === undefined || near(knackLeft, eatMarked[2], 1e-6)),
   `${game.player.stats.hunger} ${game.player.nutrition.flesh} ${knackLeft}`);
-// Food dropped in the browser with Cool Pack, and picked up again.
-game.setPerks(P('Cool Pack').fx);
-const dish = game.inventory.add('stew', { count: 1, ql: HANDS });
-const drop = ACTION_BY_ID.get('drop')!;
-drop.perform({ kind: 'item', uid: dish.uid, count: 1 } as Target, game);
-const lying = game.groundAt(game.player.tileX, game.player.tileY).find((it) => it.id === 'stew');
-check('the browser sets food down cool with Cool Pack', !!lying && lying.cool === cool, String(lying?.cool));
-const [taken] = lying ? game.takeFromGround(game.player.tileX, game.player.tileY, lying.uid) : [];
-check('and forgets it when it is taken up', !!taken && taken.cool === undefined, String(taken?.cool));
+// Quick Kitchen: every cooking recipe, on both sides, and nothing that is not cooking.
+const quick = P('Quick Kitchen');
+const [kitchenPlain, kitchenWith, kitchenOff] = say('KITCHEN').split('|');
+const cookedIds = RECIPES.filter((r) => r.skill === 'cooking').map((r) => r.id);
+game.setPerks(quick.fx);
+check(`${quick.name}: all ${cookedIds.length} cooking recipes take ${quick.fx[`time:${cookedIds[0]}`]} of the time on both sides, and nothing else does`,
+  cookedIds.every((id) => quick.fx[`time:${id}`] === quick.fx[`time:${cookedIds[0]}`] && game.perk(`time:${id}`, 1) === quick.fx[`time:${id}`])
+    && Object.keys(quick.fx).length === cookedIds.length
+    && kitchenPlain === '1' && near(Number(kitchenWith), quick.fx[`time:${cookedIds[0]}`]) && kitchenOff === '1',
+  say('KITCHEN'));
 
 for (const line of [...ok, ...bad]) console.log(line);
 if (bad.length) {

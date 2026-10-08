@@ -10,7 +10,7 @@
  * reads the perk, not that a random number fell a particular way.
  *
  *   * the chisel: Sure Chisel's failures, Three from a Shard's and Good Mix's
- *     count and the line that says it, Nothing Wasted's smelter and kiln, and
+ *     count and the line that says it, Careful Builder's smelter and kiln, and
  *     Quick Chisel's time;
  *   * the trowel: Quick Mason's time on stone and not on timber, Two at a
  *     Time, Hod Carrier's chest, Salvage, Repoint, and Tall Walls' storeys;
@@ -186,14 +186,14 @@ begin
   update item set ql = 100 where world_id = w and holder = 'player' and holder_uid = u and def = 'chisel';
   update skill set value = 60 where world_id = w and uid = u and id = 'stonecutting';
 
-  /* ---- Nothing Wasted: a kiln that fails, its bricks and mortar kept with it and lost without. ---- */
+  /* ---- Careful Builder: a kiln that fails, its bricks and mortar kept with it and lost without. ---- */
   ${checks(false)};
   perform pg_temp.hold(w, u, '{}');
   perform give(w, u, 'stone_brick', 24, 30); perform give(w, u, 'mortar', 8, 30);
   perform perform_craft(w, u, 'make_kiln', '{}'::jsonb);
   v_t := ${count('stone_brick')} || ',' || ${count('mortar')};
   ${clear('stone_brick', 'mortar')};
-  ${hold('Nothing Wasted')};
+  ${hold('Careful Builder')};
   perform give(w, u, 'stone_brick', 24, 30); perform give(w, u, 'mortar', 8, 30);
   perform perform_craft(w, u, 'make_kiln', '{}'::jsonb);
   insert into said values ('KILN', v_t || '|' || ${count('stone_brick')} || ',' || ${count('mortar')}
@@ -453,7 +453,7 @@ const [chiselA, chiselB] = say('CHISEL').split('|').map(Number);
 check(`${P('Sure Chisel').name}: thirty goes at no skill with the worst chisel all come off with its failures at nought, and not without`,
   chiselB === 60 && chiselA < 60, `${chiselA / 2} of 30 without, ${chiselB / 2} of 30 with`);
 const [kilnA, kilnB, kilnSaid] = say('KILN').split('|');
-check(`${P('Nothing Wasted').name}: a kiln that fails keeps its 24 bricks and 8 mortar with it, and loses them without`,
+check(`${P('Careful Builder').name}: a kiln that fails keeps its 24 bricks and 8 mortar with it, and loses them without`,
   kilnA === '0,0' && kilnB === '24,8' && kilnSaid !== 'unsaid', say('KILN'));
 const three = P('Three from a Shard').fx['count:stone_brick'];
 const [shardA, shardB] = say('SHARD').split('|');

@@ -391,13 +391,15 @@ begin
   ${WHOLE}
 
   /* ---- The passives ---- */
+  insert into said values ('HARD', binder_shatter_at(w.world_id, w.uid)::text);
   insert into player_node (world_id, uid, node) select w.world_id, w.uid, k2.id from class_perk k2
     where k2.class = 'binder' and not exists (select 1 from class_spell cs where cs.id = k2.id)
     on conflict do nothing;
   perform class_fold(w.world_id, w.uid);
   insert into said select 'FOLDED', coalesce((select string_agg(e2.k || '=' || e2.v, ';' order by e2.k collate "C")
-      from jsonb_each_text(class_mul->'fx') e2(k, v) where e2.k ~ '^(reach|chill|bind|still|ward):'), 'none')
+      from jsonb_each_text(class_mul->'fx') e2(k, v) where e2.k ~ '^(reach|chill|bind|still|ward|shatter):'), 'none')
     from player where world_id = w.world_id and uid = w.uid;
+  update said set v = v || '|' || binder_shatter_at(w.world_id, w.uid) where k = 'HARD';
 
   -- Far Reach: a Bind as far as the ogre at nine.
   ${FRESH(ALL)}
@@ -412,7 +414,7 @@ begin
       || (max_health(cr) - cr.health) || '|' || ${HELD('b')}
     from creature cr where cr.world_id = w.world_id and cr.id = b;
 
-  -- Unmoved, on a blow from one tied to nothing; and Frost Ward besides, on one slowed.
+  -- A blow from one tied to nothing, at its full share; and Frost Ward, on one slowed.
   ${BLOW('e', 'm0')}
   ${BLOW('b', 'm1')}
   insert into said values ('WARD', m0 || '|' || m1);
@@ -553,7 +555,7 @@ check(`a Snare out of the school holds as the trade's do, and a Shatter is ${pct
   check('and will not call it again until it has rested', /can be called again in \d+ seconds\.$/.test(island('RESTING')), island('RESTING'));
 }
 check('the six passives fold on the island to what they fold to in the browser',
-  island('FOLDED') === Object.keys(FOLD).filter((k) => /^(reach|chill|bind|still|ward):/.test(k)).sort()
+  island('FOLDED') === Object.keys(FOLD).filter((k) => /^(reach|chill|bind|still|ward|shatter):/.test(k)).sort()
     .map((k) => `${k}=${FOLD[k]}`).join(';'), island('FOLDED'));
 check(`Far Reach: a Bind as far as ${fx('bind', 'reach') + FOLD['reach:spell']} tiles`, island('FAR') === 'cast', island('FAR'));
 {
@@ -566,8 +568,12 @@ check(`Far Reach: a Bind as far as ${fx('bind', 'reach') + FOLD['reach:spell']} 
 }
 {
   const [still, chilled] = parts('WARD').map(Number);
-  check(`Unmoved: ${pct(1 - FOLD['still:taken'])} less standing still, and Frost Ward ${pct(1 - FOLD['ward:stilled'])} less again from one slowed`,
-    near(still, 0.05 * FOLD['still:taken'], 1e-9) && near(chilled, 0.05 * FOLD['still:taken'] * FOLD['ward:stilled'], 1e-9), island('WARD'));
+  check(`a blow from one tied to nothing lands whole, and Frost Ward takes ${pct(1 - FOLD['ward:stilled'])} off one from a creature slowed`,
+    near(still, 0.05, 1e-9) && near(chilled, 0.05 * FOLD['ward:stilled'], 1e-9), island('WARD'));
+}
+{
+  const [plain, hard] = parts('HARD').map(Number);
+  check(`Hard Edges: a shatter ${pct(FOLD['shatter:size'] - 1)} larger`, plain > 0 && near(hard / plain, FOLD['shatter:size'], 1e-9), island('HARD'));
 }
 check('no function is open to a player but the doors', island('OPEN') === '0', island('OPEN'));
 

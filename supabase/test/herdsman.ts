@@ -8,7 +8,7 @@
  * search path), so a go shows the number itself:
  *
  *   * taming: Soft Hand's points, Patient Coax's step, Young Trust's young and
- *     Any Bait's any food, in the chance, the words and the refusal;
+ *     Any Offering's any food, in the chance, the words and the refusal;
  *   * the brush: Brushwork's care and Healing Hands' health;
  *   * a beast you keep: the keeper's numbers stamped on it when it is tamed and
  *     when the keeper's perks change, and read by the tick, the work and the
@@ -181,11 +181,11 @@ begin
   insert into said values ('COAXSAID', v_u || '#' || coalesce(${last('A wild rabba:%')}, 'unsaid'));
   update creature set coaxed = 0, coaxed_at = null where world_id = w and id = v_c;
 
-  /* ---- Any Bait: a bowl of stew is no rabba's food, and it is for a Herdsman who has it. ---- */
+  /* ---- Any Offering: a bowl of stew is no rabba's food, and it is for a Herdsman who has it. ---- */
   perform give(w, u, 'stew', 1, 40);
   perform pg_temp.hold(w, u, '{}');
   v_t := ${refused('tame')} || '#' || coalesce(bait_in_pack(w, u, 'rabba'), 'none');
-  ${hold('Any Bait')};
+  ${hold('Any Offering')};
   v_t := v_t || '#' || ${refused('tame')} || '#' || coalesce(bait_in_pack(w, u, 'rabba', true), 'none');
   -- Offered, it goes; and the rabba, with the dice under the chance, is won over and kept.
   ${dice(0.01)};
@@ -366,7 +366,7 @@ check('and examining it says so, in the step of whoever looks',
   coaxSaid0.includes(`${Math.round(3 * COAX_STEP * 100)}% readier`) && coaxSaid1.includes(`${Math.round(3 * step * 100)}% readier`), say('COAXSAID'));
 const [baitAsk, baitGone] = say('ANYBAIT').split('|');
 const [baitNo, baitNone, baitYes, baitAny] = baitAsk.split('#');
-check(`${P('Any Bait').name}: a bowl of stew is refused for a rabba without it and offered with it`,
+check(`${P('Any Offering').name}: a bowl of stew is refused for a rabba without it and offered with it`,
   baitNo.startsWith('Rabbas take') && baitNone === 'none' && baitYes === 'ALLOWED' && baitAny === 'stew', baitAsk);
 check('and the rabba takes it and is kept', baitGone === '0:active:true', baitGone);
 

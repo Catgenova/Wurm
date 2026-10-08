@@ -122,7 +122,7 @@ export function rollGem(rand: () => number, more = false): GemDef {
 
 /**
  * One swing in a few hundred brings out something nobody was mining for, and
- * more for a perk on the job (a Miner's or an Artisan's Gem Eye, `gem:` and
+ * more for a perk on the job (a Miner's Gem Eye or an Artisan's Gem Finder, `gem:` and
  * the job), which the island had read and the browser had not.
  */
 export function maybeGem(g: Game, skill: string, tool: string, job = 'mine'): void {

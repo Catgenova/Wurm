@@ -64,7 +64,7 @@ import { BUCKET_LITRES, FURNITURE, furnitureDef } from './furniture';
 import { ARMOUR, ARMOUR_BY_ID, ARMOUR_CLASSES, HIT_CAP, SOAK_CAP, WEAPON_BY_ID, WEAPONS } from './gear';
 import { CIRCLET_SHARE, CIRCLET_STONES, GEM_ODDS, GEMS, JEWEL_BONUS, tradeName } from './gems';
 import {
-  CARRY_BASE, CARRY_PER_STRENGTH, CHAR_START, goSeconds, MAX_MOUNT_SPEED, MAX_VEHICLE_SPEED, QL_TOP, QUEUE_PER_MIND, queueCapAt, TOOL_QL_SPAN,
+  CARRY_BASE, CARRY_PER_STRENGTH, goSeconds, MAX_MOUNT_SPEED, MAX_VEHICLE_SPEED, QL_TOP, TOOL_QL_SPAN,
 } from './game';
 import { CROP_LIST, cropYield, RIPE, type CropDef } from './farming';
 import { IMPROVE_FLOOR, improveStepAt } from './improve';
@@ -148,6 +148,8 @@ export interface PerkDef {
 interface Seed {
   num: number;
   name: string;
+  /** What its id is made of, where that is not its name: a perk renamed keeps its id, and whoever took it keeps it. */
+  key?: string;
   fx: Fx;
   note: (fx: Fx) => string;
 }
@@ -351,7 +353,7 @@ const MINER: Seed[] = [
   {
     num: 15, name: 'Gem Eye',
     fx: { 'gem:mine': 1 / 150 },
-    note: (fx) => `Mine turns up a gem in ${oneIn(fx['gem:mine'])} goes (now ${oneIn(GEM_ODDS)}).`,
+    note: (fx) => `Mine turns up a gem ${oneIn(fx['gem:mine'])} goes (now ${oneIn(GEM_ODDS)}).`,
   },
   {
     num: 17, name: 'Treasure in the Rock',
@@ -515,7 +517,7 @@ const MASON: Seed[] = [
     note: (fx) => `Raising rock works on rock under water up to ${fx['depth:raise_rock']} deep (now only above the water).`,
   },
   {
-    num: 24, name: 'Nothing Wasted',
+    num: 24, name: 'Careful Builder', key: 'nothing_wasted',
     fx: each(LOST_ON_FAIL.map((r) => `spare:${r.id}`), 1),
     note: () => `A failed ${either(LOST_ON_FAIL.map((r) => itemName(r.result)))} keeps its materials (now they are lost).`,
   },
@@ -869,10 +871,10 @@ const SMITH: Seed[] = [
       + `(now ${CRAFT_REACH}): ${listed(FORGE_WORK.map((id) => label(id).toLowerCase()))}, and every recipe made at the smelter.`,
   },
   {
-    num: 38, name: 'Long Shift',
-    fx: { jobs: 2 },
-    note: (fx) => `You can keep ${numberWord(fx.jobs)} more jobs queued: ${queueCapAt(CHAR_START) + fx.jobs} at ${CHAR_START} mind `
-      + `logic (now ${queueCapAt(CHAR_START)}), and one more for every ${QUEUE_PER_MIND} above that, as before.`,
+    num: 19, name: 'Master’s Mark',
+    fx: { 'rare:smith': RARITY_ODDS[0] * 2 },
+    note: (fx) => `What you beat out at the anvil comes out rare ${oneIn(fx['rare:smith'])} (now ${oneIn(RARITY_ODDS[0])}); `
+      + 'supreme and fantastic follow at their usual odds.',
   },
   {
     num: 45, name: 'Temper Bath',
@@ -1162,6 +1164,8 @@ const FARMER: Seed[] = [
 
 /** A Cook's dishes: what a cooking recipe makes that is food. */
 const DISHES = RECIPES.filter((r) => r.skill === 'cooking' && ITEM_DEFS[r.result]?.category === 'food');
+/** Everything made with cooking, which a Cook's Quick Kitchen makes quicker. */
+const COOKED = RECIPES.filter((r) => r.skill === 'cooking');
 const DISH_ITEMS = [...new Set(DISHES.map((r) => r.result))];
 const onDishes = (fam: string, v: number): Fx => Object.fromEntries(DISH_ITEMS.map((id) => [`${fam}:${id}`, v]));
 const onDishRecipes = (fam: string, v: number): Fx => Object.fromEntries(DISHES.map((r) => [`${fam}:${r.id}`, v]));
@@ -1242,9 +1246,10 @@ const COOK: Seed[] = [
     note: (fx) => `Cooking takes what goes into it from containers within ${fx['reach:cook']} tiles (now ${CRAFT_REACH}).`,
   },
   {
-    num: 32, name: 'Cool Pack',
-    fx: { 'cool:food': 0.5 },
-    note: (fx) => `Food you drop rots ${less(fx['cool:food'])} slower where it lies, until it is picked up. Nothing rots in a pack.`,
+    num: 1, name: 'Quick Kitchen',
+    fx: onEach('time', COOKED.map((r) => r.id), 0.7),
+    note: (fx) => `Cooking takes ${less(fx[`time:${COOKED[0].id}`])} less time a go: all ${COOKED.length} cooking recipes `
+      + `(${range(COOKED.map((r) => r.baseTime))} s base).`,
   },
   {
     num: 46, name: 'Broth',
@@ -1424,7 +1429,7 @@ const HERDSMAN: Seed[] = [
     note: (fx) => `A young wildermon is ${fx['tame:young']} times as easy to tame as a grown one (now ${AGES.young.tame} times).`,
   },
   {
-    num: 10, name: 'Any Bait',
+    num: 10, name: 'Any Offering', key: 'any_bait',
     fx: { 'bait:any': 1 },
     note: () => 'Any food will do as an offering to tame any kind (now each kind takes only its own few). Feeding one you keep '
       + 'still takes its own.',
@@ -1942,9 +1947,9 @@ const ARTISAN: Seed[] = [
     note: (fx) => `Rings and pendants you forge from a casting come off the anvil ${by(fx['ql:ring'])} higher in quality, to ${QL_TOP} at most.`,
   },
   {
-    num: 10, name: 'Gem Eye',
-    fx: { 'gem:mine': 2 * GEM_ODDS },
-    note: (fx) => `Mine turns up a gem in ${oneIn(fx['gem:mine'])} goes (now ${oneIn(GEM_ODDS)}).`,
+    num: 10, name: 'Gem Finder', key: 'gem_eye',
+    fx: { 'gem:mine': 1 / 300 },
+    note: (fx) => `Mine turns up a gem ${oneIn(fx['gem:mine'])} goes (now ${oneIn(GEM_ODDS)}).`,
   },
   {
     num: 13, name: 'Focus Cutter',
@@ -2429,10 +2434,9 @@ const BINDER: Seed[] = [
       + 'strikes it while the hold lasts: blows, shots, throws, fire and shatter.',
   },
   {
-    num: 117, name: 'Unmoved',
-    fx: { 'still:taken': 0.85 },
-    note: (fx) => `While your feet have not moved for ${secs(FIGHT_BACK_STILL)}, every blow that lands on you does `
-      + `${less(fx['still:taken'])} less damage.`,
+    num: 110, name: 'Hard Edges',
+    fx: { 'shatter:size': 1.2 },
+    note: (fx) => `Your shatter is ${percent(fx['shatter:size'] - 1)} larger, on every creature it lands on.`,
   },
   {
     num: 122, name: 'Frost Ward',
@@ -2524,10 +2528,10 @@ export const TIERS: Record<string, number[][]> = {
   miner: [[7, 8, 9], [14, 13, 19], [1, 2, 25], [3, 27, 35], [28, 15, 11], [50, 17, 6]],
   mason: [[1, 8, 17], [4, 18, 19], [20, 22, 33], [2, 9, 29], [16, 35, 48], [47, 24, 12]],
   carpenter: [[1, 37, 45], [3, 6, 14], [15, 26, 31], [16, 19, 32], [2, 18, 25], [10, 12, 27]],
-  smith: [[8, 26, 27], [30, 32, 49], [12, 20, 22], [24, 25, 36], [7, 9, 13], [16, 38, 45]],
+  smith: [[8, 26, 27], [30, 32, 49], [12, 20, 22], [24, 25, 36], [7, 9, 13], [16, 19, 45]],
   forester: [[34, 43, 44], [21, 22, 40], [1, 2, 3], [7, 16, 24], [10, 11, 20], [5, 6, 14]],
   farmer: [[14, 25, 28], [4, 5, 8], [22, 23, 30], [6, 34, 39], [11, 40, 41], [15, 16, 17]],
-  cook: [[11, 18, 28], [31, 49, 50], [3, 7, 8], [5, 6, 15], [20, 21, 32], [14, 46, 47]],
+  cook: [[11, 18, 28], [31, 49, 50], [3, 7, 8], [5, 6, 15], [1, 20, 21], [14, 46, 47]],
   tailor: [[2, 3, 18], [27, 31, 37], [9, 19, 21], [16, 25, 34], [4, 7, 35], [11, 46, 49]],
   herdsman: [[1, 11, 21], [15, 37, 50], [2, 13, 22], [9, 16, 25], [14, 24, 28], [10, 18, 26]],
   naturalist: [[2, 13, 23], [10, 11, 19], [3, 17, 24], [16, 29, 30], [12, 15, 34], [43, 44, 50]],
@@ -2538,12 +2542,12 @@ export const TIERS: Record<string, number[][]> = {
   blade: [[1, 32, 108], [2, 11, 111], [15, 29, 127], [19, 26, 123], [12, 31, 129], [33, 28, 109]],
   berserker: [[18, 30, 101], [2, 3, 106], [21, 29, 125], [20, 6, 112], [8, 14, 130], [45, 50, 113]],
   pikeman: [[38, 13, 129], [6, 5, 105], [33, 32, 121], [14, 19, 113], [2, 17, 102], [35, 3, 118]],
-  archer: [[2, 1, 108], [29, 9, 107], [6, 10, 114], [3, 7, 124], [14, 25, 101], [48, 49, 102]],
+  archer: [[2, 1, 101], [29, 9, 107], [6, 10, 114], [3, 7, 124], [14, 25, 108], [48, 49, 102]],
   skirmisher: [[2, 3, 104], [31, 7, 107], [8, 12, 112], [4, 9, 110], [44, 36, 120], [10, 49, 102]],
   chirurgeon: [[1, 2, 101], [49, 4, 105], [43, 17, 104], [6, 19, 122], [46, 15, 106], [50, 20, 123]],
   beastmaster: [[1, 15, 106], [2, 28, 120], [27, 8, 101], [13, 18, 102], [32, 50, 108], [48, 41, 119]],
   kindler: [[3, 6, 125], [11, 5, 118], [44, 46, 106], [4, 10, 109], [24, 13, 124], [14, 26, 108]],
-  binder: [[1, 29, 108], [6, 36, 103], [20, 21, 101], [8, 27, 105], [2, 35, 117], [16, 15, 122]],
+  binder: [[1, 29, 108], [6, 36, 103], [20, 21, 101], [8, 27, 105], [2, 35, 110], [16, 15, 122]],
   warder: [[1, 11, 115], [2, 47, 125], [12, 20, 122], [7, 32, 128], [3, 14, 101], [42, 44, 104]],
 };
 
@@ -2553,7 +2557,7 @@ export const PERKS: PerkDef[] = Object.entries(SEEDS).flatMap(([cls, seeds]) =>
     const s = seeds.find((x) => x.num === num);
     if (!s) throw new Error(`${cls}'s tier ${t + 1} offers ${num}, and there is no such perk`);
     return {
-      id: `${cls}_${slug(s.name)}`,
+      id: `${cls}_${s.key ?? slug(s.name)}`,
       class: cls,
       num: s.num,
       name: s.name,

@@ -1936,7 +1936,7 @@ export class Game {
    */
   queueCapacity(): number {
     if (this.remoteCap !== null) return this.remoteCap;
-    // And more for a Smith's Long Shift, as `queue_capacity` has it on the island.
+    // And more for a perk's `jobs`, as `queue_capacity` has it on the island (no perk grants it now).
     return queueCapAt(this.skills.get('mind_logic')) + this.perk('jobs', 0);
   }
 
@@ -8287,7 +8287,7 @@ export class Game {
       taken = idx >= 0 ? pile.splice(idx, 1) : [];
     }
     // Nothing rots off the ground, so what kept a thing from rotting on it
-    // (a Cook's Cool Pack) goes when it is taken up.
+    // (a Fisher's Cool Pack) goes when it is taken up.
     for (const it of taken) delete it.cool;
     if (!pile.length) piles.delete(key);
     this.events.emit('world', x, y);

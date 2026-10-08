@@ -14,7 +14,7 @@
  *     carried through the kiln;
  *   * a jewel worn: Bright Stone's and Cut True's, on a ring and on a circlet
  *     on the head, each of a circlet's stones at its share;
- *   * the rock: Gem Eye's odds, and the stones More Stones lets out;
+ *   * the rock: Gem Finder's odds, and the stones More Stones lets out;
  *   * a focus: Focus Cutter's less wear and Keen Focus's stronger spell;
  *   * a book: Good Read's more out of a go of study and Sturdy Binding's less
  *     wear, and a trade book teaching its trade;
@@ -114,8 +114,8 @@ const RING_QL = 80;
 const STUDY_FROM = 30;
 /** Dice for a failed setting a Sure Setting passes: over its share of failures. */
 const SURE_ROLL = (1 + fx('Sure Setting', 'fail:set_ring')) / 2;
-/** Dice between the plain odds of a gem and a Gem Eye's, and a roll at the far end of the stones. */
-const GEM_ROLL = (GEM_ODDS + fx('Gem Eye', 'gem:mine')) / 2;
+/** Dice between the plain odds of a gem and a Gem Finder's, and a roll at the far end of the stones. */
+const GEM_ROLL = (GEM_ODDS + fx('Gem Finder', 'gem:mine')) / 2;
 const LAST_STONE = 0.999;
 const STUDY_ROLL = 0.5;
 const RUBY = GEMS.find((g) => g.id === 'ruby')!;
@@ -315,19 +315,19 @@ begin
   insert into said values ('JEWEL', v_t);
   ${clearAll};
 
-  /* ---- Gem Eye and More Stones: the rock under dice between the two odds, and the stone at the far end of the draw. ---- */
+  /* ---- Gem Finder and More Stones: the rock under dice between the two odds, and the stone at the far end of the draw. ---- */
   perform pg_temp.hold(w, u, '{}');
   ${goContext('mine')};
   ${dice(GEM_ROLL, LAST_STONE)};
   perform maybe_gem(w, u, 50, 50);
   v_t := ${count('gem')}::text;
-  ${hold('Gem Eye')};
+  ${hold('Gem Finder')};
   ${goContext('mine')};
   ${dice(GEM_ROLL, LAST_STONE)};
   perform maybe_gem(w, u, 50, 50);
   v_t := v_t || '|' || coalesce((select extra from item where id = ${newest('gem')}), 'none');
   ${clearAll};
-  ${hold('Gem Eye', 'More Stones')};
+  ${hold('Gem Finder', 'More Stones')};
   ${goContext('mine')};
   ${dice(GEM_ROLL, LAST_STONE)};
   perform maybe_gem(w, u, 50, 50);
@@ -581,7 +581,7 @@ check('and a circlet is drawn with its stones',
 const [gemPlain, gemEye, gemMore, rollPlain, rollMore] = say('GEMS').split('|');
 const lastPlain = rollGem(() => LAST_STONE, false).name;
 const lastMore = rollGem(() => LAST_STONE, true).name;
-check(`${P('Gem Eye').name}: dice of ${GEM_ROLL} find no gem at the plain odds and one at its`, gemPlain === '0' && gemEye === lastPlain, say('GEMS'));
+check(`${P('Gem Finder').name}: dice of ${GEM_ROLL} find no gem at the plain odds and one at its`, gemPlain === '0' && gemEye === lastPlain, say('GEMS'));
 check(`${P('More Stones').name}: the far end of the draw is ${lastMore} with it and ${lastPlain} without, on both sides`,
   gemMore === lastMore && rollPlain === lastPlain && rollMore === lastMore && lastMore !== lastPlain
     && GEMS.filter((g) => g.perk).every((g) => g.perk === 'more_stones'), say('GEMS'));

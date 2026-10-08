@@ -2769,7 +2769,7 @@ export const ACTIONS: ActionDef[] = [
       if (t.kind !== 'item') return;
       const item = g.inventory.take(t.uid, t.count ?? 1);
       if (!item) return;
-      // Food set down by a Cook with Cool Pack, and fish by a Fisher with theirs, rots slower where it lies.
+      // Fish set down by a Fisher with Cool Pack rots slower where it lies (`cool:food` covers all food, and no perk grants it now).
       const cool = (itemDef(item.id).category === 'food' ? g.perk('cool:food', 1) : 1) * g.perk(`cool:${item.id}`, 1);
       if (cool !== 1) item.cool = cool;
       else delete item.cool;

@@ -36,7 +36,7 @@ const creatureOf = (g: Game, t: Target): Creature | undefined => (isCreature(t) 
 /**
  * The first item in the inventory that a species will eat; a specific one when
  * asked for. An offering to tame one may be any food at all for a Herdsman's
- * Any Bait, as the island's `bait_in_pack` has it; feeding one kept is its own
+ * Any Offering, as the island's `bait_in_pack` has it; feeding one kept is its own
  * diet whoever feeds it.
  */
 function bait(g: Game, c: Creature, uid?: number, any = false) {
@@ -48,7 +48,7 @@ function bait(g: Game, c: Creature, uid?: number, any = false) {
   }
   return g.inventory.items.find((it) => takes(it.id));
 }
-/** An offering to tame one: its own diet, or any food for a Herdsman's Any Bait. */
+/** An offering to tame one: its own diet, or any food for a Herdsman's Any Offering. */
 const offering = (g: Game, c: Creature, uid?: number) => bait(g, c, uid, g.perk('bait:any', 0) > 0);
 /** What each offering in a run is worth to the next: more for a Herdsman's Patient Coax. */
 export const coaxStep = (g: Game): number => g.perk('coax:step', COAX_STEP);

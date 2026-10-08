@@ -18,7 +18,7 @@
  *     Maker's breastplate -- each read where its rule is;
  *   * Ingots: poured, weighed, and counted as their lumps by a mould, a mix, a
  *     strike and a pass of Improve, with the rest coming back as lumps;
- *   * Forge Reach's stores, Metal Polisher's pass, Long Shift's queue, and
+ *   * Forge Reach's stores, Metal Polisher's pass, Master's Mark's odds of a rare, and
  *     Temper Bath's quench, once, at water;
  *   * and the browser reads the same numbers where it asks or offers them.
  *
@@ -28,7 +28,7 @@ import { execFileSync } from 'node:child_process';
 import { Game, queueCapAt } from '../../src/game/game';
 import { ARMOUR_BY_ID, HIT_CAP, hitChance, pieceSoak, SOAK_CAP, WEAPON_BY_ID } from '../../src/game/gear';
 import { improveStep, improveStepAt } from '../../src/game/improve';
-import { ITEM_DEFS, makersMark, markSays, partsMark, rarityStep, temperOf, type Item } from '../../src/game/items';
+import { ITEM_DEFS, makersMark, markSays, partsMark, RARITY_ODDS, rarityStep, rollRarity, temperOf, type Item } from '../../src/game/items';
 import { MELT_KEEP, MELT_SHARE, meltLumps, meltQl } from '../../src/game/melt';
 import { FORGE_WORK, INGOT_LUMPS, INGOT_WEIGHT, ingotOf, lumpsIn, METAL_BY_ID, MOULD_BY_ID, MOULD_DENT, mouldUsesLeft } from '../../src/game/metal';
 import { perksOf, type PerkDef } from '../../src/game/perks';
@@ -411,11 +411,11 @@ begin
   delete from placed where id = v_chest;
   ${clear('shovel_head_mould')};
 
-  /* ---- Long Shift: two more jobs held in the head. ---- */
+  /* ---- Master's Mark: the odds of a rare off the anvil, as \`perform_forge\` reads them. ---- */
   perform pg_temp.hold(w, u, '{}');
-  v_t := queue_capacity(w, u)::text;
-  ${hold('Long Shift')};
-  insert into said values ('SHIFT', v_t || '|' || queue_capacity(w, u));
+  v_t := pk(w, u, 'rare:smith', (select r.odds from rarity_def r order by r.ord limit 1))::text;
+  ${hold('Master’s Mark')};
+  insert into said values ('MARK', v_t || '|' || pk(w, u, 'rare:smith', (select r.odds from rarity_def r order by r.ord limit 1)));
 
   /* ---- The island's forge work, and its rounding. ---- */
   insert into said select 'FORGE', string_agg(a.id, ',' order by a.id) from action_def a where forge_work(a.id);
@@ -563,8 +563,10 @@ check('the island\'s forge work is the browser\'s, with every recipe at the smel
     && RECIPES.filter((r) => r.station === 'smelter').every((r) => forgeRecipes.includes(r.id)),
   `${say('FORGE')} / ${forgeRecipes.length} recipes`);
 
-const [shiftA, shiftB] = say('SHIFT').split('|').map(Number);
-check(`${P('Long Shift').name}: ${P('Long Shift').fx.jobs} more jobs in the head`, shiftB - shiftA === P('Long Shift').fx.jobs, say('SHIFT'));
+const [markA, markB] = say('MARK').split('|').map(Number);
+const markOdds = P('Master’s Mark').fx['rare:smith'];
+check(`${P('Master’s Mark').name}: a rare off the anvil at ${markOdds} rather than ${RARITY_ODDS[0]}`,
+  near(markA, RARITY_ODDS[0], 1e-9) && near(markB, markOdds, 1e-9), say('MARK'));
 
 const uses = say('USES').split(',').map(Number);
 const usesWanted: number[] = [];
@@ -608,9 +610,13 @@ const cap = game.queueCapacity();
 const hatchet: Item = { uid: 7, id: 'hatchet', ql: 40, dmg: 0, count: 1, extra: 'Iron' };
 game.skills.values.set('blacksmithing', 50);
 const plainStep = improveStep(game, hatchet, 'blacksmithing');
-game.setPerks({ ...P('Long Shift').fx, ...P('Forge Reach').fx, ...P('Metal Polisher').fx });
-check('the browser holds more jobs, reaches further at the forge and polishes faster with the perks',
-  game.queueCapacity() - cap === P('Long Shift').fx.jobs && game.forgeReach() === P('Forge Reach').fx['reach:forge']
+game.setPerks({ ...P('Master’s Mark').fx, ...P('Forge Reach').fx, ...P('Metal Polisher').fx });
+// Dice between the plain odds and Master's Mark's, and then as high as they go: a rare with the perk and none without.
+const between = (RARITY_ODDS[0] + markOdds) / 2;
+const dice = (first: number): (() => number) => { let n = 0; return () => (n++ === 0 ? first : 0.999); };
+check('the browser rolls rarer at the anvil, reaches further at the forge and polishes faster with the perks',
+  rollRarity(dice(between), game.perk('rare:smith', RARITY_ODDS[0])) === 1 && rollRarity(dice(between)) === 0
+    && game.forgeReach() === P('Forge Reach').fx['reach:forge']
     && near(improveStep(game, hatchet, 'blacksmithing') / plainStep, P('Metal Polisher').fx['improve:metal'], 1e-9)
     && cap === queueCapAt(game.skills.get('mind_logic')),
   `${game.queueCapacity()} / ${cap}, ${game.forgeReach()}`);

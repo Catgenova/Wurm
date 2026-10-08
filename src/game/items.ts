@@ -669,8 +669,8 @@ export interface Item {
    */
   issued?: boolean;
   /**
-   * How fast it rots lying on the ground, against its own rate: food a Cook
-   * with Cool Pack set down. Set when it is dropped and gone when it is
+   * How fast it rots lying on the ground, against its own rate: fish a
+   * Fisher with Cool Pack set down. Set when it is dropped and gone when it is
    * picked up; nothing rots in a pack.
    */
   cool?: number;
@@ -1041,7 +1041,7 @@ export const billWords = (bill: ReadonlyArray<readonly [string, number]>, figure
  * up longer, and what it is made of decides the rest. A cedar chest left in
  * the rain is still a chest a long time after the pine one has gone. And a
  * dish rots slower for its maker's hand in it (a Cook's Long-lasting, `rot`),
- * and food a Cook with Cool Pack set down slower again (`cool`). A thing a
+ * and fish a Fisher with Cool Pack set down slower again (`cool`). A thing a
  * Mender's sealant is on does not decay at all (`seal`), nor a pot an
  * Artisan has glazed (`glaze`).
  */

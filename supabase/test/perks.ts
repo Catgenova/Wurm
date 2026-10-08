@@ -505,7 +505,7 @@ const OTHERS = new Set([
   'depth:dig', 'depth:dredge', 'flatten:step', 'stump:log', 'walk:road', 'reach:soil', 'carry', 'dig_tile',
   'ore:below', 'chip:chance', 'chip:step', 'slide:more', 'depth:mine', 'further:prospect', 'fit:relic', 'share:bauble', 'pan',
   'depth:raise_rock', 'lift:raise_rock', 'repoint', 'rubble',
-  'melt:share', 'melt:keep', 'pour:wear', 'reach:forge', 'jobs', 'ingot',
+  'melt:share', 'melt:keep', 'pour:wear', 'reach:forge', 'jobs', 'ingot', 'rare:smith',
   'stump:clear', 'nest:chance', 'nest:feathers', 'honey:chance', 'honey:count', 'bush:shaft', 'coppice', 'tap_resin', 'clear_brush',
   'sow_patch', 'tend_patch', 'harvest_patch',
   'table:best', 'share:butcher', 'reach:cook', 'bait:butcher', 'cool:food', 'broth', 'distil', 'taste',
@@ -536,8 +536,8 @@ const OTHERS = new Set([
   // A Kindler's: a striker set alight, what a spell costs, fire built up by casting, a burn's heat and length, and a burning striker.
   'retort:each', 'retort:secs', 'cast:cost', 'momentum:step', 'momentum:most', 'momentum:secs', 'burn:rate', 'burn:secs', 'ward:burning',
   // A Binder's: how far a spell aimed at a creature reaches, a creature's pace once a hold ends and for how long, how long a hold
-  // lasts and what a held creature takes, and a striker held, rooted or slowed.
-  'reach:spell', 'chill:pace', 'chill:secs', 'bind:secs', 'bind:brittle', 'ward:stilled',
+  // lasts and what a held creature takes, a striker held, rooted or slowed, and how large a shatter is.
+  'reach:spell', 'chill:pace', 'chill:secs', 'bind:secs', 'bind:brittle', 'ward:stilled', 'shatter:size',
   // A Warder's: how large a skin is, and over somebody else, how far one adds to another, stamina back when a blow uses one up,
   // how far off a blow on somebody turns its striker, and a share of a striker's own attack back on it.
   'skin:size', 'skin:other', 'skin:over', 'stamina:skin', 'watch:reach', 'thorns:attack',
