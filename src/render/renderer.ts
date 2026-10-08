@@ -105,6 +105,24 @@ import { css, HAZE_REACH, rgba, skyAt, unknownInk, type Sky } from './sky';
  * rather than one per tree per frame.
  */
 const HAZE_STEPS = 6;
+/** How long a wall's or a roof's picture is kept before it is made again whatever happens (`baked`), in seconds. */
+const BAKE_LIFE = 0.5;
+/** Device pixels of wall and roof pictures kept before the lot go: about a hundred and twenty-eight megabytes. */
+const BAKE_PIXELS = 32_000_000;
+/** No one picture is bigger than this; a thing that would be is drawn as it always was. */
+const BAKE_MOST = 4_000_000;
+/** How dark it is when a lamp inside starts to show through a wall or a roof (`lampBehind`), and pictures stop being kept. */
+const LAMP_DARK = 0.2;
+/** A wall's or a roof's picture, where it was made, where its corner went, when, and how long it is kept. */
+interface Baked {
+  cv: HTMLCanvasElement;
+  ax: number;
+  ay: number;
+  bx: number;
+  by: number;
+  at: number;
+  life: number;
+}
 /** The share of the screen's pixels the sea's swell is worked out at, across and down (`swellLayer`). */
 const SWELL_RES = 0.5;
 /** How many device pixels of tile edge pictures are kept before the lot go (`hems`): about sixty-four megabytes. */
@@ -6501,6 +6519,45 @@ export class Renderer {
    * eaves throw on the walls under them goes on first, under all of it.
    */
   private drawPitchedRoof(b: Building): void {
+    const bld = this.game.buildings;
+    const level = b.levels;
+    // Standing under it, or with a light burning under it after dark (glass glows with it, `lightsUnder`): as it always was.
+    const roofTiles = bld.roofTiles(b);
+    if ((this.game.darkness() >= LAMP_DARK && this.lightsUnder(b).length) || (this.roomTiles && roofTiles.some(([x, y]) => this.roomTiles?.has(`${x},${y}`)))) {
+      this.drawPitchedRoofNow(b);
+      return;
+    }
+    const cam = this.camera;
+    const world = this.game.world;
+    let sig = '';
+    let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+    let lowest = Infinity, wide = 1;
+    let fx = Infinity, fy = Infinity;
+    for (const [x, y] of roofTiles) {
+      const f = bld.floor(level, x, y);
+      if (!f || floorKind(f) !== 'roof') continue;
+      sig += `${x},${y},${f.material},${f.dye ?? ''},${isDone(f) ? 1 : 0};`;
+      lowest = Math.min(lowest, world.getHeight(x, y));
+      fx = Math.min(fx, x); fy = Math.min(fy, y);
+      wide = Math.max(wide, Math.abs(x - roofTiles[0][0]) + 1, Math.abs(y - roofTiles[0][1]) + 1);
+    }
+    if (!sig) return;
+    if (b.deck != null) lowest = Math.min(lowest, b.deck);
+    // From the ground under it to the ridge as high as the widest roof of its footprint could stand, a tile and a half past every eave.
+    const top = Math.max(lowest, b.deck ?? lowest) + (level + 0.5) * WALL_HEIGHT + ROOF_PITCH * roofShapeDef(b).rise * (wide + 2);
+    for (const [x, y] of roofTiles) {
+      for (const [cx, cy] of [[x - 1.5, y - 1.5], [x + 2.5, y - 1.5], [x - 1.5, y + 2.5], [x + 2.5, y + 2.5]]) {
+        for (const z of [lowest - WALL_HEIGHT * 0.2, top]) {
+          const sx = cam.worldToScreenX(cx, cy), sy = cam.worldToScreenY(cx, cy, z);
+          x0 = Math.min(x0, sx); x1 = Math.max(x1, sx); y0 = Math.min(y0, sy); y1 = Math.max(y1, sy);
+        }
+      }
+    }
+    const key = `r|${b.id}|${level}|${b.deck ?? ''}|${roofShapeOf(b)}|${sig}`;
+    this.baked(key, cam.worldToScreenX(fx, fy), cam.worldToScreenY(fx, fy, lowest), [x0, y0, x1, y1], () => this.drawPitchedRoofNow(b));
+  }
+
+  private drawPitchedRoofNow(b: Building): void {
     const main = this.canvas.ctx;
     const cam = this.camera;
     const bld = this.game.buildings;
@@ -8241,6 +8298,25 @@ export class Renderer {
    * well a flight comes up through. A ladder's hatch cuts its own.
    */
   private drawFloor(floor: FloorTile, x: number, y: number, base: number, alpha: number): void {
+    // Seen through, or after dark, when a lamp in the room may be falling on it: as it always was. Otherwise a picture (`baked`).
+    if (alpha < 1 || this.game.darkness() >= LAMP_DARK) {
+      this.drawFloorNow(floor, x, y, base, alpha);
+      return;
+    }
+    const cam = this.camera;
+    const h = base + floor.level * WALL_HEIGHT;
+    let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+    for (const [u, v] of [[-0.4, -0.4], [1.4, -0.4], [1.4, 1.4], [-0.4, 1.4]]) {
+      for (const z of [h - WALL_HEIGHT * 0.4, h + WALL_HEIGHT * 0.25]) {
+        const sx = cam.worldToScreenX(x + u, y + v), sy = cam.worldToScreenY(x + u, y + v, z);
+        x0 = Math.min(x0, sx); x1 = Math.max(x1, sx); y0 = Math.min(y0, sy); y1 = Math.max(y1, sy);
+      }
+    }
+    const key = `f|${floor.level}|${x},${y}|${floor.material}|${floor.kind ?? ''}|${floor.dye ?? ''}|${isDone(floor) ? 1 : 0}|${base}`;
+    this.baked(key, cam.worldToScreenX(x, y), cam.worldToScreenY(x, y, h), [x0, y0, x1, y1], () => this.drawFloorNow(floor, x, y, base, alpha));
+  }
+
+  private drawFloorNow(floor: FloorTile, x: number, y: number, base: number, alpha: number): void {
     const ctx = this.canvas.ctx;
     const cam = this.camera;
     const bare = MATERIAL_BY_ID.get(floor.material);
@@ -8480,6 +8556,92 @@ export class Renderer {
    * carry none. A square house has its joists run north to south, which puts
    * the beam ends on the fronts people build toward the sun.
    */
+  /**
+   * Walls and roofs, drawn once into a picture of their own and copied after
+   * that: in a village they were most of a frame, every frame, and they change
+   * when somebody builds, not when the camera moves.
+   *
+   * Like the ground's edges (`hems`) a picture is good only where it lands on
+   * the same fraction of a pixel, which the camera's whole-pixel step keeps
+   * true; `ax`, `ay` is a point on the screen that moves with the thing, to
+   * tell. Each picture is also made again after `BAKE_LIFE` seconds whatever
+   * else happens, a little sooner or later for each so they do not all come
+   * due in one frame: a wall reads its neighbours, its ivy and its wetness,
+   * and what any of those do shows within that, rather than having to be
+   * named here. What changes faster than that -- a lamp behind it at night, a
+   * room it is seen through, the wash of remembered ground -- is drawn as it
+   * always was (`drawWall`, `drawPitchedRoof`).
+   */
+  private bakes = new Map<string, Baked>();
+  private bakePixels = 0;
+
+  private baked(key: string, ax: number, ay: number, box: [number, number, number, number], draw: () => void): void {
+    if (!this.hemSteady) {
+      draw();
+      return;
+    }
+    const ctx = this.canvas.ctx;
+    const dpr = this.canvas.dpr;
+    const had = this.bakes.get(key);
+    if (had && this.time - had.at < had.life && this.time >= had.at) {
+      const dx = (ax - had.ax) * dpr, dy = (ay - had.ay) * dpr;
+      const rx = Math.round(dx), ry = Math.round(dy);
+      if (Math.abs(dx - rx) < 0.02 && Math.abs(dy - ry) < 0.02) {
+        ctx.drawImage(had.cv, had.bx + rx / dpr, had.by + ry / dpr, had.cv.width / dpr, had.cv.height / dpr);
+        return;
+      }
+    }
+    const bx = Math.floor(box[0] * dpr) - 2, by = Math.floor(box[1] * dpr) - 2;
+    const w = Math.ceil(box[2] * dpr) + 2 - bx, h = Math.ceil(box[3] * dpr) + 2 - by;
+    // Off the screen altogether, or too big to be worth keeping: drawn as it always was.
+    const W = this.canvas.el.width, H = this.canvas.el.height;
+    if (w <= 0 || h <= 0 || w * h > BAKE_MOST || bx > W || by > H || bx + w < 0 || by + h < 0) {
+      draw();
+      return;
+    }
+    let cv = had?.cv;
+    if (had) {
+      this.bakePixels -= had.cv.width * had.cv.height;
+      this.bakes.delete(key);
+    }
+    if (!cv) cv = document.createElement('canvas');
+    if (cv.width !== w || cv.height !== h) {
+      cv.width = w;
+      cv.height = h;
+    } else (cv.getContext('2d') as CanvasRenderingContext2D).clearRect(0, 0, w, h);
+    const g = cv.getContext('2d') as CanvasRenderingContext2D;
+    g.setTransform(dpr, 0, 0, dpr, -bx, -by);
+    // What the screen's pen was left holding, which the drawing reads without setting: the ends of a line, the joins, the type.
+    g.lineCap = ctx.lineCap;
+    g.lineJoin = ctx.lineJoin;
+    g.miterLimit = ctx.miterLimit;
+    g.lineWidth = ctx.lineWidth;
+    g.strokeStyle = ctx.strokeStyle;
+    g.fillStyle = ctx.fillStyle;
+    g.font = ctx.font;
+    g.textAlign = ctx.textAlign;
+    g.textBaseline = ctx.textBaseline;
+    g.setLineDash(ctx.getLineDash());
+    // Everything that draws a wall or a roof draws on `this.canvas.ctx`, so for the length of it that is the picture.
+    const canvas = this.canvas as { ctx: CanvasRenderingContext2D };
+    canvas.ctx = g;
+    try {
+      draw();
+    } finally {
+      canvas.ctx = ctx;
+    }
+    if (this.bakePixels + w * h > BAKE_PIXELS) {
+      this.bakes.clear();
+      this.bakePixels = 0;
+    }
+    // Due again somewhere in the second half of a life to the first half of the next, by the key, so they come due apart.
+    let spread = 0;
+    for (let i = 0; i < key.length; i++) spread = (spread * 31 + key.charCodeAt(i)) >>> 0;
+    this.bakes.set(key, { cv, ax, ay, bx: bx / dpr, by: by / dpr, at: this.time, life: BAKE_LIFE * (0.75 + (spread % 1000) / 2000) });
+    this.bakePixels += w * h;
+    ctx.drawImage(cv, bx / dpr, by / dpr, w / dpr, h / dpr);
+  }
+
   private bearsJoists(id: number, border: Border): boolean {
     const b = this.game.buildings.list.get(id);
     if (!b) return false;
@@ -8518,6 +8680,28 @@ export class Renderer {
    * that is the right amount of a wall.
    */
   private drawWall(wall: Wall, border: Border, base: number, alpha: number): void {
+    // Seen through, half built, taking the wash off remembered ground, or with a lamp behind it at night: as it always was.
+    if (alpha < 1 || this.wallLift || !isDone(wall) || this.lampBehind(wall, border) > 0) {
+      this.drawWallNow(wall, border, base, alpha);
+      return;
+    }
+    const cam = this.camera;
+    const [ax, ay, bx, by] = borderPoints(border);
+    const dx = bx - ax, dy = by - ay;
+    // The box it can reach: half a tile past either end and either face, from under its foot to well over its top.
+    const lo = base + (wall.level - 0.3) * WALL_HEIGHT, hi = base + (wall.level + 1.6) * WALL_HEIGHT;
+    let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+    for (const t of [-0.5, 1.5]) for (const s of [-0.5, 0.5]) for (const z of [lo, hi]) {
+      const wx = ax + dx * t - dy * s, wy = ay + dy * t + dx * s;
+      const sx = cam.worldToScreenX(wx, wy), sy = cam.worldToScreenY(wx, wy, z);
+      x0 = Math.min(x0, sx); x1 = Math.max(x1, sx); y0 = Math.min(y0, sy); y1 = Math.max(y1, sy);
+    }
+    const key = `w|${wall.level}|${border.dir}${border.x},${border.y}|${wall.type}|${wall.material}|${wall.dye ?? ''}|${wall.building}|${base}`;
+    this.baked(key, cam.worldToScreenX(ax, ay), cam.worldToScreenY(ax, ay, base), [x0, y0, x1, y1],
+      () => this.drawWallNow(wall, border, base, alpha));
+  }
+
+  private drawWallNow(wall: Wall, border: Border, base: number, alpha: number): void {
     const ctx = this.canvas.ctx;
     const cam = this.camera;
     const bare = MATERIAL_BY_ID.get(wall.material);
@@ -10777,7 +10961,7 @@ export class Renderer {
    */
   private lampBehind(wall: Wall, border: Border): number {
     const dark = this.game.darkness();
-    if (dark < 0.2) return 0;
+    if (dark < LAMP_DARK) return 0;
     const near = this.game.buildings.buildingAt(border.x, border.y)
       ? { x: border.x, y: border.y }
       : border.dir === 'h' ? { x: border.x, y: border.y - 1 } : { x: border.x - 1, y: border.y };
@@ -10785,7 +10969,8 @@ export class Renderer {
     if (!room) return 0;
     const inside = new Set(room.tiles);
     let most = 0;
-    for (const l of this.game.lights()) {
+    // The frame's own (`lightsNow`): gathered once a frame, not once a wall.
+    for (const l of this.lightsNow) {
       if (!inside.has(`${Math.floor(l.x)},${Math.floor(l.y)}`)) continue;
       most = Math.max(most, l.strength);
     }

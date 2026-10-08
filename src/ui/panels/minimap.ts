@@ -409,8 +409,12 @@ export class MinimapPanel {
    * smooth enough for a rectangle following a camera, and a quarter of the
    * work.
    */
+  /** The window the map is in, found once rather than looked up the page every frame. */
+  private frame: Element | null = null;
+
   update(): void {
-    if (this.view.closest('.win')?.hasAttribute('hidden')) return;
+    this.frame ??= this.view.closest('.win');
+    if (this.frame?.hasAttribute('hidden')) return;
     const now = performance.now();
     if (now - this.lastDraw < MAP_EVERY) return;
     this.lastDraw = now;
