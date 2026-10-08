@@ -1118,9 +1118,9 @@ export const CHIRURGEON: Record<string, SpellVisual> = {
       linger: { draw: (k, age, left) => {
         const R = k.fx.reach || 4, secs = secsOf(k, 10);
         const a = smooth(age / 0.6) * smooth(left / 1);
-        // The edge of the sickness kept as the seconds of the bleed, and a low miasma creeping inside it.
+        // The edge of the sickness kept as the seconds of the bleed, and a low miasma creeping inside it. No stain over
+        // the whole of it: four tiles of ground redrawn line by line for ten seconds costs more than it says.
         tally(k, k.caster, R, Math.round(secs), left, { alpha: 0.55 * a, band: 0.12, main: BLOOD, deep: BLOOD_DEEP, ink: BLOOD_INK, light: BLOOD_LIGHT, turn: age * 0.05 });
-        k.disc(k.caster, R * 0.97, { main: BLOOD_DEEP, alpha: 0.06 * a });
         if (!k.fast || k.rand() < 0.5) {
           const an = k.rand() * TAU, rr = R * Math.sqrt(k.rand());
           k.emit(k.on(k.caster.x + Math.cos(an) * rr, k.caster.y + Math.sin(an) * rr, 1), 14 * a, { kind: 'smoke', colour: [...MIASMA], size: 2.6, life: [1, 1.6], speed: [0.02, 0.08], up: [1, 3], gravity: -1 });
