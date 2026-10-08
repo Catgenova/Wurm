@@ -52,7 +52,7 @@
  * are small and thrown away. A spell that wants a hundred of something wants
  * a particle burst, not a hundred records.
  */
-import { HALF_W, HEIGHT_SCALE, UNITS_PER_TILE } from '../iso';
+import { HALF_H, HALF_W, HEIGHT_SCALE, UNITS_PER_TILE } from '../iso';
 import type { View } from '../view';
 
 /* ---- numbers ------------------------------------------------------------------ */
@@ -165,6 +165,9 @@ export interface Eye {
   unrotateY(u: number, v: number): number;
 }
 
+/** Somebody or something a spell is cast by or at, by who they are: you, somebody else by their id, a creature by its id. */
+export type Who = { kind: 'player' } | { kind: 'peer'; id: number } | { kind: 'creature'; id: number };
+
 /**
  * Something a spell is cast by or at: a person or a creature, where its feet
  * are and how big it is. `facing` is the way it is drawn turned (nought at the
@@ -184,6 +187,16 @@ export interface Body {
   kind: 'player' | 'peer' | 'creature' | 'spot';
   /** For a person: who, so a hand can be found (`FxScene.hand`). */
   figure?: import('../figure').FigurePose;
+  /** Who it is, when the stage knows: to tell the bodies `FxScene.bodiesWithin` finds apart, and the caster among them. */
+  who?: Who;
+  /**
+   * What the island says is on a creature now, where the payload carries it: a
+   * Kindler's burn running, a knife's bleed running, held fast in a trap.
+   * Nothing is said of people, and no other mark is in the payload.
+   */
+  burning?: boolean;
+  bleeding?: boolean;
+  held?: boolean;
 }
 
 /* ---- the pools ---------------------------------------------------------------- */
@@ -369,14 +382,108 @@ export function glowPicture(hex: string): HTMLCanvasElement | null {
 
 /* ---- what a frame records ------------------------------------------------------- */
 
-/** Something laid on the ground: the tiles it may cover, and how to draw it. */
+/**
+ * One part of a mark laid on the ground as shapes on the island
+ * (`FxScene.groundShape`): polygons filled, or lines stroked, in one colour,
+ * every point a place on the ground in tiles (x, y pairs, flat), drawn
+ * `lift` height units over it. `width` is in pixels as drawn (zoom already
+ * in it). A `closed` stroke goes back to its first point.
+ */
+export interface GroundLayer {
+  kind: 'fill' | 'stroke';
+  colour: string;
+  alpha: number;
+  paths: number[][];
+  lift: number;
+  width?: number;
+  closed?: boolean;
+  join?: CanvasLineJoin;
+  cap?: CanvasLineCap;
+}
+
+/** Shapes on the ground drawn whole, each point put on the land where it is: for the preview, and anything else that wants them uncut. */
+export function drawGroundLayers(g: CanvasRenderingContext2D, layers: readonly GroundLayer[], eye: Eye, ground: (x: number, y: number) => number): void {
+  for (const l of layers) {
+    if (!l.paths.length || l.alpha <= 0.01) continue;
+    g.beginPath();
+    for (const pts of l.paths) {
+      for (let i = 0; i < pts.length; i += 2) {
+        const sx = eye.worldToScreenX(pts[i], pts[i + 1]), sy = eye.worldToScreenY(pts[i], pts[i + 1], ground(pts[i], pts[i + 1]) + l.lift);
+        if (i === 0) g.moveTo(sx, sy);
+        else g.lineTo(sx, sy);
+      }
+      if (l.kind === 'fill' || l.closed) g.closePath();
+    }
+    paintGroundLayer(g, l);
+  }
+}
+
+/** Fill or stroke what is in `g`'s path as a ground layer says. */
+export function paintGroundLayer(g: CanvasRenderingContext2D, l: GroundLayer, path?: Path2D): void {
+  g.globalAlpha = l.alpha;
+  if (l.kind === 'fill') {
+    g.fillStyle = l.colour;
+    if (path) g.fill(path);
+    else g.fill();
+    return;
+  }
+  g.strokeStyle = l.colour;
+  g.lineWidth = l.width ?? 1;
+  g.lineJoin = l.join ?? 'round';
+  g.lineCap = l.cap ?? 'butt';
+  if (path) g.stroke(path);
+  else g.stroke();
+}
+
+/**
+ * Something laid on the ground: the tiles it may cover, and how to draw it.
+ *
+ * The kit's own marks (`ring`, `disc`, `sigil`, `scorch`, `groundPath`, and
+ * anything made with `groundShape`) also give their `shape`, which the stage
+ * cuts along the tiles' edges and lays a line of the ground at a time with no
+ * clip. Anything else (`groundDraw`) is drawn whole into a layer and cut out
+ * of it a line at a time under a clip, which costs by the area cut; `keep(x,
+ * y, reach)`, when given, says whether it draws anything at all within `reach`
+ * tiles of (x, y), and the ground it says no to is not cut for it. It may say
+ * yes too often (it is then cut a little wider than it needs), never too
+ * seldom (it would be cut off).
+ */
 export interface GroundRec {
   x0: number;
   y0: number;
   x1: number;
   y1: number;
   draw: (g: CanvasRenderingContext2D) => void;
+  shape?: readonly GroundLayer[];
+  keep?: (x: number, y: number, reach: number) => boolean;
 }
+
+/** How far a point is from a segment, in tiles. */
+function segDist(px: number, py: number, ax: number, ay: number, bx: number, by: number): number {
+  const dx = bx - ax, dy = by - ay, l2 = dx * dx + dy * dy;
+  const u = l2 > 0 ? clamp(((px - ax) * dx + (py - ay) * dy) / l2) : 0;
+  return Math.hypot(px - (ax + dx * u), py - (ay + dy * u));
+}
+
+/**
+ * Whether a point is within `reach` of any of a set of segments, given flat as
+ * x0, y0, x1, y1 a segment: a mark's `keep` for lines on the ground, asked
+ * thousands of times a frame, so a segment whose box is out of reach is
+ * passed over before any square root. `slack`, a number a segment, is how
+ * much further each may stray (`FxScene.chordSlack`).
+ */
+export function nearSegments(segs: readonly number[], x: number, y: number, reach: number, slack?: readonly number[]): boolean {
+  for (let i = 0; i + 3 < segs.length; i += 4) {
+    const ax = segs[i], ay = segs[i + 1], bx = segs[i + 2], by = segs[i + 3];
+    const r = reach + (slack ? slack[i >> 2] : 0);
+    if (x < Math.min(ax, bx) - r || x > Math.max(ax, bx) + r || y < Math.min(ay, by) - r || y > Math.max(ay, by) + r) continue;
+    if (segDist(x, y, ax, ay, bx, by) <= r) return true;
+  }
+  return false;
+}
+
+/** Tiles on the ground a height unit is up the screen, at the steepest: what a stroke straight across a hill strays by. */
+const TILES_A_UNIT = HEIGHT_SCALE / ((2 * HALF_H) / Math.SQRT2);
 /** Something standing in the world: the tile it sorts with, where on the screen it sorts, and how to draw it. */
 export interface WorldRec {
   x: number;
@@ -426,10 +533,29 @@ export interface Look {
   alpha?: number;
   /** How bright the glow put down with it, nought for none; one is the shape's own default. */
   glow?: number;
+  /** The colour of that glow, '#rrggbb', over the palette's `light`: a heal's green glow off a Warder's gold. */
+  light?: string;
   /** Pixels at zoom one, for the line shapes: how wide. */
   width?: number;
   /** For world shapes: pixels nearer the viewer in the sort (a shape at a body's feet with a positive bias is drawn over the body). */
   bias?: number;
+}
+
+/**
+ * One polygon (or open line) of a `shapes` group: points in the world, filled
+ * in `fill` (the look's `main` unless given, or `false` for none) and edged in
+ * `ink` (the look's ink unless given, or `false` for none).
+ */
+export interface ShapePiece {
+  pts: readonly P3[];
+  fill?: string | false;
+  ink?: string | false;
+  /** Pixels at zoom one for its edge. */
+  width?: number;
+  /** Over the group's own. */
+  alpha?: number;
+  /** Closed, as a polygon (the default), or an open line, stroked only. */
+  closed?: boolean;
 }
 
 /* ---- the scene a spell draws into ------------------------------------------------- */
@@ -465,6 +591,15 @@ export class FxScene {
   companion: Body | null = null;
   /** Tiles from the caster to the spot. */
   dist = 0;
+  /**
+   * Where the caster stood before a move the island made for this cast (a
+   * Lunge, a Parting Throw), on the ground; nothing for a cast made standing.
+   * The body is carried from here to where it ends up over the cast
+   * (`cast.move`), so `k.caster` is already wherever it has got to.
+   */
+  from: P3 | null = null;
+  /** Bodies within `r` tiles of a point, by the stage (`bodiesWithin`). */
+  near: ((x: number, y: number, r: number) => readonly Body[]) | null = null;
   /** Of this cast, kept from frame to frame: for an artist's own counters. */
   state: Record<string, number> = {};
   /** A seed of this cast's own, the same every frame. */
@@ -556,11 +691,53 @@ export class FxScene {
     return this.joint(b, 'wrist1', [0, 0.87 * along, -0.62 - 0.5 * along], 0.5);
   }
 
+  /**
+   * Everybody and everything standing within `r` tiles of a point (the spot by
+   * default): people (you, others) and creatures, the caster among them when
+   * inside; each body's `kind` and `who` tell which. What an area spell
+   * covers: a skin on every ally in a ward, a mark on every creature a
+   * judgment hits. `kinds` keeps only those kinds. Found afresh each frame (and
+   * asked once a frame however often it is called with the same numbers); the
+   * island does not say who a spell actually reached, so this is who is there.
+   */
+  bodiesWithin(r: number, c: { x: number; y: number } = this.spot, kinds?: ReadonlyArray<Body['kind']>): Body[] {
+    const all = this.near?.(c.x, c.y, r) ?? [];
+    const out: Body[] = [];
+    for (const b of all) {
+      if (Math.hypot(b.x - c.x, b.y - c.y) > r) continue;
+      if (kinds && !kinds.includes(b.kind)) continue;
+      out.push(b);
+    }
+    return out;
+  }
+
+  /**
+   * How far, in tiles, a stroke drawn straight on the screen from one point
+   * of the ground to another strays from the ground between them: over a
+   * hill or a hollow the straight line is not over the line on the ground. A
+   * mark's `keep` adds it to its reach, so a long stroke across uneven ground
+   * is not cut where it passes over tiles its own segment does not cross.
+   */
+  chordSlack(ax: number, ay: number, bx: number, by: number, samples = 3): number {
+    const ha = this.ground(ax, ay), hb = this.ground(bx, by);
+    let most = 0;
+    for (let i = 1; i <= samples; i++) {
+      const u = i / (samples + 1);
+      most = Math.max(most, Math.abs(this.ground(lerp(ax, bx, u), lerp(ay, by, u)) - lerp(ha, hb, u)));
+    }
+    return most * TILES_A_UNIT;
+  }
+
   /* ---- recording ------------------------------------------------------------------ */
 
-  /** Something drawn on the ground round (x, y), within `r` tiles of it. Draw in screen pixels with `this` for projecting. */
-  groundDraw(x: number, y: number, r: number, draw: (g: CanvasRenderingContext2D) => void): void {
-    this.out.ground.push({ x0: x - r, y0: y - r, x1: x + r, y1: y + r, draw });
+  /**
+   * Something drawn on the ground round (x, y), within `r` tiles of it. Draw in screen pixels with `this` for projecting.
+   * `keep(tx, ty, reach)`, when given, is whether it draws anything within `reach` tiles of (tx, ty) (see `GroundRec`):
+   * ground it says no to is not laid at all, so a big mark that covers little of its square (a ring, lines) costs only
+   * what it covers. `nearSegments` is one for lines.
+   */
+  groundDraw(x: number, y: number, r: number, draw: (g: CanvasRenderingContext2D) => void, keep?: (x: number, y: number, reach: number) => boolean): void {
+    this.out.ground.push({ x0: x - r, y0: y - r, x1: x + r, y1: y + r, draw, keep });
   }
   /** Something standing at `p`, sorted with what stands there; `bias` pixels nearer the viewer. */
   worldDraw(p: P3, draw: (g: CanvasRenderingContext2D) => void, bias = 0): void {
@@ -637,10 +814,35 @@ export class FxScene {
       out.push(this.eye.worldToScreenX(x, y), this.eye.worldToScreenY(x, y, this.ground(x, y) + lift));
     }
   }
+  /** Points round a circle on the ground, in tiles: x, y a point. */
+  private circle(cx: number, cy: number, r: number, n: number, turn: number): number[] {
+    const out: number[] = [];
+    for (let i = 0; i < n; i++) {
+      const a = turn + (i / n) * TAU;
+      out.push(cx + Math.cos(a) * r, cy + Math.sin(a) * r);
+    }
+    return out;
+  }
   /** Facets round a circle: fewer far off and on fast graphics, never fewer than a hexagon. */
   facets(rTiles: number, most = 48): number {
     const n = Math.round(10 + rTiles * 7 * Math.min(2, this.zoom));
     return Math.max(6, Math.min(this.fast ? Math.min(most, 18) : most, n));
+  }
+
+  /**
+   * Something laid on the ground as shapes on the island rather than strokes
+   * on the screen (`GroundLayer`): polygons filled and lines stroked, each
+   * point a place on the ground, in tiles. The stage cuts them along the
+   * edges of the tiles and lays each piece with its own line of the ground,
+   * with no clip -- which is why the kit's own marks on the ground cost what
+   * they cover however big they are. `r` tiles round (x, y) holds all of it.
+   * `keep` (as `groundDraw`'s) is for when it has to be drawn whole after all:
+   * laid between records drawn with `groundDraw`, it goes into their layer to
+   * keep its place among them, and is cut from there only where it says.
+   */
+  groundShape(x: number, y: number, r: number, layers: GroundLayer[], keep?: (x: number, y: number, reach: number) => boolean): void {
+    const eye = this.eye, ground = this.ground;
+    this.out.ground.push({ x0: x - r, y0: y - r, x1: x + r, y1: y + r, shape: layers, keep, draw: (g) => drawGroundLayers(g, layers, eye, ground) });
   }
 
   /**
@@ -654,42 +856,41 @@ export class FxScene {
     if (a <= 0.01) return;
     const n = o.n ?? this.facets(r);
     const main = o.main ?? this.pal.main, deep = o.deep ?? this.pal.deep, ink = o.ink ?? this.pal.ink;
+    const turn = o.turn ?? 0;
     const outer: number[] = [], inner: number[] = [];
-    this.around(c.x, c.y, r, n, o.turn ?? 0, 0.15, outer);
-    this.around(c.x, c.y, r - band, n, o.turn ?? 0, 0.15, inner);
+    this.around(c.x, c.y, r, n, turn, 0.15, outer);
+    this.around(c.x, c.y, r - band, n, turn, 0.15, inner);
+    const wo = this.circle(c.x, c.y, r, n, turn), wi = this.circle(c.x, c.y, r - band, n, turn);
     const dash = o.dash ?? 0;
     const inkW = Math.max(0.8, 0.7 * this.zoom);
-    // The facets in two paths, the near half of the band in the lit tone and the far half shaded -- a hoop lying on the
-    // ground -- so it is three fills and a stroke however many facets, which matters: it is drawn again for every line
-    // of the ground it lies across.
-    const lit = new Path2D(), shade = new Path2D(), rim = new Path2D();
+    // The facets in two tones, the near half of the band lit and the far half shaded -- a hoop lying on the ground --
+    // each a quad on the ground, and the rim round the outside.
+    const lit: number[][] = [], shade: number[][] = [];
     for (let i = 0; i < n; i++) {
       const j = (i + 1) % n;
-      if (!(dash && i % dash === dash - 1)) {
-        const into = outer[2 * i + 1] + outer[2 * j + 1] > inner[2 * i + 1] + inner[2 * j + 1] ? lit : shade;
-        into.moveTo(outer[2 * i], outer[2 * i + 1]);
-        into.lineTo(outer[2 * j], outer[2 * j + 1]);
-        into.lineTo(inner[2 * j], inner[2 * j + 1]);
-        into.lineTo(inner[2 * i], inner[2 * i + 1]);
-        into.closePath();
-      }
-      if (i === 0) rim.moveTo(outer[0], outer[1]);
-      else rim.lineTo(outer[2 * i], outer[2 * i + 1]);
+      if (dash && i % dash === dash - 1) continue;
+      const into = outer[2 * i + 1] + outer[2 * j + 1] > inner[2 * i + 1] + inner[2 * j + 1] ? lit : shade;
+      into.push([wo[2 * i], wo[2 * i + 1], wo[2 * j], wo[2 * j + 1], wi[2 * j], wi[2 * j + 1], wi[2 * i], wi[2 * i + 1]]);
     }
-    rim.closePath();
-    this.groundDraw(c.x, c.y, r + 0.5, (g) => {
-      g.globalAlpha = clamp(a);
-      g.fillStyle = main;
-      g.fill(lit);
-      g.fillStyle = deep;
-      g.fill(shade);
-      g.lineWidth = inkW;
-      g.strokeStyle = ink;
-      g.stroke(rim);
+    // Drawn whole, its sides are straight on the screen, which over uneven ground stray off the circle on the ground by as
+    // much as the ground bends under them; and its inner edge is a polygon, whose sides come in from the circle.
+    let bend = 0;
+    for (let i = 0; i < n; i++) {
+      const j = (i + 1) % n;
+      bend = Math.max(bend, this.chordSlack(wo[2 * i], wo[2 * i + 1], wo[2 * j], wo[2 * j + 1], 1));
+    }
+    const cx = c.x, cy = c.y, rIn = (r - band) * Math.cos(Math.PI / n) - bend, rOut = r + bend;
+    this.groundShape(c.x, c.y, r + 0.5, [
+      { kind: 'fill', colour: main, alpha: clamp(a), paths: lit, lift: 0.15 },
+      { kind: 'fill', colour: deep, alpha: clamp(a), paths: shade, lift: 0.15 },
+      { kind: 'stroke', colour: ink, alpha: clamp(a), width: inkW, paths: [wo], closed: true, join: 'round', lift: 0.15 },
+    ], (tx, ty, reach) => {
+      const d = Math.hypot(tx - cx, ty - cy);
+      return d >= rIn - reach && d <= rOut + reach;
     });
     const gl = o.glow ?? 1;
     if (gl > 0) {
-      const pic = glowPicture(this.pal.light);
+      const pic = glowPicture(o.light ?? this.pal.light);
       if (pic) {
         // A glow round the band itself, as a few soft spots along it rather than one over the whole disc.
         const step = Math.max(1, Math.floor(n / 12));
@@ -707,20 +908,9 @@ export class FxScene {
     const a = o.alpha ?? 0.5;
     if (r <= 0.02 || a <= 0.01) return;
     const n = o.n ?? this.facets(r, 32);
-    const pts: number[] = [];
-    this.around(c.x, c.y, r, n, o.turn ?? 0, 0.1, pts);
-    const fill = o.main ?? this.pal.main;
-    this.groundDraw(c.x, c.y, r + 0.5, (g) => {
-      g.globalAlpha = clamp(a);
-      g.fillStyle = fill;
-      g.beginPath();
-      for (let i = 0; i < n; i++) {
-        if (i === 0) g.moveTo(pts[0], pts[1]);
-        else g.lineTo(pts[2 * i], pts[2 * i + 1]);
-      }
-      g.closePath();
-      g.fill();
-    });
+    this.groundShape(c.x, c.y, r + 0.5, [
+      { kind: 'fill', colour: o.main ?? this.pal.main, alpha: clamp(a), paths: [this.circle(c.x, c.y, r, n, o.turn ?? 0)], lift: 0.1 },
+    ]);
   }
 
   /**
@@ -738,55 +928,43 @@ export class FxScene {
     const step = o.step ?? 2;
     this.ring(c, r, { ...o, band: Math.max(0.06, r * 0.07), turn, glow: o.glow ?? 0.7, alpha: a * smooth(grow * 2) });
     this.ring(c, r * 0.78, { ...o, band: Math.max(0.04, r * 0.035), turn: -turn, glow: 0, alpha: a * smooth(grow * 2 - 0.3) });
+    const drawn = clamp(grow * 1.4 - 0.4);
+    if (drawn <= 0) return;
     const star: number[] = [];
-    const ticks: number[] = [];
+    const ticks: number[][] = [];
     const inner = r * 0.76;
     for (let i = 0; i < points; i++) {
       const q = (i * step) % points;
       const ang = turn + (q / points) * TAU - Math.PI / 2;
-      const x = c.x + Math.cos(ang) * inner, y = c.y + Math.sin(ang) * inner;
-      star.push(this.eye.worldToScreenX(x, y), this.eye.worldToScreenY(x, y, this.ground(x, y) + 0.2));
+      star.push(c.x + Math.cos(ang) * inner, c.y + Math.sin(ang) * inner);
       const ta = turn + (i / points) * TAU - Math.PI / 2;
-      for (const rr of [r * 0.8, r * 0.98]) {
-        const tx = c.x + Math.cos(ta) * rr, ty = c.y + Math.sin(ta) * rr;
-        ticks.push(this.eye.worldToScreenX(tx, ty), this.eye.worldToScreenY(tx, ty, this.ground(tx, ty) + 0.2));
-      }
+      ticks.push([c.x + Math.cos(ta) * r * 0.8, c.y + Math.sin(ta) * r * 0.8, c.x + Math.cos(ta) * r * 0.98, c.y + Math.sin(ta) * r * 0.98]);
+    }
+    // The star drawn on stroke by stroke as it grows.
+    const strokes = points * drawn;
+    const path: number[] = [star[0], star[1]];
+    for (let i = 1; i <= Math.ceil(strokes); i++) {
+      const k = i % points, j = (i - 1) % points;
+      const u = Math.min(1, strokes - (i - 1));
+      path.push(lerp(star[2 * j], star[2 * k], u), lerp(star[2 * j + 1], star[2 * k + 1], u));
     }
     const main = o.core ?? this.pal.accent, ink = o.ink ?? this.pal.ink;
     const w = (o.width ?? 1.6) * this.zoom;
-    const drawn = clamp(grow * 1.4 - 0.4);
-    this.groundDraw(c.x, c.y, r + 0.5, (g) => {
-      if (drawn <= 0) return;
-      g.globalAlpha = clamp(a);
-      g.lineJoin = 'miter';
-      // The star drawn on stroke by stroke as it grows.
-      const strokes = points * drawn;
-      const path = (): void => {
-        g.beginPath();
-        g.moveTo(star[0], star[1]);
-        for (let i = 1; i <= Math.ceil(strokes); i++) {
-          const k = i % points, j = (i - 1) % points;
-          const u = Math.min(1, strokes - (i - 1));
-          g.lineTo(lerp(star[2 * j], star[2 * k], u), lerp(star[2 * j + 1], star[2 * k + 1], u));
-        }
-      };
-      g.strokeStyle = ink;
-      g.lineWidth = w + Math.max(1.2, this.zoom);
-      path();
-      g.stroke();
-      g.strokeStyle = main;
-      g.lineWidth = w;
-      path();
-      g.stroke();
-      g.beginPath();
-      for (let i = 0; i < ticks.length; i += 4) {
-        g.moveTo(ticks[i], ticks[i + 1]);
-        g.lineTo(ticks[i + 2], ticks[i + 3]);
-      }
-      g.lineWidth = w * 0.8;
-      g.stroke();
-      g.lineJoin = 'round';
-    });
+    // Its strokes as segments, each with how far it strays off the ground it crosses when drawn straight on the screen.
+    const lines: number[] = [], slack: number[] = [];
+    for (let i = 2; i < path.length; i += 2) {
+      lines.push(path[i - 2], path[i - 1], path[i], path[i + 1]);
+      slack.push(this.chordSlack(path[i - 2], path[i - 1], path[i], path[i + 1], 5));
+    }
+    for (const t of ticks) {
+      lines.push(t[0], t[1], t[2], t[3]);
+      slack.push(0);
+    }
+    this.groundShape(c.x, c.y, r + 0.5, [
+      { kind: 'stroke', colour: ink, alpha: clamp(a), width: w + Math.max(1.2, this.zoom), paths: [path], join: 'miter', lift: 0.2 },
+      { kind: 'stroke', colour: main, alpha: clamp(a), width: w, paths: [path], join: 'miter', lift: 0.2 },
+      { kind: 'stroke', colour: main, alpha: clamp(a), width: w * 0.8, paths: ticks, join: 'miter', lift: 0.2 },
+    ], (tx, ty, reach) => nearSegments(lines, tx, ty, reach, slack));
   }
 
   /** A burnt or blasted patch on the ground, ragged, `r` tiles: what a fire or a blow leaves behind. */
@@ -798,21 +976,75 @@ export class FxScene {
     for (let i = 0; i < n; i++) {
       const ang = (i / n) * TAU;
       const rr = r * (0.62 + 0.38 * hashOf(this.seed + i, 7));
-      const x = c.x + Math.cos(ang) * rr, y = c.y + Math.sin(ang) * rr;
-      pts.push(this.eye.worldToScreenX(x, y), this.eye.worldToScreenY(x, y, this.ground(x, y) + 0.08));
+      pts.push(c.x + Math.cos(ang) * rr, c.y + Math.sin(ang) * rr);
     }
-    const fill = o.colour ?? '#1d1612';
-    this.groundDraw(c.x, c.y, r + 0.5, (g) => {
-      g.globalAlpha = clamp(a);
-      g.fillStyle = fill;
-      g.beginPath();
-      for (let i = 0; i < n; i++) {
-        if (i === 0) g.moveTo(pts[0], pts[1]);
-        else g.lineTo(pts[2 * i], pts[2 * i + 1]);
+    this.groundShape(c.x, c.y, r + 0.5, [{ kind: 'fill', colour: o.colour ?? '#1d1612', alpha: clamp(a), paths: [pts], lift: 0.08 }]);
+  }
+
+  /**
+   * Lines on the ground through points, following the land over its hills: a
+   * crack, a furrow, a rune's strokes, the spokes of a wheel. `width` pixels at
+   * zoom one (1.6), inked underneath; `closed` joins the last point to the
+   * first. `segs` adds separate stretches to the same record:
+   * `[[a, b], [c, d], ...]`. Laid as shapes on the ground (`groundShape`), so
+   * it follows the land and costs what it covers.
+   */
+  groundPath(pts: ReadonlyArray<{ x: number; y: number }>, o: Look & { closed?: boolean; lift?: number; segs?: ReadonlyArray<readonly [{ x: number; y: number }, { x: number; y: number }]> } = {}): void {
+    const a = o.alpha ?? 1;
+    if (a <= 0.01) return;
+    const runs: number[][] = [];
+    if (pts.length >= 2) {
+      const run: number[] = [];
+      for (const p of pts) run.push(p.x, p.y);
+      if (o.closed) run.push(pts[0].x, pts[0].y);
+      runs.push(run);
+    }
+    for (const [p0, p1] of o.segs ?? []) runs.push([p0.x, p0.y, p1.x, p1.y]);
+    if (!runs.length) return;
+    let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+    for (const run of runs) {
+      for (let i = 0; i < run.length; i += 2) {
+        x0 = Math.min(x0, run[i]); y0 = Math.min(y0, run[i + 1]); x1 = Math.max(x1, run[i]); y1 = Math.max(y1, run[i + 1]);
       }
-      g.closePath();
-      g.fill();
-    });
+    }
+    const lift = o.lift ?? 0.15;
+    const main = o.main ?? this.pal.main, ink = o.ink ?? this.pal.ink;
+    const w = (o.width ?? 1.6) * this.zoom;
+    const cx = (x0 + x1) / 2, cy = (y0 + y1) / 2;
+    const segs: number[] = [], slack: number[] = [];
+    for (const run of runs) {
+      for (let i = 2; i < run.length; i += 2) {
+        segs.push(run[i - 2], run[i - 1], run[i], run[i + 1]);
+        // Its own half-width, in tiles at the steepest a tile is drawn, and how far it strays when drawn whole.
+        slack.push(((o.width ?? 1.6) + 1.5) / 68 + this.chordSlack(run[i - 2], run[i - 1], run[i], run[i + 1]));
+      }
+    }
+    this.groundShape(cx, cy, Math.max(x1 - x0, y1 - y0) / 2 + 0.5, [
+      { kind: 'stroke', colour: ink, alpha: clamp(a), width: w + Math.max(1.2, this.zoom), paths: runs, join: 'round', cap: 'round', lift },
+      { kind: 'stroke', colour: main, alpha: clamp(a), width: w, paths: runs, join: 'round', cap: 'round', lift },
+    ], (tx, ty, reach) => nearSegments(segs, tx, ty, reach, slack));
+    const gl = o.glow ?? 0;
+    if (gl > 0) {
+      const light = o.light ?? this.pal.light;
+      const eye = this.eye, ground = this.ground;
+      this.out.glow.push((g) => {
+        g.globalAlpha = clamp(a * gl * 0.4);
+        g.lineJoin = 'round';
+        g.lineCap = 'round';
+        g.strokeStyle = light;
+        g.lineWidth = w * 3;
+        g.beginPath();
+        for (const run of runs) {
+          for (let i = 0; i < run.length; i += 2) {
+            const sx = eye.worldToScreenX(run[i], run[i + 1]), sy = eye.worldToScreenY(run[i], run[i + 1], ground(run[i], run[i + 1]) + lift);
+            if (i === 0) g.moveTo(sx, sy);
+            else g.lineTo(sx, sy);
+          }
+        }
+        g.stroke();
+        g.lineCap = 'butt';
+      });
+    }
   }
 
   /* ---- standing in the world -------------------------------------------------------------- */
@@ -858,7 +1090,7 @@ export class FxScene {
       g.stroke();
     }, o.bias ?? 0);
     const gl = o.glow ?? 1;
-    if (gl > 0) this.glow(p, r * 3.2, a * gl * 0.8);
+    if (gl > 0) this.glow(p, r * 3.2, a * gl * 0.8, o.light);
   }
 
   /** A ribbon through points in the world, `width` pixels at zoom one at its widest, tapering to nothing at the first point: a trail, a slash, a wisp. */
@@ -924,7 +1156,7 @@ export class FxScene {
     }, o.bias ?? 0);
     const gl = o.glow ?? 1;
     if (gl > 0) {
-      const pic = glowPicture(this.pal.light);
+      const pic = glowPicture(o.light ?? this.pal.light);
       if (pic) {
         const R = Math.max(5, W * 1.6);
         const step = Math.max(1, Math.floor(n / 6));
@@ -998,7 +1230,7 @@ export class FxScene {
     }, -0.5);
     const gl = o.glow ?? 1;
     if (gl > 0) {
-      const light = this.pal.light;
+      const light = o.light ?? this.pal.light;
       this.out.glow.push((g) => {
         g.globalAlpha = clamp(al * gl * 0.5);
         g.lineJoin = 'round';
@@ -1069,49 +1301,47 @@ export class FxScene {
       ptsY.push(y + Math.sin(an) * ry);
     }
     const foot = { x: b.x, y: b.y, z: b.z };
+    // The facets gathered into a path a tone, made once here, so the shell is three fills and a stroke however many sides
+    // it has rather than a fill a facet: it is the shape most often left on for a whole linger, on several bodies at once.
+    const back0 = new Path2D(), back1 = new Path2D(), lit = new Path2D(), rim = new Path2D();
+    for (let i = 0; i < sides; i++) {
+      const j = (i + 1) % sides;
+      const into = i % 2 ? back1 : back0;
+      into.moveTo(x, y - ry * 0.15);
+      into.lineTo(ptsX[i], ptsY[i]);
+      into.lineTo(ptsX[j], ptsY[j]);
+      into.closePath();
+      if (i === 0) rim.moveTo(ptsX[0], ptsY[0]);
+      else rim.lineTo(ptsX[i], ptsY[i]);
+      const mx = (ptsX[i] + ptsX[j]) / 2 - x, my = (ptsY[i] + ptsY[j]) / 2 - y;
+      if (-0.6 * mx / rx - 0.8 * my / ry < 0.45) continue;
+      lit.moveTo(lerp(x, ptsX[i], 0.82), lerp(y, ptsY[i], 0.82));
+      lit.lineTo(ptsX[i], ptsY[i]);
+      lit.lineTo(ptsX[j], ptsY[j]);
+      lit.lineTo(lerp(x, ptsX[j], 0.82), lerp(y, ptsY[j], 0.82));
+      lit.closePath();
+    }
+    rim.lineTo(ptsX[0], ptsY[0]);
     // Behind: the whole of it, faint, its facets in two tones.
     this.worldDraw(foot, (g) => {
       g.globalAlpha = clamp(a * 0.45);
-      for (let i = 0; i < sides; i++) {
-        const j = (i + 1) % sides;
-        g.fillStyle = i % 2 ? main : deep;
-        g.beginPath();
-        g.moveTo(x, y - ry * 0.15);
-        g.lineTo(ptsX[i], ptsY[i]);
-        g.lineTo(ptsX[j], ptsY[j]);
-        g.closePath();
-        g.fill();
-      }
+      g.fillStyle = deep;
+      g.fill(back0);
+      g.fillStyle = main;
+      g.fill(back1);
     }, -0.3);
     // In front: the rim, and the facets the light catches.
     this.worldDraw(foot, (g) => {
       g.globalAlpha = clamp(a);
       g.lineWidth = Math.max(0.9, 0.8 * this.zoom);
       g.strokeStyle = ink;
-      g.beginPath();
-      for (let i = 0; i <= sides; i++) {
-        const k = i % sides;
-        if (i === 0) g.moveTo(ptsX[k], ptsY[k]);
-        else g.lineTo(ptsX[k], ptsY[k]);
-      }
-      g.stroke();
+      g.stroke(rim);
       g.globalAlpha = clamp(a * 0.55);
       g.fillStyle = core;
-      for (let i = 0; i < sides; i++) {
-        const j = (i + 1) % sides;
-        const mx = (ptsX[i] + ptsX[j]) / 2 - x, my = (ptsY[i] + ptsY[j]) / 2 - y;
-        if (-0.6 * mx / rx - 0.8 * my / ry < 0.45) continue;
-        g.beginPath();
-        g.moveTo(lerp(x, ptsX[i], 0.82), lerp(y, ptsY[i], 0.82));
-        g.lineTo(ptsX[i], ptsY[i]);
-        g.lineTo(ptsX[j], ptsY[j]);
-        g.lineTo(lerp(x, ptsX[j], 0.82), lerp(y, ptsY[j], 0.82));
-        g.closePath();
-        g.fill();
-      }
+      g.fill(lit);
     }, 0.6);
     const gl = o.glow ?? 1;
-    if (gl > 0) this.glow(c, (ry / this.zoom) * 1.1, a * gl * 0.35);
+    if (gl > 0) this.glow(c, (ry / this.zoom) * 1.1, a * gl * 0.35, o.light);
   }
 
   /** A column of light standing on the ground at a point, `r` pixels at zoom one across and `h` height units tall, fading up its length. */
@@ -1140,8 +1370,8 @@ export class FxScene {
     }, 0.4);
     const gl = o.glow ?? 1;
     if (gl > 0) {
-      this.glow(foot, (o.r ?? 8) * 2.6, a * gl * 0.6);
-      this.glow(this.on(c.x, c.y, (o.h ?? 40) * 0.35), (o.r ?? 8) * 2.2, a * gl * 0.4);
+      this.glow(foot, (o.r ?? 8) * 2.6, a * gl * 0.6, o.light);
+      this.glow(this.on(c.x, c.y, (o.h ?? 40) * 0.35), (o.r ?? 8) * 2.2, a * gl * 0.4, o.light);
     }
   }
 
@@ -1195,7 +1425,7 @@ export class FxScene {
         g.stroke();
       });
     }
-    if ((o.glow ?? 1) > 0) this.glow(this.on(c.x, c.y, h * 0.4), 10 + h, a * (o.glow ?? 1) * 0.35);
+    if ((o.glow ?? 1) > 0) this.glow(this.on(c.x, c.y, h * 0.4), 10 + h, a * (o.glow ?? 1) * 0.35, o.light);
   }
 
   /**
@@ -1237,7 +1467,126 @@ export class FxScene {
       g.closePath();
       g.fill();
     }, o.bias ?? 2);
-    if ((o.glow ?? 1) > 0) this.glow(p, (o.r ?? 5) * 2.6, a * (o.glow ?? 1) * 0.5);
+    if ((o.glow ?? 1) > 0) this.glow(p, (o.r ?? 5) * 2.6, a * (o.glow ?? 1) * 0.5, o.light);
+  }
+
+  /**
+   * A thin inked line through points in the world: a bowstring, a tether, a
+   * thread of a binding, a crack of light over a body. `width` pixels at zoom
+   * one (1.2), its ink round it; `closed` joins the last point to the first.
+   * Sorted with its nearest point, as a ribbon is. No glow unless `glow` is
+   * given.
+   */
+  polyline(pts: readonly P3[], o: Look & { closed?: boolean } = {}): void {
+    const n = pts.length;
+    const a = o.alpha ?? 1;
+    if (n < 2 || a <= 0.01) return;
+    const path = new Path2D();
+    let near = pts[0], nearY = -Infinity;
+    for (let i = 0; i < n; i++) {
+      const x = this.sx(pts[i]), y = this.sy(pts[i]);
+      if (i === 0) path.moveTo(x, y);
+      else path.lineTo(x, y);
+      // The nearest by where it stands on the ground, as the sort itself goes.
+      const gy = this.eye.worldToScreenY(pts[i].x, pts[i].y, this.ground(pts[i].x, pts[i].y));
+      if (gy > nearY) {
+        nearY = gy;
+        near = pts[i];
+      }
+    }
+    if (o.closed) path.closePath();
+    const W = (o.width ?? 1.2) * this.zoom;
+    const main = o.main ?? this.pal.main, ink = o.ink ?? this.pal.ink;
+    this.worldDraw(near, (g) => {
+      g.globalAlpha = clamp(a);
+      g.lineJoin = 'round';
+      g.lineCap = 'round';
+      g.strokeStyle = ink;
+      g.lineWidth = W + Math.max(1, 0.8 * this.zoom);
+      g.stroke(path);
+      g.strokeStyle = main;
+      g.lineWidth = W;
+      g.stroke(path);
+      g.lineCap = 'butt';
+    }, o.bias ?? 0);
+    const gl = o.glow ?? 0;
+    if (gl > 0) {
+      const light = o.light ?? this.pal.light;
+      this.out.glow.push((g) => {
+        g.globalAlpha = clamp(a * gl * 0.5);
+        g.lineJoin = 'round';
+        g.lineCap = 'round';
+        g.strokeStyle = light;
+        g.lineWidth = W * 4;
+        g.stroke(path);
+        g.lineCap = 'butt';
+      });
+    }
+  }
+
+  /**
+   * A string from one point to another, sagging `sag` height units at its
+   * middle (a negative sag bows it up; nought is taut), cut into `n` (8)
+   * stretches: a bowstring drawn to the hand, a tether to a companion, a leash
+   * of force. A `polyline`, so it takes the same look.
+   */
+  string(a: P3, b: P3, o: Look & { sag?: number; n?: number } = {}): void {
+    const sag = o.sag ?? 0;
+    const n = Math.max(1, Math.round(o.n ?? (sag ? 8 : 1)));
+    const pts: P3[] = [];
+    for (let i = 0; i <= n; i++) {
+      const u = i / n;
+      pts.push({ x: lerp(a.x, b.x, u), y: lerp(a.y, b.y, u), z: lerp(a.z, b.z, u) - 4 * sag * u * (1 - u) });
+    }
+    this.polyline(pts, o);
+  }
+
+  /**
+   * Many small polygons as one thing standing in the world, sorted together at
+   * `at` (`bias` pixels nearer): a crown of shards, a scatter of petals, a
+   * cage of bars, a rune built of facets -- one record however many pieces,
+   * where a call each would be a record each. Each piece is filled and inked
+   * as it says (`ShapePiece`), in the order given, so put the far ones first.
+   */
+  shapes(at: P3, pieces: readonly ShapePiece[], o: Look = {}): void {
+    const a = o.alpha ?? 1;
+    if (a <= 0.01 || !pieces.length) return;
+    const main = o.main ?? this.pal.main, ink = o.ink ?? this.pal.ink;
+    const inkW = Math.max(0.8, 0.7 * this.zoom);
+    const drawn: Array<{ path: Path2D; fill: string | false; ink: string | false; width: number; alpha: number; closed: boolean }> = [];
+    for (const piece of pieces) {
+      if (piece.pts.length < 2) continue;
+      const path = new Path2D();
+      for (let i = 0; i < piece.pts.length; i++) {
+        const x = this.sx(piece.pts[i]), y = this.sy(piece.pts[i]);
+        if (i === 0) path.moveTo(x, y);
+        else path.lineTo(x, y);
+      }
+      const closed = piece.closed !== false;
+      if (closed) path.closePath();
+      drawn.push({
+        path, closed, fill: closed ? (piece.fill === undefined ? main : piece.fill) : false, ink: piece.ink === undefined ? ink : piece.ink,
+        width: piece.width !== undefined ? piece.width * this.zoom : inkW, alpha: clamp(a * (piece.alpha ?? 1)),
+      });
+    }
+    this.worldDraw(at, (g) => {
+      g.lineJoin = 'miter';
+      for (const d of drawn) {
+        g.globalAlpha = d.alpha;
+        if (d.fill) {
+          g.fillStyle = d.fill;
+          g.fill(d.path);
+        }
+        if (d.ink) {
+          g.strokeStyle = d.ink;
+          g.lineWidth = d.width;
+          g.stroke(d.path);
+        }
+      }
+      g.lineJoin = 'round';
+    }, o.bias ?? 0);
+    const gl = o.glow ?? 0;
+    if (gl > 0) this.glow(at, 12, a * gl * 0.5, o.light);
   }
 
   /* ---- particles ------------------------------------------------------------------------- */

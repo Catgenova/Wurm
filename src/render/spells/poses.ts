@@ -281,3 +281,13 @@ export const withPose = (base: CastPose, more: (r: Rig, t: number, c: PoseCue) =
   base(r, t, c);
   more(r, t, c);
 };
+
+/** Whether the cast is on the caster themselves (a self-heal, a skin of one's own): a pose that reaches out at an ally can keep its hands in. */
+export const onSelf = (c: PoseCue): boolean => c.at === 'self';
+
+/**
+ * How far a held pose has got (`cast.hold`), nought to one: nought until the
+ * hold begins, one once it is let go. A stance can breathe with it while it
+ * is held (`Math.sin(c.held * ...)`) and settle as it ends.
+ */
+export const heldFor = (c: PoseCue): number => c.held ?? 0;
