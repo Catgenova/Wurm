@@ -111,7 +111,7 @@ export type Target =
       down?: boolean;
     }
   | { kind: 'crate'; id: number }
-  /** Somebody else on the island, by who they are (a Naturalist's Field Medic dressing their wounds). */
+  /** Somebody else on the island, by who they are (anybody dressing their wounds). */
   | { kind: 'person'; uid: string; name?: string }
   | { kind: 'campfire'; id: number; itemUid?: number; count?: number }
   | { kind: 'smelter'; id: number; itemUid?: number; count?: number; mouldUid?: number }

@@ -31,7 +31,7 @@ import {
   CHANNELS, CLASS_AT, CLASS_CHANGE_COST, CLASS_COLUMNS, CLASS_NODES, CLASS_TIER_AT, CLASSES, channelSays, NODES_PER_TRADE, PERK_CLASSES,
   PERK_TIER_AT, PERKS_PER_TIER, riteDef, RITES, type Channel,
 } from '../../game/classes';
-import { PERKS, perksOf } from '../../game/perks';
+import { PERK_BY_ID, PERKS, perksOf } from '../../game/perks';
 import { CLASS_LEARN_BLOW, CLASS_LEARN_KILL, CLASS_LEVEL_START, CLASS_SPELL_BY_ID, spellTerms } from '../../game/talents';
 import { CREATURE_CRATE } from '../../game/creaturecrate';
 import { CRATE_DEFS, SUBTILES } from '../../game/crates';
@@ -1981,8 +1981,10 @@ export function helpText(): string {
     dressing, not in place of one, and scouring the wound out takes it off. A <b>tincture</b>
     (${numberWord(recipe(`make_tincture_${KINDS[0].herb}`).inputs[0].count ?? 1)} of the herb) makes ${TINCTURE_NAMES} each go in
     ${percent(TINCTURE_BONUS)} faster for ${spanWords(TINCTURE_SECONDS)}, beside anything a dish's knack is doing for the same trade.</p>
-    <p>A Naturalist with <b>Field Medic</b> dresses somebody else: stand beside them, right-click them and choose
-    <b>Dress</b> <i>their name</i><b>'s wounds</b>. It goes on their worst wound, at your first aid and out of your pack.</p>
+    <p>Anybody can dress somebody else: stand beside them, right-click them and choose
+    <b>Dress</b> <i>their name</i><b>'s wounds</b>. It goes on their worst wound, at your first aid and out of your pack. A
+    Naturalist with <b>Field Medic</b> or a Chirurgeon with <b>Field Surgeon</b> puts back
+    ${percent((PERK_BY_ID.get('naturalist_field_medic')?.fx['heal:others'] ?? 1) - 1)} more with a dressing on somebody else.</p>
     <p>The same hands do as much for a hurt <b>wildermon</b>. Stand beside a tame one that has been in
     a fight and choose <b>Treat its wounds</b>: it takes a bandage and puts back the same share of its
     whole health, which is far more forgiving than waiting for it to mend itself. A wild creature will

@@ -47,10 +47,6 @@ function dressingFor(g: Game, w: Wound | null): { item: Item; herb: string } | n
   return cloth ? { item: cloth, herb: '' } : null;
 }
 
-/** What dressing somebody else is refused without, in the island's words (a Naturalist's Field Medic, a Chirurgeon's Field Surgeon). */
-export const FIELD_MEDIC_SAYS = 'Dressing somebody else\'s wounds wants a Naturalist who has learned Field Medic, or a Chirurgeon who has learned '
-  + 'Field Surgeon.';
-
 /** Who a person target is, as far as this machine knows: a name and where they stand. */
 const personOf = (g: Game, t: Target): { name: string } | undefined =>
   t.kind === 'person' ? (g.roster.list().find((p) => p.uid === t.uid) ?? (t.name ? { name: t.name } : undefined)) : undefined;
@@ -66,19 +62,16 @@ export const FIRST_AID_ACTIONS: ActionDef[] = [
     repeat: true,
     applies: (t, g) =>
       (t.kind === 'item' && ['bandage', 'cover'].includes(g.inventory.get(t.uid)?.id ?? ''))
-      // Somebody else's, for a Naturalist's Field Medic.
-      || (t.kind === 'person' && g.perk('dress_others', 0) > 0),
+      // Somebody else's: anybody may, standing beside them.
+      || t.kind === 'person',
     labelFor: (t, g) => {
       if (t.kind === 'person') return `Dress ${personOf(g, t)?.name ?? 'their'}'s wounds`;
       const w = worstWound(g.player.wounds);
       return w ? `Dress the ${WOUND_KINDS[w.kind].name} on your ${PART_NAMES[w.part] ?? w.part}` : 'Dress a wound';
     },
     check: (t, g) => {
-      // What is wrong with somebody else is the island's to know; the perk and a dressing are yours.
-      if (t.kind === 'person') {
-        if (g.perk('dress_others', 0) <= 0) return FIELD_MEDIC_SAYS;
-        return dressingFor(g, null) ? null : 'You have nothing to dress it with.';
-      }
+      // What is wrong with somebody else is the island's to know; the dressing is yours.
+      if (t.kind === 'person') return dressingFor(g, null) ? null : 'You have nothing to dress it with.';
       if (t.kind !== 'item') return null;
       if (!['bandage', 'cover'].includes(g.inventory.get(t.uid)?.id ?? '')) return 'That is not a dressing.';
       const w = worstWound(g.player.wounds);
@@ -88,7 +81,8 @@ export const FIRST_AID_ACTIONS: ActionDef[] = [
       return null;
     },
     perform: (t, g) => {
-      // Nobody else is here to dress offline: another's wounds are dressed on the island.
+      // Nobody else is here to dress offline: another's wounds are dressed on the island, and a Naturalist's Field Medic or a
+      // Chirurgeon's Field Surgeon (`heal:others`) puts back more there.
       if (t.kind === 'person') return;
       const w = worstWound(g.player.wounds);
       if (!w || w.infected) return;

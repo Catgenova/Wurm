@@ -25,7 +25,6 @@ import { execFileSync } from 'node:child_process';
 // The rulebook first: `firstaid` is a part of it and cannot be loaded on its own.
 import '../../src/game/actions';
 import { CLASS_TIER_AT } from '../../src/game/classes';
-import { FIELD_MEDIC_SAYS } from '../../src/game/firstaid';
 import { SPELL_BAR } from '../../src/game/patrons';
 import { foldPerks, perksOf, PERK_BY_ID, TIERS } from '../../src/game/perks';
 import { CLASS_SPELL_BY_ID, classSpellsOf, NEEDS_SAID, type ClassSpellDef } from '../../src/game/talents';
@@ -322,7 +321,7 @@ begin
   update player set used_at = '{}'::jsonb, blessings = '{}'::jsonb, stats = jsonb_set(jsonb_set(stats, '{stamina}', '1'), '{health}', '1')
    where world_id = w.world_id and uid = w.uid;
 
-  /* ---- Before the passives: somebody else refused, and slips on a poor hand ---- */
+  /* ---- Before the passives: somebody else dressed all the same, and slips on a poor hand ---- */
   insert into said values ('OTHERS:BEFORE', coalesce(fight_refusal(w.world_id, w.uid, 'bind_wound', jsonb_build_object('kind', 'person', 'uid', o)), 'dressed'));
   update skill set value = 1 where world_id = w.world_id and uid = w.uid and id = 'first_aid';
   delete from event where uid = w.uid;
@@ -341,7 +340,7 @@ begin
     on conflict do nothing;
   perform class_fold(w.world_id, w.uid);
   insert into said select 'FOLDED', coalesce((select string_agg(e.k || '=' || e.v, ';' order by e.k collate "C")
-      from jsonb_each_text(class_mul->'fx') e(k, v) where e.k ~ '^(dress_others|fail|fester|stamina|time|triage)'), 'none')
+      from jsonb_each_text(class_mul->'fx') e(k, v) where e.k ~ '^(heal|fail|fester|stamina|time|triage)'), 'none')
     from player where world_id = w.world_id and uid = w.uid;
   insert into said values ('QUICK', (pg_temp.dress_secs(w.world_id, w.uid) / m0)::text);
   delete from event where uid = w.uid;
@@ -501,10 +500,10 @@ check('and made with a knife', island('NEEDS:KNIFE') === 'ready', island('NEEDS:
 /* ---- The passives ------------------------------------------------------------ */
 
 check('the six passives fold on the island to what they fold to in the browser',
-  island('FOLDED') === Object.keys(FOLD).filter((k) => /^(dress_others|fail|fester|stamina|time|triage)/.test(k)).sort()
+  island('FOLDED') === Object.keys(FOLD).filter((k) => /^(heal|fail|fester|stamina|time|triage)/.test(k)).sort()
     .map((k) => `${k}=${FOLD[k]}`).join(';'), island('FOLDED'));
-check('Field Surgeon: somebody else\'s wounds refused without it, in the browser\'s words, and dressed with it',
-  island('OTHERS:BEFORE') === FIELD_MEDIC_SAYS && island('OTHERS') === 'dressed', `${island('OTHERS:BEFORE')} / ${island('OTHERS')}`);
+check('somebody else\'s wounds are not refused for want of Field Surgeon, only for nothing open, and dressed with it',
+  / has nothing open to dress\.$/.test(island('OTHERS:BEFORE')) && island('OTHERS') === 'dressed', `${island('OTHERS:BEFORE')} / ${island('OTHERS')}`);
 check(`Quick Bandage: a dressing ${pct(1 - FOLD['time:bind_wound'])} quicker`, near(Number(island('QUICK')), FOLD['time:bind_wound'], 1e-4),
   island('QUICK'));
 {

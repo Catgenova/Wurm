@@ -13,7 +13,7 @@
  *   * the pot: Quick Lye's time, Double Boil's pots, Thrifty Dyer's dyestuff,
  *     Sure Boil's fewer failures and Ink Maker's ink; Cover Maker's covers;
  *   * a dressing: Quick Dressing's time, Sure Hands' fewer slips, Quick Mend's
- *     faster closing, and Field Medic's dressing of somebody else;
+ *     faster closing, somebody else dressed by anybody, and Field Medic's more on them;
  *   * the remedies, made only with the perk and used by anybody: herb tea's
  *     stamina, a salve's wound that never goes bad, and a tincture's four
  *     trades, beside a dish's knack rather than in its place;
@@ -27,7 +27,7 @@ import { execFileSync } from 'node:child_process';
 import { Game } from '../../src/game/game';
 import { ACTION_BY_ID, GRASS_PER_CUT, REED_CUT, type Target } from '../../src/game/actions';
 import { TINCTURE_BONUS, TINCTURE_SECONDS, TINCTURE_SKILLS } from '../../src/game/boons';
-import { DRESS_CHECK, FIELD_MEDIC_SAYS } from '../../src/game/firstaid';
+import { DRESS_CHECK } from '../../src/game/firstaid';
 import { EMPTY_CHANCE, rollsAt } from '../../src/game/forage';
 import { hiveRate, HIVE_WAX } from '../../src/game/furniture';
 import { ITEM_DEFS, RARITIES } from '../../src/game/items';
@@ -380,21 +380,29 @@ begin
   ${onItem('bind_wound', 'v_it')};
   insert into said values ('MEND', v_t || ':' || coalesce((select w0->>'mend' from player, jsonb_array_elements(wounds) w0 where world_id = w and uid = u), 'none'));
 
-  /* ---- Field Medic: Hild beside you with a cut, refused without it and dressed with it; too far away, refused. ---- */
+  /* ---- Somebody else: Hild beside you with a cut, dressed by anybody, and more with Field Medic; too far away, refused. ---- */
   update player set x = 10.2, y = 9.5, wounds = jsonb_build_array(${jsonSql(CUT)}), body_at = now(),
          stats = coalesce(stats, '{}'::jsonb) || jsonb_build_object('health', 0.5, 'hurtSettled', now()) where world_id = w and uid = v_other;
   update player set wounds = '[]'::jsonb where world_id = w and uid = u;
   perform give(w, u, 'bandage', 3, 40);
   perform pg_temp.hold(w, u, '{}');
   v_t := coalesce(act_refusal(w, u, 'bind_wound', ${person}), 'ALLOWED');
-  ${hold('Field Medic')};
-  v_t := v_t || '#' || coalesce(act_refusal(w, u, 'bind_wound', ${person}), 'ALLOWED');
   v_n := ${count('bandage')};
+  -- The hand as it is now, put back before the second, so the first's practice does not count in it.
+  perform set_config('wurm.first_aid', skill_of(w, u, 'first_aid')::text, true);
   perform act_perform(w, u, 'bind_wound', ${person});
   v_t := v_t || '#' || (v_n - ${count('bandage')}) || ':'
     || coalesce((select w0->>'dressing' || '/' || (w0->>'bleeding') from player, jsonb_array_elements(wounds) w0 where world_id = w and uid = v_other), 'none')
     || ':' || ((select (stats->>'health')::double precision from player where world_id = w and uid = v_other) > 0.5)
     || ':' || coalesce((select e.text from event e where e.world_id = w and e.uid = v_other order by e.n desc limit 1), 'unsaid');
+  -- What it put back, and the same again under Field Medic.
+  v_u := ((select (stats->>'health')::double precision from player where world_id = w and uid = v_other) - 0.5)::text;
+  update player set wounds = jsonb_build_array(${jsonSql(CUT)}), stats = stats || jsonb_build_object('health', 0.5, 'hurtSettled', now())
+   where world_id = w and uid = v_other;
+  ${hold('Field Medic')};
+  update skill set value = current_setting('wurm.first_aid')::double precision where world_id = w and uid = u and id = 'first_aid';
+  perform act_perform(w, u, 'bind_wound', ${person});
+  v_t := v_t || '#' || v_u || '|' || ((select (stats->>'health')::double precision from player where world_id = w and uid = v_other) - 0.5);
   update player set x = 15.5, y = 15.5 where world_id = w and uid = v_other;
   insert into said values ('MEDIC', v_t || '#' || coalesce(act_refusal(w, u, 'bind_wound', ${person}), 'ALLOWED'));
   update player set wounds = '[]'::jsonb where world_id = w and uid = v_other;
@@ -564,12 +572,14 @@ check(`${P('Quick Mend').name}: a wound it dresses closes ${fx('Quick Mend', 'me
   Number(mendOn) === fx('Quick Mend', 'mend:bind_wound') && near(Number(closeMend) / Number(closePlain), fx('Quick Mend', 'mend:bind_wound'), 1e-6),
   say('MEND'));
 check('and a dressing by hands without it takes the quick hands off', mendOff === 'none', mendOff);
-const [medicNo, medicYes, medicDone, medicFar] = say('MEDIC').split('#');
-check(`${P('Field Medic').name}: somebody else's wounds are refused without it, in the browser's words`, medicNo === FIELD_MEDIC_SAYS, medicNo);
+const [medicYes, medicDone, medicMore, medicFar] = say('MEDIC').split('#');
 const [used, theirs, better, ...told] = medicDone.split(':');
-check('and with it they are dressed, out of your pack, and they are told who did it',
+check('somebody else\'s wounds are dressed by anybody, out of your pack, and they are told who did it',
   medicYes === 'ALLOWED' && used === '1' && theirs === '/false' && better === 'true' && told.join(':').includes('dresses the cut on your arm'),
   `${medicYes} / ${medicDone}`);
+const [healPlain, healMedic] = medicMore.split('|').map(Number);
+check(`${P('Field Medic').name}: a dressing on somebody else puts back ${fx('Field Medic', 'heal:others')} times as much`,
+  healPlain > 0 && near(healMedic / healPlain, fx('Field Medic', 'heal:others'), 1e-9), medicMore);
 check('and not from across the yard', medicFar === 'You need to be beside them.', medicFar);
 
 /* ---- the remedies ---------------------------------------------------------------------- */
@@ -665,7 +675,7 @@ const bandage = game.inventory.find('bandage')!;
 ACTION_BY_ID.get('bind_wound')!.perform?.({ kind: 'item', uid: bandage.uid }, game);
 check('and a dressing stamps its quick hands on the wound', game.player.wounds[0]?.mend === fx('Quick Mend', 'mend:bind_wound'), JSON.stringify(game.player.wounds[0]));
 game.setPerks({});
-check('the browser refuses Field Medic in the island\'s words', ACTION_BY_ID.get('bind_wound')!.check?.({ kind: 'person', uid: 'x' }, game) === FIELD_MEDIC_SAYS);
+check('the browser offers to dress somebody else without any perk', ACTION_BY_ID.get('bind_wound')!.applies({ kind: 'person', uid: 'x' }, game));
 // The remedies in the browser, in the island's words.
 game.player.stats.stamina = 0.5;
 const tea = game.inventory.add('herb_tea', { ql: 40 });

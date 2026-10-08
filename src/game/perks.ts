@@ -158,6 +158,9 @@ interface Seed {
 const oneIn = (p: number): string => `1 in ${Math.round(1 / p)}`;
 /** "35%" off, from a multiplier of 0.65. */
 const less = (m: number): string => percent(1 - m);
+/** A Naturalist's Field Medic and a Chirurgeon's Field Surgeon: more out of a dressing put on somebody else. */
+const dressOthersNote = (fx: Fx): string => `A dressing you put on somebody else puts back ${percent(fx['heal:others'] - 1)} more of their `
+  + 'health, and closes their wound by as much more (now the same as one on yourself).';
 /** "+10%" on, from a multiplier of 1.1. */
 const more = (m: number): string => `+${percent(m - 1)}`;
 const secs = (s: number): string => `${Number(s.toFixed(1))} s`;
@@ -1612,8 +1615,8 @@ const NATURALIST: Seed[] = [
   },
   {
     num: 34, name: 'Field Medic',
-    fx: { dress_others: 1 },
-    note: () => 'You can dress the wounds of somebody standing beside you, at your first aid and with your dressings (now only your own).',
+    fx: { 'heal:others': 1.3 },
+    note: (fx) => dressOthersNote(fx),
   },
   {
     num: 43, name: 'Herb Tea',
@@ -2280,9 +2283,8 @@ const CHIRURGEON: Seed[] = [
   ...classSpellsOf('chirurgeon').map((sp): Seed => ({ num: sp.num, name: sp.name, fx: {}, note: () => `${spellTerms(sp)} ${sp.note}` })),
   {
     num: 101, name: 'Field Surgeon',
-    fx: { dress_others: 1 },
-    note: () => 'You can dress the wounds of somebody standing beside you, at your first aid and with your dressings, as a Naturalist’s '
-      + 'Field Medic can.',
+    fx: { 'heal:others': 1.3 },
+    note: (fx) => dressOthersNote(fx),
   },
   {
     num: 105, name: 'Quick Bandage',

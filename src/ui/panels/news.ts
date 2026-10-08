@@ -1343,6 +1343,19 @@ export const NEWS: News[] = [
       ];
     },
   },
+  {
+    n: 99,
+    day: '2026-10-08',
+    lines: () => {
+      const medic = PERK_BY_ID.get('naturalist_field_medic')!;
+      return [
+        'Anybody can dress somebody else’s wounds: stand beside them, right-click them and choose Dress their wounds. It goes on '
+          + 'their worst wound, at your first aid and out of your pack.',
+        `The Naturalist’s ${medic.name} and the Chirurgeon’s ${PERK_BY_ID.get('chirurgeon_field_surgeon')!.name} now do this: ${medic.note} `
+          + 'Whoever had them keeps them.',
+      ];
+    },
+  },
 ];
 
 /** The highest entry this browser has shown. */

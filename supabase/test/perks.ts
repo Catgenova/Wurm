@@ -514,7 +514,7 @@ const OTHERS = new Set([
   'tame:offer', 'coax:step', 'tame:young', 'bait:any', 'groom:care', 'groom:heal',
   'kept:care_hours', 'kept:care_bonus', 'kept:hunger', 'kept:old_at',
   'breed:rest', 'breed:gestation', 'breed:twins', 'breed:inherit', 'breed:upgrade', 'breed:sex', 'stud_book',
-  'dress_others', 'herb_tea', 'salve', 'tincture',
+  'heal:others', 'herb_tea', 'salve', 'tincture',
   'reach:fish', 'reach:drag_net', 'bait:pull', 'bait:food', 'smoke_fish', 'fish_journal', 'fish_pond',
   'worn:armour', 'worn:shield', 'worn:weapon', 'rolls:bauble', 'floor:improve', 'repair_kit', 'sealant',
   'more_stones', 'amphora', 'potters_wheel', 'glaze_item', 'trade_book', 'circlet',

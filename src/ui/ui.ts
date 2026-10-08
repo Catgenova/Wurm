@@ -2568,7 +2568,7 @@ export class UI {
       note: after ? 'You are walking after them' : 'Walk after them until you go somewhere else',
       onSelect: () => this.game.follow(uid, name),
     });
-    // Their wounds, at your first aid and out of your pack: a Naturalist's Field Medic.
+    // Their wounds, at your first aid and out of your pack: anybody may.
     const dress = ACTION_BY_ID.get('bind_wound');
     const patient: Target = { kind: 'person', uid, name };
     if (dress?.applies(patient, this.game)) {
