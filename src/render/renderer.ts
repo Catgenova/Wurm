@@ -107,7 +107,7 @@ import { css, HAZE_REACH, rgba, skyAt, unknownInk, type Sky } from './sky';
 const HAZE_STEPS = 6;
 /** The share of the screen's pixels the swell's gradients are worked out at, across and down (`drawSwell`). */
 const SWELL_RES = 0.5;
-/** The most bands of a tree's picture its sway is laid on in (`drawTree`); a gale on a tall tree takes a pixel and a bit between them. */
+/** The most bands of a tree's picture its sway is laid on in (`drawTree`); a gale on a tall tree puts a pixel and a bit between them. */
 const TREE_BANDS = 24;
 /** Device pixels of tree pictures kept between frames (`drawTree`): about forty-eight megabytes. */
 const TREE_PIXELS = 12_000_000;
@@ -4679,13 +4679,24 @@ export class Renderer {
         ctx.setTransform(1, 0, 0, 1, 0, 0);
         if (Math.abs(sway) * hDev < 0.5) ctx.drawImage(cv, x, y);
         else {
-          // Tall enough that each band is a pixel over from the next, and never more than `TREE_BANDS` of them.
-          const band = Math.max(Math.ceil(1 / Math.abs(sway)), Math.ceil(hDev / TREE_BANDS));
-          for (let y0 = 0; y0 < hDev; y0 += band) {
-            const y1 = Math.min(hDev, y0 + band);
+          /*
+           * Cut at the same heights whatever the wind is doing, counted up
+           * from the foot, so a band moves only when its own lean crosses a
+           * whole pixel. Cut where the lean put a pixel between bands, the
+           * cuts moved every frame the wind changed and the seams ran up and
+           * down the tree: it shook. Short enough that a full gale puts no
+           * more than a pixel between one band and the next, and never more
+           * than `TREE_BANDS` of them.
+           */
+          const band = Math.max(Math.ceil(2 / SWAY_MAX), Math.ceil(hDev / TREE_BANDS));
+          const lay = (y0: number, y1: number): void => {
+            if (y1 <= y0) return;
             const off = Math.round(sway * ((y0 + y1) / 2 - pic.footY));
             ctx.drawImage(cv, 0, y0, cv.width, y1 - y0, x + off, y + y0, cv.width, y1 - y0);
-          }
+          };
+          const foot = Math.max(0, Math.min(hDev, Math.round(pic.footY)));
+          lay(foot, hDev);
+          for (let y1 = foot; y1 > 0; y1 -= band) lay(Math.max(0, y1 - band), y1);
         }
         ctx.restore();
         return;
