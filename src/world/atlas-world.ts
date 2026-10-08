@@ -354,6 +354,8 @@ export function generateAtlasWindow(
 
       let t: TileType = TileType.Grass;
       let d = 0;
+      // Above the alpine band is the mountain, which some islands keep their stone under.
+      const alpine = avg > BANDS.alpine + p * BANDS.alpineVary;
 
       if (max < 0) {
         t = avg < -28 ? TileType.Dirt : TileType.Sand;
@@ -366,7 +368,7 @@ export function generateAtlasWindow(
         t = TileType.Rock;
       } else if (avg > BANDS.snow + p * BANDS.snowVary) {
         t = R.snow ? TileType.Snow : TileType.Rock;
-      } else if (avg > BANDS.alpine + p * BANDS.alpineVary) {
+      } else if (alpine) {
         t = slope > 22 || !R.tundra ? TileType.Rock : TileType.Tundra;
         if (t === TileType.Tundra && r < 0.05) {
           t = TileType.Tree;
@@ -420,7 +422,7 @@ export function generateAtlasWindow(
       haloData[ty * tw + tx] = d;
       // Ore on the seabed is ore nobody can reach, so dry land carries the metal.
       const wet = c0 < 0 || c1 < 0 || c2 < 0 || c3 < 0;
-      haloRock[ty * tw + tx] = rockKindFor(seed, reg, wx, wy, wet ? ORE_DENSITY.water : ORE_DENSITY.land);
+      haloRock[ty * tw + tx] = rockKindFor(seed, reg, wx, wy, wet ? ORE_DENSITY.water : ORE_DENSITY.land, alpine);
     }
   }
 

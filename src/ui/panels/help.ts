@@ -109,6 +109,7 @@ import {
 } from '../../game/wounds';
 import { TURNS } from '../../render/view';
 import { ORE_DENSITY, seamShare } from '../../world/ore';
+import { REGIONS } from '../../world/regions';
 import {
   BUSH_DEFS, groundRoll, ROCK_VARIANTS, SLAB_VARIANTS, STEPS_BRICKS, STEPS_LEAST, STEPS_MOST, STEPS_PLANKS, STEPS_SLABS, STEPS_TWIST, TILE_DEFS, TileType,
   TREE_DAWN_UTC, TREE_DEFS, WEAR_FALL, WEAR_MOST, WEAR_TRAIL, WEARS,
@@ -437,6 +438,13 @@ const BOON_QL = 70;
 const CIDER = BREW_BY_ID.get('cider') ?? BREWS[0];
 /** The trees that bear. */
 const FRUIT_TREES = TREE_DEFS.filter((t) => t.fruit);
+/** An island of the chart by name, as a sentence carries it. */
+const islandName = (name: string): string => name.replace(/^The /, 'the ');
+/** A rock or seam by what it yields, as a prospector names it. */
+const rockName = (yields: string): string => (ROCK_VARIANTS.find((r) => r.yields === yields)?.name ?? yields).replace(/ (vein|seam)$/, '').toLowerCase();
+/** The fruit trees each island of the chart holds to itself. */
+const ISLAND_FRUIT = REGIONS.map((R) => ({ R, trees: R.trees.filter((s) => TREE_DEFS[s]?.fruit).map((s) => TREE_DEFS[s].name.toLowerCase()) }))
+  .filter((r) => r.trees.length);
 /** Which of them flower in which colour, the colour first: "deep pink on cherry, peach and pomegranate". */
 const FLOWER_KINDS: Array<[string, string[]]> = (['deep pink', 'pale pink', 'white'] as const).map((family) => [
   family, FRUIT_TREES.filter((t) => BLOOMS[t.fruit ?? '']?.family === family).map((t) => t.name.toLowerCase()),
@@ -920,10 +928,9 @@ export function helpText(): string {
     <h3>Fruit trees</h3>
     <p>${NumberWord(FRUIT_TREES.length)} of the ${numberWord(TREE_DEFS.length)} trees bear. <b>Apple</b> and <b>olive</b> grow wild here and there in
     the warm low country of any island, and the rest are each held to one island of the chart, where they
-    grow among the apples and olives: <b>cherry</b> on East Isle,
-    <b>pear</b> and <b>quince</b> on the Crescent, <b>pomegranate</b> and <b>apricot</b> on the Northwest
-    Steppe, <b>plum</b> in the lowland of the Northeast Tundra, <b>lemon</b> on Volcano Isle, <b>peach</b>
-    on Middle Isle and <b>fig</b> on West Skerry. An island of your own has no chart and grows them all.
+    grow among the apples and olives:
+    ${listed(ISLAND_FRUIT.map(({ R, trees }) => `${listed(trees.map((t) => `<b>${t}</b>`))} on ${islandName(R.name)}`))}.
+    An island of your own has no chart and grows them all.
     You can tell a fruit tree across a field by what is hanging in it, and in spring by its flower:
     ${FLOWER_KINDS.map(([family, kinds]) => `${family} on ${listed(kinds)}`).join('; ')}. Take a <b>sprout</b> off one
     with forestry and plant it, and you have the beginnings of an orchard, wherever the sprout came
@@ -2741,7 +2748,11 @@ export function helpText(): string {
     ore-bearing tile within range, buried or bare, and sampling where you stand names the rock, the
     mining skill any metal takes to work, the highest quality it will ever give up, and how deep it
     lies. The range starts at ${numberWord(PROSPECT_REACH)} tiles and grows by one for every ${numberWord(PROSPECT_STEP)} levels of the skill. Metal found
-    under a meadow has to be dug down to before a pickaxe is any use.</p>
+    under a meadow has to be dug down to before a pickaxe is any use.
+    Some of the ground belongs to one island of the chart and is found nowhere else:
+    ${listed(REGIONS.filter((R) => R.ores.length || (R.stone !== 'rock_shards' && !R.mountain)).map((R) => `${listed([...(R.stone !== 'rock_shards' && !R.mountain ? [R.stone] : []), ...R.ores].map((y) => `<b>${rockName(y)}</b>`))} on ${islandName(R.name)}`))}.
+    ${REGIONS.filter((R) => R.mountain).map((R) => `${capital(islandName(R.name))} is bare plain rock, with <b>${rockName(R.stone)}</b> and ${listed((R.mountain ?? []).map((y) => `<b>${rockName(y)}</b>`))} seams only under its mountain, above the alpine line.`).join(' ')}
+    Anywhere else, a seam that belongs to another island is iron instead.</p>
     <p><b>Flatten</b> brings a tile level with the ground you are standing on, corner by corner:
     ground above you is scraped down and pocketed as dirt, ground below you is packed up and spends
     dirt from your pack. Stand where you want the finished height and work outwards to terrace a

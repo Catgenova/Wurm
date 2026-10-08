@@ -65,11 +65,17 @@ const marks = {
  * `data` moved on 18 September, when eight fruit trees were held to their
  * islands: every face stayed and the species byte of one tree in fifty
  * changed, which the reconcile compares now as well as the face.
+ *
+ * `rock` and `data` moved on 8 October, when glimmersteel went to West
+ * Skerry, the plum to East Isle and the Northeast Tundra was left bare but
+ * for marble and gold under its mountain. That move was carried onto every
+ * island already founded by `tools/move-ground.ts`, which writes the new rock
+ * and the moved trees into the island's own land.
  */
 const PINNED: Record<keyof typeof marks, string> = {
   tiles: '07fcda3bbd161f34',
-  data: '61700fae33936ef8',
-  rock: 'bafd32f32da1ef6a',
+  data: '27c4f8f76a3cc0d6',
+  rock: '89aab580b6161a21',
   heights: '561c219755d4479c',
   dirt: '2c0887dc7256457a',
 };

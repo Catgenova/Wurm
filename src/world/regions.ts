@@ -59,6 +59,12 @@ export interface Region {
   ores: string[];
   /** Species that grow here and nowhere else. */
   trees: number[];
+  /**
+   * Set on an island whose ground is bare: no seam on it but these, and these
+   * and the island's stone only under its mountain (ground above the alpine
+   * band). Everywhere else on it is plain rock.
+   */
+  mountain?: string[];
 }
 
 export const REGIONS: Region[] = [
@@ -95,8 +101,9 @@ export const REGIONS: Region[] = [
     tundra: true,
     snow: true,
     stone: 'marble_shards',
-    ores: ['glimmersteel_ore'],
-    trees: [PLUM],
+    ores: [],
+    trees: [],
+    mountain: ['gold_ore'],
   },
   {
     key: 'Volcano',
@@ -132,7 +139,7 @@ export const REGIONS: Region[] = [
     snow: false,
     stone: 'rock_shards',
     ores: [],
-    trees: [CHERRY],
+    trees: [CHERRY, PLUM],
   },
   {
     key: 'WestSkerry',
@@ -143,7 +150,7 @@ export const REGIONS: Region[] = [
     tundra: false,
     snow: false,
     stone: 'rock_shards',
-    ores: [],
+    ores: ['glimmersteel_ore'],
     trees: [FIG],
   },
 ];
@@ -175,10 +182,17 @@ export const ownerOf = (yields: string): number | undefined => OWNER.get(yields)
  * The ore ladder in ore.ts is left exactly as it is — the same density, the
  * same rarity order — and filtered afterwards, so the metal a region does keep
  * turns up at the rate it always did. A seam owned elsewhere becomes iron,
- * which is what the ground would otherwise mostly have been anyway.
+ * which is what the ground would otherwise mostly have been anyway. On an
+ * island with a `mountain`, it is the stone instead: the seams it keeps, and
+ * its own stone, only under the mountain, and plain rock everywhere else.
  */
-export function rockKindFor(seed: number, region: number, x: number, y: number, density: number): number {
+export function rockKindFor(seed: number, region: number, x: number, y: number, density: number, mountain = false): number {
+  const R = REGIONS[region];
   const ore = oreKindFor(seed, x, y, density);
+  if (R?.mountain) {
+    if (!mountain) return PLAIN_ROCK;
+    return ore >= 0 && R.mountain.includes(ROCK_VARIANTS[ore].yields) ? ore : kindOf(R.stone);
+  }
   if (ore >= 0) {
     const owner = OWNER.get(ROCK_VARIANTS[ore].yields);
     return owner === undefined || owner === region ? ore : IRON;
@@ -186,7 +200,7 @@ export function rockKindFor(seed: number, region: number, x: number, y: number, 
   // Where the bands call for something other than plain stone, the island's own
   // stone shows through; islands without one are plain rock throughout.
   if (stoneKindAt(seed, x, y) === PLAIN_ROCK) return PLAIN_ROCK;
-  const own = REGIONS[region]?.stone;
+  const own = R?.stone;
   return own && own !== 'rock_shards' ? kindOf(own) : PLAIN_ROCK;
 }
 
@@ -204,9 +218,6 @@ export function speciesFor(region: number, base: number, avg: number, r: number)
   if (!R) return base;
   if (base === WILLOW && R.trees.indexOf(WILLOW) < 0) return BIRCH;
   if (base === CHERRY && R.trees.indexOf(CHERRY) < 0) return APPLE;
-  // On its own island a cherry is worth the crossing, so it grows past the one
-  // tree in fifty that the fruit trees manage elsewhere.
-  if (R.trees.indexOf(CHERRY) >= 0 && r > 0.93 && avg < 162) return CHERRY;
   const own = R.trees.filter((s) => FRUIT.has(s) && s !== CHERRY);
   if (own.length && FRUIT.has(base)) {
     // The roll that chose a fruit tree is spent above 0.978; what is left of
@@ -214,6 +225,11 @@ export function speciesFor(region: number, base: number, avg: number, r: number)
     const f = (r * 997) % 1;
     if (f < 0.5) return own[Math.floor(f * 2 * own.length)] as number;
   }
+  // On its own island a cherry is worth the crossing, so it grows past the one
+  // tree in fifty that the fruit trees manage elsewhere. Asked after the
+  // island's other fruit, which would otherwise never get a roll the cherry
+  // had not already taken.
+  if (R.trees.indexOf(CHERRY) >= 0 && r > 0.93 && avg < 162) return CHERRY;
   return base;
 }
 

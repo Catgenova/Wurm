@@ -19,7 +19,8 @@ import { favourCap, PRAYER_GAIN, PRAYER_PEAKS, PRAYER_REST, prayerWorth } from '
 import { tryGain } from '../../game/learn';
 import { DRIVING_TOP, drivingPace, SAILING_TOP, sailingPace, TRAVEL_TOP_AT, VEHICLE_QL_TOP, vehicleQlPace } from '../../game/travel';
 import { deckBill, metres, PIER_CLEAR, PIER_DROP, PIER_WALL_DROP, PIER_WATER } from '../../game/piers';
-import { TILE_DEFS, TileType, TREE_AGES, TREE_DAWN_UTC, TREE_DEFS } from '../../world/tiles';
+import { ROCK_VARIANTS, TILE_DEFS, TileType, TREE_AGES, TREE_DAWN_UTC, TREE_DEFS } from '../../world/tiles';
+import { REGIONS } from '../../world/regions';
 import { SEASON_DAYS, seasonLine, YEAR_DAYS, YEAR_FROM } from '../../world/calendar';
 import { BLOOMS, BUSH_FLOWER_FROM, evergreen, LEAF_DAYS, SHED_DAYS, TURN_DAYS } from '../../render/foliage';
 import { lifeSeasons } from '../../render/life';
@@ -1363,6 +1364,25 @@ export const NEWS: News[] = [
       `A better-made cart or wagon goes faster: ${percent(VEHICLE_QL_TOP)} faster at full quality, and that share of its quality `
         + `below it (${percent(vehicleQlPace(QL_TOP / 2) - 1)} at half), whatever is pulling it, and past the top speed a team can reach.`,
     ],
+  },
+  {
+    n: 101,
+    day: '2026-10-08',
+    lines: () => {
+      const island = (key: string) => REGIONS.find((R) => R.key === key)!;
+      const rock = (yields: string): string => (ROCK_VARIANTS.find((r) => r.yields === yields)?.name ?? yields).replace(/ (vein|seam)$/, '').toLowerCase();
+      const tree = (s: number): string => TREE_DEFS[s].name.toLowerCase();
+      const skerry = island('WestSkerry');
+      const east = island('EastIsle');
+      const tundra = island('NortheastTundra');
+      return [
+        `${capital(listed(skerry.ores.map(rock)))} is found on ${skerry.name} now, and nowhere else.`,
+        `${capital(listed(east.trees.filter((s) => TREE_DEFS[s].fruit).map(tree)))} grow on ${east.name}.`,
+        `The ${tundra.name} is bare plain rock. Its ${rock(tundra.stone)} and its ${listed((tundra.mountain ?? []).map(rock))} seams `
+          + 'lie only under its mountain, above the alpine line, and no other metal or seam is in its ground.',
+        'Islands founded before today have had the rock under those islands and their untouched trees changed to match.',
+      ];
+    },
   },
 ];
 
