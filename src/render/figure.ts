@@ -6095,6 +6095,7 @@ function drawStill(ctx: CanvasRenderingContext2D, sx: number, sy: number, zoom: 
   const look = pose.look ?? DEFAULT_LOOK;
   const key = [look.gender, look.skin, look.hair, look.hairColour, look.eyes, look.beard, look.shirt, look.trousers, pose.tunic, pose.trousers,
     Math.round(facing * 100), zoom.toFixed(3), dev, doing(pose), pose.emote ?? '', gearKey(pose.gear)].join('|');
+  if (stride(ctx, sx, sy, zoom, pose, kit, facing, changing, ink, key, dev)) return;
   let st = stills.get(id);
   if (now - lately.since > 0.25 || now < lately.since) {
     lately.count = lately.ids.size;
@@ -6131,6 +6132,70 @@ function drawStill(ctx: CanvasRenderingContext2D, sx: number, sy: number, zoom: 
   const x = sx - st.ox / st.dev, y = sy - st.oy / st.dev;
   if (close) ctx.drawImage(st.canvas, Math.round(x * st.dev) / st.dev, Math.round(y * st.dev) / st.dev, st.canvas.width / st.dev, st.canvas.height / st.dev);
   else ctx.drawImage(st.canvas, x, y, st.canvas.width / st.dev, st.canvas.height / st.dev);
+}
+
+/*
+ * A walk is a loop: the same sixteen pictures a stride, at each of the eight
+ * ways round, over and over for as long as the body keeps walking. So a body
+ * walking steadily, facing one way, is put down from a picture of that
+ * sixteenth of its stride kept from the stride before, and only the first
+ * stride at a size draws anything. Turning, starting or stopping, emoting, or
+ * wearing something whose light moves across it, it is drawn as a still is.
+ * The wildermon have kept theirs this way since they were made (`drawBeast`).
+ */
+
+/** Pictures to a stride, and the steps between a walk and a run they are kept at. */
+export const WALK_FRAMES = 16;
+const GAIT_STEPS = 10;
+/** Device pixels of stride pictures kept, the longest unused going first: about forty-eight megabytes. */
+const STRIDE_PIXELS = 12_000_000;
+
+interface StrideFrame {
+  canvas: HTMLCanvasElement;
+  ox: number;
+  oy: number;
+  dev: number;
+}
+
+const strides = new Map<string, StrideFrame>();
+let stridePixels = 0;
+
+/** Put down a walking body from its stride's pictures, making the picture it needs if it is new; false when it is not walking steadily. */
+function stride(ctx: CanvasRenderingContext2D, sx: number, sy: number, zoom: number, pose: FigurePose, kit: Kit, facing: number, changing: boolean,
+  ink: number, still: string, dev: number): boolean {
+  if (changing || doing(pose) !== 'walk' || pose.emote || !Number.isInteger(facing) || gearShines(pose.gear)) return false;
+  const turn = (((pose.phase / TAU) % 1) + 1) % 1;
+  const i = Math.min(WALK_FRAMES - 1, Math.floor(turn * WALK_FRAMES));
+  const gait = Math.round(Math.max(0, Math.min(1, pose.gait ?? 0)) * GAIT_STEPS) / GAIT_STEPS;
+  const key = `${still}|${gait}|${i}`;
+  let f = strides.get(key);
+  if (f) {
+    strides.delete(key);
+    strides.set(key, f);
+  } else {
+    const k = zoom * dev;
+    const w = Math.ceil((STILL_BOX.right - STILL_BOX.left) * k), h = Math.ceil((STILL_BOX.bottom - STILL_BOX.top) * k);
+    while (stridePixels + w * h > STRIDE_PIXELS && strides.size) {
+      const [old, gone] = strides.entries().next().value as [string, StrideFrame];
+      strides.delete(old);
+      stridePixels -= gone.canvas.width * gone.canvas.height;
+    }
+    const canvas = document.createElement('canvas');
+    canvas.width = w;
+    canvas.height = h;
+    const g = canvas.getContext('2d') as CanvasRenderingContext2D;
+    f = { canvas, ox: Math.round(-STILL_BOX.left * k), oy: Math.round(-STILL_BOX.top * k), dev };
+    g.setTransform(dev, 0, 0, dev, f.ox, f.oy);
+    // The middle of its sixteenth, at its step of gait.
+    const at: FigurePose = { ...pose, phase: ((i + 0.5) / WALK_FRAMES) * TAU, gait };
+    drawLive(g, 0, 0, zoom, at, kit, rigOf(at, kit.fr), facing, ink, 0);
+    strides.set(key, f);
+    stridePixels += w * h;
+  }
+  const x = sx - f.ox / f.dev, y = sy - f.oy / f.dev;
+  if (zoom >= STILL_BELOW) ctx.drawImage(f.canvas, Math.round(x * f.dev) / f.dev, Math.round(y * f.dev) / f.dev, f.canvas.width / f.dev, f.canvas.height / f.dev);
+  else ctx.drawImage(f.canvas, x, y, f.canvas.width / f.dev, f.canvas.height / f.dev);
+  return true;
 }
 
 /**

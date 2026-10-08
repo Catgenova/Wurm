@@ -950,6 +950,15 @@ export class Renderer {
   /** Whether any water was drawn this frame; an inland view skips the surface pass. */
   private drewWater = false;
   private seaPath = new Path2D();
+  /** Round `seaPath` on the screen: left, top, right, bottom, NaN while there is none. */
+  private seaBox = new Float64Array([NaN, NaN, NaN, NaN]);
+  private growSeaBox(x: number, y: number): void {
+    const b = this.seaBox;
+    if (!(b[0] <= x)) b[0] = x;
+    if (!(b[1] <= y)) b[1] = y;
+    if (!(b[2] >= x)) b[2] = x;
+    if (!(b[3] >= y)) b[3] = y;
+  }
   /** The tiles of stepping stones on the line of the ground being drawn, as x and y pairs: in sight, and only remembered. */
   private stoneRow: number[] = [];
   private stoneRowDim: number[] = [];
@@ -2921,6 +2930,7 @@ export class Renderer {
     let lineOver = false;
     this.lifted = false;
     this.seaPath = new Path2D();
+    this.seaBox.fill(NaN);
     this.drewWater = false;
     this.pierFeet.clear();
     this.wetPiers(cam.view);
@@ -12060,16 +12070,21 @@ export class Renderer {
       g.globalCompositeOperation = 'destination-in';
       g.fillStyle = '#000';
       g.fill(this.seaPath);
-      pic = this.swellPic = { cv: full, half, fit, at: this.time, frame: this.frameNo, ax, ay };
+      // Where on it the sea is, in its pixels, so only that much of it is copied on.
+      const b = this.seaBox;
+      const bx = Math.max(0, Math.floor(t.a * b[0] + t.e) - 2), by = Math.max(0, Math.floor(t.d * b[1] + t.f) - 2);
+      const box: [number, number, number, number] = [bx, by, Math.min(full.width, Math.ceil(t.a * b[2] + t.e) + 2) - bx, Math.min(full.height, Math.ceil(t.d * b[3] + t.f) + 2) - by];
+      pic = this.swellPic = { cv: full, half, fit, at: this.time, frame: this.frameNo, ax, ay, box };
     }
     ctx.save();
     ctx.setTransform(1, 0, 0, 1, 0, 0);
-    ctx.drawImage(pic.cv, Math.round((ax - pic.ax) * dev), Math.round((ay - pic.ay) * dev));
+    const [bx, by, bw, bh] = pic.box;
+    if (bw > 0 && bh > 0) ctx.drawImage(pic.cv, bx, by, bw, bh, bx + Math.round((ax - pic.ax) * dev), by + Math.round((ay - pic.ay) * dev), bw, bh);
     ctx.restore();
   }
 
   /** The swell as last made (`drawSwell`): its picture, the view it was made for, when, and where the world's corner was on the screen. */
-  private swellPic: { cv: HTMLCanvasElement; half: HTMLCanvasElement; fit: string; at: number; frame: number; ax: number; ay: number } | null = null;
+  private swellPic: { cv: HTMLCanvasElement; half: HTMLCanvasElement; fit: string; at: number; frame: number; ax: number; ay: number; box: [number, number, number, number] } | null = null;
 
   /**
    * Which lines of the ground this frame have a tile of a building standing
@@ -12119,6 +12134,7 @@ export class Renderer {
     if (!this.fast) this.drawSwell(ctx, zoom);
     this.drawWakes(ctx, zoom);
     this.seaPath = new Path2D();
+    this.seaBox.fill(NaN);
     this.drewWater = false;
     if (this.pondPath) this.pondPath = new Path2D();
   }
@@ -12307,6 +12323,7 @@ export class Renderer {
         fogInto?.lineTo(sx, sy);
         sea?.lineTo(sx, sy);
       }
+      if (sea) this.growSeaBox(sx, sy);
     }
     ctx.closePath();
     fogInto?.closePath();

@@ -258,7 +258,9 @@ export class Player {
      * can reach is worse than no branch at all — it reads like a thing that
      * still happens.
      */
-    if (this.path && this.path.length) {
+    // Arriving at a step of the path goes straight on to the next in the same frame: a frame spent only arriving was a frame
+    // stood still, and every tile of a walk read as stopping and starting again -- the body blended to standing and back.
+    while (this.path && this.path.length) {
       const wp = this.path[0];
       const dx = wp.x + 0.5 - this.x;
       const dy = wp.y + 0.5 - this.y;
@@ -272,6 +274,7 @@ export class Player {
         vx = dx / dist;
         vy = dy / dist;
         distanceLimit = dist;
+        break;
       }
     }
 

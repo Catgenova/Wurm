@@ -27,6 +27,7 @@ import { BLOOMS, BUSH_FLOWER_FROM, evergreen, LEAF_DAYS, SHED_DAYS, TURN_DAYS } 
 import { lifeSeasons } from '../../render/life';
 import { LAYERS, TRIAL_SECONDS } from '../../render/timings';
 import { SWELL_RATE } from '../../render/water';
+import { WALK_FRAMES } from '../../render/figure';
 import { furnitureDef, liquidCapacity, POND_EVERY, type PlacedFurniture } from '../../game/furniture';
 import { billWords, countOf, type Item } from '../../game/items';
 import { COIN_METALS, coinPurity, INGOT_LUMPS, INGOT_WEIGHT, MOULD_BY_ID } from '../../game/metal';
@@ -1418,6 +1419,16 @@ export const NEWS: News[] = [
       'People and wildermon seen close up are redrawn as often as they are from further out, no longer twice as often.',
       `Settings has Show drawing times, which puts under the frame rate how many milliseconds each frame spends on the ground, ${listed(Object.keys(LAYERS))}, `
         + `and Measure each layer, which leaves each of those out for ${numberWord(TRIAL_SECONDS)} second in turn and writes down the frame rate without it.`,
+    ],
+  },
+  {
+    n: 105,
+    day: '2026-10-08',
+    lines: () => [
+      `A person walking steadily one way is drawn from ${numberWord(WALK_FRAMES)} pictures a stride, kept from one stride to the next, instead of being drawn afresh `
+        + 'as they go; turning, starting, stopping or wearing something that shines, they are drawn as before.',
+      'Walking a path no longer stands still for a frame at every tile, so the body no longer eases to standing and back again at each step.',
+      'Only the part of the screen with sea on it takes the swell each frame.',
     ],
   },
 ];
