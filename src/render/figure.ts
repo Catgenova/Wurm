@@ -1581,6 +1581,32 @@ function footMesh(): Mesh {
   return mesh(v.map((p) => [p[0] * 1.08, p[1] * 1.04, p[2]] as V3), f);
 }
 
+/**
+ * A tube down a leg made straight in the knee's terms (`kneeBent`): `rs` its
+ * rings bottom first, one of them at the knee (`z` nought). In two, the thigh
+ * down to that ring and the shin from it, each a part on its own bone and
+ * drawn as one, which is what lets either be drawn over the other where it is
+ * nearer. The two share the ring at the knee, edge to edge at every bend, and
+ * neither is inked along it, so the leg is one outline and not a thigh and a
+ * shin with a line round the knee between them.
+ */
+function legTube(rs: number[][], n: number, mat: Mat | ((band: number, j: number) => Mat)): { thigh: Mesh; shin: Mesh } {
+  const knee = rs.findIndex((r) => r[0] === 0);
+  const m = (band: number, j: number): Mat => (typeof mat === 'function' ? mat(band, j) : mat);
+  const half = (from: number, to: number): Mesh => {
+    const t = rings(rs.slice(from, to + 1), n, (band, j) => m(band + from, j), { top: false, bottom: false });
+    return { ...t, f: t.f.map((f) => (f.i.some((i) => t.v[i][2] === 0) ? { ...f, soft: true } : f)) };
+  };
+  return { thigh: half(knee, rs.length - 1), shin: half(0, knee) };
+}
+
+/**
+ * How wide a thigh is at the top: wider on wider hips, but by less than they
+ * are. Grown with them all the way, a woman's thighs stood out past the hem of
+ * a skirt at either side.
+ */
+const thighTop = (fr: Frame): number => 0.55 + 0.45 * fr.hi;
+
 function grownHair(h: HairKit): HairKit {
   return {
     cap: h.cap && grown(h.cap),
@@ -1663,8 +1689,9 @@ function kitOf(look: Look, lod: number): Kit {
       chain([[0, -0.25, GRIP], [0, CHISEL_TOP[1], GRIP]], [0.14, 0.18], 5, 'haft'),
       chain([[0, -0.25, GRIP], [0, -1.05, GRIP]], [0.1, 0.03], 4, 'iron'),
     ),
-    thigh: rings([[-1.05, 1.02 * fr.hi, 1.05], [-3.45, 0.8, 0.84]], 6, 'trousers', { top: false }),
-    shin: rings([[0.12, 0.8, 0.84], [-1.55, 0.68, 0.72]], 6, 'trousers', { bottom: false }),
+    // From up inside the hips, so a thigh swung forward or back does not come out from under them, to the knee and down into the boot,
+    // with the calf a little fuller behind under the knee.
+    ...legTube([[-1.6, 0.7, 0.74], [-KNEE_SPAN, 0.78, 0.82, 0, -0.03], [0, 0.8, 0.84], [KNEE_SPAN, 0.84, 0.88], [THIGH * fr.tall - 0.8, thighTop(fr), 1.04]], 6, 'trousers'),
     boot: rings([[-1.3, 0.84, 0.88], [-1.62, 0.8, 0.84], [-1.66, 0.72, 0.76], [-3.02, 0.66, 0.7], [-3.15, 0.61, 0.64]], 6, (band) => (band === 0 ? 'cuff' : 'boot'), { bottom: false }),
     foot: footMesh(),
   };
@@ -2314,27 +2341,67 @@ function plantFoot(b: Bones, r: Rig, fr: Frame, k: number, dz: number, weight: n
   }
 }
 
-/**
- * The tunic's skirt, pushed by the legs under it: the hem goes forward over
- * a thigh coming up and back over one going behind, so a stride does not
- * put a knee through the cloth.
+/*
+ * The knee, bent. The leg was a thigh and a shin, two tubes each rigid on its
+ * own bone, and a ball over the joint between them: bent, the end of the
+ * thigh stood out at the back of the knee, the top of the shin's tube at the
+ * front, and the ball as a cap poking out of whichever side was toward the
+ * viewer -- stacked tubes, not a leg. Now everything on the leg is made
+ * straight, in the knee's own terms -- `z` up the thigh from the knee and down
+ * the shin from it -- and bent here as a modeller's skinned joint is: what is
+ * further than `KNEE_SPAN` above the knee goes with the thigh, what is
+ * further below it with the shin, and between the two it turns part of the
+ * way, half at the knee itself, so a ring there is the joint ring that keeps
+ * the two meeting edge to edge at every bend. The ring at the knee also
+ * keeps the leg's volume as it bends: out at the front, where the kneecap
+ * comes to a point between the thigh and the shin (by `KNEE_POINT` of the
+ * way to the sharp mitre the two would meet in), and in at the back, where
+ * the thigh and the calf close on each other (by `KNEE_FOLD`), and a
+ * little wider across (by `KNEE_WIDE`).
  */
-function skirtBent(kit: Kit, r: Rig): V3[] {
-  const v = kit.skirt.v.map((p) => [...p] as V3);
-  // The hem goes all the way with the thigh, the cloth over the hips some of the way, and the waist not at all.
-  for (const p of v) {
-    const share = p[2] < -0.9 ? 1 : p[2] < 0.5 ? 0.4 : 0;
-    if (share) {
-      for (let k = 0; k < 2; k++) {
-        const s = k ? 1 : -1;
-        const d = 1.35 * Math.sin(r.leg[k][0] * DEG) * share;
-        const w = Math.max(0, Math.min(1, 1 - Math.abs(p[0] - s * 0.95 * kit.fr.hi) / 1.5));
-        if (d > 0 && p[1] > -0.4) { p[1] += d * w; p[2] += d * 0.3 * w; }
-        if (d < 0 && p[1] < 0.4) { p[1] += d * w * 0.8; p[2] -= d * 0.2 * w; }
-      }
-    }
-  }
-  return v;
+const KNEE_SPAN = 0.62;
+const KNEE_POINT = 0.5;
+const KNEE_FOLD = 0.9;
+/** And wider across, by this much bent square, as a knee is: without it a knee bent toward the viewer came to a point like a stake. */
+const KNEE_WIDE = 0.16;
+
+/** How far a leg's knee is bent, in degrees: read off its bones rather than the pose, since a foot put down on the ground bends it further. */
+function kneeBend(b: Bones, k: number): number {
+  const h = b[`hip${k}`].m, n = b[`knee${k}`].m;
+  // The knee's turn in the hip's frame is a pitch about x alone, of minus the bend: its row for z, column for y and z.
+  const s = h[2] * n[1] + h[5] * n[4] + h[8] * n[7];
+  const c = h[2] * n[2] + h[5] * n[5] + h[8] * n[8];
+  return -Math.atan2(s, c) / DEG;
+}
+
+/**
+ * A mesh made straight in the knee's terms bent as the leg is: in the frame
+ * of the thigh at the knee, for what is put on the thigh, or of the shin, for
+ * what is put on the shin. Either way the same point of it goes to the same
+ * place, so a thing on the thigh and a thing on the shin made to meet at the
+ * knee meet there at every bend.
+ */
+function kneeBent(v: readonly V3[], bend: number, onShin: boolean): V3[] {
+  const th = Math.max(0, Math.min(150, bend)) * DEG, th0 = bend * DEG;
+  const half = Math.cos(th / 2);
+  const point = KNEE_POINT * (1 / half - 1), fold = KNEE_FOLD * (1 - half), wide = KNEE_WIDE * Math.sin(th / 2);
+  return v.map(([x, y, z]) => {
+    // How far round with the shin: none above the span, all of it below, a half at the knee.
+    const w = Math.max(0, Math.min(1, (KNEE_SPAN - z) / (2 * KNEE_SPAN)));
+    const at = 1 - Math.abs(2 * w - 1);
+    const yy = y * (1 + (y > 0 ? point : -fold) * at);
+    // Where it goes in the thigh's frame at the knee.
+    const a = -w * bend * DEG;
+    let c = Math.cos(a), s = Math.sin(a);
+    let qy = c * yy - s * z;
+    const qz = s * yy + c * z;
+    // The back of the calf, folded up beside the thigh, pressed flat against the back of it rather than through it: bent hard, the
+    // top of the calf came up inside the thigh, and drawn over it was a lit patch at the back of the knee.
+    if (w > 0.5 && y < 0 && qz > 0 && qy > y) qy += (y - qy) * ramp(qz, 0, 0.5);
+    if (!onShin) return [x * (1 + wide * at), qy, qz];
+    c = Math.cos(th0); s = Math.sin(th0);
+    return [x * (1 + wide * at), c * qy - s * qz, s * qy + c * qz];
+  });
 }
 
 /* ---- drawing ------------------------------------------------------------------ */
@@ -2809,6 +2876,11 @@ interface GearBit {
   convex?: boolean;
   /** Bends with the legs below the hips, as a skirt does. */
   skirt?: boolean;
+  /**
+   * Made straight in the knee's terms and bent with it (`kneeBent`): on the
+   * hip, it is put at the knee, and on the knee, it is there already.
+   */
+  bend?: boolean;
   /** How far out it is worn, where not as far as the rest of its piece. */
   layer?: number;
   /** Over what it covers only while this side of it is toward the viewer: see `Part.front`. */
@@ -2957,12 +3029,31 @@ const upperShell = (b: Build, g: number, to: number, m: Mat): Mesh => rings(uppe
 /** The forearm, from over the elbow down into the glove, bottom first. */
 const forearmRings = (g: number): number[][] => [[-2.46, 0.56 * g, 0.53 * g], [-1.2, 0.62 * g, 0.58 * g], [0.45, 0.7 * g, 0.66 * g]];
 const forearmShell = (g: number, m: Mat): Mesh => rings(forearmRings(g), 6, m, { top: false, bottom: false });
-/** The thigh, from the hip down to the knee, bottom first. */
-const thighRings = (b: Build, g: number): number[][] => [[-3.42, 0.82 * g, 0.86 * g], [-0.9, 1.04 * b.fr.hi * g, 1.07 * g]];
-const thighShell = (b: Build, g: number, m: Mat): Mesh => rings(thighRings(b, g), 6, m, { top: false, bottom: false });
-/** The shin, from the knee down to `to`, bottom first. */
-const shinRings = (g: number, to: number): number[][] => [[to, 0.66 * g, 0.7 * g], [-1.4, 0.74 * g, 0.78 * g], [0.3, 0.84 * g, 0.88 * g]];
-const shinShell = (g: number, to: number, m: Mat | ((band: number, j: number) => Mat)): Mesh => rings(shinRings(g, to), 6, m, { top: false, bottom: false });
+/**
+ * A leg of gear, `g` round the leg, in the knee's terms (`kneeBent`), bottom
+ * first: from `to` up the shin, through the joint ring at the knee and the
+ * rings either side of it that go with the thigh and the shin, and up the
+ * thigh to under the hips.
+ */
+const legRings = (b: Build, g: number, to: number): number[][] => [
+  [to, 0.66 * g, 0.7 * g], ...(to < -1.6 ? [[-1.4, 0.74 * g, 0.78 * g]] : []),
+  [-KNEE_SPAN, 0.8 * g, 0.84 * g, 0, -0.03 * g], [0, 0.83 * g, 0.87 * g], [KNEE_SPAN, 0.86 * g, 0.9 * g], [THIGH * b.fr.tall - 0.9, 1.04 * thighTop(b.fr) * g, 1.07 * g],
+];
+/** That leg's ring at height `z`, for what goes round it. */
+const legAt = (b: Build, g: number, z: number): number[] => profileAt(legRings(b, g, -3), (z + 3) / (THIGH * b.fr.tall + 2.1));
+/**
+ * What is laid over the front of a knee, `out` off a leg of gear `g` round,
+ * from `h` above the knee to `h` below and `wide` degrees either side of
+ * straight ahead at the knee, narrower above and below: a pad, a cop, a
+ * poleyn. Made straight and bent with the knee as the leg is, it stays on the
+ * front of it at every bend.
+ */
+const kneeCop = (g: number, out: number, h: number, wide: number, m: Mat): Mesh => {
+  const ring = (z: number, o: number): number[] => [z, 0.83 * g + o, 0.87 * g + o];
+  return arcs([ring(-h, out * 0.6), ring(0, out), ring(h, out * 0.6)], 3, [90 - wide * 0.7, 90 - wide, 90 - wide * 0.7], [90 + wide * 0.7, 90 + wide, 90 + wide * 0.7], m);
+};
+/** A boot's shaft goes over the leg in it unless its foot end is turned well away from the viewer (see `Part.front`). */
+const SHAFT: V3 = [0, 0, -0.5];
 /** A ball over a joint as round as the shells either side of it, so a bent elbow or knee never opens a gap in what is worn over it. */
 const knuckle = (r: number, m: Mat, ry = r): Mesh => ball([0, 0, 0], [r, ry, r], 6, 4, m);
 
@@ -3533,101 +3624,132 @@ const MODELS: Record<string, (b: Build, fit: number) => GearModel> = {
     hides: ['upper', 'lower'],
   }),
 
-  /* Legs */
-  cloth_trousers: (b) => ({
-    layer: 1,
-    bits: [
-      { bone: 'hip', side: 'both', over: ['thigh'], bias: 0.01, convex: true, mesh: worn(rings([[-3.42, 0.86 * 1.18, 0.9 * 1.18], [-2.4, 0.98 * 1.18, 1.02 * 1.18], [-0.9, 1.06 * b.fr.hi * 1.14, 1.1 * 1.14]], 6, 'cloth', { top: false, bottom: false }), 'quilt') },
-      { bone: 'knee', side: 'both', over: ['shin', 'thigh'], bias: 0.02, convex: true, mesh: knuckle(0.96, 'cloth', 1.0) },
-      { bone: 'knee', side: 'both', over: ['shin', 'boot'], bias: 0.03, convex: true, mesh: worn(rings([[-3.05, 0.74, 0.78], [-1.5, 0.84, 0.88], [-0.8, 0.94, 0.98], [0.3, 1.0, 1.04]], 6, 'cloth', { top: false, bottom: false }), 'quilt') },
-      // Wound from the shoe to below the knee in strips of the darker cloth.
-      { bone: 'knee', side: 'both', over: ['shin', 'boot'], bias: 0.035, convex: true, mesh: rings([-3.02, -2.72, -2.42, -2.12, -1.82, -1.52].map((z, i) => [z, 0.8 + i * 0.016, 0.84 + i * 0.016]), 6, (band) => (band % 2 ? 'cloth' : 'clothDark'), { top: false, bottom: false }) },
-    ],
-    hides: ['thigh', 'shin'],
-  }),
-  leather_trousers: (b) => ({
-    layer: 2,
-    bits: [
-      { bone: 'hip', side: 'both', over: ['thigh'], bias: 0.01, convex: true, mesh: thighShell(b, 1.08, 'leather') },
-      { bone: 'knee', side: 'both', over: ['shin', 'thigh'], bias: 0.02, convex: true, mesh: knuckle(0.9, 'leather') },
-      { bone: 'knee', side: 'both', over: ['shin', 'boot'], bias: 0.03, convex: true, mesh: shinShell(1.08, -1.9, 'leather') },
-      // A pad of doubled hide over the front of each knee, flat to it and darker, where a round one in the hide's own colour is a
-      // lump of light on the leg.
-      { bone: 'knee', side: 'both', over: ['shin', 'boot', 'thigh'], bias: 0.04, front: [0, 1, 0], mesh: ball([0, 0.46, 0.04], [0.56, 0.22, 0.6], 6, 3, 'leatherDark') },
-    ],
-    hides: ['thigh', 'shin'],
-  }),
-  chain_leggings: (b) => ({
-    layer: 3,
-    bits: [
-      { bone: 'hip', side: 'both', over: ['thigh'], bias: 0.012, convex: true, mesh: worn(thighShell(b, 1.1, 'mail'), 'mail') },
-      // The thigh's mail hanging over the knee in ragged points.
-      { bone: 'hip', side: 'both', over: ['thigh', 'shin'], bias: 0.016, convex: true, mesh: teeth(thighRings(b, 1.1)[0], 9, 0.28, 0.06, 'mail') },
-      { bone: 'knee', side: 'both', over: ['shin', 'thigh'], bias: 0.02, convex: true, mesh: knuckle(0.92, 'mail') },
-      { bone: 'knee', side: 'both', over: ['shin', 'boot'], bias: 0.03, convex: true, mesh: worn(shinShell(1.1, -2.6, 'mail'), 'mail') },
-      // A garter of hide under the knee, holding the mail up.
-      { bone: 'knee', side: 'both', over: ['shin', 'boot'], bias: 0.04, convex: true, mesh: rings([[-0.86, 0.9, 0.94], [-0.62, 0.92, 0.96]], 6, 'leatherDark', { top: false, bottom: false }) },
-    ],
-    hides: ['thigh', 'shin'],
-  }),
-  plate_legs: (b) => ({
-    layer: 5,
-    bits: [
-      // Cuisses in lames down the thigh, from up under the fauld so no gap shows between them.
-      { bone: 'hip', side: 'both', over: ['thigh'], bias: 0.015, convex: true, mesh: worn(shingled([...thighRings(b, 1.08), [0.25, 1.1 * b.fr.hi * 1.08, 1.12 * 1.08]], 3, 0.1, 'metal'), 'lames') },
-      { bone: 'knee', side: 'both', over: ['shin', 'thigh'], bias: 0.02, convex: true, mesh: knuckle(0.92, 'metal') },
-      { bone: 'knee', side: 'both', over: ['shin', 'boot'], bias: 0.03, convex: true, mesh: shinShell(1.1, -2.7, 'metal') },
-      // The poleyn: a dome over the front of the knee, in a few broad facets of the plate's own metal for the reason the couter is.
-      { bone: 'knee', side: 'both', over: ['shin', 'boot', 'thigh'], bias: 0.05, front: [0, 1, 0], convex: true, mesh: ball([0, 0.54, 0.06], [0.66, 0.4, 0.64], 6, 3, 'metal') },
-    ],
-    hides: ['thigh', 'shin'],
-  }),
-  scale_leggings: (b) => ({
-    layer: 4,
-    bits: [
-      { bone: 'hip', side: 'both', over: ['thigh'], bias: 0.012, convex: true, mesh: worn(thighShell(b, 1.12, 'scale'), 'scale') },
-      { bone: 'knee', side: 'both', over: ['shin', 'thigh'], bias: 0.02, convex: true, mesh: knuckle(0.92, 'scaleDark') },
-      { bone: 'knee', side: 'both', over: ['shin', 'boot'], bias: 0.03, convex: true, mesh: worn(shinShell(1.12, -2.4, 'scale'), 'scale') },
-      // The thigh's hem cut in points over the knee.
-      { bone: 'hip', side: 'both', over: ['thigh', 'shin'], bias: 0.016, convex: true, mesh: teeth(thighRings(b, 1.12)[0], 6, 0.34, 0.08, 'scaleDark') },
-    ],
-    hides: ['thigh', 'shin'],
-  }),
+  /*
+   * Legs. Each leg of every pair one tube from up under the hips to the
+   * shin, made straight in the knee's terms and bent there as the body's own
+   * leg is (`kneeBent`), in a thigh and a shin that meet edge to edge at the
+   * knee (`legTube`): no ball over the knee, which bent stood out of the
+   * front of it or the back as a cap of its own, and no step where a thigh's
+   * tube ended and a shin's began. What is on the knee -- a pad, a poleyn,
+   * the points of a hem -- is bent with it the same way, so it stays on it.
+   */
+  cloth_trousers: (b) => {
+    // Padded out, fullest over the thigh and full over the knee, quilted in channels down the leg.
+    const top = THIGH * b.fr.tall - 0.9, mid = KNEE_SPAN + 0.45 * (top - KNEE_SPAN);
+    const tube = legTube([[-3.05, 0.74, 0.78], [-1.5, 0.84, 0.88], [-KNEE_SPAN, 0.94, 0.98, 0, -0.03], [0, 1.0, 1.04], [KNEE_SPAN, 1.06, 1.1], [mid, 1.12, 1.16], [top, 1.06 * thighTop(b.fr) * 1.1, 1.1 * 1.12]], 6, 'cloth');
+    return {
+      layer: 1,
+      bits: [
+        { bone: 'hip', side: 'both', bend: true, over: ['thigh'], bias: 0.01, convex: true, mesh: worn(tube.thigh, 'quilt') },
+        { bone: 'knee', side: 'both', bend: true, over: ['shin', 'boot'], bias: 0.03, convex: true, mesh: worn(tube.shin, 'quilt') },
+        // Wound from the shoe to below the knee in strips of the darker cloth.
+        { bone: 'knee', side: 'both', over: ['shin', 'boot'], bias: 0.035, convex: true, mesh: rings([-3.02, -2.72, -2.42, -2.12, -1.82, -1.52].map((z, i) => [z, 0.8 + i * 0.016, 0.84 + i * 0.016]), 6, (band) => (band % 2 ? 'cloth' : 'clothDark'), { top: false, bottom: false }) },
+      ],
+      hides: ['thigh', 'shin'],
+    };
+  },
+  leather_trousers: (b) => {
+    const tube = legTube(legRings(b, 1.08, -1.9), 6, 'leather');
+    return {
+      layer: 2,
+      bits: [
+        { bone: 'hip', side: 'both', bend: true, over: ['thigh'], bias: 0.01, convex: true, mesh: tube.thigh },
+        { bone: 'knee', side: 'both', bend: true, over: ['shin', 'boot'], bias: 0.03, convex: true, mesh: tube.shin },
+        // A pad of doubled hide over the front of each knee, darker, laid on it and bent with it.
+        { bone: 'knee', side: 'both', bend: true, over: ['shin', 'boot', 'thigh'], bias: 0.04, convex: true, mesh: kneeCop(1.08, 0.05, 0.5, 34, 'leatherDark') },
+      ],
+      hides: ['thigh', 'shin'],
+    };
+  },
+  chain_leggings: (b) => {
+    const tube = legTube(legRings(b, 1.1, -2.6), 6, 'mail');
+    return {
+      layer: 3,
+      bits: [
+        { bone: 'hip', side: 'both', bend: true, over: ['thigh'], bias: 0.012, convex: true, mesh: worn(tube.thigh, 'mail') },
+        { bone: 'knee', side: 'both', bend: true, over: ['shin', 'boot'], bias: 0.03, convex: true, mesh: worn(tube.shin, 'mail') },
+        // A row of ragged points round the leg over the knee, where the mail of the thigh is laced over that of the shin.
+        { bone: 'hip', side: 'both', bend: true, over: ['thigh', 'shin'], bias: 0.016, convex: true, mesh: teeth(legAt(b, 1.1, 0.5), 9, 0.26, 0.05, 'mail') },
+        // A garter of hide under the knee, holding the mail up.
+        { bone: 'knee', side: 'both', bend: true, over: ['shin', 'boot'], bias: 0.04, convex: true, mesh: rings([legAt(b, 1.15, -0.86), legAt(b, 1.15, -0.6)], 6, 'leatherDark', { top: false, bottom: false }) },
+      ],
+      hides: ['thigh', 'shin'],
+    };
+  },
+  plate_legs: (b) => {
+    // The greave and the knee as one, and the cuisses over the thigh in lames, from up under the fauld so no gap shows between them.
+    const g = 1.1, top = THIGH * b.fr.tall;
+    const tube = legTube(legRings(b, g, -2.7).filter((r) => r[0] <= KNEE_SPAN), 6, 'metal');
+    const cuisse = shingled([legAt(b, g, KNEE_SPAN), legAt(b, g, top - 0.9), [top + 0.25, 1.1 * b.fr.hi * g, 1.12 * g]], 3, 0.1, 'metal');
+    return {
+      layer: 5,
+      bits: [
+        { bone: 'hip', side: 'both', bend: true, over: ['thigh'], bias: 0.015, convex: true, mesh: join(tube.thigh, worn(cuisse, 'lames')) },
+        { bone: 'knee', side: 'both', bend: true, over: ['shin', 'boot'], bias: 0.03, convex: true, mesh: tube.shin },
+        // The poleyn: a cup over the front of the knee, standing off it, in a few broad facets of the plate's own metal.
+        { bone: 'knee', side: 'both', bend: true, over: ['shin', 'boot', 'thigh'], bias: 0.05, convex: true, mesh: kneeCop(g, 0.16, 0.56, 52, 'metal') },
+      ],
+      hides: ['thigh', 'shin'],
+    };
+  },
+  scale_leggings: (b) => {
+    const g = 1.12;
+    const tube = legTube(legRings(b, g, -2.4), 6, 'scale');
+    return {
+      layer: 4,
+      bits: [
+        { bone: 'hip', side: 'both', bend: true, over: ['thigh'], bias: 0.012, convex: true, mesh: worn(tube.thigh, 'scale') },
+        { bone: 'knee', side: 'both', bend: true, over: ['shin', 'boot'], bias: 0.03, convex: true, mesh: worn(tube.shin, 'scale') },
+        // A cop of the dark scale on the knee, and over it the thigh's scale ending in points.
+        { bone: 'knee', side: 'both', bend: true, over: ['shin', 'boot', 'thigh'], bias: 0.035, convex: true, mesh: kneeCop(g, 0.05, 0.42, 40, 'scaleDark') },
+        { bone: 'hip', side: 'both', bend: true, over: ['thigh', 'shin'], bias: 0.04, convex: true, mesh: teeth(legAt(b, g, 0.62), 6, 0.34, 0.08, 'scaleDark') },
+      ],
+      hides: ['thigh', 'shin'],
+    };
+  },
 
-  /* Feet: in place of the body's own boots */
+  /*
+   * Feet: in place of the body's own boots. Each shaft is over the leg of
+   * whatever is worn under it unless its foot is turned well away from the
+   * viewer, when the leg is the nearer and goes over it.
+   */
   cloth_shoes: () => ({
     layer: 1,
     bits: [
       // The leg of the trousers down to the shoe, which the boot's shaft was: under anything worn on the leg.
-      { bone: 'knee', side: 'both', over: ['shin'], bias: 0.01, convex: true, layer: 0, mesh: rings([[-3.0, 0.64, 0.68], [-1.3, 0.8, 0.84]], 6, 'trousers', { top: false, bottom: false }) },
-      { bone: 'knee', side: 'both', over: ['shin'], bias: 0.02, convex: true, mesh: rings([[-3.1, 0.68, 0.72], [-2.5, 0.72, 0.76]], 6, 'clothDark', { top: false, bottom: false }) },
+      { bone: 'knee', side: 'both', over: ['shin'], bias: 0.01, convex: true, layer: 0, front: SHAFT, mesh: rings([[-3.0, 0.64, 0.68], [-1.3, 0.8, 0.84]], 6, 'trousers', { top: false, bottom: false }) },
+      { bone: 'knee', side: 'both', over: ['shin'], bias: 0.02, convex: true, front: SHAFT, mesh: rings([[-3.1, 0.68, 0.72], [-2.5, 0.72, 0.76]], 6, 'clothDark', { top: false, bottom: false }) },
       { bone: 'ankle', side: 'both', over: ['foot'], bias: 0.02, mesh: recoloured(swelled(footMesh(), 0.96, 0.8), { boot: 'clothDark' }) },
     ],
     hides: ['boot', 'foot'],
   }),
-  leather_boots: () => ({
-    layer: 2,
-    bits: [
-      // To below the knee, the top turned down.
-      { bone: 'knee', side: 'both', over: ['shin'], bias: 0.02, convex: true, mesh: rings([[-3.15, 0.63, 0.66], [-3.02, 0.68, 0.72], [-1.15, 0.86, 0.9], [-1.1, 1.06, 1.1], [-0.5, 1.12, 1.16]], 6, (band) => (band >= 2 ? 'leatherDark' : 'leather'), { top: false, bottom: false }) },
-      { bone: 'ankle', side: 'both', over: ['foot'], bias: 0.02, mesh: recoloured(swelled(footMesh(), 1.04), { boot: 'leather' }) },
-    ],
-    hides: ['boot', 'foot'],
-  }),
+  leather_boots: () => {
+    // To under the knee, clear of the pad on it, the top turned down, and cut lower behind than in front so a bent knee does not
+    // close the back of the thigh on it.
+    const shaft = rings([[-3.15, 0.63, 0.66], [-3.02, 0.68, 0.72], [-1.45, 0.84, 0.88], [-1.4, 1.04, 1.08], [-0.85, 1.1, 1.14]], 6, (band) => (band >= 2 ? 'leatherDark' : 'leather'), { top: false, bottom: false });
+    return {
+      layer: 2,
+      bits: [
+        { bone: 'knee', side: 'both', over: ['shin'], bias: 0.02, convex: true, front: SHAFT, mesh: { ...shaft, v: shaft.v.map(([x, y, z]): V3 => [x, y, z > -0.9 && y < 0 ? z + 0.3 * (y / 1.14) : z]) } },
+        { bone: 'ankle', side: 'both', over: ['foot'], bias: 0.02, mesh: recoloured(swelled(footMesh(), 1.04), { boot: 'leather' }) },
+      ],
+      hides: ['boot', 'foot'],
+    };
+  },
   chain_boots: () => ({
     layer: 3,
     bits: [
-      { bone: 'knee', side: 'both', over: ['shin'], bias: 0.02, convex: true, mesh: worn(rings([[-3.1, 0.68, 0.72], [-1.2, 0.9, 0.94]], 6, 'mail', { top: false, bottom: false }), 'mail') },
+      { bone: 'knee', side: 'both', over: ['shin'], bias: 0.02, convex: true, front: SHAFT, mesh: worn(rings([[-3.1, 0.68, 0.72], [-1.2, 0.9, 0.94]], 6, 'mail', { top: false, bottom: false }), 'mail') },
       { bone: 'ankle', side: 'both', over: ['foot'], bias: 0.02, mesh: worn(recoloured(swelled(footMesh(), 1.05), { boot: 'mail' }), 'mail') },
       // Strapped at the ankle over the mail.
-      { bone: 'knee', side: 'both', over: ['shin'], bias: 0.03, convex: true, mesh: rings([[-2.92, 0.73, 0.77], [-2.72, 0.74, 0.78]], 6, 'leatherDark', { top: false, bottom: false }) },
+      { bone: 'knee', side: 'both', over: ['shin'], bias: 0.03, convex: true, front: SHAFT, mesh: rings([[-2.92, 0.73, 0.77], [-2.72, 0.74, 0.78]], 6, 'leatherDark', { top: false, bottom: false }) },
     ],
     hides: ['boot', 'foot'],
   }),
   plate_boots: () => ({
     layer: 5,
     bits: [
-      { bone: 'knee', side: 'both', over: ['shin'], bias: 0.02, convex: true, mesh: rings([[-3.18, 0.7, 0.74], [-3.0, 0.72, 0.76], [-1.3, 0.84, 0.88]], 6, (band) => (band === 0 ? 'metalLit' : 'metal'), { top: false, bottom: false }) },
+      { bone: 'knee', side: 'both', over: ['shin'], bias: 0.02, convex: true, front: SHAFT, mesh: rings([[-3.18, 0.7, 0.74], [-3.0, 0.72, 0.76], [-1.3, 0.84, 0.88]], 6, (band) => (band === 0 ? 'metalLit' : 'metal'), { top: false, bottom: false }) },
       { bone: 'ankle', side: 'both', over: ['foot'], bias: 0.02, mesh: worn(recoloured(swelled(footMesh(), 1.08), { boot: 'metal' }), 'lames') },
     ],
     hides: ['boot', 'foot'],
@@ -3635,9 +3757,9 @@ const MODELS: Record<string, (b: Build, fit: number) => GearModel> = {
   scale_boots: () => ({
     layer: 4,
     bits: [
-      { bone: 'knee', side: 'both', over: ['shin'], bias: 0.02, convex: true, mesh: worn(rings([[-3.08, 0.68, 0.72], [-1.05, 0.88, 0.92]], 8, 'scale', { top: false, bottom: false }), 'scale') },
+      { bone: 'knee', side: 'both', over: ['shin'], bias: 0.02, convex: true, front: SHAFT, mesh: worn(rings([[-3.08, 0.68, 0.72], [-1.05, 0.88, 0.92]], 8, 'scale', { top: false, bottom: false }), 'scale') },
       // The top of the shaft flared into a crown of points.
-      { bone: 'knee', side: 'both', over: ['shin'], bias: 0.03, convex: true, mesh: teeth([-1.12, 0.9, 0.94], 7, -0.38, 0.1, 'scaleDark') },
+      { bone: 'knee', side: 'both', over: ['shin'], bias: 0.03, convex: true, front: SHAFT, mesh: teeth([-1.12, 0.9, 0.94], 7, -0.38, 0.1, 'scaleDark') },
       // And the foot scaled, its toe capped in the dark scale.
       { bone: 'ankle', side: 'both', over: ['foot'], bias: 0.02, mesh: recoloured(swelled(footMesh(), 1.05), { boot: 'scaleDark', cuff: 'scale' }) },
     ],
@@ -3787,34 +3909,73 @@ function gloveOf(hand: Mesh, mat: Mat): Mesh {
   return g;
 }
 
-/** A skirt of gear, bent with the legs as the tunic's own hem is (`skirtBent`), and further for a longer one. */
+/*
+ * A skirt -- the tunic's own, or one of gear -- swung with the legs under it.
+ * It was pushed: the hem slid forward over a thigh coming up and back over
+ * one going behind, by a guess at how far, so a thigh raised high went
+ * through the cloth, and the cloth over a thigh sat down in a seat went on
+ * hanging straight down with the leg gone into it. Now the cloth over each
+ * leg turns about the hip as the thigh lifts it: over the front of a thigh
+ * going forward or the back of one going behind, as far as keeps it
+ * `SKIRT_CLEAR` off the line of the thigh and no further -- so a hem far out
+ * on a bell is lifted less than one close over the leg, and heavy mail is
+ * not flung up like a board -- over the side the thigh is moving away from
+ * not at all, and in between as much as it is round toward the one or the
+ * other. Nothing turns above the hip joint and the whole of it does
+ * `SKIRT_TURNS` below, so the waist stays put. Sat down, the front lies
+ * along the lap and the rest of it on the seat.
+ */
+const SKIRT_TURNS = 1.4;
+/** How far in front of the line of a thigh, or behind it, a skirt must keep to clear it: the thigh's round, in what is worn on it. */
+const SKIRT_CLEAR = 1.2;
+/** Where a body sat down sits, in the hips' frame: the underside of the thighs. */
+const SEAT = -1.15;
 function bentWith(v: V3[], r: Rig, fr: Frame): V3[] {
   // How far apart the legs are, fore and aft: the hem swings out wider the longer the stride, as a skirt does at a run.
   const stride = Math.min(1, 1.2 * Math.abs(Math.sin(r.leg[0][0] * DEG) - Math.sin(r.leg[1][0] * DEG)));
   const run = r.hover?.w ?? 0;
+  const hip = -0.1;
   return v.map((p0) => {
-    const p: V3 = [...p0];
-    const share = p[2] < -0.9 ? 1 : p[2] < 0.5 ? 0.4 : 0;
-    if (!share) return p;
-    const swing = 1 + 0.14 * stride * share;
-    p[0] *= swing;
-    p[1] *= swing;
+    const down = Math.max(0, Math.min(1, (hip - p0[2]) / SKIRT_TURNS));
+    if (!down) return [...p0] as V3;
+    const swing = 1 + 0.14 * stride * down;
+    const x = p0[0] * swing;
+    let y = p0[1] * swing, z = p0[2] - hip;
+    // How far round to the front of the body it is, from straight behind to straight ahead.
+    const ahead = p0[1] / (Math.hypot(p0[0] / (1.25 * fr.hi), p0[1]) || 1);
+    let turn = 0, seat = 0;
     for (let k = 0; k < 2; k++) {
-      const s = k ? 1 : -1;
-      const lever = Math.max(1.35, -p[2]);
-      const d = lever * Math.sin(r.leg[k][0] * DEG) * share;
-      const w = Math.max(0, Math.min(1, 1 - Math.abs(p[0] - s * 0.95 * fr.hi) / 1.5));
-      if (d > 0 && p[1] > -0.4) { p[1] += d * w; p[2] += d * 0.3 * w; }
-      if (d < 0 && p[1] < 0.4) { p[1] += d * w * 0.8; p[2] -= d * 0.2 * w; }
+      const s = k ? 1 : -1, a = r.leg[k][0] * DEG;
+      // Over this leg rather than the other: all of it from a little in from the middle outward.
+      const over = Math.max(0, Math.min(1, 0.5 + (1.6 * s * p0[0]) / fr.hi));
+      // On the side the thigh is going toward.
+      const toward = Math.max(0, Math.min(1, (Math.sign(a) * ahead + 0.35) / 0.9));
+      // As far as keeps it off the thigh and no further, reckoned where it is: the hem far out on a bell turns less than one close
+      // over the leg, a short skirt's hardly at all, and none of it further than the thigh does.
+      const off = Math.max(Math.sign(a) * y, SKIRT_CLEAR + 0.05);
+      const clear = Math.max(0, Math.abs(a) - Math.acos(SKIRT_CLEAR / Math.hypot(off, z)) + Math.atan2(-z, off));
+      turn += Math.sign(a) * Math.min(Math.abs(a), clear) * over * toward * down;
+      // And a thigh raised far enough to sit on sits on what is behind it and beside it.
+      seat = Math.max(seat, over * (1 - toward) * ramp(a / DEG, 45, 85));
+    }
+    const c = Math.cos(turn), sn = Math.sin(turn);
+    [y, z] = [c * y - sn * z, sn * y + c * z];
+    z += hip;
+    // Sat on, what hung below the seat lies on it behind and beside, gathered in as it is sat on rather than spread as wide as its hem:
+    // left hanging, it went down through the seat, and the sides twisted out at the knees in points.
+    let gather = 1;
+    if (seat > 0 && z < SEAT) {
+      gather = 1 - 0.4 * seat * Math.min(1, (SEAT - z) / 1.5);
+      z += (SEAT - z) * seat;
     }
     // At a run the back of it flies out behind and up, the further the longer the stride, and falls back as the legs pass: side on,
     // a hem that tilts and swings with the legs rather than a cone carried down the road on them.
-    if (run > 0 && p[1] < 0.2) {
-      const t = Math.min(1, (0.2 - p[1]) / 1.6);
-      p[1] -= 0.45 * run * stride * share * t;
-      p[2] += 0.6 * run * stride * share * t;
+    if (run > 0 && y < 0.2) {
+      const t = Math.min(1, (0.2 - y) / 1.6);
+      y -= 0.45 * run * stride * down * t;
+      z += 0.6 * run * stride * down * t;
     }
-    return p;
+    return [x * gather, y * gather, z];
   });
 }
 
@@ -4641,8 +4802,9 @@ function dress(parts: Part[], named: Map<string, Part[]>, kit: Kit, r: Rig, b: B
       for (const k of sides) {
         const bone = b[k < 0 ? bit.bone : `${bit.bone}${k}`];
         const m = k === 0 && bit.side === 'both' ? mirrored(bit.mesh) : bit.mesh;
-        const xf = bit.at || bit.turn ? joint(bone, bit.at ?? [0, 0, 0], ...(bit.turn ?? [0, 0, 0])) : bone;
-        const part: Part = { mesh: m, xf, bias: bit.bias ?? 0.02, pal: P, rare, seed: si + 1, convex: bit.convex, front: bit.front, v: bit.skirt ? bentWith(m.v, r, fr) : undefined };
+        const xf = bit.bend && bit.bone === 'hip' ? joint(bone, [0, 0, -THIGH * fr.tall]) : bit.at || bit.turn ? joint(bone, bit.at ?? [0, 0, 0], ...(bit.turn ?? [0, 0, 0])) : bone;
+        const v = bit.skirt ? bentWith(m.v, r, fr) : bit.bend ? kneeBent(m.v, kneeBend(b, k), bit.bone === 'knee') : undefined;
+        const part: Part = { mesh: m, xf, bias: bit.bias ?? 0.02, pal: P, rare, seed: si + 1, convex: bit.convex, front: bit.front, v };
         out.push(part);
         put.push({ part, on: regionsOf(bit.over[0], k)[0], over: bit.over.flatMap((c) => regionsOf(c, k)), layer: bit.layer ?? model.layer, order, seq });
       }
@@ -4854,7 +5016,7 @@ function partsOf(kit: Kit, r: Rig, b: Bones, gear?: GearLook, pal?: Palette, fac
     else named.set(key, [p]);
     return p;
   };
-  const skirt = name('skirt', { mesh: kit.skirt, xf: b.pelvis, v: skirtBent(kit, r), bias: 0.15 });
+  const skirt = name('skirt', { mesh: kit.skirt, xf: b.pelvis, v: bentWith(kit.skirt.v, r, kit.fr), bias: 0.15 });
   const abdomen = name('abdomen', { mesh: kit.abdomen, xf: b.spine, bias: 0.05, convex: true });
   const head = name('head', { mesh: r.blink ? kit.blink : kit.head, xf: b.head, bias: 0.2 });
   const parts: Part[] = [
@@ -4887,9 +5049,14 @@ function partsOf(kit: Kit, r: Rig, b: Bones, gear?: GearLook, pal?: Palette, fac
       name(`upper${k}`, { mesh: kit.upper, xf: b[`arm${k}`], bias: 0, convex: true }),
       name(`lower${k}`, { mesh: kit.lower, xf: b[`elbow${k}`], bias: 0.02 }),
       name(`hand${k}`, { mesh: r.open[k] ? kit.open[k] : kit.hands[k], xf: b[`wrist${k}`], bias: 0.03 }),
-      name(`thigh${k}`, { mesh: kit.thigh, xf: b[`hip${k}`], bias: 0, convex: true }),
-      name(`shin${k}`, { mesh: kit.shin, xf: b[`knee${k}`], bias: 0, convex: true }),
-      name(`boot${k}`, { mesh: kit.boot, xf: b[`knee${k}`], bias: 0.01, convex: true }),
+    );
+    const bend = kneeBend(b, k);
+    const shin = name(`shin${k}`, { mesh: kit.shin, xf: b[`knee${k}`], v: kneeBent(kit.shin.v, bend, true), bias: 0, convex: true });
+    parts.push(
+      name(`thigh${k}`, { mesh: kit.thigh, xf: joint(b[`hip${k}`], [0, 0, -THIGH * kit.fr.tall]), v: kneeBent(kit.thigh.v, bend, false), bias: 0, convex: true }),
+      shin,
+      // The boot round the shin, over it unless its foot is turned well away from the viewer, when the shin is the nearer.
+      name(`boot${k}`, { mesh: kit.boot, xf: b[`knee${k}`], bias: 0.01, convex: true, after: shin, front: [0, 0, -0.5] }),
       name(`foot${k}`, { mesh: kit.foot, xf: b[`ankle${k}`], bias: 0.02 }),
     );
   }
