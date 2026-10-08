@@ -4,7 +4,7 @@ import { EMOTE_BY_ID } from '../game/emotes';
 import { cleanLook } from '../game/look';
 import { whoAmI } from './accounts';
 import { supabase } from './supabase';
-import { Island, type CastWire, type ItemRow, type PlayerRow } from './island';
+import { Island, type CastMore, type CastWire, type ItemRow, type PlayerRow } from './island';
 import { isSpell } from '../render/spells/info';
 import { generateAtlasWorld, loadAtlas } from '../world/atlas-world';
 import { ACTION_BY_ID, type ActionDef, type Target } from '../game/actions';
@@ -552,11 +552,15 @@ export async function startIsland(params: URLSearchParams, tell: Telling): Promi
   game.events.on('cast', (c) => {
     if (c.by !== null) return;
     const at = c.at;
+    // With the companion's creature, so everybody sees the real beast act, and where you stood if the island moved you.
+    const more: CastMore = {};
+    if (c.companion !== undefined) more.pet = c.companion;
+    if (c.from) more.from = c.from;
     island.castSeen(c.spell, at.kind === 'peer' && at.uid ? { kind: 'player', uid: at.uid }
       : at.kind === 'creature' ? { kind: 'creature', id: at.id }
-        : at.kind === 'spot' ? { kind: 'spot', x: at.x, y: at.y } : { kind: 'self' });
+        : at.kind === 'spot' ? { kind: 'spot', x: at.x, y: at.y } : { kind: 'self' }, more);
   });
-  island.hooks.castSeen = (uid: string, spell: string, at: CastWire) => {
+  island.hooks.castSeen = (uid: string, spell: string, at: CastWire, more: CastMore) => {
     if (!isSpell(spell)) return;
     const by = hashId(uid);
     if (!game.roster.get(by)) return;
@@ -565,6 +569,7 @@ export async function startIsland(params: URLSearchParams, tell: Telling): Promi
       at: at.kind === 'player' ? (at.uid === island.uid ? { kind: 'you' } : { kind: 'peer', id: hashId(at.uid), uid: at.uid })
         : at.kind === 'creature' ? { kind: 'creature', id: at.id }
           : at.kind === 'spot' ? { kind: 'spot', x: at.x, y: at.y } : { kind: 'self' },
+      companion: more.pet, from: more.from,
     });
   };
   game.woreTitle = (id: string | null) => void island.wearTitle(id);

@@ -675,6 +675,29 @@ export type CastWire =
   | { kind: 'creature'; id: number }
   | { kind: 'spot'; x: number; y: number };
 
+/**
+ * What else a cast says as it goes between browsers, for drawing it as the
+ * caster saw it: their companion's creature id (`pet`), and where they stood
+ * before the island moved them for it (`from`). Both optional, so a browser
+ * that sends neither is drawn as it always was.
+ */
+export interface CastMore {
+  pet?: number;
+  from?: { x: number; y: number };
+}
+
+/** The extras of a cast heard from somebody else's browser, checked: anything malformed is left out. */
+export function castMoreIn(v: unknown): CastMore {
+  const out: CastMore = {};
+  if (!v || typeof v !== 'object') return out;
+  const o = v as Record<string, unknown>;
+  const num = (n: unknown): n is number => typeof n === 'number' && Number.isFinite(n);
+  if (num(o.pet)) out.pet = o.pet;
+  const f = o.from as Record<string, unknown> | undefined;
+  if (f && typeof f === 'object' && num(f.x) && num(f.y)) out.from = { x: f.x, y: f.y };
+  return out;
+}
+
 /** A cast heard from somebody else's browser, checked: anything malformed is nothing. */
 export function castWireIn(v: unknown): CastWire | null {
   if (!v || typeof v !== 'object') return null;
@@ -696,7 +719,7 @@ export interface IslandHooks {
    * island did whatever the spell does, and tells everybody that in its own
    * way.
    */
-  castSeen?: (uid: string, spell: string, at: CastWire) => void;
+  castSeen?: (uid: string, spell: string, at: CastWire, more: CastMore) => void;
   /** A line for the log, from the island rather than from here. */
   /**
    * A line for the log. `at` is when the island wrote it, in milliseconds —
@@ -2053,10 +2076,10 @@ export class Island {
        */
       this.bodies.on('broadcast', { event: 'cast' }, (m) => {
         if (!this.bodies) return;
-        const e = (m as { payload?: { uid?: unknown; spell?: unknown; at?: unknown } }).payload;
+        const e = (m as { payload?: { uid?: unknown; spell?: unknown; at?: unknown; pet?: unknown; from?: unknown } }).payload;
         if (!e || typeof e.uid !== 'string' || typeof e.spell !== 'string' || e.uid === this.uid || e.spell.length > 64) return;
         const at = castWireIn(e.at);
-        if (at) this.hooks.castSeen?.(e.uid, e.spell, at);
+        if (at) this.hooks.castSeen?.(e.uid, e.spell, at, castMoreIn(e));
       });
       this.bodies.subscribe();
     }
@@ -2912,9 +2935,9 @@ export class Island {
   }
 
   /** Say you cast a spell the island took, to whoever is listening on this island, for them to draw. */
-  castSeen(spell: string, at: CastWire): void {
+  castSeen(spell: string, at: CastWire, more: CastMore = {}): void {
     if (!this.bodies || !this.uid) return;
-    void this.bodies.send({ type: 'broadcast', event: 'cast', payload: { uid: this.uid, spell, at } });
+    void this.bodies.send({ type: 'broadcast', event: 'cast', payload: { uid: this.uid, spell, at, ...more } });
   }
 
   /** Say you waved, to whoever is listening on this island. */

@@ -1049,6 +1049,7 @@ export class Renderer {
       const c = this.game.creatures.active();
       return c ? this.spellBody({ kind: 'creature', id: c.id }) : null;
     },
+    near: (x, y, r) => this.spellsNear(x, y, r),
   });
   /** The season and its day, for the trees' look (`./foliage`): read once a frame off the wall clock, as the hud reads it. */
   private year = yearAt(Date.now() / 1000);
@@ -1268,7 +1269,7 @@ export class Renderer {
     // A spell cast, yours or anybody's in sight: drawn from whoever cast it at whatever it was cast at.
     game.events.on('cast', (c) => {
       const by: Who = c.by === null ? { kind: 'player' } : { kind: 'peer', id: c.by };
-      this.spells.play(c.spell, by, this.spellAim(c.at), { mine: c.by === null });
+      this.spells.play(c.spell, by, this.spellAim(c.at), { mine: c.by === null, companion: c.companion, from: c.from });
     });
     game.events.on('reset', () => {
       this.spells.clear();
@@ -4262,7 +4263,38 @@ export class Renderer {
     return {
       x: cr.x, y: cr.y, z: game.laidOver(Math.floor(cr.x), Math.floor(cr.y)) ?? this.footAt(cr.x, cr.y), tall, wide: 5 * rarityOf(cr).size,
       facing: this.beastFacing.get(cr.id) ?? 0, kind: 'creature',
+      // What is on it that the payload says: a burn or a bleed still running, a trap holding it.
+      burning: (cr.burnUntil ?? 0) > game.time, bleeding: cr.bleedRate > 0 && cr.bleedUntil > game.time, held: cr.trapped != null,
     };
+  }
+
+  /** Everybody and everything within `r` tiles of a point, for an area spell to find what it covers (`FxScene.bodiesWithin`). */
+  private spellsNear(x: number, y: number, r: number): SpellBody[] {
+    const game = this.game;
+    const out: SpellBody[] = [];
+    const add = (w: Who, wx: number, wy: number): void => {
+      // A little over, for a body's middle moving on before the stage measures it again.
+      if (Math.hypot(wx - x, wy - y) > r + 0.5) return;
+      const b = this.spellBody(w);
+      if (!b) return;
+      b.who = w;
+      out.push(b);
+    };
+    add(PLAYER_CASTS, game.player.x, game.player.y);
+    for (const peer of game.roster.list()) {
+      const [px, py] = game.roster.drawnAt(peer);
+      add({ kind: 'peer', id: peer.id }, px, py);
+    }
+    for (const cr of game.creatures.list.values()) add({ kind: 'creature', id: cr.id }, cr.x, cr.y);
+    return out;
+  }
+
+  /** How far off where they stand somebody is drawn while a spell carries them (`SpellStage.shiftOf`), in the screen's pixels. */
+  private spellShift(w: Who): [number, number] {
+    const sh = this.spells.shiftOf(w);
+    if (!sh) return [0, 0];
+    const cam = this.camera;
+    return [cam.worldToScreenX(sh.x, sh.y) - cam.worldToScreenX(0, 0), cam.worldToScreenY(sh.x, sh.y, 0) - cam.worldToScreenY(0, 0, 0)];
   }
 
   /** Somebody turned to face what they are casting at, unless they are walking somewhere. */
@@ -4281,8 +4313,10 @@ export class Renderer {
    * checking how a spell looks (`wurm.spell` in the console). At what is
    * under the cursor -- a creature, somebody, the ground -- unless told, or
    * at yourself for a spell cast only on yourself. Nothing is sent to anybody.
+   * `from` plays it as though the island had just moved you there from that
+   * spot (a Lunge); `companion` as though that creature were your companion.
    */
-  playSpell(spell: string, at?: CastAt): boolean {
+  playSpell(spell: string, at?: CastAt, opts: { from?: { x: number; y: number }; companion?: number } = {}): boolean {
     const info = spellInfo(spell);
     const hover = this.hover;
     const p = this.game.player;
@@ -4295,7 +4329,7 @@ export class Renderer {
       aim = peer ? { kind: 'peer', id: peer.id } : { kind: 'self' };
     } else if (hover) aim = { kind: 'spot', x: hover.wx, y: hover.wy };
     else aim = { kind: 'spot', x: p.x + p.dirX * 3, y: p.y + p.dirY * 3 };
-    return this.spells.play(spell, PLAYER_CASTS, this.spellAim(aim), { mine: true });
+    return this.spells.play(spell, PLAYER_CASTS, this.spellAim(aim), { mine: true, ...opts });
   }
 
   /** What a cast was at, as the stage takes it. */
@@ -4347,7 +4381,9 @@ export class Renderer {
       const hovering = this.isHovered(ent);
       if (ent.kind === 'player') {
         const struck = this.flashOf(player.attackedAt);
-        const ex = ent.sx + (ent.drawDx ?? 0), ey = ent.sy + (ent.drawDy ?? 0);
+        // Carried from where a spell found you to where the island put you (a Lunge), while its cast plays.
+        const [shx, shy] = this.spellShift(PLAYER_CASTS);
+        const ex = ent.sx + (ent.drawDx ?? 0) + shx, ey = ent.sy + (ent.drawDy ?? 0) + shy;
         // Where your feet are on the screen, for the ring the swing in hand is drawn as (`drawFight`).
         this.feetAt = { x: ex, y: ey - (ent.lift ?? 0) };
         this.clipTo(ctx, ent.clip);
@@ -4383,7 +4419,8 @@ export class Renderer {
       if (ent.kind === 'peer' && ent.peer) {
         const peer = ent.peer;
         // Somebody on a deck is drawn at their place on it, lifted to it; see `takeAboard`.
-        const ex = ent.sx + (ent.drawDx ?? 0), ey = ent.sy + (ent.drawDy ?? 0) - (ent.lift ?? 0);
+        const [shx, shy] = this.spellShift({ kind: 'peer', id: peer.id });
+        const ex = ent.sx + (ent.drawDx ?? 0) + shx, ey = ent.sy + (ent.drawDy ?? 0) - (ent.lift ?? 0) + shy;
         // The same box a creature catches clicks with, because it is the same
         // figure at the same size. Without one, the only thing you could ever
         // do to another person was walk to the tile they were standing on.

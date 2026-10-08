@@ -21,6 +21,14 @@ export interface CastSeen {
   spell: string;
   by: number | null;
   at: CastAt;
+  /** The caster's companion, by its creature id, when they have one out: what a Beastmaster's spells act through. */
+  companion?: number;
+  /**
+   * Where the caster stood before the cast, when the island moved them for it
+   * (a Lunge strides up to four tiles, a Parting Throw steps back): drawn
+   * carried from there rather than jumping.
+   */
+  from?: { x: number; y: number };
 }
 /** What a spell was cast at, as it is drawn: the caster, you, somebody else, a creature, or a spot on the ground. */
 export type CastAt =
