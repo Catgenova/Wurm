@@ -1,7 +1,7 @@
 import { hash2, mulberry32 } from '../world/noise';
 import { cushions, hashOf, type Cushion } from './ivy';
 import type { Look } from '../game/look';
-import { EMOTE_BY_ID, emotePose } from '../game/emotes';
+import { EMOTE_BY_ID, HOPS, emotePose } from '../game/emotes';
 import { drawBust, drawFigure, shineOver, type FigurePose } from './figure';
 import { BUSH_DEFS, TREE_AGES, TREE_DEFS } from '../world/tiles';
 import { drawWildermon, drawWildermonPortrait, modelled, wildermonTop } from './wildermon';
@@ -4990,6 +4990,11 @@ export function drawHeadshot(ctx: CanvasRenderingContext2D, x: number, y: number
   drawBust(ctx, x, y, size, look, facing, t, tall);
 }
 
+/** How much taller than standing, in the figure's own units, a body waving is in the mirror: the hand up over the head. */
+const PORTRAIT_WAVE = 3;
+/** And over a hop's height, for the body coming up onto its toes as it leaves the ground. */
+const PORTRAIT_HOP = 4;
+
 /** What the creator's mirror can show a body doing. */
 export type PortraitMotion = 'idle' | 'walk' | 'run' | 'work' | 'wave' | 'hop';
 
@@ -5000,7 +5005,9 @@ export type PortraitMotion = 'idle' | 'walk' | 'run' | 'work' | 'wave' | 'hop';
  * that is its own code is a preview that can lie to you.
  */
 export function drawPortrait(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, look: Look, t = 0, facing = 1, motion: PortraitMotion = 'idle'): void {
-  const zoom = Math.min(w / 30, h / 44);
+  // Room over the head for the hand raised in a wave and for the top of a hop, which went out of the top of the frame.
+  const room = motion === 'hop' ? HOPS[0].high + PORTRAIT_HOP : motion === 'wave' ? PORTRAIT_WAVE : 0;
+  const zoom = Math.min(w / 30, h / (44 + room));
   // One body, so going from standing to walking and turning round are blended as they are on the island.
   const pose: PlayerPose = { id: 'mirror', phase: t * 6, moving: false, facing, swimming: false, working: false, look };
   if (motion === 'walk' || motion === 'run') {
