@@ -309,40 +309,35 @@ function cracked(k: FxScene, from: { x: number; y: number }, to: { x: number; y:
 function cracks(k: FxScene, lines: readonly (readonly P3[])[], u: number, o: { alpha?: number; width?: number; glow?: number; colour?: string } = {}): void {
   const a = o.alpha ?? 1;
   if (a <= 0.01 || u <= 0) return;
-  const runs: number[][] = [];
+  // One path a frame for all of them, stroked twice per line of the land they lie across.
+  const path = new Path2D();
+  let any = false;
   let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
   for (const pts of lines) {
     const n = pts.length;
     const upto = u * (n - 1);
-    const xy: number[] = [];
     for (let i = 0; i < n && i <= Math.ceil(upto); i++) {
       const p = i <= upto ? pts[i] : mid3(pts[i - 1], pts[i], upto - (i - 1));
-      xy.push(k.sx(p), k.sy(p));
+      if (i) {
+        path.lineTo(k.sx(p), k.sy(p));
+        any = true;
+      } else path.moveTo(k.sx(p), k.sy(p));
       x0 = Math.min(x0, p.x); y0 = Math.min(y0, p.y); x1 = Math.max(x1, p.x); y1 = Math.max(y1, p.y);
     }
-    if (xy.length >= 4) runs.push(xy);
   }
-  if (!runs.length) return;
+  if (!any) return;
   const W = (o.width ?? 1) * k.zoom;
   const ink = k.pal.ink, glowC = o.colour ?? k.pal.core;
-  const stroke = (g: CanvasRenderingContext2D): void => {
-    g.beginPath();
-    for (const xy of runs) {
-      g.moveTo(xy[0], xy[1]);
-      for (let i = 2; i < xy.length; i += 2) g.lineTo(xy[i], xy[i + 1]);
-    }
-  };
   k.groundDraw((x0 + x1) / 2, (y0 + y1) / 2, Math.max(x1 - x0, y1 - y0) / 2 + 0.5, (g) => {
     g.globalAlpha = clamp(a);
     g.lineJoin = 'miter';
     g.lineCap = 'butt';
-    stroke(g);
     g.lineWidth = W + Math.max(1, 0.7 * k.zoom);
     g.strokeStyle = ink;
-    g.stroke();
+    g.stroke(path);
     g.lineWidth = W * 0.6;
     g.strokeStyle = glowC;
-    g.stroke();
+    g.stroke(path);
   });
   const gl = o.glow ?? 1;
   if (gl > 0) {
@@ -353,8 +348,7 @@ function cracks(k: FxScene, lines: readonly (readonly P3[])[], u: number, o: { a
       g.lineCap = 'round';
       g.strokeStyle = light;
       g.lineWidth = W * 2.4;
-      stroke(g);
-      g.stroke();
+      g.stroke(path);
       g.lineCap = 'butt';
     });
   }
@@ -371,35 +365,40 @@ function tally(k: FxScene, c: { x: number; y: number }, r: number, left: number,
   const share = clamp(left / Math.max(0.01, total));
   const lit = share * n;
   const da = Math.min((TAU / n) * 0.22, 0.034 / r), dr = Math.min(0.032, r * 0.12);
-  const quads: number[] = [];
-  const state: number[] = [];
+  // Three paths a frame -- the lit stones, the one going out, the spent -- since what lies on the ground is drawn again for
+  // every line of the land under it.
+  const on = new Path2D(), going = new Path2D(), off = new Path2D();
   for (let i = 0; i < n; i++) {
     const an = -Math.PI * 0.75 + (i / n) * TAU;
+    const into = i < Math.floor(lit) ? on : i < lit ? going : off;
     const pts = [[r + dr, an], [r, an + da], [r - dr, an], [r, an - da]] as const;
-    for (const [rr, aa] of pts) {
+    pts.forEach(([rr, aa], j) => {
       const x = c.x + Math.cos(aa) * rr, y = c.y + Math.sin(aa) * rr;
-      quads.push(k.sx({ x, y, z: k.ground(x, y) + 0.15 }), k.sy({ x, y, z: k.ground(x, y) + 0.15 }));
-    }
-    // Lit, going out (the one now running), or out.
-    state.push(i < Math.floor(lit) ? 1 : i < lit ? lit - Math.floor(lit) : 0);
+      const sx = k.sx({ x, y, z: k.ground(x, y) + 0.15 }), sy = k.sy({ x, y, z: k.ground(x, y) + 0.15 });
+      if (j) into.lineTo(sx, sy);
+      else into.moveTo(sx, sy);
+    });
+    into.closePath();
   }
+  const fading = lit - Math.floor(lit);
   const t = tones(k, {});
   const accent = k.pal.accent;
   const inkW = Math.max(0.7, 0.6 * k.zoom);
   k.groundDraw(c.x, c.y, r + 0.3, (g) => {
-    for (let i = 0; i < n; i++) {
-      const q = i * 8;
-      g.beginPath();
-      g.moveTo(quads[q], quads[q + 1]);
-      for (let j = 2; j < 8; j += 2) g.lineTo(quads[q + j], quads[q + j + 1]);
-      g.closePath();
-      g.globalAlpha = clamp(alpha * (0.3 + 0.7 * state[i]));
-      g.fillStyle = state[i] >= 1 ? t.main : state[i] > 0 ? accent : t.deep;
-      g.fill();
-      g.lineWidth = inkW;
-      g.strokeStyle = t.ink;
-      g.stroke();
-    }
+    g.lineWidth = inkW;
+    g.strokeStyle = t.ink;
+    g.globalAlpha = clamp(alpha * 0.3);
+    g.fillStyle = t.deep;
+    g.fill(off);
+    g.stroke(off);
+    g.globalAlpha = clamp(alpha * (0.3 + 0.7 * fading));
+    g.fillStyle = accent;
+    g.fill(going);
+    g.stroke(going);
+    g.globalAlpha = clamp(alpha);
+    g.fillStyle = t.main;
+    g.fill(on);
+    g.stroke(on);
   });
 }
 
@@ -495,8 +494,8 @@ const rootPose: CastPose = (r, t) => {
 /** Stillness: the hands brought before the chest and the head bowed, a breath, then both palms pressed slowly down to the hips. */
 const stillnessPose: CastPose = (r, t) => {
   for (let k = 0; k < 2; k++) {
-    r.arm[k] = euler(t, [[0, REST_ARM], [0.28, [34, -14, 32]], [0.4, [38, -12, 32]], [0.55, [22, 8, 14]], [0.82, [20, 10, 12]], [1, REST_ARM]]);
-    r.elbow[k] = one(t, [[0, 18], [0.28, 72], [0.4, 70], [0.55, 52], [0.82, 50], [1, 20]]);
+    r.arm[k] = euler(t, [[0, REST_ARM], [0.28, [20, 20, 24]], [0.4, [22, 20, 24]], [0.55, [2, 14, 30]], [0.82, [2, 14, 30]], [1, REST_ARM]]);
+    r.elbow[k] = one(t, [[0, 18], [0.28, 108], [0.4, 106], [0.55, 72], [0.82, 70], [1, 20]]);
     r.hand[k] = euler(t, [[0, [0, 0, 0]], [0.28, [-30, 0, 0]], [0.55, [-62, 0, 0]], [0.82, [-60, 0, 0]], [1, [0, 0, 0]]]);
     r.open[k] = t > 0.06;
     r.knee[k] = one(t, [[0, 4], [0.4, 4], [0.55, 12], [0.82, 11], [1, 4]]);
@@ -504,14 +503,14 @@ const stillnessPose: CastPose = (r, t) => {
   r.head = euler(t, [[0, [0, 0, 0]], [0.28, [-14, 0, 0]], [0.4, [-10, 0, 0]], [0.55, [-22, 0, 0]], [0.82, [-20, 0, 0]], [1, [0, 0, 0]]]);
   r.chest = euler(t, [[0, [0, 0, 0]], [0.28, [2, 0, 0]], [0.4, [6, 0, 0]], [0.55, [-5, 0, 0]], [0.82, [-4, 0, 0]], [1, [0, 0, 0]]]);
   r.spine = euler(t, [[0, [0, 0, 0]], [0.55, [-4, 0, 0]], [1, [0, 0, 0]]]);
-  r.shrug = [one(t, [[0, 0], [0.4, 4], [0.55, 0]]), one(t, [[0, 0], [0.4, 4], [0.55, 0]])];
+  r.shrug = [one(t, [[0, 0], [0.4, 0.3], [0.55, 0]]), one(t, [[0, 0], [0.4, 0.3], [0.55, 0]])];
 };
 
 /** Heavy Limbs: a weight taken up at the chest, hoisted overhead with the back straining, heaved forward off both hands, and the body sinking after it. */
 const heavyPose: CastPose = (r, t) => {
   for (let k = 0; k < 2; k++) {
-    r.arm[k] = euler(t, [[0, REST_ARM], [0.22, [26, -4, 22]], [0.42, [150, 16, 8]], [0.5, [152, 16, 8]], [0.56, [96, 10, 8]], [0.7, [44, 10, 6]], [0.84, [42, 10, 6]], [1, REST_ARM]]);
-    r.elbow[k] = one(t, [[0, 20], [0.22, 70], [0.42, 76], [0.5, 80], [0.56, 12], [0.7, 14], [0.84, 16], [1, 22]]);
+    r.arm[k] = euler(t, [[0, REST_ARM], [0.22, [14, 20, 24]], [0.42, [150, 16, 8]], [0.5, [152, 16, 8]], [0.56, [96, 10, 8]], [0.7, [44, 10, 6]], [0.84, [42, 10, 6]], [1, REST_ARM]]);
+    r.elbow[k] = one(t, [[0, 20], [0.22, 96], [0.42, 76], [0.5, 80], [0.56, 12], [0.7, 14], [0.84, 16], [1, 22]]);
     r.hand[k] = euler(t, [[0, [0, 0, 0]], [0.22, [30, 0, 0]], [0.5, [30, 0, 0]], [0.56, [-20, 0, 0]], [1, [0, 0, 0]]]);
     r.open[k] = t > 0.06;
     r.leg[k] = euler(t, [[0, [2, 2, 0]], [0.22, [8, 6, 0]], [0.5, [2, 6, 0]], [0.7, [18, 8, 0]], [0.84, [16, 8, 0]], [1, [2, 2, 0]]]);
@@ -576,8 +575,8 @@ const brittlePose: CastPose = (r, t) => {
 const lockPose: CastPose = (r, t) => {
   for (let k = 0; k < 2; k++) {
     const s = k ? 1 : -1;
-    r.arm[k] = euler(t, [[0, REST_ARM], [0.28, [80, -10, 22]], [0.46, [84, -8, 24]], [0.58, [16, -4, 30]], [0.84, [14, -4, 30]], [1, REST_ARM]]);
-    r.elbow[k] = one(t, [[0, 20], [0.28, 26], [0.46, 22], [0.58, 100], [0.84, 102], [1, 22]]);
+    r.arm[k] = euler(t, [[0, REST_ARM], [0.28, [68, 50, 12]], [0.46, [70, 50, 12]], [0.58, [20, 20, 24]], [0.84, [20, 20, 24]], [1, REST_ARM]]);
+    r.elbow[k] = one(t, [[0, 20], [0.28, 36], [0.46, 34], [0.58, 108], [0.84, 108], [1, 22]]);
     r.hand[k] = euler(t, [[0, [0, 0, 0]], [0.28, [0, 0, 0]], [0.46, [0, 80 * s, 0]], [0.58, [0, 70 * s, 0]], [1, [0, 0, 0]]]);
     r.open[k] = t > 0.06 && t < 0.55;
     r.leg[k] = euler(t, [[0, [2, 2, 0]], [0.28, [2, 9, 0]], [0.58, [4, 12, 0]], [0.84, [4, 12, 0]], [1, [2, 2, 0]]]);
@@ -591,13 +590,13 @@ const lockPose: CastPose = (r, t) => {
 /** Still Skin: the arms crossed over the chest and the body curled round them, then the fists driven down and out at the sides, chest up. */
 const stillSkinPose: CastPose = (r, t) => {
   for (let k = 0; k < 2; k++) {
-    r.arm[k] = euler(t, [[0, REST_ARM], [0.3, [18, -30, 46]], [0.42, [20, -32, 48]], [0.5, [-8, 26, -4]], [0.78, [-6, 24, -4]], [1, REST_ARM]]);
-    r.elbow[k] = one(t, [[0, 20], [0.3, 80], [0.42, 84], [0.5, 4], [0.78, 6], [1, 22]]);
+    r.arm[k] = euler(t, [[0, REST_ARM], [0.3, [2, 32, 66]], [0.42, [4, 32, 68]], [0.5, [-8, 26, -4]], [0.78, [-6, 24, -4]], [1, REST_ARM]]);
+    r.elbow[k] = one(t, [[0, 20], [0.3, 108], [0.42, 112], [0.5, 4], [0.78, 6], [1, 22]]);
     r.open[k] = false;
     r.leg[k] = euler(t, [[0, [2, 2, 0]], [0.3, [6, 4, 0]], [0.5, [2, 12, 0]], [0.78, [2, 12, 0]], [1, [2, 2, 0]]]);
     r.knee[k] = one(t, [[0, 4], [0.3, 18], [0.42, 20], [0.5, 8], [0.78, 8], [1, 4]]);
   }
-  r.shrug = [one(t, [[0, 0], [0.42, 5], [0.5, -2], [0.78, -2], [1, 0]]), one(t, [[0, 0], [0.42, 5], [0.5, -2], [0.78, -2], [1, 0]])];
+  r.shrug = [one(t, [[0, 0], [0.42, 0.4], [0.5, -0.15], [0.78, -0.15], [1, 0]]), one(t, [[0, 0], [0.42, 0.4], [0.5, -0.15], [0.78, -0.15], [1, 0]])];
   r.spine = euler(t, [[0, [0, 0, 0]], [0.3, [-10, 0, 0]], [0.42, [-12, 0, 0]], [0.5, [6, 0, 0]], [0.78, [5, 0, 0]], [1, [0, 0, 0]]]);
   r.chest = euler(t, [[0, [0, 0, 0]], [0.3, [-8, 0, 0]], [0.42, [-9, 0, 0]], [0.5, [9, 0, 0]], [0.78, [8, 0, 0]], [1, [0, 0, 0]]]);
   r.head = euler(t, [[0, [0, 0, 0]], [0.3, [-14, 0, 0]], [0.42, [-16, 0, 0]], [0.5, [6, 0, 0]], [0.78, [5, 0, 0]], [1, [0, 0, 0]]]);
@@ -606,8 +605,8 @@ const stillSkinPose: CastPose = (r, t) => {
 /** Mire: down into a wide squat, the hands together low ahead, then swept slowly apart, palms flat, as if smoothing something thick. */
 const mirePose: CastPose = (r, t) => {
   for (let k = 0; k < 2; k++) {
-    r.arm[k] = euler(t, [[0, REST_ARM], [0.25, [46, -8, 18]], [0.55, [40, 68, -4]], [0.82, [36, 70, -4]], [1, REST_ARM]]);
-    r.elbow[k] = one(t, [[0, 20], [0.25, 44], [0.55, 10], [0.82, 12], [1, 22]]);
+    r.arm[k] = euler(t, [[0, REST_ARM], [0.25, [14, 26, 30]], [0.55, [40, 68, -4]], [0.82, [36, 70, -4]], [1, REST_ARM]]);
+    r.elbow[k] = one(t, [[0, 20], [0.25, 72], [0.55, 10], [0.82, 12], [1, 22]]);
     r.hand[k] = euler(t, [[0, [0, 0, 0]], [0.25, [-50, 0, 0]], [0.55, [-60, 0, 0]], [0.82, [-56, 0, 0]], [1, [0, 0, 0]]]);
     r.open[k] = t > 0.06;
     r.leg[k] = euler(t, [[0, [2, 2, 0]], [0.25, [20, 10, 0]], [0.55, [28, 16, 0]], [0.82, [26, 16, 0]], [1, [2, 2, 0]]]);
@@ -636,8 +635,8 @@ const massRootPose: CastPose = (r, t) => {
 
 /** Snare: the focus held up in the left hand while the right draws a loop in the air before it, then tosses the noose low and yanks it shut. */
 const snarePose: CastPose = (r, t) => {
-  r.arm[0] = euler(t, [[0, REST_ARM], [0.2, [44, -6, 20]], [0.55, [46, -6, 20]], [0.82, [40, -6, 20]], [1, REST_ARM]]);
-  r.elbow[0] = one(t, [[0, 20], [0.2, 64], [0.55, 62], [0.82, 66], [1, 22]]);
+  r.arm[0] = euler(t, [[0, REST_ARM], [0.2, [32, 14, 12]], [0.55, [34, 14, 12]], [0.82, [30, 14, 12]], [1, REST_ARM]]);
+  r.elbow[0] = one(t, [[0, 20], [0.2, 108], [0.55, 106], [0.82, 104], [1, 22]]);
   r.open[0] = false;
   // The loop: a full turn of the hand round a point before the chest, then down and back for the toss.
   const loop = seg(t, 0.1, 0.42);
@@ -1592,20 +1591,21 @@ function plates(k: FxScene, b: Body, grow: number, a: number, sweep: number): vo
       const mx = (x0 + x1) / 2, my = (y0 + y1) / 2;
       const lx = mx + dy * W, ly = my - dx * W, rx = mx - dy * W, ry = my + dx * W;
       const leftLit = -(lx - mx) * 0.75 - (ly - my) * 0.65 > 0;
+      const [hx, hy, sx, sy] = leftLit ? [lx, ly, rx, ry] : [rx, ry, lx, ly];
       g.beginPath();
       g.moveTo(x0, y0);
-      g.lineTo(lx, ly);
+      g.lineTo(hx, hy);
       g.lineTo(x1, y1);
       g.closePath();
-      g.fillStyle = lit[i] || leftLit ? P.core : P.main;
+      g.fillStyle = P.core;
       g.fill();
       g.beginPath();
       g.moveTo(x0, y0);
-      g.lineTo(rx, ry);
+      g.lineTo(sx, sy);
       g.lineTo(x1, y1);
       g.closePath();
-      g.fillStyle = lit[i] ? P.core : leftLit ? P.main : P.core;
-      if (!lit[i] && leftLit) g.fillStyle = P.deep;
+      // The shaded half, lit too while the light runs over it.
+      g.fillStyle = lit[i] ? P.core : P.main;
       g.fill();
       g.beginPath();
       g.moveTo(x0, y0);
@@ -1631,12 +1631,12 @@ const stillSkin: SpellVisual = {
       k.glow(k.at(k.caster, 0.6), 9, 0.5 * seg(t, 0.2, 0.5));
     },
     hit: (k) => {
-      shatterBurst(k, k.at(k.caster, 0.55), 14, undefined, 0.8);
+      shatterBurst(k, k.at(k.caster, 0.55), 8, undefined, 0.7);
       k.flash(0.04);
     },
     impact: { secs: 0.5, draw: (k, u) => {
       k.ring(k.caster, 0.25 + 0.7 * easeOut(u), { band: 0.07 * (1 - u), alpha: 0.9 * (1 - u), glow: 0.5 });
-      k.flare(k.chest(), 10 * (1 - u * 0.5), flashOf(u, 0.1), P.core);
+      k.flare(k.chest(), 6 * (1 - u * 0.5), flashOf(u, 0.1), P.core);
       k.light(k.caster, 2.5, 0.6 * (1 - u));
     } },
     // The plates set hard, a light running over them now and then; they flake away when it is over.
@@ -1786,7 +1786,8 @@ function massLines(k: FxScene, c: { x: number; y: number }): P3[][] {
   const out: P3[][] = [];
   for (let i = 0; i < MASS_ARMS; i++) {
     const an = (i / MASS_ARMS) * TAU + (hashOf(k.seed + 90, i) - 0.5) * 0.4;
-    out.push(cracked(k, c, { x: c.x + Math.cos(an) * MASS_R, y: c.y + Math.sin(an) * MASS_R }, 90 + i, 8, 0.2));
+    // From a little way out, so the cracks start at the palms rather than running up through the caster.
+    out.push(cracked(k, { x: c.x + Math.cos(an) * 0.25, y: c.y + Math.sin(an) * 0.25 }, { x: c.x + Math.cos(an) * MASS_R, y: c.y + Math.sin(an) * MASS_R }, 90 + i, 8, 0.2));
   }
   return out;
 }
