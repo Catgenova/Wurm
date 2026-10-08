@@ -68,7 +68,7 @@ import { kilnCentre, type PlacedKiln } from '../game/kiln';
 import { furnitureCentre, furnitureDef, type PlacedFurniture, facingOf as pieceFacing, furnitureFootprint } from '../game/furniture';
 import { UNSEEN, VISIBLE } from '../game/vision';
 import { DAWN, DUSK } from '../game/game';
-import { clothInWind, crewOrder, deviceOf, drawFurniture, drawFurnitureLive, driverOn, furnitureHoles, reinsTo, rowedPiece, furnitureSpan, FURNITURE_HEIGHT, glowsAtNight, headingView, mossTrim, PIECE_STAGES, pieceView, planterTrim, roseTrim, type Air, type Crew, type PieceView } from './furniture';
+import { clothInWind, crewOrder, deviceOf, drawFurniture, drawFurnitureLive, driverOn, furnitureHoles, helmSeat, reinsTo, rowedPiece, furnitureSpan, FURNITURE_HEIGHT, glowsAtNight, headingView, mossTrim, PIECE_STAGES, pieceView, planterTrim, roseTrim, type Air, type Crew, type PieceView } from './furniture';
 import { roseStage } from '../game/roses';
 import { fieldRate } from '../game/growth';
 import { dyeOf } from '../game/dyestuffs';
@@ -322,22 +322,25 @@ interface Entity {
 /**
  * Where the people on a hull stand, for baking her in layers round them
  * (`Crew` in `./furniture`): her helm first, then each passenger's place, in
- * her own units. Only a hull with a deck of her own to stand on has one --
- * a rowing boat's or a sailing boat's helm sits in her middle, under
- * nothing -- and only one of those is worth a picture per person.
+ * her own units. A hull with a deck of her own to stand on has one, and so
+ * does the sailing boat, whose helmsman sits aft under her mast and sail
+ * (`helmSeat`): drawn after the whole of her, he was drawn over the mast and
+ * the sail from forward, where they are nearer you than he is. A rowing
+ * boat's helm sits in her middle under nothing, and is drawn after her.
  */
 const crews = new Map<string, Crew | null>();
 function crewOf(kind: string): Crew | null {
   let c = crews.get(kind);
   if (c === undefined) {
     const boat = furnitureDef(kind).boat;
+    const sat = helmSeat(kind);
     c = boat && (boat.helm || boat.deck?.length) ? {
       tall: FIGURE_TOP / HEIGHT_SCALE,
       at: [
         [(boat.helm?.[0] ?? 0) * UNITS_PER_TILE, (boat.helm?.[1] ?? 0) * UNITS_PER_TILE, boat.seat / HEIGHT_SCALE],
         ...(boat.deck ?? []).map(([along, across]): [number, number, number] => [along * UNITS_PER_TILE, across * UNITS_PER_TILE, (boat.waist ?? boat.seat) / HEIGHT_SCALE]),
       ],
-    } : null;
+    } : sat ? { tall: FIGURE_TOP / HEIGHT_SCALE, at: [sat] } : null;
     crews.set(kind, c);
   }
   return c;
@@ -3954,7 +3957,12 @@ export class Renderer {
       } });
     };
     if (f.helm) aboard(f.helm, 0, () => this.game.helmSpot(f), boat.seat, !!boat.helm);
-    if (this.helming === f) hands.push({ spot: 0, take: (sy) => this.onDeck(this.take('player', x, y, fe.sx, sy, null), f, this.game.helmSpot(f), boat.seat * zoom, true) });
+    if (this.helming === f) hands.push({ spot: 0, take: (sy) => {
+      const e = this.take('player', x, y, fe.sx, sy, null);
+      this.onDeck(e, f, this.game.helmSpot(f), boat.seat * zoom, !!boat.helm);
+      // A helm with nowhere to stand at it is sat at, at her tiller, as when she had no layers.
+      if (!boat.helm) this.seatOn(e, f, zoom);
+    } });
     if (me.aboard === f.id) hands.push({ spot: me.seat ?? 0, take: (sy) => this.onDeck(this.take('player', x, y, fe.sx, sy, null), f, [me.x, me.y], waist * zoom, true) });
     for (const r of f.riders ?? []) aboard(r.who, r.seat, (peer) => this.game.roster.drawnAt(peer), waist, true);
 
