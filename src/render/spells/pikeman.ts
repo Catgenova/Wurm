@@ -71,7 +71,7 @@ function reachHeld(k: FxScene): number {
  */
 const STAFF_BACK = [0, 1, 0, 0, 0, 1, 0, 0];
 const STAFF_BACK_BY = -8;
-const STAFF_OUT = [10, 22, 10, 10, 10, 22, 10, 10];
+const STAFF_OUT = [10, 22, 10, 10, 10, 32, 10, 10];
 const STAFF_LEAST = [0, 0, 22, 0, 0, 0, 22, 0];
 /** A spear's lean forward in the fist, and how far its point is past the fist, in height units (figure.ts `spear`). */
 const SPEAR_LEAN = 7;
