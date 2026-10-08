@@ -1,0 +1,207 @@
+/**
+ * How every spell is cast and what it looks like.
+ *
+ * A spell is drawn twice over: on the caster, as a cast -- a pose the body
+ * goes through, wound up, let go and recovered from -- and in the world, as
+ * effects: at the caster while it is cast, along the way to what it was cast
+ * at, where it lands, and lingering there for as long as what it did lasts.
+ * Both are a `SpellVisual`, one per spell, kept in this folder a group to a
+ * file:
+ *
+ *   blade.ts berserker.ts pikeman.ts archer.ts skirmisher.ts chirurgeon.ts
+ *   beastmaster.ts kindler.ts binder.ts warder.ts      the fighting trades
+ *   blessing.ts justice.ts chaos.ts                    the patrons
+ *
+ * (the six arcane spells -- ember, pyre, snare, stillfield, aegis, bulwark --
+ * are in kindler.ts, binder.ts and warder.ts). Each file exports its palette
+ * and a record of its spells' visuals by spell id. Every spell starts as a
+ * stand-in (`placeholder`, from `./generic`), picked by how it is cast
+ * (`CastKind`) and drawn in its group's colours; drawing a spell properly is
+ * replacing its line in its own file with a visual of its own. Nobody else's
+ * file is touched, and neither is this one or the kit.
+ *
+ * ## A visual
+ *
+ *     blade_lunge: {
+ *       cast: {
+ *         timing: { secs: 0.9, release: 0.45 },
+ *         pose: (r, t, c) => { ... write the Rig at t, nought to one over the cast ... },
+ *       },
+ *       fx: {
+ *         charge: (k, t) => { ... at the caster while it is cast ... },
+ *         release: (k) => { ... once, the moment it leaves the hand ... },
+ *         travel: { secs: (tiles) => tiles * 0.05, draw: (k, u) => { ... on its way, u nought to one ... } },
+ *         hit: (k) => { ... once, the moment it lands ... },
+ *         impact: { secs: 0.6, draw: (k, u) => { ... where it landed ... } },
+ *         linger: { draw: (k, age, left) => { ... for as long as it lasts ... } },
+ *       },
+ *     },
+ *
+ * Every part is optional. The times run off the cast's start: the pose plays
+ * over `timing.secs`; the spell leaves the hand at `release` of the way through
+ * it; with a `travel` it lands that many seconds later, without one at once;
+ * `impact` plays from the landing; `linger` from the landing for the spell's
+ * `lasts` (its `secs`, or how long it holds -- see `SpellInfo`) or the
+ * `secs` it gives itself.
+ *
+ * ### The pose
+ *
+ * `pose(r, t, c)` writes the body's `Rig` (render/figure.ts: degrees per joint,
+ * `arm[k]` = [forward, out, turned in] with k = 1 the right; `elbow[k]` bend;
+ * `spine`/`chest`/`neck`/`head` = [pitch, roll, yaw], a positive pitch leaning
+ * back; `leg`, `knee`, `open[k]` for an open hand, `wield` to have a weapon in
+ * the right fist follow the forearm through a blow). Write the pose as it is at
+ * full strength: the stage blends into it over the first `blendIn` and out of
+ * it over the last `blendOut` of the cast (unless `blend: false`), so a cast
+ * never snaps. While the caster walks, swims or drives only the arms and the
+ * trunk are taken from it. The body is turned to face what it is cast at
+ * before the cast starts, so "ahead" is at the target.
+ *
+ * ### The effects
+ *
+ * Every `fx` function gets `k`, an `FxScene` (`./kit`): `k.caster`,
+ * `k.target` (the caster again for a spell on oneself) and `k.spot` (where it
+ * lands on the ground), `k.hand()`, `k.chest()`, `k.head()`, `k.heart(target)`,
+ * `k.weaponAt(len)`, `k.local(body, right, ahead, up)`, `k.fx` (the spell's own
+ * numbers: `k.fx.reach`, `k.fx.secs` ...), `k.state` for anything a cast keeps
+ * between frames, and every shape the kit has: `ring`, `disc`, `sigil`,
+ * `scorch` on the ground; `orb`, `bolt`, `beam`, `ribbon`, `slash`, `shell`,
+ * `pillar`, `shards`, `mark` in the world; `glow`, `flare` as light; `light`
+ * for the night; `burst` and `emit` for particles; `flash` for the screen.
+ * They are called afresh every frame and draw only that frame.
+ *
+ * ## Seeing one
+ *
+ *     node /home/user/Wurm/node_modules/.cache/anim/spell.mjs --root <worktree> --spell blade_lunge \
+ *       --facing 1 --frames 10 --zoom 4 --target creature --out /path/sheet.png
+ *
+ * draws a sheet of frames through the cast -- the caster, a stand-in target at
+ * the right distance, every effect -- on a patch of ground (`--target`
+ * creature | player | tile | self; `--night 1` for the dark, `--fast 1` for
+ * fast graphics, `--secs` to run on past the cast for what lingers). In the
+ * game, `wurm.spell('blade_lunge')` in the console plays it from you at
+ * whatever is under the cursor, with no island needed (`?alone` works), and
+ * `wurm.spells` lists every id.
+ *
+ * SPELLS.md, beside the animation brief, is the long form of all of this for
+ * whoever draws the spells: the palettes, the conventions, the budgets.
+ */
+import { castPosesBy, weaponCarry, type FigurePose, type Rig } from '../figure';
+import type { FxScene, SpellPalette } from './kit';
+import type { CastKind, SpellGroup, SpellInfo } from './info';
+import { BLADE } from './blade';
+import { BERSERKER } from './berserker';
+import { PIKEMAN } from './pikeman';
+import { ARCHER } from './archer';
+import { SKIRMISHER } from './skirmisher';
+import { CHIRURGEON } from './chirurgeon';
+import { BEASTMASTER } from './beastmaster';
+import { KINDLER } from './kindler';
+import { BINDER } from './binder';
+import { WARDER } from './warder';
+import { BLESSING } from './blessing';
+import { JUSTICE } from './justice';
+import { CHAOS } from './chaos';
+
+export type { CastKind, SpellGroup, SpellInfo };
+export { ALL_SPELL_IDS, spellInfo, spellsIn, SPELL_GROUPS } from './info';
+
+/** When a cast's moments fall: all of it `secs` long, the spell let go at `release` of the way through. */
+export interface CastTiming {
+  /** Seconds, start of the wind-up to the end of the recovery. A quick blow is half a second; a great working two. */
+  secs: number;
+  /** Nought to one: when it leaves the hand, which is when a blow lands and when a bolt sets off. */
+  release: number;
+  /** Shares of the cast taken blending into the pose and back out of it. 0.12 and 0.25 when not given. */
+  blendIn?: number;
+  blendOut?: number;
+}
+
+/** What a pose is told besides the time. */
+export interface PoseCue {
+  timing: CastTiming;
+  /** Which of the eight ways the body is turned, as drawn: nought at the viewer, two to screen right. */
+  facing: number;
+  /** On the move: only the arms and the trunk will be kept. */
+  moving: boolean;
+  /** How what is in the right hand (or a bow, the left) is carried, or nothing. */
+  carry: 'fist' | 'staff' | 'bow' | 'shoulder' | null;
+}
+
+/** A cast's pose: write `r` as the body is `t` (nought to one) of the way through the cast. */
+export type CastPose = (r: Rig, t: number, c: PoseCue) => void;
+
+/** The effects, each part optional; see the top of this file for when each is called. */
+export interface SpellFx {
+  charge?: (k: FxScene, t: number) => void;
+  release?: (k: FxScene) => void;
+  travel?: { secs: (tiles: number) => number; draw: (k: FxScene, u: number) => void };
+  hit?: (k: FxScene) => void;
+  impact?: { secs: number; draw: (k: FxScene, u: number) => void };
+  /** `age` seconds since it landed and `left` to go; `secs` to last other than the spell's own `lasts`. */
+  linger?: { secs?: number; draw: (k: FxScene, age: number, left: number) => void };
+}
+
+export interface SpellVisual {
+  /** Whose colours. */
+  palette: SpellPalette;
+  cast: { timing: CastTiming; pose: CastPose; blend?: boolean };
+  fx: SpellFx;
+  /** A stand-in, until somebody draws it properly. */
+  placeholder?: boolean;
+}
+
+/** Every spell's visual by id, the thirteen files' records together. */
+export const SPELL_VISUALS = new Map<string, SpellVisual>();
+for (const group of [BLADE, BERSERKER, PIKEMAN, ARCHER, SKIRMISHER, CHIRURGEON, BEASTMASTER, KINDLER, BINDER, WARDER, BLESSING, JUSTICE, CHAOS]) {
+  for (const [id, v] of Object.entries(group)) SPELL_VISUALS.set(id, v);
+}
+export const visualOf = (id: string): SpellVisual | undefined => SPELL_VISUALS.get(id);
+
+/** How long a spell lingers once it has landed, in seconds: its own `linger.secs`, or what the spell lasts. */
+export function lingerSecs(v: SpellVisual, info: SpellInfo | undefined): number {
+  if (!v.fx.linger) return 0;
+  return v.fx.linger.secs ?? info?.lasts ?? 0;
+}
+
+/* ---- the cast on the body ------------------------------------------------------------ */
+
+type Deep = number | boolean | Deep[] | { [k: string]: Deep } | undefined;
+const copy = (v: Deep): Deep => (Array.isArray(v) ? v.map(copy) : v && typeof v === 'object' ? Object.fromEntries(Object.entries(v).map(([k, x]) => [k, copy(x)])) : v);
+/** `to`, `w` of the way from `from`: every number in it, however deep; a switch goes over at halfway. */
+function mixDeep(from: Deep, to: Deep, w: number): Deep {
+  if (typeof to === 'number') return (typeof from === 'number' ? from : 0) + (to - (typeof from === 'number' ? from : 0)) * w;
+  if (typeof to === 'boolean') return w >= 0.5 ? to : from ?? to;
+  if (Array.isArray(to)) return to.map((x, i) => mixDeep(Array.isArray(from) ? from[i] : undefined, x, w));
+  if (to && typeof to === 'object') {
+    const f = from && typeof from === 'object' && !Array.isArray(from) ? from : {};
+    const out: { [k: string]: Deep } = {};
+    for (const k of Object.keys(to)) out[k] = mixDeep(f[k], to[k], w);
+    return out;
+  }
+  return w >= 0.5 ? to : from;
+}
+
+const smooth = (u: number): number => { const v = Math.max(0, Math.min(1, u)); return v * v * (3 - 2 * v); };
+/** How much of the pose is the cast's at `t`: in over `blendIn`, out over `blendOut`. */
+export function castWeight(t: number, timing: CastTiming): number {
+  const a = timing.blendIn ?? 0.12, b = timing.blendOut ?? 0.25;
+  return smooth(a > 0 ? t / a : 1) * smooth(b > 0 ? (1 - t) / b : 1);
+}
+
+/** Lay the cast in `p.cast` over the pose the body was going to be in. Registered with the figure below. */
+export function castOver(r: Rig, p: FigurePose): void {
+  const cast = p.cast;
+  const v = cast && SPELL_VISUALS.get(cast.id);
+  if (!cast || !v) return;
+  const t = Math.max(0, Math.min(1, cast.t));
+  const base = v.cast.blend === false ? null : (copy(r as unknown as Deep) as unknown as Rig);
+  const carry = p.gear?.weapon ? weaponCarry(p.gear.weapon.id)?.carry ?? null : null;
+  v.cast.pose(r, t, { timing: v.cast.timing, facing: p.facing, moving: p.moving || p.swimming || !!p.driving, carry });
+  if (!base) return;
+  const w = castWeight(t, v.cast.timing);
+  const mixed = mixDeep(base as unknown as Deep, r as unknown as Deep, w) as unknown as Rig;
+  Object.assign(r, mixed);
+}
+
+castPosesBy(castOver);

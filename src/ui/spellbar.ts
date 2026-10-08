@@ -1,4 +1,6 @@
 import { PLAYER_ATTACKER } from '../game/creatures';
+import type { CastAt } from '../game/events';
+import { furnitureCentre } from '../game/furniture';
 import type { Game } from '../game/game';
 import {
   FAITH_SPELL_BY_ID, PATRON_AT, SCHOOL_NAMES, SPELL_BAR, SPELL_REACH, spellOnText, type SpellOn, type SpellSchool,
@@ -39,6 +41,34 @@ const barSpell = (id: string | null | undefined): BarSpell | undefined => {
   if (c) return { id, name: c.name, note: c.note, on: c.on, rest: c.rest, costs: c.cost > 0 ? `${percent(c.cost)} stamina` : 'no stamina' };
   return undefined;
 };
+
+/**
+ * What a spell went at, as it is drawn (`CastAt`): a person by who they are on
+ * the screen, the ground where you stand when no spot was chosen, a thing in
+ * your pack as yourself and a thing set down where it stands.
+ */
+export function castAtOf(g: Game, aim: SpellAim): CastAt {
+  switch (aim.kind) {
+    case 'self':
+    case 'item':
+      return { kind: 'self' };
+    case 'creature':
+      return { kind: 'creature', id: aim.id };
+    case 'player': {
+      const peer = g.roster.list().find((p) => p.uid === aim.uid);
+      return peer ? { kind: 'peer', id: peer.id, uid: aim.uid } : { kind: 'self' };
+    }
+    case 'placed': {
+      // Most things set down are furniture; a fire, a kiln or an anvil is drawn as a spell on you, near enough.
+      const f = g.furniture.get(aim.id);
+      if (!f) return { kind: 'self' };
+      const [x, y] = furnitureCentre(f);
+      return { kind: 'spot', x, y };
+    }
+    case 'area':
+      return aim.x !== undefined && aim.y !== undefined ? { kind: 'spot', x: aim.x, y: aim.y } : { kind: 'spot', x: g.player.x, y: g.player.y };
+  }
+}
 
 /** "8% stamina" as the start of a sentence. */
 const capitalFirst = (t: string): string => (t ? t[0].toUpperCase() + t.slice(1) : t);
@@ -155,10 +185,15 @@ export class SpellBar {
     this.menu(r.left, r.top, `Cast ${def.name} on`, this.aimItems(i, def));
   }
 
-  /** Call the spell in a slot at this. */
+  /** Call the spell in a slot at this; and once the island has taken it, draw it (`cast` event). */
   async castAt(i: number, aim: SpellAim): Promise<void> {
+    const spell = this.book.said?.bar[i] ?? null;
     const why = await this.book.cast(i, aim);
-    if (why) this.game.logMsg(why, 'error');
+    if (why) {
+      this.game.logMsg(why, 'error');
+      return;
+    }
+    if (spell) this.game.events.emit('cast', { spell, by: null, at: castAtOf(this.game, aim) });
   }
 
   /** "Cast ..." for every spell on the bar that takes this, for the menu of whatever it is. */

@@ -1780,10 +1780,10 @@ function kitFor(look: Look, lod = 1): Kit {
 
 /* ---- posing ------------------------------------------------------------------- */
 
-type Euler = [number, number, number];
+export type Euler = [number, number, number];
 
-/** A pose: every joint's turn, in degrees, and where the body is. */
-interface Rig {
+/** A pose: every joint's turn, in degrees, and where the body is. Exported for the spells' cast poses (`./spells`). */
+export interface Rig {
   at: V3;
   pelvis: Euler;
   spine: Euler;
@@ -1845,6 +1845,12 @@ interface Rig {
   carried: number;
   /** How much further it is turned about itself there, in degrees, to show its head to the viewer. */
   spin: number;
+  /**
+   * A weapon in the right fist carried by the forearm rather than set off the hips, this share of the way: a blow
+   * struck by a spell (`./spells`), where the swing of the arm has to be the swing of the blade. Nought or absent
+   * is the carry as it always was.
+   */
+  wield?: number;
 }
 
 function rest(): Rig {
@@ -1938,6 +1944,12 @@ export interface FigurePose {
   id?: string;
   /** What is worn and held, each piece drawn on the body in its own material, dye and rarity. */
   gear?: GearLook;
+  /**
+   * A spell part way through being cast: which, and how far through it, nought to one. What it does to the body
+   * is the spell's own (`./spells`, registered with `castPosesBy`), laid over whatever else the body is doing --
+   * over the arms and the trunk only while it walks, swims or drives.
+   */
+  cast?: { id: string; t: number };
 }
 
 /*
@@ -2955,6 +2967,7 @@ function rigOf(p: FigurePose, fr: Frame): Rig {
   // A hand with something in it is closed on it.
   if (held && !r.stowed) r.loose[held.carry === 'bow' ? 0 : held.carry === 'shoulder' ? r.carried : 1] = false;
   if (p.gear?.offhand && !r.stowed) r.loose[0] = false;
+  if (p.cast && castPoser) castOver(r, p, castPoser);
   return r;
 }
 
@@ -2995,6 +3008,41 @@ function carrying(r: Rig, held: Weapon | undefined, shield: boolean, g: number):
     r.arm[0][2] = L(0, 10);
     r.elbow[0] = L(34, 76) + 0.3 * e;
   }
+}
+
+/* ---- a spell being cast ------------------------------------------------------- */
+
+/** What lays a spell's cast over a pose: `./spells`, which registers itself so this file needs to know no spell. */
+let castPoser: ((r: Rig, p: FigurePose) => void) | null = null;
+export function castPosesBy(fn: ((r: Rig, p: FigurePose) => void) | null): void {
+  castPoser = fn;
+}
+
+/**
+ * The cast over the pose. On the move -- walking, swimming, driving -- only the arms and the trunk are the
+ * spell's: the legs, the hips and the body's height are put back as the motion had them, so a spell cast on the
+ * run neither stops the feet nor lifts them off the ground.
+ */
+function castOver(r: Rig, p: FigurePose, poser: (r: Rig, p: FigurePose) => void): void {
+  const moving = p.moving || p.swimming || !!p.driving;
+  const keep = moving ? {
+    at: r.at, pelvis: r.pelvis, leg: r.leg, knee: r.knee, foot: r.foot, flat: r.flat, lift: r.lift, sink: r.sink,
+    hover: r.hover, plant: r.plant, tail: r.tail,
+  } : null;
+  poser(r, p);
+  if (keep) Object.assign(r, keep);
+}
+
+/**
+ * Where a point in a bone's frame is, on a body posed so, in the body's own units from the middle of its feet:
+ * x to its right, y ahead of it, z up. For what a spell draws at a hand, the head or a weapon's point (`./spells`).
+ * Bones: pelvis, spine, chest, neck, head, arm0/1, elbow0/1, wrist0/1, hip0/1, knee0/1, ankle0/1 (0 the left).
+ */
+export function figureJoint(pose: FigurePose, bone: string, at: V3 = [0, 0, 0]): V3 {
+  const kit = kitFor(pose.look ?? DEFAULT_LOOK, 0.5);
+  const b = skeleton(kit.fr, rigOf(pose, kit.fr));
+  const xf = b[bone];
+  return xf ? place(xf, at) : [0, 0, 0];
 }
 
 /* ---- one pose into the next -------------------------------------------------- */
@@ -5688,6 +5736,20 @@ function aimed(bone: Xf, at: V3, dir: V3, out: V3): Xf {
   return { m: mm(bone.m, [x[0], y[0], z[0], x[1], y[1], z[1], x[2], y[2], z[2]]), t: place(bone, at) };
 }
 
+/**
+ * A weapon in the fist as the forearm carries it, `w` of the way from where the carry `xf` set it: its point
+ * ahead of the knuckles and a little down the arm, as a sword is held out at the end of a blow, and its flat
+ * square to the forearm. In the body's frame, from the fist.
+ */
+function wielded(xf: Xf, wrist: Xf, fist: V3, w: number): Xf {
+  const n = (v: V3): V3 => unit(v);
+  const mix = (a: V3, b: V3): V3 => n([a[0] + (b[0] - a[0]) * w, a[1] + (b[1] - a[1]) * w, a[2] + (b[2] - a[2]) * w]);
+  const col = (m: M3, i: number): V3 => [m[i], m[3 + i], m[6 + i]];
+  const dir = mix(col(xf.m, 2), n(mv(wrist.m, [0, 0.87, -0.5])));
+  const out = mix(col(xf.m, 0), n(mv(wrist.m, [1, 0, 0])));
+  return { m: aimed(ROOT, [0, 0, 0], dir, out).m, t: fist };
+}
+
 /** A frame turned by a matrix, whose columns are where its x, y and z go, at `at`. */
 const framed = (bone: Xf, at: V3, x: V3, y: V3, z: V3): Xf => ({ m: mm(bone.m, [x[0], y[0], z[0], x[1], y[1], z[1], x[2], y[2], z[2]]), t: place(bone, at) });
 
@@ -5937,6 +5999,8 @@ function wield(out: Part[], named: Map<string, Part[]>, r: Rig, b: Bones, gear: 
       let xf = aim(down);
       // Raised toward level, a step at a time, wherever that would put its point in the ground.
       for (let q = 0; q < 9 && place(xf, [0, 0, arm.to])[2] < 0.5; q++) xf = aim((down -= 8 * DEG));
+      // A blow struck by a spell: carried by the forearm, `wield` of the way, so the swing of the arm swings it.
+      if ((r.wield ?? 0) > 0) xf = wielded(xf, b.wrist1, fist, Math.min(1, r.wield ?? 0));
       const grip = bit(arm.grip, xf, 0.02);
       bit(arm.head, xf, 0.035);
       for (const h of named.get('hand1') ?? []) h.after = grip;
@@ -7178,9 +7242,12 @@ export function drawFigure(ctx: CanvasRenderingContext2D, sx: number, sy: number
   // Cut coarser at the sizes the island is played at: under one and a half, a lock of hair is a pixel or two.
   const kit = kitFor(look, zoom < 1.5 ? 0.5 : 1);
   const now = performance.now() / 1000;
-  const { rig: r, facing, changing } = pose.id
+  const settled = pose.id
     ? settle(pose.id, pose, rigOf(pose, kit.fr), now)
     : { rig: rigOf(pose, kit.fr), facing: (((pose.seat ? pose.facing : Math.round(pose.facing)) % 8) + 8) % 8, changing: false };
+  const { rig: r, facing } = settled;
+  // A cast moves every frame it lasts, so it is drawn every frame, as a blend or a turn is, and never from a stride's pictures.
+  const changing = settled.changing || !!pose.cast;
   // Most of a pixel however far out, and never more than three and a half however far in.
   const ink = opts.ink !== undefined ? opts.ink / zoom : Math.max(0.9 / zoom, 0.7);
   if (pose.id && opts.ink === undefined) {

@@ -11,7 +11,28 @@ export interface LogEntry {
   kind: LogKind;
 }
 
+/**
+ * A spell somebody cast, for the renderer to draw: which, by whom -- `by` a
+ * peer's id, or null for you -- and at what. Raised when the island said yes
+ * to your own cast, and when somebody else's browser says it said yes to
+ * theirs (`Island.castSeen`). Only drawn: nothing in the game reads it.
+ */
+export interface CastSeen {
+  spell: string;
+  by: number | null;
+  at: CastAt;
+}
+/** What a spell was cast at, as it is drawn: the caster, you, somebody else, a creature, or a spot on the ground. */
+export type CastAt =
+  | { kind: 'self' }
+  | { kind: 'you' }
+  | { kind: 'peer'; id: number; uid?: string }
+  | { kind: 'creature'; id: number }
+  | { kind: 'spot'; x: number; y: number };
+
 export type GameEvents = {
+  /** A spell was cast, by you or by somebody in sight: see `CastSeen`. */
+  cast: [seen: CastSeen];
   log: [entry: LogEntry];
   inventory: [];
   skill: [id: string, gain: number];

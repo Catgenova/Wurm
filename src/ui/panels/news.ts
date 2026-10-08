@@ -30,6 +30,7 @@ import { SWELL_RATE } from '../../render/water';
 import { WALK_FRAMES } from '../../render/figure';
 import { BEARD_ODDS } from '../../game/look';
 import { EMOTE_BY_ID } from '../../game/emotes';
+import { SPELL_VISUALS } from '../../render/spells';
 import { furnitureDef, liquidCapacity, POND_EVERY, type PlacedFurniture } from '../../game/furniture';
 import { billWords, countOf, type Item } from '../../game/items';
 import { COIN_METALS, coinPurity, INGOT_LUMPS, INGOT_WEIGHT, MOULD_BY_ID } from '../../game/metal';
@@ -1452,6 +1453,15 @@ export const NEWS: News[] = [
       'An arm holding a blade, spear or shield swings less than a free one and holds it off the leg.',
       `Standing still shifts the weight from foot to foot; waving and hopping were redone, and a hop lasts ${EMOTE_BY_ID.get('hop')!.seconds} seconds.`,
       'Swimming is a breaststroke with the body cut at the waterline, leaving rings behind; a driver sits on the seat of the cart, wagon or boat, holds the reins or pulls the oars.',
+    ],
+  },
+  {
+    n: 108,
+    day: '2026-10-08',
+    lines: () => [
+      `Every class, faith and arcane spell (${SPELL_VISUALS.size} of them) is drawn when the island accepts it: `
+        + 'the caster moves through a cast, and the spell shows on the way to its target, where it lands and for as long as it lasts. '
+        + 'Other people see your casts and you see theirs. A spell the island refuses draws nothing.',
     ],
   },
 ];
