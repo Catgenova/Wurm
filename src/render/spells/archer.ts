@@ -31,7 +31,7 @@
  */
 import type { CastPose, SpellVisual } from './index';
 import { spellInfo } from './info';
-import { arcAt, bump, clamp, easeOut, flashOf, lerp, mid3, seg, smooth, TAU, type Body, type FxScene, type P3, type SpellPalette } from './kit';
+import { arcAt, bump, clamp, easeIn, easeOut, flashOf, lerp, mid3, seg, smooth, TAU, type Body, type FxScene, type P3, type SpellPalette } from './kit';
 import { euler, one } from './poses';
 import { UNITS_PER_TILE } from '../iso';
 
@@ -108,9 +108,10 @@ function bowOf(k: FxScene, b: Body = k.caster): Bow | null {
   if (!span) return null;
   const grip = k.hand(0, b);
   const fwd = (byFacing(BOW_FWD, b.facing) * Math.PI) / 180, out = (byFacing(BOW_OUT, b.facing) * Math.PI) / 180;
-  // The bow's upright in the hips' frame, carried onto the island by the hips' own frame: two points of it, and the step between.
-  const o = toV(k.joint(b, 'pelvis', [0, 0, 0]));
-  const u = toV(k.joint(b, 'pelvis', [-Math.sin(out) * 4, Math.sin(fwd) * 4, Math.cos(out) * Math.cos(fwd) * 4]));
+  // The bow's upright in the hips' frame, carried onto the island by the body's own frame -- which the hips all but keep through a
+  // shot -- rather than by the posed hips, so that finding it costs no more than the hand does.
+  const o = toV(k.local(b, 0, 0, 0));
+  const u = toV(k.local(b, -Math.sin(out) * 4, Math.sin(fwd) * 4, Math.cos(out) * Math.cos(fwd) * 4));
   let up = sub(u, o);
   if (len(up) < 0.5) up = [0, 0, 1];
   up = unit(up);
@@ -1239,22 +1240,27 @@ export const ARCHER: Record<string, SpellVisual> = {
             const foot = k.on(b.x + Math.cos(an) * R, b.y + Math.sin(an) * R, 0);
             const v = clamp((age - i * 0.04) / fall);
             if (v <= 0) continue;
-            // Each ghost arrow from the wound down into the ground, leaning out, its shaft standing out of the turf when it is in.
-            const d = dirOf(at, foot);
-            const head = v < 1 ? mid3(at, foot, easeOut(v)) : foot;
-            arrow(k, head, d, { alpha: a * 0.95, fletch: GOLD, tip: PALETTE.core, glow: 0.6, sunk: v < 1 ? 0 : 0.25, bias: 1 });
+            // Each ghost arrow dropping from over the creature straight down into the turf beside its feet, and standing there as a
+            // tent peg does, its nock leant out away from what it holds.
+            const out = dirOf(k.on(b.x, b.y, 0), foot);
+            const from = along(along(foot, [0, 0, 1], 20), [out[0], out[1], 0], 3.5);
+            const d = dirOf(from, foot);
+            const head = v < 1 ? mid3(from, foot, easeIn(v)) : foot;
+            arrow(k, head, d, { alpha: a * 0.95, fletch: GOLD, tip: PALETTE.core, glow: 0.6, sunk: v < 1 ? 0 : 0.3, bias: 1 });
             if (v >= 1) {
               // The tether, taut from its nock to the body, shivering as the creature strains.
-              const nock = along(foot, d, -ARROW * 0.75);
+              const nock = along(foot, d, -ARROW * 0.95);
               const shiver = left > 0.25 ? Math.sin(k.now * 60 + i * 2) * 0.6 : 0;
               const mid = mid3(nock, at, 0.5);
-              k.ribbon([nock, { ...mid, z: mid.z + shiver }, at], { width: 1.1, taper: 'none', alpha: a * 0.9, main: GOLD, core: PALETTE.core, ink: GOLD_DEEP, glow: 0.4 });
+              k.ribbon([nock, { ...mid, z: mid.z + shiver }, at], { width: 1.5, taper: 'none', alpha: a * 0.9, main: GOLD, core: PALETTE.core, ink: GOLD_DEEP, glow: 0.4 });
               if (!k.state[`dug${i}`]) {
                 k.state[`dug${i}`] = 1;
                 k.burst(foot, 5, { kind: 'dust', colour: '#7d6e58', size: 2, life: [0.3, 0.6], speed: [0.1, 0.3], up: [2, 6], gravity: 3 });
               }
             }
           }
+          // A little gold light under it while it is held, so the stakes and the tethers read at night.
+          k.light(b, 1.3, 0.4 * a, GOLD);
           // Held: a gold band tight round the feet.
           k.ring(b, R * 0.7, { band: 0.04, alpha: 0.6 * a, dash: 3, turn: 0.2, main: GOLD, deep: GOLD_DEEP, glow: 0.3 });
           // Let go: the tethers snap in a spray of gold.
@@ -1424,7 +1430,7 @@ export const ARCHER: Record<string, SpellVisual> = {
           k.flare(at, 18 * (1 - u), flashOf(u, 0.05), PALETTE.core, Math.PI / 4);
           k.flare(along(at, d, 6), 10 * (1 - u), flashOf(u, 0.08), GOLD, 0);
           k.ring(k.target, 0.15 + 0.6 * easeOut(u), { band: 0.1 * (1 - u) + 0.02, alpha: 0.9 * (1 - u), main: GOLD, deep: GOLD_DEEP, glow: 0.6 });
-          k.light(at, 4, 0.9 * (1 - u), GOLD);
+          k.light(at, 2.6, 0.85 * (1 - u), GOLD);
         },
       },
     },
@@ -1551,7 +1557,7 @@ function brambles(k: FxScene, b: Body, grow: number, alpha: number, age: number)
   const R = brambleR(k);
   k.disc(b, R * 1.1, { alpha: 0.2 * alpha, main: PALETTE.ink, n: 9, turn: 0.4 });
   k.ring(b, R, { band: 0.035, alpha: 0.7 * alpha, dash: 2, turn: 0.3, glow: 0, main: PALETTE.deep, deep: PALETTE.ink });
-  const vines = k.fast ? 2 : 3;
+  const vines = k.fast ? 1 : 2;
   const high = b.tall * 0.3;
   for (let v = 0; v < vines; v++) {
     const a0 = (v / vines) * TAU + (k.seed % 11) * 0.5;
@@ -1568,7 +1574,7 @@ function brambles(k: FxScene, b: Body, grow: number, alpha: number, age: number)
     }
     wrap(k, b, pts, { width: 1.1, alpha, main: PALETTE.deep, core: PALETTE.main, glow: 0 });
   }
-  k.shards(b, { n: k.fast ? 4 : 6, r: R * 0.95, h: 1.8, grow, alpha, main: PALETTE.main, deep: PALETTE.deep, core: LEAVES[0], glow: 0 });
+  k.shards(b, { n: k.fast ? 3 : 5, r: R * 0.95, h: 1.8, grow, alpha, main: PALETTE.main, deep: PALETTE.deep, core: LEAVES[0], glow: 0 });
 }
 /** The pinning arrows' ring: a stride out from the creature's feet. */
 const pinR = (k: FxScene): number => Math.max(0.28, (k.target.wide / UNITS_PER_TILE) * 1.6 + 0.12);
