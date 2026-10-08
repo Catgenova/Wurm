@@ -7,6 +7,8 @@ import { FIGHT_BACK_STILL, FIGHT_QUIET } from '../../game/fight';
 import type { UIWindow } from '../windows';
 import { setUiSize, UI_SIZE_MAX, UI_SIZE_MIN, uiSizeShown } from '../screen';
 import { FAST_DPR, FRAME_CAPS, FULL_DPR } from '../../game/settings';
+import { LAYERS, TIMING_WINDOW, TRIAL_SECONDS } from '../../render/timings';
+import { listed, numberWord } from '../../game/words';
 
 interface Toggle {
   input: HTMLInputElement;
@@ -188,6 +190,28 @@ export class SettingsPanel {
       () => game.settings.frameCap,
       (v) => (game.settings.frameCap = v),
     );
+    add(
+      'Show drawing times',
+      `Under the frame rate: how long each frame takes, and how many milliseconds of it go on drawing the ground, ${listed(Object.keys(LAYERS))}, `
+        + `averaged over ${TIMING_WINDOW * 1000} milliseconds. A frame much longer than its drawing is waiting on the graphics chip.`,
+      () => game.settings.timings,
+      (v) => (game.settings.timings = v),
+    );
+    {
+      const row = document.createElement('div');
+      row.className = 'setting-row setting-look';
+      const text = document.createElement('span');
+      text.innerHTML = `<b>Measure each layer</b><small>Leaves each of ${listed(Object.keys(LAYERS))} out of the picture for ${numberWord(TRIAL_SECONDS)} second in turn, `
+        + `${numberWord((Object.keys(LAYERS).length + 2) * TRIAL_SECONDS)} seconds in all, and writes under the frame rate how many frames a second come without it. `
+        + 'Close this window first so it is your view being measured.</small>';
+      const go = document.createElement('button');
+      go.type = 'button';
+      go.className = 'tb-btn tb-small';
+      go.textContent = 'Measure';
+      go.addEventListener('click', () => game.measureDrawing?.());
+      row.append(text, go);
+      display.append(row);
+    }
     /*
      * How you look, which is chosen once on the account page and was never
      * offered again. The creator itself is a window of its own: a mirror and

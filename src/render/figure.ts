@@ -6046,10 +6046,11 @@ export const FIGURE_TOP: number = (() => {
  * A few hundred facets a frame for every person in view is what the island
  * could not afford; a picture a frame is what it always drew.
  *
- * At every size. From `STILL_BELOW` in, where each body is big enough to
- * see a stride hitch, it is drawn again twice as often and put down on a
- * whole device pixel, so it stays sharp; it was drawn afresh every frame
- * there, which is a few hundred facets a frame for a body standing still.
+ * At every size. From `STILL_BELOW` in it is put down on a whole device
+ * pixel, so it stays sharp. It was drawn again twice as often there too, which
+ * at that size is a picture as big as a tree remade every frame of a walk:
+ * seven milliseconds of a close view for one person standing in it. The rates
+ * are the same at every zoom now.
  */
 const STILL_BELOW = 2.5;
 
@@ -6101,10 +6102,9 @@ function drawStill(ctx: CanvasRenderingContext2D, sx: number, sy: number, zoom: 
     lately.since = now;
   }
   lately.ids.add(id);
-  // Something rare on them is drawn often enough for its glint to cross it smoothly.
   const close = zoom >= STILL_BELOW;
-  const rate = Math.min(Math.max(pose.emote ? 30 : STILL_RATE[doing(pose)] ?? 30, gearShines(pose.gear) ? SHINE_RATE : 0), lately.count > CROWD ? CROWD_RATE : Infinity)
-    * (close ? 2 : 1);
+  // Something rare on them is drawn often enough for its glint to cross it smoothly.
+  const rate = Math.min(Math.max(pose.emote ? 30 : STILL_RATE[doing(pose)] ?? 30, gearShines(pose.gear) ? SHINE_RATE : 0), lately.count > CROWD ? CROWD_RATE : Infinity);
   if (!st || st.key !== key || changing || now - st.at >= 1 / rate || now < st.at) {
     const k = zoom * dev;
     const w = Math.ceil((STILL_BOX.right - STILL_BOX.left) * k), h = Math.ceil((STILL_BOX.bottom - STILL_BOX.top) * k);

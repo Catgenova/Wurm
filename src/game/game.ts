@@ -3160,6 +3160,8 @@ export class Game {
   craftPrefsChanged?: () => void;
   /** The graphics settings changed: the screen is sized again for them. */
   graphicsChanged?: () => void;
+  /** Leave each layer of the picture out in turn and write down the frame rate without it (`Timings.measure`). */
+  measureDrawing?: () => void;
 
   /**
    * And the two fighting ones -- `fightStance` and `fightBack` -- for the same

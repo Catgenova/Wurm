@@ -13,6 +13,9 @@
  * anything.
  */
 
+/** How many times a second the sea's swell is painted afresh (`Renderer.drawSwell`); it is copied on, moved with the view, in between. */
+export const SWELL_RATE = 15;
+
 /** Tiles a second the swell travels at, in a full blow. */
 export const SWELL_SPEED = 1.25;
 

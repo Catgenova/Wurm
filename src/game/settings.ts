@@ -115,6 +115,8 @@ export const SETTING_DEFAULTS = {
    * and the small life.
    */
   graphics: 'full' as 'full' | 'fast',
+  /** Under the frame rate, the milliseconds a frame spends drawing each layer (`Timings`). */
+  timings: false,
 };
 
 export type Settings = typeof SETTING_DEFAULTS & {

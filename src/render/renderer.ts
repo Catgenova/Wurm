@@ -82,7 +82,7 @@ import { cropDef, type CropLook } from '../game/farming';
 import { crateCentre, crateKindOfItem, subtileOf, SUBTILES } from '../game/crates';
 import { HUNT_SIGHT, maxHealth, PLAYER_ATTACKER, SPECIES, type Creature } from '../game/creatures';
 import { rarityOf } from '../game/items';
-import { CREST_ALPHA, FOAM_WIDTH, foamAlpha, LONG_WAVE, SHORT_WAVE, SPRING_EDGE, SPRING_PALETTE, springLevel, SWELL_SPEED, swellAt, swellShow, TROUGH_ALPHA, WATER_LIT, WATER_PALETTE, waterLevel } from './water';
+import { CREST_ALPHA, FOAM_WIDTH, foamAlpha, LONG_WAVE, SHORT_WAVE, SPRING_EDGE, SPRING_PALETTE, springLevel, SWELL_RATE, SWELL_SPEED, swellAt, swellShow, TROUGH_ALPHA, WATER_LIT, WATER_PALETTE, waterLevel } from './water';
 import { Wakes } from './wake';
 import { foamTexture, SpringWater } from './ponds';
 import { drawFountain } from './fountain';
@@ -105,6 +105,21 @@ import { css, HAZE_REACH, rgba, skyAt, unknownInk, type Sky } from './sky';
  * rather than one per tree per frame.
  */
 const HAZE_STEPS = 6;
+/** The share of the screen's pixels the swell's gradients are worked out at, across and down (`drawSwell`). */
+const SWELL_RES = 0.5;
+/** The most bands of a tree's picture its sway is laid on in (`drawTree`); a gale on a tall tree takes a pixel and a bit between them. */
+const TREE_BANDS = 24;
+/** Device pixels of tree pictures kept between frames (`drawTree`): about forty-eight megabytes. */
+const TREE_PIXELS = 12_000_000;
+
+/** A tree drawn ready for the screen (`drawTree`), and where in it the foot is. */
+interface TreePicture {
+  cv: HTMLCanvasElement;
+  footX: number;
+  footY: number;
+  /** The frame it was last put down in. */
+  used: number;
+}
 /** How long a wall's or a roof's picture is kept before it is made again whatever happens (`baked`), in seconds. */
 const BAKE_LIFE = 0.5;
 /** Device pixels of wall and roof pictures kept before the lot go: about a hundred and twenty-eight megabytes. */
@@ -123,8 +138,6 @@ interface Baked {
   at: number;
   life: number;
 }
-/** The share of the screen's pixels the sea's swell is worked out at, across and down (`swellLayer`). */
-const SWELL_RES = 0.5;
 /** How many device pixels of tile edge pictures are kept before the lot go (`hems`): about sixty-four megabytes. */
 const HEM_PIXELS = 16_000_000;
 /** No one tile's edge picture is bigger than this; a tile that would be is drawn as it always was. */
@@ -152,6 +165,7 @@ import { PUFFS, PUFF_DRIFT, PUFF_RISE, puffAge, puffOf } from './smoke';
 import { CROWD, DROWNS, hemOf, ruffle, strew, strewLook, WADES, WADE_DEPTH, type Lobe } from './meadow';
 import { seam } from './seam';
 import { SWAY_MAX, swayAt } from './sway';
+import { Timings } from './timings';
 import { ColourPages, MarkPages } from './pages';
 import { trailMask, trailShape, type TrailShape } from './trails';
 import { clumpOf, FLOWER_COLOURS, flowerSprite, swayFrame, tileColour } from './flowers';
@@ -2764,13 +2778,19 @@ export class Renderer {
       this.hemFor = fit;
       this.forgetHems();
     }
+    this.timings.set(this, this.game.settings.timings);
+    this.timings.begin();
     try {
       this.renderFrame(dt);
     } finally {
       cam.cx = cx;
       cam.cy = cy;
+      this.timings.end(performance.now() / 1000);
     }
   }
+
+  /** Where the drawing went, layer by layer, while `Settings.timings` is on. */
+  readonly timings = new Timings();
 
   /** The fast graphics this frame (`Settings.graphics`): no swell, no haze, no small life. */
   private fast = false;
@@ -2990,6 +3010,7 @@ export class Renderer {
       this.scaledAt = zoom;
       this.scaled.clear();
       this.scaledSizes.clear();
+      this.forgetTreePictures();
     }
     const paved = zoom >= 0.75;
     /*
@@ -3119,6 +3140,7 @@ export class Renderer {
       forgetTrees();
       this.scaled.clear();
       this.scaledSizes.clear();
+      this.forgetTreePictures();
     }
     this.year = year;
     if (!this.fast) this.life.frame({
@@ -4539,73 +4561,11 @@ export class Renderer {
       // Anything standing up throws a shadow away from the sun, long at the
       // ends of the day and gone at noon. The sprite's own contact shadow does
       // the rest, which is why this can be thrown away entirely at midday.
-      if (this.shadow.alpha > 0.012) this.castShadow(ctx, ent.sx, ent.sy, (spr.ay - (spr.h - spr.ay)) * 0.5 * zoom + dh * 0.12);
       if (ent.kind === 'tree' || ent.kind === 'bush') {
-        const ready = this.atSize(spr.canvas, dw, dh);
-        /*
-         * Air between here and the back of the wood.
-         *
-         * Everything standing up was drawn at one strength whatever its
-         * distance, so the far rank of a wood came forward as hard as the
-         * near one and the whole thing flattened into a pattern. The screen
-         * is the depth here -- in this projection a thing further away is a
-         * thing higher up the picture -- so the top of the view is washed
-         * toward the sky and the bottom is left alone. It is the same trick
-         * the ground haze uses, and unlike the ground haze it has to keep
-         * working when somebody zooms in, which is exactly where a wood
-         * needed it most.
-         */
-        const far = Math.max(0, Math.min(1, 1 - (ent.sy + dh * 0.5) / (this.canvas.height * 0.82)));
-        // Rooted at the foot, leaning at the head: the shear is taken about
-        // the trunk, so the tree bends rather than slides. A lean that moves
-        // the crown less than half a pixel is not worth a transform to draw.
-        const bend = (swayAt(ent.x, ent.y, this.time, this.lean.force) * SWAY_MAX * (ent.kind === 'bush' ? 0.6 : 1)) / 2;
-        /*
-         * The lean this one grew with, as against the one the wind is putting
-         * on it this instant. Both are the same shear about the foot, so they
-         * add, and neither costs a second sprite.
-         *
-         * Nothing had one. Every tree on the island stood dead upright, which
-         * is the single thing that made a wood read as one stamp printed a
-         * hundred times however different the crowns were -- an array of
-         * uprights is an array whatever is on top of the posts. Up to about
-         * six degrees, its own for every tile, and either way.
-         */
-        const stand = (hash2(Math.round(ent.x), Math.round(ent.y), 9931) - 0.5) * 0.22;
-        /*
-         * Laid on thinner the further back it stands, so it takes up some of
-         * whatever is behind it -- the meadow low down, the wood's own far
-         * rank higher up, the sky over the top of all of it. In a picture
-         * made of flat colour that is the whole of atmosphere: contrast and
-         * chroma both come off with distance because the thing is literally
-         * part ground now, and it costs one number.
-         */
-        /*
-         * And a little off each tree on its own account, so no two of a
-         * species are quite the same weight of green. A canopy is one sprite
-         * per species per age however many hues the table carries, and sixty
-         * tiles of one hue in a frame reads as one flat colour -- this is a
-         * value jitter rather than a hue one, but against a ground it is the
-         * same thing: every tree takes a different amount of the floor up
-         * into itself.
-         */
-        // How far off it is, in steps, plus a little of its own so no two
-        // trees of a species carry quite the same weight of colour.
-        const own = 0.06 * hash2(Math.round(ent.x), Math.round(ent.y), 4231);
-        const step = Math.min(HAZE_STEPS, Math.round((far * 0.94 + own) * HAZE_STEPS));
-        const shown = step > 0 ? this.hazed(ready, step) : ready;
-        const shear = stand - this.lean.x * bend;
-        if (Math.abs(shear) * dh < 1.5) {
-          ctx.drawImage(shown, left, top, dw, dh);
-          continue;
-        }
-        ctx.save();
-        ctx.translate(ent.sx, ent.sy);
-        ctx.transform(1, 0, shear, 1, 0, 0);
-        ctx.drawImage(shown, left - ent.sx, top - ent.sy, dw, dh);
-        ctx.restore();
+        this.drawTree(ctx, ent, spr, zoom, grew);
         continue;
       }
+      if (this.shadow.alpha > 0.012) this.castShadow(ctx, ent.sx, ent.sy, (spr.ay - (spr.h - spr.ay)) * 0.5 * zoom + dh * 0.12);
       const ready = this.atSize(spr.canvas, dw, dh);
       this.paint(ctx, zoom, hovering ? 'hover' : 'none', 0, ent.sx, ent.sy, (g, px, py) => g.drawImage(ready, px - spr.ax * zoom, py - spr.ay * zoom, dw, dh));
       /*
@@ -4623,6 +4583,182 @@ export class Renderer {
     // Down a cellar it goes on once, over the whole of the cellar (`drawCellarView`).
     if (this.ghost && !this.inCellarPass) this.drawGhost(ctx, zoom, this.ghost);
   }
+
+  /**
+   * A tree or a bush, from a picture of it kept at exactly the size it is on
+   * the screen, already leaning the way it grew and already mixed toward the
+   * distance, put down on whole device pixels.
+   *
+   * It was rescaled and sheared afresh every frame for the wind, and those
+   * are the two dearest things a picture can be put down with: a straight
+   * copy of the same picture measured a seventh of the rescaled one and a
+   * fifteenth of the sheared one, and a close view of a wood was spending
+   * half its frame on nineteen trees. The wind is laid on over the top as a
+   * few bands of the picture, each a straight copy shifted along by the lean
+   * at its height -- the shear, a whole pixel at a time.
+   */
+  private drawTree(ctx: CanvasRenderingContext2D, ent: Entity, spr: Sprite, zoom: number, grew: number): void {
+    const dw = spr.w * zoom * grew;
+    const dh = spr.h * zoom * grew;
+    const left = ent.sx - spr.ax * zoom * grew;
+    const top = ent.sy - spr.ay * zoom * grew;
+    if (this.shadow.alpha > 0.012) this.castShadow(ctx, ent.sx, ent.sy, (spr.ay - (spr.h - spr.ay)) * 0.5 * zoom + dh * 0.12);
+    /*
+     * Air between here and the back of the wood.
+     *
+     * Everything standing up was drawn at one strength whatever its
+     * distance, so the far rank of a wood came forward as hard as the
+     * near one and the whole thing flattened into a pattern. The screen
+     * is the depth here -- in this projection a thing further away is a
+     * thing higher up the picture -- so the top of the view is washed
+     * toward the sky and the bottom is left alone. It is the same trick
+     * the ground haze uses, and unlike the ground haze it has to keep
+     * working when somebody zooms in, which is exactly where a wood
+     * needed it most.
+     */
+    const far = Math.max(0, Math.min(1, 1 - (ent.sy + dh * 0.5) / (this.canvas.height * 0.82)));
+    // Rooted at the foot, leaning at the head: the shear is taken about
+    // the trunk, so the tree bends rather than slides. A lean that moves
+    // the crown less than half a pixel is not worth a transform to draw.
+    const bend = (swayAt(ent.x, ent.y, this.time, this.lean.force) * SWAY_MAX * (ent.kind === 'bush' ? 0.6 : 1)) / 2;
+    /*
+     * The lean this one grew with, as against the one the wind is putting
+     * on it this instant. Both are the same shear about the foot, so they
+     * add, and neither costs a second sprite.
+     *
+     * Nothing had one. Every tree on the island stood dead upright, which
+     * is the single thing that made a wood read as one stamp printed a
+     * hundred times however different the crowns were -- an array of
+     * uprights is an array whatever is on top of the posts. Up to about
+     * six degrees, its own for every tile, and either way.
+     */
+    const stand = (hash2(Math.round(ent.x), Math.round(ent.y), 9931) - 0.5) * 0.22;
+    /*
+     * Laid on thinner the further back it stands, so it takes up some of
+     * whatever is behind it -- the meadow low down, the wood's own far
+     * rank higher up, the sky over the top of all of it. In a picture
+     * made of flat colour that is the whole of atmosphere: contrast and
+     * chroma both come off with distance because the thing is literally
+     * part ground now, and it costs one number.
+     */
+    /*
+     * And a little off each tree on its own account, so no two of a
+     * species are quite the same weight of green. A canopy is one sprite
+     * per species per age however many hues the table carries, and sixty
+     * tiles of one hue in a frame reads as one flat colour -- this is a
+     * value jitter rather than a hue one, but against a ground it is the
+     * same thing: every tree takes a different amount of the floor up
+     * into itself.
+     */
+    // How far off it is, in steps, plus a little of its own so no two
+    // trees of a species carry quite the same weight of colour.
+    const own = 0.06 * hash2(Math.round(ent.x), Math.round(ent.y), 4231);
+    const step = Math.min(HAZE_STEPS, Math.round((far * 0.94 + own) * HAZE_STEPS));
+    const sway = -this.lean.x * bend;
+    const t = ctx.getTransform();
+    // While the zoom is moving every size is new every frame, and a picture made for one frame is wasted: drawn as it was.
+    if (this.hemSteady && t.b === 0 && t.c === 0 && t.a === t.d) {
+      const wDev = Math.round(dw * t.a);
+      const hDev = Math.round(dh * t.a);
+      const pic = wDev > 0 && hDev > 0 ? this.treePicture(spr, wDev, hDev, step, Math.round(stand * hDev)) : null;
+      if (pic) {
+        const x = Math.round(t.a * ent.sx + t.e - pic.footX);
+        const y = Math.round(t.d * ent.sy + t.f - pic.footY);
+        const cv = pic.cv;
+        ctx.save();
+        ctx.setTransform(1, 0, 0, 1, 0, 0);
+        if (Math.abs(sway) * hDev < 0.5) ctx.drawImage(cv, x, y);
+        else {
+          // Tall enough that each band is a pixel over from the next, and never more than `TREE_BANDS` of them.
+          const band = Math.max(Math.ceil(1 / Math.abs(sway)), Math.ceil(hDev / TREE_BANDS));
+          for (let y0 = 0; y0 < hDev; y0 += band) {
+            const y1 = Math.min(hDev, y0 + band);
+            const off = Math.round(sway * ((y0 + y1) / 2 - pic.footY));
+            ctx.drawImage(cv, 0, y0, cv.width, y1 - y0, x + off, y + y0, cv.width, y1 - y0);
+          }
+        }
+        ctx.restore();
+        return;
+      }
+    }
+    const ready = this.atSize(spr.canvas, dw, dh);
+    const shown = step > 0 ? this.hazed(ready, step) : ready;
+    const shear = stand + sway;
+    if (Math.abs(shear) * dh < 1.5) {
+      ctx.drawImage(shown, left, top, dw, dh);
+      return;
+    }
+    ctx.save();
+    ctx.translate(ent.sx, ent.sy);
+    ctx.transform(1, 0, shear, 1, 0, 0);
+    ctx.drawImage(shown, left - ent.sx, top - ent.sy, dw, dh);
+    ctx.restore();
+  }
+
+  /** The tree pictures (`drawTree`), most lately used last, and how many pixels they hold between them. */
+  private treePics = new Map<string, TreePicture>();
+  private treePixels = 0;
+  private spriteIds = new WeakMap<HTMLCanvasElement, number>();
+
+  private forgetTreePictures(): void {
+    this.treePics.clear();
+    this.treePixels = 0;
+  }
+
+  /**
+   * `spr` at `w` by `h` device pixels, sheared about its foot so its crown
+   * stands `lean` pixels over, and mixed `haze` steps toward the distance.
+   * Null when the pictures in use this frame already fill `TREE_PIXELS`.
+   */
+  private treePicture(spr: Sprite, w: number, h: number, haze: number, lean: number): TreePicture | null {
+    let id = this.spriteIds.get(spr.canvas);
+    if (id === undefined) {
+      id = ++this.spriteCount;
+      this.spriteIds.set(spr.canvas, id);
+    }
+    const key = `${id}|${w}|${h}|${haze}|${lean}`;
+    const had = this.treePics.get(key);
+    if (had) {
+      had.used = this.frameNo;
+      this.treePics.delete(key);
+      this.treePics.set(key, had);
+      return had;
+    }
+    const s = lean / h;
+    const fx = (spr.ax / spr.w) * w;
+    const fy = (spr.ay / spr.h) * h;
+    const lo = Math.min(0, -s * fy, s * (h - fy));
+    const hi = Math.max(0, -s * fy, s * (h - fy));
+    const ox = Math.ceil(-lo);
+    const cw = Math.ceil(w + ox + hi) + 1;
+    // Room made by putting away what has gone longest unused, and never what this frame has drawn already.
+    while (this.treePixels + cw * h > TREE_PIXELS) {
+      const first = this.treePics.entries().next();
+      if (first.done || first.value[1].used === this.frameNo) return null;
+      this.treePics.delete(first.value[0]);
+      this.treePixels -= first.value[1].cv.width * first.value[1].cv.height;
+    }
+    const cv = document.createElement('canvas');
+    cv.width = cw;
+    cv.height = h;
+    const g = cv.getContext('2d');
+    if (!g) return null;
+    g.setTransform(1, 0, s, 1, ox - s * fy, 0);
+    g.drawImage(spr.canvas, 0, 0, w, h);
+    if (haze > 0) {
+      g.setTransform(1, 0, 0, 1, 0, 0);
+      g.globalCompositeOperation = 'source-atop';
+      g.globalAlpha = (haze / HAZE_STEPS) * 0.62;
+      g.fillStyle = css(this.sky.far);
+      g.fillRect(0, 0, cw, h);
+    }
+    const pic: TreePicture = { cv, footX: ox + fx, footY: fy, used: this.frameNo };
+    this.treePics.set(key, pic);
+    this.treePixels += cw * h;
+    return pic;
+  }
+
+  private spriteCount = 0;
 
   /** The ghost of what is being set down, over everything, and washed red where it will not go. */
   private drawGhost(ctx: CanvasRenderingContext2D, zoom: number, ghost: Ghost): void {
@@ -11872,45 +12008,68 @@ export class Renderer {
    */
   private drawSwell(ctx: CanvasRenderingContext2D, zoom: number): void {
     if (!this.drewWater) return;
+    // A frame with buildings standing in the water lays its swell in pieces round them (`layWater`): each piece laid straight on as it comes.
+    if (this.wetPierBuildings) {
+      this.swellBand(ctx, zoom, 0, LONG_WAVE, CREST_ALPHA, 1, this.seaPath);
+      this.swellBand(ctx, zoom, 0.55, SHORT_WAVE, TROUGH_ALPHA * 0.7, 0.62, this.seaPath);
+      return;
+    }
+    /*
+     * Otherwise it is a picture of its own, already cut to the sea, made
+     * `SWELL_RATE` times a second and copied on in between, moved with the
+     * view so it stays where the sea is. Painting the two gradients over
+     * the sea every frame cost more than the trees: half a close view of open
+     * water, a frame. The waves are slow enough that the steps between one
+     * picture and the next do not show.
+     */
+    const cam = this.camera;
+    const t = ctx.getTransform();
+    const dev = t.a;
     const W = this.canvas.width, H = this.canvas.height;
+    const ax = cam.worldToScreenX(0, 0), ay = cam.worldToScreenY(0, 0, 0);
+    const fit = `${zoom}|${cam.rotation}|${W}|${H}|${dev}|${t.e}|${t.f}`;
+    let pic = this.swellPic;
+    // Never two frames running, so a slow machine is not painting it afresh every frame it draws.
+    if (!pic || pic.fit !== fit || Math.abs(ax - pic.ax) > W / 4 || Math.abs(ay - pic.ay) > H / 4
+      || ((this.time - pic.at >= 1 / SWELL_RATE || this.time < pic.at) && this.frameNo - pic.frame > 1)) {
+      const full = pic?.cv ?? document.createElement('canvas');
+      const half = pic?.half ?? document.createElement('canvas');
+      if (full.width !== ctx.canvas.width || full.height !== ctx.canvas.height) {
+        full.width = ctx.canvas.width;
+        full.height = ctx.canvas.height;
+      }
+      // The two gradients worked out at `SWELL_RES` of the pixels: neither has an edge of its own to keep sharp.
+      const sw = Math.max(1, Math.ceil(full.width * SWELL_RES)), sh = Math.max(1, Math.ceil(full.height * SWELL_RES));
+      if (half.width !== sw || half.height !== sh) {
+        half.width = sw;
+        half.height = sh;
+      }
+      const h = half.getContext('2d') as CanvasRenderingContext2D;
+      h.setTransform(1, 0, 0, 1, 0, 0);
+      h.clearRect(0, 0, sw, sh);
+      h.setTransform(t.a * SWELL_RES, 0, 0, t.d * SWELL_RES, t.e * SWELL_RES, t.f * SWELL_RES);
+      this.swellBand(h, zoom, 0, LONG_WAVE, CREST_ALPHA, 1, null);
+      this.swellBand(h, zoom, 0.55, SHORT_WAVE, TROUGH_ALPHA * 0.7, 0.62, null);
+      // And cut to the sea at the screen's own, which is where the edge is: the shore.
+      const g = full.getContext('2d') as CanvasRenderingContext2D;
+      g.setTransform(1, 0, 0, 1, 0, 0);
+      g.globalCompositeOperation = 'source-over';
+      g.clearRect(0, 0, full.width, full.height);
+      g.drawImage(half, 0, 0, full.width, full.height);
+      g.setTransform(t);
+      g.globalCompositeOperation = 'destination-in';
+      g.fillStyle = '#000';
+      g.fill(this.seaPath);
+      pic = this.swellPic = { cv: full, half, fit, at: this.time, frame: this.frameNo, ax, ay };
+    }
     ctx.save();
-    ctx.clip(this.seaPath);
-    ctx.drawImage(this.swellLayer(zoom), 0, 0, W, H);
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.drawImage(pic.cv, Math.round((ax - pic.ax) * dev), Math.round((ay - pic.ay) * dev));
     ctx.restore();
   }
 
-  /**
-   * The two trains of waves, laid on a layer of their own at `SWELL_RES` of
-   * the screen once a frame, and that layer laid over the sea.
-   *
-   * They were two gradients the size of the screen, each up to a hundred and
-   * forty stops, laid straight onto the sea -- and laid again in front of
-   * every building on piers in the water (`layWater`). Neither has an edge of
-   * its own to keep sharp: the edge is the shore, and the shore is the clip,
-   * which stays at the screen's own resolution. So they are worked out at a
-   * quarter of the pixels, once, and copied.
-   */
-  private swellLayer(zoom: number): HTMLCanvasElement {
-    if (this.swell && this.swellFrame === this.frameNo) return this.swell;
-    const W = this.canvas.width, H = this.canvas.height;
-    const sw = Math.max(1, Math.ceil(W * SWELL_RES)), sh = Math.max(1, Math.ceil(H * SWELL_RES));
-    const cv = this.swell ?? (this.swell = document.createElement('canvas'));
-    if (cv.width !== sw || cv.height !== sh) {
-      cv.width = sw;
-      cv.height = sh;
-    }
-    const g = cv.getContext('2d') as CanvasRenderingContext2D;
-    g.setTransform(1, 0, 0, 1, 0, 0);
-    g.clearRect(0, 0, sw, sh);
-    g.setTransform(sw / W, 0, 0, sh / H, 0, 0);
-    this.swellBand(g, zoom, 0, LONG_WAVE, CREST_ALPHA, 1);
-    this.swellBand(g, zoom, 0.55, SHORT_WAVE, TROUGH_ALPHA * 0.7, 0.62);
-    this.swellFrame = this.frameNo;
-    return cv;
-  }
-
-  private swell: HTMLCanvasElement | null = null;
-  private swellFrame = -1;
+  /** The swell as last made (`drawSwell`): its picture, the view it was made for, when, and where the world's corner was on the screen. */
+  private swellPic: { cv: HTMLCanvasElement; half: HTMLCanvasElement; fit: string; at: number; frame: number; ax: number; ay: number } | null = null;
 
   /**
    * Which lines of the ground this frame have a tile of a building standing
@@ -11965,7 +12124,8 @@ export class Renderer {
   }
 
   /** One train of waves: a wavelength, a lean off the wind, and a speed. */
-  private swellBand(ctx: CanvasRenderingContext2D, zoom: number, lean: number, waveTiles: number, amp: number, rate: number): void {
+  /** One train of waves as a gradient, over `area` or over the whole screen. */
+  private swellBand(ctx: CanvasRenderingContext2D, zoom: number, lean: number, waveTiles: number, amp: number, rate: number, area: Path2D | null): void {
     const cam = this.camera;
     const a = Math.atan2(this.surf.dirY, this.surf.dirX) + lean;
     const wdx = Math.cos(a);
@@ -12020,7 +12180,8 @@ export class Renderer {
       g.addColorStop(t, w >= 0 ? `rgba(226,242,252,${alpha.toFixed(3)})` : `rgba(4,22,52,${alpha.toFixed(3)})`);
     }
     ctx.fillStyle = g;
-    ctx.fillRect(0, 0, W, H);
+    if (area) ctx.fill(area);
+    else ctx.fillRect(0, 0, W, H);
   }
 
   /**

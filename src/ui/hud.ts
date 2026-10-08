@@ -782,7 +782,11 @@ export class Hud {
     }
     const mobs = this.game.creatures.ticked;
     const watched = this.game.settings.fog ? ` · ${mobs.thought}/${mobs.near + mobs.far + mobs.asleep} mobs` : '';
-    this.say(this.fpsEl, `${VERSION} · ${fps} fps · ${renderer.tilesDrawn} tiles${watched} · ${renderer.camera.zoom.toFixed(2)}×`);
+    // And, asked for, a frame's length beside the time it spent drawing: much longer than its drawing is a frame waiting on the graphics chip.
+    const t = renderer.timings;
+    const timed = !this.game.settings.timings ? ''
+      : (t.line && fps > 0 ? `\nframe ${(1000 / fps).toFixed(1)} ms · ${t.line}` : '') + (t.measuring ?? t.measured ? `\n${t.measuring ?? t.measured}` : '');
+    this.say(this.fpsEl, `${VERSION} · ${fps} fps · ${renderer.tilesDrawn} tiles${watched} · ${renderer.camera.zoom.toFixed(2)}×${timed}`);
     const svg = this.compass.firstElementChild as HTMLElement | null;
     if (svg) svg.style.transform = `rotate(${renderer.camera.northAngle().toFixed(1)}deg)`;
     // What is in your hands and how much armour is on you.

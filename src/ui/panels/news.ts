@@ -25,6 +25,8 @@ import { REGIONS } from '../../world/regions';
 import { SEASON_DAYS, seasonLine, YEAR_DAYS, YEAR_FROM } from '../../world/calendar';
 import { BLOOMS, BUSH_FLOWER_FROM, evergreen, LEAF_DAYS, SHED_DAYS, TURN_DAYS } from '../../render/foliage';
 import { lifeSeasons } from '../../render/life';
+import { LAYERS, TRIAL_SECONDS } from '../../render/timings';
+import { SWELL_RATE } from '../../render/water';
 import { furnitureDef, liquidCapacity, POND_EVERY, type PlacedFurniture } from '../../game/furniture';
 import { billWords, countOf, type Item } from '../../game/items';
 import { COIN_METALS, coinPurity, INGOT_LUMPS, INGOT_WEIGHT, MOULD_BY_ID } from '../../game/metal';
@@ -1405,6 +1407,17 @@ export const NEWS: News[] = [
         + 'No pan washes it and no hoard or chest holds it any more; gold seams anywhere else are iron now.',
       `Foraging turns up a gold coin one go in ${numberWord(COIN_FIND_ONE_IN)}, up to ${numberWord(COIN_FINDS_A_DAY)} a day for each person. `
         + 'A worker foraging for a deed never finds one.',
+    ],
+  },
+  {
+    n: 104,
+    day: '2026-10-08',
+    lines: () => [
+      'Trees and bushes are drawn from a picture kept at exactly their size on the screen, leaning as they grew, and the wind sways them a whole pixel at a time.',
+      `The swell on the sea is painted ${numberWord(SWELL_RATE)} times a second and moved with the view in between, instead of afresh every frame.`,
+      'People and wildermon seen close up are redrawn as often as they are from further out, no longer twice as often.',
+      `Settings has Show drawing times, which puts under the frame rate how many milliseconds each frame spends on the ground, ${listed(Object.keys(LAYERS))}, `
+        + `and Measure each layer, which leaves each of those out for ${numberWord(TRIAL_SECONDS)} second in turn and writes down the frame rate without it.`,
     ],
   },
 ];

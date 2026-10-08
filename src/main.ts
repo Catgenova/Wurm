@@ -182,6 +182,10 @@ const fitGraphics = (): void => {
 };
 fitGraphics();
 game.graphicsChanged = fitGraphics;
+game.measureDrawing = () => {
+  game.settings.timings = true;
+  renderer.timings.measure();
+};
 const renderer = new Renderer(canvas, game);
 const camera = renderer.camera;
 const input = new Input(canvasEl);

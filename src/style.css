@@ -560,6 +560,9 @@ kbd {
   bottom: 8px;
   color: rgba(217, 208, 189, 0.55);
   font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  white-space: pre-line;
   pointer-events: none !important;
 }
 
