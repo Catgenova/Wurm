@@ -164,7 +164,8 @@ function hoop(k: FxScene, c: P3, r0: number, r1: number, dz: number, o: HoopLook
   k.worldDraw(foot, half(false), -0.5);
   k.worldDraw(foot, half(true), 0.8);
   const gl = o.glow ?? 1;
-  if (gl > 0) k.glow(lift(c, dz / 2), (rx / k.zoom) * 1.3, a * gl * 0.45);
+  // One soft glow, no bigger than a body's: a glow the size of Benediction's halo costs a great deal to draw and shows nothing more.
+  if (gl > 0) k.glow(lift(c, dz / 2), Math.min(28, (rx / k.zoom) * 1.3), a * gl * 0.45);
 }
 
 /**
@@ -1306,11 +1307,12 @@ export const BLESSING: Record<string, SpellVisual> = {
       charge: (k, t) => {
         const R = reachOf('blessing_benediction', 6);
         const g = smooth(seg(t, 0.12, 0.52));
+        const gone = 1 - seg(t, 0.55, 0.57);
         // A great halo gathering in the sky over the spot, turning, with the light kept in its middle.
         const sky = k.on(k.spot.x, k.spot.y, BENEDICTION_SKY);
-        hoop(k, sky, 0.25 + 0.8 * g, (0.25 + 0.8 * g) * 0.82, 0, { alpha: smooth(seg(t, 0.1, 0.3)), turn: k.now * 0.6, glow: 0.8, back: 0.7 });
-        k.glow(sky, 10 + 14 * g, 0.5 * g);
-        k.ring(k.spot, R, { band: 0.12, alpha: 0.55 * g, dash: 6, turn: k.now * 0.1, glow: 0.4 });
+        hoop(k, sky, 0.25 + 0.8 * g, (0.25 + 0.8 * g) * 0.82, 0, { alpha: smooth(seg(t, 0.1, 0.3)) * gone, turn: k.now * 0.6, glow: 0.8, back: 0.7 });
+        k.glow(sky, 10 + 14 * g, 0.5 * g * gone);
+        k.ring(k.spot, R, { band: 0.12, alpha: 0.55 * g * (1 - seg(t, 0.55, 0.75)), dash: 6, turn: k.now * 0.1, glow: 0.4 });
         k.light(k.spot, 2 + 3 * g, 0.55 * g);
         for (const s of [0, 1]) if (g > 0.1) k.emit(k.hand(s), 10 * g, { kind: 'mote', size: 1.5, life: [0.5, 0.9], speed: [0.02, 0.08], up: [14, 24], gravity: 0, jitter: 0.03 });
       },
@@ -1333,15 +1335,15 @@ export const BLESSING: Record<string, SpellVisual> = {
           k.ring(c, 0.2 + (R - 0.2) * out, { band: 0.3 * (1 - 0.5 * out), alpha: 0.95 * (1 - seg(u, 0.55, 1)) });
           k.disc(c, R * Math.max(0.05, out), { alpha: 0.1 * (1 - seg(u, 0.4, 1)), main: k.pal.core });
           if (u < 0.6) {
-            const per = k.fast ? 1 : 3;
-            for (let i = 0; i < per; i++) {
+            // Three points a frame, each raining at a steady rate, so fast graphics thins the rain rather than losing it.
+            for (let i = 0; i < 3; i++) {
               const an = k.rand() * TAU, rr = R * Math.sqrt(k.rand()) * Math.max(0.2, out);
-              k.burst(k.on(c.x + Math.cos(an) * rr, c.y + Math.sin(an) * rr, BENEDICTION_SKY * (0.6 + 0.3 * k.rand())), 1, { kind: 'spark', colour: [k.pal.core, k.pal.main], size: 2.2, life: [0.4, 0.5], speed: [0, 0.01], up: [-70, -60], gravity: 0, drag: 1 });
+              k.emit(k.on(c.x + Math.cos(an) * rr, c.y + Math.sin(an) * rr, BENEDICTION_SKY * (0.6 + 0.3 * k.rand())), 35, { kind: 'spark', colour: [k.pal.core, k.pal.main], size: 2.2, life: [0.4, 0.5], speed: [0, 0.01], up: [-70, -60], gravity: 0, drag: 1 });
             }
           }
           if (u > 0.3 && u < 0.9) {
             const an = k.rand() * TAU, rr = R * Math.sqrt(k.rand());
-            k.burst(k.on(c.x + Math.cos(an) * rr, c.y + Math.sin(an) * rr, 2), 1, { kind: 'mote', size: 1.8, life: [0.6, 1.0], speed: [0, 0.03], up: [10, 18], gravity: 0 });
+            k.emit(k.on(c.x + Math.cos(an) * rr, c.y + Math.sin(an) * rr, 2), 30, { kind: 'mote', size: 1.8, life: [0.6, 1.0], speed: [0, 0.03], up: [10, 18], gravity: 0 });
           }
           k.light(c, R * (0.4 + 0.6 * out), 0.85 * (1 - u * u));
         },
@@ -1436,6 +1438,7 @@ export const BLESSING: Record<string, SpellVisual> = {
             k.flare(p, 5 * bump(v, 0, 0.3, 1), a, k.pal.core, v);
           }
           k.ring(b, shieldR(b) * 1.05, { band: 0.04, alpha: 0.35 * a, dash: 3, turn: age * 0.4, glow: 0.3 });
+          k.light(b, 1.6, 0.3 * a);
         },
       },
     },
@@ -1498,9 +1501,7 @@ export const BLESSING: Record<string, SpellVisual> = {
           const c = k.spot;
           const a = smooth(seg(age, 1.0, 1.3)) * smooth(left / 1);
           const ring = smooth(left / 1);
-          k.ring(c, R, { band: 0.13, alpha: 0.75 * ring, turn: age * 0.05, glow: 0.5 });
-          k.ring(c, R - 0.28, { band: 0.04, alpha: 0.45 * ring, dash: 4, turn: -age * 0.12, glow: 0 });
-          k.disc(c, R, { alpha: 0.07 * ring, main: k.pal.core });
+          k.ring(c, R, { band: 0.13, alpha: 0.75 * ring, turn: age * 0.05, glow: 0.5, n: 36 });
           // The posts burn down with the seconds it holds.
           sanctuaryPosts(k, R, 0.3 + 0.7 * clamp(left / lasts), a, age);
           k.light(c, R * 0.85, 0.35 * ring);
@@ -1620,7 +1621,7 @@ export const BLESSING: Record<string, SpellVisual> = {
         const R = reachOf('blessing_radiance', 8);
         const g = smooth(seg(t, 0.2, 0.55));
         const at = k.on(k.spot.x, k.spot.y, lerp(1, RADIANCE_SUN, g));
-        sun(k, at, 1.5 + 6.5 * g, k.now * 0.3, smooth(seg(t, 0.15, 0.25)));
+        sun(k, at, 1.5 + 8.5 * g, k.now * 0.3, smooth(seg(t, 0.15, 0.25)));
         rays(k, at, 6 + 26 * g, { n: 12, alpha: 0.6 * g, turn: -k.now * 0.4 + 0.26, inner: 0.5 });
         k.ring(k.spot, R, { band: 0.1, alpha: 0.5 * g, dash: 8, turn: -k.now * 0.08, glow: 0.3 });
         k.light(k.spot, 2 + 4 * g, 0.6 * g);
@@ -1654,15 +1655,15 @@ export const BLESSING: Record<string, SpellVisual> = {
           // A beat a second: the burn on whatever is hunting there.
           const beat = 1 - smooth((age % 1) / 0.45);
           const at = k.on(c.x, c.y, lerp(RADIANCE_SUN, 6, set));
-          sun(k, at, 8 + 1.2 * beat, age * 0.3, fade);
+          sun(k, at, 10 + 1.5 * beat, age * 0.3, fade);
           rays(k, at, 30 + 10 * beat, { n: 12, alpha: (0.35 + 0.45 * beat) * fade * (1 - set * 0.7), turn: -age * 0.4 + 0.26, inner: 0.5 });
           k.ring(c, 0.55, { band: 0.12, alpha: 0.8 * fade, turn: -age * 0.3, glow: 0.4 });
-          groundRays(k, c, 0.6, R, 16, { alpha: (0.2 + 0.16 * beat) * fade * (1 - set * 0.6), turn: age * 0.04, spread: 0.1 });
-          k.ring(c, R, { band: 0.12, alpha: (0.45 + 0.2 * beat) * fade, dash: 8, turn: age * 0.06, glow: 0.4 });
+          groundRays(k, c, 0.6, R, 12, { alpha: (0.2 + 0.16 * beat) * fade * (1 - set * 0.6), turn: age * 0.04, spread: 0.1 });
+          k.ring(c, R, { band: 0.12, alpha: (0.45 + 0.2 * beat) * fade, dash: 8, turn: age * 0.06, glow: 0.4, n: 36 });
           k.light(c, R * 0.9, (0.5 + 0.15 * beat) * fade * (1 - set * 0.5));
           if (!k.fast) {
             const an = k.rand() * TAU, rr = R * Math.sqrt(k.rand());
-            if (k.rand() < k.dt * 10) k.burst(k.on(c.x + Math.cos(an) * rr, c.y + Math.sin(an) * rr, 24), 1, { kind: 'mote', size: 1.8, life: [0.6, 0.8], speed: [0, 0.02], up: [-34, -28], gravity: 0 });
+            k.emit(k.on(c.x + Math.cos(an) * rr, c.y + Math.sin(an) * rr, 24), 8, { kind: 'mote', size: 1.8, life: [0.6, 0.8], speed: [0, 0.02], up: [-34, -28], gravity: 0 });
           }
         },
       },
@@ -1739,7 +1740,7 @@ export const BLESSING: Record<string, SpellVisual> = {
           }
           if (out < 1) {
             const an = k.rand() * TAU;
-            k.burst(k.on(c.x + Math.cos(an) * front, c.y + Math.sin(an) * front, 1), k.fast ? 1 : 3, { kind: 'shard', colour: [LEAF, k.pal.main], size: 2.2, life: [0.6, 1.0], speed: [0.05, 0.2], up: [10, 18], gravity: 10, drag: 0.4, spin: 1 });
+            k.emit(k.on(c.x + Math.cos(an) * front, c.y + Math.sin(an) * front, 1), 90, { kind: 'shard', colour: [LEAF, k.pal.main], size: 2.2, life: [0.6, 1.0], speed: [0.05, 0.2], up: [10, 18], gravity: 10, drag: 0.4, spin: 1 });
           }
           k.light(c, front, 0.6 * end);
         },
@@ -1763,21 +1764,27 @@ function steadyAt(k: FxScene): P3 {
   return onSelf(k) ? mid3(k.hand(0), k.hand(1), 0.5) : k.on(k.spot.x, k.spot.y, 3);
 }
 
-/** How far the edge of a weapon goes from the fist, in height units: a gleam runs this far along it. */
-const BLADE_RUN = 12;
 /**
  * A gleam run along what is in somebody's right hand, `u` nought to one from
- * the fist to the point, or a glint at the fist when the hand is empty. For a
- * thing set down, a glint where it stands.
+ * the fist out to its end, or a glint at the fist when the hand is empty. For
+ * a thing set down, a glint where it stands. The run goes on out of the fist
+ * the way the forearm points, as long again as the forearm: where a blade
+ * held in a swing lies (`wield`), and near enough where one carried at the
+ * hip hangs, which the figure does not say.
  */
 function gleam(k: FxScene, u: number, a: number, b = k.caster): void {
   if (a <= 0.01 || u <= 0 || u >= 1) return;
-  if (b === k.caster && !onSelf(k) && k.spot) {
+  if (b === k.caster && !onSelf(k)) {
     k.flare(k.on(k.spot.x, k.spot.y, 3), 6 * bump(u, 0, 0.3, 1), a, k.pal.core, u * 2);
     return;
   }
+  const h = k.hand(1, b);
   const armed = !!b.figure?.gear?.weapon;
-  const p = armed ? k.weaponAt(BLADE_RUN * smooth(u), b) : k.hand(1, b);
+  let p = h;
+  if (armed) {
+    const el = k.joint(b, 'elbow1', [0, 0, 0], 0.6), s = smooth(u);
+    p = { x: h.x + (h.x - el.x) * s, y: h.y + (h.y - el.y) * s, z: h.z + (h.z - el.z) * s };
+  }
   k.flare(p, (armed ? 6 : 5) * bump(u, 0, 0.25, 1), a, k.pal.core, u * 3);
 }
 
@@ -1834,8 +1841,9 @@ function sanctuaryPosts(k: FxScene, R: number, h: number, a: number, age: number
     const an = (i / n) * TAU + Math.PI / 8;
     const base = k.on(c.x + Math.cos(an) * R, c.y + Math.sin(an) * R);
     const tall = 22 * h;
-    post(k, base, tall, 3.4, a);
-    k.glow(lift(base, tall), 5, a * (0.55 + 0.2 * Math.sin(age * 3 + i)));
+    post(k, base, tall, 4, a);
+    k.glow(lift(base, tall * 0.5), 3 + tall * 0.3, a * 0.35);
+    k.glow(lift(base, tall), 6, a * (0.6 + 0.2 * Math.sin(age * 3 + i)));
     if (!k.fast && age > 0) k.emit(lift(base, tall), 0.8 * a, { kind: 'mote', size: 1.4, life: [0.6, 1.0], speed: [0, 0.02], up: [6, 12], gravity: 0, jitter: 0.03 });
   }
 }
