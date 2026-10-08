@@ -2476,6 +2476,8 @@ interface Build {
   trim?: number;
   /** Which of four flickers a fire in it is at. */
   frame: number;
+  /** Somebody is at her helm, with her tiller in hand: the tiller is drawn with them (`Seat.pivot` in `./figure`), not in her. */
+  manned?: boolean;
 }
 
 type Model = (b: Build) => void;
@@ -4031,9 +4033,9 @@ const MODELS: Record<string, Model> = {
       }
     });
   },
-  sailing_boat: ({ sc, wood, hw, hd, trim, tint }) => {
+  sailing_boat: ({ sc, wood, hw, hd, trim, tint, manned }) => {
     sc.shadows = [];
-    const { xs, xb, B, S, thwarts, thwart, tiller } = HULLS.sailing_boat(hw, hd);
+    const { xs, xb, B, S, thwarts, thwart, tiller, rudder } = HULLS.sailing_boat(hw, hd);
     const sheer = sheerOf(S);
     const xm = xs + (xb - xs) * 0.6, zb = S + 2.4, zt = 30, luff = 16, boom = 15, gaff = 10;
     const set = trim ?? 0.25;
@@ -4055,8 +4057,8 @@ const MODELS: Record<string, Model> = {
       for (const tx of thwarts) seat(tx, thwart, 0.7);
       deck(0.72);
       sc.drawRod([xm, 0, 0.8], [xm, 0, S + 0.6], 0.45, wood);
-      // The tiller, from the rudder's head forward over the stern sheets to the helmsman's hand.
-      sc.drawRod([xs - 0.6, 0, sheer(0) + 0.6], tiller, 0.3, wood);
+      // The tiller, from the rudder's head forward over the stern sheets to the helmsman's hand; in her while it is in nobody's.
+      if (!manned) sc.drawRod(rudder, tiller, 0.3, wood);
     }, { reach: boom + belly + 1, top: zt + 1, box: rigBox(), draw: () => {
       // The forestay from the masthead to the stem, then the mast and the sail in the order they stand.
       sc.line(sc.P(xm, 0, zt - 0.6), sc.P(xb - 0.4, 0, sheer(1)), rgb(ROPE.ink, 1, 0.55), sc.ink * 0.5);
@@ -4575,10 +4577,13 @@ function boxOf(kind: keyof typeof BOX_MEASURES, hw: number, hd: number): { L0: n
  * after thwart beside the tiller, near enough its end to have it in hand.
  */
 const HULLS = {
-  rowing_boat: (hw: number, hd: number) => ({ xs: -hw + 1.6, xb: hw - 0.4, B: hd - 2.2, S: 3.6, thwarts: [-5.2, 1.8], thwart: 2.4, tiller: null }),
+  rowing_boat: (hw: number, hd: number) => ({ xs: -hw + 1.6, xb: hw - 0.4, B: hd - 2.2, S: 3.6, thwarts: [-5.2, 1.8], thwart: 2.4, tiller: null, rudder: null }),
   sailing_boat: (hw: number, hd: number) => {
     const xs = -hw + 2.2, S = 5.2;
-    return { xs, xb: hw - 0.4, B: hd - 3.4, S, thwarts: [xs + 5.6, -2.5], thwart: S - 1.4, tiller: [xs + 6.6, 0, sheerOf(S)(0) + 1.2] as V3 };
+    return {
+      xs, xb: hw - 0.4, B: hd - 3.4, S, thwarts: [xs + 5.6, -2.5], thwart: S - 1.4,
+      tiller: [xs + 6.6, 0, sheerOf(S)(0) + 1.2] as V3, rudder: [xs - 0.6, 0, sheerOf(S)(0) + 0.6] as V3,
+    };
   },
 };
 
@@ -4593,7 +4598,7 @@ const HULLS = {
  * seat, and `hull` whatever else of the sides makes their outline from
  * outside.
  */
-interface DriverPlace { hands: Seat['hands']; at: V3; up: number; aft?: boolean; grip: V3; rim: V3[]; hull: V3[] }
+interface DriverPlace { hands: Seat['hands']; at: V3; up: number; aft?: boolean; grip: V3; pivot?: V3; rim: V3[]; hull: V3[] }
 const places = new Map<string, DriverPlace | null>();
 /** The reins of a team: out ahead of the middle of the piece to over its yokes, as high over the bench as the driver's hands are. */
 export const REIN_REACH = 14;
@@ -4622,7 +4627,7 @@ function placeOf(kind: string): DriverPlace | null {
       p = { hands: 'oars', at: [x, 0, HULL_FLOOR], up: h.thwart - HULL_FLOOR, aft: true, grip: [lock, near(lock).b, near(lock).s + 0.3], rim, hull };
     } else {
       // On the after thwart, to port of the tiller.
-      p = { hands: 'tiller', at: [h.thwarts[0], -3, HULL_FLOOR], up: h.thwart - HULL_FLOOR, grip: h.tiller as V3, rim, hull };
+      p = { hands: 'tiller', at: [h.thwarts[0], -3, HULL_FLOOR], up: h.thwart - HULL_FLOOR, grip: h.tiller as V3, pivot: h.rudder as V3, rim, hull };
     }
   }
   places.set(kind, p);
@@ -4634,6 +4639,9 @@ export const reinsTo = (kind: string): V3 | null => {
   const p = placeOf(kind);
   return p?.hands === 'reins' ? p.grip : null;
 };
+
+/** Whether a piece is steered by a tiller, which is in the helmsman's hand while there is one (`Seat.pivot` in `./figure`). */
+export const steeredByTiller = (kind: string): boolean => !!placeOf(kind)?.pivot;
 
 /** Whether a piece is driven sat at its oars, which are then out in the rower's hands rather than shipped in her. */
 export const rowedPiece = (kind: string): boolean => placeOf(kind)?.hands === 'oars';
@@ -4662,7 +4670,10 @@ export function driverOn(kind: string, view: PieceView): { dx: number; dy: numbe
   const grip = body(p.grip);
   // A rowlock: the one to the body's right, whichever of hers that is.
   if (p.hands === 'oars') grip[0] = Math.abs(grip[0]);
-  return { dx, dy, lift: p.at[2] * HEIGHT_SCALE, facing, seat: { hands: p.hands, up: p.up, grip, sides: { outline: hullOf(p.hull.map(on)), rim: p.rim.map(on) } } };
+  return {
+    dx, dy, lift: p.at[2] * HEIGHT_SCALE, facing,
+    seat: { hands: p.hands, up: p.up, grip, pivot: p.pivot && body(p.pivot), sides: { outline: hullOf(p.hull.map(on)), rim: p.rim.map(on) } },
+  };
 }
 
 /** The outline round a set of points on the screen: the smallest convex shape holding them all. */
@@ -4703,11 +4714,11 @@ export function furnitureSpan(kind: string): [number, number] {
 }
 
 /** Build a piece into a scene: its model, or a plain box for a piece nobody has modelled. */
-function build(sc: Scene, kind: string, lit: boolean, tint: Tint | undefined, trim: number | undefined, material: string | undefined, frame: number): void {
+function build(sc: Scene, kind: string, lit: boolean, tint: Tint | undefined, trim: number | undefined, material: string | undefined, frame: number, manned = false): void {
   const def = furnitureDef(kind);
   const hw = def.w * 5, hd = def.h * 5;
   const model = MODELS[kind];
-  if (model) model({ sc, wood: woodOf(material), hw, hd, lit, tint, trim, frame });
+  if (model) model({ sc, wood: woodOf(material), hw, hd, lit, tint, trim, frame, manned });
   else sc.box(-hw * 0.7, hw * 0.7, -hd * 0.7, hd * 0.7, 0, 5, woodOf(material));
   // The floor it shades: what the model said, or its footprint drawn in a little.
   sc.shadows ??= [[-hw * 0.78, hw * 0.78, -hd * 0.78, hd * 0.78]];
@@ -4777,9 +4788,9 @@ const BAKED_BUDGET = 16e6;
 const baked = new Map<string, Baked>();
 let bakedArea = 0;
 
-function bake(kind: string, lit: boolean, tint: Tint | undefined, trim: number | undefined, view: PieceView, material: string | undefined, frame: number, scale: number, zoom: number, crew?: Crew): Baked {
+function bake(kind: string, lit: boolean, tint: Tint | undefined, trim: number | undefined, view: PieceView, material: string | undefined, frame: number, scale: number, zoom: number, crew?: Crew, manned = false): Baked {
   const sc = new Scene(null as unknown as CanvasRenderingContext2D, view, zoom);
-  build(sc, kind, lit, tint, trim, material, frame);
+  build(sc, kind, lit, tint, trim, material, frame, manned);
   let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
   const take = (x: number, y: number, z: number): void => {
     const [px, py] = sc.P(x, y, z);
@@ -4835,18 +4846,18 @@ const areaOf = (b: Baked): number => b.canvas.width * b.canvas.height * (1 + (b.
  * Draw one piece with its floor contact at (sx, sy), turned as `view` says
  * and built of `material`. A sail's trim is taken to the nearest twentieth,
  * which is finer than the eye can tell a sail by and keeps a boat being
- * sailed from baking a new one every frame.
+ * sailed from baking a new one every frame. `manned`: somebody has her
+ * tiller in hand, which is drawn with them rather than in her.
  */
 export function drawFurniture(ctx: CanvasRenderingContext2D, sx: number, sy: number, zoom: number, kind: string, lit = false, tint?: Tint, trim?: number, view: PieceView = pieceView('s', 0), material?: string,
-  crew?: Crew, layer: number | 'all' = 'all', live = true, seeHelm = false): [number, number, number, number] {
-  const b = bakedFor(zoom, kind, lit, tint, trim, view, material, crew);
+  crew?: Crew, layer: number | 'all' = 'all', live = true, seeHelm: Silhouette | null = null, manned = false): [number, number, number, number] {
+  const b = bakedFor(zoom, kind, lit, tint, trim, view, material, crew, manned);
   const k = zoom / b.scale;
   const sheets = [b.canvas, ...(b.layers ?? [])];
-  const helm = seeHelm && crew ? driverOn(kind, view) : null;
   for (const [i, c] of sheets.entries()) {
     if (layer !== 'all' && layer !== i) continue;
     const at: [number, number, number, number] = [sx - b.ox * k, sy - b.oy * k, b.canvas.width * k, b.canvas.height * k];
-    if (helm && i > 0) seeThrough(ctx, c, at, sx + helm.dx * zoom, sy + (helm.dy - HELM_WINDOW.up) * zoom, zoom);
+    if (seeHelm && crew && i > 0) seeThrough(ctx, c, at, seeHelm);
     else ctx.drawImage(c, ...at);
   }
   // And whatever on it moves, over the last of it, as it is this frame.
@@ -4855,21 +4866,30 @@ export function drawFurniture(ctx: CanvasRenderingContext2D, sx: number, sy: num
   return [b.bounds[0] * zoom, b.bounds[1] * zoom, b.bounds[2] * zoom, b.bounds[3] * zoom];
 }
 
+/** A picture of somebody as it was last put down: what it was put down on, and where, in that context's own units. */
+export interface Silhouette { ctx: CanvasRenderingContext2D; canvas: CanvasImageSource & { width: number; height: number }; x: number; y: number; w: number; h: number }
+
 /**
  * One's own helmsman seen through what is in front of him. Sailing toward
  * you, the sailing boat's mast and sail are between you and whoever has her
  * tiller, and hid all of him but his shins: at one heading in eight you lost
  * sight of yourself. So, as games seen from above do with whatever stands in
  * front of the player, a layer baked in front of your own helmsman is let
- * fade where it is over him -- most of the way in the middle of him, and
- * less and less out to an oval round him, so there is no edge to it -- and he
- * shows through it. Only your own: anybody else's helmsman is hidden as it
- * should be.
+ * fade where it is over him, and he shows through it. Only your own: anybody
+ * else's helmsman is hidden as it should be.
+ *
+ * The fade was an oval round where he sits, which took in open water behind
+ * the sail beside him -- a soft blue beam down the sail by his face -- and
+ * the mast and thwarts wherever they crossed it. Now it is his own picture
+ * as it was just put down (`HELM_SEEN`): the layer is let fade over him and a
+ * pixel or two round his edge, and nowhere else.
  */
-const HELM_WINDOW = { up: 17, rx: 10, ry: 20, most: 0.62 };
+const HELM_SEEN = { most: 0.62, soft: 1.5 };
 let seePad: HTMLCanvasElement | null = null;
-function seeThrough(ctx: CanvasRenderingContext2D, c: HTMLCanvasElement, at: [number, number, number, number], cx: number, cy: number, zoom: number): void {
+function seeThrough(ctx: CanvasRenderingContext2D, c: HTMLCanvasElement, at: [number, number, number, number], helm: Silhouette): void {
   const [x, y, w, h] = at;
+  // Drawn on another picture than this one -- a flash or a ring round him under the pointer -- it is nowhere here to see through.
+  if (helm.ctx !== ctx) { ctx.drawImage(c, x, y, w, h); return; }
   seePad ??= document.createElement('canvas');
   if (seePad.width < c.width || seePad.height < c.height) {
     seePad.width = Math.max(seePad.width, c.width);
@@ -4881,21 +4901,57 @@ function seeThrough(ctx: CanvasRenderingContext2D, c: HTMLCanvasElement, at: [nu
   g.clearRect(0, 0, c.width, c.height);
   g.globalCompositeOperation = 'source-over';
   g.drawImage(c, 0, 0);
-  // The oval, in the layer's own pixels: a round fade drawn squashed.
+  // His picture, in the layer's own pixels, taken out of it: softened at the edge, so there is no line round him.
   const k = c.width / w;
   g.globalCompositeOperation = 'destination-out';
-  g.translate((cx - x) * k, (cy - y) * k);
-  g.scale(1, HELM_WINDOW.ry / HELM_WINDOW.rx);
-  const r = HELM_WINDOW.rx * zoom * k;
-  const fade = g.createRadialGradient(0, 0, 0, 0, 0, r);
-  fade.addColorStop(0, `rgba(0, 0, 0, ${HELM_WINDOW.most})`);
-  fade.addColorStop(0.55, `rgba(0, 0, 0, ${HELM_WINDOW.most})`);
-  fade.addColorStop(1, 'rgba(0, 0, 0, 0)');
-  g.fillStyle = fade;
-  g.fillRect(-r, -r, 2 * r, 2 * r);
-  g.setTransform(1, 0, 0, 1, 0, 0);
+  g.globalAlpha = HELM_SEEN.most;
+  g.filter = `blur(${(HELM_SEEN.soft * k).toFixed(2)}px)`;
+  g.drawImage(helm.canvas, 0, 0, helm.canvas.width, helm.canvas.height, (helm.x - x) * k, (helm.y - y) * k, helm.w * k, helm.h * k);
+  g.filter = 'none';
+  g.globalAlpha = 1;
   g.globalCompositeOperation = 'source-over';
   ctx.drawImage(seePad, 0, 0, c.width, c.height, x, y, w, h);
+}
+
+/*
+ * A small boat on the water is never still: she rolls on the swell either
+ * way and pitches over it, and lifts on each wave; under sail she heels
+ * over to her lee, more in the gusts. The body at her helm is drawn with her
+ * (`Seat.sway` in `./figure`), and whoever draws her moves her and everybody
+ * aboard her together (`swayOf`), so the two always agree.
+ */
+/** How a boat sits on the water at `t` seconds: heeled to starboard and pitched bow down, in degrees, and lifted, in units. */
+export interface Sway { heel: number; pitch: number; lift: number }
+/**
+ * `under` from nought stopped to one under sail; `lee` the side her sail is
+ * out on, one to starboard and minus one to port; `seed` keeps two boats from
+ * rolling in step.
+ */
+export function boatSway(t: number, under: number, lee: number, seed = 0): Sway {
+  const q = t + seed;
+  const swell = 1.3 * Math.sin(q * 1.15 + 0.4) + 0.6 * Math.sin(q * 2.3 + 1.7);
+  const gust = 4.5 + 1.6 * Math.sin(q * 0.55 + 0.3) + 0.8 * Math.sin(q * 1.4 + 2.2);
+  return {
+    heel: swell * (1 - 0.4 * under) + lee * under * gust,
+    pitch: (0.8 + 0.9 * under) * Math.sin(q * 1.3 + 0.9) + 0.4 * Math.sin(q * 2.9 + 0.2),
+    lift: (0.12 + 0.14 * under) * Math.sin(q * 1.3 + 2.4),
+  };
+}
+/**
+ * A boat's sway as a change to the picture of her, about her floor contact:
+ * what is `dy` over it on the screen goes `c * dy` across and `(d - 1) * dy`
+ * down, and the whole of her `up` pixels up. Everything in her picture is
+ * mostly on her middle line, so how high a point is over the water is taken
+ * from how high it is on the screen, and a heel leans it across her and a
+ * pitch along her by that much: a shear, which costs nothing to draw with.
+ */
+export function swayOnScreen(view: PieceView, s: Sway, zoom: number): { c: number; d: number; up: number } {
+  const th = s.heel * (Math.PI / 180), ph = s.pitch * (Math.PI / 180);
+  return {
+    c: -(th * view.vx + ph * view.ux) / HEIGHT_SCALE,
+    d: 1 - (th * view.vy + ph * view.uy) / HEIGHT_SCALE,
+    up: s.lift * HEIGHT_SCALE * zoom,
+  };
 }
 
 /**
@@ -4903,25 +4959,25 @@ function seeThrough(ctx: CanvasRenderingContext2D, c: HTMLCanvasElement, at: [nu
  * piece baked round them: the first of these is drawn after layer 0, the
  * second after layer 1, and so on (`drawFurniture` with a `layer`).
  */
-export function crewOrder(zoom: number, kind: string, lit: boolean, tint: Tint | undefined, trim: number | undefined, view: PieceView, material: string | undefined, crew: Crew): number[] {
-  return bakedFor(zoom, kind, lit, tint, trim, view, material, crew).order ?? [];
+export function crewOrder(zoom: number, kind: string, lit: boolean, tint: Tint | undefined, trim: number | undefined, view: PieceView, material: string | undefined, crew: Crew, manned = false): number[] {
+  return bakedFor(zoom, kind, lit, tint, trim, view, material, crew, manned).order ?? [];
 }
 
 /** A piece's bake for this zoom, turn and trim, from the ones kept or new. */
-function bakedFor(zoom: number, kind: string, lit: boolean, tint: Tint | undefined, trim: number | undefined, view: PieceView, material: string | undefined, crew?: Crew): Baked {
+function bakedFor(zoom: number, kind: string, lit: boolean, tint: Tint | undefined, trim: number | undefined, view: PieceView, material: string | undefined, crew?: Crew, manned = false): Baked {
   const scale = BAKE_STEPS.find((s) => s >= zoom - 1e-3) ?? zoom;
   // The ink is a pixel wide on the screen until the zoom is under one, when it is held at a pixel and so is its own bake.
   const inkZoom = zoom < 0.95 ? Math.round(zoom * 20) / 20 : 1;
   const frame = lit ? Math.floor(performance.now() / 150) % 4 : 0;
   const set = trim === undefined || Number.isInteger(trim) ? trim : Math.round(trim * 20) / 20;
-  const aboard = crew ? `|${crew.tall}:${crew.at.map((a) => a.join(',')).join(';')}` : '';
+  const aboard = (crew ? `|${crew.tall}:${crew.at.map((a) => a.join(',')).join(';')}` : '') + (manned ? '|manned' : '');
   const key = `${kind}|${material ?? ''}|${lit ? frame : '-'}|${tint?.colour ?? ''}|${set ?? ''}|${view.ux.toFixed(3)},${view.uy.toFixed(3)},${view.vx.toFixed(3)},${view.vy.toFixed(3)}|${scale}|${inkZoom}${aboard}`;
   let b = baked.get(key);
   if (b) {
     baked.delete(key);
     baked.set(key, b);
   } else {
-    b = bake(kind, lit, tint, set, view, material, frame, scale, inkZoom, crew);
+    b = bake(kind, lit, tint, set, view, material, frame, scale, inkZoom, crew, manned);
     baked.set(key, b);
     bakedArea += areaOf(b);
     for (const [k, old] of baked) {

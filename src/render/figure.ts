@@ -1849,6 +1849,8 @@ export interface Rig {
   slack?: number;
   /** A pair of oars, right then left: each turned about its rowlock, out over the water, and its blade turned flat to the air from square to it by `feather`. */
   oars?: Array<{ lock: V3; out: V3; feather: number; splash?: number }>;
+  /** A tiller in hand, from where it is pivoted on the rudder's head to its end in the fist, and its wood as `#rrggbb`: see `steer`. */
+  tiller?: { pivot: V3; end: V3; wood?: string };
   blink: boolean;
   reins: boolean;
   /** A mallet in the right hand and a chisel in the left. */
@@ -1943,6 +1945,17 @@ export interface Seat {
   astride?: boolean;
   /** Where the reins run to; the right-hand oar's rowlock (the left's is its mirror); the end of the tiller. */
   grip: V3;
+  /**
+   * A tiller's pivot, on the head of the rudder, in the same frame, and its wood as `#rrggbb`: given, the tiller is the
+   * driver's to draw, swung about it with the hand, and whatever draws the hull leaves it out of her.
+   */
+  pivot?: V3;
+  wood?: string;
+  /**
+   * How far the hull under the seat is heeled over to the body's right and pitched bow down, in degrees, as whoever draws
+   * the hull has it this moment: the body is carried over with her by that, and balances against it.
+   */
+  sway?: { heel: number; pitch: number };
   /**
    * The near side of what is sat in, on the screen from the feet at zoom
    * one, for whatever of the body is down behind it: the outline of the
@@ -2644,11 +2657,17 @@ const TREAD_REACH = 1.5;
  * scarecrow. Now the sweep is a forearm's depth under, the elbows let down
  * under the line of the arm so that it bends, and one arm runs a few hundredths of a
  * stroke ahead of the other (`ARM_LEAD`), as no two arms are ever quite together.
+ *
+ * That was still a bar of shirt along the surface from behind: a hundredth and
+ * a half of a stroke between the arms is a sixtieth of a second, and the upper
+ * arms lay on the water. Now the elbows at the out-sweep go down into it, so
+ * the upper arm slants down through the surface, and the arms are four
+ * hundredths apart and do not set their elbows quite alike (`ELBOW_ODD`).
  */
 const BREAST: Key[] = [
   { at: 0, v: [-62, 7, 0.5, 5.6, -1.6, 1, -0.2, -20, 2, 3, 6, -30, 0.1] },
   { at: 0.14, v: [-60, 8, 2.3, 5.0, -1.45, 1, -0.5, -30, 2, 5, 6, -30, 0.2] },
-  { at: 0.28, v: [-52, 10, 3.2, 2.7, -1.25, 1, -0.45, -10, 6, 7, 14, -24, 0.75] },
+  { at: 0.28, v: [-52, 10, 3.2, 2.7, -1.25, 1, -0.8, -10, 6, 7, 14, -24, 0.75] },
   { at: 0.4, v: [-44, 12, 0.8, 1.4, -0.45, 1, 0.2, 30, 26, 12, 70, 10, 1.6] },
   { at: 0.52, v: [-54, 10, 0.4, 3.4, -0.7, 1, -0.4, 10, 40, 24, 112, 22, 0.35] },
   { at: 0.64, v: [-60, 8, 0.45, 5.4, -1.4, 1, -0.2, -10, 12, 22, 46, -10, 0.12] },
@@ -2713,7 +2732,9 @@ function aimHand(r: Rig, fr: Frame, k: number, fingers: V3, back: V3): void {
 }
 
 /** How far ahead of the stroke one arm is, and behind it the other, as a share of a stroke. */
-const ARM_LEAD = 0.014;
+const ARM_LEAD = 0.04;
+/** How much further out, and how much lower, the right elbow is set than the left, swimming: each arm has its own habit. */
+const ELBOW_ODD: [number, number] = [0.18, -0.15];
 
 function swim(r: Rig, phi: number, moving: boolean, fr: Frame): void {
   r.flat = [false, false];
@@ -2737,7 +2758,8 @@ function swim(r: Rig, phi: number, moving: boolean, fr: Frame): void {
     const [, , ax, ay, az, apx, apz, awr] = loop(BREAST, (s + (k ? ARM_LEAD : -ARM_LEAD) + 1) % 1);
     r.hand[k] = [0, 0, awr];
     r.open[k] = 1;
-    swimHand(r, fr, k, [ax, ay, az], [apx, -0.2, apz]);
+    const odd = k ? 0.5 : -0.5;
+    swimHand(r, fr, k, [ax, ay, az], [apx + odd * ELBOW_ODD[0], -0.2, apz + odd * ELBOW_ODD[1]]);
     r.leg[k] = [lp, la, 0];
     r.knee[k] = kn;
     r.foot[k] = ft;
@@ -2758,14 +2780,19 @@ function tread(r: Rig, phi: number, fr: Frame): void {
   const s = Math.sin(q), c = Math.cos(q);
   r.pelvis = [-10, -2 * s, 0];
   r.spine = [-4, 2 * s, 0];
-  r.chest = [2 + 1.5 * c, 3 * s, 0];
+  r.chest = [2 + 1.5 * c, 4 * s, 0];
   // The head kept level over the roll, and looking about.
-  r.neck = [6, -2.5 * s, 0];
+  r.neck = [6, -3.5 * s, 0];
   r.head = [4, -0.5 * s, 14 * Math.sin(q * 0.23)];
-  // Topped out a little under the shoulders: any higher and the top of the shirt showed in a crescent inside the foam round them.
-  r.float = 0.42 + 0.2 * Math.cos(2 * q - 0.6);
+  /*
+   * Topped out a little under the shoulders, for the top of the shirt showed in a crescent inside the foam round them: so only
+   * a head on a long neck ever showed, standing up out of rings. Now that what comes up out of the water by a sliver is let up
+   * gradually (`waterline`), the tops of the shoulders break the surface at the top of each kick and go back under it, the one
+   * a little before the other as the shoulders roll.
+   */
+  r.float = 0.8 + 0.32 * Math.cos(2 * q - 0.6);
   // The shoulders let down a little with the arms out under the water, the tops of them under it with the arms.
-  r.shrug = [-0.25, -0.25];
+  r.shrug = [-0.15, -0.15];
   for (let k = 0; k < 2; k++) {
     /*
      * The hands out to the sides just under the surface, sweeping out and in, each a little behind the other, and each
@@ -2848,7 +2875,8 @@ function reinsIn(r: Rig, phi: number, moving: boolean, seat: Seat, fr: Frame): v
   const t = phi / 6;
   // The team's nod, once to a stride of theirs; the rock of the wheels, slower and not in step with it; a jolt now and then.
   const nod = moving ? Math.sin(phi * 0.5) : 0;
-  const rock = moving ? Math.sin(phi * 0.43 + 0.7) : 0;
+  // Two swings that never fall into step, so the rock is never the same twice running, as a cart's on a track is not.
+  const rock = moving ? 0.65 * Math.sin(phi * 0.43 + 0.7) + 0.35 * Math.sin(phi * 1.07 + 2.1) : 0;
   const jolt = moving ? Math.pow(Math.max(0, Math.sin(phi * 0.37) * Math.sin(phi * 0.83 + 1)), 3) : 0;
   // The bench's bump with each beat of the wheels, and the same a little later, which is when the shoulders feel it.
   const bump = moving ? Math.pow(Math.abs(Math.sin(phi * 0.5 + 0.6)), 1.5) : 0;
@@ -2878,14 +2906,24 @@ function reinsIn(r: Rig, phi: number, moving: boolean, seat: Seat, fr: Frame): v
    * head turning back against little more than half of it so it rocks too;
    * and a rut every few seconds throws the shoulders forward and the head
    * back.
+   *
+   * That rock was one pure swing, ten degrees either way: a metronome. And
+   * the bump lifted the whole body most of a unit off a bench that stayed
+   * where it was, a hop rather than a ride. Now the rock is two swings that
+   * never fall into step, seven degrees at the most, and a rut throws the
+   * body over to one side as well as forward and it settles back; the bench
+   * lifts the hips a little, and the rest of the bump goes into the back,
+   * which gives under it and comes up again a beat later.
    */
-  if (moving && !seat.astride) r.lift = 0.5 * bump + 0.3 * jolt;
-  r.pelvis = [4, 3 * rock, 0];
-  r.spine = [-9 + 3.8 * jolt + 1.2 * b * (moving ? 0 : 1), 5 * rock, 0];
-  r.chest = [-2 + 2.2 * jolt + 1.4 * nod * 0.3 + 2.5 * after, 2 * rock, 0];
+  // Which way a rut throws the body: one side for a while and then the other.
+  const kick = moving ? 3 * jolt * Math.sign(Math.sin(phi * 0.19)) : 0;
+  if (moving && !seat.astride) r.lift = 0.25 * bump + 0.1 * jolt;
+  r.pelvis = [4, 2 * rock + 0.5 * kick, 0];
+  r.spine = [-9 + 3.8 * jolt + 4 * bump + 1.2 * b * (moving ? 0 : 1), 3.5 * rock + kick, 0];
+  r.chest = [-2 + 2.2 * jolt + 1.4 * nod * 0.3 + 2.5 * after - 1.2 * bump, 1.5 * rock + 0.5 * kick, 0];
   // The head kept nearly level and looking ahead over the team; stopped, looking about.
-  r.neck = [6 - 3 * jolt - 1.5 * after, -3.2 * rock, 0];
-  r.head = [4 - 4.5 * jolt, -2.2 * rock, moving ? 3 * Math.sin(phi * 0.09) : 14 * Math.sin((t * TAU) / 11) * Math.min(1, 2 * Math.abs(Math.sin((t * TAU) / 23)))];
+  r.neck = [6 - 3 * jolt - 1.5 * after - 2 * bump, -2.3 * rock - 1.2 * kick, 0];
+  r.head = [4 - 4.5 * jolt, -1.6 * rock - 0.6 * kick, moving ? 3 * Math.sin(phi * 0.09) : 14 * Math.sin((t * TAU) / 11) * Math.min(1, 2 * Math.abs(Math.sin((t * TAU) / 23)))];
   r.blink = !moving && t % 4.3 < 0.12;
   // How taut the reins are, nought to one: drawn out with each nod and let back, and let go slack stopped.
   r.slack = moving ? 0.45 - 0.35 * nod : 1;
@@ -2897,7 +2935,7 @@ function reinsIn(r: Rig, phi: number, moving: boolean, seat: Seat, fr: Frame): v
       : [s * 1.0, hips[1] + 2.35, hips[2] + 1.15 + 0.06 * b];
     fistOn(r, fr, k, at, [s * 0.7, -0.6, -0.5], [-s * 0.9, 0.15, 0.4]);
   }
-  r.tail = [12 + 4 * rock + 6 * jolt, 3 * rock, 0];
+  r.tail = [12 + 4 * rock + 6 * jolt, 3 * rock + kick, 0];
 }
 
 /*
@@ -2945,11 +2983,20 @@ const STROKE: Key[] = [
 const ROW_CATCH = 0.97;
 const ROW_SPLASH = 0.24;
 
+/**
+ * The two hands are never quite together: the left a little ahead through
+ * the stroke, as a share of it, and over the right by this much in the
+ * middle of the drive, where the handles come in toward each other.
+ */
+const ROW_LEAD = 0.025;
+const ROW_OVER = 0.18;
+
 function row(r: Rig, phi: number, moving: boolean, seat: Seat, fr: Frame): void {
   const st = (((phi / ROW_STROKE) % 1) + 1) % 1;
-  const [sweep, height, feather, swing] = moving ? loop(STROKE, st) : [10, 0.02, 1, 4 + 1.5 * Math.sin(phi / 6 * TAU / 4.2)];
-  // How far through its life the splash of the blades going in is: from nought as they go in to one as it has settled.
-  const splash = moving ? ((st - ROW_CATCH + 1) % 1) / ROW_SPLASH : 1;
+  const still = (): number[] => [10, 0.02, 1, 4 + 1.5 * Math.sin(phi / 6 * TAU / 4.2)];
+  const [, , , swing] = moving ? loop(STROKE, st) : still();
+  // Where the back was a moment ago, which the head follows: it lags the swing a little, as a weight on the neck does.
+  const was = moving ? loop(STROKE, (st + 0.94) % 1)[3] : swing;
   // The legs out along the boards to the stretcher, the knees down under the gunwales.
   r.leg = [[92, 12, -4], [92, 12, -4]];
   r.knee = [50, 50];
@@ -2957,14 +3004,26 @@ function row(r: Rig, phi: number, moving: boolean, seat: Seat, fr: Frame): void 
   r.pelvis = [6, 0, 0];
   r.spine = [swing * 0.55 - 4, 0, 0];
   r.chest = [swing * 0.45, 0, 0];
-  r.neck = [-swing * 0.45 + 2, 0, 0];
-  r.head = [-swing * 0.35 + 2, 0, moving ? 0 : 10 * Math.sin(phi / 6 * TAU / 13)];
+  r.neck = [-swing * 0.45 + 2 - 0.3 * (swing - was), 0, 0];
+  r.head = [-swing * 0.35 + 2 - 0.15 * (swing - was), 0, moving ? 0 : 10 * Math.sin(phi / 6 * TAU / 13)];
   const lock = seat.grip, inboard = Math.max(2, lock[0] - 1.05), out = inboard * OAR_OUT;
-  // Dropped toward the blade by as much as puts its middle at `height` over the water.
-  const dip = Math.asin(Math.max(-0.9, Math.min(0.9, (lock[2] - height) / (out - 1.4))));
   r.oars = [];
   for (let k = 1; k >= 0; k--) {
     const s = k ? 1 : -1;
+    /*
+     * Each hand at its own place in the stroke, the left a touch ahead. Through
+     * the drive the left handle rides over the right, which drops its blade
+     * that much deeper, the oar turning about its rowlock. The two arms and
+     * oars were each other's mirror all through the stroke.
+     */
+    const sk = (st + (k ? 0 : ROW_LEAD)) % 1;
+    const [sweep, h0, feather] = moving ? loop(STROKE, sk) : still();
+    // How far through its life the splash of the blade going in is: from nought as it goes in to one as it has settled.
+    const splash = moving ? ((sk - ROW_CATCH + 1) % 1) / ROW_SPLASH : 1;
+    const over = k || !moving ? 0 : ROW_OVER * Math.pow(Math.max(0, Math.sin(Math.PI * (st - 0.18) / 0.42)), 2) * (st > 0.18 && st < 0.6 ? 1 : 0);
+    const height = h0 - over * (out - 1.4) / inboard;
+    // Dropped toward the blade by as much as puts its middle at `height` over the water.
+    const dip = Math.asin(Math.max(-0.9, Math.min(0.9, (lock[2] - height) / (out - 1.4))));
     const a = sweep * DEG;
     const dir: V3 = [s * Math.cos(a) * Math.cos(dip), Math.sin(a) * Math.cos(dip), -Math.sin(dip)];
     const at: V3 = [s * lock[0], lock[1], lock[2]];
@@ -2983,52 +3042,56 @@ function row(r: Rig, phi: number, moving: boolean, seat: Seat, fr: Frame): void 
  * the water and the body leans against it from the hips, the head held
  * level; stopped, the same, gentler.
  */
+/** How far the tiller is put over either way at the most, in degrees, steering under way. */
+const TILLER_SWING = 9;
 function steer(r: Rig, phi: number, moving: boolean, seat: Seat, fr: Frame): void {
   const t = phi / 6;
-  // How far she is over and up on the water, nought to one either way: under way slow and deep, stopped a gentle roll.
-  const lift = moving ? Math.sin(phi * 0.19) : 0.4 * Math.sin((t * TAU) / 5.5);
   const b = Math.sin((t * TAU) / 4.2);
   /*
    * A degree or two of lean and a head that looked up now and then were all
-   * there was of it, and the free hand sat on the hip with the elbow out. Now
-   * the body heels with her from the hips, five degrees and more, the neck and
-   * head turned back against it so the eyes stay level on the water ahead; the
-   * seat lifts under it as she rises; the tiller hand works the tiller fore and
-   * aft a little, the arm swinging with it; and the free hand lies flat on the
-   * thigh with the elbow back and down.
+   * there was of it. Then the body heeled eight degrees and rose a third of a
+   * unit off its seat with the swell -- on a hull that did neither, so at the
+   * size the island is played at it was a man swaying on a boat sat still,
+   * and the fist stayed on a tiller that never moved.
    *
-   * At the size the island is played at that was still a body sat still: the
-   * seat rose a sixth of a unit, and the neck and head took back the whole of
-   * the heel, so the face, which is all that reads, did not move. And the fist
-   * slid fore and aft along a tiller that stayed where it was, off its end and
-   * back. Now she lifts the body over a third of a unit; it heels with her
-   * eight degrees, the head taking back two-thirds of that so the rest shows,
-   * and sways fore and aft three degrees as she pitches; and the fist stays on
-   * the end of the tiller, the steering in the elbow and the shoulders, which
-   * turn a little with each pull and push.
+   * Now the hull heels, pitches and lifts on the water, and the body with
+   * her (`Seat.sway`, from whoever draws her): sat on her, it goes where her
+   * seat goes. What the body does of its own is balance against her, the
+   * hips and back a third of the heel the other way and the neck and head
+   * most of the rest, so the eyes stay level while the mast leans; and steer.
+   * The tiller is his to draw (`Seat.pivot`): it swings on the rudder's head
+   * with his fist on the end of it, put over this way and that in no steady
+   * rhythm, the shoulders turning with each push and pull.
    */
-  r.lift = (moving ? 0.36 : 0.1) * (0.5 + 0.5 * Math.sin(phi * 0.38 + 1.1));
-  const pitch = moving ? Math.sin(phi * 0.3 + 0.5) : 0.5 * Math.sin((t * TAU) / 4.9);
+  const heel = seat.sway?.heel ?? 0, pitch = seat.sway?.pitch ?? 0;
+  const work = moving ? 0.7 * Math.sin(phi * 0.27 + 0.4) + 0.3 * Math.sin(phi * 0.61 + 1.3) : 0.3 * Math.sin((t * TAU) / 7);
   r.leg = [[80, 12, -6], [80, 12, -6]];
   r.knee = [80, 80];
   const k = seat.grip[0] >= 0 ? 1 : 0, s = k ? 1 : -1;
-  const work = moving ? Math.sin(phi * 0.27 + 0.4) : 0.3 * Math.sin((t * TAU) / 7);
-  r.pelvis = [6, 3.5 * lift, 0];
-  r.spine = [-6 + 1.2 * b + 1.8 * pitch, 3 * lift, 0];
-  r.chest = [-1 + 0.8 * b + 1.2 * pitch, 1.5 * lift, s * 4 * work];
-  r.neck = [4 - 1.5 * pitch, -3.1 * lift, -s * 1.5 * work];
+  r.pelvis = [6, -0.15 * heel, 0];
+  r.spine = [-6 + 1.2 * b - 0.3 * pitch, -0.2 * heel, s * 2 * work];
+  r.chest = [-1 + 0.8 * b, -0.1 * heel, s * 5 * work];
+  r.neck = [4 + 0.3 * pitch, -0.25 * heel, -s * 2.5 * work];
   // Looking ahead, and up at the sail every so often.
   const up = Math.pow(Math.max(0, Math.sin((t * TAU) / 9)), 8);
-  r.head = [4 + 16 * up - pitch, -2.1 * lift, 6 * Math.sin((t * TAU) / 13) - 10 * up - s * work];
+  r.head = [4 + 16 * up + 0.3 * pitch, -0.2 * heel, 6 * Math.sin((t * TAU) / 13) - 10 * up - s * 1.5 * work];
   r.blink = t % 4.7 < 0.12;
-  const g = seat.grip;
-  fistOn(r, fr, k, g, [s * (0.5 - 0.35 * work), -0.9 + 0.2 * work, -0.35 + 0.3 * work], [0, 1, 0.1]);
+  // The end of the tiller, swung about its pivot by how far it is put over.
+  let g = seat.grip, haft: V3 = [0, 1, 0.1];
+  if (seat.pivot) {
+    const p = seat.pivot, a = TILLER_SWING * work * DEG, c = Math.cos(a), n = Math.sin(a);
+    const d: V3 = [g[0] - p[0], g[1] - p[1], g[2] - p[2]];
+    g = [p[0] + d[0] * c - d[1] * n, p[1] + d[0] * n + d[1] * c, g[2]];
+    haft = unit([g[0] - p[0], g[1] - p[1], g[2] - p[2]]);
+    r.tiller = { pivot: p, end: g, wood: seat.wood };
+  }
+  fistOn(r, fr, k, g, [s * (0.5 - 0.35 * work), -0.9 + 0.2 * work, -0.35 + 0.3 * work], haft);
   // The other hand flat on its thigh, half way to the knee, the fingers toward the knee.
   const hips = hipsOn(r, seat.up).t;
   r.open[1 - k] = 1;
   fistOn(r, fr, 1 - k, [-s * 1.2, hips[1] + 1.75, hips[2] + 0.75], [-s * 0.3, -0.9, -0.6], [s, 0, 0]);
   aimHand(r, fr, 1 - k, [0, 0.95, -0.3], [0, -0.2, 1]);
-  r.tail = [10 + 4 * lift, 2 * lift, 0];
+  r.tail = [10 - 0.2 * heel, -0.2 * heel, 0];
 }
 
 /** How far to turn the hand on side `k` about its forearm, in degrees, for its palm to face as near `want` as it can, in the chest's frame. */
@@ -3441,6 +3504,7 @@ function mixRig(a: Rig, b: Rig, w: number): Rig {
     oars: a.oars && b.oars && a.oars.length === b.oars.length
       ? b.oars.map((o, i) => ({ ...o, out: e(a.oars![i].out, o.out), feather: n(a.oars![i].feather, o.feather) }))
       : b.oars,
+    tiller: a.tiller && b.tiller ? { ...b.tiller, end: e(a.tiller.end, b.tiller.end) } : b.tiller,
     slack: a.slack !== undefined && b.slack !== undefined ? n(a.slack, b.slack) : b.slack,
     // Carried on the curve as much as the walk being blended into or out of is, so that stopping in the air at a run comes down
     // over the blend rather than dropping onto the lower foot at once.
@@ -3468,8 +3532,18 @@ function mixRig(a: Rig, b: Rig, w: number): Rig {
  */
 const WATER_BLEND = 0.6;
 function mixWater(a: Rig, b: Rig, t: number): Rig {
-  const arms = mixRig(a, b, ease(Math.min(1, t / 0.65)));
-  const body = mixRig(a, b, ease(Math.max(0, (t - 0.25) / 0.75)));
+  /*
+   * Setting off, the arms went first too, and the stroke's arms are set
+   * against a body lying along the surface: put on one still upright, "out
+   * ahead along the glide" is up at the shoulders in front of the chest, so
+   * both forearms and fists came up out of the water and reached forward for
+   * a third of a second. So setting off is the other way about: the body tips
+   * forward first, the arms coming round under it after, and they are at
+   * the stroke only once it is lying along the water.
+   */
+  const off = (b.under ?? 0) > (a.under ?? 0);
+  const arms = mixRig(a, b, ease(off ? Math.max(0, (t - 0.3) / 0.7) : Math.min(1, t / 0.65)));
+  const body = mixRig(a, b, ease(off ? Math.min(1, t / 0.6) : Math.max(0, (t - 0.25) / 0.75)));
   return { ...body, arm: arms.arm, elbow: arms.elbow, hand: arms.hand, shrug: arms.shrug };
 }
 
@@ -3539,7 +3613,8 @@ function settle(id: string, p: FigurePose, rigAt: (facing: number, left: boolean
   const what = doingAt(p, h.facing, h.left);
   if (what !== h.doing) {
     h.was = h.doing.split('|')[0];
-    h.water = p.swimming && (h.was === 'swim' || h.was === 'tread');
+    // Only a change between swimming and treading water: turning while doing either is blended as any turn is.
+    h.water = p.swimming && (h.was === 'swim' || h.was === 'tread') && h.was !== doing(p);
     h.doing = what;
     h.from = h.rig;
     h.since = now;
@@ -8307,6 +8382,27 @@ function reins(g: CanvasRenderingContext2D, b: Bones, view: View, r: Rig, px: nu
   g.lineCap = 'butt';
 }
 
+/**
+ * A tiller, from its pivot on the rudder's head to its end in the fist: a
+ * rod as thick as the boat's own (`drawRod` in `./furniture`), of her wood.
+ * Baked into the hull it stood still while the hand on it steered; drawn
+ * with the body, it goes where the hand puts it.
+ */
+function tillerRod(g: CanvasRenderingContext2D, view: View, ink: number, t: { pivot: V3; end: V3; wood?: string }): void {
+  const wood: RGB = t.wood ? [parseInt(t.wood.slice(1, 3), 16), parseInt(t.wood.slice(3, 5), 16), parseInt(t.wood.slice(5, 7), 16)] : OAR_WOOD;
+  const a = onScreen(view, t.pivot), z = onScreen(view, t.end);
+  g.lineCap = 'round';
+  for (const [colour, w] of [[css(inkOf(wood)), 0.8 + 2 * ink], [css(wood, 0.92), 0.8]] as Array<[string, number]>) {
+    g.strokeStyle = colour;
+    g.lineWidth = w;
+    g.beginPath();
+    g.moveTo(a[0], a[1]);
+    g.lineTo(z[0], z[1]);
+    g.stroke();
+  }
+  g.lineCap = 'butt';
+}
+
 /** An oar's blade: how long, and how wide, in the body's units. */
 const BLADE: [number, number] = [3.2, 1.15];
 const OAR_WOOD: RGB = [188, 150, 104];
@@ -8486,8 +8582,9 @@ function ripple(g: CanvasRenderingContext2D, view: View, set: RingSet, at: V3, f
     // Left where it was made, which the swimmer has gone on from at the pace the phase goes at, as far as the picture reaches.
     const back = moving ? Math.min(age, set.halt !== undefined ? set.halt - shift - born : age) * SWUM : set.drift ?? 0;
     if (u < 0 || u >= 1 || back > RIPPLE_REACH) continue;
-    // Each comes up as it opens out, so none is ever a small bright ring by the head.
-    const fade = 0.6 * Math.min(1, u / 0.3) * Math.pow(1 - u, 1.5) * (1 - back / RIPPLE_REACH);
+    // Each comes up as it opens out, so none is ever a small bright ring by the head. Treading water makes small soft rings,
+    // fainter than a stroke's: as bright and as wide, two of them crossing over the neck were most of the picture.
+    const fade = (moving ? 0.6 : 0.42) * Math.min(1, u / 0.3) * Math.pow(1 - u, 1.5) * (1 - back / RIPPLE_REACH);
     g.lineWidth = 1 - 0.5 * u;
     // Opening fast and then slower, from about the width of the shoulders.
     const open = 1 - (1 - u) * (1 - u);
@@ -8514,7 +8611,7 @@ function ripple(g: CanvasRenderingContext2D, view: View, set: RingSet, at: V3, f
         at[1] + 1.0 + 0.35 * Math.cos(q) + 1.2 * (h(4) - 0.5) - back,
         0,
       ]);
-      const R = (0.8 + 5.2 * open) * (0.75 + 0.5 * h(5));
+      const R = (0.8 + 3.7 * open) * (0.75 + 0.5 * h(5));
       // A level circle on the water is drawn twice as wide as it is deep.
       g.ellipse(c[0], c[1], R * 1.7, R * 0.85, 0, 0, TAU);
     }
@@ -8571,17 +8668,23 @@ function waterline(parts: Part[], up: boolean): Part[] {
   const made = new Map<Part, Part>();
   for (const part of parts) {
     const pv = (part.v ?? part.mesh.v).map((p) => place(part.xf, p));
-    const above = (i: number): boolean => pv[i][2] >= 0;
     let n = 0, top = -Infinity;
     for (let i = 0; i < pv.length; i++) {
-      if (above(i)) n++;
+      if (pv[i][2] >= 0) n++;
       top = Math.max(top, pv[i][2]);
     }
     if (n === (up ? pv.length : 0)) { made.set(part, part); continue; }
     if (n === (up ? 0 : pv.length)) continue;
-    // A part that comes up out of the water by a sliver -- the collar of a shirt round the neck, the top of a shoulder at the top
-    // of a bob -- is a crescent of another colour inside the foam: under the lip of the water there, rather.
-    if (up && top < SLIVER) continue;
+    /*
+     * A part that comes up out of the water by a sliver -- the collar of a shirt round the neck, the top of a shoulder at the top
+     * of a bob -- is a crescent of another colour inside the foam: under the lip of the water there, rather. That was a cut: the
+     * part left out until it was `SLIVER` out and then drawn the whole of that at once, so the shoulders and upper arms came up
+     * out of the water at full width in one frame. Now what shows of it is cut off at a level raised over the water that comes
+     * down to it as the part comes up, from `SLIVER` to twice that, so what shows grows from nothing to the whole of it.
+     */
+    if (up && top <= SLIVER) continue;
+    const level = up && top < 2 * SLIVER ? 2 * SLIVER - top : 0;
+    const above = (i: number): boolean => pv[i][2] >= level;
     const v = pv.slice();
     const cuts = new Map<number, number>();
     const cutOf = (a: number, b: number): number => {
@@ -8589,9 +8692,9 @@ function waterline(parts: Part[], up: boolean): Part[] {
       let i = cuts.get(key);
       if (i === undefined) {
         const [p, q] = a < b ? [pv[a], pv[b]] : [pv[b], pv[a]];
-        const t = p[2] / (p[2] - q[2]);
+        const t = (p[2] - level) / (p[2] - q[2]);
         i = v.length;
-        v.push([p[0] + (q[0] - p[0]) * t, p[1] + (q[1] - p[1]) * t, 0]);
+        v.push([p[0] + (q[0] - p[0]) * t, p[1] + (q[1] - p[1]) * t, level]);
         cuts.set(key, i);
       }
       return i;
@@ -8642,6 +8745,8 @@ const rehomed = (face: Face, xf: Xf): Face =>
  * along its slant.
  */
 interface Wake { at: V3; r: number; along: V3; long: number }
+/** How far the top of a shoulder stands over its joint. */
+const SHOULDER_TOP = 0.6;
 function wakeOf(b: Bones, fr: Frame): Wake[] {
   const out: Wake[] = [];
   const through = (p: V3, q: V3, r: number): void => {
@@ -8659,6 +8764,18 @@ function wakeOf(b: Bones, fr: Frame): Wake[] {
   through(b.pelvis.t, b.chest.t, 1.75 * fr.wa);
   through(b.chest.t, b.neck.t, 1.9 * fr.sh);
   through(b.neck.t, b.head.t, 0.85);
+  /*
+   * The tops of the shoulders, up through the water while the root of the neck is still under it -- treading water, at the
+   * top of a kick -- are in a ring of their own across them, which opens out from nothing as they come up: with only the
+   * neck's, the shirt that came up showed as a red crescent inside a ring the width of the neck.
+   */
+  const s0 = b.arm0.t, s1 = b.arm1.t;
+  const up = (s0[2] + s1[2]) / 2 + SHOULDER_TOP;
+  if (b.neck.t[2] < 0 && up > 0) {
+    const g = Math.min(1, up / (2 * SHOULDER_TOP));
+    const d: V3 = [s1[0] - s0[0], s1[1] - s0[1], 0], l = Math.hypot(d[0], d[1]) || 1;
+    out.push({ at: [(s0[0] + s1[0]) / 2, (s0[1] + s1[1]) / 2, 0], r: 0.4 + 0.6 * g, along: [d[0] / l, d[1] / l, 0], long: 0.4 + (l / 2 + 0.3) * g });
+  }
   for (let k = 0; k < 2; k++) {
     through(b[`arm${k}`].t, b[`elbow${k}`].t, 0.72);
     through(b[`elbow${k}`].t, b[`wrist${k}`].t, 0.6);
@@ -8876,6 +8993,9 @@ function drawLive(ctx: CanvasRenderingContext2D, sx: number, sy: number, zoom: n
     const T = view.T;
     const near = (o: { lock: V3 }): boolean => o.lock[0] * T[0] + o.lock[1] * T[1] > 0;
     for (const o of r.oars ?? []) if (!near(o)) oar(ctx, view, ink, o);
+    // The tiller under the body or over it by which side of the chest the middle of it is.
+    const tiller = r.tiller, over = !!tiller && dot(tiller.pivot, T) + dot(tiller.end, T) > 2 * dot(b.chest.t, T);
+    if (tiller && !over) tillerRod(ctx, view, ink, tiller);
     if (r.reins) reins(ctx, b, view, r, 1 / zoom, true);
     const sides = r.seat?.sides;
     if (sides) {
@@ -8893,6 +9013,7 @@ function drawLive(ctx: CanvasRenderingContext2D, sx: number, sy: number, zoom: n
     render(ctx, r.sit?.astride ? parts.map((p) => (p.hide ? p : { ...p, hide: [BARREL], hideIn: ROOT })) : parts, pal, view, ink, 1 / zoom, now);
     if (sides) ctx.restore();
     for (const o of r.oars ?? []) if (near(o)) oar(ctx, view, ink, o);
+    if (tiller && over) tillerRod(ctx, view, ink, tiller);
     if (r.reins) reins(ctx, b, view, r, 1 / zoom, false);
   }
   ctx.restore();
@@ -8958,9 +9079,21 @@ interface Still {
   ox: number;
   oy: number;
   dev: number;
+  /** Where it was last put down: on what, and where in that one's own units. */
+  put?: { ctx: CanvasRenderingContext2D; x: number; y: number; w: number; h: number };
 }
 
 const stills = new Map<string, Still>();
+
+/**
+ * The picture of a body as it was last put down, and where, while it is kept
+ * as one (see `drawStill`): what a boat's sail in front of my own helmsman is
+ * let fade over, so he shows through it (`seeThrough` in `./furniture`).
+ */
+export function figurePicture(id: string): { ctx: CanvasRenderingContext2D; canvas: HTMLCanvasElement; x: number; y: number; w: number; h: number } | null {
+  const st = stills.get(id);
+  return st?.put ? { ...st.put, canvas: st.canvas } : null;
+}
 
 function drawStill(ctx: CanvasRenderingContext2D, sx: number, sy: number, zoom: number, pose: FigurePose, kit: Kit, r: Rig, facing: number, changing: boolean, ink: number, now: number): void {
   const id = pose.id as string;
@@ -9004,8 +9137,9 @@ function drawStill(ctx: CanvasRenderingContext2D, sx: number, sy: number, zoom: 
     drawLive(st.g, 0, 0, zoom, pose, kit, r, facing, ink, now);
   }
   const x = sx - st.ox / st.dev, y = sy - st.oy / st.dev;
-  if (close) ctx.drawImage(st.canvas, Math.round(x * st.dev) / st.dev, Math.round(y * st.dev) / st.dev, st.canvas.width / st.dev, st.canvas.height / st.dev);
-  else ctx.drawImage(st.canvas, x, y, st.canvas.width / st.dev, st.canvas.height / st.dev);
+  const px = close ? Math.round(x * st.dev) / st.dev : x, py = close ? Math.round(y * st.dev) / st.dev : y;
+  ctx.drawImage(st.canvas, px, py, st.canvas.width / st.dev, st.canvas.height / st.dev);
+  st.put = { ctx, x: px, y: py, w: st.canvas.width / st.dev, h: st.canvas.height / st.dev };
 }
 
 /*

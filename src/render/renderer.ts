@@ -68,7 +68,7 @@ import { kilnCentre, type PlacedKiln } from '../game/kiln';
 import { furnitureCentre, furnitureDef, type PlacedFurniture, facingOf as pieceFacing, furnitureFootprint } from '../game/furniture';
 import { UNSEEN, VISIBLE } from '../game/vision';
 import { DAWN, DUSK } from '../game/game';
-import { clothInWind, crewOrder, deviceOf, drawFurniture, drawFurnitureLive, driverOn, furnitureHoles, helmSeat, reinsTo, rowedPiece, furnitureSpan, FURNITURE_HEIGHT, glowsAtNight, headingView, mossTrim, PIECE_STAGES, pieceView, planterTrim, roseTrim, type Air, type Crew, type PieceView } from './furniture';
+import { boatSway, clothInWind, crewOrder, deviceOf, drawFurniture, drawFurnitureLive, driverOn, swayOnScreen, steeredByTiller, woodHex, furnitureHoles, helmSeat, reinsTo, rowedPiece, furnitureSpan, FURNITURE_HEIGHT, glowsAtNight, headingView, mossTrim, PIECE_STAGES, pieceView, planterTrim, roseTrim, type Air, type Crew, type PieceView } from './furniture';
 import { roseStage } from '../game/roses';
 import { fieldRate } from '../game/growth';
 import { dyeOf } from '../game/dyestuffs';
@@ -187,7 +187,7 @@ import { spellInfo } from './spells/info';
 import type { Body as SpellBody, WorldRec as SpellRec } from './spells/kit';
 import type { CastAt } from '../game/events';
 import { lookStep, yearAt } from './foliage';
-import { FIGURE_TOP, type Seat } from './figure';
+import { FIGURE_TOP, figurePicture, type Seat } from './figure';
 /**
  * How much larger a beast in the traces is drawn than one loose: enough that
  * a grown orse, the draught beast, stands a quarter again as tall as a body
@@ -317,6 +317,12 @@ interface Entity {
   aq?: AqueductPart;
   /** The part of the screen a body shows in, for one down a hole: the ground in front of the hole hides the rest (`onFlight`). */
   clip?: Array<[number, number]>;
+  /**
+   * The roll, pitch and lift of the boat this is or is aboard, as a change to
+   * the screen about her floor contact (`swayOnScreen` in `./furniture`): she
+   * and everybody on her are drawn through the same one, so they move together.
+   */
+  sway?: { ox: number; oy: number; c: number; d: number; up: number };
 }
 
 /**
@@ -948,6 +954,7 @@ export class Renderer {
     e.seatFacing = undefined;
     e.rare = undefined;
     e.view = undefined;
+    e.sway = undefined;
     e.layer = undefined;
     e.mote = undefined;
     e.fx = undefined;
@@ -3943,27 +3950,33 @@ export class Renderer {
     if (!boat) return;
     const waist = boat.waist ?? boat.seat;
     const me = this.game.player;
+    const sway = this.swayOf(f, fe, zoom);
+    fe.sway = sway?.screen;
+    const swayed = (e: Entity): Entity => {
+      e.sway = sway?.screen;
+      return e;
+    };
     // Who is where: place 0 is her helm, and a passenger's place is their seat.
     const hands: Array<{ spot: number; take: (sy: number) => void }> = [];
     const aboard = (uid: string, spot: number, at: (peer: Peer) => [number, number], deck: number, standing: boolean): void => {
       const peer = this.game.roster.list().find((p) => p.uid === uid);
       if (!peer) return;
       hands.push({ spot, take: (sy) => {
-        const e = this.take('peer', x, y, fe.sx, sy, null);
+        const e = swayed(this.take('peer', x, y, fe.sx, sy, null));
         e.peer = peer;
         this.onDeck(e, f, at(peer), deck * zoom, standing);
         // Whoever has the helm of a boat with no deck of its own to stand at it is sat at her oars or her tiller.
-        if (spot === 0 && !standing) this.seatOn(e, f, zoom);
+        if (spot === 0 && !standing) this.seatOn(e, f, zoom, sway?.at);
       } });
     };
     if (f.helm) aboard(f.helm, 0, () => this.game.helmSpot(f), boat.seat, !!boat.helm);
     if (this.helming === f) hands.push({ spot: 0, take: (sy) => {
-      const e = this.take('player', x, y, fe.sx, sy, null);
+      const e = swayed(this.take('player', x, y, fe.sx, sy, null));
       this.onDeck(e, f, this.game.helmSpot(f), boat.seat * zoom, !!boat.helm);
       // A helm with nowhere to stand at it is sat at, at her tiller, as when she had no layers.
-      if (!boat.helm) this.seatOn(e, f, zoom);
+      if (!boat.helm) this.seatOn(e, f, zoom, sway?.at);
     } });
-    if (me.aboard === f.id) hands.push({ spot: me.seat ?? 0, take: (sy) => this.onDeck(this.take('player', x, y, fe.sx, sy, null), f, [me.x, me.y], waist * zoom, true) });
+    if (me.aboard === f.id) hands.push({ spot: me.seat ?? 0, take: (sy) => this.onDeck(swayed(this.take('player', x, y, fe.sx, sy, null)), f, [me.x, me.y], waist * zoom, true) });
     for (const r of f.riders ?? []) aboard(r.who, r.seat, (peer) => this.game.roster.drawnAt(peer), waist, true);
 
     const crew = crewOf(f.kind);
@@ -3972,11 +3985,11 @@ export class Renderer {
       hands.forEach((h, i) => h.take(fe.sy + HAIR * (i + 1)));
       return;
     }
-    const order = crewOrder(zoom, f.kind, !!f.lit, dyeOf(f) ?? undefined, this.pieceTrim(f), fe.view, f.material, crew);
+    const order = crewOrder(zoom, f.kind, !!f.lit, dyeOf(f) ?? undefined, this.pieceTrim(f), fe.view, f.material, crew, this.manned(f));
     fe.layer = 0;
     order.forEach((spot, n) => {
       for (const h of hands) if (h.spot === spot) h.take(fe.sy + HAIR * (2 * n + 1));
-      const le = this.take('hull', x, y, fe.sx, fe.sy + HAIR * (2 * n + 2), null);
+      const le = swayed(this.take('hull', x, y, fe.sx, fe.sy + HAIR * (2 * n + 2), null));
       le.piece = f;
       le.view = fe.view;
       le.layer = n + 1;
@@ -3992,14 +4005,47 @@ export class Renderer {
    * put that far from wherever they are drawn from now, and lifted to the
    * floor under the seat, which is what makes them a driver.
    */
-  private seatOn(e: Entity, f: PlacedFurniture, zoom: number): void {
+  private seatOn(e: Entity, f: PlacedFurniture, zoom: number, sway?: { heel: number; pitch: number }): void {
     const d = driverOn(f.kind, this.viewOf(f));
     if (!d) return;
     e.lift = d.lift * zoom;
     e.drawDx = (e.drawDx ?? 0) + d.dx * zoom;
     e.drawDy = (e.drawDy ?? 0) + d.dy * zoom + e.lift;
-    e.seat = d.seat;
+    // A tiller in hand is of her wood; and the body balances against however she is heeled this moment.
+    e.seat = d.seat.pivot || sway ? { ...d.seat, wood: d.seat.pivot ? woodHex(f.material) : undefined, sway } : d.seat;
     e.seatFacing = d.facing;
+  }
+
+  /** Whether somebody has `f`'s tiller in hand, which is then drawn with them rather than in her. */
+  private manned(f: PlacedFurniture): boolean {
+    return steeredByTiller(f.kind) && (!!f.helm || this.helming === f);
+  }
+
+  /**
+   * How a boat steered by a tiller sits on the water this frame
+   * (`boatSway` in `./furniture`), and that as a change to the screen about
+   * where she is drawn, for her and everybody aboard her. Under sail is let
+   * come on and off over a second or two, as she gathers way and loses it.
+   */
+  private readonly swaying = new Map<number, { under: number; seen: number }>();
+  private swayOf(f: PlacedFurniture, fe: Entity, zoom: number): { at: { heel: number; pitch: number }; screen: NonNullable<Entity['sway']> } | null {
+    if (!steeredByTiller(f.kind) || !fe.view) return null;
+    const helm = this.helming === f ? this.game.player : f.helm ? this.game.roster.list().find((p) => p.uid === f.helm) : undefined;
+    const going = helm?.moving ? 1 : 0;
+    let w = this.swaying.get(f.id);
+    if (!w || this.time - w.seen > 1) {
+      w = { under: going, seen: this.time };
+      this.swaying.set(f.id, w);
+      if (this.swaying.size > 64) for (const [k, v] of this.swaying) if (this.time - v.seen > 10) this.swaying.delete(k);
+    }
+    const dt = Math.max(0, Math.min(0.1, this.time - w.seen));
+    w.under += Math.max(-dt / 1.6, Math.min(dt / 1.6, going - w.under));
+    w.seen = this.time;
+    // Heeled to the side her sail is out on: the other side from the wind's, which is the sign of her trim.
+    const lee = (this.pieceTrim(f) ?? 0.25) < 0 ? 1 : -1;
+    const s = boatSway(this.time, w.under, lee, (f.id * 7.31) % 97);
+    const { c, d, up } = swayOnScreen(fe.view, s, zoom);
+    return { at: { heel: s.heel, pitch: s.pitch }, screen: { ox: fe.sx, oy: fe.sy, c, d, up } };
   }
 
   /** Somebody on `f`, drawn at `wx`, `wy` on her rather than where they sort, `lift` up. */
@@ -4322,8 +4368,12 @@ export class Renderer {
      * a body, a beast, a bird is looked for, and under a floor that deep
      * would be lost.
      */
-    let behind = false;
+    let behind = false, swayed = false;
     for (const ent of ents) {
+      if (swayed) {
+        ctx.restore();
+        swayed = false;
+      }
       if (behind) {
         ctx.restore();
         behind = false;
@@ -4333,6 +4383,15 @@ export class Renderer {
         ctx.save();
         ctx.clip(under, 'evenodd');
         behind = true;
+      }
+      // A boat on the water, and whoever is aboard her, drawn as she rolls and pitches (`swayOf`).
+      if (ent.sway) {
+        const w = ent.sway;
+        ctx.save();
+        ctx.translate(w.ox, w.oy - w.up);
+        ctx.transform(1, 0, w.c, w.d, 0, 0);
+        ctx.translate(-w.ox, -w.oy);
+        swayed = true;
       }
       if (ent.kind === 'life') {
         if (ent.mote) this.life.draw(ctx, ent.mote);
@@ -4504,7 +4563,8 @@ export class Renderer {
       // The layers of a hull in front of somebody on her deck; see `takeAboard`. At my own helm, I am seen through them.
       if (ent.kind === 'hull' && ent.piece && ent.view) {
         const piece = ent.piece;
-        drawFurniture(ctx, ent.sx, ent.sy + (ent.drawDy ?? 0), zoom, piece.kind, !!piece.lit, dyeOf(piece) ?? undefined, this.pieceTrim(piece), ent.view, piece.material, crewOf(piece.kind) ?? undefined, ent.layer, true, this.helming === piece);
+        drawFurniture(ctx, ent.sx, ent.sy + (ent.drawDy ?? 0), zoom, piece.kind, !!piece.lit, dyeOf(piece) ?? undefined, this.pieceTrim(piece), ent.view, piece.material, crewOf(piece.kind) ?? undefined, ent.layer, true,
+          this.helming === piece ? figurePicture('player') : null, this.manned(piece));
         continue;
       }
       if (ent.kind === 'furniture' && ent.piece) {
@@ -4586,7 +4646,7 @@ export class Renderer {
            */
           const crew = ent.layer === 0 ? crewOf(piece.kind) ?? undefined : undefined;
           this.paint(ctx, zoom, hovering ? 'hover' : 'none', 0, ent.sx, ent.sy, (g, px, py) => {
-            drawn = drawFurniture(g, px, py, zoom, piece.kind, !!piece.lit, dyeOf(piece) ?? undefined, this.pieceTrim(piece), view, piece.material, crew, crew && !hovering ? 0 : 'all', false);
+            drawn = drawFurniture(g, px, py, zoom, piece.kind, !!piece.lit, dyeOf(piece) ?? undefined, this.pieceTrim(piece), view, piece.material, crew, crew && !hovering ? 0 : 'all', false, null, this.manned(piece));
           });
           // What on it moves -- an altar's stars, a banner's cloth -- over it, and outside the
           // ring under the pointer: a ring round a bloom of light is a blot.
@@ -4757,6 +4817,7 @@ export class Renderer {
         this.crateHits.push({ x: ent.x, y: ent.y, left: left + dw * 0.15, top: top + dh * 0.2, w: dw * 0.7, h: dh * 0.75, crate: ent.crateId });
       }
     }
+    if (swayed) ctx.restore();
     if (behind) ctx.restore();
     // Down a cellar it goes on once, over the whole of the cellar (`drawCellarView`).
     if (this.ghost && !this.inCellarPass) this.drawGhost(ctx, zoom, this.ghost);
