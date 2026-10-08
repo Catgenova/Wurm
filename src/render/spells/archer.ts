@@ -1399,7 +1399,7 @@ export const ARCHER: Record<string, SpellVisual> = {
         k.flash(0.12, '#fff6d0');
         const m = muzzle(k), d = aimOf(k);
         k.burst(m, 14, { kind: 'spark', colour: [GOLD, PALETTE.core], size: 1.8, life: [0.15, 0.3], speed: [0.8, 1.8], up: [-2, 8], heading: { x: d[0], y: d[1] }, cone: 0.5, gravity: 0 });
-        leaves(k, k.at(k.caster, 0.05), 8, { speed: [0.4, 1], up: [2, 8] });
+        leaves(k, k.at(k.caster, 0.05), 5, { speed: [0.4, 1], up: [2, 8] });
         k.state.fromX = m.x;
         k.state.fromY = m.y;
         k.state.fromZ = m.z;
