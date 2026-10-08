@@ -143,35 +143,35 @@ function suture(k: FxScene, b: Body, at: P3, o: SutureOpts): void {
   const ax = x - dx * L * 0.5, ay = y - dy * L * 0.5;
   const sewn = clamp(o.close * clamp(o.u));
   const gash = clamp(o.gash ?? 1);
-  const W = L * 0.12;
+  const W = L * 0.085;
   const stitches = Math.max(2, Math.round((o.close * o.len) / 2.6));
   const inkW = Math.max(0.8, 0.7 * k.zoom);
   k.worldDraw({ x: b.x, y: b.y, z: b.z }, (g) => {
     g.globalAlpha = clamp(a);
     g.lineJoin = 'miter';
-    // The open part of the gash: a lens from where the stitching has got to, to the far end.
+    // The open part of the gash, from where the stitching has got to, to the far end: a slit with curved lips, dark
+    // at the edges and wet red down its middle, pointed at both ends as a cut is.
     if (gash > 0.01 && sewn < 0.99) {
-      const s = sewn, mx = ax + dx * L * (s + 1) * 0.5, my = ay + dy * L * (s + 1) * 0.5;
+      const s = sewn;
       const w = W * gash * Math.min(1, (1 - s) * 2);
-      const sx0 = ax + dx * L * s, sy0 = ay + dy * L * s;
+      const sx0 = ax + dx * L * s, sy0 = ay + dy * L * s, ex0 = ax + dx * L, ey0 = ay + dy * L;
+      const mx = (sx0 + ex0) / 2, my = (sy0 + ey0) / 2;
+      const lips = (k2: number): void => {
+        g.beginPath();
+        g.moveTo(sx0, sy0);
+        g.quadraticCurveTo(mx + nx * w * 2 * k2, my + ny * w * 2 * k2, ex0, ey0);
+        g.quadraticCurveTo(mx - nx * w * 2 * k2, my - ny * w * 2 * k2, sx0, sy0);
+        g.closePath();
+      };
       g.globalAlpha = clamp(a * Math.min(1, gash * 1.5));
+      lips(1);
       g.fillStyle = BLOOD_DEEP;
-      g.beginPath();
-      g.moveTo(sx0, sy0);
-      g.lineTo(mx + nx * w, my + ny * w);
-      g.lineTo(ax + dx * L, ay + dy * L);
-      g.lineTo(mx - nx * w, my - ny * w);
-      g.closePath();
       g.fill();
-      g.lineWidth = inkW;
+      g.lineWidth = Math.max(0.7, inkW * 0.6);
       g.strokeStyle = BLOOD_INK;
       g.stroke();
+      lips(0.45);
       g.fillStyle = BLOOD;
-      g.beginPath();
-      g.moveTo(lerp(sx0, mx, 0.3), lerp(sy0, my, 0.3));
-      g.lineTo(mx + nx * w * 0.45 - dx * w * 0.3, my + ny * w * 0.45 - dy * w * 0.3);
-      g.lineTo(lerp(ax + dx * L, mx, 0.3), lerp(ay + dy * L, my, 0.3));
-      g.closePath();
       g.fill();
     }
     if (sewn <= 0.001) return;
@@ -208,7 +208,7 @@ function suture(k: FxScene, b: Body, at: P3, o: SutureOpts): void {
     const hx = ax + dx * L * sewn, hy = ay + dy * L * sewn;
     const dip = Math.sin(o.bob ?? 0);
     const tipX = hx + nx * W * 1.2 * dip, tipY = hy + ny * W * 1.2 * dip - k.px(1.5);
-    const backX = tipX - nx * L * 0.35 - dx * L * 0.15, backY = tipY - ny * L * 0.35 - dy * L * 0.15 - k.px(2.5);
+    const backX = tipX - nx * L * 0.2 - dx * L * 0.1, backY = tipY - ny * L * 0.2 - dy * L * 0.1 - k.px(2);
     k.worldDraw({ x: b.x, y: b.y, z: b.z }, (g) => {
       g.globalAlpha = nd;
       g.lineCap = 'round';
@@ -388,7 +388,7 @@ function glint(k: FxScene, p: P3, r: number, alpha: number, turn = 0): void {
 /** Where to put a wound on somebody: `i` of a few spread over the body, the same every frame. */
 function woundAt(k: FxScene, b: Body, i: number): { at: P3; ang: number } {
   const up = [0.62, 0.46, 0.74, 0.34][i % 4];
-  const side = [-0.12, 0.2, 0.3, -0.26][i % 4] * b.wide;
+  const side = [-0.1, 0.16, 0.2, -0.18][i % 4] * b.wide;
   const at = k.local(b, side, 0, b.tall * up);
   const ang = (hashOf(k.seed, i) - 0.5) * 0.8 + (i % 2 ? 0.7 : -0.5);
   return { at, ang };
@@ -548,7 +548,7 @@ const handsPose: CastPose = (r, t) => {
  */
 const circlePose: CastPose = (r, t) => {
   for (let k = 0; k < 2; k++) {
-    r.arm[k] = euler(t, [[0, [12, 10, 0]], [0.22, [60, 8, 0]], [0.42, [62, 14, 0]], [0.5, [60, 16, 0]], [0.62, [104, 58, -4]], [0.8, [100, 60, -4]], [1, [12, 10, 0]]]);
+    r.arm[k] = euler(t, [[0, [12, 10, 0]], [0.22, [60, 8, 0]], [0.42, [62, 14, 0]], [0.5, [60, 16, 0]], [0.62, [40, 96, -4]], [0.8, [36, 94, -4]], [1, [12, 10, 0]]]);
     r.elbow[k] = one(t, [[0, 16], [0.22, 20], [0.42, 6], [0.5, 6], [0.62, 12], [1, 18]]);
     r.hand[k] = euler(t, [[0, [0, 0, 0]], [0.3, [-60, 0, 0]], [0.5, [-70, 0, 0]], [0.62, [0, 0, 0]], [1, [0, 0, 0]]]);
     r.open[k] = t > 0.14 && t < 0.92;
@@ -570,7 +570,7 @@ const circlePose: CastPose = (r, t) => {
 const massPose: CastPose = (r, t) => {
   const yaw = one(t, [[0, 0], [0.38, -44], [0.5, 30], [0.64, 46], [0.82, 14], [1, 0]]);
   for (let k = 0; k < 2; k++) {
-    r.arm[k] = euler(t, [[0, [12, 10, 0]], [0.2, [44, 46, 0]], [0.38, [62, 80, 0]], [0.5, [74, 86, 0]], [0.66, [60, 78, 0]], [0.84, [30, 40, 0]], [1, [12, 10, 0]]]);
+    r.arm[k] = euler(t, [[0, [12, 10, 0]], [0.2, [22, 52, 0]], [0.38, [16, 84, 0]], [0.5, [22, 90, 0]], [0.66, [16, 82, 0]], [0.84, [12, 40, 0]], [1, [12, 10, 0]]]);
     r.elbow[k] = one(t, [[0, 16], [0.2, 40], [0.38, 30], [0.5, 4], [0.7, 10], [1, 18]]);
     r.open[k] = t > 0.46 && t < 0.88;
   }
@@ -644,7 +644,7 @@ const surgeryPose: CastPose = (r, t, c) => {
  */
 const restorePose: CastPose = (r, t) => {
   for (let k = 0; k < 2; k++) {
-    r.arm[k] = euler(t, [[0, [12, 10, 0]], [0.3, [66, -24, 44]], [0.5, [68, -26, 46]], [0.6, [128, 62, -6]], [0.82, [124, 62, -6]], [1, [12, 10, 0]]]);
+    r.arm[k] = euler(t, [[0, [12, 10, 0]], [0.3, [66, -24, 44]], [0.5, [68, -26, 46]], [0.6, [34, 128, -6]], [0.82, [32, 124, -6]], [1, [12, 10, 0]]]);
     r.elbow[k] = one(t, [[0, 16], [0.3, 138], [0.5, 140], [0.6, 14], [0.82, 16], [1, 18]]);
     r.open[k] = t > 0.2 && t < 0.92;
   }
@@ -743,11 +743,19 @@ export const CHIRURGEON: Record<string, SpellVisual> = {
         // The needle's glint at the fingertips, and a thread trailing after the hand through its loops.
         const h = k.hand(1);
         const st = k.state;
-        const live = seg(t, 0.08, 0.14);
-        if (st.n) thread(k, { x: st.x1, y: st.y1, z: st.z1 }, h, { alpha: 0.8 * live * (1 - seg(t, 0.55, 0.6)) });
-        if (!st.n || k.now - st.at > 0.05) {
-          st.x1 = st.x0 ?? h.x; st.y1 = st.y0 ?? h.y; st.z1 = st.z0 ?? h.z;
+        const live = seg(t, 0.08, 0.14) * (1 - seg(t, 0.55, 0.6));
+        // Where the hand was over the last few twentieths of a second, kept in the cast's own numbers, newest first.
+        if (!st.n || k.now - st.at > 0.045) {
+          for (let i = 3; i > 0; i--) {
+            st[`x${i}`] = st[`x${i - 1}`] ?? h.x; st[`y${i}`] = st[`y${i - 1}`] ?? h.y; st[`z${i}`] = st[`z${i - 1}`] ?? h.z;
+          }
           st.x0 = h.x; st.y0 = h.y; st.z0 = h.z; st.at = k.now; st.n = 1;
+        }
+        if (live > 0.01) {
+          const pts: P3[] = [];
+          for (let i = 3; i >= 1; i--) pts.push({ x: st[`x${i}`], y: st[`y${i}`], z: st[`z${i}`] });
+          pts.push(h);
+          k.ribbon(pts, { width: 1.4, taper: 'start', alpha: 0.85 * live, main: LINEN, core: '#ffffff', ink: PALETTE.ink, glow: 0.3 });
         }
         k.flare(h, 3.2, live * (0.6 + 0.4 * Math.sin(k.now * 30)), PALETTE.core, k.now * 4);
       },
@@ -1017,14 +1025,25 @@ export const CHIRURGEON: Record<string, SpellVisual> = {
     cast: { timing: { secs: 1.3, release: 0.5 }, pose: massPose },
     fx: {
       charge: (k, t) => {
-        // The strips held out from both hands, streaming as the body winds round.
+        // The strips held out from both hands, trailing after them as the body winds and whips round, sagging.
         const g = smooth(seg(t, 0.15, 0.3)) * (1 - seg(t, 0.48, 0.52));
-        if (g <= 0) return;
+        const st = k.state;
         for (let s = 0; s < 2; s++) {
           const h = k.hand(s);
-          const pts: P3[] = [h];
-          for (let i = 1; i <= 4; i++) pts.push({ x: h.x, y: h.y, z: h.z - i * 1.6 + Math.sin(k.now * 18 + i + s * 2) * 0.6 });
-          k.ribbon(pts.reverse(), { width: 2.6, taper: 'start', alpha: g, main: LINEN, core: '#ffffff', ink: LINEN_INK, glow: 0.2 });
+          const key = s ? 'r' : 'l';
+          if (!st[key + 'n'] || k.now - st[key + 'at'] > 0.04) {
+            for (let i = 3; i > 0; i--) {
+              st[key + 'x' + i] = st[key + 'x' + (i - 1)] ?? h.x;
+              st[key + 'y' + i] = st[key + 'y' + (i - 1)] ?? h.y;
+              st[key + 'z' + i] = st[key + 'z' + (i - 1)] ?? h.z;
+            }
+            st[key + 'x0'] = h.x; st[key + 'y0'] = h.y; st[key + 'z0'] = h.z; st[key + 'at'] = k.now; st[key + 'n'] = 1;
+          }
+          if (g <= 0.01) continue;
+          const pts: P3[] = [];
+          for (let i = 3; i >= 1; i--) pts.push({ x: st[key + 'x' + i], y: st[key + 'y' + i], z: st[key + 'z' + i] - i * 1.4 + Math.sin(k.now * 16 + i + s * 2) * 0.4 });
+          pts.push(h);
+          k.ribbon(pts, { width: 2.4, taper: 'none', alpha: g, main: LINEN, core: '#ffffff', ink: LINEN_INK, glow: 0.2 });
         }
       },
       hit: (k) => k.flash(0.05),
@@ -1167,7 +1186,7 @@ export const CHIRURGEON: Record<string, SpellVisual> = {
         // The wounds shown on the body as it gathers itself, and light under the crossed arms.
         const b = k.caster;
         const show = seg(t, 0.1, 0.3);
-        for (let i = 0; i < 4; i++) {
+        for (let i = 0; i < 3; i++) {
           const w = woundAt(k, b, i);
           suture(k, b, w.at, { len: 8, ang: w.ang, close: 1, u: 0, gash: show * seg(t, 0.1 + i * 0.04, 0.2 + i * 0.04), alpha: 1 });
         }
@@ -1182,7 +1201,7 @@ export const CHIRURGEON: Record<string, SpellVisual> = {
         // A band of light rising up the body, feet to crown; each wound it passes is stitched shut, the whole of it.
         const rise = easeOut(seg(u, 0, 0.6));
         const fade = 1 - seg(u, 0.75, 1);
-        for (let i = 0; i < 4; i++) {
+        for (let i = 0; i < 3; i++) {
           const w = woundAt(k, b, i);
           const share = (w.at.z - b.z) / b.tall;
           const sewn = seg(rise, share - 0.12, share + 0.02);
