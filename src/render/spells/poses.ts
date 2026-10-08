@@ -16,6 +16,23 @@
  * turning the front to the body's left; `leg[k]` = [forward, out, turned];
  * `knee[k]` its bend; `open[k]` an open hand; `wield` the weapon in the right
  * fist carried by the forearm.
+ *
+ * And, each optional and blended in with the cast like the rest (see the
+ * `Rig` in render/figure.ts for each): `wieldStaff` a spear taken by the arms,
+ * along the right forearm or with `both` from the right fist through the left;
+ * `wieldBow` the bow taken by the left fist, `draw` its string pulled to the
+ * right hand, `nocked` an arrow on it; `thrown` the right hand emptied, the
+ * shield kept; `both` the other hand on the haft (`bothAt` where); `haft` the
+ * weapon turned in the fist toward the forearm's line (150 with `wield`, a
+ * blade reversed, point down); `slide` the weapon slid through the fist;
+ * `reach` a hand put at a place in the body's frame from its feet (`stoop` to
+ * bow the trunk as far as it takes); `shape` each hand's claw, cup, flat,
+ * point or two; `mouth` open; `kneel` down on one knee. From the figure too:
+ * `figureJoint`/`figureJoints` know a weapon's `tip`, `butt`, `grip`, a bow's
+ * `bowTop`, `bowBottom`, `nock`, `arrow`; `weaponSpan` a weapon's own
+ * measures (a bow's tips among them); `figureProportions`, `reachHand`,
+ * and `armToward`, which points an arm -- past level ahead, a positive `out`
+ * in `arm[k]` carries the arm back across the body, and is left so.
  */
 import type { Euler, Rig } from '../figure';
 import type { CastPose, PoseCue } from './index';
