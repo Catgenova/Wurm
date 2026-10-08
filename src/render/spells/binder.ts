@@ -23,7 +23,7 @@ import type { CastPose, SpellVisual } from './index';
 import { spellInfo } from './info';
 import {
   arcAt, bump, clamp, easeBack, easeIn, easeOut, flashOf, hashOf, lerp, mid3, seg, smooth, TAU,
-  type Body, type FxScene, type P3, type SpellPalette,
+  type Body, type FxScene, type GroundLayer, type P3, type SpellPalette,
 } from './kit';
 import { euler, one } from './poses';
 
@@ -309,36 +309,30 @@ function cracked(k: FxScene, from: { x: number; y: number }, to: { x: number; y:
 function cracks(k: FxScene, lines: readonly (readonly P3[])[], u: number, o: { alpha?: number; width?: number; glow?: number; colour?: string } = {}): void {
   const a = o.alpha ?? 1;
   if (a <= 0.01 || u <= 0) return;
-  // One path a frame for all of them, stroked twice per line of the land they lie across.
-  const path = new Path2D();
-  let any = false;
+  // As shapes on the ground in tiles, which the stage cuts along the tiles' edges and lays a piece at a time: they cost what
+  // they cover. A path on the screen as well, for the glow over them.
+  const paths: number[][] = [];
+  const glowPath = new Path2D();
   let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
   for (const pts of lines) {
     const n = pts.length;
     const upto = u * (n - 1);
+    const run: number[] = [];
     for (let i = 0; i < n && i <= Math.ceil(upto); i++) {
       const p = i <= upto ? pts[i] : mid3(pts[i - 1], pts[i], upto - (i - 1));
-      if (i) {
-        path.lineTo(k.sx(p), k.sy(p));
-        any = true;
-      } else path.moveTo(k.sx(p), k.sy(p));
+      run.push(p.x, p.y);
+      if (i) glowPath.lineTo(k.sx(p), k.sy(p));
+      else glowPath.moveTo(k.sx(p), k.sy(p));
       x0 = Math.min(x0, p.x); y0 = Math.min(y0, p.y); x1 = Math.max(x1, p.x); y1 = Math.max(y1, p.y);
     }
+    if (run.length >= 4) paths.push(run);
   }
-  if (!any) return;
+  if (!paths.length) return;
   const W = (o.width ?? 1) * k.zoom;
-  const ink = k.pal.ink, glowC = o.colour ?? k.pal.core;
-  k.groundDraw((x0 + x1) / 2, (y0 + y1) / 2, Math.max(x1 - x0, y1 - y0) / 2 + 0.5, (g) => {
-    g.globalAlpha = clamp(a);
-    g.lineJoin = 'miter';
-    g.lineCap = 'butt';
-    g.lineWidth = W + Math.max(1, 0.7 * k.zoom);
-    g.strokeStyle = ink;
-    g.stroke(path);
-    g.lineWidth = W * 0.6;
-    g.strokeStyle = glowC;
-    g.stroke(path);
-  });
+  k.groundShape((x0 + x1) / 2, (y0 + y1) / 2, Math.max(x1 - x0, y1 - y0) / 2 + 0.3, [
+    { kind: 'stroke', colour: k.pal.ink, alpha: clamp(a), width: W + Math.max(1, 0.7 * k.zoom), paths, lift: 0.2, join: 'miter' },
+    { kind: 'stroke', colour: o.colour ?? k.pal.core, alpha: clamp(a), width: W * 0.6, paths, lift: 0.2, join: 'miter' },
+  ]);
   const gl = o.glow ?? 1;
   if (gl > 0) {
     const light = k.pal.light;
@@ -348,7 +342,7 @@ function cracks(k: FxScene, lines: readonly (readonly P3[])[], u: number, o: { a
       g.lineCap = 'round';
       g.strokeStyle = light;
       g.lineWidth = W * 2.4;
-      g.stroke(path);
+      g.stroke(glowPath);
       g.lineCap = 'butt';
     });
   }
@@ -365,41 +359,23 @@ function tally(k: FxScene, c: { x: number; y: number }, r: number, left: number,
   const share = clamp(left / Math.max(0.01, total));
   const lit = share * n;
   const da = Math.min((TAU / n) * 0.22, 0.034 / r), dr = Math.min(0.032, r * 0.12);
-  // Three paths a frame -- the lit stones, the one going out, the spent -- since what lies on the ground is drawn again for
-  // every line of the land under it.
-  const on = new Path2D(), going = new Path2D(), off = new Path2D();
+  // Lozenges on the ground in tiles: the lit ones, the one going out, the spent ones.
+  const on: number[][] = [], going: number[][] = [], off: number[][] = [];
   for (let i = 0; i < n; i++) {
     const an = -Math.PI * 0.75 + (i / n) * TAU;
-    const into = i < Math.floor(lit) ? on : i < lit ? going : off;
-    const pts = [[r + dr, an], [r, an + da], [r - dr, an], [r, an - da]] as const;
-    pts.forEach(([rr, aa], j) => {
-      const x = c.x + Math.cos(aa) * rr, y = c.y + Math.sin(aa) * rr;
-      const sx = k.sx({ x, y, z: k.ground(x, y) + 0.15 }), sy = k.sy({ x, y, z: k.ground(x, y) + 0.15 });
-      if (j) into.lineTo(sx, sy);
-      else into.moveTo(sx, sy);
-    });
-    into.closePath();
+    const pts: number[] = [];
+    for (const [rr, aa] of [[r + dr, an], [r, an + da], [r - dr, an], [r, an - da]] as const) pts.push(c.x + Math.cos(aa) * rr, c.y + Math.sin(aa) * rr);
+    (i < Math.floor(lit) ? on : i < lit ? going : off).push(pts);
   }
   const fading = lit - Math.floor(lit);
-  const t = tones(k, {});
-  const accent = k.pal.accent;
-  const inkW = Math.max(0.7, 0.6 * k.zoom);
-  k.groundDraw(c.x, c.y, r + 0.3, (g) => {
-    g.lineWidth = inkW;
-    g.strokeStyle = t.ink;
-    g.globalAlpha = clamp(alpha * 0.3);
-    g.fillStyle = t.deep;
-    g.fill(off);
-    g.stroke(off);
-    g.globalAlpha = clamp(alpha * (0.3 + 0.7 * fading));
-    g.fillStyle = accent;
-    g.fill(going);
-    g.stroke(going);
-    g.globalAlpha = clamp(alpha);
-    g.fillStyle = t.main;
-    g.fill(on);
-    g.stroke(on);
-  });
+  const lift = 0.15;
+  const layers: GroundLayer[] = [
+    { kind: 'fill', colour: k.pal.deep, alpha: clamp(alpha * 0.3), paths: off, lift },
+    { kind: 'fill', colour: k.pal.accent, alpha: clamp(alpha * (0.3 + 0.7 * fading)), paths: going, lift },
+    { kind: 'fill', colour: k.pal.main, alpha: clamp(alpha), paths: on, lift },
+    { kind: 'stroke', colour: k.pal.ink, alpha: clamp(alpha * 0.85), width: Math.max(0.7, 0.6 * k.zoom), paths: [...on, ...going, ...off], closed: true, lift },
+  ];
+  k.groundShape(c.x, c.y, r + 0.2, layers);
 }
 
 /** A sharp glint that runs round a fetter now and then: what catches the eye on a bound thing far off. */
@@ -407,6 +383,31 @@ function glint(k: FxScene, p: P3, age: number, every: number, alpha: number): vo
   const u = (age % every) / every;
   if (u > 0.25) return;
   k.flare(p, 5, alpha * Math.sin((u / 0.25) * Math.PI), k.pal.core, u * 2);
+}
+
+/**
+ * Where an area spell was let go, kept from the first time it is asked: the mire, the cracks and the dome stay where they
+ * were cast when the caster walks on (their lingers are `on: 'spot'`, which only their seconds end).
+ */
+function fieldAt(k: FxScene): P3 {
+  if (k.state.fieldX === undefined) {
+    k.state.fieldX = k.caster.x;
+    k.state.fieldY = k.caster.y;
+    k.state.fieldZ = k.caster.z;
+  }
+  return { x: k.state.fieldX, y: k.state.fieldY, z: k.state.fieldZ };
+}
+
+/**
+ * The creatures standing in an area -- not the caster's own companion -- nearest first and at most `most` of them: what an
+ * area binding is drawn on. The island does not say who it reached, so this is who is there now.
+ */
+function caught(k: FxScene, c: { x: number; y: number }, r: number, most = 5): Body[] {
+  const pet = k.companion;
+  return k.bodiesWithin(r, c, ['creature'])
+    .filter((b) => !pet || Math.hypot(b.x - pet.x, b.y - pet.y) > 0.05)
+    .sort((a, b) => Math.hypot(a.x - c.x, a.y - c.y) - Math.hypot(b.x - c.x, b.y - c.y))
+    .slice(0, most);
 }
 
 /** Once in a cast: true the first time it is asked, by name. */
@@ -443,7 +444,9 @@ const bindPose: CastPose = (r, t) => {
   r.arm[1] = euler(t, [[0, REST_ARM], [0.3, [36, 34, -24]], [0.45, [92, 6, 2]], [0.58, [60, 14, 8]], [0.76, [58, 14, 8]], [1, REST_ARM]]);
   r.elbow[1] = one(t, [[0, 22], [0.3, 112], [0.45, 4], [0.58, 82], [0.76, 84], [1, 24]]);
   r.hand[1] = euler(t, [[0, [0, 0, 0]], [0.3, [30, 0, 0]], [0.45, [-12, 0, 0]], [0.58, [10, 0, 0]], [1, [0, 0, 0]]]);
-  r.open[1] = t > 0.08 && t < 0.46;
+  r.open[1] = false;
+  // Fingers spread and hooked as it goes out, shut hard into the fist at the reach: the grab.
+  r.shape = [undefined, { claw: one(t, [[0, 0], [0.14, 1], [0.44, 1], [0.47, 0]]) }];
   r.arm[0] = euler(t, [[0, REST_ARM], [0.3, [34, 20, 6]], [0.45, [-12, 22, 0]], [0.76, [-8, 20, 0]], [1, REST_ARM]]);
   r.elbow[0] = one(t, [[0, 20], [0.3, 46], [0.45, 24], [1, 22]]);
   r.chest = euler(t, [[0, [0, 0, 0]], [0.3, [4, 0, -22]], [0.45, [-6, 0, 14]], [0.58, [6, 0, -4]], [0.76, [6, 0, -4]], [1, [0, 0, 0]]]);
@@ -463,7 +466,9 @@ const shatterPose: CastPose = (r, t) => {
   r.open[1] = false;
   r.arm[0] = euler(t, [[0, REST_ARM], [0.28, [86, 4, -6]], [0.36, [88, 4, -6]], [0.42, [22, 26, 0]], [0.74, [20, 24, 0]], [1, REST_ARM]]);
   r.elbow[0] = one(t, [[0, 20], [0.28, 8], [0.36, 8], [0.42, 52], [1, 22]]);
-  r.open[0] = t > 0.06 && t < 0.44;
+  r.open[0] = false;
+  r.shape = [{ point: one(t, [[0, 0], [0.12, 1], [0.42, 1], [0.5, 0]]) }, undefined];
+  r.mouth = one(t, [[0, 0], [0.38, 0], [0.42, 0.45], [0.6, 0]]);
   r.chest = euler(t, [[0, [0, 0, 0]], [0.28, [8, -4, -22]], [0.36, [10, -4, -24]], [0.42, [-14, 4, 16]], [0.55, [-12, 2, 12]], [0.74, [-11, 2, 11]], [1, [0, 0, 0]]]);
   r.spine = euler(t, [[0, [0, 0, 0]], [0.36, [6, 0, -6]], [0.42, [-16, 0, 6]], [0.74, [-12, 0, 4]], [1, [0, 0, 0]]]);
   r.head = euler(t, [[0, [0, 0, 0]], [0.36, [-4, 0, 16]], [0.42, [-10, 0, -8]], [0.74, [-8, 0, -6]], [1, [0, 0, 0]]]);
@@ -473,22 +478,24 @@ const shatterPose: CastPose = (r, t) => {
   r.knee[1] = one(t, [[0, 4], [0.36, 8], [0.42, 22], [0.74, 18], [1, 5]]);
 };
 
-/** Root: a step and a drop into a lunge, the right palm brought down flat onto the ground ahead and held there. */
+/** Root: the hand raised, then down onto one knee with the right palm put flat on the ground ahead and held there. */
 const rootPose: CastPose = (r, t) => {
-  r.arm[1] = euler(t, [[0, REST_ARM], [0.3, [128, 22, -6]], [0.5, [34, 8, 0]], [0.74, [34, 8, 0]], [1, REST_ARM]]);
-  r.elbow[1] = one(t, [[0, 22], [0.3, 46], [0.5, 4], [0.74, 6], [1, 24]]);
-  r.hand[1] = euler(t, [[0, [0, 0, 0]], [0.3, [10, 0, 0]], [0.5, [-70, 0, 0]], [0.74, [-70, 0, 0]], [1, [0, 0, 0]]]);
-  r.open[1] = t > 0.06;
-  r.arm[0] = euler(t, [[0, REST_ARM], [0.3, [40, 30, 0]], [0.5, [6, 44, 0]], [0.74, [8, 42, 0]], [1, REST_ARM]]);
-  r.elbow[0] = one(t, [[0, 20], [0.3, 30], [0.5, 18], [1, 22]]);
-  r.open[0] = t > 0.2 && t < 0.85;
-  r.spine = euler(t, [[0, [0, 0, 0]], [0.3, [6, 0, -4]], [0.5, [-30, 0, 8]], [0.74, [-28, 0, 8]], [1, [0, 0, 0]]]);
-  r.chest = euler(t, [[0, [0, 0, 0]], [0.3, [4, 0, -10]], [0.5, [-12, 0, 10]], [0.74, [-11, 0, 10]], [1, [0, 0, 0]]]);
-  r.head = euler(t, [[0, [0, 0, 0]], [0.3, [-8, 0, 0]], [0.5, [18, 0, -6]], [0.74, [16, 0, -6]], [1, [0, 0, 0]]]);
-  r.leg[0] = euler(t, [[0, [2, 2, 0]], [0.3, [-4, 2, 0]], [0.5, [52, 6, 0]], [0.74, [50, 6, 0]], [1, [3, 2, 0]]]);
-  r.knee[0] = one(t, [[0, 4], [0.3, 8], [0.5, 92], [0.74, 90], [1, 5]]);
-  r.leg[1] = euler(t, [[0, [0, 2, 0]], [0.3, [4, 2, 0]], [0.5, [-14, 4, 0]], [0.74, [-14, 4, 0]], [1, [-2, 2, 0]]]);
-  r.knee[1] = one(t, [[0, 4], [0.3, 6], [0.5, 66], [0.74, 64], [1, 5]]);
+  r.arm[1] = euler(t, [[0, REST_ARM], [0.3, [128, 22, -6]], [0.5, [40, 8, 0]], [0.76, [40, 8, 0]], [1, REST_ARM]]);
+  r.elbow[1] = one(t, [[0, 22], [0.3, 46], [0.5, 6], [0.76, 6], [1, 24]]);
+  r.hand[1] = euler(t, [[0, [0, 0, 0]], [0.3, [10, 0, 0]], [0.5, [-70, 0, 0]], [0.76, [-70, 0, 0]], [1, [0, 0, 0]]]);
+  r.arm[0] = euler(t, [[0, REST_ARM], [0.3, [40, 30, 0]], [0.5, [10, 40, 0]], [0.76, [10, 40, 0]], [1, REST_ARM]]);
+  r.elbow[0] = one(t, [[0, 20], [0.3, 30], [0.5, 20], [1, 22]]);
+  r.open = [false, false];
+  r.shape = [{ flat: one(t, [[0.15, 0], [0.3, 0.8], [0.86, 0.8], [1, 0]]) }, { flat: one(t, [[0, 0], [0.12, 1], [0.86, 1], [1, 0]]) }];
+  // Down onto the right knee as the hand comes down, and the palm put flat on the ground ahead, the back bowing as far as it
+  // takes to get it there.
+  r.kneel = one(t, [[0, 0], [0.34, 0], [0.48, 1], [0.8, 1], [0.95, 0]]);
+  r.reach = [undefined, { at: [1.4, 6.5, 0.6], stoop: true, w: one(t, [[0, 0], [0.38, 0], [0.5, 1], [0.78, 1], [0.92, 0]]) }];
+  r.chest = euler(t, [[0, [0, 0, 0]], [0.3, [4, 0, -10]], [0.5, [-6, 0, 10]], [0.78, [-6, 0, 10]], [1, [0, 0, 0]]]);
+  r.head = euler(t, [[0, [0, 0, 0]], [0.3, [-8, 0, 0]], [0.5, [20, 0, -6]], [0.78, [18, 0, -6]], [1, [0, 0, 0]]]);
+  r.spine = euler(t, [[0, [0, 0, 0]], [0.3, [6, 0, -4]], [0.5, [0, 0, 6]], [1, [0, 0, 0]]]);
+  r.leg[0] = euler(t, [[0, [2, 2, 0]], [0.3, [-4, 2, 0]], [0.4, [10, 3, 0]], [1, [3, 2, 0]]]);
+  r.knee[0] = one(t, [[0, 4], [0.3, 10], [0.4, 14], [1, 5]]);
 };
 
 /** Stillness: the hands brought before the chest and the head bowed, a breath, then both palms pressed slowly down to the hips. */
@@ -497,22 +504,26 @@ const stillnessPose: CastPose = (r, t) => {
     r.arm[k] = euler(t, [[0, REST_ARM], [0.28, [20, 20, 24]], [0.4, [22, 20, 24]], [0.55, [2, 14, 30]], [0.82, [2, 14, 30]], [1, REST_ARM]]);
     r.elbow[k] = one(t, [[0, 18], [0.28, 108], [0.4, 106], [0.55, 72], [0.82, 70], [1, 20]]);
     r.hand[k] = euler(t, [[0, [0, 0, 0]], [0.28, [-30, 0, 0]], [0.55, [-62, 0, 0]], [0.82, [-60, 0, 0]], [1, [0, 0, 0]]]);
-    r.open[k] = t > 0.06;
+    r.open[k] = false;
     r.knee[k] = one(t, [[0, 4], [0.4, 4], [0.55, 12], [0.82, 11], [1, 4]]);
   }
   r.head = euler(t, [[0, [0, 0, 0]], [0.28, [-14, 0, 0]], [0.4, [-10, 0, 0]], [0.55, [-22, 0, 0]], [0.82, [-20, 0, 0]], [1, [0, 0, 0]]]);
   r.chest = euler(t, [[0, [0, 0, 0]], [0.28, [2, 0, 0]], [0.4, [6, 0, 0]], [0.55, [-5, 0, 0]], [0.82, [-4, 0, 0]], [1, [0, 0, 0]]]);
   r.spine = euler(t, [[0, [0, 0, 0]], [0.55, [-4, 0, 0]], [1, [0, 0, 0]]]);
   r.shrug = [one(t, [[0, 0], [0.4, 0.3], [0.55, 0]]), one(t, [[0, 0], [0.4, 0.3], [0.55, 0]])];
+  const palms = { flat: one(t, [[0, 0], [0.14, 1], [0.86, 1], [1, 0]]) };
+  r.shape = [palms, palms];
 };
 
 /** Heavy Limbs: a weight taken up at the chest, hoisted overhead with the back straining, heaved forward off both hands, and the body sinking after it. */
 const heavyPose: CastPose = (r, t) => {
+  r.shape = [undefined, undefined];
   for (let k = 0; k < 2; k++) {
     r.arm[k] = euler(t, [[0, REST_ARM], [0.22, [14, 20, 24]], [0.42, [150, 16, 8]], [0.5, [152, 16, 8]], [0.56, [96, 10, 8]], [0.7, [44, 10, 6]], [0.84, [42, 10, 6]], [1, REST_ARM]]);
     r.elbow[k] = one(t, [[0, 20], [0.22, 96], [0.42, 76], [0.5, 80], [0.56, 12], [0.7, 14], [0.84, 16], [1, 22]]);
     r.hand[k] = euler(t, [[0, [0, 0, 0]], [0.22, [30, 0, 0]], [0.5, [30, 0, 0]], [0.56, [-20, 0, 0]], [1, [0, 0, 0]]]);
-    r.open[k] = t > 0.06;
+    r.open[k] = false;
+    r.shape[k] = { cup: one(t, [[0, 0], [0.12, 1], [0.52, 1], [0.58, 0]]), flat: one(t, [[0.52, 0], [0.58, 1], [0.86, 1], [1, 0]]) };
     r.leg[k] = euler(t, [[0, [2, 2, 0]], [0.22, [8, 6, 0]], [0.5, [2, 6, 0]], [0.7, [18, 8, 0]], [0.84, [16, 8, 0]], [1, [2, 2, 0]]]);
     r.knee[k] = one(t, [[0, 4], [0.22, 22], [0.42, 6], [0.5, 8], [0.7, 38], [0.84, 34], [1, 4]]);
   }
@@ -520,6 +531,7 @@ const heavyPose: CastPose = (r, t) => {
   r.spine = euler(t, [[0, [0, 0, 0]], [0.22, [-6, 0, 0]], [0.42, [10, 0, 0]], [0.5, [12, 0, 0]], [0.56, [-8, 0, 0]], [0.7, [-20, 0, 0]], [0.84, [-18, 0, 0]], [1, [0, 0, 0]]]);
   r.chest = euler(t, [[0, [0, 0, 0]], [0.42, [6, 0, 0]], [0.56, [-6, 0, 0]], [0.7, [-8, 0, 0]], [1, [0, 0, 0]]]);
   r.head = euler(t, [[0, [0, 0, 0]], [0.22, [-12, 0, 0]], [0.42, [6, 0, 0]], [0.56, [0, 0, 0]], [0.7, [8, 0, 0]], [1, [0, 0, 0]]]);
+  r.mouth = one(t, [[0, 0], [0.4, 0], [0.5, 0.4], [0.56, 0.6], [0.7, 0]]);
 };
 
 /** Dull Claws: the left hand drawn across to the right shoulder, then a backhand swept out flat across the front and away. */
@@ -527,7 +539,8 @@ const dullPose: CastPose = (r, t) => {
   r.arm[0] = euler(t, [[0, REST_ARM], [0.3, [80, -34, 44]], [0.36, [82, -36, 46]], [0.46, [86, 58, -14]], [0.6, [76, 70, -14]], [0.76, [74, 70, -12]], [1, REST_ARM]]);
   r.elbow[0] = one(t, [[0, 20], [0.3, 98], [0.36, 102], [0.46, 8], [0.6, 12], [0.76, 14], [1, 22]]);
   r.hand[0] = euler(t, [[0, [0, 0, 0]], [0.36, [0, 0, 30]], [0.46, [0, 0, -30]], [1, [0, 0, 0]]]);
-  r.open[0] = t > 0.06;
+  r.open[0] = false;
+  r.shape = [{ flat: one(t, [[0, 0], [0.14, 1], [0.84, 1], [1, 0]]) }, undefined];
   r.arm[1] = euler(t, [[0, REST_ARM], [0.3, [30, 14, 10]], [0.46, [22, 20, 0]], [1, REST_ARM]]);
   r.elbow[1] = one(t, [[0, 20], [0.3, 84], [0.46, 64], [1, 22]]);
   r.chest = euler(t, [[0, [0, 0, 0]], [0.3, [2, 0, -22]], [0.36, [2, 0, -24]], [0.46, [-4, 0, 24]], [0.6, [-4, 0, 26]], [0.76, [-3, 0, 24]], [1, [0, 0, 0]]]);
@@ -543,10 +556,11 @@ const dullPose: CastPose = (r, t) => {
 const tetherPose: CastPose = (r, t) => {
   r.arm[1] = euler(t, [[0, REST_ARM], [0.2, [118, 26, -10]], [0.38, [166, 30, -28]], [0.48, [92, 8, 16]], [0.58, [66, 10, 18]], [0.7, [22, 18, 6]], [0.86, [22, 18, 6]], [1, REST_ARM]]);
   r.elbow[1] = one(t, [[0, 22], [0.2, 64], [0.38, 100], [0.48, 8], [0.58, 26], [0.7, 96], [0.86, 94], [1, 24]]);
-  r.open[1] = t > 0.48 && t < 0.62;
+  r.open[1] = false;
   r.arm[0] = euler(t, [[0, REST_ARM], [0.38, [86, 12, -8]], [0.48, [40, 22, 0]], [0.7, [30, 20, 0]], [1, REST_ARM]]);
   r.elbow[0] = one(t, [[0, 20], [0.38, 10], [0.48, 40], [0.7, 30], [1, 22]]);
-  r.open[0] = t > 0.2 && t < 0.5;
+  r.open[0] = false;
+  r.shape = [{ point: one(t, [[0.15, 0], [0.3, 1], [0.48, 1], [0.56, 0]]) }, { flat: one(t, [[0.46, 0], [0.49, 1], [0.6, 1], [0.66, 0]]) }];
   r.chest = euler(t, [[0, [0, 0, 0]], [0.38, [8, -6, -30]], [0.48, [-8, 4, 22]], [0.58, [-6, 2, 18]], [0.7, [6, 0, -10]], [0.86, [6, 0, -10]], [1, [0, 0, 0]]]);
   r.spine = euler(t, [[0, [0, 0, 0]], [0.38, [8, 0, -8]], [0.48, [-14, 0, 8]], [0.58, [-10, 0, 6]], [0.7, [9, 0, 0]], [0.86, [8, 0, 0]], [1, [0, 0, 0]]]);
   r.head = euler(t, [[0, [0, 0, 0]], [0.38, [0, 0, 24]], [0.48, [-4, 0, -6]], [0.7, [-6, 0, 0]], [1, [0, 0, 0]]]);
@@ -561,7 +575,8 @@ const brittlePose: CastPose = (r, t) => {
   r.arm[1] = euler(t, [[0, REST_ARM], [0.24, [116, 32, -30]], [0.34, [118, 30, -30]], [0.4, [94, 2, 0]], [0.64, [92, 4, 0]], [1, REST_ARM]]);
   r.elbow[1] = one(t, [[0, 22], [0.24, 130], [0.34, 134], [0.4, 0], [0.64, 4], [1, 24]]);
   r.hand[1] = euler(t, [[0, [0, 0, 0]], [0.34, [40, 0, 0]], [0.4, [-30, 0, 0]], [0.64, [-24, 0, 0]], [1, [0, 0, 0]]]);
-  r.open[1] = t > 0.08;
+  r.open[1] = false;
+  r.shape = [undefined, { point: one(t, [[0, 0], [0.12, 1], [0.86, 1], [1, 0]]) }];
   r.arm[0] = euler(t, [[0, REST_ARM], [0.24, [24, 12, 0]], [0.4, [16, 16, 0]], [1, REST_ARM]]);
   r.elbow[0] = one(t, [[0, 20], [0.24, 40], [0.4, 30], [1, 22]]);
   r.head = euler(t, [[0, [0, 0, 0]], [0.24, [-6, 8, 10]], [0.34, [-6, 8, 10]], [0.4, [-4, 5, 0]], [0.64, [-4, 5, 0]], [1, [0, 0, 0]]]);
@@ -573,12 +588,14 @@ const brittlePose: CastPose = (r, t) => {
 
 /** Lock: both hands out together, turned as a key is turned, then shut into fists and hauled in to the chest from a wide, set stance. */
 const lockPose: CastPose = (r, t) => {
+  const cupped = { cup: one(t, [[0, 0], [0.14, 1], [0.54, 1], [0.58, 0]]) };
+  r.shape = [cupped, cupped];
   for (let k = 0; k < 2; k++) {
     const s = k ? 1 : -1;
     r.arm[k] = euler(t, [[0, REST_ARM], [0.28, [68, 50, 12]], [0.46, [70, 50, 12]], [0.58, [20, 20, 24]], [0.84, [20, 20, 24]], [1, REST_ARM]]);
     r.elbow[k] = one(t, [[0, 20], [0.28, 36], [0.46, 34], [0.58, 108], [0.84, 108], [1, 22]]);
     r.hand[k] = euler(t, [[0, [0, 0, 0]], [0.28, [0, 0, 0]], [0.46, [0, 80 * s, 0]], [0.58, [0, 70 * s, 0]], [1, [0, 0, 0]]]);
-    r.open[k] = t > 0.06 && t < 0.55;
+    r.open[k] = false;
     r.leg[k] = euler(t, [[0, [2, 2, 0]], [0.28, [2, 9, 0]], [0.58, [4, 12, 0]], [0.84, [4, 12, 0]], [1, [2, 2, 0]]]);
     r.knee[k] = one(t, [[0, 4], [0.28, 10], [0.46, 8], [0.58, 24], [0.84, 22], [1, 4]]);
   }
@@ -604,11 +621,13 @@ const stillSkinPose: CastPose = (r, t) => {
 
 /** Mire: down into a wide squat, the hands together low ahead, then swept slowly apart, palms flat, as if smoothing something thick. */
 const mirePose: CastPose = (r, t) => {
+  const palms = { flat: one(t, [[0, 0], [0.14, 1], [0.86, 1], [1, 0]]) };
+  r.shape = [palms, palms];
   for (let k = 0; k < 2; k++) {
     r.arm[k] = euler(t, [[0, REST_ARM], [0.25, [14, 26, 30]], [0.55, [40, 68, -4]], [0.82, [36, 70, -4]], [1, REST_ARM]]);
     r.elbow[k] = one(t, [[0, 20], [0.25, 72], [0.55, 10], [0.82, 12], [1, 22]]);
     r.hand[k] = euler(t, [[0, [0, 0, 0]], [0.25, [-50, 0, 0]], [0.55, [-60, 0, 0]], [0.82, [-56, 0, 0]], [1, [0, 0, 0]]]);
-    r.open[k] = t > 0.06;
+    r.open[k] = false;
     r.leg[k] = euler(t, [[0, [2, 2, 0]], [0.25, [20, 10, 0]], [0.55, [28, 16, 0]], [0.82, [26, 16, 0]], [1, [2, 2, 0]]]);
     r.knee[k] = one(t, [[0, 4], [0.25, 40], [0.55, 58], [0.82, 54], [1, 4]]);
   }
@@ -617,20 +636,27 @@ const mirePose: CastPose = (r, t) => {
   r.head = euler(t, [[0, [0, 0, 0]], [0.25, [6, 0, 0]], [0.55, [14, 0, 0]], [0.82, [12, 0, 0]], [1, [0, 0, 0]]]);
 };
 
-/** Mass Root: both arms flung up as the body rises onto its toes, a small hop, and down into a crouch with both palms slammed flat. */
+/** Mass Root: both arms flung up as the body rises onto its toes, a small hop, and down onto a knee with both palms slammed flat. */
 const massRootPose: CastPose = (r, t) => {
+  const w = one(t, [[0, 0], [0.44, 0], [0.5, 1], [0.78, 1], [0.92, 0]]);
   for (let k = 0; k < 2; k++) {
-    r.arm[k] = euler(t, [[0, REST_ARM], [0.25, [140, 30, 0]], [0.38, [152, 28, 0]], [0.5, [34, 16, 0]], [0.76, [36, 16, 0]], [1, REST_ARM]]);
-    r.elbow[k] = one(t, [[0, 20], [0.25, 30], [0.38, 20], [0.5, 6], [0.76, 8], [1, 22]]);
-    r.hand[k] = euler(t, [[0, [0, 0, 0]], [0.38, [10, 0, 0]], [0.5, [-72, 0, 0]], [0.76, [-70, 0, 0]], [1, [0, 0, 0]]]);
-    r.open[k] = t > 0.06;
-    r.leg[k] = euler(t, [[0, [2, 2, 0]], [0.25, [10, 4, 0]], [0.38, [0, 4, 0]], [0.5, [50, 10, 0]], [0.76, [48, 10, 0]], [1, [2, 2, 0]]]);
-    r.knee[k] = one(t, [[0, 4], [0.25, 24], [0.38, 2], [0.5, 100], [0.76, 96], [1, 4]]);
+    r.arm[k] = euler(t, [[0, REST_ARM], [0.25, [140, 30, 0]], [0.38, [152, 28, 0]], [0.5, [34, 16, 0]], [0.78, [36, 16, 0]], [1, REST_ARM]]);
+    r.elbow[k] = one(t, [[0, 20], [0.25, 30], [0.38, 20], [0.5, 6], [0.78, 8], [1, 22]]);
+    r.hand[k] = euler(t, [[0, [0, 0, 0]], [0.38, [10, 0, 0]], [0.5, [-72, 0, 0]], [0.78, [-70, 0, 0]], [1, [0, 0, 0]]]);
+    r.open[k] = false;
+    r.leg[k] = euler(t, [[0, [2, 2, 0]], [0.25, [10, 4, 0]], [0.38, [0, 4, 0]], [1, [2, 2, 0]]]);
+    r.knee[k] = one(t, [[0, 4], [0.25, 24], [0.38, 2], [0.46, 12], [1, 4]]);
   }
+  const palms = { flat: one(t, [[0, 0], [0.14, 1], [0.86, 1], [1, 0]]) };
+  r.shape = [palms, palms];
   r.lift = one(t, [[0, 0], [0.32, 0], [0.4, 3], [0.47, 0], [1, 0]]);
-  r.spine = euler(t, [[0, [0, 0, 0]], [0.25, [4, 0, 0]], [0.38, [10, 0, 0]], [0.5, [-36, 0, 0]], [0.76, [-34, 0, 0]], [1, [0, 0, 0]]]);
-  r.chest = euler(t, [[0, [0, 0, 0]], [0.38, [6, 0, 0]], [0.5, [-10, 0, 0]], [1, [0, 0, 0]]]);
-  r.head = euler(t, [[0, [0, 0, 0]], [0.38, [16, 0, 0]], [0.5, [22, 0, 0]], [0.76, [20, 0, 0]], [1, [0, 0, 0]]]);
+  // Down on a knee as it lands, both palms put flat on the ground either side ahead, and a shout as they strike.
+  r.kneel = one(t, [[0, 0], [0.44, 0], [0.5, 1], [0.8, 1], [0.95, 0]]);
+  r.reach = [{ at: [-2.6, 5.5, 0.6], stoop: true, w }, { at: [2.6, 5.5, 0.6], stoop: true, w }];
+  r.mouth = one(t, [[0, 0], [0.44, 0], [0.5, 0.85], [0.64, 0.3], [0.78, 0]]);
+  r.spine = euler(t, [[0, [0, 0, 0]], [0.25, [4, 0, 0]], [0.38, [10, 0, 0]], [0.5, [0, 0, 0]], [1, [0, 0, 0]]]);
+  r.chest = euler(t, [[0, [0, 0, 0]], [0.38, [6, 0, 0]], [0.5, [-6, 0, 0]], [1, [0, 0, 0]]]);
+  r.head = euler(t, [[0, [0, 0, 0]], [0.38, [16, 0, 0]], [0.5, [24, 0, 0]], [0.78, [22, 0, 0]], [1, [0, 0, 0]]]);
 };
 
 /** Snare: the focus held up in the left hand while the right draws a loop in the air before it, then tosses the noose low and yanks it shut. */
@@ -638,6 +664,7 @@ const snarePose: CastPose = (r, t) => {
   r.arm[0] = euler(t, [[0, REST_ARM], [0.2, [32, 14, 12]], [0.55, [34, 14, 12]], [0.82, [30, 14, 12]], [1, REST_ARM]]);
   r.elbow[0] = one(t, [[0, 20], [0.2, 108], [0.55, 106], [0.82, 104], [1, 22]]);
   r.open[0] = false;
+  r.shape = [{ cup: one(t, [[0, 0], [0.14, 1], [0.86, 1], [1, 0]]) }, { point: one(t, [[0.04, 0], [0.12, 1], [0.42, 1], [0.48, 0]]), flat: one(t, [[0.46, 0], [0.5, 1], [0.58, 1], [0.64, 0]]) }];
   // The loop: a full turn of the hand round a point before the chest, then down and back for the toss.
   const loop = seg(t, 0.1, 0.42);
   const ph = loop * TAU;
@@ -646,7 +673,7 @@ const snarePose: CastPose = (r, t) => {
   else if (t < 0.42) r.arm[1] = inLoop;
   else r.arm[1] = euler(t, [[0.42, [72, 38, 0]], [0.49, [-18, 12, 0]], [0.55, [72, 4, 0]], [0.68, [28, 14, 0]], [0.86, [26, 14, 0]], [1, REST_ARM]]);
   r.elbow[1] = one(t, [[0, 22], [0.1, 40], [0.42, 40], [0.49, 10], [0.55, 4], [0.68, 92], [0.86, 90], [1, 24]]);
-  r.open[1] = t > 0.06 && t < 0.58;
+  r.open[1] = false;
   r.chest = euler(t, [[0, [0, 0, 0]], [0.42, [0, 0, -4]], [0.49, [2, 0, -14]], [0.55, [-6, 0, 10]], [0.68, [6, 0, -6]], [0.86, [6, 0, -6]], [1, [0, 0, 0]]]);
   r.spine = euler(t, [[0, [0, 0, 0]], [0.49, [-4, 0, 0]], [0.55, [-10, 0, 0]], [0.68, [7, 0, 0]], [0.86, [6, 0, 0]], [1, [0, 0, 0]]]);
   r.head = euler(t, [[0, [0, 0, 0]], [0.2, [-10, 0, 0]], [0.42, [-10, 0, 0]], [0.55, [-2, 0, 0]], [1, [0, 0, 0]]]);
@@ -658,11 +685,13 @@ const snarePose: CastPose = (r, t) => {
 
 /** Still field: the arms rise wide and meet overhead, the hands pressed together, then flung out level at the shoulders -- and the body freezes there. */
 const stillfieldPose: CastPose = (r, t) => {
+  const palms = { flat: one(t, [[0, 0], [0.12, 1], [0.9, 1], [1, 0]]) };
+  r.shape = [palms, palms];
   for (let k = 0; k < 2; k++) {
     r.arm[k] = euler(t, [[0, REST_ARM], [0.2, [70, 50, 0]], [0.38, [150, 18, 14]], [0.45, [152, 16, 16]], [0.5, [8, 86, 0]], [0.86, [8, 86, 0]], [1, REST_ARM]]);
     r.elbow[k] = one(t, [[0, 20], [0.2, 20], [0.38, 34], [0.45, 36], [0.5, 2], [0.86, 2], [1, 22]]);
     r.hand[k] = euler(t, [[0, [0, 0, 0]], [0.45, [0, 0, 0]], [0.5, [50, 0, 0]], [0.86, [50, 0, 0]], [1, [0, 0, 0]]]);
-    r.open[k] = t > 0.05;
+    r.open[k] = false;
     r.leg[k] = euler(t, [[0, [2, 2, 0]], [0.38, [0, 3, 0]], [0.5, [2, 8, 0]], [0.86, [2, 8, 0]], [1, [2, 2, 0]]]);
     r.knee[k] = one(t, [[0, 4], [0.2, 10], [0.38, 2], [0.5, 10], [0.86, 10], [1, 4]]);
   }
@@ -740,6 +769,13 @@ const bind: SpellVisual = {
   },
 };
 
+/**
+ * How much more a Shatter breaks: its own `held` over its `shatter` on a creature the island says is held fast (twice as
+ * much), and once on anything else. The island says so only of a trap's hold; a Binder's own holds are not in what it
+ * sends, so on those it is drawn once.
+ */
+const shatterMore = (k: FxScene): number => (k.target.held ? (k.fx.held ?? 2) / (k.fx.shatter ?? 1) : 1);
+
 const shatter: SpellVisual = {
   palette: P,
   cast: { timing: { secs: 0.7, release: 0.42, blendOut: 0.22 }, pose: shatterPose },
@@ -768,17 +804,21 @@ const shatter: SpellVisual = {
     } },
     hit: (k) => {
       const at = k.heart(k.target);
-      shatterBurst(k, at, 34, k.toward(k.caster, k.target), 1.4);
+      const m = shatterMore(k);
+      shatterBurst(k, at, Math.round(34 * m), k.toward(k.caster, k.target), 1.4 * Math.sqrt(m));
+      if (m > 1) k.flash(0.05);
       k.burst(k.at(k.target, 0.05), 8, { kind: 'dust', colour: '#9aa6c0', size: 3, life: [0.4, 0.7], speed: [0.3, 0.7], up: [2, 6], gravity: 2 });
     },
     // The air round it breaks like a pane: spurs of crystal fly out from where the lance went in, and the ground under it splits.
     impact: { secs: 0.6, draw: (k, u) => {
       const b = k.target, at = k.heart(b);
-      const out = easeOut(seg(u, 0, 0.35));
+      const m = shatterMore(k);
+      const out = easeOut(seg(u, 0, 0.35)) * Math.sqrt(m);
       const fade = 1 - smooth(seg(u, 0.35, 1));
       const away = k.toward(k.caster, b);
-      for (let i = 0; i < 7; i++) {
-        const an = Math.atan2(away.y, away.x) + (i - 3) * 0.55 + (hashOf(k.seed, i) - 0.5) * 0.4;
+      const spurs = Math.round(7 * Math.sqrt(m));
+      for (let i = 0; i < spurs; i++) {
+        const an = Math.atan2(away.y, away.x) + (i - (spurs - 1) / 2) * (3.85 / spurs) * Math.sqrt(m) + (hashOf(k.seed, i) - 0.5) * 0.4;
         const dir = { x: Math.cos(an), y: Math.sin(an) };
         const lift = (hashOf(k.seed + 1, i) - 0.3) * 14;
         const r0 = 0.08 + 0.4 * out, r1 = r0 + 0.16 + 0.1 * hashOf(k.seed + 2, i);
@@ -787,13 +827,15 @@ const shatter: SpellVisual = {
         crystal(k, a, c, 1.5 * fade + 0.3, { waist: 0.3, turn: i + u * 6, alpha: fade, glow: 0.4 });
       }
       const lines: P3[][] = [];
-      for (let i = 0; i < 6; i++) {
-        const an = (i / 6) * TAU + hashOf(k.seed + 4, i);
-        const len = 0.35 + 0.35 * hashOf(k.seed + 5, i);
+      for (let i = 0; i < 6 * m; i++) {
+        const an = (i / (6 * m)) * TAU + hashOf(k.seed + 4, i);
+        const len = (0.35 + 0.35 * hashOf(k.seed + 5, i)) * Math.sqrt(m);
         lines.push(cracked(k, b, { x: b.x + Math.cos(an) * len, y: b.y + Math.sin(an) * len }, 20 + i, 4, 0.12));
       }
       cracks(k, lines, easeOut(seg(u, 0, 0.25)), { alpha: 1 - smooth(seg(u, 0.4, 1)), width: 1.3 });
-      k.flare(at, 14 * (1 - u * 0.6), flashOf(u, 0.08), P.core, u);
+      // On something already held, the hold breaks with it: its fetter bursts outward as the spurs fly.
+      if (m > 1) hoop(k, b, b.z + b.tall * 0.45, girth(b) * (1 + 2.5 * out), { alpha: fade, h: band(b), turn: u * 2, n: 10 });
+      k.flare(at, 14 * Math.sqrt(m) * (1 - u * 0.6), flashOf(u, 0.08), P.core, u);
       k.light(b, 3.5, 0.9 * (1 - u));
     } },
   },
@@ -805,6 +847,8 @@ const ROOT_CORE = '#b9d8ff';
 /** Root's crystal, by where it comes up round the feet: the far ones before the body, the near ones after it. */
 function rootSpikes(k: FxScene, b: Body, grow: number, a: number, salt: number, n = 6): void {
   const r0 = girth(b) * 1.25;
+  const cy = k.sy({ x: b.x, y: b.y, z: b.z });
+  const far: Array<(g: CanvasRenderingContext2D) => void> = [], near: Array<(g: CanvasRenderingContext2D) => void> = [];
   for (let i = 0; i < n; i++) {
     const g = easeBack(seg(grow, (i % 3) * 0.12, (i % 3) * 0.12 + 0.6));
     if (g <= 0.01) continue;
@@ -814,8 +858,12 @@ function rootSpikes(k: FxScene, b: Body, grow: number, a: number, salt: number, 
     const tall = b.tall * (0.24 + 0.16 * hashOf(k.seed + salt + 2, i)) * g;
     const lean = { x: -Math.cos(an) * rr * 0.55, y: -Math.sin(an) * rr * 0.55 };
     const paint = spike(k, base, tall, 2.2 + 0.9 * hashOf(k.seed + salt + 3, i), lean, { alpha: a, turn: i * 1.3, core: ROOT_CORE });
-    if (paint) k.worldDraw(k.on(base.x, base.y), paint, 0);
+    if (paint) (k.sy({ x: base.x, y: base.y, z: b.z }) > cy ? near : far).push(paint);
   }
+  // Two records, the far crystals behind the body they hold and the near ones before it, each laid back to front.
+  const foot = { x: b.x, y: b.y, z: b.z };
+  if (far.length) k.worldDraw(foot, (g) => { for (const p of far) p(g); }, -2);
+  if (near.length) k.worldDraw(foot, (g) => { for (const p of near) p(g); }, 2);
   k.glow(k.at(b, 0.15), 14, a * 0.35);
 }
 
@@ -1656,99 +1704,82 @@ const MIRE = spellInfo('binder_mire');
 const MIRE_PACE = MIRE?.fx.pace ?? 0.6;
 
 /**
- * The mire: a slick of dark glass over the ground `r` tiles round, lobed at its edge, with slow rings and bubbles.
- *
- * Whatever lies on the ground is drawn again for every line of the land it lies across, and this lies across a score of
- * them, so its paths are made once a frame and only filled and stroked per line -- a handful of calls each time rather than
- * a few dozen -- and nothing is filled twice over the whole of it.
+ * The mire: a slick of dark glass over the ground `r` tiles round, lobed at its edge, with slow rings and bubbles. All of
+ * it shapes on the ground in tiles (`groundShape`), which the stage lays a piece at a time along the tiles: a slick eight
+ * tiles across costs what it covers.
  */
 function slick(k: FxScene, c: { x: number; y: number }, r: number, age: number, a: number): void {
   if (a <= 0.01 || r <= 0.05) return;
   const n = k.facets(r, 36);
   const t = age * MIRE_PACE;
-  const at = (x: number, y: number, lift: number): [number, number] => [k.sx({ x, y, z: k.ground(x, y) + lift }), k.sy({ x, y, z: k.ground(x, y) + lift })];
-  const edge = new Path2D();
-  const ex: number[] = [];
+  const edge: number[] = [];
+  const glowPath = new Path2D();
   for (let i = 0; i < n; i++) {
     const an = (i / n) * TAU;
     const wob = 0.95 + 0.05 * Math.sin(an * 5 + t * 1.3 + hashOf(k.seed, 1) * 6) + 0.025 * Math.sin(an * 9 - t);
-    const [x, y] = at(c.x + Math.cos(an) * r * wob, c.y + Math.sin(an) * r * wob, 0.1);
-    if (i) edge.lineTo(x, y);
-    else edge.moveTo(x, y);
-    ex.push(x, y);
+    const x = c.x + Math.cos(an) * r * wob, y = c.y + Math.sin(an) * r * wob;
+    edge.push(x, y);
+    const p = { x, y, z: k.ground(x, y) + 0.1 };
+    if (i) glowPath.lineTo(k.sx(p), k.sy(p));
+    else glowPath.moveTo(k.sx(p), k.sy(p));
   }
-  edge.closePath();
-  // Rings moving outwards through it at the slick's own slow pace: one path, each ring brightest halfway out.
-  const rings = new Path2D();
+  glowPath.closePath();
+  // Rings moving outwards through it at the slick's own slow pace.
+  const rings: number[][] = [];
   const m = Math.max(12, Math.round(n * 0.6));
   for (let j = 0; j < 3; j++) {
     const v = (t * 0.22 + j / 3) % 1;
     const rr = r * (0.12 + 0.8 * v);
-    for (let i = 0; i <= m; i++) {
-      const an = (i / m) * TAU;
-      const [x, y] = at(c.x + Math.cos(an) * rr, c.y + Math.sin(an) * rr, 0.12);
-      if (i) rings.lineTo(x, y);
-      else rings.moveTo(x, y);
-    }
+    const ring: number[] = [];
+    for (let i = 0; i < m; i++) ring.push(c.x + Math.cos((i / m) * TAU) * rr, c.y + Math.sin((i / m) * TAU) * rr);
+    rings.push(ring);
   }
-  // Bubbles that swell as little faceted domes and burst as rings opening on the surface.
-  const domes = new Path2D(), lights = new Path2D(), bursts = new Path2D();
-  const Z = k.zoom;
+  // Bubbles that swell as little faceted blisters and burst as rings opening on the surface.
+  const domes: number[][] = [], lights: number[][] = [], bursts: number[][] = [];
   for (let i = 0; i < 9; i++) {
     const v = (t * 0.5 + hashOf(k.seed + 80, i)) % 1;
     const an = hashOf(k.seed + 81, i) * TAU, rr = r * (0.15 + 0.75 * hashOf(k.seed + 82, i));
-    const [x, y] = at(c.x + Math.cos(an) * rr, c.y + Math.sin(an) * rr, 0.12);
+    const x = c.x + Math.cos(an) * rr, y = c.y + Math.sin(an) * rr;
+    const hex = (rad: number, ox = 0, oy = 0): number[] => {
+      const out: number[] = [];
+      for (let j = 0; j < 6; j++) out.push(x + ox + Math.cos((j / 6) * TAU) * rad, y + oy + Math.sin((j / 6) * TAU) * rad);
+      return out;
+    };
     if (v < 0.8) {
-      const R = (0.8 + 2.2 * v) * Z;
-      domes.moveTo(x - R, y);
-      domes.lineTo(x - R * 0.5, y - R * 0.8);
-      domes.lineTo(x + R * 0.5, y - R * 0.8);
-      domes.lineTo(x + R, y);
-      domes.lineTo(x, y + R * 0.35);
-      domes.closePath();
-      lights.rect(x - R * 0.5, y - R * 0.6, R * 0.35, R * 0.25);
-    } else {
-      const w = (v - 0.8) / 0.2, R = (3 + 3 * w) * Z;
-      bursts.moveTo(x + R, y);
-      bursts.ellipse(x, y, R, R * 0.5, 0, 0, TAU);
-    }
+      const rad = 0.012 + 0.04 * v;
+      domes.push(hex(rad));
+      lights.push(hex(rad * 0.35, -rad * 0.3, -rad * 0.3));
+    } else bursts.push(hex(0.05 + 0.08 * ((v - 0.8) / 0.2)));
   }
+  const Z = k.zoom;
   const inkW = Math.max(1, 0.9 * Z), thin = Math.max(0.6, 0.5 * Z);
-  k.groundDraw(c.x, c.y, r + 0.3, (g) => {
-    g.globalAlpha = clamp(a * 0.26);
-    g.fillStyle = LEAD.deep;
-    g.fill(edge);
-    g.globalAlpha = clamp(a * 0.9);
-    g.lineWidth = inkW * 1.3;
-    g.strokeStyle = P.ink;
-    g.stroke(edge);
-    g.lineWidth = inkW * 0.6;
-    g.strokeStyle = P.accent;
-    g.stroke(edge);
-    g.globalAlpha = clamp(a * 0.35);
-    g.lineWidth = Math.max(0.7, 0.55 * Z);
-    g.strokeStyle = P.main;
-    g.stroke(rings);
-    g.globalAlpha = clamp(a * 0.85);
-    g.fillStyle = LEAD.main;
-    g.fill(domes);
-    g.lineWidth = thin;
-    g.strokeStyle = P.ink;
-    g.stroke(domes);
-    g.fillStyle = LEAD.core;
-    g.fill(lights);
-    g.globalAlpha = clamp(a * 0.5);
-    g.strokeStyle = P.main;
-    g.stroke(bursts);
-  });
+  const burst = bursts.length ? 1 : 0;
+  k.groundShape(c.x, c.y, r + 0.3, [
+    { kind: 'fill', colour: LEAD.deep, alpha: clamp(a * 0.26), paths: [edge], lift: 0.1 },
+    { kind: 'stroke', colour: P.ink, alpha: clamp(a * 0.9), width: inkW * 1.3, paths: [edge], closed: true, lift: 0.1 },
+    { kind: 'stroke', colour: P.accent, alpha: clamp(a * 0.9), width: inkW * 0.6, paths: [edge], closed: true, lift: 0.1 },
+    { kind: 'stroke', colour: P.main, alpha: clamp(a * 0.35), width: Math.max(0.7, 0.55 * Z), paths: rings, closed: true, lift: 0.12 },
+    { kind: 'fill', colour: LEAD.main, alpha: clamp(a * 0.85), paths: domes, lift: 0.12 },
+    { kind: 'stroke', colour: P.ink, alpha: clamp(a * 0.85), width: thin, paths: domes, closed: true, lift: 0.12 },
+    { kind: 'fill', colour: LEAD.core, alpha: clamp(a * 0.85), paths: lights, lift: 0.13 },
+    { kind: 'stroke', colour: P.main, alpha: clamp(a * 0.5 * burst), width: thin, paths: bursts, closed: true, lift: 0.12 },
+  ]);
   const pic = k.pal.light;
   k.glowDraw((g) => {
     // The rim glows faintly so the slick's edge can be found at night.
     g.globalAlpha = clamp(a * 0.16);
     g.strokeStyle = pic;
     g.lineWidth = 2.6 * Z;
-    g.stroke(edge);
+    g.stroke(glowPath);
   });
+}
+
+/** What is caught in the mire: a dark ring sucking at its feet, closing and opening at the slick's own slow pace. */
+function mired(k: FxScene, b: Body, age: number, a: number, i: number): void {
+  const pulse = 0.5 + 0.5 * Math.sin(age * 2.2 * MIRE_PACE + i * 1.7);
+  k.disc(b, girth(b) * 2, { alpha: 0.35 * a, main: LEAD.deep });
+  k.ring(b, girth(b) * (1.5 + 0.5 * pulse), { band: 0.03, alpha: 0.7 * a, main: P.main, deep: LEAD.main, glow: 0.3 });
+  if (!k.fast) k.emit(k.at(b, 0.05), 1.5 * a, { kind: 'drop', colour: [LEAD.main, P.main], size: 1.8, life: [0.3, 0.5], speed: [0.05, 0.15], up: [3, 6], gravity: 30 });
 }
 
 const mire: SpellVisual = {
@@ -1762,19 +1793,22 @@ const mire: SpellVisual = {
       k.glow(mid3(k.hand(0), k.hand(1), 0.5), 6, 0.5 * bump(t, 0.1, 0.25, 0.55));
     },
     hit: (k) => {
-      k.burst(k.at(k.caster, 0.05), 24, { kind: 'drop', colour: [LEAD.main, LEAD.deep, P.main], size: 2.6, life: [0.4, 0.8], speed: [0.8, 1.8], up: [4, 12], gravity: 40, drag: 0.2 });
+      const c = fieldAt(k);
+      k.burst({ ...c, z: c.z + 1 }, 24, { kind: 'drop', colour: [LEAD.main, LEAD.deep, P.main], size: 2.6, life: [0.4, 0.8], speed: [0.8, 1.8], up: [4, 12], gravity: 40, drag: 0.2 });
     },
-    impact: { secs: 0.4, draw: (k, u) => k.light(k.caster, MIRE_R, 0.5 * (1 - u)) },
-    // It spreads out to its reach as thick things do, slowly, and lies there with rings crawling through it.
-    linger: { draw: (k, age, left) => {
-      const b = k.caster;
+    impact: { secs: 0.4, draw: (k, u) => k.light(fieldAt(k), MIRE_R, 0.5 * (1 - u)) },
+    // It spreads out to its reach as thick things do, slowly, and lies where it was cast with rings crawling through it;
+    // whatever stands in it has the slick sucking at its feet.
+    linger: { on: 'spot', draw: (k, age, left) => {
+      const c = fieldAt(k);
       const a = life(age, left, 0.05, 0.8);
       const spread = easeOut(seg(age, 0, 1.4 / MIRE_PACE * 0.6));
       const r = lerp(0.85, MIRE_R, spread);
-      slick(k, b, r, age, a);
-      tally(k, b, 0.45, left, age + left, 0.8 * a);
-      k.light(b, r, 0.22 * a);
-      if (!k.fast) k.emit(k.on(b.x, b.y, 0.5), 5 * a, { kind: 'mote', colour: [P.main, P.accent], size: 1.4, life: [1.0, 1.6], speed: [0.02, 0.05], up: [1, 3], gravity: 0, drag: 0.5, jitter: r * 0.7 });
+      slick(k, c, r, age, a);
+      caught(k, c, r).forEach((b, i) => mired(k, b, age, a * smooth(seg(age, 0.2, 0.6)), i));
+      tally(k, c, 0.45, left, age + left, 0.8 * a);
+      k.light(c, r, 0.22 * a);
+      if (!k.fast) k.emit({ ...c, z: c.z + 0.5 }, 5 * a, { kind: 'mote', colour: [P.main, P.accent], size: 1.4, life: [1.0, 1.6], speed: [0.02, 0.05], up: [1, 3], gravity: 0, drag: 0.5, jitter: r * 0.7 });
     } },
   },
 };
@@ -1803,22 +1837,23 @@ const massRoot: SpellVisual = {
       k.light(k.at(k.caster, 1), 2, 0.5 * g);
     },
     hit: (k) => {
-      const c = k.caster;
-      k.burst(k.at(c, 0.05), 16, { kind: 'dust', colour: '#8f8a7a', size: 2.6, life: [0.4, 0.8], speed: [1.2, 2.4], up: [2, 6], gravity: 4, drag: 0.15 });
-      shatterBurst(k, k.at(c, 0.2), 16, undefined, 1.2);
+      const c = fieldAt(k);
+      k.burst({ ...c, z: c.z + 1 }, 12, { kind: 'dust', colour: '#8f8a7a', size: 2, life: [0.3, 0.6], speed: [1.4, 2.6], up: [2, 5], gravity: 4, drag: 0.15 });
+      shatterBurst(k, { ...c, z: c.z + 3 }, 16, undefined, 1.2);
       k.flash(0.05);
     },
     impact: { secs: 0.9, draw: (k, u) => {
-      k.ring(k.caster, 0.2 + MASS_R * easeOut(seg(u, 0, 0.55)), { band: 0.14 * (1 - u), alpha: 0.9 * (1 - u * u), glow: 0.6 });
-      k.light(k.caster, MASS_R + 1, 0.8 * (1 - u));
+      const c = fieldAt(k);
+      k.ring(c, 0.2 + MASS_R * easeOut(seg(u, 0, 0.55)), { band: 0.14 * (1 - u), alpha: 0.9 * (1 - u * u), glow: 0.6 });
+      k.light(c, MASS_R + 1, 0.8 * (1 - u));
     } },
-    // Cracks race out as far as it reaches and crystal bursts up all along them, holding fast to whatever stands there.
-    linger: { draw: (k, age, left) => {
-      const c = k.caster;
+    // Cracks race out as far as it reaches and crystal bursts up all along them, and round the feet of whatever stands there.
+    linger: { on: 'spot', draw: (k, age, left) => {
+      const c = fieldAt(k);
       const a = life(age, left, 0.02, 0.6);
       const run = easeOut(seg(age, 0, 0.5));
       const lines = massLines(k, c);
-      cracks(k, lines, run, { alpha: a * (0.45 + 0.55 * (1 - smooth(seg(age, 0.8, 2.5)))), width: 1.1, glow: 1 - smooth(seg(age, 0.6, 1.6)) });
+      cracks(k, lines, run, { alpha: a * (0.45 + 0.55 * (1 - smooth(seg(age, 0.8, 2.5)))), width: 1.1, glow: 0.6 * (1 - smooth(seg(age, 0.4, 1.1))) });
       const sink = smooth(left / 0.6);
       for (let i = 0; i < MASS_ARMS; i++) {
         const line = lines[i];
@@ -1841,8 +1876,13 @@ const massRoot: SpellVisual = {
         }
         if (sortAt && paints.length) k.worldDraw(sortAt, (g) => { for (const p of paints) p(g); }, 0);
       }
+      // Each creature caught is rooted when the crack running its way reaches it.
+      caught(k, c, MASS_R).forEach((b, i) => {
+        const reached = seg(run, Math.hypot(b.x - c.x, b.y - c.y) / MASS_R - 0.05, 1);
+        if (reached > 0) rootSpikes(k, b, seg(age, 0.5 * Math.hypot(b.x - c.x, b.y - c.y) / MASS_R, 1) * sink, a, 60 + i * 5, 5);
+      });
       tally(k, c, 0.45, left, age + left, 0.8 * a);
-      if (left < 0.6 && once(k, 'sank')) k.burst(k.at(c, 0.05), 16, { kind: 'dust', colour: '#8f8a7a', size: 3, life: [0.4, 0.8], speed: [0.6, 1.6], up: [2, 6], gravity: 4 });
+      if (left < 0.6 && once(k, 'sank')) k.burst({ ...c, z: c.z + 0.5 }, 16, { kind: 'dust', colour: '#8f8a7a', size: 3, life: [0.4, 0.8], speed: [0.6, 1.6], up: [2, 6], gravity: 4 });
     } },
   },
 };
@@ -1935,9 +1975,7 @@ const snare: SpellVisual = {
       hoop(k, c, c.z, r, { h: 0.9, n: 10, turn: u * 4, alpha: 0.95, glow: 0.6 });
       const d = k.toward(k.caster, k.spot);
       const near = { x: c.x - d.x * r, y: c.y - d.y * r, z: c.z };
-      const pts: P3[] = [];
-      for (let i = 0; i <= 6; i++) pts.push(arcAt(from, near, i / 6, -1));
-      k.ribbon(pts, { width: 1.4, taper: 'none', alpha: 0.85, glow: 0.4 });
+      k.string(from, near, { sag: 1 + k.dist * 0.4 * u, width: 1.2, main: P.core, glow: 0.5, alpha: 0.95 });
     } },
     hit: (k) => {
       k.burst(k.at(k.target, 0.05), 10, { kind: 'dust', colour: '#8f8a7a', size: 2.6, life: [0.4, 0.7], speed: [0.2, 0.5], up: [2, 6], gravity: 4 });
@@ -2073,7 +2111,8 @@ function frozenMotes(k: FxScene, c: { x: number; y: number; z: number }, r: numb
 
 const stillfield: SpellVisual = {
   palette: P,
-  cast: { timing: { secs: 1.7, release: 0.5, blendOut: 0.16 }, pose: stillfieldPose },
+  // The arms held out, still, for as long as the field holds: the Binder is holding it.
+  cast: { timing: { secs: 1.7, release: 0.5, blendOut: 0.16 }, pose: stillfieldPose, hold: { at: 0.62 } },
   fx: {
     // A diamond forming where the hands meet overhead, brightening as they press.
     charge: (k, t) => {
@@ -2090,21 +2129,28 @@ const stillfield: SpellVisual = {
     },
     // The field shuts down over everything near: a dome rung out fast, then still.
     impact: { secs: 0.5, draw: (k, u) => {
+      const c = fieldAt(k);
       k.flare(k.at(k.caster, 1.15), 10 * (1 - u * 0.6), flashOf(u, 0.08), P.core);
-      k.ring(k.caster, FIELD_R * easeOut(u), { band: 0.12 * (1 - u) + 0.02, alpha: 1 - u, glow: 0.6 });
-      k.light(k.caster, FIELD_R + 1, 0.8 * (1 - u * 0.5));
+      k.ring(c, FIELD_R * easeOut(u), { band: 0.12 * (1 - u) + 0.02, alpha: 1 - u, glow: 0.6 });
+      k.light(c, FIELD_R + 1, 0.8 * (1 - u * 0.5));
     } },
-    linger: { draw: (k, age, left) => {
-      const c = k.caster;
+    linger: { on: 'spot', draw: (k, age, left) => {
+      const c = { ...fieldAt(k), tall: k.caster.tall };
       const a = life(age, left, 0.02, 0.5);
       const out = easeOut(seg(age, 0, 0.35));
       const r = FIELD_R * out, h = c.tall * 2.1 * out;
       dome(k, { x: c.x, y: c.y, z: c.z }, r, h, a * (0.45 + 0.55 * (1 - smooth(seg(age, 0.3, 1.2)))), 0.2);
       frozenMotes(k, { x: c.x, y: c.y, z: c.z }, FIELD_R, c.tall * 2.1, a * smooth(seg(age, 0.3, 0.6)), age);
       k.ring(c, Math.max(0.05, r), { band: 0.05, alpha: 0.6 * a, glow: 0.5 });
+      // Whatever is caught stops where it stands: a band of frost round it and its own stone over it, not turning.
+      caught(k, c, r).forEach((b, i) => {
+        const s = smooth(seg(age, 0.15 + 0.05 * i, 0.4 + 0.05 * i));
+        hoop(k, b, b.z + b.tall * 0.45, girth(b) * lerp(1.8, 1.05, easeBack(s)), { alpha: a * s, h: band(b) * 0.7, n: 8, glow: 0.3, main: P.core, core: '#ffffff' });
+        gemAt(k, k.at(b, 1.2), s, 1.6, 0.4 + i, { alpha: a, bias: 6 });
+      });
       tally(k, c, 0.45, left, age + left, 0.8 * a);
       k.light(c, FIELD_R + 0.5, 0.3 * a);
-      if (left < 0.4 && once(k, 'thaw')) k.burst(k.at(c, 0.8), 20, { kind: 'mote', colour: [P.core, P.main], size: 1.6, life: [0.4, 0.8], speed: [0.4, FIELD_R * 0.6], up: [-4, 4], gravity: 6 });
+      if (left < 0.4 && once(k, 'thaw')) k.burst({ ...c, z: c.z + c.tall * 0.8 }, 20, { kind: 'mote', colour: [P.core, P.main], size: 1.6, life: [0.4, 0.8], speed: [0.4, FIELD_R * 0.6], up: [-4, 4], gravity: 6 });
     } },
   },
 };
