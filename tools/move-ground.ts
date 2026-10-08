@@ -18,6 +18,10 @@
  *    tiles nobody has touched (no `tile_change`), with the age the island has
  *    grown them to kept.
  *
+ * And a second: the trees nobody has touched on an island where none grow of
+ * themselves, taken off and the ground under them laid as the generator lays
+ * it now (`clearTrees`).
+ *
  * Each island it has done goes into `land_move`, and an island already there
  * is skipped without reading its land, so a deploy can run this every time.
  *
@@ -124,6 +128,72 @@ export async function move(sb: SupabaseClient, world: World): Promise<void> {
   for (const [k, n] of [...kinds].sort((a, b) => b[1] - a[1])) console.log(`      ${String(n).padStart(8)}  ${k}`);
 }
 
+const CLEAR = '2026-10-08 the Northeast Tundra treeless';
+const TREELESS = new Set(REGIONS.map((R, i) => (R.treeless ? i : -1)).filter((i) => i >= 0));
+
+/**
+ * The second move: on an island where no tree grows of itself, the trees the
+ * old generator put there and nobody has touched since come off, and the tile
+ * goes back to what the generator lays there now. Trees people planted are in
+ * `tile_change` and stay.
+ */
+export async function clearTrees(sb: SupabaseClient, world: World): Promise<void> {
+  const atlas = readAtlas();
+  const S = world.size;
+  const step = Math.max(1, S >> 10);
+  let yLo = S, yHi = -1, xLo = S, xHi = -1;
+  for (let y = 0; y < S; y += step) for (let x = 0; x < S; x += step) {
+    if (!TREELESS.has(regionAt(atlas, x, y, S))) continue;
+    yLo = Math.min(yLo, y); yHi = Math.max(yHi, y + step - 1);
+    xLo = Math.min(xLo, x); xHi = Math.max(xHi, x + step - 1);
+  }
+  let cleared = 0;
+  if (yHi >= 0) {
+    yHi = Math.min(S - 1, yHi); xHi = Math.min(S - 1, xHi);
+    const told = new Set<number>();
+    for (let from = 0; ; ) {
+      const { data, error } = await sb.from('tile_change')
+        .select('x, y, n').eq('world_id', world.id).gt('n', from).order('n').limit(10000);
+      if (error) throw new Error(`could not read the record: ${error.message}`);
+      const rows = (data ?? []) as Array<{ x: number; y: number; n: number }>;
+      if (!rows.length) break;
+      for (const r of rows) told.add(r.y * S + r.x);
+      from = rows[rows.length - 1].n;
+    }
+    const w = xHi - xLo + 1;
+    for (let y0 = yLo; y0 <= yHi; y0 += BAND) {
+      const h = Math.min(BAND, yHi + 1 - y0);
+      const { data: land, error } = await sb.from('land_tile')
+        .select('y, tiles, data').eq('world_id', world.id).gte('y', y0).lt('y', y0 + h);
+      if (error) throw new Error(`could not read the land at ${y0}: ${error.message}`);
+      const win = generateAtlasWindow(world.seed, atlas, xLo, y0, w, h, S);
+      for (const row of (land ?? []) as Array<{ y: number; tiles: string; data: string }>) {
+        const j = row.y - y0;
+        const tiles = bytes(row.tiles), data = bytes(row.data);
+        const xs: number[] = [], fromT: number[] = [], fromD: number[] = [], toT: number[] = [], toD: number[] = [];
+        for (let x = xLo; x <= xHi; x++) {
+          if (tiles[x] !== TileType.Tree || told.has(row.y * S + x) || !TREELESS.has(regionAt(atlas, x, row.y, S))) continue;
+          const k = j * w + (x - xLo);
+          if (win.tiles[k] === TileType.Tree) continue;
+          xs.push(x); fromT.push(tiles[x]); fromD.push(data[x]); toT.push(win.tiles[k]); toD.push(win.data[k]);
+        }
+        if (!xs.length) continue;
+        const { data: n, error: we } = await sb.rpc('land_regrow_face', {
+          p_world: world.id, p_y: row.y, p_x: xs, p_from_tile: fromT, p_from_data: fromD, p_tile: toT, p_data: toD,
+        });
+        if (we) throw new Error(`could not write row ${row.y}: ${we.message}`);
+        cleared += Number(n ?? 0);
+      }
+      process.stdout.write(`  ${y0 - yLo}/${yHi - yLo}\r`);
+    }
+    const { error: ce } = await sb.from('land_chunk').delete().eq('world_id', world.id);
+    if (ce) throw new Error(`could not forget the land chunks: ${ce.message}`);
+  }
+  const { error: le } = await sb.from('land_move').insert({ world_id: world.id, move: CLEAR, trees: cleared });
+  if (le) throw new Error(`could not record the move: ${le.message}`);
+  console.log(`${world.name}: ${cleared} trees taken off where none grow of themselves`);
+}
+
 async function main(): Promise<void> {
   const url = process.env.SUPABASE_URL || PROJECT.url;
   const key = process.env.SUPABASE_KEY || '';
@@ -131,12 +201,14 @@ async function main(): Promise<void> {
   const sb = createClient(url, key, { auth: { persistSession: false } });
   const { data: worlds, error } = await sb.from('world').select('id, name, seed, size').eq('ready', true);
   if (error) throw new Error(`could not read the worlds: ${error.message}`);
-  const { data: done, error: de } = await sb.from('land_move').select('world_id').eq('move', MOVE);
-  if (de) throw new Error(`could not read the moves: ${de.message}`);
-  const had = new Set(((done ?? []) as Array<{ world_id: string }>).map((d) => d.world_id));
-  const todo = ((worlds ?? []) as World[]).filter((w) => !had.has(w.id));
-  console.log(`${MOVE}: ${todo.length} of ${(worlds ?? []).length} islands to move`);
-  for (const w of todo) await move(sb, w);
+  for (const [name, run] of [[MOVE, move], [CLEAR, clearTrees]] as const) {
+    const { data: done, error: de } = await sb.from('land_move').select('world_id').eq('move', name);
+    if (de) throw new Error(`could not read the moves: ${de.message}`);
+    const had = new Set(((done ?? []) as Array<{ world_id: string }>).map((d) => d.world_id));
+    const todo = ((worlds ?? []) as World[]).filter((w) => !had.has(w.id));
+    console.log(`${name}: ${todo.length} of ${(worlds ?? []).length} islands to move`);
+    for (const w of todo) await run(sb, w);
+  }
 }
 
 // Left alone when a test brings `move` in with a client of its own.

@@ -65,6 +65,14 @@ export interface Region {
    * band). Everywhere else on it is plain rock.
    */
   mountain?: string[];
+  /** Set where no tree grows of itself: none is laid down there, and none seeds there. */
+  treeless?: boolean;
+  /**
+   * Set where everything wild that stands up is a monster and never a
+   * wildermon. Each kind may number this many times its island-wide cap here,
+   * counted among those standing on this island and apart from the rest.
+   */
+  monsters?: number;
 }
 
 export const REGIONS: Region[] = [
@@ -104,6 +112,8 @@ export const REGIONS: Region[] = [
     ores: [],
     trees: [],
     mountain: ['gold_ore'],
+    treeless: true,
+    monsters: 3,
   },
   {
     key: 'Volcano',

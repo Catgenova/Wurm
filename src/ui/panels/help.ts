@@ -931,6 +931,7 @@ export function helpText(): string {
     grow among the apples and olives:
     ${listed(ISLAND_FRUIT.map(({ R, trees }) => `${listed(trees.map((t) => `<b>${t}</b>`))} on ${islandName(R.name)}`))}.
     An island of your own has no chart and grows them all.
+    ${REGIONS.filter((R) => R.treeless).map((R) => `No tree grows of itself on ${islandName(R.name)}, and none seeds there.`).join(' ')}
     You can tell a fruit tree across a field by what is hanging in it, and in spring by its flower:
     ${FLOWER_KINDS.map(([family, kinds]) => `${family} on ${listed(kinds)}`).join('; ')}. Take a <b>sprout</b> off one
     with forestry and plant it, and you have the beginnings of an orchard, wherever the sprout came
@@ -2586,6 +2587,7 @@ export function helpText(): string {
     ${listed(MONSTERS.map(([id, w]) => `${percent(w / MONSTER_WEIGHT)} ${SPECIES[id].name.toLowerCase()}s`))}. Only so many of each are alive at once
     (${listed(MONSTERS.map(([id]) => `${numberWord(MONSTER_CAP[id] ?? 1)} ${SPECIES[id].name.toLowerCase()}${(MONSTER_CAP[id] ?? 1) === 1 ? '' : 's'}`))}), and the bigger the thing the further it keeps
     from your token &mdash; ${listed(MONSTERS.map(([id]) => `${article(SPECIES[id].name)} ${SPECIES[id].name.toLowerCase()} ${numberWord(MONSTER_KEEP_OFF[id] ?? 0)} tiles`))}. None of them can be tamed,
+    ${REGIONS.filter((R) => R.monsters).map((R) => `${capital(islandName(R.name))} is monster country: everything wild that stands up there is one of these and never a wildermon, and it holds ${times(R.monsters ?? 1)} the number of each that the rest of the chart shares between them (${listed(MONSTERS.map(([id]) => `${numberWord((MONSTER_CAP[id] ?? 1) * (R.monsters ?? 1))} ${SPECIES[id].name.toLowerCase()}${(MONSTER_CAP[id] ?? 1) * (R.monsters ?? 1) === 1 ? '' : 's'}`))}).`).join(' ')}
     trapped, bred or brushed. There is nothing to be done with one but kill it, and nothing to be gained
     by meeting one in your shirt: ${listed(MONSTERS.map(([id], i) => `${article(SPECIES[id].name)} ${SPECIES[id].name.toLowerCase()}'s ${i === 0 ? 'blow takes ' : ''}${percent(Math.round(SPECIES[id].attack * BLOW_SHARE * 100) / 100)}`))} of an unarmoured life.</p>
     <p>What they are worth is on the other side of that. Butchering one gives what a wildermon gives and

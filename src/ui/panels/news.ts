@@ -62,7 +62,7 @@ import { weaponCarry } from '../../render/figure';
 import { TRY_LEARN } from '../../game/learn';
 import { CLIMB_LEARN_FROM, CLIMB_PER_LEVEL, MAX_STEP } from '../../game/player';
 import { ALL_GOALS } from '../../game/journal';
-import { COMPANION_SIGHT, SPECIES } from '../../game/creatures';
+import { COMPANION_SIGHT, MONSTER_CAP, MONSTERS, SPECIES } from '../../game/creatures';
 import { betterThanCommon, CHANNELS, husbandryOdds, pct as cardPct } from '../../game/traits';
 import { CHAIN_MOST, FALL_DROP, FILL_RATE, POOL_DEPTH, POOL_LIP, RUN_RATE, SPRING_DEPTH, SPRINGS_EACH } from '../../world/springs';
 import { POOL_FILL } from '../../game/foundations';
@@ -1383,6 +1383,15 @@ export const NEWS: News[] = [
         'Islands founded before today have had the rock under those islands and their untouched trees changed to match.',
       ];
     },
+  },
+  {
+    n: 102,
+    day: '2026-10-08',
+    lines: () => REGIONS.filter((R) => R.monsters || R.treeless).flatMap((R) => [
+      ...(R.treeless ? [`No tree grows of itself on the ${R.name.replace(/^The /, '')} any more, and none seeds there.`] : []),
+      ...(R.monsters ? [`Everything wild that stands up on the ${R.name.replace(/^The /, '')} is a monster, never a wildermon, and it holds ${times(R.monsters)} `
+        + `as many of each as the rest of the chart shares: ${listed(MONSTERS.map(([id]) => `${numberWord((MONSTER_CAP[id] ?? 1) * (R.monsters ?? 1))} ${SPECIES[id].name.toLowerCase()}${(MONSTER_CAP[id] ?? 1) * (R.monsters ?? 1) === 1 ? '' : 's'}`))}.`] : []),
+    ]),
   },
 ];
 

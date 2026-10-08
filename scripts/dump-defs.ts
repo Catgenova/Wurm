@@ -121,6 +121,7 @@ import { SAY_A_MINUTE, SAY_MAX } from '../src/game/chat';
 import { CALLS_A_MINUTE, CHANGE_KEEP, EVENT_KEEP, FOG_BYTES, FOUND_MAX, GUIDE_BATCH, IDLE_LOGOUT, ISLAND_KEEP, ISLAND_UNOPENED_KEEP, ISLAND_UNVISITED_KEEP, LAND_ASK, LEG_SLACK, MOBS_RANGE, PEACE_REACH, REGION, SENT_INLINE, STIR_COARSE_EVERY, STIR_SLACK, STORED_SETTLE, SWEEP_EVERY, SWEEP_ROWS, TICK_PLAYERS, TICK_SECONDS, TICK_WORLDS, WALK_SAMPLES, WORKER_REST_EVERY, WORKER_REST_FIRST, WORKER_REST_MOST } from '../src/game/keep';
 import { CLIMB_LEARN, CLIMB_LEARN_FROM, CLIMB_LEARN_STEEP, CLIMB_PER_LEVEL, MAX_STAND, MAX_STEP, SWIM_DEPTH } from '../src/game/player';
 import { CHUNK } from '../src/world/world';
+import { REGIONS } from '../src/world/regions';
 import { FUELS, FUEL_SAID } from '../src/game/campfire';
 import { GRAVE_KEEPS, GRAVE_REACH } from '../src/game/graves';
 import { spanWords } from '../src/game/words';
@@ -1306,6 +1307,15 @@ for (const a of Object.values(AGES)) {
   out.push(`insert into tier_odds values (${q(tier)}, ${q(ord)}, ${q(WILD_ODDS[tier as 'common'])});`));
 // The two loose numbers, as functions rather than a row with no table to be in.
 out.push(`create or replace function monster_share() returns double precision language sql immutable as $fn$ select ${q(MONSTER_SHARE)}::double precision $fn$;`);
+/*
+ * What each island of the chart does with its wild and its woods, by its
+ * index in REGIONS, which is the byte `chart_region` holds for a stretch of the
+ * chart: how many times the island-wide cap each monster may number there
+ * (nought for an island whose wild is the usual mix), and whether trees seed
+ * there at all.
+ */
+out.push(`create or replace function region_monsters(p_region int) returns int language sql immutable as $fn$ select case p_region ${REGIONS.map((R, i) => (R.monsters ? `when ${i} then ${R.monsters} ` : '')).join('')}else 0 end $fn$;`);
+out.push(`create or replace function region_treeless(p_region int) returns boolean language sql immutable as $fn$ select coalesce(p_region = any(array[${REGIONS.map((R, i) => (R.treeless ? i : -1)).filter((i) => i >= 0).join(', ') || '-1'}]::int[]), false) $fn$;`);
 out.push(`create or replace function trait_slots() returns int language sql immutable as $fn$ select ${q(TRAIT_SLOTS)} $fn$;`);
 /* And the share of a wild roll that is fighting blood, which then rolls its own grade. */
 out.push(`create or replace function fight_share() returns double precision language sql immutable as $fn$ select ${q(FIGHT_SHARE)}::double precision $fn$;`);

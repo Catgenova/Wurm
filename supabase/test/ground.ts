@@ -71,10 +71,15 @@ const marks = {
  * for marble and gold under its mountain. That move was carried onto every
  * island already founded by `tools/move-ground.ts`, which writes the new rock
  * and the moved trees into the island's own land.
+ *
+ * `tiles` and `data` moved again the same day, when the Northeast Tundra was
+ * made treeless: where the generator would have put a tree there it leaves the
+ * tundra or grass under it. `tools/move-ground.ts` carries that onto islands
+ * already founded too, taking off the trees nobody had touched.
  */
 const PINNED: Record<keyof typeof marks, string> = {
-  tiles: '07fcda3bbd161f34',
-  data: '27c4f8f76a3cc0d6',
+  tiles: 'd5d42e470e6f2bfb',
+  data: '24435ee0a65a8797',
   rock: '89aab580b6161a21',
   heights: '561c219755d4479c',
   dirt: '2c0887dc7256457a',

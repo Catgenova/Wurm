@@ -418,6 +418,11 @@ export function generateAtlasWindow(
         else if (avg < 9 && nearWater(wx, wy) && r < 0.08) t = TileType.Clay;
       }
 
+      // An island where nothing grows of itself keeps the ground the tree would have stood on.
+      if (t === TileType.Tree && R.treeless) {
+        t = alpine || (R.tundra && r < 0.5) ? TileType.Tundra : TileType.Grass;
+        d = 0;
+      }
       halo[ty * tw + tx] = t;
       haloData[ty * tw + tx] = d;
       // Ore on the seabed is ore nobody can reach, so dry land carries the metal.
