@@ -11,7 +11,7 @@
  * work with in the pack. What is used up is in the stores:
  *
  *   * a wagon two tiles off that somebody else set down, off any settlement:
- *     iron lumps, iron ore, an iron shovel, shovel head castings, silver
+ *     iron lumps, iron ore, an iron shovel, shovel head castings, gold
  *     lumps, unfired bowls and apples -- a vehicle is anybody's to load and
  *     to empty, so it is anybody's to use;
  *   * a crate of logs of your own;
@@ -91,7 +91,7 @@ for (const c of [...game.crates.values()]) game.removeCrate(c.id);
 for (const f of [...game.furniture.values()]) game.removeFurniture(f.id);
 
 const pack = game.inventory;
-const USED = ['iron_lump', 'iron_ore', 'log', 'shovel_head_mould', 'anvil_mould', 'casting', 'silver_lump', 'coin_die',
+const USED = ['iron_lump', 'iron_ore', 'log', 'shovel_head_mould', 'anvil_mould', 'casting', 'gold_lump', 'coin_die',
   'file', 'whetstone', 'hatchet', 'apple', 'unfired_clay_bowl', 'shovel', 'coin', 'plank', 'shaft', 'thatch', 'peat', 'coal', 'timber'];
 for (const it of [...pack.items]) if (USED.includes(it.id) || it.inside) pack.remove(it.uid, it.count);
 /* The lumps in the wagon: what an anvil takes off its mould, and ten over for the rest of it. */
@@ -114,7 +114,7 @@ barrel.litres = 20;
 
 const wagon = game.addFurniture('wagon', px + 2, py, 0, 0, 40, [
   stack('iron_lump', LUMPS, 45, 'Iron'), stack('iron_ore', 5, 35), stack('shovel', 1, 30, 'Iron'),
-  stack('casting', 2, 50, 'Iron', 'shovel_head'), stack('silver_lump', 2, 40, 'Silver'),
+  stack('casting', 2, 50, 'Iron', 'shovel_head'), stack('gold_lump', 2, 40, 'Gold'),
   stack('unfired_clay_bowl', 3, 30), stack('apple', 20, 30),
 ], 'Pine');
 // Somebody else's, off any settlement: a vehicle is anybody's all the same.
@@ -196,8 +196,8 @@ check('a casting is beaten out at the anvil out of the wagon',
   go('smith', { kind: 'anvil', id: anvil.id, itemUid: first(wagon.items, 'casting').uid } as Target) === 'done'
   && count(wagon.items, 'casting') === 1, `${count(wagon.items, 'casting')} castings left`);
 check('and coins are struck out of it',
-  go('strike_coins', { kind: 'anvil', id: anvil.id, itemUid: first(wagon.items, 'silver_lump').uid } as Target) === 'done'
-  && count(wagon.items, 'silver_lump') === 1, `${count(wagon.items, 'silver_lump')} silver left`);
+  go('strike_coins', { kind: 'anvil', id: anvil.id, itemUid: first(wagon.items, 'gold_lump').uid } as Target) === 'done'
+  && count(wagon.items, 'gold_lump') === 1, `${count(wagon.items, 'gold_lump')} gold left`);
 
 const better = { kind: 'item', uid: hatchet.uid } as Target;
 check('a hatchet is bettered with a lump out of the wagon',
@@ -242,7 +242,7 @@ begin
       stats = jsonb_set(coalesce(stats, '{}'::jsonb), '{stamina}', '1')
    where world_id = w and uid = me;
   delete from item i where i.world_id = w and i.holder = 'player' and i.holder_uid = me
-    and (i.def in ('iron_lump', 'iron_ore', 'log', 'shovel_head_mould', 'anvil_mould', 'casting', 'silver_lump',
+    and (i.def in ('iron_lump', 'iron_ore', 'log', 'shovel_head_mould', 'anvil_mould', 'casting', 'gold_lump',
                    'coin_die', 'file', 'whetstone', 'hatchet', 'apple', 'unfired_clay_bowl', 'shovel', 'coin',
                    'plank', 'shaft', 'thatch', 'peat', 'coal', 'timber') or is_bag(i.def));
 
@@ -270,7 +270,7 @@ begin
     (w, 'furniture', v_wagon, 'iron_ore', 35, 5, null, null),
     (w, 'furniture', v_wagon, 'shovel', 30, 1, 'Iron', null),
     (w, 'furniture', v_wagon, 'casting', 50, 2, 'Iron', 'shovel_head'),
-    (w, 'furniture', v_wagon, 'silver_lump', 40, 2, 'Silver', null),
+    (w, 'furniture', v_wagon, 'gold_lump', 40, 2, 'Gold', null),
     (w, 'furniture', v_wagon, 'unfired_clay_bowl', 30, 3, null, null),
     (w, 'furniture', v_wagon, 'apple', 30, 20, null, null);
   select coalesce(max(id), 0) + 1 into v_crate from crate where world_id = w;
@@ -365,10 +365,10 @@ begin
     'itemUid', (select id from item where placed = v_wagon and def = 'casting')));
   insert into said values ('SMITH|' || (select coalesce(sum(count), 0) from item where placed = v_wagon and def = 'casting'));
   insert into said values ('COIN?|' || coalesce(act_refusal(w, me, 'strike_coins', jsonb_build_object('kind', 'anvil', 'id', v_anvil,
-    'itemUid', (select id from item where placed = v_wagon and def = 'silver_lump'))), 'none'));
+    'itemUid', (select id from item where placed = v_wagon and def = 'gold_lump'))), 'none'));
   perform act_perform(w, me, 'strike_coins', jsonb_build_object('kind', 'anvil', 'id', v_anvil,
-    'itemUid', (select id from item where placed = v_wagon and def = 'silver_lump')));
-  insert into said values ('COIN|' || (select coalesce(sum(count), 0) from item where placed = v_wagon and def = 'silver_lump'));
+    'itemUid', (select id from item where placed = v_wagon and def = 'gold_lump')));
+  insert into said values ('COIN|' || (select coalesce(sum(count), 0) from item where placed = v_wagon and def = 'gold_lump'));
   insert into said values ('BETTER?|' || coalesce(act_refusal(w, me, 'improve_item',
     jsonb_build_object('kind', 'item', 'uid', v_hatchet)), 'none'));
   perform act_perform(w, me, 'improve_item', jsonb_build_object('kind', 'item', 'uid', v_hatchet));
