@@ -1,4 +1,4 @@
-import { darker, drawBeast, drawBeastPortrait, topOf, type Anim, type BeastPose, type Kind } from './beasts';
+import { darker, drawBeast, drawBeastPortrait, headOf, topOf, type Anim, type BeastPose, type Kind } from './beasts';
 import { LUME, VESP } from './wild-air';
 import { QUILL, SEDRA, WARDA } from './wild-birds';
 import { DRAGON } from './wild-dragon';
@@ -81,6 +81,12 @@ export function drawWildermon(ctx: CanvasRenderingContext2D, sx: number, sy: num
 export function wildermonTop(species: string): number | undefined {
   const kind = WILDERMON[species];
   return kind ? topOf(species, kind) : undefined;
+}
+
+/** Where a kind's head is over its feet at a facing, at zoom one (`headOf`): where the reins of a team come to. */
+export function wildermonHead(species: string, facing: number): [number, number] | null {
+  const kind = WILDERMON[species];
+  return kind ? headOf(species, kind, facing) : null;
 }
 
 /** A kind on its own, for a page. */

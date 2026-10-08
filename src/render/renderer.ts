@@ -126,7 +126,7 @@ import { clumpOf, FLOWER_COLOURS, flowerSprite, swayFrame, tileColour } from './
 import { flowerSeason, flowersOn } from '../world/flowers';
 import { drawFace, EDGES, ROCK_MOSS, topEdges, type Face } from './outcrops';
 import { forgetTrees, grownAt, spriteScaleFor, bushSprite, crateSprite, cropSprite, drawAnvil, drawCampfire, drawCreature, drawKiln, drawPlayer, drawSmelter, facingOf, pileSprite, tokenSprite, treeSprite, type Sprite, drawWorkPost, drawTrap, drawDeck, stumpSprite, type DeckShape } from './sprites';
-import { wildermonTop } from './wildermon';
+import { wildermonHead, wildermonTop } from './wildermon';
 import {
   drawChains, drawDrawbridgeSpan, drawGallows, drawGatewayDressing, drawGrille, drawGrooves, drawHiddenMark, drawHingeCrib, drawLandingCrib,
   drawStandingDeck,
@@ -144,6 +144,12 @@ import { FIGURE_TOP } from './figure';
  * (`FIGURE_TOP`), as a horse in harness stands over its driver. The rest of a
  * team is drawn up by the same, so a team keeps its kinds' sizes to each other.
  */
+/** How far out from the middle of a cart or wagon, toward its team, the driver's hands are, in tiles; and how far over the seat. */
+const REIN_REACH = 0.35;
+const REIN_HANDS = 9;
+/** Reins: dark leather, inked. */
+const REIN_LEATHER = 'rgb(112, 74, 46)';
+const REIN_LINE = 'rgba(46, 30, 22, 0.85)';
 const TRACES_SCALE = Math.max(1, (1.25 * FIGURE_TOP) / (wildermonTop('orse') ?? FIGURE_TOP));
 import {
   CELLAR_DARK, CELLAR_DARK_INK, CELLAR_FALL, CELLAR_VEIL, cellarFloor, cellarFloorHeight, cellarOrder, cutFace, earthEnd, earthFace, faceOn, KERB, OUT, UNDER,
@@ -3713,6 +3719,47 @@ export class Renderer {
     e.standing = standing;
   }
 
+  /**
+   * The reins of a beast in the traces: from where its head is drawn back to
+   * the driver's box of the cart or wagon it is put to, at the height of the
+   * driver's hands, hanging a little between -- two lines of leather, a pair to
+   * each beast, as a team is driven. Drawn over the beast, so they are seen
+   * coming off its head; the box, drawn after it where it stands in front,
+   * takes their other end.
+   */
+  private drawReins(ctx: CanvasRenderingContext2D, cr: Creature, sx: number, sy: number, facing: number, big: number, zoom: number): void {
+    const f = cr.hitchedTo !== null ? this.game.furniture.get(cr.hitchedTo) : undefined;
+    const v = f && furnitureDef(f.kind).vehicle;
+    if (!f || !v) return;
+    const cam = this.camera;
+    const head = wildermonHead(cr.species, facing) ?? [0, -(wildermonTop(cr.species) ?? 20) * 0.8];
+    const hx = sx + head[0] * zoom * big, hy = sy + head[1] * zoom * big;
+    // The driver's hands: over the front of the box, toward the team, where the seat is.
+    const [cx, cy] = furnitureCentre(f);
+    const dx = cr.x - cx, dy = cr.y - cy, d = Math.hypot(dx, dy) || 1;
+    const wx = cx + (dx / d) * REIN_REACH, wy = cy + (dy / d) * REIN_REACH;
+    const bx = cam.worldToScreenX(wx, wy);
+    const by = cam.worldToScreenY(wx, wy, this.pieceBase(f, wx, wy)) - (v.seat + REIN_HANDS) * zoom;
+    // A pair a hand apart, sagging by a little of the length between.
+    const nx = -(hy - by), ny = hx - bx, nl = Math.hypot(nx, ny) || 1;
+    const sag = Math.min(14, Math.hypot(hx - bx, hy - by) * 0.12) * zoom;
+    ctx.save();
+    ctx.lineCap = 'round';
+    for (const side of [-1, 1]) {
+      const ox = (nx / nl) * side * 1.1 * zoom, oy = (ny / nl) * side * 1.1 * zoom;
+      const mx = (hx + bx) / 2 + ox, my = (hy + by) / 2 + oy + sag;
+      for (const [ink, w] of [[REIN_LINE, 2.2], [REIN_LEATHER, 1.2]] as Array<[string, number]>) {
+        ctx.strokeStyle = ink;
+        ctx.lineWidth = Math.max(0.8, w * zoom * 0.6);
+        ctx.beginPath();
+        ctx.moveTo(bx + ox, by + oy);
+        ctx.quadraticCurveTo(mx, my, hx + ox, hy + oy);
+        ctx.stroke();
+      }
+    }
+    ctx.restore();
+  }
+
   private pieceBase(f: { kind: string; level?: number }, wx: number, wy: number): number {
     // A wagon driven up a wide staircase stands on the floor of its storey, as a body up there does.
     const up = f.level ?? 0;
@@ -4025,6 +4072,8 @@ export class Renderer {
             rare: cr.rare,
           }),
         );
+        // In the traces: the reins back from its head to the box of what it pulls.
+        if (cr.hitchedTo !== null) this.drawReins(ctx, cr, ent.sx, ent.sy, turned, big, zoom);
         // As tall and as wide as it is drawn: a big one, or a rare one, is clicked by its head as well as its feet.
         const size = rarityOf(cr).size;
         const tall = Math.max(22 * size, (wildermonTop(def.id) ?? 0) * big);

@@ -1029,6 +1029,35 @@ export function extentOf(kind: Kind, kit: readonly Piece[], facing: number, a: A
   return { x0, y0, x1, y1 };
 }
 
+/**
+ * Where a kind's head is over its feet, standing, facing one of the eight
+ * ways, in screen units at zoom one with its size in it: the middle of its
+ * head piece, which is where the reins of a team come to (`drawReins`).
+ * Nothing for a kind with no head piece.
+ */
+const heads = new Map<string, [number, number] | null>();
+export function headOf(id: string, kind: Kind, facing: number): [number, number] | null {
+  const f = ((Math.round(facing) % 8) + 8) % 8;
+  const key = `${id}|${f}`;
+  if (heads.has(key)) return heads.get(key) ?? null;
+  const a: Anim = { t: 0, u: 0, go: 0, gait: 0, graze: 0, blink: false, breath: 0.5, fleece: 1, seed: 0 };
+  const b = kind.bones(a);
+  const view = viewOf(f);
+  let sx = 0, sy = 0, n = 0;
+  for (const pc of kitOf(id, kind, 0)) {
+    if (pc.key !== 'head' || !b[pc.bone]) continue;
+    for (const v of pc.mesh.v) {
+      const [x, y] = onScreen(view, place(b[pc.bone], v));
+      sx += x;
+      sy += y;
+      n++;
+    }
+  }
+  const out: [number, number] | null = n ? [(sx / n) * (kind.size ?? 1), (sy / n) * (kind.size ?? 1)] : null;
+  heads.set(key, out);
+  return out;
+}
+
 /* ---- a body drawn frame after frame ------------------------------------------------ */
 
 /** What the island says a wildermon is doing, as the renderer hands it over. */
