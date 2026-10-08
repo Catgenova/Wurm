@@ -2595,6 +2595,34 @@ jobs:
             fi
           done
           echo "::warning::Could not reach the database to add the island owner. The next deploy tries again."
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - name: Carry the generator's moves onto islands already founded
+        env:
+          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+          PROJECT_REF: ${{ vars.SUPABASE_PROJECT_REF || 'glebtboagnafcgwjjvfy' }}
+        run: |
+          # When what the generator says about a region changes, an island
+          # founded before it holds the old ground. tools/move-ground.ts writes
+          # the new ground into each such island once, and `land_move`
+          # remembers it, so every later deploy reads that list and nothing
+          # else. It goes through psql with the database password, as the
+          # steps around it do: the deploy holds no service key.
+          set -o pipefail
+          export PGPASSWORD="$SUPABASE_DB_PASSWORD" PGCONNECT_TIMEOUT=20
+          urls=""
+          if [ -s supabase/.temp/pooler-url ]; then
+            urls="$(sed 's/:\[YOUR-PASSWORD\]//' supabase/.temp/pooler-url)"
+          fi
+          export MOVE_DB_URLS="$urls postgresql://postgres@db.$PROJECT_REF.supabase.co:5432/postgres"
+          npx esbuild tools/move-ground.ts --bundle --platform=node --format=esm \
+            --outfile=node_modules/.cache/move-ground.mjs --log-level=error
+          node --max-old-space-size=4096 node_modules/.cache/move-ground.mjs | tee move.log
+          echo "### Ground moved" >> "$GITHUB_STEP_SUMMARY"
+          tail -20 move.log >> "$GITHUB_STEP_SUMMARY"
       - name: What is alive on each island
         # Asked for: "what is the crescent island mob count currently?" — a
         # question nothing in the run could answer, because this is the only
@@ -2943,45 +2971,10 @@ jobs:
           echo "### The ground" >> "$GITHUB_STEP_SUMMARY"
           tail -20 reconcile.log >> "$GITHUB_STEP_SUMMARY"
 
-  move:
-    name: Carry the generator's moves onto islands already founded
-    if: github.event_name == 'workflow_dispatch' && inputs.live
-    needs: migrate
-    runs-on: ubuntu-latest
-    environment: AI
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '22'
-          cache: npm
-      - run: npm ci
-      - name: Move the ground each island has not had moved yet
-        env:
-          SUPABASE_URL: ${{ vars.SUPABASE_URL || 'https://glebtboagnafcgwjjvfy.supabase.co' }}
-          SUPABASE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
-        run: |
-          # When what the generator says about a region changes, an island
-          # founded before it holds the old ground. This writes the new ground
-          # into each such island once, and `land_move` remembers it, so every
-          # later deploy reads the list and nothing else.
-          set -o pipefail
-          if [ -z "$SUPABASE_KEY" ]; then
-            echo "::error::Set SUPABASE_SERVICE_KEY in the 'AI' environment: this reads and writes land."
-            exit 1
-          fi
-          npx esbuild tools/move-ground.ts --bundle --platform=node --format=esm \
-            --outfile=node_modules/.cache/move-ground.mjs --log-level=error
-          node --max-old-space-size=4096 node_modules/.cache/move-ground.mjs | tee move.log
-          echo "### Ground moved" >> "$GITHUB_STEP_SUMMARY"
-          tail -20 move.log >> "$GITHUB_STEP_SUMMARY"
-
   smoke:
     name: Play on the real island
     if: github.event_name == 'workflow_dispatch' && inputs.live
-    # After the move, so the island it founds and gives up is never one the
-    # move is halfway through.
-    needs: [migrate, move]
+    needs: migrate
     runs-on: ubuntu-latest
     environment: AI
     steps:

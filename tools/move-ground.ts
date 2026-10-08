@@ -9,259 +9,244 @@
  * new answer instead, which is what a change meant for the islands people are
  * already on needs.
  *
- * It is one move, named below, and it carries only what that move changed:
+ * Three moves, each carrying only what it changed:
  *
- *  - the rock under the Northeast Tundra and West Skerry, written as the
- *    generator has it now. Nothing writes rock after founding, so every
- *    difference there is the move.
- *  - trees on the Northeast Tundra and East Isle where a plum is involved, on
- *    tiles nobody has touched (no `tile_change`), with the age the island has
- *    grown them to kept.
+ *  - `move`: the rock under the Northeast Tundra and West Skerry, written as the
+ *    generator has it now (nothing writes rock after founding, so every
+ *    difference there is the move); and trees on the tundra and East Isle where
+ *    a plum is involved, on tiles nobody has touched, keeping their age.
+ *  - `clearTrees`: on an island where no tree grows of itself, the trees nobody
+ *    has touched come off and the tile goes back to what the generator lays
+ *    there now. Planted ones are in `tile_change` and stay.
+ *  - `goldOff`: gold seams anywhere but under the Northeast Tundra's mountain
+ *    become what the generator lays there now (iron, as any seam that belongs
+ *    to another island does).
  *
- * And a second: the trees nobody has touched on an island where none grow of
- * themselves, taken off and the ground under them laid as the generator lays
- * it now (`clearTrees`).
+ * Each island a move has done goes into `land_move`, and an island already
+ * there is skipped without reading its land, so a deploy can run this every
+ * time. It talks to Postgres through psql, as the deploy's other steps do,
+ * because the deploy holds the database password and not a service key:
  *
- * And a third: gold seams anywhere but under the Northeast Tundra's mountain
- * become what the generator lays there now (`goldOff`).
- *
- * Each island it has done goes into `land_move`, and an island already there
- * is skipped without reading its land, so a deploy can run this every time.
- *
- *   SUPABASE_URL=... SUPABASE_KEY=<service key> npx tsx tools/move-ground.ts
+ *   PGPASSWORD=... MOVE_DB_URLS="postgresql://postgres@host:5432/postgres" \
+ *     npx tsx tools/move-ground.ts
  */
-import { createClient, type SupabaseClient } from '@supabase/supabase-js';
+import { execFileSync } from 'node:child_process';
 import { generateAtlasWindow, regionAt } from '../src/world/atlas-world';
 import { REGIONS } from '../src/world/regions';
 import { packTreeData, ROCK_VARIANTS, TileType, TREE_DEFS, treeSpecies, treeVariant } from '../src/world/tiles';
-import { PROJECT } from '../src/net/supabase';
 import { readAtlas } from './atlas-node';
-
-const MOVE = '2026-10-08 glimmersteel to West Skerry, plum to East Isle, a bare tundra';
-const regionNamed = (key: string): number => REGIONS.findIndex((R) => R.key === key);
-const ROCK_REGIONS = new Set(['NortheastTundra', 'WestSkerry'].map(regionNamed));
-const TREE_REGIONS = new Set(['NortheastTundra', 'EastIsle'].map(regionNamed));
-const PLUM = TREE_DEFS.findIndex((t) => t.name === 'Plum');
 
 /** Rows of land read and written at a time. */
 const BAND = 64;
 
-function bytes(v: string): Uint8Array {
-  if (v.startsWith('\\x')) return Uint8Array.from(Buffer.from(v.slice(2), 'hex'));
-  return Uint8Array.from(Buffer.from(v, 'base64'));
-}
+/** One round trip: the statements in, the rows out, fields split on tabs. */
+export type Sql = (text: string) => string[][];
 
-interface Row { y: number; tiles: string; data: string; rock: string }
-interface World { id: string; name: string; seed: number; size: number }
-
-export async function move(sb: SupabaseClient, world: World): Promise<void> {
-  const atlas = readAtlas();
-  const S = world.size;
-  // Only the bands that hold one of the regions this move touches.
-  const regionRow = (x: number, y: number): number => regionAt(atlas, x, y, S);
-  const step = Math.max(1, S >> 10);
-  let yLo = S, yHi = -1, xLo = S, xHi = -1;
-  for (let y = 0; y < S; y += step) for (let x = 0; x < S; x += step) {
-    const r = regionRow(x, y);
-    if (!ROCK_REGIONS.has(r) && !TREE_REGIONS.has(r)) continue;
-    yLo = Math.min(yLo, y); yHi = Math.max(yHi, y + step - 1);
-    xLo = Math.min(xLo, x); xHi = Math.max(xHi, x + step - 1);
-  }
-  if (yHi < 0) return;
-  yHi = Math.min(S - 1, yHi); xHi = Math.min(S - 1, xHi);
-
-  // The tiles the record already covers, whose tree is what people made it.
-  const told = new Set<number>();
-  for (let from = 0; ; ) {
-    const { data, error } = await sb.from('tile_change')
-      .select('x, y, n').eq('world_id', world.id).gt('n', from).order('n').limit(10000);
-    if (error) throw new Error(`could not read the record: ${error.message}`);
-    const rows = (data ?? []) as Array<{ x: number; y: number; n: number }>;
-    if (!rows.length) break;
-    for (const r of rows) told.add(r.y * S + r.x);
-    from = rows[rows.length - 1].n;
-  }
-
-  let rockN = 0, treeN = 0;
-  const kinds = new Map<string, number>();
-  const tally = (k: string): void => { kinds.set(k, (kinds.get(k) ?? 0) + 1); };
-  const w = xHi - xLo + 1;
-  for (let y0 = yLo; y0 <= yHi; y0 += BAND) {
-    const h = Math.min(BAND, yHi + 1 - y0);
-    const { data: land, error } = await sb.from('land_tile')
-      .select('y, tiles, data, rock').eq('world_id', world.id).gte('y', y0).lt('y', y0 + h);
-    if (error) throw new Error(`could not read the land at ${y0}: ${error.message}`);
-    const win = generateAtlasWindow(world.seed, atlas, xLo, y0, w, h, S);
-    for (const row of (land ?? []) as Row[]) {
-      const j = row.y - y0;
-      const tiles = bytes(row.tiles), data = bytes(row.data), rock = bytes(row.rock);
-      const rockX: number[] = [], rockTo: number[] = [];
-      const treeX: number[] = [], treeFrom: number[] = [], treeTo: number[] = [];
-      for (let x = xLo; x <= xHi; x++) {
-        const r = regionRow(x, row.y);
-        const k = j * w + (x - xLo);
-        if (ROCK_REGIONS.has(r) && win.rock[k] !== rock[x]) {
-          rockX.push(x); rockTo.push(win.rock[k]);
-          tally(`rock ${ROCK_VARIANTS[rock[x]]?.name ?? rock[x]} -> ${ROCK_VARIANTS[win.rock[k]].name}`);
-        }
-        if (!TREE_REGIONS.has(r) || told.has(row.y * S + x)) continue;
-        if (tiles[x] !== TileType.Tree || win.tiles[k] !== TileType.Tree) continue;
-        const had = treeSpecies(data[x]), now = treeSpecies(win.data[k]);
-        if (had === now || (had !== PLUM && now !== PLUM)) continue;
-        treeX.push(x); treeFrom.push(data[x]); treeTo.push(packTreeData(now, treeVariant(data[x])));
-        tally(`tree ${TREE_DEFS[had].name} -> ${TREE_DEFS[now].name}`);
+/** psql against the first address that answers, kept once one has. */
+export function psql(urls: string[]): Sql {
+  let chosen: string | null = null;
+  return (text) => {
+    const tries = chosen ? [chosen] : urls;
+    let last: unknown = null;
+    for (const url of tries) {
+      try {
+        const out = execFileSync('psql', [url, '-X', '-q', '-t', '-A', '-F', '\t', '-v', 'ON_ERROR_STOP=1', '-f', '-'],
+          { input: text, encoding: 'utf8', maxBuffer: 1 << 30, stdio: ['pipe', 'pipe', 'pipe'] });
+        chosen = url;
+        return out.split('\n').filter((l) => l.length).map((l) => l.split('\t'));
+      } catch (e) {
+        last = e;
+        if (chosen) break;
       }
-      if (!rockX.length && !treeX.length) continue;
-      const { data: n, error: we } = await sb.rpc('land_regrow_row', {
-        p_world: world.id, p_y: row.y, p_rock_x: rockX, p_rock: rockTo,
-        p_tree_x: treeX, p_tree_from: treeFrom, p_tree_to: treeTo, p_tree: TileType.Tree,
-      });
-      if (we) throw new Error(`could not write row ${row.y}: ${we.message}`);
-      rockN += rockX.length;
-      treeN += Math.max(0, Number(n ?? 0) - rockX.length);
     }
-    process.stdout.write(`  ${y0 - yLo}/${yHi - yLo}\r`);
-  }
-  // The packed windows were cut from the old ground.
-  const { error: ce } = await sb.from('land_chunk').delete().eq('world_id', world.id);
-  if (ce) throw new Error(`could not forget the land chunks: ${ce.message}`);
-  const { error: le } = await sb.from('land_move').insert({ world_id: world.id, move: MOVE, rock: rockN, trees: treeN });
-  if (le) throw new Error(`could not record the move: ${le.message}`);
-  console.log(`${world.name}: ${rockN} rock and ${treeN} trees moved`);
-  for (const [k, n] of [...kinds].sort((a, b) => b[1] - a[1])) console.log(`      ${String(n).padStart(8)}  ${k}`);
+    throw new Error(`psql failed: ${String((last as { stderr?: string })?.stderr ?? last)}`);
+  };
 }
 
-const CLEAR = '2026-10-08 the Northeast Tundra treeless';
-const TREELESS = new Set(REGIONS.map((R, i) => (R.treeless ? i : -1)).filter((i) => i >= 0));
+const lit = (s: string): string => `'${s.replace(/'/g, "''")}'`;
+const arr = (xs: number[]): string => `array[${xs.join(',')}]::int[]`;
+const hexBytes = (h: string): Uint8Array => Uint8Array.from(Buffer.from(h, 'hex'));
 
-/**
- * The second move: on an island where no tree grows of itself, the trees the
- * old generator put there and nobody has touched since come off, and the tile
- * goes back to what the generator lays there now. Trees people planted are in
- * `tile_change` and stay.
- */
-export async function clearTrees(sb: SupabaseClient, world: World): Promise<void> {
-  const atlas = readAtlas();
-  const S = world.size;
-  const step = Math.max(1, S >> 10);
-  let yLo = S, yHi = -1, xLo = S, xHi = -1;
-  for (let y = 0; y < S; y += step) for (let x = 0; x < S; x += step) {
-    if (!TREELESS.has(regionAt(atlas, x, y, S))) continue;
-    yLo = Math.min(yLo, y); yHi = Math.max(yHi, y + step - 1);
-    xLo = Math.min(xLo, x); xHi = Math.max(xHi, x + step - 1);
-  }
-  let cleared = 0;
-  if (yHi >= 0) {
-    yHi = Math.min(S - 1, yHi); xHi = Math.min(S - 1, xHi);
-    const told = new Set<number>();
-    for (let from = 0; ; ) {
-      const { data, error } = await sb.from('tile_change')
-        .select('x, y, n').eq('world_id', world.id).gt('n', from).order('n').limit(10000);
-      if (error) throw new Error(`could not read the record: ${error.message}`);
-      const rows = (data ?? []) as Array<{ x: number; y: number; n: number }>;
-      if (!rows.length) break;
-      for (const r of rows) told.add(r.y * S + r.x);
-      from = rows[rows.length - 1].n;
-    }
-    const w = xHi - xLo + 1;
-    for (let y0 = yLo; y0 <= yHi; y0 += BAND) {
-      const h = Math.min(BAND, yHi + 1 - y0);
-      const { data: land, error } = await sb.from('land_tile')
-        .select('y, tiles, data').eq('world_id', world.id).gte('y', y0).lt('y', y0 + h);
-      if (error) throw new Error(`could not read the land at ${y0}: ${error.message}`);
-      const win = generateAtlasWindow(world.seed, atlas, xLo, y0, w, h, S);
-      for (const row of (land ?? []) as Array<{ y: number; tiles: string; data: string }>) {
-        const j = row.y - y0;
-        const tiles = bytes(row.tiles), data = bytes(row.data);
-        const xs: number[] = [], fromT: number[] = [], fromD: number[] = [], toT: number[] = [], toD: number[] = [];
-        for (let x = xLo; x <= xHi; x++) {
-          if (tiles[x] !== TileType.Tree || told.has(row.y * S + x) || !TREELESS.has(regionAt(atlas, x, row.y, S))) continue;
-          const k = j * w + (x - xLo);
-          if (win.tiles[k] === TileType.Tree) continue;
-          xs.push(x); fromT.push(tiles[x]); fromD.push(data[x]); toT.push(win.tiles[k]); toD.push(win.data[k]);
-        }
-        if (!xs.length) continue;
-        const { data: n, error: we } = await sb.rpc('land_regrow_face', {
-          p_world: world.id, p_y: row.y, p_x: xs, p_from_tile: fromT, p_from_data: fromD, p_tile: toT, p_data: toD,
-        });
-        if (we) throw new Error(`could not write row ${row.y}: ${we.message}`);
-        cleared += Number(n ?? 0);
-      }
-      process.stdout.write(`  ${y0 - yLo}/${yHi - yLo}\r`);
-    }
-    const { error: ce } = await sb.from('land_chunk').delete().eq('world_id', world.id);
-    if (ce) throw new Error(`could not forget the land chunks: ${ce.message}`);
-  }
-  const { error: le } = await sb.from('land_move').insert({ world_id: world.id, move: CLEAR, trees: cleared });
-  if (le) throw new Error(`could not record the move: ${le.message}`);
-  console.log(`${world.name}: ${cleared} trees taken off where none grow of themselves`);
-}
+export interface World { id: string; name: string; seed: number; size: number }
 
-const GOLD_MOVE = '2026-10-08 gold only under the Northeast Tundra';
+const regionNamed = (key: string): number => REGIONS.findIndex((R) => R.key === key);
+const PLUM = TREE_DEFS.findIndex((t) => t.name === 'Plum');
 const GOLD = ROCK_VARIANTS.findIndex((r) => r.yields === 'gold_ore');
 
-/**
- * The third move: gold is the Northeast Tundra's alone, under its mountain, so
- * every gold seam anywhere else on an island founded before becomes what the
- * generator lays there now (iron, as any seam that belongs to another island
- * does). Nothing writes rock after founding, so every such seam is the old
- * generator's.
- */
-export async function goldOff(sb: SupabaseClient, world: World): Promise<void> {
+/** The rows of land from y0 for h rows, by y: the columns asked for, unpacked. */
+function readBand(sql: Sql, world: World, y0: number, h: number, cols: Array<'tiles' | 'data' | 'rock'>): Map<number, Record<string, Uint8Array>> {
+  const rows = sql(`select y, ${cols.map((c) => `encode(${c}, 'hex')`).join(', ')} from land_tile
+    where world_id = ${lit(world.id)} and y >= ${y0} and y < ${y0 + h} order by y;`);
+  const out = new Map<number, Record<string, Uint8Array>>();
+  for (const r of rows) {
+    const rec: Record<string, Uint8Array> = {};
+    cols.forEach((c, i) => { rec[c] = hexBytes(r[i + 1]); });
+    out.set(Number(r[0]), rec);
+  }
+  return out;
+}
+
+/** Every tile the record covers: the ones whose ground people made. */
+function touched(sql: Sql, world: World): Set<number> {
+  const told = new Set<number>();
+  for (const [x, y] of sql(`select x, y from tile_change where world_id = ${lit(world.id)};`)) told.add(Number(y) * world.size + Number(x));
+  return told;
+}
+
+/** The rows and columns that hold any of these regions, sampled off the chart. */
+function boundsOf(world: World, regions: Set<number>): { xLo: number; xHi: number; yLo: number; yHi: number } | null {
+  const atlas = readAtlas();
+  const S = world.size;
+  const step = Math.max(1, S >> 10);
+  let yLo = S, yHi = -1, xLo = S, xHi = -1;
+  for (let y = 0; y < S; y += step) for (let x = 0; x < S; x += step) {
+    if (!regions.has(regionAt(atlas, x, y, S))) continue;
+    yLo = Math.min(yLo, y); yHi = Math.max(yHi, y + step - 1);
+    xLo = Math.min(xLo, x); xHi = Math.max(xHi, x + step - 1);
+  }
+  return yHi < 0 ? null : { xLo, xHi: Math.min(S - 1, xHi), yLo, yHi: Math.min(S - 1, yHi) };
+}
+
+/** A band's writes in one transaction, and what they changed between them. */
+function writeBand(sql: Sql, statements: string[]): number {
+  if (!statements.length) return 0;
+  const got = sql(`begin;\nset local lock_timeout = '5s';\nselect coalesce(sum(n), 0) from (\n${statements.join('\nunion all\n')}\n) w(n);\ncommit;`);
+  return Number(got[0]?.[0] ?? 0);
+}
+
+/** The packed windows were cut from the old ground; and the move is down in the ledger. */
+function finish(sql: Sql, world: World, name: string, rock: number, trees: number): void {
+  sql(`${rock + trees > 0 ? `delete from land_chunk where world_id = ${lit(world.id)};\n` : ''}insert into land_move (world_id, move, rock, trees)
+    values (${lit(world.id)}, ${lit(name)}, ${rock}, ${trees}) on conflict do nothing;`);
+}
+
+export const MOVE = '2026-10-08 glimmersteel to West Skerry, plum to East Isle, a bare tundra';
+export function move(sql: Sql, world: World): string {
+  const ROCK_REGIONS = new Set(['NortheastTundra', 'WestSkerry'].map(regionNamed));
+  const TREE_REGIONS = new Set(['NortheastTundra', 'EastIsle'].map(regionNamed));
+  const b = boundsOf(world, new Set([...ROCK_REGIONS, ...TREE_REGIONS]));
+  let rockN = 0, treeN = 0;
+  if (b) {
+    const atlas = readAtlas();
+    const S = world.size;
+    const told = touched(sql, world);
+    const w = b.xHi - b.xLo + 1;
+    for (let y0 = b.yLo; y0 <= b.yHi; y0 += BAND) {
+      const h = Math.min(BAND, b.yHi + 1 - y0);
+      const land = readBand(sql, world, y0, h, ['tiles', 'data', 'rock']);
+      const win = generateAtlasWindow(world.seed, atlas, b.xLo, y0, w, h, S);
+      const statements: string[] = [];
+      for (const [y, row] of land) {
+        const j = y - y0;
+        const rockX: number[] = [], rockTo: number[] = [];
+        const treeX: number[] = [], treeFrom: number[] = [], treeTo: number[] = [];
+        for (let x = b.xLo; x <= b.xHi; x++) {
+          const r = regionAt(atlas, x, y, S);
+          const k = j * w + (x - b.xLo);
+          if (ROCK_REGIONS.has(r) && win.rock[k] !== row.rock[x]) { rockX.push(x); rockTo.push(win.rock[k]); }
+          if (!TREE_REGIONS.has(r) || told.has(y * S + x)) continue;
+          if (row.tiles[x] !== TileType.Tree || win.tiles[k] !== TileType.Tree) continue;
+          const had = treeSpecies(row.data[x]), now = treeSpecies(win.data[k]);
+          if (had === now || (had !== PLUM && now !== PLUM)) continue;
+          treeX.push(x); treeFrom.push(row.data[x]); treeTo.push(packTreeData(now, treeVariant(row.data[x])));
+        }
+        if (!rockX.length && !treeX.length) continue;
+        rockN += rockX.length;
+        treeN += treeX.length;
+        statements.push(`select land_regrow_row(${lit(world.id)}, ${y}, ${arr(rockX)}, ${arr(rockTo)}, ${arr(treeX)}, ${arr(treeFrom)}, ${arr(treeTo)}, ${TileType.Tree})`);
+      }
+      writeBand(sql, statements);
+    }
+  }
+  finish(sql, world, MOVE, rockN, treeN);
+  return `${world.name}: ${rockN} rock and ${treeN} trees moved`;
+}
+
+export const CLEAR = '2026-10-08 the Northeast Tundra treeless';
+export function clearTrees(sql: Sql, world: World): string {
+  const TREELESS = new Set(REGIONS.map((R, i) => (R.treeless ? i : -1)).filter((i) => i >= 0));
+  const b = boundsOf(world, TREELESS);
+  let cleared = 0;
+  if (b) {
+    const atlas = readAtlas();
+    const S = world.size;
+    const told = touched(sql, world);
+    const w = b.xHi - b.xLo + 1;
+    for (let y0 = b.yLo; y0 <= b.yHi; y0 += BAND) {
+      const h = Math.min(BAND, b.yHi + 1 - y0);
+      const land = readBand(sql, world, y0, h, ['tiles', 'data']);
+      const win = generateAtlasWindow(world.seed, atlas, b.xLo, y0, w, h, S);
+      const statements: string[] = [];
+      for (const [y, row] of land) {
+        const j = y - y0;
+        const xs: number[] = [], fromT: number[] = [], fromD: number[] = [], toT: number[] = [], toD: number[] = [];
+        for (let x = b.xLo; x <= b.xHi; x++) {
+          if (row.tiles[x] !== TileType.Tree || told.has(y * S + x) || !TREELESS.has(regionAt(atlas, x, y, S))) continue;
+          const k = j * w + (x - b.xLo);
+          if (win.tiles[k] === TileType.Tree) continue;
+          xs.push(x); fromT.push(row.tiles[x]); fromD.push(row.data[x]); toT.push(win.tiles[k]); toD.push(win.data[k]);
+        }
+        if (xs.length) statements.push(`select land_regrow_face(${lit(world.id)}, ${y}, ${arr(xs)}, ${arr(fromT)}, ${arr(fromD)}, ${arr(toT)}, ${arr(toD)})`);
+      }
+      cleared += writeBand(sql, statements);
+    }
+  }
+  finish(sql, world, CLEAR, 0, cleared);
+  return `${world.name}: ${cleared} trees taken off where none grow of themselves`;
+}
+
+export const GOLD_MOVE = '2026-10-08 gold only under the Northeast Tundra';
+export function goldOff(sql: Sql, world: World): string {
   const atlas = readAtlas();
   const S = world.size;
   let moved = 0;
   for (let y0 = 0; y0 < S; y0 += BAND) {
     const h = Math.min(BAND, S - y0);
-    const { data: land, error } = await sb.from('land_tile')
-      .select('y, rock').eq('world_id', world.id).gte('y', y0).lt('y', y0 + h);
-    if (error) throw new Error(`could not read the land at ${y0}: ${error.message}`);
-    const rows = (land ?? []) as Array<{ y: number; rock: string }>;
-    const withGold = rows.map((r) => ({ y: r.y, rock: bytes(r.rock) })).filter((r) => r.rock.includes(GOLD));
+    const land = readBand(sql, world, y0, h, ['rock']);
+    const withGold = [...land].filter(([, r]) => r.rock.includes(GOLD));
     if (!withGold.length) continue;
     const win = generateAtlasWindow(world.seed, atlas, 0, y0, S, h, S);
-    for (const row of withGold) {
-      const j = row.y - y0;
+    const statements: string[] = [];
+    for (const [y, { rock }] of withGold) {
+      const j = y - y0;
       const xs: number[] = [], to: number[] = [];
       for (let x = 0; x < S; x++) {
-        if (row.rock[x] !== GOLD || win.rock[j * S + x] === GOLD) continue;
+        if (rock[x] !== GOLD || win.rock[j * S + x] === GOLD) continue;
         xs.push(x); to.push(win.rock[j * S + x]);
       }
-      if (!xs.length) continue;
-      const { data: n, error: we } = await sb.rpc('land_regrow_row', {
-        p_world: world.id, p_y: row.y, p_rock_x: xs, p_rock: to,
-        p_tree_x: [], p_tree_from: [], p_tree_to: [], p_tree: TileType.Tree,
-      });
-      if (we) throw new Error(`could not write row ${row.y}: ${we.message}`);
-      moved += Number(n ?? 0);
+      if (xs.length) statements.push(`select land_regrow_row(${lit(world.id)}, ${y}, ${arr(xs)}, ${arr(to)}, ${arr([])}, ${arr([])}, ${arr([])}, ${TileType.Tree})`);
     }
-    process.stdout.write(`  ${y0}/${S}\r`);
+    moved += writeBand(sql, statements);
   }
-  if (moved) {
-    const { error: ce } = await sb.from('land_chunk').delete().eq('world_id', world.id);
-    if (ce) throw new Error(`could not forget the land chunks: ${ce.message}`);
-  }
-  const { error: le } = await sb.from('land_move').insert({ world_id: world.id, move: GOLD_MOVE, rock: moved });
-  if (le) throw new Error(`could not record the move: ${le.message}`);
-  console.log(`${world.name}: ${moved} gold seams off the islands that no longer hold gold`);
+  finish(sql, world, GOLD_MOVE, moved, 0);
+  return `${world.name}: ${moved} gold seams off the islands that no longer hold gold`;
 }
 
-async function main(): Promise<void> {
-  const url = process.env.SUPABASE_URL || PROJECT.url;
-  const key = process.env.SUPABASE_KEY || '';
-  if (!key) throw new Error('SUPABASE_KEY must be the project service key: this reads and writes land.');
-  const sb = createClient(url, key, { auth: { persistSession: false } });
-  const { data: worlds, error } = await sb.from('world').select('id, name, seed, size').eq('ready', true);
-  if (error) throw new Error(`could not read the worlds: ${error.message}`);
-  for (const [name, run] of [[MOVE, move], [CLEAR, clearTrees], [GOLD_MOVE, goldOff]] as const) {
-    const { data: done, error: de } = await sb.from('land_move').select('world_id').eq('move', name);
-    if (de) throw new Error(`could not read the moves: ${de.message}`);
-    const had = new Set(((done ?? []) as Array<{ world_id: string }>).map((d) => d.world_id));
-    const todo = ((worlds ?? []) as World[]).filter((w) => !had.has(w.id));
-    console.log(`${name}: ${todo.length} of ${(worlds ?? []).length} islands to move`);
-    for (const w of todo) await run(sb, w);
+export const MOVES: Array<[string, (sql: Sql, world: World) => string]> = [[MOVE, move], [CLEAR, clearTrees], [GOLD_MOVE, goldOff]];
+
+/** Every move not yet made, on every island that is open. */
+export function moveAll(sql: Sql): void {
+  const worlds = sql('select id, name, seed, size from world where ready;')
+    .map(([id, name, seed, size]) => ({ id, name, seed: Number(seed), size: Number(size) }));
+  for (const [name, run] of MOVES) {
+    const done = new Set(sql(`select world_id from land_move where move = ${lit(name)};`).map((r) => r[0]));
+    const todo = worlds.filter((w) => !done.has(w.id));
+    console.log(`${name}: ${todo.length} of ${worlds.length} islands to move`);
+    for (const w of todo) console.log(`  ${run(sql, w)}`);
   }
 }
 
-// Left alone when a test brings `move` in with a client of its own.
-if (process.env.MOVE_GROUND_TEST !== '1') main().catch((e: unknown) => { console.error(String(e)); process.exit(1); });
+// Left alone when a test brings the moves in with a database of its own.
+if (process.env.MOVE_GROUND_TEST !== '1') {
+  const urls = (process.env.MOVE_DB_URLS ?? '').split(/\s+/).filter(Boolean);
+  if (!urls.length) {
+    console.error('MOVE_DB_URLS must name the database, with the password in PGPASSWORD.');
+    process.exit(1);
+  }
+  try {
+    moveAll(psql(urls));
+  } catch (e) {
+    console.error(String(e));
+    process.exit(1);
+  }
+}
