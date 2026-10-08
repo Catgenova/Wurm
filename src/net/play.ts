@@ -4,7 +4,8 @@ import { EMOTE_BY_ID } from '../game/emotes';
 import { cleanLook } from '../game/look';
 import { whoAmI } from './accounts';
 import { supabase } from './supabase';
-import { Island, type ItemRow, type PlayerRow } from './island';
+import { Island, type CastWire, type ItemRow, type PlayerRow } from './island';
+import { isSpell } from '../render/spells/info';
 import { generateAtlasWorld, loadAtlas } from '../world/atlas-world';
 import { ACTION_BY_ID, type ActionDef, type Target } from '../game/actions';
 import { hiddenAsk } from '../game/gates';
@@ -543,6 +544,29 @@ export async function startIsland(params: URLSearchParams, tell: Telling): Promi
     else game.roster.spoke(hashId(uid), words);
   };
   game.emoted = (id: string) => island.emote(id);
+  /*
+   * Spells, both ways. Yours, once the island has taken it (the spell bar
+   * raises `cast` then), goes out for everybody watching to draw; anybody
+   * else's comes in and is drawn here, at whoever or wherever it went.
+   */
+  game.events.on('cast', (c) => {
+    if (c.by !== null) return;
+    const at = c.at;
+    island.castSeen(c.spell, at.kind === 'peer' && at.uid ? { kind: 'player', uid: at.uid }
+      : at.kind === 'creature' ? { kind: 'creature', id: at.id }
+        : at.kind === 'spot' ? { kind: 'spot', x: at.x, y: at.y } : { kind: 'self' });
+  });
+  island.hooks.castSeen = (uid: string, spell: string, at: CastWire) => {
+    if (!isSpell(spell)) return;
+    const by = hashId(uid);
+    if (!game.roster.get(by)) return;
+    game.events.emit('cast', {
+      spell, by,
+      at: at.kind === 'player' ? (at.uid === island.uid ? { kind: 'you' } : { kind: 'peer', id: hashId(at.uid), uid: at.uid })
+        : at.kind === 'creature' ? { kind: 'creature', id: at.id }
+          : at.kind === 'spot' ? { kind: 'spot', x: at.x, y: at.y } : { kind: 'self' },
+    });
+  };
   game.woreTitle = (id: string | null) => void island.wearTitle(id);
   /*
    * The two crafting settings. The island spends the stock, so it keeps a

@@ -2929,6 +2929,7 @@ export class Game {
       const glow = this.creatures.species(c).glow;
       if (glow && near(c.x, c.y)) out.push({ x: c.x, y: c.y, radius: glow, strength: 0.7, steady: true });
     }
+    for (const l of this.spellLights) out.push(l);
     return out;
   }
 
@@ -3265,6 +3266,12 @@ export class Game {
    * belongs to the screen, not to whichever body it is pointing at.
    */
   saidAloud: { text: string; at: number } | null = null;
+  /**
+   * What spells are lighting this frame (a Kindler's bolt in flight, a
+   * blessing on the ground), set by the renderer each frame (`SpellStage`)
+   * and handed on with everything else alight by `lights`.
+   */
+  spellLights: readonly LightSource[] = [];
 
   /** The title being worn, written out. */
   titleName(): string | null {

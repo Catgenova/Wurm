@@ -182,6 +182,10 @@ import {
 import { hingeKey, hingeOf, isDrawbridge, landingOf } from '../game/gates';
 import { bridgeDone, type Bridge } from '../game/bridges';
 import { SmallLife, type Mote } from './life';
+import { personBody, SpellStage, type Aim, type Who } from './spells/stage';
+import { spellInfo } from './spells/info';
+import type { Body as SpellBody, WorldRec as SpellRec } from './spells/kit';
+import type { CastAt } from '../game/events';
 import { lookStep, yearAt } from './foliage';
 import { FIGURE_TOP } from './figure';
 /**
@@ -253,7 +257,7 @@ export interface Pick {
 }
 
 interface Entity {
-  kind: 'tree' | 'bush' | 'stump' | 'player' | 'peer' | 'pile' | 'token' | 'crate' | 'creature' | 'campfire' | 'crop' | 'smelter' | 'kiln' | 'furniture' | 'hull' | 'anvil' | 'post' | 'trap' | 'deck' | 'life' | 'waterplant';
+  kind: 'tree' | 'bush' | 'stump' | 'player' | 'peer' | 'pile' | 'token' | 'crate' | 'creature' | 'campfire' | 'crop' | 'smelter' | 'kiln' | 'furniture' | 'hull' | 'anvil' | 'post' | 'trap' | 'deck' | 'life' | 'waterplant' | 'spell';
   x: number;
   y: number;
   sx: number;
@@ -296,6 +300,8 @@ interface Entity {
   layer?: number;
   /** Something small aloft over this line of the ground: a butterfly, a dragonfly, a petal or a leaf (`./life`). */
   mote?: Mote;
+  /** A piece of a spell standing in the world: an orb, a bolt, a shell, a puff of its smoke (`./spells`). */
+  fx?: SpellRec;
   /** A piece of an aqueduct: a bay's insides or its face and water, the spout at its foot, or the cut at its head (`./aqueducts`). */
   aq?: AqueductPart;
   /** The part of the screen a body shows in, for one down a hole: the ground in front of the hole hides the rest (`onFlight`). */
@@ -821,6 +827,9 @@ function inHull(pts: number[], x: number, y: number): boolean {
 /** A piece of a cellar's drawing laid into a canvas of its own (`Renderer.layOut`), and where it was laid against. */
 type CellarLaid = { cv: HTMLCanvasElement; x0: number; y0: number; ax: number; ay: number; w: number; h: number };
 
+/** You, as the spell stage names whoever casts. */
+const PLAYER_CASTS: Who = { kind: 'player' };
+
 export class Renderer {
   readonly camera = new Camera();
   time = 0;
@@ -925,6 +934,7 @@ export class Renderer {
     e.view = undefined;
     e.layer = undefined;
     e.mote = undefined;
+    e.fx = undefined;
     e.aq = undefined;
     e.clip = undefined;
     this.ents.push(e);
@@ -1009,6 +1019,21 @@ export class Renderer {
    * zoomed out past `LIFE_FROM`.
    */
   readonly life = new SmallLife();
+  /**
+   * Every spell on the screen (`./spells`): cast by you or by anybody in
+   * sight, followed wherever its caster and its target go, drawn in among
+   * everything else, and lighting the night.
+   */
+  readonly spells: SpellStage = new SpellStage({
+    body: (w) => this.spellBody(w),
+    ground: (x, y) => (this.game.world.inBounds(Math.floor(x), Math.floor(y)) ? this.game.world.heightAt(x, y) : 0),
+    turn: (w, x, y) => this.spellTurn(w, x, y),
+    companion: (w) => {
+      if (w.kind !== 'player') return null;
+      const c = this.game.creatures.active();
+      return c ? this.spellBody({ kind: 'creature', id: c.id }) : null;
+    },
+  });
   /** The season and its day, for the trees' look (`./foliage`): read once a frame off the wall clock, as the hud reads it. */
   private year = yearAt(Date.now() / 1000);
   /** What the small life asks of the island, made once rather than every frame. */
@@ -1224,7 +1249,13 @@ export class Renderer {
       const tone = dustTone(this.groundColor(tx, ty, true, this.sunNow));
       this.dust.burst(x, y, this.time, tone, Math.max(0.45, dustiness(w.viewTile(tx, ty, true))));
     });
+    // A spell cast, yours or anybody's in sight: drawn from whoever cast it at whatever it was cast at.
+    game.events.on('cast', (c) => {
+      const by: Who = c.by === null ? { kind: 'player' } : { kind: 'peer', id: c.by };
+      this.spells.play(c.spell, by, this.spellAim(c.at), { mine: c.by === null });
+    });
     game.events.on('reset', () => {
+      this.spells.clear();
       this.floaters.clear();
       this.dust.clear();
       this.wakes.clear();
@@ -2820,6 +2851,9 @@ export class Renderer {
     this.dormant = this.game.crops.size > 0 && fieldRate(this.game.wallNow()) <= 0;
     this.roomTiles = this.myRoom();
     this.shades.clear();
+    // The spells first: what they light is among what is burning.
+    this.spells.update({ eye: this.camera, now: performance.now() / 1000, dt, fast: this.fast });
+    this.game.spellLights = this.spells.lights;
     // What is burning, for glass to glow with at night, and last frame's glow gone.
     this.lightsNow = this.game.darkness() > 0.02 ? this.game.lights() : [];
     this.glassNight.length = 0;
@@ -2893,6 +2927,8 @@ export class Renderer {
       this.cutInFront();
     }
     this.queueRoofs(V, dLo, dHi);
+    // What the spells drew this frame, sorted into the lines it goes down with.
+    this.spells.layout(ctx, V, dLo, dHi);
     this.linePilasters.length = 0;
     this.frameCuts.clear();
     this.jettyCuts.clear();
@@ -3647,6 +3683,9 @@ export class Renderer {
       }
       // And whatever small thing is in the air over it, sorted in with everything standing on it.
       if (!this.fast) for (const m of this.life.aloft(d)) this.take('life', m.tx, m.ty, m.sx, m.sy, null).mote = m;
+      // What spells lay on this line's ground, under everything standing on it; and what of them stands here, sorted in with it.
+      this.spells.groundLine(ctx, d);
+      for (const rec of this.spells.itemsAt(d)) this.take('spell', Math.floor(rec.x), Math.floor(rec.y), rec.sx, rec.sy, null).fx = rec;
       if (this.ents.length) this.drawEntities(ctx, zoom);
       // Remembered ground on this line came down over what was waiting to take the wash off: the wash so far is laid, and that taken off it, first.
       if (lineOver) {
@@ -4149,6 +4188,84 @@ export class Renderer {
     ctx.clip();
   }
 
+  /* ---- spells ---------------------------------------------------------------------- */
+
+  /** Where somebody a spell is cast by or at stands this frame, as the stage wants them; nothing when they are gone. */
+  private spellBody(w: Who): SpellBody | null {
+    const game = this.game;
+    if (w.kind === 'player') {
+      const p = game.player;
+      const z = this.footOn(p.x, p.y, Math.max(0, p.level)) + Math.max(0, p.visualLevel) * WALL_HEIGHT;
+      return personBody(p.x, p.y, z, this.playerFacing, 'player', {
+        phase: p.moving ? p.walkPhase : this.time * 6, moving: p.moving, gait: 0, facing: this.playerFacing, swimming: p.swimming, working: false,
+        look: p.look, gear: gearFrom(wornWire((slot) => game.worn(slot))),
+      });
+    }
+    if (w.kind === 'peer') {
+      const peer = game.roster.get(w.id);
+      if (!peer || peer.level < 0) return null;
+      const [x, y] = game.roster.drawnAt(peer);
+      const z = this.footOn(x, y, peer.level) + peer.level * WALL_HEIGHT;
+      return personBody(x, y, z, peer.facing, 'peer', {
+        phase: peer.moving ? peer.walkPhase : this.time * 6, moving: peer.moving, facing: peer.facing, swimming: peer.swimming, working: !!peer.working,
+        look: peer.look, gear: peer.gear,
+      });
+    }
+    const cr = game.creatures.get(w.id);
+    if (!cr || cr.health <= 0 || cr.mode === 'stored') return null;
+    const def = SPECIES[cr.species] ?? SPECIES.rabba;
+    const big = ageDef(cr, game.time).scale * rarityOf(cr).size;
+    const tall = Math.max(22 * rarityOf(cr).size, (wildermonTop(def.id) ?? 0) * big) / HEIGHT_SCALE;
+    return {
+      x: cr.x, y: cr.y, z: game.laidOver(Math.floor(cr.x), Math.floor(cr.y)) ?? this.footAt(cr.x, cr.y), tall, wide: 5 * rarityOf(cr).size,
+      facing: this.beastFacing.get(cr.id) ?? 0, kind: 'creature',
+    };
+  }
+
+  /** Somebody turned to face what they are casting at, unless they are walking somewhere. */
+  private spellTurn(w: Who, x: number, y: number): void {
+    const game = this.game;
+    const who = w.kind === 'player' ? game.player : w.kind === 'peer' ? game.roster.get(w.id) : undefined;
+    if (!who || who.moving) return;
+    const dx = x - who.x, dy = y - who.y, l = Math.hypot(dx, dy);
+    if (l < 0.05) return;
+    who.dirX = dx / l;
+    who.dirY = dy / l;
+  }
+
+  /**
+   * Play a spell's drawing from you, with no island and nothing done: for
+   * checking how a spell looks (`wurm.spell` in the console). At what is
+   * under the cursor -- a creature, somebody, the ground -- unless told, or
+   * at yourself for a spell cast only on yourself. Nothing is sent to anybody.
+   */
+  playSpell(spell: string, at?: CastAt): boolean {
+    const info = spellInfo(spell);
+    const hover = this.hover;
+    const p = this.game.player;
+    let aim: CastAt;
+    if (info && info.on.length === 1 && info.on[0] === 'self') aim = { kind: 'self' };
+    else if (at) aim = at;
+    else if (hover?.creature !== undefined) aim = { kind: 'creature', id: hover.creature };
+    else if (hover?.peer !== undefined) {
+      const peer = this.game.roster.list().find((q) => q.uid === hover.peer);
+      aim = peer ? { kind: 'peer', id: peer.id } : { kind: 'self' };
+    } else if (hover) aim = { kind: 'spot', x: hover.wx, y: hover.wy };
+    else aim = { kind: 'spot', x: p.x + p.dirX * 3, y: p.y + p.dirY * 3 };
+    return this.spells.play(spell, PLAYER_CASTS, this.spellAim(aim), { mine: true });
+  }
+
+  /** What a cast was at, as the stage takes it. */
+  private spellAim(at: CastAt): Aim {
+    switch (at.kind) {
+      case 'self': return { kind: 'self' };
+      case 'you': return { kind: 'player' };
+      case 'peer': return { kind: 'peer', id: at.id };
+      case 'creature': return { kind: 'creature', id: at.id };
+      case 'spot': return { kind: 'spot', x: at.x, y: at.y };
+    }
+  }
+
   private drawEntities(ctx: CanvasRenderingContext2D, zoom: number): void {
     const ents = this.ents;
     // Within a diagonal, whatever stands lower on screen is nearer the viewer.
@@ -4168,7 +4285,7 @@ export class Renderer {
         ctx.restore();
         behind = false;
       }
-      const under = ent.kind === 'life' || ent.kind === 'player' || ent.kind === 'peer' || ent.kind === 'creature' ? null : this.underJetty(ent);
+      const under = ent.kind === 'life' || ent.kind === 'spell' || ent.kind === 'player' || ent.kind === 'peer' || ent.kind === 'creature' ? null : this.underJetty(ent);
       if (under) {
         ctx.save();
         ctx.clip(under, 'evenodd');
@@ -4176,6 +4293,10 @@ export class Renderer {
       }
       if (ent.kind === 'life') {
         if (ent.mote) this.life.draw(ctx, ent.mote);
+        continue;
+      }
+      if (ent.kind === 'spell') {
+        if (ent.fx) this.spells.drawItem(ctx, ent.fx);
         continue;
       }
       // Being hit beats being pointed at: a blow should read as a blow even
@@ -4205,6 +4326,7 @@ export class Renderer {
             // stamped on and the one the frames are drawn on.
             emote: player.emote,
             emoteT: emoteAt(player.emote, player.emoteAt, performance.now() / 1000) ?? undefined,
+            cast: this.spells.poseOf(PLAYER_CASTS),
           }),
         );
         if (ent.clip) ctx.restore();
@@ -4242,6 +4364,7 @@ export class Renderer {
             gear: peer.gear,
             emote: peer.emote,
             emoteT: emoteAt(peer.emote, peer.emoteAt, performance.now() / 1000) ?? undefined,
+            cast: this.spells.poseOf({ kind: 'peer', id: peer.id }),
           }),
         );
         if (ent.clip) ctx.restore();
@@ -12603,6 +12726,9 @@ export class Renderer {
     }
     // The fireflies, which are lights: over the night, not under it.
     if (!this.fast) this.life.glow(ctx);
+    // And the spells' light, over the night too, and the screen's tint for a great one of your own over that.
+    this.spells.glowPass(ctx);
+    this.spells.screenPass(ctx, this.canvas.width, this.canvas.height);
     // Down in a cellar, the cellar, over all of it; and the marks over that.
     if (this.cellarFrame) {
       this.drawCellarView(ctx, zoom);
