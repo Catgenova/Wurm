@@ -4058,10 +4058,8 @@ const MODELS: Record<string, Model> = {
       // The tiller, from the rudder's head forward over the stern sheets to the helmsman's hand.
       sc.drawRod([xs - 0.6, 0, sheer(0) + 0.6], tiller, 0.3, wood);
     }, { reach: boom + belly + 1, top: zt + 1, box: rigBox(), draw: () => {
-      // Stays from the masthead to the stem and down to either side, then the mast and the sail in the order they stand.
-      for (const [x, y, z] of [[xb - 0.4, 0, sheer(1)], [xm - 2, B * 0.85, S], [xm - 2, -B * 0.85, S]] as V3[]) {
-        sc.line(sc.P(xm, 0, zt - 0.6), sc.P(x, y, z), rgb(ROPE.ink, 1, 0.55), sc.ink * 0.5);
-      }
+      // The forestay from the masthead to the stem, then the mast and the sail in the order they stand.
+      sc.line(sc.P(xm, 0, zt - 0.6), sc.P(xb - 0.4, 0, sheer(1)), rgb(ROPE.ink, 1, 0.55), sc.ink * 0.5);
       const n = 6;
       const pt = (u: number, v: number): V3 => {
         const p = lerp(lerp(tack, clew, u), lerp(throat, peak, u), v);
@@ -4079,9 +4077,28 @@ const MODELS: Record<string, Model> = {
       for (const s of strips) sc.drawPanel(s.q, SAIL);
       sc.drawRod(tack, clew, 0.32, wood);
       sc.drawRod(throat, peak, 0.28, wood);
-      sc.line(sc.P(clew[0], clew[1], clew[2]), sc.P(xs + 1.2, 0, sheer(0) + 0.4), rgb(ROPE.ink, 1, 0.8), sc.ink * 0.6);
       if (!behind) mast();
     } });
+    /*
+     * The shrouds down to either side, and the mainsheet from the end of the
+     * boom aft to her transom, each a part of its own. They were drawn with
+     * the mast and the sail, so wherever those were nearer you than the
+     * helmsman the sheet, which runs aft past him, and the shroud on his side
+     * of her, which comes down outboard of him, went over him too. Each of
+     * them in a few lengths, each its own part, sorts against him by where
+     * that length of it is.
+     */
+    // Boxed from her sheer up, whatever their ends come down to, so the hull, which is the floor they stand over, goes first.
+    const sheerTop = Math.max(...Array.from({ length: 11 }, (_, i) => sheer(i / 10)));
+    const rope = (a: V3, b: V3, alpha: number, width: number, n: number): void => {
+      for (let i = 0; i < n; i++) {
+        const p = lerp(a, b, i / n), q = lerp(a, b, (i + 1) / n);
+        const z0 = Math.max(sheerTop, Math.min(p[2], q[2]));
+        sc.part(p[0], q[0], p[1], q[1], z0, Math.max(z0 + 0.1, p[2], q[2]), () => sc.line(sc.P(p[0], p[1], p[2]), sc.P(q[0], q[1], q[2]), rgb(ROPE.ink, 1, alpha), width));
+      }
+    };
+    for (const sg of [-1, 1]) rope([xm, 0, zt - 0.6], [xm - 2, sg * B * 0.85, S], 0.55, sc.ink * 0.5, 4);
+    rope(clew, [xs + 1.2, 0, sheer(0) + 0.4], 0.8, sc.ink * 0.6, 4);
     // The rudder, hung off the transom.
     sc.box(xs - 0.9, xs - 0.3, -0.35, 0.35, 0, sheer(0) + 0.8, wood);
   },
@@ -4821,17 +4838,64 @@ const areaOf = (b: Baked): number => b.canvas.width * b.canvas.height * (1 + (b.
  * sailed from baking a new one every frame.
  */
 export function drawFurniture(ctx: CanvasRenderingContext2D, sx: number, sy: number, zoom: number, kind: string, lit = false, tint?: Tint, trim?: number, view: PieceView = pieceView('s', 0), material?: string,
-  crew?: Crew, layer: number | 'all' = 'all', live = true): [number, number, number, number] {
+  crew?: Crew, layer: number | 'all' = 'all', live = true, seeHelm = false): [number, number, number, number] {
   const b = bakedFor(zoom, kind, lit, tint, trim, view, material, crew);
   const k = zoom / b.scale;
   const sheets = [b.canvas, ...(b.layers ?? [])];
+  const helm = seeHelm && crew ? driverOn(kind, view) : null;
   for (const [i, c] of sheets.entries()) {
-    if (layer === 'all' || layer === i) ctx.drawImage(c, sx - b.ox * k, sy - b.oy * k, b.canvas.width * k, b.canvas.height * k);
+    if (layer !== 'all' && layer !== i) continue;
+    const at: [number, number, number, number] = [sx - b.ox * k, sy - b.oy * k, b.canvas.width * k, b.canvas.height * k];
+    if (helm && i > 0) seeThrough(ctx, c, at, sx + helm.dx * zoom, sy + (helm.dy - HELM_WINDOW.up) * zoom, zoom);
+    else ctx.drawImage(c, ...at);
   }
   // And whatever on it moves, over the last of it, as it is this frame.
   if (live && (layer === 'all' || layer === sheets.length - 1)) drawFurnitureLive(ctx, sx, sy, zoom, kind, view, 0, tint ? { ...STILL, tint } : STILL);
   // What it covers on the screen, from its floor contact: the box it is clicked by.
   return [b.bounds[0] * zoom, b.bounds[1] * zoom, b.bounds[2] * zoom, b.bounds[3] * zoom];
+}
+
+/**
+ * One's own helmsman seen through what is in front of him. Sailing toward
+ * you, the sailing boat's mast and sail are between you and whoever has her
+ * tiller, and hid all of him but his shins: at one heading in eight you lost
+ * sight of yourself. So, as games seen from above do with whatever stands in
+ * front of the player, a layer baked in front of your own helmsman is let
+ * fade where it is over him -- most of the way in the middle of him, and
+ * less and less out to an oval round him, so there is no edge to it -- and he
+ * shows through it. Only your own: anybody else's helmsman is hidden as it
+ * should be.
+ */
+const HELM_WINDOW = { up: 17, rx: 10, ry: 20, most: 0.62 };
+let seePad: HTMLCanvasElement | null = null;
+function seeThrough(ctx: CanvasRenderingContext2D, c: HTMLCanvasElement, at: [number, number, number, number], cx: number, cy: number, zoom: number): void {
+  const [x, y, w, h] = at;
+  seePad ??= document.createElement('canvas');
+  if (seePad.width < c.width || seePad.height < c.height) {
+    seePad.width = Math.max(seePad.width, c.width);
+    seePad.height = Math.max(seePad.height, c.height);
+  }
+  const g = seePad.getContext('2d');
+  if (!g) { ctx.drawImage(c, x, y, w, h); return; }
+  g.setTransform(1, 0, 0, 1, 0, 0);
+  g.clearRect(0, 0, c.width, c.height);
+  g.globalCompositeOperation = 'source-over';
+  g.drawImage(c, 0, 0);
+  // The oval, in the layer's own pixels: a round fade drawn squashed.
+  const k = c.width / w;
+  g.globalCompositeOperation = 'destination-out';
+  g.translate((cx - x) * k, (cy - y) * k);
+  g.scale(1, HELM_WINDOW.ry / HELM_WINDOW.rx);
+  const r = HELM_WINDOW.rx * zoom * k;
+  const fade = g.createRadialGradient(0, 0, 0, 0, 0, r);
+  fade.addColorStop(0, `rgba(0, 0, 0, ${HELM_WINDOW.most})`);
+  fade.addColorStop(0.55, `rgba(0, 0, 0, ${HELM_WINDOW.most})`);
+  fade.addColorStop(1, 'rgba(0, 0, 0, 0)');
+  g.fillStyle = fade;
+  g.fillRect(-r, -r, 2 * r, 2 * r);
+  g.setTransform(1, 0, 0, 1, 0, 0);
+  g.globalCompositeOperation = 'source-over';
+  ctx.drawImage(seePad, 0, 0, c.width, c.height, x, y, w, h);
 }
 
 /**

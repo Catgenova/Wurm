@@ -4501,10 +4501,10 @@ export class Renderer {
         this.creatureHits.push({ x: ent.x, y: ent.y, left: ent.sx - wide * zoom, top: ent.sy - tall * zoom, w: 2 * wide * zoom, h: (tall + 2) * zoom, creature: cr.id });
         continue;
       }
-      // The layers of a hull in front of somebody on her deck; see `takeAboard`.
+      // The layers of a hull in front of somebody on her deck; see `takeAboard`. At my own helm, I am seen through them.
       if (ent.kind === 'hull' && ent.piece && ent.view) {
         const piece = ent.piece;
-        drawFurniture(ctx, ent.sx, ent.sy + (ent.drawDy ?? 0), zoom, piece.kind, !!piece.lit, dyeOf(piece) ?? undefined, this.pieceTrim(piece), ent.view, piece.material, crewOf(piece.kind) ?? undefined, ent.layer);
+        drawFurniture(ctx, ent.sx, ent.sy + (ent.drawDy ?? 0), zoom, piece.kind, !!piece.lit, dyeOf(piece) ?? undefined, this.pieceTrim(piece), ent.view, piece.material, crewOf(piece.kind) ?? undefined, ent.layer, true, this.helming === piece);
         continue;
       }
       if (ent.kind === 'furniture' && ent.piece) {
