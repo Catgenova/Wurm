@@ -20,11 +20,11 @@
  * Blows swing the real weapon through the target (`wield`); the buffs are
  * stances and breaths, each a different silhouette and a different tempo.
  */
-import { figureJoint, type Rig, type V3 } from '../figure';
+import { figureJoints, weaponSpan, type Rig } from '../figure';
 import { HALF_H, HALF_W, HEIGHT_SCALE } from '../iso';
 import type { CastPose, SpellVisual } from './index';
 import { spellInfo } from './info';
-import { bump, clamp, flashOf, hashOf, lerp, mid3, seg, smooth, TAU, type Body, type FxScene, type Look, type P3, type SpellPalette } from './kit';
+import { bump, clamp, flashOf, hashOf, lerp, mid3, seg, smooth, TAU, type Body, type FxScene, type GroundLayer, type Look, type P3, type SpellPalette } from './kit';
 import { euler, one, track, type Key } from './poses';
 
 /** Steel and a cold white edge, with brass where a blow lands. */
@@ -40,54 +40,56 @@ export const PALETTE: SpellPalette = {
 /** The brass of the palette as a shape's own colours: where a blow lands, and what is kept count of. */
 const BRASS: Look = { main: PALETTE.accent, deep: '#a37a2a', core: '#fff4cc' };
 const BRASS_DEEP = '#a37a2a';
+const BRASS_CORE = '#fff4cc';
 /** Breath in the cold: pale, a little blue. */
 const BREATH = '#e6eef8';
 const DUST = '#8a7a62';
 
 /* ---- where the sword is ----------------------------------------------------------------- */
 
-/** How far from the fist to the point, in height units, by what is in it: a sword's own length, and a middling one for the rest. */
-const BLADE_LEN: Record<string, number> = { sword: 7.6, short_sword: 5.4, hunting_knife: 2.6, butchering_knife: 2.9, carving_knife: 4.0 };
-const bladeLen = (b: Body): number => BLADE_LEN[b.figure?.gear?.weapon?.id ?? ''] ?? 6;
+/** The point of whatever is in the caster's hand, this frame. */
+const tipOf = (k: FxScene): P3 => k.joint(k.caster, 'tip');
 
 /**
- * A point `along` height units out along the blade, on the caster as the cast has them at `t` (nought to one) --
- * not the frame now: what the blade's path was a moment ago, so a smear can lie exactly along it. The same
- * point `FxScene.weaponAt` finds, asked of the figure at another moment of the cast.
+ * The point of the blade and a place `inner` of the way out from the fist to it, on the caster as the cast has them
+ * at `t` (nought to one) -- not the frame now: where the blade was a moment ago, so a smear can lie exactly along its
+ * path. Both from the one posing of the figure.
  */
-function bladeAt(k: FxScene, t: number, along: number): P3 {
+function bladeAt(k: FxScene, t: number, inner: number): [P3, P3] {
   const b = k.caster, f = b.figure, cast = f?.cast;
-  if (!f || !cast) return k.weaponAt(along);
-  const at: V3 = [0, 0.87 * along, -0.62 - 0.5 * along];
-  const j = figureJoint({ ...f, facing: b.facing, cast: { id: cast.id, t } }, 'wrist1', at);
-  return k.local(b, j[0], j[1], j[2]);
+  if (!f || !cast) {
+    const p = tipOf(k);
+    return [p, mid3(k.hand(1), p, inner)];
+  }
+  const span = weaponSpan(f.gear?.weapon?.id ?? '');
+  const [p, q] = figureJoints({ ...f, facing: b.facing, cast: { ...cast, t } }, ['tip', ['weapon', [0, 0, (span?.to ?? 6) * inner]]]);
+  return [k.local(b, p[0], p[1], p[2]), k.local(b, q[0], q[1], q[2])];
 }
 
 /* ---- the Blade's shapes -------------------------------------------------------------------- */
 
 /**
- * The sword's smear: the band the blade swept between cast times `t0` and `t1`, from a little out from the
- * fist to the point, laid in facets that come up from nothing at the tail to full at the head. The leading
- * edge (the point's path) carries the white edge and the ink; the rest is steel going to nothing.
+ * The sword's smear: the band the blade swept between cast times `t0` and `t1`, from part way out from the fist to
+ * the point, laid in facets that come up from nothing at the tail to full at the head. The leading edge (the point's
+ * path) carries the white edge and the ink; the rest is steel going to nothing.
  */
 function smear(k: FxScene, t0: number, t1: number, o: { alpha?: number; inner?: number; brass?: boolean } = {}): void {
   const a = o.alpha ?? 1;
   if (a <= 0.01 || t1 <= t0 || !k.caster.figure?.cast) return;
   const n = k.fast ? 5 : 8;
-  const L = bladeLen(k.caster);
   const tip: number[] = [], root: number[] = [];
-  let near: P3 = k.caster, nearY = -Infinity;
+  let near: P3 = k.caster, nearY = -Infinity, head: P3 = k.caster;
   for (let i = 0; i <= n; i++) {
-    const t = lerp(t0, t1, i / n);
-    const p = bladeAt(k, t, L), q = bladeAt(k, t, L * (o.inner ?? 0.5));
+    const [p, q] = bladeAt(k, lerp(t0, t1, i / n), o.inner ?? 0.5);
     tip.push(k.sx(p), k.sy(p));
     root.push(k.sx(q), k.sy(q));
+    head = p;
     // Sorted by whichever of its points is nearest the viewer on the ground, as a ribbon is.
     const gy = k.eye.worldToScreenY(p.x, p.y, k.ground(p.x, p.y));
     if (gy > nearY) { nearY = gy; near = p; }
   }
   const main = o.brass ? PALETTE.accent : PALETTE.main;
-  const core = o.brass ? '#fff4cc' : PALETTE.core, ink = PALETTE.ink;
+  const core = o.brass ? BRASS_CORE : PALETTE.core, ink = PALETTE.ink;
   const inkW = Math.max(0.8, 0.7 * k.zoom);
   const z = k.zoom;
   k.worldDraw(near, (g) => {
@@ -135,7 +137,7 @@ function smear(k: FxScene, t0: number, t1: number, o: { alpha?: number; inner?: 
     g.stroke();
     g.lineCap = 'butt';
   }, 1);
-  k.glow(bladeAt(k, t1, L), 6, a * 0.6);
+  k.glow(head, 6, a * 0.6);
   k.glowDraw((g) => {
     g.globalAlpha = clamp(a * 0.16);
     g.strokeStyle = PALETTE.light;
@@ -209,54 +211,41 @@ function cutLine(k: FxScene, a: P3, b: P3, o: { grow?: number; part?: number; al
 
 /**
  * A line scored into the ground from `a` to `b`: a long brass diamond lying flat on the land, `w` tiles across at
- * its widest, inked, with a white groove down its middle. On the ground rather than standing over it, so
- * whoever stands on it stands on it, from any side.
+ * its widest, inked, with a white groove down its middle. On the ground rather than standing over it, so whoever
+ * stands on it stands on it, from any side.
  */
 function scored(k: FxScene, a: P3, b: P3, w: number, alpha: number): void {
   if (alpha <= 0.01) return;
   const dx = b.x - a.x, dy = b.y - a.y, l = Math.hypot(dx, dy) || 1;
   const px = (-dy / l) * w, py = (dx / l) * w;
-  const m = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
-  const P = (x: number, y: number): [number, number] => [k.eye.worldToScreenX(x, y), k.eye.worldToScreenY(x, y, k.ground(x, y) + 0.2)];
-  const out = [P(a.x, a.y), P(m.x + px, m.y + py), P(b.x, b.y), P(m.x - px, m.y - py)];
-  const groove = [P(lerp(a.x, m.x, 0.3), lerp(a.y, m.y, 0.3)), P(m.x + px * 0.3, m.y + py * 0.3), P(lerp(b.x, m.x, 0.3), lerp(b.y, m.y, 0.3)), P(m.x - px * 0.3, m.y - py * 0.3)];
-  const z = k.zoom;
-  const poly = (g: CanvasRenderingContext2D, q: Array<[number, number]>): void => {
-    g.beginPath();
-    g.moveTo(q[0][0], q[0][1]);
-    for (let i = 1; i < q.length; i++) g.lineTo(q[i][0], q[i][1]);
-    g.closePath();
-  };
-  k.groundDraw(m.x, m.y, l / 2 + 0.2, (g) => {
-    g.globalAlpha = clamp(alpha);
-    poly(g, out);
-    g.fillStyle = PALETTE.accent;
-    g.fill();
-    g.lineWidth = Math.max(0.8, 0.8 * z);
-    g.strokeStyle = PALETTE.ink;
-    g.stroke();
-    poly(g, groove);
-    g.fillStyle = '#fff4cc';
-    g.fill();
-  });
+  const mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2;
+  const out = [a.x, a.y, mx + px, my + py, b.x, b.y, mx - px, my - py];
+  const groove = [lerp(a.x, mx, 0.3), lerp(a.y, my, 0.3), mx + px * 0.3, my + py * 0.3, lerp(b.x, mx, 0.3), lerp(b.y, my, 0.3), mx - px * 0.3, my - py * 0.3];
+  k.groundShape(mx, my, l / 2 + 0.2, [
+    { kind: 'fill', colour: PALETTE.accent, alpha, paths: [out], lift: 0.2 },
+    { kind: 'stroke', colour: PALETTE.ink, alpha, width: Math.max(0.8, 0.8 * k.zoom), paths: [out], closed: true, join: 'miter', lift: 0.2 },
+    { kind: 'fill', colour: BRASS_CORE, alpha, paths: [groove], lift: 0.22 },
+  ]);
+  const ga = k.on(groove[0], groove[1], 0.2), gb = k.on(groove[4], groove[5], 0.2);
+  const x0 = k.sx(ga), y0 = k.sy(ga), x1 = k.sx(gb), y1 = k.sy(gb), z = k.zoom;
   k.glowDraw((g) => {
-    g.globalAlpha = clamp(alpha * 0.45);
+    g.globalAlpha = clamp(alpha * 0.25);
     g.strokeStyle = PALETTE.accent;
-    g.lineWidth = 4 * z;
+    g.lineWidth = 3 * z;
     g.lineCap = 'round';
     g.beginPath();
-    g.moveTo(groove[0][0], groove[0][1]);
-    g.lineTo(groove[2][0], groove[2][1]);
+    g.moveTo(x0, y0);
+    g.lineTo(x1, y1);
     g.stroke();
     g.lineCap = 'butt';
   });
 }
 
 /**
- * The measure: a brass arc on the ground round `c`, `r` tiles out, that runs clockwise from the top of the
- * screen through `share` of a full turn -- how much of a lasting spell is left -- over a faint track of the
- * whole, with a tick at each quarter. One shape under every lasting Blade spell, so how long reads the same
- * everywhere.
+ * The measure: a brass arc on the ground round `c`, `r` tiles out, that runs clockwise from the top of the screen
+ * through `share` of a full turn -- how much of a lasting spell is left -- over a faint track of the whole, with a
+ * tick at each quarter. One shape under every lasting Blade spell, so how long reads the same everywhere. Laid as
+ * shapes on the island, so it costs what it covers however long it lies there.
  */
 function measure(k: FxScene, c: { x: number; y: number }, r: number, share: number, alpha: number, o: { band?: number; ticks?: number } = {}): void {
   if (alpha <= 0.01 || r <= 0.05) return;
@@ -266,81 +255,68 @@ function measure(k: FxScene, c: { x: number; y: number }, r: number, share: numb
   // Clockwise on the screen from its top: the view's own (-1, -1) is straight up the screen.
   const e = k.eye;
   const a0 = -0.75 * Math.PI;
-  const pt = (ang: number, rr: number, lift: number): [number, number] => {
+  const at = (ang: number, rr: number, out: number[]): void => {
     const u = Math.cos(ang), v = Math.sin(ang);
-    const x = c.x + e.unrotateX(u, v) * rr, y = c.y + e.unrotateY(u, v) * rr;
-    return [e.worldToScreenX(x, y), e.worldToScreenY(x, y, k.ground(x, y) + lift)];
+    out.push(c.x + e.unrotateX(u, v) * rr, c.y + e.unrotateY(u, v) * rr);
   };
   const outer: number[] = [], inner: number[] = [];
   for (let i = 0; i <= n; i++) {
     const ang = a0 + (i / n) * s * TAU;
-    outer.push(...pt(ang, r, 0.2));
-    inner.push(...pt(ang, r - band, 0.2));
+    at(ang, r, outer);
+    at(ang, r - band, inner);
   }
+  const arc = [...outer];
+  for (let i = n; i >= 0; i--) arc.push(inner[2 * i], inner[2 * i + 1]);
   const track: number[] = [];
   const nt = k.facets(r, 32);
-  for (let i = 0; i < nt; i++) track.push(...pt(a0 + (i / nt) * TAU, r - band * 0.5, 0.15));
-  const ticks: number[] = [];
-  const nTicks = o.ticks ?? 4;
-  for (let i = 0; i < nTicks; i++) {
-    const ang = a0 + (i / nTicks) * TAU;
-    ticks.push(...pt(ang, r + band * 0.6, 0.2), ...pt(ang, r - band * 1.6, 0.2));
+  for (let i = 0; i < nt; i++) at(a0 + (i / nt) * TAU, r - band * 0.5, track);
+  const ticks: number[][] = [];
+  for (let i = 0; i < (o.ticks ?? 4); i++) {
+    const q: number[] = [];
+    const ang = a0 + (i / (o.ticks ?? 4)) * TAU;
+    at(ang, r + band * 0.6, q);
+    at(ang, r - band * 1.6, q);
+    ticks.push(q);
   }
-  const head = s > 0.002 ? [...pt(a0 + s * TAU, r + band * 1.1, 0.2), ...pt(a0 + s * TAU, r - band * 2.1, 0.2)] : null;
-  const z = k.zoom;
-  k.groundDraw(c.x, c.y, r + 0.3, (g) => {
-    g.globalAlpha = clamp(alpha * 0.22);
-    g.strokeStyle = PALETTE.ink;
-    g.lineWidth = Math.max(0.8, 0.7 * z);
-    g.beginPath();
-    for (let i = 0; i < nt; i++) (i ? g.lineTo : g.moveTo).call(g, track[2 * i], track[2 * i + 1]);
-    g.closePath();
-    g.stroke();
-    g.beginPath();
-    for (let i = 0; i < ticks.length; i += 4) {
-      g.moveTo(ticks[i], ticks[i + 1]);
-      g.lineTo(ticks[i + 2], ticks[i + 3]);
-    }
-    g.lineWidth = Math.max(0.8, 0.9 * z);
-    g.stroke();
-    if (s <= 0.002) return;
-    g.globalAlpha = clamp(alpha);
-    g.beginPath();
-    g.moveTo(outer[0], outer[1]);
-    for (let i = 1; i <= n; i++) g.lineTo(outer[2 * i], outer[2 * i + 1]);
-    for (let i = n; i >= 0; i--) g.lineTo(inner[2 * i], inner[2 * i + 1]);
-    g.closePath();
-    g.fillStyle = PALETTE.accent;
-    g.fill();
-    g.lineWidth = Math.max(0.8, 0.7 * z);
-    g.strokeStyle = PALETTE.ink;
-    g.stroke();
-    if (head) {
-      g.lineWidth = Math.max(1.2, 1.3 * z);
-      g.strokeStyle = PALETTE.ink;
-      g.beginPath();
-      g.moveTo(head[0], head[1]);
-      g.lineTo(head[2], head[3]);
-      g.stroke();
-      g.lineWidth = Math.max(0.7, 0.6 * z);
-      g.strokeStyle = '#fff4cc';
-      g.stroke();
-    }
-  });
+  const head: number[] = [];
+  at(a0 + s * TAU, r + band * 1.1, head);
+  at(a0 + s * TAU, r - band * 2.1, head);
+  const z = k.zoom, inkW = Math.max(0.8, 0.7 * z);
+  const layers: GroundLayer[] = [
+    { kind: 'stroke', colour: PALETTE.ink, alpha: alpha * 0.22, width: inkW, paths: [track], closed: true, lift: 0.15 },
+    { kind: 'stroke', colour: PALETTE.ink, alpha: alpha * 0.22, width: Math.max(0.8, 0.9 * z), paths: ticks, lift: 0.15 },
+  ];
+  if (s > 0.002) {
+    layers.push(
+      { kind: 'fill', colour: PALETTE.accent, alpha, paths: [arc], lift: 0.2 },
+      { kind: 'stroke', colour: PALETTE.ink, alpha, width: inkW, paths: [arc], closed: true, join: 'round', lift: 0.2 },
+      { kind: 'stroke', colour: PALETTE.ink, alpha, width: Math.max(1.2, 1.3 * z), paths: [head], lift: 0.2 },
+      { kind: 'stroke', colour: BRASS_CORE, alpha, width: Math.max(0.7, 0.6 * z), paths: [head], lift: 0.22 },
+    );
+  }
+  k.groundShape(c.x, c.y, r + 0.3, layers);
+  if (s <= 0.002) return;
   // A faint light along what is left, so it still reads in the dark, and a brighter one on its head.
-  if (head) k.glowDraw((g) => {
+  const scr: number[] = [];
+  for (let i = 0; i < outer.length; i += 2) {
+    const p = k.on(outer[i], outer[i + 1], 0.2);
+    scr.push(k.sx(p), k.sy(p));
+  }
+  const h0 = k.on(head[0], head[1], 0.2), h1 = k.on(head[2], head[3], 0.2);
+  const hx0 = k.sx(h0), hy0 = k.sy(h0), hx1 = k.sx(h1), hy1 = k.sy(h1);
+  k.glowDraw((g) => {
     g.lineCap = 'round';
     g.globalAlpha = clamp(alpha * 0.1);
     g.strokeStyle = PALETTE.accent;
     g.lineWidth = 2.5 * z;
     g.beginPath();
-    g.moveTo(outer[0], outer[1]);
-    for (let i = 1; i <= n; i++) g.lineTo(outer[2 * i], outer[2 * i + 1]);
+    g.moveTo(scr[0], scr[1]);
+    for (let i = 2; i < scr.length; i += 2) g.lineTo(scr[i], scr[i + 1]);
     g.stroke();
     g.globalAlpha = clamp(alpha * 0.5);
     g.beginPath();
-    g.moveTo(head[0], head[1]);
-    g.lineTo(head[2], head[3]);
+    g.moveTo(hx0, hy0);
+    g.lineTo(hx1, hy1);
     g.stroke();
     g.lineCap = 'butt';
   });
@@ -419,77 +395,20 @@ function swordGlyph(k: FxScene, p: P3, r: number, ang: number, alpha: number, o:
 }
 
 /**
- * A wide ring on the ground as a run of brass dashes, `r` tiles out and `band` across, turned by `turn`. Each dash
- * is its own small record: a ring several tiles across laid down as one would be redrawn under every line of
- * the ground it spans, which for a reach of five tiles is a score of times a frame for the whole of it.
- */
-function dashes(k: FxScene, c: { x: number; y: number }, r: number, band: number, alpha: number, turn = 0): void {
-  if (alpha <= 0.01) return;
-  const n = Math.max(8, Math.min(k.fast ? 16 : 28, Math.round(r * 5)));
-  const span = (TAU / n) * 0.62;
-  const z = k.zoom;
-  for (let i = 0; i < n; i++) {
-    const a0 = turn + (i / n) * TAU;
-    const pts: number[] = [];
-    for (let j = 0; j <= 3; j++) {
-      const an = a0 + (span * j) / 3;
-      const x = c.x + Math.cos(an) * r, y = c.y + Math.sin(an) * r;
-      pts.push(k.eye.worldToScreenX(x, y), k.eye.worldToScreenY(x, y, k.ground(x, y) + 0.15));
-    }
-    for (let j = 3; j >= 0; j--) {
-      const an = a0 + (span * j) / 3;
-      const x = c.x + Math.cos(an) * (r - band), y = c.y + Math.sin(an) * (r - band);
-      pts.push(k.eye.worldToScreenX(x, y), k.eye.worldToScreenY(x, y, k.ground(x, y) + 0.15));
-    }
-    const mid = a0 + span / 2;
-    k.groundDraw(c.x + Math.cos(mid) * r, c.y + Math.sin(mid) * r, (span * r) / 2 + band + 0.1, (g) => {
-      g.globalAlpha = clamp(alpha);
-      g.beginPath();
-      g.moveTo(pts[0], pts[1]);
-      for (let j = 2; j < pts.length; j += 2) g.lineTo(pts[j], pts[j + 1]);
-      g.closePath();
-      g.fillStyle = PALETTE.accent;
-      g.fill();
-      g.lineWidth = Math.max(0.7, 0.6 * z);
-      g.strokeStyle = PALETTE.ink;
-      g.stroke();
-    });
-  }
-}
-
-/**
- * A dart on the ground at `c`, pointing along `dir` (a step in tiles), `s` tiles long: brass, inked. Which way
- * something is turned: a challenged creature at the one who challenged it, the called ones inward.
+ * A dart on the ground at `c`, pointing along `dir` (a step in tiles), `s` tiles long: brass with its lit half pale,
+ * inked. Which way something is turned: a challenged creature at the one who challenged it, the called ones inward.
  */
 function dart(k: FxScene, c: { x: number; y: number }, dir: { x: number; y: number }, s: number, alpha: number): void {
   if (alpha <= 0.01) return;
   const px = -dir.y, py = dir.x;
-  const P = (a: number, b: number): [number, number] => {
-    const x = c.x + dir.x * a + px * b, y = c.y + dir.y * a + py * b;
-    return [k.eye.worldToScreenX(x, y), k.eye.worldToScreenY(x, y, k.ground(x, y) + 0.2)];
-  };
-  const pts = [P(s * 0.6, 0), P(-s * 0.4, s * 0.55), P(-s * 0.15, 0), P(-s * 0.4, -s * 0.55)];
-  const z = k.zoom;
-  k.groundDraw(c.x, c.y, s + 0.2, (g) => {
-    g.globalAlpha = clamp(alpha);
-    g.beginPath();
-    g.moveTo(pts[0][0], pts[0][1]);
-    for (let i = 1; i < 4; i++) g.lineTo(pts[i][0], pts[i][1]);
-    g.closePath();
-    g.fillStyle = PALETTE.accent;
-    g.fill();
-    g.lineWidth = Math.max(0.8, 0.7 * z);
-    g.strokeStyle = PALETTE.ink;
-    g.stroke();
-    // Its lit half.
-    g.fillStyle = '#fff4cc';
-    g.beginPath();
-    g.moveTo(pts[0][0], pts[0][1]);
-    g.lineTo(pts[1][0], pts[1][1]);
-    g.lineTo(pts[2][0], pts[2][1]);
-    g.closePath();
-    g.fill();
-  });
+  const P = (a: number, b: number): [number, number] => [c.x + dir.x * a + px * b, c.y + dir.y * a + py * b];
+  const tip = P(s * 0.6, 0), l = P(-s * 0.4, s * 0.55), notch = P(-s * 0.15, 0), r = P(-s * 0.4, -s * 0.55);
+  const whole = [...tip, ...l, ...notch, ...r];
+  k.groundShape(c.x, c.y, s + 0.2, [
+    { kind: 'fill', colour: PALETTE.accent, alpha, paths: [whole], lift: 0.2 },
+    { kind: 'fill', colour: BRASS_CORE, alpha, paths: [[...tip, ...l, ...notch]], lift: 0.21 },
+    { kind: 'stroke', colour: PALETTE.ink, alpha, width: Math.max(0.8, 0.7 * k.zoom), paths: [whole], closed: true, join: 'miter', lift: 0.22 },
+  ]);
 }
 
 /**
@@ -547,15 +466,16 @@ function clash(k: FxScene, at: P3, n: number, heading?: { x: number; y: number }
 
 /*
  * Where the sword points, which is the whole of a Blade's cast: with `wield` the blade leaves the fist on the
- * thumb's side, sixty degrees off the line down the forearm, and every pitch down the arm turns it in the same
- * plane. So in the arm's own plane the blade stands at
+ * thumb's side, sixty degrees off the line down the forearm, `haft` degrees less, and every pitch down the arm
+ * turns it in the same plane. So in the arm's own plane the blade stands at
  *
- *     60 + arm pitch + elbow + hand pitch     degrees from straight down, toward ahead
+ *     60 - haft + arm pitch + elbow + hand pitch     degrees from straight down, toward ahead
  *
  * -- 90 level ahead, 180 straight up, 210 back over the shoulder -- and an arm's roll out to the side lays that
- * plane over (a full roll out makes it level, for a flat sweep). The keys below are written from it: each
- * comment says where the blade is. Pointing it down in front wants the grip turned over (a hand pitch near
- * 180), which is how a sword is held to be driven into the ground.
+ * plane over (a full roll out makes it level, for a flat sweep). The keys below are written from it: each comment
+ * says where the blade is. A `haft` of 150 is the grip reversed, the point down out of the bottom of the fist,
+ * which is how a sword is held to be driven into the ground; letting it back to nought swings the point up and
+ * over through ahead.
  */
 
 /** Feet and knees for a stance at `t`, keyed: [left forward, left out, right forward, right out, left knee, right knee]. */
@@ -567,9 +487,9 @@ function legs(r: Rig, t: number, keys: readonly Key[]): void {
 }
 
 /**
- * Measured Cut: the sword taken up beside the head, its point back over the right shoulder, the left hand put
- * out toward the creature to take its distance, a held beat -- the measure -- and then the cut, over and down
- * through it on a long step, the body turning in behind the blade, and back to guard.
+ * Measured Cut: the sword taken up beside the head, its point back over the right shoulder, the left hand put out
+ * flat toward the creature to take its distance, a held beat -- the measure -- and then the cut, over and down
+ * through it on a long step, the body turning in behind the blade, a breath let out with it, and back to guard.
  */
 const measuredCut: CastPose = (r, t) => {
   // Blade: 124 at guard, 210 over the shoulder at the top, 82 level at the blow, 72 going down and across, 116.
@@ -578,7 +498,10 @@ const measuredCut: CastPose = (r, t) => {
   r.hand[1] = euler(t, [[0, [0, 0, 0]], [0.28, [-30, 0, 0]], [0.42, [-32, 0, 0]], [0.5, [-48, 0, 0]], [0.62, [-40, 0, 0]], [1, [-10, 0, 0]]]);
   r.arm[0] = euler(t, [[0, [12, 10, 0]], [0.24, [62, 10, 8]], [0.42, [64, 8, 8]], [0.5, [6, 22, 0]], [0.7, [10, 18, 0]], [1, [10, 12, 0]]]);
   r.elbow[0] = one(t, [[0, 24], [0.24, 18], [0.42, 16], [0.5, 80], [1, 30]]);
-  r.open[0] = t > 0.12 && t < 0.52;
+  // The measuring hand flat and square to the creature, closing as it is pulled back into the cut.
+  r.shape = [{ flat: one(t, [[0.08, 0], [0.22, 1], [0.44, 1], [0.52, 0]]) }, undefined];
+  r.hand[0] = euler(t, [[0.08, [0, 0, 0]], [0.24, [-50, 0, 0]], [0.44, [-50, 0, 0]], [0.52, [0, 0, 0]]]);
+  r.mouth = one(t, [[0.44, 0], [0.5, 0.35], [0.7, 0]]);
   r.chest = euler(t, [[0, [0, 0, 0]], [0.28, [4, -2, -20]], [0.42, [5, -3, -24]], [0.5, [-8, 4, 20]], [0.62, [-8, 3, 26]], [1, [0, 0, 4]]]);
   r.spine = euler(t, [[0, [0, 0, 0]], [0.28, [3, 0, -6]], [0.42, [4, 0, -8]], [0.5, [-12, 0, 6]], [0.62, [-10, 0, 6]], [1, [-2, 0, 0]]]);
   r.head = euler(t, [[0, [0, 0, 0]], [0.28, [-4, 0, 16]], [0.42, [-5, 0, 20]], [0.5, [-8, 0, -12]], [1, [-2, 0, -2]]]);
@@ -588,24 +511,25 @@ const measuredCut: CastPose = (r, t) => {
 };
 
 /**
- * Lunge: the body arrives low and still going -- the island puts it by the creature the moment the spell is
- * cast, so the pose starts a stride back and drives the last of it -- then the fencer's lunge, front knee deep,
- * back leg straight, the back arm flung out behind, the point driven straight through.
+ * Lunge: the stride the island made, run -- the body carried from where it stood (`cast.move`) on a low bound,
+ * the sword drawn back by the hip -- then the fencer's lunge as it arrives: front knee deep, back leg straight, the
+ * back arm flung out behind with the hand open, the point driven straight through with a shout.
  */
 const lunge: CastPose = (r, t) => {
-  r.at = [0, one(t, [[0, -9], [0.3, -2], [0.4, 3], [0.62, 3], [1, 0]]), one(t, [[0, -1], [0.4, -2.4], [0.62, -2.2], [1, 0]])];
   // Blade: level ahead from the hip as it comes in (92), and level ahead at the full reach of the arm (90).
-  r.arm[1] = euler(t, [[0, [-14, 18, 0]], [0.22, [-20, 16, 4]], [0.4, [104, 0, -4]], [0.62, [100, 2, -4]], [1, [28, 14, 4]]]);
-  r.elbow[1] = one(t, [[0, 80], [0.22, 92], [0.4, 0], [0.62, 4], [1, 40]]);
-  r.hand[1] = euler(t, [[0, [-36, 0, 0]], [0.22, [-40, 0, 0]], [0.4, [-52, 0, 0]], [0.62, [-50, 0, 0]], [1, [-10, 0, 0]]]);
-  r.arm[0] = euler(t, [[0, [40, 14, 0]], [0.22, [46, 12, 0]], [0.4, [-40, 36, 0]], [0.62, [-38, 36, 0]], [1, [10, 12, 0]]]);
-  r.elbow[0] = one(t, [[0, 60], [0.22, 70], [0.4, 8], [0.62, 10], [1, 26]]);
-  r.open[0] = t > 0.3 && t < 0.8;
-  r.chest = euler(t, [[0, [-4, 0, -8]], [0.22, [-2, 0, -14]], [0.4, [-6, 0, 18]], [0.62, [-6, 0, 16]], [1, [0, 0, 2]]]);
-  r.spine = euler(t, [[0, [-16, 0, 0]], [0.22, [-14, 0, -4]], [0.4, [-16, 0, 8]], [0.62, [-14, 0, 8]], [1, [-2, 0, 0]]]);
-  r.head = euler(t, [[0, [6, 0, 6]], [0.4, [10, 0, -14]], [0.62, [8, 0, -12]], [1, [0, 0, 0]]]);
-  legs(r, t, [[0, [34, 3, -26, 3, 44, 26]], [0.22, [14, 3, -6, 3, 40, 36]], [0.4, [56, 4, -36, 3, 60, 4]], [0.62, [54, 4, -35, 3, 58, 6]],
-    [1, [8, 3, -4, 2, 8, 6]]]);
+  r.arm[1] = euler(t, [[0, [-10, 18, 0]], [0.2, [-22, 16, 4]], [0.4, [104, 0, -4]], [0.62, [100, 2, -4]], [1, [28, 14, 4]]]);
+  r.elbow[1] = one(t, [[0, 80], [0.2, 94], [0.4, 0], [0.62, 4], [1, 40]]);
+  r.hand[1] = euler(t, [[0, [-36, 0, 0]], [0.2, [-40, 0, 0]], [0.4, [-52, 0, 0]], [0.62, [-50, 0, 0]], [1, [-10, 0, 0]]]);
+  r.arm[0] = euler(t, [[0, [44, 14, 0]], [0.1, [20, 14, 0]], [0.2, [50, 12, 0]], [0.4, [-40, 36, 0]], [0.62, [-38, 36, 0]], [1, [10, 12, 0]]]);
+  r.elbow[0] = one(t, [[0, 70], [0.1, 50], [0.2, 70], [0.4, 8], [0.62, 10], [1, 26]]);
+  r.shape = [{ flat: one(t, [[0.28, 0], [0.4, 1], [0.7, 1], [0.9, 0]]) }, undefined];
+  r.mouth = one(t, [[0.32, 0], [0.4, 0.8], [0.6, 0.3], [0.75, 0]]);
+  r.chest = euler(t, [[0, [-4, 0, -8]], [0.2, [-2, 0, -14]], [0.4, [-6, 0, 18]], [0.62, [-6, 0, 16]], [1, [0, 0, 2]]]);
+  r.spine = euler(t, [[0, [-18, 0, 0]], [0.2, [-16, 0, -4]], [0.4, [-16, 0, 8]], [0.62, [-14, 0, 8]], [1, [-2, 0, 0]]]);
+  r.head = euler(t, [[0, [8, 0, 6]], [0.4, [10, 0, -14]], [0.62, [8, 0, -12]], [1, [0, 0, 0]]]);
+  // A running bound -- left foot reaching, then the right -- into the lunge's long stance.
+  legs(r, t, [[0, [36, 3, -30, 3, 30, 50]], [0.1, [-20, 3, 30, 3, 50, 24]], [0.2, [30, 3, -24, 3, 40, 30]], [0.4, [56, 4, -36, 3, 60, 4]],
+    [0.62, [54, 4, -35, 3, 58, 6]], [1, [8, 3, -4, 2, 8, 6]]]);
   r.wield = 1;
 };
 
@@ -620,7 +544,7 @@ const hamstring: CastPose = (r, t) => {
   r.hand[1] = euler(t, [[0, [0, 0, 0]], [0.3, [-60, 0, 0]], [0.48, [-44, 0, 0]], [0.62, [-40, 0, 0]], [1, [-10, 0, 0]]]);
   r.arm[0] = euler(t, [[0, [12, 10, 0]], [0.3, [60, -10, 10]], [0.48, [20, 50, 0]], [0.62, [16, 52, 0]], [1, [10, 12, 0]]]);
   r.elbow[0] = one(t, [[0, 24], [0.3, 60], [0.48, 20], [1, 26]]);
-  r.open[0] = t > 0.2 && t < 0.8;
+  r.shape = [{ flat: one(t, [[0.2, 0], [0.32, 1], [0.7, 1], [0.85, 0]]) }, undefined];
   r.chest = euler(t, [[0, [0, 0, 0]], [0.3, [-4, 4, -40]], [0.48, [-6, -2, 28]], [0.62, [-6, -2, 36]], [1, [0, 0, 2]]]);
   r.spine = euler(t, [[0, [0, 0, 0]], [0.3, [-20, 0, -8]], [0.48, [-26, 0, 8]], [0.62, [-24, 0, 8]], [1, [-2, 0, 0]]]);
   r.head = euler(t, [[0, [0, 0, 0]], [0.3, [12, 0, 22]], [0.48, [12, 0, -14]], [1, [0, 0, 0]]]);
@@ -631,7 +555,8 @@ const hamstring: CastPose = (r, t) => {
 
 /**
  * Shield Bash: the left shoulder drawn back with the shield tucked across the chest and the weight on the back
- * foot, then the whole body driven in behind it, the shield punched out square, the sword kept back by the hip.
+ * foot, then the whole body driven in behind it with a grunt, the shield punched out square, the sword kept back
+ * by the hip in its carry.
  */
 const shieldBash: CastPose = (r, t) => {
   r.arm[0] = euler(t, [[0, [20, 12, 0]], [0.3, [30, 2, 44]], [0.42, [90, 2, 8]], [0.56, [86, 4, 8]], [1, [20, 14, 0]]]);
@@ -639,6 +564,7 @@ const shieldBash: CastPose = (r, t) => {
   // The sword kept back out of the way by the right hip, in its carry, as the shield does the work.
   r.arm[1] = euler(t, [[0, [24, 14, 0]], [0.3, [-16, 20, 0]], [0.42, [-24, 22, 0]], [0.56, [-22, 22, 0]], [1, [24, 14, 0]]]);
   r.elbow[1] = one(t, [[0, 40], [0.3, 40], [0.42, 46], [1, 40]]);
+  r.mouth = one(t, [[0.34, 0], [0.42, 0.7], [0.6, 0]]);
   r.chest = euler(t, [[0, [0, 0, 0]], [0.3, [4, 0, 30]], [0.42, [-8, 0, -26]], [0.56, [-8, 0, -22]], [1, [0, 0, 0]]]);
   r.spine = euler(t, [[0, [0, 0, 0]], [0.3, [6, 0, 6]], [0.42, [-20, 0, -6]], [0.56, [-18, 0, -6]], [1, [-2, 0, 0]]]);
   r.head = euler(t, [[0, [0, 0, 0]], [0.3, [-6, 0, -18]], [0.42, [6, 0, 18]], [1, [0, 0, 0]]]);
@@ -667,7 +593,8 @@ const disarmingCut: CastPose = (r, t) => {
 
 /**
  * Challenge: feet together, the hilt brought up before the chin in a salute, blade upright, and held; then the
- * blade swept down and out to point level at the creature, held there while the left hand calls it on, twice.
+ * blade swept down and out to point level at the creature, held there while the left hand, open, calls it on --
+ * the fingers curled in twice.
  */
 const challenge: CastPose = (r, t) => {
   // Blade: upright before the face (180), then level at the creature (90).
@@ -675,8 +602,12 @@ const challenge: CastPose = (r, t) => {
   r.elbow[1] = one(t, [[0, 40], [0.26, 112], [0.4, 112], [0.55, 2], [0.82, 4], [1, 40]]);
   r.hand[1] = euler(t, [[0, [0, 0, 0]], [0.26, [-34, 0, 0]], [0.4, [-34, 0, 0]], [0.55, [-58, 0, 0]], [0.82, [-56, 0, 0]], [1, [-10, 0, 0]]]);
   r.arm[0] = euler(t, [[0, [10, 10, 0]], [0.4, [8, 12, 0]], [0.56, [56, 28, -16]], [0.64, [58, 26, -18]], [0.72, [56, 28, -16]], [0.86, [52, 26, -14]], [1, [10, 12, 0]]]);
-  r.elbow[0] = one(t, [[0, 20], [0.4, 22], [0.56, 30], [0.64, 96], [0.72, 34], [0.8, 92], [0.88, 40], [1, 24]]);
-  r.open[0] = t > 0.44;
+  r.elbow[0] = one(t, [[0, 20], [0.4, 22], [0.56, 30], [0.64, 70], [0.72, 34], [0.8, 70], [0.88, 40], [1, 24]]);
+  // Come on: the open hand, palm up, the fingers drawn in and let out again on each pull of the elbow.
+  const curl = one(t, [[0.56, 0], [0.64, 1], [0.72, 0], [0.8, 1], [0.88, 0]]);
+  r.shape = [{ flat: one(t, [[0.42, 0], [0.54, 1], [0.9, 1], [1, 0]]) * (1 - curl), claw: curl }, undefined];
+  r.hand[0] = euler(t, [[0.42, [0, 0, 0]], [0.54, [0, -80, 0]], [0.9, [0, -80, 0]], [1, [0, 0, 0]]]);
+  r.mouth = one(t, [[0.5, 0], [0.58, 0.4], [0.7, 0]]);
   r.chest = euler(t, [[0, [0, 0, 0]], [0.26, [4, 0, 0]], [0.4, [4, 0, 0]], [0.55, [2, 0, 14]], [0.82, [2, 0, 12]], [1, [0, 0, 0]]]);
   r.spine = euler(t, [[0, [0, 0, 0]], [0.26, [3, 0, 0]], [0.55, [-2, 0, 0]], [1, [0, 0, 0]]]);
   r.head = euler(t, [[0, [0, 0, 0]], [0.26, [-10, 0, 0]], [0.4, [-10, 0, 0]], [0.55, [6, 0, -10]], [0.82, [6, 0, -10]], [1, [0, 0, 0]]]);
@@ -686,15 +617,17 @@ const challenge: CastPose = (r, t) => {
 };
 
 /**
- * Second Breath: bent over spent, hands toward the knees, then the great breath -- the body coming up and the
- * chest opening, the arms going wide and low, the head back -- and let out as it settles.
+ * Second Breath: bent over spent, hands toward the knees, mouth open, then the great breath -- the body coming up
+ * and the chest opening, the arms going wide and low with the hands open, the head back -- and let out as it
+ * settles.
  */
 const secondBreath: CastPose = (r, t) => {
   for (let k = 0; k < 2; k++) {
     r.arm[k] = euler(t, [[0, [20, 10, 0]], [0.2, [44, 4, 10]], [0.5, [22, 56, -10]], [0.66, [20, 48, -8]], [1, [14, 12, 0]]]);
     r.elbow[k] = one(t, [[0, 20], [0.2, 30], [0.5, 16], [1, 20]]);
   }
-  r.open[0] = t > 0.1;
+  r.shape = [{ flat: one(t, [[0.1, 0], [0.3, 0.6], [0.5, 1], [0.8, 1], [1, 0]]) }, undefined];
+  r.mouth = one(t, [[0, 0], [0.18, 0.45], [0.42, 0.65], [0.52, 0.2], [0.6, 0.45], [0.8, 0]]);
   const sh = one(t, [[0, 0], [0.2, -0.2], [0.5, 0.7], [0.66, 0.5], [1, 0]]);
   r.shrug = [sh, sh];
   r.chest = euler(t, [[0, [0, 0, 0]], [0.2, [-14, 0, 0]], [0.5, [14, 0, 0]], [0.66, [10, 0, 0]], [1, [0, 0, 0]]]);
@@ -705,8 +638,8 @@ const secondBreath: CastPose = (r, t) => {
 };
 
 /**
- * Deflect: snapped into a hanging guard, the blade upright across the front of the body, and a short hard beat
- * of the wrist out as a blow is met -- quick, and held.
+ * Deflect: snapped into a hanging guard, the blade upright across the front of the body and the left hand open
+ * behind it, and a short hard beat of the wrist out as a blow is met -- quick, and held.
  */
 const deflect: CastPose = (r, t) => {
   // Blade: upright before the body (170), beaten out at the meeting (185), back to upright.
@@ -715,6 +648,7 @@ const deflect: CastPose = (r, t) => {
   r.hand[1] = euler(t, [[0, [0, 0, 0]], [0.22, [-10, 0, 0]], [0.35, [9, 0, -16]], [0.5, [-10, 0, 0]], [0.8, [-10, 0, 0]], [1, [-10, 0, 0]]]);
   r.arm[0] = euler(t, [[0, [12, 10, 0]], [0.22, [30, 30, 0]], [0.8, [28, 30, 0]], [1, [10, 12, 0]]]);
   r.elbow[0] = one(t, [[0, 24], [0.22, 60], [1, 26]]);
+  r.shape = [{ flat: one(t, [[0.1, 0], [0.22, 1], [0.8, 1], [1, 0]]) }, undefined];
   r.chest = euler(t, [[0, [0, 0, 0]], [0.22, [2, 0, 14]], [0.35, [0, 0, 6]], [0.5, [2, 0, 12]], [1, [0, 0, 0]]]);
   r.spine = euler(t, [[0, [0, 0, 0]], [0.22, [4, 0, 0]], [0.35, [2, 0, 0]], [1, [0, 0, 0]]]);
   r.head = euler(t, [[0, [0, 0, 0]], [0.22, [-4, 0, -6]], [1, [0, 0, 0]]]);
@@ -723,17 +657,20 @@ const deflect: CastPose = (r, t) => {
 };
 
 /**
- * Hold the Line: the sword turned over in the fist and raised high, point down, the left hand coming to the
- * pommel, then driven down into the ground before the feet as the stance goes wide and low, and leant on.
+ * Hold the Line: the sword turned over in the fist as it comes up (`haft`), raised before the face point down, the
+ * left hand closing on the grip under the right (`both`), then driven down into the ground before the feet as the
+ * stance goes wide and low, and leant on -- and drawn out and turned back over to the guard.
  */
 const holdTheLine: CastPose = (r, t) => {
-  // Blade: from the guard (124) turned over in the hand to point down from over the head (360), and driven down (350).
-  r.arm[1] = euler(t, [[0, [24, 14, 0]], [0.36, [128, 10, 10]], [0.46, [132, 10, 10]], [0.55, [40, 4, 16]], [0.8, [40, 4, 16]], [1, [28, 14, 4]]]);
-  r.elbow[1] = one(t, [[0, 40], [0.36, 22], [0.46, 24], [0.55, 80], [0.8, 82], [1, 40]]);
-  r.hand[1] = euler(t, [[0, [0, 0, 0]], [0.36, [150, 0, 0]], [0.46, [150, 0, 0]], [0.55, [168, 0, 0]], [0.8, [168, 0, 0]], [1, [-10, 0, 0]]]);
-  r.arm[0] = euler(t, [[0, [12, 10, 0]], [0.36, [126, -12, 20]], [0.46, [130, -12, 20]], [0.55, [42, -14, 26]], [0.8, [42, -14, 26]], [1, [10, 12, 0]]]);
-  r.elbow[0] = one(t, [[0, 24], [0.36, 26], [0.55, 84], [0.8, 86], [1, 26]]);
-  r.open[0] = t > 0.3 && t < 0.86;
+  // Blade (haft 150 from 0.32): point down from the raised fists (60 - 150 + 150 - 60 = 0), driven down (-5), held.
+  r.haft = one(t, [[0.08, 0], [0.32, 150], [0.82, 150], [1, 0]]);
+  r.arm[1] = euler(t, [[0, [24, 14, 0]], [0.32, [120, 6, 10]], [0.44, [126, 6, 10]], [0.55, [40, 4, 12]], [0.82, [40, 4, 12]], [1, [26, 14, 4]]]);
+  r.elbow[1] = one(t, [[0, 40], [0.32, 30], [0.44, 32], [0.55, 20], [0.82, 22], [1, 40]]);
+  r.hand[1] = euler(t, [[0, [0, 0, 0]], [0.32, [-60, 0, 0]], [0.44, [-62, 0, 0]], [0.55, [25, 0, 0]], [0.82, [25, 0, 0]], [1, [-10, 0, 0]]]);
+  r.both = one(t, [[0.22, 0], [0.34, 1], [0.84, 1], [0.94, 0]]);
+  r.arm[0] = euler(t, [[0, [12, 10, 0]], [0.32, [118, -12, 20]], [0.44, [124, -12, 20]], [0.55, [40, -12, 22]], [0.82, [40, -12, 22]], [1, [10, 12, 0]]]);
+  r.elbow[0] = one(t, [[0, 24], [0.32, 34], [0.55, 26], [0.82, 28], [1, 26]]);
+  r.mouth = one(t, [[0.48, 0], [0.55, 0.6], [0.7, 0]]);
   r.chest = euler(t, [[0, [0, 0, 0]], [0.36, [8, 0, 0]], [0.55, [-10, 0, 0]], [0.8, [-8, 0, 0]], [1, [0, 0, 0]]]);
   r.spine = euler(t, [[0, [0, 0, 0]], [0.36, [6, 0, 0]], [0.55, [-16, 0, 0]], [0.8, [-14, 0, 0]], [1, [0, 0, 0]]]);
   r.head = euler(t, [[0, [0, 0, 0]], [0.36, [10, 0, 0]], [0.55, [-8, 0, 0]], [0.8, [0, 0, 0]], [1, [0, 0, 0]]]);
@@ -743,7 +680,8 @@ const holdTheLine: CastPose = (r, t) => {
 
 /**
  * Measured Breathing: the sword let down at the side, point low, the left hand flat on the belly, and one slow
- * breath in and out -- the chest and the shoulders rising and falling, the knees softening on the out-breath.
+ * breath in and out -- the chest and the shoulders rising and falling, the breath let out through the lips, the
+ * knees softening on the out-breath.
  */
 const measuredBreathing: CastPose = (r, t) => {
   // Blade: down and ahead at the side (34).
@@ -752,7 +690,8 @@ const measuredBreathing: CastPose = (r, t) => {
   r.hand[1] = euler(t, [[0, [0, 0, 0]], [0.2, [-50, 0, 0]], [0.85, [-50, 0, 0]], [1, [-10, 0, 0]]]);
   r.arm[0] = euler(t, [[0, [12, 10, 0]], [0.18, [26, -12, 40]], [0.85, [26, -12, 40]], [1, [10, 12, 0]]]);
   r.elbow[0] = one(t, [[0, 24], [0.18, 96], [0.85, 96], [1, 26]]);
-  r.open[0] = t > 0.1 && t < 0.92;
+  r.shape = [{ flat: one(t, [[0.06, 0], [0.18, 1], [0.86, 1], [0.96, 0]]) }, undefined];
+  r.mouth = one(t, [[0.48, 0], [0.54, 0.25], [0.7, 0.2], [0.76, 0]]);
   const s = one(t, [[0, 0], [0.18, 0], [0.4, 0.8], [0.48, 0.8], [0.7, -0.2], [0.85, 0], [1, 0]]);
   r.shrug = [s, s];
   r.chest = euler(t, [[0, [0, 0, 0]], [0.18, [0, 0, 0]], [0.4, [10, 0, 0]], [0.48, [10, 0, 0]], [0.7, [-4, 0, 0]], [1, [0, 0, 0]]]);
@@ -764,8 +703,8 @@ const measuredBreathing: CastPose = (r, t) => {
 
 /**
  * Guardian's Call: gathered over the sword with the knees bent and the head down, then up -- the sword thrust
- * straight up over the head, the left arm flung wide, the head back in the shout -- and held, for everything
- * round to see.
+ * straight up over the head, the left arm flung wide with the hand open, the head back in the shout -- and held,
+ * for everything round to see.
  */
 const guardiansCall: CastPose = (r, t) => {
   // Blade: upright before the chest (170), then straight up over the head (180).
@@ -774,7 +713,8 @@ const guardiansCall: CastPose = (r, t) => {
   r.hand[1] = euler(t, [[0, [0, 0, 0]], [0.32, [-50, 0, 0]], [0.5, [-56, 0, 0]], [0.78, [-56, 0, 0]], [1, [-10, 0, 0]]]);
   r.arm[0] = euler(t, [[0, [12, 10, 0]], [0.32, [40, -6, 30]], [0.5, [70, 80, 0]], [0.78, [66, 78, 0]], [1, [10, 12, 0]]]);
   r.elbow[0] = one(t, [[0, 24], [0.32, 100], [0.5, 6], [0.78, 8], [1, 26]]);
-  r.open[0] = t > 0.4 && t < 0.9;
+  r.shape = [{ flat: one(t, [[0.36, 0], [0.48, 1], [0.84, 1], [0.94, 0]]) }, undefined];
+  r.mouth = one(t, [[0.42, 0], [0.5, 1], [0.74, 0.9], [0.86, 0]]);
   r.chest = euler(t, [[0, [0, 0, 0]], [0.32, [-10, 0, 0]], [0.5, [12, 0, 0]], [0.78, [10, 0, 0]], [1, [0, 0, 0]]]);
   r.spine = euler(t, [[0, [0, 0, 0]], [0.32, [-12, 0, 0]], [0.5, [6, 0, 0]], [0.78, [4, 0, 0]], [1, [0, 0, 0]]]);
   r.head = euler(t, [[0, [0, 0, 0]], [0.32, [-16, 0, 0]], [0.5, [20, 0, 0]], [0.78, [16, 0, 0]], [1, [0, 0, 0]]]);
@@ -783,26 +723,28 @@ const guardiansCall: CastPose = (r, t) => {
 };
 
 /**
- * Last Stand: down on the right knee, the sword turned over and planted point down before it, the head bowed
- * over the hilt -- spent -- then up all at once into a wide stance, the sword swung up through the front to
- * stand upright before the face in both hands, and held.
+ * Last Stand: down on the right knee (`kneel`), the sword turned over in both fists and planted point down before
+ * it, the head bowed over the hilt -- spent -- then up all at once with a shout into a wide stance, the grip let
+ * back round so the blade swings up through ahead to stand upright before the face in both hands, and held.
  */
 const lastStand: CastPose = (r, t) => {
-  // Blade: point down before the knee (350), drawn up out of the ground and round past the shoulder to stand upright
-  // before the face (180) -- turned the way back through the hand, as a hand pitch can only unwind.
-  r.arm[1] = euler(t, [[0, [24, 14, 0]], [0.24, [40, -4, 16]], [0.44, [42, -4, 16]], [0.55, [60, -16, 34]], [0.82, [60, -16, 34]], [1, [28, 14, 4]]]);
-  r.elbow[1] = one(t, [[0, 40], [0.24, 80], [0.44, 80], [0.55, 100], [0.82, 100], [1, 40]]);
-  r.hand[1] = euler(t, [[0, [0, 0, 0]], [0.24, [170, 0, 0]], [0.44, [170, 0, 0]], [0.55, [-40, 0, 0]], [0.82, [-40, 0, 0]], [1, [-10, 0, 0]]]);
-  r.arm[0] = euler(t, [[0, [12, 10, 0]], [0.24, [40, -14, 26]], [0.44, [42, -14, 26]], [0.55, [58, -24, 40]], [0.82, [58, -24, 40]], [1, [10, 12, 0]]]);
-  r.elbow[0] = one(t, [[0, 24], [0.24, 84], [0.55, 104], [0.82, 104], [1, 26]]);
-  r.chest = euler(t, [[0, [0, 0, 0]], [0.24, [-8, 0, 0]], [0.44, [-10, 0, 0]], [0.55, [10, 0, 0]], [0.82, [8, 0, 0]], [1, [0, 0, 0]]]);
-  r.spine = euler(t, [[0, [0, 0, 0]], [0.24, [-14, 0, 0]], [0.44, [-16, 0, 0]], [0.55, [2, 0, 0]], [0.82, [2, 0, 0]], [1, [0, 0, 0]]]);
-  r.head = euler(t, [[0, [0, 0, 0]], [0.24, [-22, 0, 0]], [0.44, [-24, 0, 0]], [0.55, [6, 0, 0]], [0.82, [4, 0, 0]], [1, [0, 0, 0]]]);
-  legs(r, t, [[0, [2, 2, 0, 2, 4, 4]], [0.24, [58, 4, -26, 4, 96, 104]], [0.44, [58, 4, -26, 4, 98, 106]], [0.55, [14, 14, -8, 14, 20, 16]],
-    [0.82, [14, 14, -8, 14, 22, 18]], [1, [2, 2, 0, 2, 4, 4]]]);
+  // Blade: reversed (haft 150) and point down before the knee (60 - 150 + 70 + 15 = -5), then the grip let back as
+  // the arms come up, which swings the point up through ahead to upright before the face (60 + 160 - 40 = 180).
+  r.haft = one(t, [[0.04, 0], [0.2, 150], [0.44, 150], [0.55, 0]]);
+  r.kneel = one(t, [[0.04, 0], [0.22, 1], [0.44, 1], [0.54, 0]]);
+  r.arm[1] = euler(t, [[0, [24, 14, 0]], [0.22, [40, -4, 16]], [0.44, [42, -4, 16]], [0.55, [60, -16, 34]], [0.82, [60, -16, 34]], [1, [28, 14, 4]]]);
+  r.elbow[1] = one(t, [[0, 40], [0.22, 30], [0.44, 30], [0.55, 100], [0.82, 100], [1, 40]]);
+  r.hand[1] = euler(t, [[0, [0, 0, 0]], [0.22, [15, 0, 0]], [0.44, [15, 0, 0]], [0.55, [-40, 0, 0]], [0.82, [-40, 0, 0]], [1, [-10, 0, 0]]]);
+  r.both = one(t, [[0.1, 0], [0.22, 1], [0.84, 1], [0.95, 0]]);
+  r.arm[0] = euler(t, [[0, [12, 10, 0]], [0.22, [40, -14, 26]], [0.44, [42, -14, 26]], [0.55, [58, -24, 40]], [0.82, [58, -24, 40]], [1, [10, 12, 0]]]);
+  r.elbow[0] = one(t, [[0, 24], [0.22, 34], [0.55, 104], [0.82, 104], [1, 26]]);
+  r.mouth = one(t, [[0.46, 0], [0.55, 1], [0.72, 0.6], [0.84, 0]]);
+  r.chest = euler(t, [[0, [0, 0, 0]], [0.22, [-8, 0, 0]], [0.44, [-10, 0, 0]], [0.55, [10, 0, 0]], [0.82, [8, 0, 0]], [1, [0, 0, 0]]]);
+  r.spine = euler(t, [[0, [0, 0, 0]], [0.22, [-10, 0, 0]], [0.44, [-12, 0, 0]], [0.55, [2, 0, 0]], [0.82, [2, 0, 0]], [1, [0, 0, 0]]]);
+  r.head = euler(t, [[0, [0, 0, 0]], [0.22, [-22, 0, 0]], [0.44, [-24, 0, 0]], [0.55, [6, 0, 0]], [0.82, [4, 0, 0]], [1, [0, 0, 0]]]);
+  legs(r, t, [[0, [2, 2, 0, 2, 4, 4]], [0.44, [2, 2, 0, 2, 4, 4]], [0.55, [14, 14, -8, 14, 20, 16]], [0.82, [14, 14, -8, 14, 22, 18]], [1, [2, 2, 0, 2, 4, 4]]]);
   r.wield = 1;
 };
-
 /* ---- the numbers each spell is drawn from -------------------------------------------------- */
 
 const fxOf = (id: string): Readonly<Record<string, number>> => spellInfo(id)?.fx ?? {};
@@ -831,7 +773,7 @@ export const BLADE: Record<string, SpellVisual> = {
           // Its ticks, at even steps, the last on the creature.
           for (let i = 1; i <= 3; i++) if (grow > i / 3 - 0.02) k.flare(mid3(a, b, i / 3), 3 + (i === 3 ? 2 : 0), 0.8 * m, '#fff4cc', 0);
         }
-        k.glow(k.weaponAt(bladeLen(k.caster)), 5, 0.6 * bump(t, 0.2, 0.42, 0.5));
+        k.glow(tipOf(k), 5, 0.6 * bump(t, 0.2, 0.42, 0.5));
         if (t > 0.42 && t < 0.66) smear(k, Math.max(0.42, t - 0.1), Math.min(t, 0.6), { alpha: 1 - seg(t, 0.56, 0.66) });
       },
       hit: (k) => {
@@ -858,11 +800,11 @@ export const BLADE: Record<string, SpellVisual> = {
     fx: {
       charge: (k, t) => {
         // The salute's glint as the hilt comes up before the face, and down the blade as it is laid on the creature.
-        k.flare(k.weaponAt(bladeLen(k.caster) * 0.85), 7, bump(t, 0.2, 0.3, 0.42), PALETTE.core, 0.3);
+        k.flare(mid3(k.hand(1), tipOf(k), 0.85), 7, bump(t, 0.2, 0.3, 0.42), PALETTE.core, 0.3);
         if (t > 0.42 && t < 0.58) smear(k, Math.max(0.4, t - 0.1), t, { alpha: 0.7, inner: 0.6 });
       },
       travel: { secs: (tiles) => 0.12 + tiles * 0.03, draw: (k, u) => {
-        const a = k.weaponAt(bladeLen(k.caster)), b = k.heart(k.target);
+        const a = tipOf(k), b = k.heart(k.target);
         k.ribbon([a, mid3(a, b, smooth(u) * 0.5), mid3(a, b, smooth(u))], { ...BRASS, width: 1.8, taper: 'none', glow: 0.6 });
       } },
       hit: (k) => {
@@ -870,7 +812,7 @@ export const BLADE: Record<string, SpellVisual> = {
         clash(k, k.heart(k.target), 10, k.toward(k.target, k.caster), 1.4, 0.6);
       },
       impact: { secs: 0.6, draw: (k, u) => {
-        const a = k.weaponAt(bladeLen(k.caster)), b = k.heart(k.target);
+        const a = tipOf(k), b = k.heart(k.target);
         k.ribbon([a, mid3(a, b, 0.5), b], { ...BRASS, width: 1.8 * (1 - u), taper: 'none', alpha: 1 - u, glow: 0.6 });
         k.flare(k.at(k.target, 1.15), 10 * (1 - u), flashOf(u, 0.1), '#fff4cc');
       } },
@@ -890,8 +832,10 @@ export const BLADE: Record<string, SpellVisual> = {
         // Now and then a pulse down the line between you, from it to you: it is coming.
         const ph = (age % 2.2) / 2.2;
         if (ph < 0.45) {
-          const p = mid3(k.heart(k.target), k.chest(), smooth(ph / 0.45));
-          k.orb(p, 1.6, { ...BRASS, alpha: a * 0.8 * Math.sin((Math.PI * ph) / 0.45), glow: 0.6 });
+          const from = k.heart(k.target), to = k.chest(), v = smooth(ph / 0.45);
+          // A short brass stroke running down the line, long enough to read as going somewhere.
+          const head = mid3(from, to, v), tail = mid3(from, to, Math.max(0, v - 0.12));
+          k.ribbon([tail, mid3(tail, head, 0.5), head], { ...BRASS, width: 2.4, taper: 'start', alpha: a * 0.85 * Math.sin((Math.PI * ph) / 0.45), glow: 0.6 });
         }
       } },
     },
@@ -903,22 +847,30 @@ export const BLADE: Record<string, SpellVisual> = {
   // light, a ring of force standing round it where it goes in.
   blade_lunge: {
     palette: PALETTE,
-    cast: { timing: { secs: 0.85, release: 0.4, blendIn: 0.04 }, pose: lunge },
+    // The body carried over the ground the island put it across, from the start of the bound to the stamp of the lunge.
+    cast: { timing: { secs: 0.85, release: 0.4 }, pose: lunge, move: { from: 0, to: 0.36 } },
     fx: {
       charge: (k, t) => {
         const f = frameOf(k);
-        // The rush: streaks off behind the body at its height, drawn back to nothing as it stops.
-        const run = 1 - smooth(seg(t, 0.05, 0.42));
-        if (run > 0.01) {
-          const L = 0.7 * run;
+        // The rush: streaks trailing off behind the body at its height along the way it came, as long as the ground
+        // it has crossed (a short one when it was already in reach), drawn back to nothing as it stops.
+        const run = 1 - smooth(seg(t, 0.3, 0.46));
+        const came = k.from ? Math.hypot(k.caster.x - k.from.x, k.caster.y - k.from.y) : 0;
+        const back = k.from && came > 0.05 ? { x: (k.from.x - k.caster.x) / came, y: (k.from.y - k.caster.y) / came } : { x: -f.fwd.x, y: -f.fwd.y };
+        const L = Math.min(1.1, k.from ? came : 0.4) * run;
+        if (L > 0.02) {
           for (let i = 0; i < 4; i++) {
             const h = k.caster.tall * (0.25 + 0.2 * i), side = (hashOf(k.seed, i) - 0.5) * 0.3;
-            const a = off(k.at(k.caster, 0), f, side, -0.15 - 0.1 * hashOf(k.seed, i + 9), h);
-            const tail = off(a, f, 0, -L * (0.55 + 0.45 * hashOf(k.seed, i + 4)), 0);
-            k.ribbon([tail, mid3(tail, a, 0.5), mid3(tail, a, 0.85), a], { width: 1.6 + 0.8 * hashOf(k.seed, i + 7), taper: 'both', alpha: 0.7 * run, glow: 0.3 });
+            const a = off(k.at(k.caster, 0), f, side, 0, h);
+            const lead = 0.12 + 0.1 * hashOf(k.seed, i + 9);
+            const head = { x: a.x + back.x * lead, y: a.y + back.y * lead, z: a.z };
+            const len = L * (0.55 + 0.45 * hashOf(k.seed, i + 4));
+            const tail = { x: head.x + back.x * len, y: head.y + back.y * len, z: a.z };
+            k.ribbon([tail, mid3(tail, head, 0.5), mid3(tail, head, 0.85), head], { width: 1.6 + 0.8 * hashOf(k.seed, i + 7), taper: 'both', alpha: 0.7 * run, glow: 0.3 });
           }
         }
-        if (t < 0.35) k.emit(off(k.at(k.caster, 0), f, 0, -0.1, 1), 40 * (1 - t / 0.35), { kind: 'dust', colour: DUST, size: 2, life: [0.3, 0.6], speed: [0.2, 0.6], up: [2, 8], heading: { x: -f.fwd.x, y: -f.fwd.y }, cone: 1.4, gravity: 4, drag: 0.1 });
+        // Dust kicked up at each foot as it goes, back the way it came.
+        if (t < 0.36) k.emit(k.on(k.caster.x, k.caster.y, 1), 46 * (1 - t / 0.36), { kind: 'dust', colour: DUST, size: 2, life: [0.3, 0.6], speed: [0.2, 0.6], up: [2, 8], heading: back, cone: 1.4, gravity: 4, drag: 0.1 });
         if (t > 0.26 && t < 0.56) smear(k, Math.max(0.22, t - 0.1), Math.min(t, 0.46), { alpha: 1 - seg(t, 0.44, 0.56), inner: 0.5 });
       },
       release: (k) => {
@@ -978,7 +930,7 @@ export const BLADE: Record<string, SpellVisual> = {
     fx: {
       charge: (k, t) => {
         if (t > 0.3 && t < 0.66) smear(k, Math.max(0.28, t - 0.14), Math.min(t, 0.6), { alpha: 1 - seg(t, 0.54, 0.66) });
-        if (t > 0.3 && t < 0.5) k.emit(k.weaponAt(bladeLen(k.caster)), 40, { kind: 'dust', colour: DUST, size: 2, life: [0.25, 0.5], speed: [0.1, 0.3], up: [1, 4], gravity: 4 });
+        if (t > 0.3 && t < 0.5) k.emit(tipOf(k), 40, { kind: 'dust', colour: DUST, size: 2, life: [0.25, 0.5], speed: [0.1, 0.3], up: [1, 4], gravity: 4 });
       },
       hit: (k) => {
         const f = frameOf(k), legs = k.at(k.target, 0.2);
@@ -1153,7 +1105,7 @@ export const BLADE: Record<string, SpellVisual> = {
         if (t > 0.12 && t < 0.4) smear(k, Math.max(0.08, t - 0.12), t, { alpha: 0.8 * (1 - seg(t, 0.32, 0.4)), inner: 0.5 });
       },
       hit: (k) => {
-        const p = k.weaponAt(bladeLen(k.caster) * 0.6);
+        const p = mid3(k.hand(1), tipOf(k), 0.6);
         clash(k, p, 16, k.facingDir(k.caster), 2.2, 0.9);
         k.flare(p, 6, 1, PALETTE.core, 0.3);
       },
@@ -1206,11 +1158,11 @@ export const BLADE: Record<string, SpellVisual> = {
     cast: { timing: { secs: 1.2, release: 0.55 }, pose: holdTheLine },
     fx: {
       charge: (k, t) => {
-        k.flare(k.weaponAt(bladeLen(k.caster)), 6, bump(t, 0.26, 0.4, 0.5), PALETTE.core, 0.2);
+        k.flare(tipOf(k), 6, bump(t, 0.26, 0.4, 0.5), PALETTE.core, 0.2);
         if (t > 0.44 && t < 0.62) smear(k, Math.max(0.4, t - 0.1), Math.min(t, 0.56), { alpha: 0.8 * (1 - seg(t, 0.55, 0.62)) });
       },
       hit: (k) => {
-        const tip = k.weaponAt(bladeLen(k.caster));
+        const tip = tipOf(k);
         const p = k.on(tip.x, tip.y, 0.5);
         clash(k, p, 24, undefined, 0, 0.7);
         k.burst(p, 16, { kind: 'dust', colour: DUST, size: 3, life: [0.4, 0.9], speed: [0.3, 0.8], up: [3, 10], gravity: 4, drag: 0.1 });
@@ -1226,7 +1178,7 @@ export const BLADE: Record<string, SpellVisual> = {
         const half = 0.45 * smooth(u / 0.1);
         const a = k.on(c.x - px * half, c.y - py * half, 0.3), b = k.on(c.x + px * half, c.y + py * half, 0.3);
         const al = 1 - seg(u, 0.55, 1);
-        scored(k, a, b, 0.05, al);
+        scored(k, a, b, 0.04, al);
         if (u < 0.1) k.flare(mid3(a, b, 0.5), 8, 1 - u / 0.1, '#fff4cc', 0);
         // Sparks running out along it to its two ends as it is scored.
         if (u < 0.12) for (const q of [a, b]) k.emit(q, 120, { kind: 'spark', colour: [PALETTE.accent, '#fff4cc'], size: 1.4, life: [0.12, 0.3], speed: [0.3, 0.8], up: [6, 16], gravity: 60 });
@@ -1308,11 +1260,11 @@ export const BLADE: Record<string, SpellVisual> = {
     fx: {
       charge: (k, t) => {
         if (t > 0.34 && t < 0.56) smear(k, Math.max(0.32, t - 0.1), Math.min(t, 0.5), { alpha: 0.8 * (1 - seg(t, 0.5, 0.56)), inner: 0.5 });
-        k.flare(k.weaponAt(bladeLen(k.caster)), 9, bump(t, 0.44, 0.52, 0.8), PALETTE.core, 0);
+        k.flare(tipOf(k), 9, bump(t, 0.44, 0.52, 0.8), PALETTE.core, 0);
       },
       hit: (k) => {
         k.burst(k.at(k.caster, 0.05), 24, { kind: 'dust', colour: DUST, size: 3.2, life: [0.5, 0.9], speed: [CALL_REACH * 0.25, CALL_REACH * 0.5], up: [2, 6], gravity: 2, drag: 0.1 });
-        k.burst(k.weaponAt(bladeLen(k.caster)), 7, { kind: 'mote', colour: [PALETTE.accent, '#fff4cc'], size: 1.6, life: [0.4, 0.8], speed: [0.2, 0.6], up: [4, 14], gravity: 0 });
+        k.burst(tipOf(k), 7, { kind: 'mote', colour: [PALETTE.accent, '#fff4cc'], size: 1.6, life: [0.4, 0.8], speed: [0.2, 0.6], up: [4, 14], gravity: 0 });
         k.flash(0.06);
       },
       impact: { secs: 1.0, draw: (k, u) => {
@@ -1323,7 +1275,7 @@ export const BLADE: Record<string, SpellVisual> = {
         const a = smooth(age / 0.6) * smooth(left / 0.8);
         const b = k.caster;
         // The reach, faint, its edge dashed; and round it darts stepping in at the Blade.
-        dashes(k, b, CALL_REACH, 0.06, a * 0.55, age * 0.05);
+        k.ring(b, CALL_REACH, { ...BRASS, band: 0.06, dash: 3, alpha: 0.55 * a, glow: 0.3, turn: age * 0.05 });
         // Two rings of darts at once, half a step apart, each closing in from the edge and fading as it comes.
         const n = k.fast ? 4 : 6;
         for (let w = 0; w < 2; w++) {
@@ -1334,6 +1286,17 @@ export const BLADE: Record<string, SpellVisual> = {
             const d = { x: -Math.cos(ang), y: -Math.sin(ang) };
             dart(k, { x: b.x - d.x * rr, y: b.y - d.y * rr }, d, 0.32, a * 0.85 * Math.sin(Math.PI * step));
           }
+        }
+        // Every creature in reach, turned: a dart at its feet pointed at the Blade, and as the call goes out a brass
+        // thread drawn taut from it to the Blade and let go. The island does not say which of them was hunting
+        // somebody, so it is every one there; the nearest six, to keep to the budget.
+        const near = k.bodiesWithin(CALL_REACH, b, ['creature']);
+        near.sort((p, q) => Math.hypot(p.x - b.x, p.y - b.y) - Math.hypot(q.x - b.x, q.y - b.y));
+        const pull = 1 - smooth(seg(age, 0.4, 1.2));
+        for (const c of near.slice(0, 6)) {
+          const d = k.toward(c, b), r = markR(c);
+          dart(k, { x: c.x + d.x * (r + 0.1), y: c.y + d.y * (r + 0.1) }, d, 0.22, 0.9 * a);
+          if (pull > 0.01) k.string(k.heart(c), k.chest(), { ...BRASS, alpha: pull * a, sag: 1.5 * (1 - pull), glow: 0.5 });
         }
         // The standard: a sword over the head.
         swordGlyph(k, k.at(b, 1.25 + 0.03 * Math.sin(age * 2)), 12, Math.PI, a, { brass: true });
@@ -1366,7 +1329,7 @@ export const BLADE: Record<string, SpellVisual> = {
         k.flash(0.08, PALETTE.light);
       },
       impact: { secs: 0.8, draw: (k, u) => {
-        wave(k, k.caster, u, 1.6, 0.75, { band: 0.07 });
+        wave(k, k.caster, u, 1.6, 0.55, { band: 0.06 });
         k.light(k.caster, 4, 0.9 * (1 - u));
       } },
       linger: { draw: (k, age, left) => {
