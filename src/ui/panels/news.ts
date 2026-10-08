@@ -28,6 +28,7 @@ import { lifeSeasons } from '../../render/life';
 import { LAYERS, TRIAL_SECONDS } from '../../render/timings';
 import { SWELL_RATE } from '../../render/water';
 import { WALK_FRAMES } from '../../render/figure';
+import { BEARD_ODDS } from '../../game/look';
 import { furnitureDef, liquidCapacity, POND_EVERY, type PlacedFurniture } from '../../game/furniture';
 import { billWords, countOf, type Item } from '../../game/items';
 import { COIN_METALS, coinPurity, INGOT_LUMPS, INGOT_WEIGHT, MOULD_BY_ID } from '../../game/metal';
@@ -1429,6 +1430,16 @@ export const NEWS: News[] = [
         + 'as they go; turning, starting, stopping or wearing something that shines, they are drawn as before.',
       'Walking a path no longer stands still for a frame at every tile, so the body no longer eases to standing and back again at each step.',
       'Only the part of the screen with sea on it takes the swell each frame.',
+    ],
+  },
+  {
+    n: 106,
+    day: '2026-10-08',
+    lines: () => [
+      'A woman\'s build has a fuller chest that shows from the side and at three-quarters, a narrower waist and wider hips; '
+        + 'finer, higher-arched brows, a lash line on each eye and fuller lips. Neither has half of the body\'s difference and none of the face\'s.',
+      `Roll me one gives a man a beard ${percent(BEARD_ODDS.man)} of the time, neither ${percent(BEARD_ODDS.neither)}, `
+        + `and a woman ${BEARD_ODDS.woman ? percent(BEARD_ODDS.woman) : 'never'}. Any build can still choose any beard.`,
     ],
   },
 ];

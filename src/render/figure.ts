@@ -540,10 +540,15 @@ function headMesh(fr: Frame, blink: boolean): Mesh {
   const eye: Pt[] = (blink
     ? [[-0.16, 1.5], [0.15, 1.52], [0.15, 1.55], [-0.16, 1.53]]
     : [[-0.16, 1.54], [-0.09, 1.66], [0.06, 1.67], [0.15, 1.57], [0.07, 1.44], [-0.09, 1.44]]).map(([u, z]) => [u - 0.11, z]);
-  const brow: Pt[] = [[-0.33, 1.8], [0.08, 1.82], [0.1, 1.87], [-0.15, 1.91], [-0.34, 1.86]];
+  // A woman's brow finer and arched higher at the middle, a man's straight and heavy.
+  const brow: Pt[] = [[-0.33, 1.8 + fr.fem * 0.02], [0.08, 1.82 + fr.fem * 0.01], [0.1, 1.87 - fr.fem * 0.02], [-0.15, 1.91 + fr.fem * 0.02], [-0.34, 1.86 - fr.fem * 0.01]];
+  // And on a woman's eye the upper lid's line drawn dark and flicked up past the outer corner, which is the cheek's side (`faceMarks`): the lashes.
+  const lash: Pt[] = [[-0.26, 1.58], [-0.2, 1.685], [-0.05, 1.7], [0.07, 1.64], [0.14, 1.675], [0.06, 1.6], [-0.05, 1.665], [-0.2, 1.655], [-0.25, 1.555]];
+  // Fuller on a woman: the lower lip down and the upper up, by as much again as a man's lips are thick.
+  const full = fr.fem * 0.03;
   const mouth = (w: number, z: number): V3[] => {
     const y = faceFront(fr, z) + 0.005;
-    return [[-w, y, z + 0.03], [0, y + 0.02, z - 0.03], [w, y, z + 0.03], [w * 0.8, y, z + 0.055], [0, y + 0.02, z + 0.01], [-w * 0.8, y, z + 0.055]];
+    return [[-w, y, z + 0.03], [0, y + 0.02, z - 0.03 - full], [w, y, z + 0.03], [w * 0.8, y, z + 0.055 + full * 0.6], [0, y + 0.02, z + 0.01 + full], [-w * 0.8, y, z + 0.055 + full * 0.6]];
   };
   // The white of the eye showing round the dark of it, most at the outer corner.
   const [eu, ez] = [eye.reduce((a, p) => a + p[0], 0) / eye.length, eye.reduce((a, p) => a + p[1], 0) / eye.length];
@@ -552,6 +557,7 @@ function headMesh(fr: Frame, blink: boolean): Mesh {
     ...[-1, 1].flatMap((s) => [
       ...(blink ? [] : faceMarks(fr, s, white, 'white')),
       ...faceMarks(fr, s, eye, 'eye'),
+      ...(blink || fr.fem < 1 ? [] : faceMarks(fr, s, lash, 'eye')),
       ...faceMarks(fr, s, brow, 'brow'),
       ...(blink ? [] : faceMarks(fr, s, [[-0.225, 1.605], [-0.15, 1.63], [-0.15, 1.565], [-0.225, 1.55]], 'glint')),
       // Side on the front of the face is edge-on and its eyes with it, so the cheek carries the eye then.
@@ -1584,13 +1590,27 @@ function grownHair(h: HairKit): HairKit {
   };
 }
 
+/*
+ * The breast: the ring across the chest made deeper by `BUST` of itself on a
+ * woman's frame, and carried forward by as much again, so the back stays
+ * where it was and the front comes out by twice that. It was deeper by a
+ * little over a tenth and no further forward, which spread it round the back
+ * as much as the front -- on a woman in the same tunic and haircut as a man
+ * it did not show at all, from the front or the side.
+ */
+const BUST = 0.17;
+/** The ring across the chest, `g` times the body's own round: [height, half width, half depth, across, forward]. */
+const bustRing = (fr: Frame, g: number): number[] => [0.9, 1.9 * fr.sh * g, 1.34 * bustDeep(fr) * g, 0, 0.05 + bustAhead(fr, g)];
+/** How much deeper the chest is than a man's, and how much further forward its middle, `g` times the body's own round. */
+const bustDeep = (fr: Frame): number => 1 + fr.fem * BUST;
+const bustAhead = (fr: Frame, g: number): number => 1.34 * fr.fem * BUST * g;
+
 function kitOf(look: Look, lod: number): Kit {
   const fr = frameOf(look, lod);
   const beard = beardOf(fr, look.beard);
   const sw = (fr.sh + fr.wa) / 2;
-  const bust = 1 + fr.fem * 0.13;
   const chest = rings([
-    [-0.1, 1.58 * sw, 1.22, 0, 0], [0.9, 1.9 * fr.sh, 1.34 * bust, 0, 0.05], [1.7, 2.06 * fr.sh, 1.22, 0, -0.04], [2.24, 1.3 * fr.sh, 0.74, 0, -0.08],
+    [-0.1, 1.58 * sw, 1.22, 0, 0], bustRing(fr, 1), [1.7, 2.06 * fr.sh, 1.22, 0, -0.04], [2.24, 1.3 * fr.sh, 0.74, 0, -0.08],
   ], 8, 'tunic', { bottom: false });
   // The neck of the tunic: open in a V at the throat, from the neck down the upper facet of the chest.
   const top = 0.74 * Math.sin((3 * Math.PI) / 8) - 0.08, below = 1.22 * Math.sin((3 * Math.PI) / 8) - 0.04;
@@ -2901,12 +2921,12 @@ function slab(pts: Array<[number, number, number]>, m: Mat, edge?: Mat, edgeFrom
 
 /* -- the body's own shapes, a margin out ---------------------------------------------- */
 
-interface Build { fr: Frame; sw: number; bust: number; arm: number }
-const buildOf = (fr: Frame): Build => ({ fr, sw: (fr.sh + fr.wa) / 2, bust: 1 + fr.fem * 0.13, arm: 0.9 + fr.sh * 0.1 });
+interface Build { fr: Frame; sw: number; arm: number }
+const buildOf = (fr: Frame): Build => ({ fr, sw: (fr.sh + fr.wa) / 2, arm: 0.9 + fr.sh * 0.1 });
 
 /** The chest's rings, `g` times the body's own round, bottom first. */
 const chestRings = (b: Build, g: number, top = 2.24): number[][] => [
-  [-0.15, 1.58 * b.sw * g, 1.22 * g, 0, 0], [0.9, 1.9 * b.fr.sh * g, 1.34 * b.bust * g, 0, 0.05],
+  [-0.15, 1.58 * b.sw * g, 1.22 * g, 0, 0], bustRing(b.fr, g),
   // The shoulder rounded over rather than squared off, so a thick coat does not stand up in corners above the arms.
   [1.7, 2.06 * b.fr.sh * g, 1.22 * g, 0, -0.04], [1.7 + (top - 1.7) * 0.55, 1.8 * b.fr.sh * g, 1.02 * g, 0, -0.06], [top, 1.3 * b.fr.sh * g, 0.74 * g, 0, -0.08],
 ];
@@ -3347,7 +3367,7 @@ const MODELS: Record<string, (b: Build, fit: number) => GearModel> = {
           mesh: join(worn(chestShell(b, g, 'leather', 2.18), 'studs'),
             decals([
               // Laced up the front: three crossings of the lace.
-              ...[0.35, 0.95, 1.5].map((z) => plate([0, 1.43 * b.bust * g / 1.07, z], [0.32, 0, 0.18], [0.05, 0, -0.18], [0, 1, 0], 'lace')),
+              ...[0.35, 0.95, 1.5].map((z) => plate([0, (1.43 * bustDeep(b.fr) * g) / 1.07 + bustAhead(b.fr, g), z], [0.32, 0, 0.18], [0.05, 0, -0.18], [0, 1, 0], 'lace')),
               ...stitchesOf(b, g),
             ])),
         },
@@ -3390,7 +3410,7 @@ const MODELS: Record<string, (b: Build, fit: number) => GearModel> = {
   },
   plate_breastplate: (b) => {
     const g = CHEST_FIT.plate_breastplate;
-    const front = 1.34 * b.bust * g * Math.cos(Math.PI / 8);
+    const front = 1.34 * bustDeep(b.fr) * g * Math.cos(Math.PI / 8) + bustAhead(b.fr, g);
     return {
       layer: 5,
       bits: [

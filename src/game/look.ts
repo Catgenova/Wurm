@@ -176,7 +176,7 @@ export const GENDERS: Style[] = [
  */
 export const BUILDS: Record<Gender, { shoulder: number; waist: number; hip: number }> = {
   man: { shoulder: 1.18, waist: 1, hip: 0.95 },
-  woman: { shoulder: 0.84, waist: 0.8, hip: 1.16 },
+  woman: { shoulder: 0.84, waist: 0.76, hip: 1.2 },
   neither: { shoulder: 1, waist: 0.92, hip: 1.03 },
 };
 
@@ -236,16 +236,25 @@ export function darken(hex: string, by: number): string {
   return `#${((r << 16) | (g << 8) | b).toString(16).padStart(6, '0')}`;
 }
 
+/**
+ * How often somebody rolled at random comes with a beard, by build. Rolled
+ * at two in five whatever the build, two women in five came out of "Roll me
+ * one" bearded. Anybody can still choose one.
+ */
+export const BEARD_ODDS: Record<Gender, number> = { man: 0.6, neither: 0.2, woman: 0 };
+
 /** Somebody, at random. What the creator opens on, and what a body with no look gets. */
 export function randomLook(roll: () => number = Math.random): Look {
   const any = <T extends { id: string }>(t: T[]): string => t[Math.floor(roll() * t.length)].id;
+  const gender = any(GENDERS) as Gender;
   return {
-    gender: any(GENDERS) as Gender,
+    gender,
     skin: any(SKINS),
     hair: any(HAIRSTYLES),
     hairColour: any(HAIR_COLOURS),
     eyes: any(EYES),
-    beard: roll() < 0.4 ? any(BEARDS) : 'none',
+    // Among the beards, not clean-shaven again: a beard rolled is a beard.
+    beard: roll() < BEARD_ODDS[gender] ? any(BEARDS.filter((b) => b.id !== 'none')) : 'none',
     shirt: any(CLOTH),
     trousers: any(CLOTH),
   };
