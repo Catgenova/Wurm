@@ -1605,6 +1605,63 @@ const bustRing = (fr: Frame, g: number): number[] => [0.9, 1.9 * fr.sh * g, 1.34
 const bustDeep = (fr: Frame): number => 1 + fr.fem * BUST;
 const bustAhead = (fr: Frame, g: number): number => 1.34 * fr.fem * BUST * g;
 
+/*
+ * The arm, modelled as one limb that bends rather than two tubes hinged. The
+ * upper arm's shell stops at the elbow in a ring and the forearm's starts in
+ * the same ring, edge to edge, neither reaching into the other: drawn one
+ * over the other by the painter, a tube's end inside another was drawn on
+ * top of it, a disc or a stub standing out of the crook. Each has a ring
+ * where the bend ends on its side of the elbow (`ELBOW_BEND`), so the bend
+ * is spread over the three (`bentAtElbow`), and is open at the elbow, its
+ * rim not inked, so the join is no line at all.
+ *
+ * Bottom first, as `rings` wants them: the other way up turns every facet
+ * inside out, and a tube drawn from its inside is lit on the wrong side and
+ * shows its far end through itself.
+ */
+/** Where the bend at the elbow begins above it and is all done below it, in tenths of a metre. */
+const ELBOW_BEND = 0.6;
+/** How much of the way in to the bone the inside of an elbow bent double is drawn (`bentAtElbow`). */
+const ELBOW_PINCH = 0.7;
+/** The ring round the elbow, `g` times the arm's own round: where a shell on the upper arm ends and the forearm's begins. */
+const elbowRing = (g: number): number[] => [0, 0.62 * g, 0.59 * g];
+/**
+ * The top of the upper arm, bottom first, `g` times the bare arm's round, for the right arm (the left is its mirror): full over
+ * the deltoid and rounding in over the top of it, and drawn in toward the body as it goes up, so that its top is under the slope
+ * of the shoulder rather than a lid standing up beside it -- seen from the front, the shoulder's line runs down off the chest
+ * and round the outside of the arm in one curve. The ring at the bottom is where the shoulder's give (`bentAtShoulder`) ends.
+ */
+const deltoid = (arm: number, g: number): number[][] => [
+  [-0.7, 0.8 * arm * g, 0.77 * g, -0.04], [-0.15, 0.84 * arm * g, 0.8 * g, -0.12], [0.26, 0.56 * arm * g, 0.54 * g, -0.28],
+];
+/** The faces with a corner at height `z` not inked along their open rim there: see `Face.soft`. */
+const softAt = (m: Mesh, z: number): Mesh => ({ ...m, f: m.f.map((f) => (f.i.some((i) => Math.abs(m.v[i][2] - z) < 1e-6) ? { ...f, soft: true } : f)) });
+
+/**
+ * The bare upper arm in the tunic's short sleeve, the elbow `UPPER` below the
+ * shoulder: skin from the elbow up to the sleeve's hem, just clear of the
+ * bend (`ELBOW_BEND`) so that the skin bends and the sleeve never does --
+ * bent in the crook, a hem there stood out through the forearm in front of
+ * it; the hem turned in to the skin under it, in the darker trim, as the
+ * inside of a sleeve is in shade (lit, with the arm raised toward the viewer
+ * it was a pale ring); a band of the trim round it; and the sleeve up over
+ * the shoulder (`deltoid`), its top a seam into the tunic, never inked.
+ */
+function bareUpper(fr: Frame): Mesh {
+  const U = UPPER * fr.tall, arm = 0.9 + fr.sh * 0.1;
+  const [, ex, ey] = elbowRing(0.9);
+  const m = rings([
+    [-U, ex, ey], [-U + ELBOW_BEND, 0.6, 0.57], [-U + ELBOW_BEND, 0.71, 0.69], [-U + ELBOW_BEND + 0.25, 0.72, 0.7], ...deltoid(arm, 1),
+  ], 6, (band) => (band === 0 ? 'skin' : band === 1 || band === 2 ? 'trim' : 'tunic'), { bottom: false });
+  return softAt(seamed(m, (p) => p[2] > 0), -U);
+}
+
+/** The bare forearm, from the elbow's ring down to the wrist: fullest a little under the elbow, as a forearm is, and narrowing to the wrist. */
+function bareLower(): Mesh {
+  const [, ex, ey] = elbowRing(0.9);
+  return softAt(rings([[-2.3, 0.44, 0.41], [-1.0, 0.56, 0.52], [-ELBOW_BEND, 0.58, 0.55], [0, ex, ey]], 6, 'skin', { top: false }), 0);
+}
+
 function kitOf(look: Look, lod: number): Kit {
   const fr = frameOf(look, lod);
   const beard = beardOf(fr, look.beard);
@@ -1636,11 +1693,11 @@ function kitOf(look: Look, lod: number): Kit {
     ears: grown(earsOf(fr)),
     hair: grownHair(hairOf(fr, look.hair)),
     beard: beard ? grown(beard) : undefined,
-    // The sleeve's end in shade, as the inside of a sleeve is: seen end on, with the arm raised toward the viewer, a lit end is a pale disc.
-    upper: seamed(rings([[0.45, 0.46, 0.48], [0.05, 0.82 * (0.9 + fr.sh * 0.1), 0.8], [-1.5, 0.74, 0.72], [-3.05, 0.65, 0.63]], 6, (band) => (band === 3 ? 'trim' : 'tunic')), (p) => p[2] > 0 || p[2] < -3),
-    lower: join(rings([[0.1, 0.57, 0.54], [-2.3, 0.44, 0.41]], 6, 'skin'), seamed(seamed(rings([[0.25, 0.7, 0.66], [-0.75, 0.66, 0.62]], 6, 'trim'), (p) => p[2] > 0.2), (p) => p[2] < -0.7)),
+    upper: bareUpper(fr),
+    lower: bareLower(),
     hands: [-1, 1].map((s) => handSized(join(
-      rings([[0.08, 0.42, 0.27], [-0.5, 0.52, 0.31], [-1.1, 0.38, 0.24]], 6, 'skin'),
+      // Bottom first, so the facets face out (see `bareUpper`).
+      rings([[-1.1, 0.38, 0.24], [-0.5, 0.52, 0.31], [0.08, 0.42, 0.27]], 6, 'skin'),
       chain([[-s * 0.18, 0.12, -0.22], [-s * 0.26, 0.3, -0.52], [-s * 0.22, 0.36, -0.78]], [0.14, 0.12, 0.07], 4, 'skin'),
     ))) as [Mesh, Mesh],
     // Open: a flat palm, broad, four fingers spread in a fan -- the outer two nearly a third of a right angle out
@@ -1648,7 +1705,7 @@ function kitOf(look: Look, lod: number): Kit {
     // them at zoom four -- and the thumb out from them, the palm on the side a fist's is. Spread, and as much bigger
     // than the fist as a hand opened out is, so that one held up a few pixels across is a hand and not a mitten.
     open: [-1, 1].map((s) => handSized(grownBy(1.15, join(
-      rings([[0.08, 0.23, 0.38], [-0.5, 0.22, 0.5], [-0.88, 0.17, 0.49]], 6, 'skin'),
+      rings([[-0.88, 0.17, 0.49], [-0.5, 0.22, 0.5], [0.08, 0.23, 0.38]], 6, 'skin'),
       ...([[0.35, 0.52, 28], [0.12, 0.6, 9], [-0.12, 0.56, -9], [-0.35, 0.44, -28]] as Array<[number, number, number]>).map(([y, l, a]) =>
         fine(chain([[0, y, -0.84], [0, y + l * Math.sin(a * DEG), -0.84 - l * Math.cos(a * DEG)]], [0.12, 0.09], 4, 'skin'), 0.24 * 1.15 * HAND)),
       fine(chain([[-s * 0.06, 0.32, -0.18], [-s * 0.08, 0.62, -0.46], [-s * 0.08, 0.78, -0.74]], [0.13, 0.11, 0.08], 4, 'skin'), 0.26 * 1.15 * HAND),
@@ -2337,6 +2394,81 @@ function skirtBent(kit: Kit, r: Rig): V3[] {
   return v;
 }
 
+/**
+ * The elbow bent as an arm bends, rather than as two tubes hinged: every
+ * corner of whatever is worn on the upper arm or the forearm is carried round
+ * the elbow's hinge by a share of its bend -- none `ELBOW_BEND` above the
+ * elbow, all of it as far below, and half at the elbow itself -- so the upper
+ * arm's shell and the forearm's, meeting in one ring there, stay one limb
+ * however far it bends: the outside of the elbow turns in steps across the
+ * rings either side of it rather than in one corner, and opens no gap, and
+ * the crook folds in on itself. `e` is the bend in degrees; `U`, for corners
+ * in the upper arm's frame, how far down it the elbow is, and none for corners
+ * in the forearm's, whose origin it is.
+ */
+function bentAtElbow(v: V3[], e: number, U?: number): V3[] {
+  const z0 = U === undefined ? 0 : -U;
+  // How far the crook is drawn in: nothing straight, most of the way bent double.
+  const pinch = ELBOW_PINCH * Math.pow(Math.sin((Math.max(0, e) * DEG) / 2), 2);
+  return v.map((p) => {
+    const share = Math.max(0, Math.min(1, (ELBOW_BEND - (p[2] - z0)) / (2 * ELBOW_BEND)));
+    // The forearm's corners are already bent all the way, and come back by what of the bend is not theirs.
+    const a = (U === undefined ? share - 1 : share) * e * DEG;
+    if (!a) return p;
+    // The inside of the bend drawn in toward the bone, most at the elbow, as the flesh and the cloth of the crook are pressed
+    // aside: turned without it, the crook of an arm bent hard folded out through the forearm in front of it.
+    const y = p[1] > 0 ? p[1] * (1 - pinch * (1 - Math.abs(2 * share - 1))) : p[1];
+    const c = Math.cos(a), s = Math.sin(a), z = p[2] - z0;
+    return [p[0], c * y - s * z, z0 + s * y + c * z];
+  });
+}
+
+/**
+ * The shoulder's give: from `SHOULDER_GIVE` under the joint, where the arm
+ * swings whole, up to `SHOULDER_KEEP` over it, where its top stays on the
+ * shoulder; and the most of a swing the top is kept back from, in degrees.
+ */
+const SHOULDER_GIVE = 0.7;
+const SHOULDER_KEEP = 0.3;
+const SHOULDER_MOST = 32;
+
+/**
+ * The top of the upper arm kept on the shoulder rather than swung bodily
+ * with the arm: every corner of what is on the upper arm above
+ * `SHOULDER_GIVE` under the joint is carried round with the arm by less of
+ * its swing the higher it is -- of the turn from where the arm hangs at rest
+ * to where it is, as much as `SHOULDER_MOST` of it is taken back out about
+ * the joint, all of that at the top. Swung whole, an arm swung forward stood
+ * the back of its top up off the shoulder blade as a knob, and one swung
+ * back the front of it over the collarbone; as a shoulder does, the top now
+ * stays over the joint at a walk and a run and the turn is taken down the
+ * deltoid. An arm raised high takes the rest of the turn with it, or its
+ * top would be left as a lid on the side of the shoulder.
+ */
+function bentAtShoulder(v: V3[], r: Rig, k: number): V3[] {
+  const s = k ? 1 : -1;
+  const [ap, aa, at] = r.arm[k];
+  const turn = (p: number, a: number, w: number): M3 => mm(rz(s * w * DEG), mm(ry(-s * a * DEG), rx(p * DEG)));
+  // From the arm's frame as posed into its frame at rest: the turn the top of it is let back by.
+  const A = turn(ap, aa, at), R = turn(4, 8, 0);
+  const D: M3 = [0, 1, 2, 3, 4, 5, 6, 7, 8].map((i) => {
+    const row = Math.floor(i / 3), col = i % 3;
+    return A[row] * R[col] + A[3 + row] * R[3 + col] + A[6 + row] * R[6 + col];
+  });
+  const cos = Math.max(-1, Math.min(1, (D[0] + D[4] + D[8] - 1) / 2)), angle = Math.acos(cos);
+  if (angle < 0.01) return v;
+  const sin = Math.sin(angle);
+  const n = sin > 1e-4 ? unit([D[7] - D[5], D[2] - D[6], D[3] - D[1]]) : unit([D[0] + 1, D[3], D[6]]);
+  const kept = Math.min(angle, SHOULDER_MOST * DEG);
+  return v.map((p) => {
+    const share = Math.max(0, Math.min(1, (p[2] + SHOULDER_GIVE) / (SHOULDER_GIVE + SHOULDER_KEEP)));
+    if (!share) return p;
+    // Turned back about the axis by its share of what is kept (Rodrigues).
+    const a = share * kept, c = Math.cos(a), sn = Math.sin(a), d = dot(n, p), x = cross(n, p);
+    return [p[0] * c + x[0] * sn + n[0] * d * (1 - c), p[1] * c + x[1] * sn + n[1] * d * (1 - c), p[2] * c + x[2] * sn + n[2] * d * (1 - c)];
+  });
+}
+
 /* ---- drawing ------------------------------------------------------------------ */
 
 export type Palette = Record<Mat, RGB>;
@@ -2813,6 +2945,12 @@ interface GearBit {
   layer?: number;
   /** Over what it covers only while this side of it is toward the viewer: see `Part.front`. */
   front?: V3;
+  /**
+   * Carried whole by its bone, not given at the shoulder or bent at the elbow
+   * with the arm under it (`bentAtShoulder`, `bentAtElbow`): a stiff cap or a
+   * plate standing off the shoulder, which bent was crumpled.
+   */
+  whole?: boolean;
 }
 
 interface GearModel {
@@ -2949,14 +3087,45 @@ const skirtRings = (b: Build, g: number, hem: number, bell = 1): number[][] => {
 /** A belt round the waist, `g` out, on the hips. */
 const beltRing = (b: Build, g: number, m: Mat, lo = 0.98, hi = 1.42): Mesh =>
   rings([[lo, 1.64 * b.fr.wa * g, 1.32 * g], [hi, 1.64 * b.fr.wa * g, 1.32 * g]], 8, m, { top: false, bottom: false });
-/** The upper arm, from the shoulder down to `to`, bottom first. */
-const upperRings = (b: Build, g: number, to: number): number[][] => [
-  ...(to < -1.5 ? [[to, 0.68 * g, 0.66 * g]] : []), [Math.max(to, -1.5), 0.76 * g, 0.74 * g], [0.08, 0.84 * b.arm * g, 0.82 * g], [0.5, 0.52 * g, 0.54 * g],
+/**
+ * The last of a shell on the upper arm, bottom first: the elbow's ring
+ * (`elbowRing`), and one at the top of the bend (`ELBOW_BEND`) on the way to
+ * `r` at height `z` -- the joint ring and the loop over it that the bend is
+ * taken across, the forearm's shell having the loop under it.
+ */
+const overElbow = (fr: Frame, g: number, z: number, r: number[]): number[][] => {
+  const U = UPPER * fr.tall, [, ex, ey] = elbowRing(g), t = ELBOW_BEND / (U + z);
+  return [[-U, ex, ey], [-U + ELBOW_BEND, ex + (r[0] - ex) * t, ey + (r[1] - ey) * t]];
+};
+/** The upper arm, from the shoulder down to `to`, bottom first; or, without it, down to the elbow, to meet the forearm's shell there. */
+const upperRings = (b: Build, g: number, to?: number): number[][] => {
+  // Without the ring at the foot of the shoulder's give, which a shell over the arm can spare: the give is taken down the whole of it.
+  const top = deltoid(b.arm, g).slice(1);
+  return [...(to === undefined ? overElbow(b.fr, g, top[0][0], [top[0][1], top[0][2]]) : [[to, 0.76 * g, 0.74 * g]]), ...top];
+};
+const upperShell = (b: Build, g: number, to: number | undefined, m: Mat): Mesh => {
+  const shell = capped(rings(upperRings(b, g, to), 6, m, { bottom: false }));
+  return to === undefined ? softAt(shell, -UPPER * b.fr.tall) : shell;
+};
+/**
+ * The underside of what stands off the top of the arm -- a shoulder cap, a pauldron -- from its lower edge `p` in to the arm: with
+ * the arm raised it is seen from below, and open it was a hollow rim with the arm and the chest showing through it.
+ */
+const underside = (p: number[], n: number, m: Mat): Mesh => rings([[p[0], 0.86, 0.84], p], n, m, { top: false, bottom: false });
+/**
+ * A sleeve's top closed, and the lid a seam into the coat (`Face.seam`): open, the arm swung forward or up turned the hole in its
+ * top to the viewer, a ring inked on the shoulder with the chest showing through it.
+ */
+const capped = (m: Mesh): Mesh => {
+  const top = Math.max(...m.v.map((p) => p[2]));
+  return seamed(m, (p) => p[2] > top - 1e-6);
+};
+/** The forearm, from the elbow down into the glove, bottom first: fullest a little under the elbow, and meeting the upper arm's shell in its ring. */
+const forearmRings = (g: number): number[][] => [
+  [-2.46, 0.56 * g, 0.53 * g], [-1.2, 0.62 * g, 0.58 * g], [-ELBOW_BEND, 0.64 * g, 0.6 * g], elbowRing(g),
 ];
-const upperShell = (b: Build, g: number, to: number, m: Mat): Mesh => rings(upperRings(b, g, to), 6, m, { top: false, bottom: false });
-/** The forearm, from over the elbow down into the glove, bottom first. */
-const forearmRings = (g: number): number[][] => [[-2.46, 0.56 * g, 0.53 * g], [-1.2, 0.62 * g, 0.58 * g], [0.45, 0.7 * g, 0.66 * g]];
-const forearmShell = (g: number, m: Mat): Mesh => rings(forearmRings(g), 6, m, { top: false, bottom: false });
+/** Closed at the wrist and the lid a seam, as the top of a sleeve is (`capped`): with the forearm raised, its end was a hollow ring round the wrist. */
+const forearmShell = (g: number, m: Mat): Mesh => softAt(seamed(rings(forearmRings(g), 6, m, { top: false }), (p) => p[2] < -2.45), 0);
 /** The thigh, from the hip down to the knee, bottom first. */
 const thighRings = (b: Build, g: number): number[][] => [[-3.42, 0.82 * g, 0.86 * g], [-0.9, 1.04 * b.fr.hi * g, 1.07 * g]];
 const thighShell = (b: Build, g: number, m: Mat): Mesh => rings(thighRings(b, g), 6, m, { top: false, bottom: false });
@@ -3382,7 +3551,10 @@ const MODELS: Record<string, (b: Build, fit: number) => GearModel> = {
         { bone: 'pelvis', over: ['skirt', 'thigh', 'pelvis'], bias: 0.17, skirt: true, mesh: join(...[[8, 82], [98, 172], [188, 262], [278, 352]].map(([a, c]) => arcs(profileHem(skirt, 0.05, 0.2), 3, a, c, 'lace'))) },
         { bone: 'pelvis', over: ['belt', 'skirt', 'abdomen', 'pelvis'], bias: 0.02, convex: true, mesh: join(beltRing(b, g + 0.01, 'belt', 0.9, 1.5), decals([plate([0, 1.32 * (g + 0.01) * Math.cos(Math.PI / 8) + 0.01, 1.2], [0.24, 0, 0], [0, 0, 0.22], [0, 1, 0], 'fitting')])) },
         // Stiff caps over the shoulders, their edge burnished pale.
-        { bone: 'arm', side: 'both', over: ['upper'], bias: 0.2, convex: true, mesh: rings([[-0.9, 1.04, 1.02, 0.08], [-0.72, 1.1, 1.08, 0.08], [-0.05, 1.18 * b.arm, 1.14, 0.08], [0.62, 0.68, 0.66, 0.03]], 6, (band) => (band === 0 ? 'leatherLit' : 'leather'), { bottom: false }) },
+        {
+          bone: 'arm', side: 'both', over: ['upper'], bias: 0.2, convex: true, whole: true,
+          mesh: join(rings([[-0.9, 1.04, 1.02, 0.08], [-0.72, 1.1, 1.08, 0.08], [-0.05, 1.18 * b.arm, 1.14, 0.08], [0.62, 0.68, 0.66, 0.03]], 6, (band) => (band === 0 ? 'leatherLit' : 'leather'), { bottom: false }), underside([-0.9, 1.04, 1.02, 0.08], 6, 'leatherDark')),
+        },
       ],
       hides: ['skirt', 'belt', 'chest', 'abdomen'],
     };
@@ -3444,8 +3616,8 @@ const MODELS: Record<string, (b: Build, fit: number) => GearModel> = {
         { bone: 'pelvis', over: ['skirt', 'thigh', 'pelvis'], bias: 0.17, skirt: true, convex: true, mesh: teeth(profileAt(skirt, 0), 10, 0.42, 0.1, 'scaleDark') },
         { bone: 'pelvis', over: ['belt', 'skirt', 'abdomen', 'pelvis'], bias: 0.02, convex: true, mesh: beltRing(b, g + 0.03, 'belt') },
         // Great scales capping the shoulders, their edge in points over the top of the arm.
-        { bone: 'arm', side: 'both', over: ['upper'], bias: 0.2, convex: true, mesh: scaly(rings(shoulder, 8, 'scale', { bottom: false })) },
-        { bone: 'arm', side: 'both', over: ['upper'], bias: 0.21, convex: true, mesh: teeth(shoulder[0], 6, 0.42, 0.1, 'scaleDark') },
+        { bone: 'arm', side: 'both', over: ['upper'], bias: 0.2, convex: true, whole: true, mesh: join(scaly(rings(shoulder, 8, 'scale', { bottom: false })), underside(shoulder[0], 8, 'scaleDark')) },
+        { bone: 'arm', side: 'both', over: ['upper'], bias: 0.21, convex: true, whole: true, mesh: teeth(shoulder[0], 6, 0.42, 0.1, 'scaleDark') },
       ],
       hides: ['skirt', 'belt', 'chest', 'abdomen'],
     };
@@ -3456,11 +3628,18 @@ const MODELS: Record<string, (b: Build, fit: number) => GearModel> = {
     layer: 1,
     bits: [
       // Padded out, thickest over the shoulder, and rolled at the cuff: the top of it rounded in and sloping in toward the neck, as a
-      // raglan sleeve's does, and open there into the coat's armhole, where a cap on it or a roll round it was a lid on a tube.
-      { bone: 'arm', side: 'both', over: ['upper'], bias: 0.01, convex: true, mesh: worn(rings([[-2.95, 0.68 * 1.26, 0.66 * 1.26], [-1.5, 0.76 * 1.34, 0.74 * 1.34], [-0.2, 0.84 * b.arm * 1.42, 0.82 * 1.42], [0.2, 0.64 * 1.42, 0.62 * 1.42, -0.22], [0.36, 0.4, 0.38, -0.55]], 6, 'cloth', { bottom: false, top: false }), 'quilt') },
-      // No ball over the elbow: soft cloth is one tube bent there, the forearm's reaching up inside the upper arm's, where a ball of
-      // its own showed through the crook as a doll's joint.
-      { bone: 'elbow', side: 'both', over: ['lower'], bias: 0.015, convex: true, mesh: join(worn(forearmShell(1.2, 'cloth'), 'quilt'), rings([[-2.46, 0.72, 0.68], [-1.95, 0.74, 0.7]], 6, 'lining', { top: false, bottom: false })) },
+      // raglan sleeve's does, and closed there with a seam into the coat's armhole (`capped`), where a cap standing on it or a roll
+      // round it was a lid on a tube.
+      {
+        bone: 'arm', side: 'both', over: ['upper'], bias: 0.01, convex: true,
+        mesh: worn(softAt(capped(rings([
+          ...overElbow(b.fr, 1.24, -0.2, [0.84 * b.arm * 1.42, 0.82 * 1.42]),
+          [-0.2, 0.84 * b.arm * 1.42, 0.82 * 1.42], [0.2, 0.64 * 1.42, 0.62 * 1.42, -0.22], [0.36, 0.4, 0.38, -0.55],
+        ], 6, 'cloth', { bottom: false })), -UPPER * b.fr.tall), 'quilt'),
+      },
+      // No ball over the elbow: soft cloth is one tube bent there (see `bentAtElbow`), where a ball of its own showed through the
+      // crook as a doll's joint.
+      { bone: 'elbow', side: 'both', over: ['lower'], bias: 0.015, convex: true, mesh: join(worn(forearmShell(1.24, 'cloth'), 'quilt'), rings([[-2.46, 0.72, 0.68], [-1.95, 0.74, 0.7]], 6, 'lining', { top: false, bottom: false })) },
     ],
     hides: ['upper', 'lower'],
   }),
@@ -3468,13 +3647,13 @@ const MODELS: Record<string, (b: Build, fit: number) => GearModel> = {
     layer: 2,
     bits: [
       // No ball over the elbow, as with cloth: from behind it was a button of lit hide on each arm.
-      { bone: 'arm', side: 'both', over: ['upper'], bias: 0.02, convex: true, mesh: upperShell(b, 1.12, -2.95, 'leather') },
+      { bone: 'arm', side: 'both', over: ['upper'], bias: 0.02, convex: true, mesh: upperShell(b, 1.1, undefined, 'leather') },
       {
         bone: 'elbow', side: 'both', over: ['lower'], bias: 0.025,
         // Bracers of the darker hide, stiff and standing off the forearm, laced down the inside.
-        mesh: join(rings([[-2.3, 0.8, 0.76], [-1.1, 0.84, 0.8], [-0.55, 0.76, 0.72]], 6, 'leatherDark', { top: false, bottom: false }), decals([-0.9, -1.35, -1.8].map((z) => plate([0, 0.8 + 0.02, z], [0.22, 0, 0.1], [0, 0, 0.05], [0, 1, 0], 'lace')))),
+        mesh: join(rings(BRACER, 6, 'leatherDark', { top: false, bottom: false }), decals([-0.9, -1.35, -1.8].flatMap((z) => laceOver(BRACER, z)))),
       },
-      { bone: 'elbow', side: 'both', over: ['lower'], bias: 0.02, convex: true, mesh: forearmShell(1.02, 'leather') },
+      { bone: 'elbow', side: 'both', over: ['lower'], bias: 0.02, convex: true, mesh: forearmShell(1.1, 'leather') },
     ],
     glove: 'leather',
     hides: ['upper', 'lower'],
@@ -3482,9 +3661,9 @@ const MODELS: Record<string, (b: Build, fit: number) => GearModel> = {
   chain_sleeves: (b) => ({
     layer: 3,
     bits: [
-      { bone: 'arm', side: 'both', over: ['upper'], bias: 0.015, convex: true, mesh: worn(upperShell(b, 1.12, -2.95, 'mail'), 'mail') },
-      { bone: 'elbow', side: 'both', over: ['lower', 'upper'], bias: 0.017, convex: true, mesh: knuckle(0.74, 'mail') },
-      { bone: 'elbow', side: 'both', over: ['lower'], bias: 0.02, convex: true, mesh: worn(forearmShell(1.1, 'mail'), 'mail') },
+      // No ball over the elbow: mail hangs in one sleeve bent there, and a ball stood out of the crook of every bent arm.
+      { bone: 'arm', side: 'both', over: ['upper'], bias: 0.015, convex: true, mesh: worn(upperShell(b, 1.12, undefined, 'mail'), 'mail') },
+      { bone: 'elbow', side: 'both', over: ['lower'], bias: 0.02, convex: true, mesh: worn(forearmShell(1.12, 'mail'), 'mail') },
       // Flaring out over the back of the hand at the wrist, its edge hanging in the ragged points rings do: what says mail in the
       // outline of an arm, where a sleeve of anything else is a tube.
       { bone: 'elbow', side: 'both', over: ['lower', 'hand'], bias: 0.03, convex: true, mesh: worn(rings([[-2.52, 0.8, 0.76], [-1.95, 0.64, 0.6]], 6, 'mail', { top: false, bottom: false }), 'mail') },
@@ -3498,21 +3677,29 @@ const MODELS: Record<string, (b: Build, fit: number) => GearModel> = {
     bits: [
       // The rerebrace down the upper arm, and the pauldron standing off the shoulder: one plate domed over the point of it, and two
       // lames under its edge -- ring on ring all the way up, it is a bellows.
-      { bone: 'arm', side: 'both', over: ['upper'], bias: 0.02, convex: true, mesh: rings([[-2.75, 0.8, 0.78], [0.05, 0.94 * b.arm, 0.9]], 6, 'metal', { top: false, bottom: false }) },
       {
-        bone: 'arm', side: 'both', over: ['upper'], bias: 0.2, convex: true,
+        bone: 'arm', side: 'both', over: ['upper'], bias: 0.02, convex: true,
+        mesh: softAt(capped(rings([...overElbow(b.fr, 1.16, 0.05, [0.94 * b.arm, 0.9]), [0.05, 0.94 * b.arm, 0.9]], 6, 'metal', { bottom: false })), -UPPER * b.fr.tall),
+      },
+      {
+        bone: 'arm', side: 'both', over: ['upper'], bias: 0.2, convex: true, whole: true,
         mesh: join(
           shingled([[-1.35, 1.34, 1.3, 0.3], [-0.38, 1.56, 1.5, 0.34]], 2, 0.1, 'metal'),
+          underside([-1.35, 1.44, 1.4, 0.3], 6, 'metalDark'),
           rings([[-0.38, 1.68, 1.62, 0.36], [0.45, 1.6, 1.54, 0.3], [0.95, 1.14, 1.1, 0.16], [1.2, 0.5, 0.48, 0.06]], 6, (band) => (band >= 1 ? 'metalLit' : 'metal'), { bottom: false }),
         ),
       },
-      // The couter over the point of the elbow, and the vambrace down the forearm.
-      { bone: 'elbow', side: 'both', over: ['lower', 'upper'], bias: 0.022, convex: true, mesh: knuckle(0.8, 'metal') },
-      { bone: 'elbow', side: 'both', over: ['lower'], bias: 0.024, convex: true, mesh: rings(forearmRings(1.1), 6, 'metal', { top: false, bottom: false }) },
-      // In the plate's own metal and a few broad facets, so it shades as one dome: lit metal cut fine is a scatter of white specks.
-      { bone: 'elbow', side: 'both', over: ['lower', 'upper'], bias: 0.03, convex: true, mesh: ball([0, -0.46, 0.05], [0.5, 0.36, 0.52], 5, 3, 'metal') },
-      // The flared cuff of the gauntlet.
-      { bone: 'wrist', side: 'both', over: ['hand'], bias: 0.05, convex: true, mesh: rings([[-0.2, 0.66, 0.62], [0.35, 0.54, 0.5]], 6, 'metalLit', { top: false, bottom: false }) },
+      // The vambrace down the forearm, meeting the rerebrace at the elbow; and the couter, a cup over the point of the elbow and
+      // round its outside, open to the crook and bent round the elbow with the arm, standing off the rerebrace and the vambrace by a
+      // plate's thickness. A ball there, or a dome on the elbow's frame, stood half out of the crook of a bent arm.
+      { bone: 'elbow', side: 'both', over: ['lower'], bias: 0.024, convex: true, mesh: forearmShell(1.16, 'metal') },
+      {
+        bone: 'elbow', side: 'both', over: ['lower', 'upper'], bias: 0.03, convex: true,
+        mesh: arcs([[-0.66, 0.78, 0.74, 0, -0.02], [-0.32, 0.86, 0.86, 0, -0.08], [0, 0.88, 0.9, 0, -0.12], [0.32, 0.86, 0.86, 0, -0.08], [0.66, 0.8, 0.76, 0, -0.02]], 4, 195, 345, (band) => (band === 1 || band === 2 ? 'metalLit' : 'metal')),
+      },
+      // The flared cuff of the gauntlet, its top going in under the vambrace and not inked there: drawn over it, with the forearm
+      // raised toward the viewer it was a ring round the wrist.
+      { bone: 'wrist', side: 'both', over: ['hand'], bias: 0.05, convex: true, mesh: softAt(rings([[-0.2, 0.66, 0.62], [0.08, 0.6, 0.56], [0.35, 0.54, 0.5]], 6, 'metalLit', { top: false, bottom: false }), 0.35) },
     ],
     glove: 'metal',
     hides: ['upper', 'lower'],
@@ -3522,9 +3709,9 @@ const MODELS: Record<string, (b: Build, fit: number) => GearModel> = {
     bits: [
       // Courses of scale down the arm, the upper arm's hem cut in points over the elbow, and no ball at the elbow: side on it was a
       // ring round the joint.
-      { bone: 'arm', side: 'both', over: ['upper'], bias: 0.015, convex: true, mesh: worn(upperShell(b, 1.14, -2.95, 'scale'), 'scale') },
-      { bone: 'arm', side: 'both', over: ['upper', 'lower'], bias: 0.018, convex: true, mesh: teeth(upperRings(b, 1.14, -2.95)[0], 6, 0.36, 0.08, 'scaleDark') },
-      { bone: 'elbow', side: 'both', over: ['lower'], bias: 0.02, convex: true, mesh: worn(forearmShell(1.12, 'scale'), 'scale') },
+      { bone: 'arm', side: 'both', over: ['upper'], bias: 0.015, convex: true, mesh: worn(upperShell(b, 1.14, undefined, 'scale'), 'scale') },
+      { bone: 'arm', side: 'both', over: ['upper', 'lower'], bias: 0.018, convex: true, mesh: teeth(upperRings(b, 1.14)[1], 6, 0.36, 0.08, 'scaleDark') },
+      { bone: 'elbow', side: 'both', over: ['lower'], bias: 0.02, convex: true, mesh: worn(forearmShell(1.14, 'scale'), 'scale') },
       // A cuff of scale flaring over the back of the glove.
       { bone: 'elbow', side: 'both', over: ['lower', 'hand'], bias: 0.03, convex: true, mesh: rings([[-2.4, 0.76, 0.72], [-1.8, 0.62, 0.59]], 6, 'scaleDark', { top: false, bottom: false }) },
     ],
@@ -3758,6 +3945,25 @@ const MODELS: Record<string, (b: Build, fit: number) => GearModel> = {
 function profileHem(rs: number[][], out: number, up: number, below = 0.06): number[][] {
   const hem = profileAt(rs, 0), over = profileAt(rs, Math.min(1, up / Math.max(0.01, rs[rs.length - 1][0] - rs[0][0])));
   return [[hem[0] - below, hem[1] + out, hem[2] + out, hem[3], hem[4]], [over[0], over[1] + out * 0.6, over[2] + out * 0.6, over[3], over[4]]];
+}
+
+/** A leather bracer's rings, bottom first. */
+const BRACER: number[][] = [[-2.3, 0.8, 0.76], [-1.1, 0.84, 0.8], [-0.55, 0.76, 0.72]];
+/**
+ * A crossing of lace over the front of six-sided rings at height `z`, laid on
+ * the two facets either side of the ridge down the front rather than flat
+ * across it: flat, its ends stood off the facets as they fell away, and seen
+ * side on they were pale splinters standing out of the arm.
+ */
+function laceOver(rs: number[][], z: number): Array<{ q: V3[]; m: Mat }> {
+  const [, rx, ry] = profileAt(rs, (z - rs[0][0]) / (rs[rs.length - 1][0] - rs[0][0]));
+  // Across the facet from the ridge at the front to the next corner round, a little proud of it.
+  const on = (x: number, dz: number): V3 => [x, ry - ((ry * 0.5) / (rx * Math.cos(Math.PI / 6))) * Math.abs(x) + 0.02, z + dz];
+  const q = (a: V3[]): { q: V3[]; m: Mat } => ({ q: newell(a)[1] < 0 ? [...a].reverse() : a, m: 'lace' });
+  return [
+    q([on(-0.22, -0.15), on(0, -0.05), on(0, 0.05), on(-0.22, -0.05)]),
+    q([on(0, -0.05), on(0.22, 0.05), on(0.22, 0.15), on(0, 0.05)]),
+  ];
 }
 
 /** A model for a piece on a body of this build, made once. */
@@ -4641,7 +4847,8 @@ function dress(parts: Part[], named: Map<string, Part[]>, kit: Kit, r: Rig, b: B
       for (const k of sides) {
         const bone = b[k < 0 ? bit.bone : `${bit.bone}${k}`];
         const m = k === 0 && bit.side === 'both' ? mirrored(bit.mesh) : bit.mesh;
-        const xf = bit.at || bit.turn ? joint(bone, bit.at ?? [0, 0, 0], ...(bit.turn ?? [0, 0, 0])) : bone;
+        // A bit carried whole is on a frame of its own, the bone's own frame being what is bent.
+        const xf = bit.at || bit.turn || bit.whole ? joint(bone, bit.at ?? [0, 0, 0], ...(bit.turn ?? [0, 0, 0])) : bone;
         const part: Part = { mesh: m, xf, bias: bit.bias ?? 0.02, pal: P, rare, seed: si + 1, convex: bit.convex, front: bit.front, v: bit.skirt ? bentWith(m.v, r, fr) : undefined };
         out.push(part);
         put.push({ part, on: regionsOf(bit.over[0], k)[0], over: bit.over.flatMap((c) => regionsOf(c, k)), layer: bit.layer ?? model.layer, order, seq });
@@ -4884,7 +5091,7 @@ function partsOf(kit: Kit, r: Rig, b: Bones, gear?: GearLook, pal?: Palette, fac
   if (r.tool) parts.push({ mesh: kit.mallet, xf: r.lefty ? b.wrist0 : b.wrist1, bias: 0.04 }, { mesh: kit.chisel, xf: r.lefty ? b.wrist1 : b.wrist0, bias: 0.04 });
   for (let k = 0; k < 2; k++) {
     parts.push(
-      name(`upper${k}`, { mesh: kit.upper, xf: b[`arm${k}`], bias: 0, convex: true }),
+      name(`upper${k}`, { mesh: k ? kit.upper : mirrored(kit.upper), xf: b[`arm${k}`], bias: 0, convex: true }),
       name(`lower${k}`, { mesh: kit.lower, xf: b[`elbow${k}`], bias: 0.02 }),
       name(`hand${k}`, { mesh: r.open[k] ? kit.open[k] : kit.hands[k], xf: b[`wrist${k}`], bias: 0.03 }),
       name(`thigh${k}`, { mesh: kit.thigh, xf: b[`hip${k}`], bias: 0, convex: true }),
@@ -4893,7 +5100,16 @@ function partsOf(kit: Kit, r: Rig, b: Bones, gear?: GearLook, pal?: Palette, fac
       name(`foot${k}`, { mesh: kit.foot, xf: b[`ankle${k}`], bias: 0.02 }),
     );
   }
-  return gear && pal ? dress(parts, named, kit, r, b, gear, pal, facing, lod) : parts;
+  const all = gear && pal ? dress(parts, named, kit, r, b, gear, pal, facing, lod) : parts;
+  // Everything on either arm, the body's own and what is worn over it, kept on the shoulder at the top and bent at the elbow as one limb.
+  for (let k = 0; k < 2; k++) {
+    const e = Math.abs(r.elbow[k]) < 0.5 ? 0 : r.elbow[k], arm = b[`arm${k}`], fore = b[`elbow${k}`];
+    for (const p of all) {
+      if (p.xf === arm) p.v = bentAtShoulder(e ? bentAtElbow(p.v ?? p.mesh.v, e, UPPER * kit.fr.tall) : p.v ?? p.mesh.v, r, k);
+      else if (p.xf === fore && e) p.v = bentAtElbow(p.v ?? p.mesh.v, e);
+    }
+  }
+  return all;
 }
 
 export interface View {
@@ -6230,7 +6446,7 @@ export function drawBust(ctx: CanvasRenderingContext2D, x: number, y: number, si
   if (t === undefined) r.head = [3, 0, 0];
   else idle(r, t);
   const b = skeleton(kit.fr, r);
-  const parts = partsOf(kit, r, b).filter((p) => p.xf === b.head || p.xf === b.neck || p.xf === b.chest || p.mesh === kit.upper || kit.hair.tails.some((t) => t.mesh === p.mesh));
+  const parts = partsOf(kit, r, b).filter((p) => p.xf === b.head || p.xf === b.neck || p.xf === b.chest || p.mesh === kit.upper || p.mesh === mirrored(kit.upper) || kit.hair.tails.some((t) => t.mesh === p.mesh));
   const view = viewOf(facing);
   const head = place(b.head, [0, 0, 2]);
   const zoom = size / 14;
