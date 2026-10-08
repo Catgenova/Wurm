@@ -967,7 +967,8 @@ export const KINDLER: Record<string, SpellVisual> = {
             const lag = j === 1 ? 0 : 0.06;
             const pts: P3[] = [];
             for (let i = 5; i >= 0; i--) pts.push(at(clamp(u - lag - i * 0.055)));
-            k.ribbon(pts, { ...SCALD, width: j === 1 ? 4.2 : 3, alpha: 0.92, taper: 'start', glow: 0.5 });
+            k.ribbon(pts, { ...SCALD, width: j === 1 ? 5.5 : 4, alpha: 0.92, taper: 'start', glow: 0.5 });
+            k.orb(pts[pts.length - 1], j === 1 ? 2.2 : 1.6, { ...SCALD, glow: 0.5, turn: k.now * 6 });
             k.emit(pts[pts.length - 1], 22, { kind: 'drop', colour: [SCALD.core, SCALD.main, PALETTE.accent], size: 1.6, life: [0.2, 0.35], speed: [0.05, 0.3], up: [-4, 4], gravity: 90 });
           }
           k.emit(arcAt(from, to, u, 3 + k.dist), 10, { kind: 'smoke', colour: [STEAM, STEAM_SHADE], size: 1.8, life: [0.3, 0.6], speed: [0.02, 0.1], up: [4, 10], gravity: -5, jitter: 0.08 });
@@ -995,8 +996,10 @@ export const KINDLER: Record<string, SpellVisual> = {
           const life = left / Math.max(0.01, age + left);
           // Steam hanging low round the legs, slow to lift: the weight it carries for as long as it is slowed.
           const R = footOf(b) * 1.3;
-          k.disc(b, R * 0.9, { main: STEAM_SHADE, alpha: 0.18 * a });
-          k.emit(k.at(b, 0.15), (7 + 5 * life) * a, { kind: 'smoke', colour: [STEAM, STEAM_SHADE], size: 1.8, sizeEnd: 4.5, life: [0.9, 1.5], speed: [0.03, 0.1], up: [3, 7], gravity: -1, drag: 0.5, jitter: R * 0.7, jitterZ: 1 });
+          k.disc(b, R * 0.7, { main: STEAM_SHADE, alpha: 0.14 * a });
+          // Low and clinging at the legs, and lifting off its back in slow wisps.
+          k.emit(k.at(b, 0.15), (5 + 4 * life) * a, { kind: 'smoke', colour: [STEAM, STEAM_SHADE], size: 1.6, sizeEnd: 4, life: [0.8, 1.3], speed: [0.03, 0.1], up: [2, 5], gravity: -1, drag: 0.5, jitter: R * 0.6, jitterZ: 1 });
+          k.emit(k.at(b, 0.7), (4 + 4 * life) * a, { kind: 'smoke', colour: [STEAM, STEAM_SHADE], size: 1.4, sizeEnd: 4.5, life: [1.2, 1.9], speed: [0.02, 0.06], up: [9, 14], gravity: -2, drag: 0.6, jitter: b.wide / 50 });
           k.emit(k.at(b, 0.45), 5 * a, { kind: 'drop', colour: [SCALD.main, SCALD.core], size: 1.4, life: [0.25, 0.4], speed: [0, 0.05], up: [-2, 0], gravity: 60, jitter: b.wide / 50 });
           // The scalded hide glistening, the heat in it pulsing slowly.
           k.glow(k.at(b, 0.45), 8, 0.3 * a * (0.6 + 0.4 * Math.sin(age * 3)), SCALD.deep);
@@ -1035,7 +1038,7 @@ export const KINDLER: Record<string, SpellVisual> = {
         draw: (k, u) => {
           const from = mid3(k.hand(0), k.hand(1), 0.5), to = k.heart(k.target);
           // The cone: tongues laid out along the shove, fanned, reaching past the creature; it pours, holds and burns back.
-          const grow = easeOut(seg(u, 0, 0.18)), die = smooth(seg(u, 0.35, 1));
+          const grow = easeOut(seg(u, 0, 0.18)), die = smooth(seg(u, 0.25, 0.8));
           const fx = k.sx(from), fy = k.sy(from), tx = k.sx(to), ty = k.sy(to);
           let dx = tx - fx, dy = ty - fy;
           const L = Math.hypot(dx, dy) || 1;
@@ -1063,7 +1066,7 @@ export const KINDLER: Record<string, SpellVisual> = {
           }
           // Sorted with whichever end is nearer the viewer, so it lies over the nearer of the two.
           const near = to.y + to.x > from.y + from.x ? to : from;
-          flameGroup(k, near, flames, 1 - seg(u, 0.55, 0.85), 4);
+          flameGroup(k, near, flames, 1 - seg(u, 0.4, 0.7), 4);
           k.flare(to, 16 * (1 - u), flashOf(u, 0.08), '#ffffff');
           k.glow(mid3(from, to, 0.5), 18 * (1 - die), 0.7 * (1 - die));
           k.light(mid3(from, to, 0.6), 3.5, 1 - u);
@@ -1482,7 +1485,7 @@ export const KINDLER: Record<string, SpellVisual> = {
           // Falling faster and faster; the tail the length of the way it came this last tenth of a second.
           const v = easeIn(u) * 0.85 + u * 0.15;
           const head = mid3(star, to, v), back = mid3(star, to, Math.max(0, v - 0.1));
-          fireball(k, head, back, 6.5, 5, true);
+          fireball(k, head, back, 8, 5.5, true);
           k.light(head, 3, 0.9);
           k.light(k.spot, W + 0.5, 0.35 + 0.5 * u);
           k.emit(back, 40, { kind: 'smoke', colour: [SMOKE, ASH], size: 3, sizeEnd: 7, life: [0.5, 1], speed: [0.02, 0.1], up: [0, 4], gravity: -2, jitter: 0.1, jitterZ: 3 });
