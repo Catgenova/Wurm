@@ -3158,6 +3158,8 @@ export class Game {
    * that counts there.
    */
   craftPrefsChanged?: () => void;
+  /** The graphics settings changed: the screen is sized again for them. */
+  graphicsChanged?: () => void;
 
   /**
    * And the two fighting ones -- `fightStance` and `fightBack` -- for the same

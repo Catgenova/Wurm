@@ -105,6 +105,20 @@ import { css, HAZE_REACH, rgba, skyAt, unknownInk, type Sky } from './sky';
  * rather than one per tree per frame.
  */
 const HAZE_STEPS = 6;
+/** The share of the screen's pixels the sea's swell is worked out at, across and down (`swellLayer`). */
+const SWELL_RES = 0.5;
+/** How many device pixels of tile edge pictures are kept before the lot go (`hems`): about sixty-four megabytes. */
+const HEM_PIXELS = 16_000_000;
+/** No one tile's edge picture is bigger than this; a tile that would be is drawn as it always was. */
+const HEM_TILE_MOST = 400_000;
+/** A tile's ruffled edges as a picture, where it was made, and where its top-left corner went (CSS pixels). */
+interface HemPicture {
+  cv: HTMLCanvasElement | null;
+  px: number;
+  py: number;
+  bx: number;
+  by: number;
+}
 
 /** The thin darker line where a pond meets its bank. */
 const POND_SHORE = `rgba(${SPRING_EDGE.join(',')},0.6)`;
@@ -1294,6 +1308,11 @@ export class Renderer {
           this.trailShapes.delete(yy * w.w + xx);
           this.flowerMarks.forget(xx, yy);
           this.faces.delete(yy * w.w + xx);
+          for (const m of [this.hemCache, this.hemMemCache]) {
+            const h = m.get(yy * w.w + xx);
+            if (h?.cv) this.hemPixels -= h.cv.width * h.cv.height;
+            m.delete(yy * w.w + xx);
+          }
         }
       }
     }
@@ -1380,7 +1399,14 @@ export class Renderer {
    * copy of it. How dark it is goes on at the end, so the hour moving does
    * not undo any of it.
    */
-  private lit: { mask: HTMLCanvasElement; warm: HTMLCanvasElement; key: string; box: Box } | null = null;
+  /**
+   * The steady lights' layers, made with a margin round the screen and slid
+   * with the camera rather than made again for every frame it moves: `cx`
+   * and `cy` are where it was when they were made, `pad` the margin in CSS
+   * pixels. Made again when the lights change, or the view slides further
+   * than the margin.
+   */
+  private lit: { mask: HTMLCanvasElement; warm: HTMLCanvasElement; key: string; cx: number; cy: number; pad: number } | null = null;
   private litNow: { mask: HTMLCanvasElement; warm: HTMLCanvasElement } | null = null;
 
   private lightLayers(lights: LightSource[], w: number, h: number): { mask: HTMLCanvasElement; warm: HTMLCanvasElement; box: Box } {
@@ -1393,18 +1419,18 @@ export class Renderer {
       return c;
     };
     /** Each light where it falls on the screen this frame, and how far it reaches there. */
-    const placed = (l: LightSource): { sx: number; sy: number; r: number } | null => {
-      const sx = cam.worldToScreenX(l.x, l.y);
+    const placed = (l: LightSource, pad = 0): { sx: number; sy: number; r: number } | null => {
+      const sx = cam.worldToScreenX(l.x, l.y) + pad;
       // At what it stands on: the ground, or the finished deck of a tile on piers (`standTop`).
-      const sy = cam.worldToScreenY(l.x, l.y, this.standTop(l.x, l.y));
+      const sy = cam.worldToScreenY(l.x, l.y, this.standTop(l.x, l.y)) + pad;
       // A flame is never steady; a candle behind cloth very nearly is.
       const r = Math.max(8, l.radius * HALF_W * zoom * this.flicker(l));
-      return sx < -r || sy < -r || sx > w + r || sy > h + r ? null : { sx, sy, r };
+      return sx < -r || sy < -r || sx > w + 2 * pad + r || sy > h + 2 * pad + r ? null : { sx, sy, r };
     };
-    const holes = (g: CanvasRenderingContext2D, ls: LightSource[]): void => {
+    const holes = (g: CanvasRenderingContext2D, ls: LightSource[], pad = 0): void => {
       g.globalCompositeOperation = 'destination-out';
       for (const l of ls) {
-        const p = placed(l);
+        const p = placed(l, pad);
         if (!p) continue;
         const grad = g.createRadialGradient(p.sx, p.sy, 0, p.sx, p.sy, p.r);
         grad.addColorStop(0, `rgba(0,0,0,${l.strength.toFixed(2)})`);
@@ -1430,11 +1456,11 @@ export class Renderer {
       }
       return x1 > x0 && y1 > y0 ? [x0, y0, x1 - x0, y1 - y0] : [0, 0, 0, 0];
     };
-    const casts = (g: CanvasRenderingContext2D, ls: LightSource[]): void => {
+    const casts = (g: CanvasRenderingContext2D, ls: LightSource[], pad = 0): void => {
       // Opaque on black, so 'lighten' keeps the larger of what is there and what comes: the warmest light, not the sum.
       g.globalCompositeOperation = 'lighten';
       for (const l of ls) {
-        const p = placed(l);
+        const p = placed(l, pad);
         if (!p) continue;
         const a = l.castAlpha ?? 0.16 * l.strength;
         const [r0, g0, b0] = (l.cast ?? '255, 186, 92').split(',').map((v) => Math.round(Number(v) * a));
@@ -1455,35 +1481,51 @@ export class Renderer {
     };
     const steady = lights.filter((l) => l.steady);
     const live = lights.filter((l) => !l.steady);
-    const key = `${lw}x${lh}|${cam.cx.toFixed(2)},${cam.cy.toFixed(2)},${zoom},${cam.rotation}|`
+    // Not where the camera is: the layers are slid with it (`lit`).
+    const key = `${lw}x${lh}|${zoom},${cam.rotation}|`
       + steady.map((l) => `${l.x.toFixed(3)},${l.y.toFixed(3)},${this.standTop(l.x, l.y)},${l.radius},${l.strength},${l.cast ?? ''},${l.castAlpha ?? ''}`).join(';');
-    if (!this.lit || this.lit.key !== key) {
-      const mask = sheet(this.lit?.mask), warm = sheet(this.lit?.warm);
+    const slid = (at: { cx: number; cy: number }): [number, number] => [(at.cx - cam.cx) * zoom, (at.cy - cam.cy) * zoom];
+    const stale = (at: NonNullable<Renderer['lit']>): boolean => {
+      const [ox, oy] = slid(at);
+      return at.key !== key || Math.abs(ox) > at.pad || Math.abs(oy) > at.pad;
+    };
+    if (!this.lit || stale(this.lit)) {
+      // A quarter of the screen spare on every side.
+      const pad = Math.ceil(Math.max(w, h) * 0.25);
+      const bw = Math.max(1, Math.ceil((w + 2 * pad) * LIGHT_RES)), bh = Math.max(1, Math.ceil((h + 2 * pad) * LIGHT_RES));
+      const big = (had: HTMLCanvasElement | undefined): HTMLCanvasElement => {
+        const c = had ?? document.createElement('canvas');
+        if (c.width !== bw || c.height !== bh) { c.width = bw; c.height = bh; }
+        return c;
+      };
+      const mask = big(this.lit?.mask), warm = big(this.lit?.warm);
       const m = ctxOf(mask), c = ctxOf(warm);
       m.globalCompositeOperation = 'source-over';
       m.fillStyle = '#000';
-      m.fillRect(0, 0, w, h);
-      holes(m, steady);
+      m.fillRect(0, 0, w + 2 * pad, h + 2 * pad);
+      holes(m, steady, pad);
       c.globalCompositeOperation = 'source-over';
       c.fillStyle = '#000';
-      c.fillRect(0, 0, w, h);
-      casts(c, steady);
-      this.lit = { mask, warm, key, box: cover(steady) };
+      c.fillRect(0, 0, w + 2 * pad, h + 2 * pad);
+      casts(c, steady, pad);
+      this.lit = { mask, warm, key, cx: cam.cx, cy: cam.cy, pad };
     }
-    if (!live.length) return this.lit;
-    // The fires, over a copy of what the steady lights left.
+    // The steady layers where the camera is now, and the fires over them.
     const now = this.litNow ?? (this.litNow = { mask: sheet(undefined), warm: sheet(undefined) });
     const mask = sheet(now.mask), warm = sheet(now.warm);
+    const [ox, oy] = slid(this.lit);
     for (const [to, from] of [[mask, this.lit.mask], [warm, this.lit.warm]] as const) {
       const g = to.getContext('2d') as CanvasRenderingContext2D;
       g.setTransform(1, 0, 0, 1, 0, 0);
       g.globalCompositeOperation = 'copy';
-      g.drawImage(from, 0, 0);
+      g.drawImage(from, (ox - this.lit.pad) * LIGHT_RES, (oy - this.lit.pad) * LIGHT_RES);
       g.globalCompositeOperation = 'source-over';
     }
-    holes(ctxOf(mask), live);
-    casts(ctxOf(warm), live);
-    return { mask, warm, box: cover(live, this.lit.box) };
+    if (live.length) {
+      holes(ctxOf(mask), live);
+      casts(ctxOf(warm), live);
+    }
+    return { mask, warm, box: cover(live, cover(steady)) };
   }
 
   /**
@@ -1964,6 +2006,85 @@ export class Renderer {
    * the ruffle reads one way round at one rotation and the other at the next
    * and the whole path crawls as the camera comes about.
    */
+  /**
+   * Each tile's ruffled edges, drawn once into a picture of their own and
+   * laid down from it after that.
+   *
+   * The ruffles were the dearest thing on an ordinary screen of country: some
+   * sixty arcs a tile wherever two grounds meet, filled three times over,
+   * every frame -- about two fifths of a whole frame on open meadow. They
+   * change only when the ground does, so they are drawn once and copied.
+   *
+   * A copy only lines up with the polygon it sits on if both land on the same
+   * fraction of a pixel. `render` puts the camera on a whole device pixel for
+   * the frame, so a tile keeps its fraction of a pixel however far the view
+   * is panned, and a picture made of it in one frame is the same picture in
+   * the next, moved by whole pixels. While the zoom is still moving every
+   * picture would be out of date by the next frame, so then the edges are
+   * drawn as they always were and nothing is kept.
+   *
+   * By tile, for ground in sight and ground remembered apart; dropped with the
+   * colour, which goes stale at the same moments, and all at once past
+   * `HEM_PIXELS` of pictures.
+   */
+  private hemCache = new Map<number, HemPicture>();
+  private hemMemCache = new Map<number, HemPicture>();
+  private hemPixels = 0;
+  /** The zoom, view and screen the pictures were made for, and whether the zoom has held still since the last frame. */
+  private hemFor = '';
+  private hemZoomWas = 0;
+  private hemSteady = false;
+
+  private forgetHems(lit?: boolean): void {
+    if (lit !== false) this.hemCache.clear();
+    if (lit !== true) this.hemMemCache.clear();
+    this.hemPixels = 0;
+    for (const m of [this.hemCache, this.hemMemCache]) for (const h of m.values()) this.hemPixels += h.cv ? h.cv.width * h.cv.height : 0;
+  }
+
+  /** `swardEdges`, from the tile's picture when it has one that fits, making one when it may. */
+  private hems(ctx: CanvasRenderingContext2D, V: View, x: number, y: number, pts: Float64Array, zoom: number, lit: boolean): boolean {
+    if (!this.hemSteady) return this.swardEdges(ctx, V, x, y, pts, zoom, lit);
+    const dpr = this.canvas.dpr;
+    const cache = lit ? this.hemCache : this.hemMemCache;
+    const key = y * this.game.world.w + x;
+    const had = cache.get(key);
+    if (had) {
+      const dx = (pts[0] - had.px) * dpr;
+      const dy = (pts[1] - had.py) * dpr;
+      const rx = Math.round(dx), ry = Math.round(dy);
+      if (Math.abs(dx - rx) < 0.02 && Math.abs(dy - ry) < 0.02) {
+        if (had.cv) ctx.drawImage(had.cv, had.bx + rx / dpr, had.by + ry / dpr, had.cv.width / dpr, had.cv.height / dpr);
+        return had.cv !== null;
+      }
+      if (had.cv) this.hemPixels -= had.cv.width * had.cv.height;
+      cache.delete(key);
+    }
+    let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+    for (let k = 0; k < 8; k += 2) {
+      x0 = Math.min(x0, pts[k]); x1 = Math.max(x1, pts[k]);
+      y0 = Math.min(y0, pts[k + 1]); y1 = Math.max(y1, pts[k + 1]);
+    }
+    // A pixel either side for the antialiasing along the clip.
+    const bx = Math.floor(x0 * dpr) - 1, by = Math.floor(y0 * dpr) - 1;
+    const w = Math.ceil(x1 * dpr) + 1 - bx, h = Math.ceil(y1 * dpr) + 1 - by;
+    if (w <= 0 || h <= 0 || w * h > HEM_TILE_MOST) return this.swardEdges(ctx, V, x, y, pts, zoom, lit);
+    const cv = document.createElement('canvas');
+    cv.width = w;
+    cv.height = h;
+    const g = cv.getContext('2d');
+    if (!g) return this.swardEdges(ctx, V, x, y, pts, zoom, lit);
+    g.setTransform(dpr, 0, 0, dpr, -bx, -by);
+    const drew = this.swardEdges(g, V, x, y, pts, zoom, lit);
+    if (this.hemPixels + w * h > HEM_PIXELS) this.forgetHems();
+    cache.set(key, { cv: drew ? cv : null, px: pts[0], py: pts[1], bx: bx / dpr, by: by / dpr });
+    if (drew) {
+      this.hemPixels += w * h;
+      ctx.drawImage(cv, bx / dpr, by / dpr, w / dpr, h / dpr);
+    }
+    return drew;
+  }
+
   /** One tile's ruffled edges, and one colour's worth of them: reused, never remade. */
   private hemBuf: number[] = [];
   private hemRun: number[] = [];
@@ -2603,7 +2724,45 @@ export class Renderer {
   /** Whether the ivy is in flower: in spring and summer (`seasonAt`). */
   private bloom = false;
 
+  /**
+   * One frame, with the camera put on a whole device pixel for the length of
+   * it: everything drawn then lands on the same fraction of a pixel frame
+   * after frame however the view is panned, which is what lets a picture made
+   * in one frame be laid down unchanged in the next (`hems`). Half a device
+   * pixel at most, and put back afterwards for everything that reads the
+   * camera between frames.
+   */
   render(dt: number): void {
+    const cam = this.camera;
+    const cx = cam.cx, cy = cam.cy;
+    const unit = cam.zoom * this.canvas.dpr;
+    cam.cx = Math.round(cx * unit) / unit;
+    cam.cy = Math.round(cy * unit) / unit;
+    // The pictures are for one zoom, one view and one screen; and none are made while the zoom is moving.
+    const fit = `${cam.zoom}|${cam.rotation}|${cam.width}|${cam.height}|${this.canvas.dpr}`;
+    this.hemSteady = cam.zoom === this.hemZoomWas;
+    this.hemZoomWas = cam.zoom;
+    if (this.hemSteady && fit !== this.hemFor) {
+      this.hemFor = fit;
+      this.forgetHems();
+    }
+    try {
+      this.renderFrame(dt);
+    } finally {
+      cam.cx = cx;
+      cam.cy = cy;
+    }
+  }
+
+  /** The fast graphics this frame (`Settings.graphics`): no swell, no haze, no small life. */
+  private fast = false;
+
+  /** Frames drawn, for anything worked out once a frame and asked for more than once in it. */
+  private frameNo = 0;
+
+  private renderFrame(dt: number): void {
+    this.frameNo++;
+    this.fast = this.game.settings.graphics === 'fast';
     this.time += dt;
     this.frameDt = dt;
     this.poolRuns.clear();
@@ -2765,6 +2924,7 @@ export class Renderer {
         this.memColors.forgetBox(Math.max(0, box.x0), Math.max(0, box.y0),
           Math.min(world.w - 1, box.x1), Math.min(world.h - 1, box.y1));
       } else this.memColors.clear();
+      this.forgetHems(false);
       this.trailMemMarks.clear();
     }
     // The sun moves through the day, so the ground has to be shaded again as it
@@ -2777,6 +2937,7 @@ export class Renderer {
     if (sunStep !== this.lastSun) {
       this.lastSun = sunStep;
       this.colors.clear();
+      this.forgetHems();
       this.trailPaint.clear();
     }
     /*
@@ -2942,7 +3103,7 @@ export class Renderer {
       this.scaledSizes.clear();
     }
     this.year = year;
-    this.life.frame({
+    if (!this.fast) this.life.frame({
       world, cam, view: V, dLo, dHi, eMin, eMax, width: W, height: H,
       // The island's clock where there is one, so every player sees the same butterfly in the same place.
       clock: this.game.islandClock ? this.game.islandClock() : this.game.time,
@@ -3100,7 +3261,7 @@ export class Renderer {
           const seams = lit ? this.colors : this.memColors;
           const known = seams.flag(x, y);
           if (known !== 1) {
-            const drew = this.swardEdges(ctx, V, x, y, pts, zoom, lit);
+            const drew = this.hems(ctx, V, x, y, pts, zoom, lit);
             if (known === 0) seams.setFlag(x, y, drew ? 2 : 1);
           }
         }
@@ -3406,7 +3567,7 @@ export class Renderer {
         this.plantRow.length = 0;
       }
       // Petals and leaves lying on this line's ground and floating on its water.
-      this.life.ground(ctx, d);
+      if (!this.fast) this.life.ground(ctx, d);
       // The line's pilasters, over every wall of it and under its roofs (`drawColumnsAt`).
       if (this.linePilasters.length) {
         for (const lay of this.linePilasters) lay();
@@ -3435,7 +3596,7 @@ export class Renderer {
         this.gateLate.length = 0;
       }
       // And whatever small thing is in the air over it, sorted in with everything standing on it.
-      for (const m of this.life.aloft(d)) this.take('life', m.tx, m.ty, m.sx, m.sy, null).mote = m;
+      if (!this.fast) for (const m of this.life.aloft(d)) this.take('life', m.tx, m.ty, m.sx, m.sy, null).mote = m;
       if (this.ents.length) this.drawEntities(ctx, zoom);
       // Remembered ground on this line came down over what was waiting to take the wash off: the wash so far is laid, and that taken off it, first.
       if (lineOver) {
@@ -3458,10 +3619,10 @@ export class Renderer {
     }
     // The surface and then what crossed it, both clipped to the water, so
     // neither washes up over a beach standing in front of them.
-    this.drawSwell(ctx, zoom);
+    if (!this.fast) this.drawSwell(ctx, zoom);
     this.drawWakes(ctx, zoom);
     this.drawAir(ctx, zoom);
-    this.drawHaze(ctx, zoom);
+    if (!this.fast) this.drawHaze(ctx, zoom);
     this.drawFloaters(ctx, zoom);
 
     // One pass for all of it, so a remembered wood goes cold with its ground.
@@ -3796,17 +3957,40 @@ export class Renderer {
   private tintPad: HTMLCanvasElement | null = null;
   private tintCtx: CanvasRenderingContext2D | null = null;
 
-  private scratch(zoom: number): { pad: HTMLCanvasElement; g: CanvasRenderingContext2D; ox: number; oy: number } {
-    const side = Math.ceil(124 * Math.max(1, zoom));
-    if (!this.tintPad || this.tintPad.width < side) {
+  /**
+   * The scratch, at the screen's own resolution: a pixel of it is a device
+   * pixel, so a copy of what was drawn on it is as sharp as the thing drawn
+   * straight onto the screen, and can stand in for it (`paint`). `side` is
+   * its size in CSS pixels, and (ox, oy) where the thing's feet go on it.
+   */
+  private scratch(zoom: number): { pad: HTMLCanvasElement; g: CanvasRenderingContext2D; ox: number; oy: number; side: number } {
+    const dpr = this.canvas.dpr;
+    const want = Math.ceil(124 * Math.max(1, zoom) * dpr);
+    if (!this.tintPad || this.tintPad.width < want) {
       this.tintPad = document.createElement('canvas');
-      this.tintPad.width = side;
-      this.tintPad.height = side;
+      this.tintPad.width = want;
+      this.tintPad.height = want;
       this.tintCtx = this.tintPad.getContext('2d');
     }
     const g = this.tintCtx as CanvasRenderingContext2D;
+    g.setTransform(1, 0, 0, 1, 0, 0);
     g.clearRect(0, 0, this.tintPad.width, this.tintPad.height);
-    return { pad: this.tintPad, g, ox: this.tintPad.width / 2, oy: this.tintPad.height * 0.78 };
+    g.setTransform(dpr, 0, 0, dpr, 0, 0);
+    const side = this.tintPad.width / dpr;
+    return { pad: this.tintPad, g, ox: side / 2, oy: side * 0.78, side };
+  }
+
+  /** The ring round the thing under the cursor, put together off the screen and laid down in one go (`paint`). */
+  private ringPad: HTMLCanvasElement | null = null;
+  /** And a copy of the thing as it was drawn, laid over the ring rather than drawing the thing a second time. */
+  private keepPad: HTMLCanvasElement | null = null;
+  private sized(had: HTMLCanvasElement | null, w: number, h: number): HTMLCanvasElement {
+    const c = had ?? document.createElement('canvas');
+    if (c.width !== w || c.height !== h) {
+      c.width = w;
+      c.height = h;
+    }
+    return c;
   }
 
   /**
@@ -3818,10 +4002,12 @@ export class Renderer {
   private stamp(colour: string): void {
     const pad = this.tintPad as HTMLCanvasElement;
     const g = this.tintCtx as CanvasRenderingContext2D;
+    g.save();
+    g.setTransform(1, 0, 0, 1, 0, 0);
     g.globalCompositeOperation = 'source-atop';
     g.fillStyle = colour;
     g.fillRect(0, 0, pad.width, pad.height);
-    g.globalCompositeOperation = 'source-over';
+    g.restore();
   }
 
   /**
@@ -3848,29 +4034,43 @@ export class Renderer {
       draw(ctx, sx, sy);
       return;
     }
-    const { pad, g, ox, oy } = this.scratch(zoom);
+    const { pad, g, ox, oy, side } = this.scratch(zoom);
     draw(g, ox, oy);
     const left = sx - ox;
     const top = sy - oy;
     if (effect === 'flash') {
-      ctx.drawImage(pad, left, top);
+      ctx.drawImage(pad, left, top, side, side);
       this.stamp('#ffffff');
       ctx.globalAlpha = Math.max(0, Math.min(1, power));
-      ctx.drawImage(pad, left, top);
+      ctx.drawImage(pad, left, top, side, side);
       ctx.globalAlpha = 1;
       return;
     }
     // The outline goes down first and the thing on top of it, so what shows is
-    // the part of the ring that sticks out past the edges.
+    // the part of the ring that sticks out past the edges. The thing is kept
+    // as it was drawn before the scratch is stamped, and the ring is put
+    // together off the screen: two copies onto the screen, where there were
+    // eight and the whole thing drawn over again.
+    const dpr = this.canvas.dpr;
+    const keep = (this.keepPad = this.sized(this.keepPad, pad.width, pad.height));
+    const kg = keep.getContext('2d') as CanvasRenderingContext2D;
+    kg.globalCompositeOperation = 'copy';
+    kg.drawImage(pad, 0, 0);
+    kg.globalCompositeOperation = 'source-over';
     this.stamp(HOVER_INK);
     const r = Math.max(1.6, 2.1 * zoom);
-    ctx.globalAlpha = 0.9;
+    const m = Math.ceil(r * dpr) + 1;
+    const ring = (this.ringPad = this.sized(this.ringPad, pad.width + 2 * m, pad.height + 2 * m));
+    const rg = ring.getContext('2d') as CanvasRenderingContext2D;
+    rg.clearRect(0, 0, ring.width, ring.height);
     for (let i = 0; i < 8; i++) {
       const a = (i / 8) * Math.PI * 2;
-      ctx.drawImage(pad, left + Math.cos(a) * r, top + Math.sin(a) * r);
+      rg.drawImage(pad, m + Math.cos(a) * r * dpr, m + Math.sin(a) * r * dpr);
     }
+    ctx.globalAlpha = 0.9;
+    ctx.drawImage(ring, left - m / dpr, top - m / dpr, ring.width / dpr, ring.height / dpr);
     ctx.globalAlpha = 1;
-    draw(ctx, sx, sy);
+    ctx.drawImage(keep, left, top, side, side);
   }
 
   /**
@@ -11487,12 +11687,45 @@ export class Renderer {
    */
   private drawSwell(ctx: CanvasRenderingContext2D, zoom: number): void {
     if (!this.drewWater) return;
+    const W = this.canvas.width, H = this.canvas.height;
     ctx.save();
     ctx.clip(this.seaPath);
-    this.swellBand(ctx, zoom, 0, LONG_WAVE, CREST_ALPHA, 1);
-    this.swellBand(ctx, zoom, 0.55, SHORT_WAVE, TROUGH_ALPHA * 0.7, 0.62);
+    ctx.drawImage(this.swellLayer(zoom), 0, 0, W, H);
     ctx.restore();
   }
+
+  /**
+   * The two trains of waves, laid on a layer of their own at `SWELL_RES` of
+   * the screen once a frame, and that layer laid over the sea.
+   *
+   * They were two gradients the size of the screen, each up to a hundred and
+   * forty stops, laid straight onto the sea -- and laid again in front of
+   * every building on piers in the water (`layWater`). Neither has an edge of
+   * its own to keep sharp: the edge is the shore, and the shore is the clip,
+   * which stays at the screen's own resolution. So they are worked out at a
+   * quarter of the pixels, once, and copied.
+   */
+  private swellLayer(zoom: number): HTMLCanvasElement {
+    if (this.swell && this.swellFrame === this.frameNo) return this.swell;
+    const W = this.canvas.width, H = this.canvas.height;
+    const sw = Math.max(1, Math.ceil(W * SWELL_RES)), sh = Math.max(1, Math.ceil(H * SWELL_RES));
+    const cv = this.swell ?? (this.swell = document.createElement('canvas'));
+    if (cv.width !== sw || cv.height !== sh) {
+      cv.width = sw;
+      cv.height = sh;
+    }
+    const g = cv.getContext('2d') as CanvasRenderingContext2D;
+    g.setTransform(1, 0, 0, 1, 0, 0);
+    g.clearRect(0, 0, sw, sh);
+    g.setTransform(sw / W, 0, 0, sh / H, 0, 0);
+    this.swellBand(g, zoom, 0, LONG_WAVE, CREST_ALPHA, 1);
+    this.swellBand(g, zoom, 0.55, SHORT_WAVE, TROUGH_ALPHA * 0.7, 0.62);
+    this.swellFrame = this.frameNo;
+    return cv;
+  }
+
+  private swell: HTMLCanvasElement | null = null;
+  private swellFrame = -1;
 
   /**
    * Which lines of the ground this frame have a tile of a building standing
@@ -11539,7 +11772,7 @@ export class Renderer {
    * shade, and the piers stand in it.
    */
   private layWater(ctx: CanvasRenderingContext2D, zoom: number): void {
-    this.drawSwell(ctx, zoom);
+    if (!this.fast) this.drawSwell(ctx, zoom);
     this.drawWakes(ctx, zoom);
     this.seaPath = new Path2D();
     this.drewWater = false;
@@ -11933,7 +12166,8 @@ export class Renderer {
     // asked for whatever the darkness reads.
     const washes = skyWash(game.hourOfDay(), dark);
     if (washes.length) {
-      const lights = game.lights();
+      // Gathered once at the top of the frame when it is dark enough to want them (`lightsNow`).
+      const lights = dark > 0.02 ? this.lightsNow : game.lights();
       if (!lights.length && !this.glows.length) {
         for (const wash of washes) {
           ctx.fillStyle = `rgba(${wash.colour}, ${wash.alpha.toFixed(3)})`;
@@ -11994,7 +12228,7 @@ export class Renderer {
       }
     }
     // The fireflies, which are lights: over the night, not under it.
-    this.life.glow(ctx);
+    if (!this.fast) this.life.glow(ctx);
     // Down in a cellar, the cellar, over all of it; and the marks over that.
     if (this.cellarFrame) {
       this.drawCellarView(ctx, zoom);

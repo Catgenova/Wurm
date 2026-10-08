@@ -6,6 +6,7 @@ import { CRAFT_REACH } from '../../game/recipes';
 import { FIGHT_BACK_STILL, FIGHT_QUIET } from '../../game/fight';
 import type { UIWindow } from '../windows';
 import { setUiSize, UI_SIZE_MAX, UI_SIZE_MIN, uiSizeShown } from '../screen';
+import { FAST_DPR, FRAME_CAPS, FULL_DPR } from '../../game/settings';
 
 interface Toggle {
   input: HTMLInputElement;
@@ -145,6 +146,48 @@ export class SettingsPanel {
       row.append(input, text);
       display.append(row);
     }
+    /*
+     * How hard the screen is worked: a choice of two rather than a yes or no,
+     * so a list rather than a tick box. Every figure in the words comes from
+     * the setting itself.
+     */
+    const choose = <T extends string | number>(label: string, hint: string, options: Array<[T, string]>, read: () => T, write: (v: T) => void): void => {
+      const row = document.createElement('label');
+      row.className = 'setting-row';
+      const select = document.createElement('select');
+      for (const [value, name] of options) {
+        const o = document.createElement('option');
+        o.value = String(value);
+        o.textContent = name;
+        select.append(o);
+      }
+      select.value = String(read());
+      select.addEventListener('change', () => write(options.find(([v]) => String(v) === select.value)![0]));
+      const text = document.createElement('span');
+      text.innerHTML = `<b>${label}</b><small>${hint}</small>`;
+      row.append(select, text);
+      display.append(row);
+    };
+    choose<'full' | 'fast'>(
+      'Graphics',
+      `Fast draws ${FAST_DPR} pixel for each screen pixel on a high-density screen instead of up to ${FULL_DPR}, `
+        + `which is ${Math.round((1 - (FAST_DPR / FULL_DPR) ** 2) * 100)}% fewer pixels on a ${FULL_DPR}× screen, and leaves out the swell on the sea, `
+        + 'the haze over distant country, and the butterflies, dragonflies, fireflies, petals and falling leaves.',
+      [['full', 'Full'], ['fast', 'Fast']],
+      () => game.settings.graphics,
+      (v) => {
+        game.settings.graphics = v;
+        game.graphicsChanged?.();
+      },
+    );
+    choose<number>(
+      'Frame rate limit',
+      `Draws at most this many frames a second. With no limit a screen that refreshes faster than ${FRAME_CAPS[1]} times a second is `
+        + 'drawn for every refresh, which costs more and looks the same.',
+      FRAME_CAPS.map((n): [number, string] => [n, n === 0 ? 'No limit' : `${n} a second`]),
+      () => game.settings.frameCap,
+      (v) => (game.settings.frameCap = v),
+    );
     /*
      * How you look, which is chosen once on the account page and was never
      * offered again. The creator itself is a window of its own: a mirror and

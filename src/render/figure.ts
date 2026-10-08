@@ -5993,7 +5993,7 @@ export function drawFigure(ctx: CanvasRenderingContext2D, sx: number, sy: number
     : { rig: rigOf(pose, kit.fr), facing: ((Math.round(pose.facing) % 8) + 8) % 8, changing: false };
   // Most of a pixel however far out, and never more than three and a half however far in.
   const ink = opts.ink !== undefined ? opts.ink / zoom : Math.max(0.9 / zoom, 0.7);
-  if (pose.id && zoom < STILL_BELOW && opts.ink === undefined) {
+  if (pose.id && opts.ink === undefined) {
     drawStill(ctx, sx, sy, zoom, pose, kit, r, facing, changing, ink, now);
     return;
   }
@@ -6046,9 +6046,10 @@ export const FIGURE_TOP: number = (() => {
  * A few hundred facets a frame for every person in view is what the island
  * could not afford; a picture a frame is what it always drew.
  *
- * Only at the sizes the island is usually played at. Closer in there are
- * few enough people on the screen, and each big enough to see it hitch,
- * that they are drawn every frame.
+ * At every size. From `STILL_BELOW` in, where each body is big enough to
+ * see a stride hitch, it is drawn again twice as often and put down on a
+ * whole device pixel, so it stays sharp; it was drawn afresh every frame
+ * there, which is a few hundred facets a frame for a body standing still.
  */
 const STILL_BELOW = 2.5;
 
@@ -6101,7 +6102,9 @@ function drawStill(ctx: CanvasRenderingContext2D, sx: number, sy: number, zoom: 
   }
   lately.ids.add(id);
   // Something rare on them is drawn often enough for its glint to cross it smoothly.
-  const rate = Math.min(Math.max(pose.emote ? 30 : STILL_RATE[doing(pose)] ?? 30, gearShines(pose.gear) ? SHINE_RATE : 0), lately.count > CROWD ? CROWD_RATE : Infinity);
+  const close = zoom >= STILL_BELOW;
+  const rate = Math.min(Math.max(pose.emote ? 30 : STILL_RATE[doing(pose)] ?? 30, gearShines(pose.gear) ? SHINE_RATE : 0), lately.count > CROWD ? CROWD_RATE : Infinity)
+    * (close ? 2 : 1);
   if (!st || st.key !== key || changing || now - st.at >= 1 / rate || now < st.at) {
     const k = zoom * dev;
     const w = Math.ceil((STILL_BOX.right - STILL_BOX.left) * k), h = Math.ceil((STILL_BOX.bottom - STILL_BOX.top) * k);
@@ -6125,7 +6128,9 @@ function drawStill(ctx: CanvasRenderingContext2D, sx: number, sy: number, zoom: 
     st.g.setTransform(dev, 0, 0, dev, st.ox, st.oy);
     drawLive(st.g, 0, 0, zoom, pose, kit, r, facing, ink, now);
   }
-  ctx.drawImage(st.canvas, sx - st.ox / st.dev, sy - st.oy / st.dev, st.canvas.width / st.dev, st.canvas.height / st.dev);
+  const x = sx - st.ox / st.dev, y = sy - st.oy / st.dev;
+  if (close) ctx.drawImage(st.canvas, Math.round(x * st.dev) / st.dev, Math.round(y * st.dev) / st.dev, st.canvas.width / st.dev, st.canvas.height / st.dev);
+  else ctx.drawImage(st.canvas, x, y, st.canvas.width / st.dev, st.canvas.height / st.dev);
 }
 
 /**

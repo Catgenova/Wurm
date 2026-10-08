@@ -1,4 +1,5 @@
 import { wornWire } from './game/worn';
+import { FAST_DPR, FULL_DPR } from './game/settings';
 import { FullscreenCanvas } from './engine/canvas';
 import { Input } from './engine/input';
 import { GameLoop } from './engine/loop';
@@ -171,6 +172,16 @@ const island = started?.island ?? null;
 const game = started?.game ?? (seedParam ? null : await loadGame()) ?? Game.create(seedParam ? Number(seedParam) >>> 0 : (Math.random() * 0x7fffffff) >>> 0);
 
 const canvas = new FullscreenCanvas(canvasEl);
+// The fast graphics draw a pixel for every screen pixel (`FAST_GRAPHICS`); sized again whenever that changes.
+const fitGraphics = (): void => {
+  const most = game.settings.graphics === 'fast' ? FAST_DPR : FULL_DPR;
+  if (canvas.maxDpr !== most) {
+    canvas.maxDpr = most;
+    canvas.resize();
+  }
+};
+fitGraphics();
+game.graphicsChanged = fitGraphics;
 const renderer = new Renderer(canvas, game);
 const camera = renderer.camera;
 const input = new Input(canvasEl);
@@ -482,6 +493,7 @@ const loop = new GameLoop(
   (dt) => {
     renderer.render(dt);
     ui.update(loop.fps);
+    loop.maxFps = game.settings.frameCap;
   },
 );
 loop.start();

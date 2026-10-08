@@ -27,6 +27,12 @@
 
 const KEY = 'wurm.settings.v1';
 
+/** The frame-rate limits on offer, 0 for every refresh of the screen. */
+export const FRAME_CAPS = [0, 60, 30] as const;
+/** Device pixels drawn to a screen pixel, at most: everything, and the fast graphics. */
+export const FULL_DPR = 2;
+export const FAST_DPR = 1;
+
 /** Everything that is a preference, and their out-of-the-box answers. */
 export const SETTING_DEFAULTS = {
   grid: true,
@@ -101,6 +107,14 @@ export const SETTING_DEFAULTS = {
   compactFight: true,
   /** The arrows a bow looses first while there are any (`nockedArrow`); sent with every shot, since it is the island that looses them. */
   nock: 'arrow',
+  /** The most frames drawn a second, or 0 for every refresh of the screen (`GameLoop.maxFps`). */
+  frameCap: 0,
+  /**
+   * How much is drawn: everything, or the fast set (`FAST_GRAPHICS`), which
+   * draws one pixel for every screen pixel and leaves out the swell, the haze
+   * and the small life.
+   */
+  graphics: 'full' as 'full' | 'fast',
 };
 
 export type Settings = typeof SETTING_DEFAULTS & {
@@ -137,6 +151,8 @@ function read(): Partial<typeof SETTING_DEFAULTS> {
     for (const k of KEPT) if (typeof got[k] === typeof SETTING_DEFAULTS[k]) out[k] = got[k];
     // A stance is one of three words, not any word.
     if (!['aggressive', 'balanced', 'defensive'].includes(out.fightStance as string)) delete out.fightStance;
+    if (!['full', 'fast'].includes(out.graphics as string)) delete out.graphics;
+    if (!(FRAME_CAPS as readonly number[]).includes(out.frameCap as number)) delete out.frameCap;
     return out as Partial<typeof SETTING_DEFAULTS>;
   } catch {
     return {};
