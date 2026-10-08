@@ -2356,6 +2356,14 @@ const LOOKS: [number, number, number][] = [[0.4, 3, 1], [2.7, 17, -1], [5.0, 10,
 const LOOK_LEAST = -24;
 /** And how much of that the neck and the head take, the chest bowing the rest. */
 const LOOK_BOW = -16;
+/**
+ * Under a helm with a brim and a nasal the face is gone from in front at
+ * far less than that, so there the head and the chest each bow no further
+ * than this, and the hand is looked down at: bowed to it, the brim and
+ * nasal covered all of the face but a strip. Brought up higher to the
+ * eyes instead, the gauntlet was held in front of the face.
+ */
+const LOOK_BOW_HELM = -7;
 /** And when it blinks: as each look starts, and now and then besides, once twice in a row. */
 const BLINKS = [0.45, 2.75, 4.1, 5.05, 8.65, 10.15, 11.3, 11.62, 14.65];
 
@@ -2376,7 +2384,7 @@ const BLINKS = [0.45, 2.75, 4.1, 5.05, 8.65, 10.15, 11.3, 11.62, 14.65];
  * body and a spear's shaft across the face -- and none when both are full.
  * And the eyes go to where the hand is, wherever that is.
  */
-function idle(r: Rig, t: number, fr: Frame, busy: [boolean, boolean] = [false, false]): void {
+function idle(r: Rig, t: number, fr: Frame, busy: [boolean, boolean] = [false, false], helmed = false): void {
   const tt = ((t % 16) + 16) % 16;
   const turn = (period: number): number => (TAU * t) / period;
   // Breathing: the rate drifting a sixth either way over the loop, in quicker than out, deeper and shallower.
@@ -2457,8 +2465,8 @@ function idle(r: Rig, t: number, fr: Frame, busy: [boolean, boolean] = [false, f
     const look = Math.max(LOOK_LEAST, Math.atan2(d[2], Math.hypot(d[0], d[1])) / DEG), yaw = Math.atan2(-d[0], d[1]) / DEG;
     // The neck and the head bow no further than `LOOK_BOW` and the chest the rest: bowed the whole way, a helm's crown and nasal
     // filled the face from in front.
-    const nod = Math.max(LOOK_BOW, look);
-    r.chest[0] += (look - nod) * lk;
+    const nod = Math.max(helmed ? LOOK_BOW_HELM : LOOK_BOW, look);
+    r.chest[0] += Math.max(helmed ? LOOK_BOW_HELM : -90, look - nod) * lk;
     r.neck = [r.neck[0] * (1 - lk) + 0.35 * nod * lk, r.neck[1], r.neck[2] * (1 - lk) + 0.35 * yaw * lk];
     r.head = [r.head[0] * (1 - lk) + 0.65 * nod * lk, r.head[1], r.head[2] * (1 - lk) + 0.65 * yaw * lk];
   }
@@ -2801,17 +2809,40 @@ const CHISEL_TOP: V3 = [0, 0.95, GRIP];
 const BLOW: Key[] = [
   { at: 0.08, v: [1.8, 3.1, 3.2, 0.5, -0.6, -0.7, -0.95, 0.15, 0.35] },
   { at: 0.2, v: [1.8, 3.2, 2.8, 0.4, -0.6, -0.8, -1, 0.15, 0.12] },
-  { at: 0.34, v: [2.9, 1.4, 3.9, 0.9, -0.2, -0.4, -0.2, 0.6, 0.75] },
-  { at: 0.48, v: [3.0, -0.3, 5.7, 0.9, 0.3, 0.2, 0, -0.1, 1] },
-  { at: 0.6, v: [3.1, -0.6, 6.4, 0.85, 0.35, 0.45, -0.05, -0.65, 0.75] },
-  { at: 0.72, v: [3.2, -0.8, 6.6, 0.85, 0.3, 0.45, -0.05, -0.9, 0.42] },
-  { at: 0.86, v: [3.2, -0.85, 6.65, 0.85, 0.3, 0.45, -0.05, -0.92, 0.38] },
+  { at: 0.27, v: [3.0, 1.5, 2.5, 0.65, -0.4, -0.6, -0.6, -0.1, 0.8] },
+  { at: 0.34, v: [3.1, 1.2, 3.9, 0.9, -0.2, -0.4, -0.2, 0.6, 0.75] },
+  { at: 0.48, v: [3.1, -0.4, 5.7, 0.9, 0.3, 0.2, 0, -0.1, 1] },
+  { at: 0.6, v: [3.1, -0.6, 6.35, 0.85, 0.35, 0.45, -0.05, -0.65, 0.75] },
+  { at: 0.72, v: [3.2, -0.82, 6.5, 0.85, 0.3, 0.45, -0.05, -0.85, 0.5] },
+  { at: 0.86, v: [3.25, -1.0, 6.7, 0.85, 0.3, 0.45, -0.05, -0.97, 0.22] },
   { at: 0.92, v: [3.3, -0.5, 6.3, 0.8, 0.5, 0.1, 0.1, -0.7, 0.7] },
   { at: 0.955, v: [3.3, -0.2, 4.6, 0.8, -0.3, -0.5, 0.15, -0.15, 0.98] },
   { at: 0.98, v: [2.8, 1.2, 2.4, 0.5, -0.6, -0.7, -0.3, 0.5, 0.8] },
 ];
+/*
+ * At the top the arm was held dead still: the three keys there were within a
+ * quarter of a unit of one another, and a third of a second of every second
+ * the arm was frozen, a pause and then a hit. Now the cock loads through it --
+ * the wrist creeping back and up and the head of the mallet tipping further
+ * back over the shoulder -- until the blow comes down. And on the draw up the
+ * fist goes out from the work to the side first and rises beside the shoulder,
+ * out and back of it: brought forward at the height of the chest first, the
+ * mallet's head went up past the mouth and chin.
+ */
 /** How far into a blow, after it lands, work may change hands: see `settle`. */
 const WORK_SWAP = 0.12;
+/**
+ * Where the mallet is held up instead of cocked behind the ear while the hand
+ * it is in is the far one from where it is seen -- after a turn onto a
+ * facing that works the other way (see `lefty`), until the next blow lands
+ * and the hands change: out beside the chest, below the shoulder, in the hips'
+ * frame as `BLOW` has it. Cocked behind the ear with the far arm, the forearm
+ * lay across the brow and the mallet over the crown, a hand on the forehead,
+ * for up to half a second every time the body turned that way at work.
+ */
+const FAR_COCK = [3.4, 0.9, 2.5, 0.8, 0.1, -0.6];
+/** Which facings work is done left-handed at, for easing between them as the body turns (see `lefty`). */
+const LEFTY = [0, 0, 0, 1, 0, 0, 0, 1];
 
 /** Where the ankles stand at work: apart, the left forward under the work and the right back and turned out, braced for the blow. */
 function workFeet(fr: Frame): [V3, V3] {
@@ -2833,7 +2864,7 @@ function workFeet(fr: Frame): [V3, V3] {
  * thirty, it was a crown over a chest, and a cap or a helm hid the face. Seen from where the right hand's swing would come across
  * the face, it is done the other way about, left-handed (`left`, see `lefty`).
  */
-function work(r: Rig, w: number, fr: Frame, left: boolean): void {
+function work(r: Rig, w: number, fr: Frame, left: boolean, far = 0): void {
   const s = (((w / TAU) % 1) + 1) % 1;
   const T = fr.tall;
   r.tool = true;
@@ -2873,6 +2904,10 @@ function work(r: Rig, w: number, fr: Frame, left: boolean): void {
     wrist = [wrist[0] + top[0] - head[0], wrist[1] + top[1] - head[1], wrist[2] + top[2] + 0.5 * T - head[2]];
   }
   const k = loop([{ at: 0, v: [wrist[0] / T, wrist[1] / T, wrist[2] / T, 0.4, -0.6, -0.8, ...haft], hit: true }, ...BLOW], s);
+  // The far hand held up beside the shoulder rather than cocked behind the head, the elbow out and down, by as much as it is up
+  // and the far one.
+  const low = far * Math.min(1, Math.max(0, up));
+  for (let i = 0; i < 6; i++) k[i] += (FAR_COCK[i] - k[i]) * low;
   hold(r, fr, 1, [k[0] * T, k[1] * T, k[2] * T], [k[3], k[4], k[5]], [k[6], k[7], k[8]]);
   if (left) mirror(r);
 }
@@ -3426,17 +3461,20 @@ const WAVE_BEND = [86, 76, 66, 84, 86, 84, 66, 76];
  * body turns in the middle of a wave made with the staged one: the far arm
  * three-quarters on raised half way forward, which takes the hand out past
  * the side of the head rather than behind it; the near one side on raised
- * all but straight back, where the hand is behind the head on the screen and
- * clear of the face -- out to the side, it comes at the viewer and the hand
- * was over the face; and the far one three-quarters away straight out, past
- * the back of the head.
+ * straight ahead, a little lower and with the elbow opened, so the forearm
+ * leans out ahead of the face and the hand is clear of it -- out to the side,
+ * it comes at the viewer and the hand was over the face, and raised straight
+ * back, the hand sat on the back of the crown and the wave read as
+ * scratching the head; and the far one three-quarters away straight out,
+ * past the back of the head.
  */
-const WAVE_ROUND_OTHER = [20, 45, -80, 0, 20, 0, -80, 45];
-const WAVE_BEND_OTHER = [86, 80, 80, 84, 86, 84, 80, 80];
+const WAVE_ROUND_OTHER = [20, 45, 84, 0, 20, 0, 84, 45];
+const WAVE_RAISE_OTHER = [102, 98, 100, 102, 102, 102, 100, 98];
+const WAVE_BEND_OTHER = [86, 80, 62, 84, 86, 84, 62, 80];
 /** Each arm's tables, round the eight facings: the staged ones where it is the staged arm, the other ones where not. */
 const WAVE_BY_ARM = [0, 1].map((k) => {
   const pick = (main: number[], other: number[]): number[] => main.map((v, f) => (stagedArm(f) === k ? v : other[f]));
-  return { round: pick(WAVE_ROUND, WAVE_ROUND_OTHER), raise: WAVE_RAISE, bend: pick(WAVE_BEND, WAVE_BEND_OTHER) };
+  return { round: pick(WAVE_ROUND, WAVE_ROUND_OTHER), raise: pick(WAVE_RAISE, WAVE_RAISE_OTHER), bend: pick(WAVE_BEND, WAVE_BEND_OTHER) };
 });
 
 /**
@@ -3474,7 +3512,10 @@ function wave(r: Rig, t: number, facing: number, fr: Frame, k: number, busy: [bo
    */
   const x = ease(Math.max(0, Math.min(1, t / 0.24)));
   const raise = (1 + 2.2 * Math.pow(x - 1, 3) + 1.2 * Math.pow(x - 1, 2)) * (1 - step(t, 0.76, 0.96));
-  const lift = step(t, 0, 0.11) * (1 - step(t, 0.84, 1));
+  // The elbow bent from the first frames, and further than it is held up, so the forearm is folded up before the upper arm comes
+  // level (`early`): bent as the arm rose, side on it went up for a frame or two as one straight arm pointing ahead at the height
+  // of the shoulder, with the fist on the end of it.
+  const lift = step(t, 0, 0.05) * (1 - step(t, 0.84, 1));
   // Three swings of the forearm, in and out from upright, eased in and out of.
   const swings = step(t, 0.15, 0.25) * (1 - step(t, 0.72, 0.82));
   const ph = (TAU * 3 * (t - 0.2)) / 0.58;
@@ -3500,12 +3541,12 @@ function wave(r: Rig, t: number, facing: number, fr: Frame, k: number, busy: [bo
   // The forearm bent from the elbow toward forward as it hangs and toward straight up as it is raised; and kept toward up as it
   // comes down, so the hand comes down past the shoulder: bent toward forward, the arm side on lowered ahead of the body was one
   // straight line, the forearm on from the upper arm.
-  const up = t < 0.5 ? Math.min(lift, Math.max(0, Math.min(1, raise))) : lift;
+  const up = t < 0.5 ? Math.min(lift, Math.max(0, Math.min(1, 1.6 * raise))) : lift;
   const want: V3 = [0, 1 - up, up], wu = dot(want, u);
   const p = unit([want[0] - u[0] * wu, want[1] - u[1] * wu, want[2] - u[2] * wu]);
   // Coming down, the elbow folds further, the hand toward the shoulder, before it opens again at the side.
-  const fold = 30 * step(t, 0.74, 0.86);
-  const bend = (r.elbow[k] + (byFacing(table.bend, facing) + fold - (swing > 0 ? 24 : 16) * swing - r.elbow[k]) * lift) * DEG;
+  const fold = 30 * step(t, 0.74, 0.86), early = t < 0.5 ? 35 * Math.max(0, 1 - raise) : 0;
+  const bend = (r.elbow[k] + (byFacing(table.bend, facing) + fold + early - (swing > 0 ? 24 : 16) * swing - r.elbow[k]) * lift) * DEG;
   const fa: V3 = [u[0] * Math.cos(bend) + p[0] * Math.sin(bend), u[1] * Math.cos(bend) + p[1] * Math.sin(bend), u[2] * Math.cos(bend) + p[2] * Math.sin(bend)];
   const S: V3 = [s * 2.1 * fr.sh, -0.1, ARM_AT * T + r.shrug[k]];
   const a = UPPER * T, b = LOWER * T;
@@ -3528,20 +3569,27 @@ function wave(r: Rig, t: number, facing: number, fr: Frame, k: number, busy: [bo
 /**
  * The greeting with both hands full, a weapon and a shield, `t` of the way
  * through: the head turned to whoever is looking and a nod with a little bow
- * from the chest, the weapon hand brought up and forward a little and down
- * again with it. It was a wave with the shield arm, the hand behind the
+ * from the chest. It was a wave with the shield arm, the hand behind the
  * shield, which read as the shield raised -- and side on, over the face.
+ *
+ * The weapon hand stays down, the forearm only coming up a little with the
+ * bow: brought up and forward, it tipped a blade in the fist up to level
+ * (see `heldFrame`), pointed at whoever the body faced, which reads as a
+ * threat and not a greeting. And seen from behind, the head turns over the
+ * shoulder toward the viewer by up to `NOD_BACK` degrees, so the nod is
+ * made to them: kept facing away, it was the back of the head dipping,
+ * which reads as looking at the ground.
  */
+const NOD_BACK = 35;
 function nod(r: Rig, t: number, facing: number): void {
   const held = step(t, 0.05, 0.25) * (1 - step(t, 0.72, 0.95));
   const dip = Math.pow(Math.sin(Math.PI * step(t, 0.22, 0.62)), 2);
-  const view = viewOf(facing);
-  const to = view.T[1] > -0.2 ? Math.max(-20, Math.min(20, Math.atan2(-view.T[0], view.T[1]) / DEG)) : 0;
+  const view = viewOf(facing), way = Math.atan2(-view.T[0], view.T[1]) / DEG;
+  const to = view.T[1] > -0.2 ? Math.max(-20, Math.min(20, way)) : way >= 0 ? NOD_BACK : -NOD_BACK;
   r.chest = [r.chest[0] - 5 * dip, r.chest[1], r.chest[2] + 0.25 * to * held];
   r.neck = [r.neck[0] - 7 * dip, r.neck[1], r.neck[2] * (1 - held) + 0.25 * to * held];
   r.head = [r.head[0] + 2 * held - 16 * dip, r.head[1], r.head[2] * (1 - held) + 0.5 * to * held];
-  r.arm[1] = [r.arm[1][0] + 24 * held, r.arm[1][1], r.arm[1][2]];
-  r.elbow[1] += 34 * held;
+  r.elbow[1] += 12 * held;
 }
 
 /*
@@ -3594,6 +3642,8 @@ const HOP_TWIST = 7;
  * in at the shoulder there, which is what shows a bent elbow from in front. In degrees, at the top of the leap.
  */
 const HOP_RIGHT_BEND = 20, HOP_RIGHT_IN = 0.7, HOP_RIGHT_TURN = 12, HOP_TURN = 10;
+/** How much of that shape the right arm keeps on the ground, and how far both elbows bend further at the deepest of a crouch, in degrees. */
+const HOP_KEEP = 0.5, HOP_GIVE = 26;
 
 /** The hop's pose `t` of the way through, over whatever the body was doing standing: everything but how high it is off the ground. */
 function hopPose(r: Rig, t: number, fr: Frame, busy: [boolean, boolean]): void {
@@ -3656,9 +3706,11 @@ function hopPose(r: Rig, t: number, fr: Frame, busy: [boolean, boolean]): void {
   for (let k = 0; k < 2; k++) {
     const [p, a, e] = loop(HOP_ARMS, Math.max(0, Math.min(0.9999, t - (k ? HOP_RIGHT : 0))));
     const g = env * (k ? HOP_RIGHT_SIZE : 1) * (busy[k] ? HOP_HELD : 1);
-    const shape = k ? air : 0, out = a * (1 - (1 - HOP_RIGHT_IN) * shape);
+    // Something of the right arm's shape kept on the ground, and both elbows giving with the knees as a landing is taken: shaped
+    // only in the air, the arms came down at the landing into one straight A, the one the mirror of the other.
+    const shape = k ? Math.max(air, HOP_KEEP * env) : 0, out = a * (1 - (1 - HOP_RIGHT_IN) * shape);
     r.arm[k] = [r.arm[k][0] + (p - r.arm[k][0]) * g, Math.max(r.arm[k][1], r.arm[k][1] + (out - r.arm[k][1]) * g), r.arm[k][2] * (1 - g) + (HOP_TURN * air + HOP_RIGHT_TURN * shape) * g];
-    r.elbow[k] = r.elbow[k] + (e + HOP_RIGHT_BEND * shape - r.elbow[k]) * g;
+    r.elbow[k] = r.elbow[k] + (e + HOP_RIGHT_BEND * shape + HOP_GIVE * c - r.elbow[k]) * g;
   }
 }
 
@@ -3698,6 +3750,8 @@ function busyOf(p: FigurePose, facing: number, side = overLeft(facing) ? 0 : 1):
 interface Kept {
   wave?: number;
   side?: number;
+  /** And the shoulder it is on its way to, which is the one whose hand is full as far as an emote is concerned (see `settle`). */
+  bound?: number;
 }
 
 /**
@@ -3708,12 +3762,12 @@ interface Kept {
 function rigOf(p: FigurePose, fr: Frame, left = lefty(p.facing), kept: Kept = {}): Rig {
   const r = rest();
   const side = kept.side ?? (overLeft(p.facing) ? 0 : 1);
-  const busy = busyOf(p, p.facing, side);
+  const busy = busyOf(p, p.facing, kept.bound ?? side);
   if (p.swimming) swim(r, p.phase, p.moving, fr);
   else if (p.driving) drive(r, p.phase, p.moving, p.seat ?? BOX, fr);
   else if (p.moving) walk(r, p.phase, Math.max(0, Math.min(1, p.gait ?? 0)), fr);
-  else if (p.working) work(r, p.phase, fr, left);
-  else idle(r, p.phase / 6, fr, busy);
+  else if (p.working) work(r, p.phase, fr, left, left ? 1 - byFacing(LEFTY, p.facing) : byFacing(LEFTY, p.facing));
+  else idle(r, p.phase / 6, fr, busy, /helm/.test(p.gear?.head?.id ?? ''));
   if (p.emote && !p.swimming && !p.driving) emote(r, p.emote, p.emoteT ?? 0, p.facing, fr, busy, kept.wave);
   // Put away for what wants both hands -- work, the water, the reins, a seat -- and not for an emote, which was a weapon and a
   // shield gone to the back in one frame and back again at the end: a wave is made with the hand that is free, and a hop with
@@ -4309,21 +4363,24 @@ function settle(id: string, p: FigurePose, rigAt: (facing: number, left: boolean
    * eighth in the middle of a wave changed the waving hand, which nobody does. Chosen again only if the body comes round more than
    * a quarter turn from where it started.
    */
+  const over = overLeft(h.goal) ? 0 : 1, bound = h.side > 0 && h.side < 1 ? over : h.side;
   if (p.emote !== 'wave') h.wave = undefined;
   else {
     let off = h.facing - (h.waveFrom ?? h.facing);
     off -= 8 * Math.round(off / 8);
     if (h.wave === undefined || Math.abs(off) > 2) {
-      h.wave = waveArm(h.facing, busyOf(p, h.facing, h.side));
+      h.wave = waveArm(h.facing, busyOf(p, h.facing, bound));
       h.waveFrom = h.facing;
     }
   }
   // Something heavy goes over to the other shoulder as the way it is turning to says, starting as the turn does, over `SWAP`
   // seconds -- but not during an emote, where the hand it would go into may be waving; put away, it is taken up again on whichever.
-  const over = overLeft(h.goal) ? 0 : 1;
+  // Caught half way by one, it goes on to where it was going, and the emote is made with the hand that will be free there: frozen
+  // there, the wave or the hop was made holding the maul out in front in both hands; and sent back to the shoulder it was nearer,
+  // it was carried through the wave on the shoulder staged for the other side, its head over the face.
   if (p.working || p.swimming || p.driving) h.side = over;
-  else if (!p.emote) h.side += Math.max(-dt / SWAP, Math.min(dt / SWAP, over - h.side));
-  const kept: Kept = { wave: h.wave, side: h.side };
+  else if (!p.emote || (h.side > 0 && h.side < 1)) h.side += Math.max(-dt / SWAP, Math.min(dt / SWAP, over - h.side));
+  const kept: Kept = { wave: h.wave, side: h.side, bound: p.emote ? bound : undefined };
   const what = doingAt(p, h.left, h.wave);
   if (what !== h.doing) {
     /*
@@ -4382,7 +4439,10 @@ function settle(id: string, p: FigurePose, rigAt: (facing: number, left: boolean
   // is the ground going round to the left.
   let turned = h.facing - was;
   turned -= 8 * Math.round(turned / 8);
-  const changing = w < 1 || k < 1 || h.lead !== 0;
+  // And while something heavy is on its way between the shoulders: called settled once the turn was, a walk was put down from its
+  // stride's pictures -- made with it already on the far shoulder -- and the swap jumped to its end, and standing it was drawn a
+  // dozen times a second, which shows its last few tenths as one picture.
+  const changing = w < 1 || k < 1 || h.lead !== 0 || !!target.swapping;
   const { rig, busy } = footed(h, led, p.moving && !p.swimming && !p.driving ? target : undefined, frameOf(p.look ?? DEFAULT_LOOK), changing, -turned * 45, -togo * 45, now, dt);
   return { rig, facing: h.facing, changing: changing || busy };
 }
@@ -7375,35 +7435,70 @@ function onShoulder(r: Rig, fr: Frame, w: Weapon, k: number, facing: number): Xf
 }
 
 /** Seconds to take something heavy from one shoulder to the other. */
-const SWAP = 0.6;
+const SWAP = 1;
 
 /*
  * Something heavy from one shoulder to the other, `side` of the way from the
  * left (nought) to the right (one), as [how far along, where the lower hand
  * is in the chest's frame, which way the haft runs from it]. Blended joint by
- * joint from the one carry to the other, the arm coming down lerped its
- * angles while the weapon rode the other hand, and the head of a maul went
- * through the back of the skull and an axe's haft down the face. Now it is
- * lifted off the shoulder and swung down and round in front, the head low
- * in front of the feet half way, as a sledge is let down and taken up again,
- * and up onto the other shoulder, the haft never higher than the chest
- * while it is in front.
+ * joint from the one carry to the other, the head of a maul went through the
+ * back of the skull; then it was swung about the fist from the shoulder to
+ * straight out in front in a twentieth of a second -- the head ten units
+ * while the hand went one -- held out level at arm's length by its butt,
+ * which nobody can hold a maul by, and swung back up the same way.
+ *
+ * Now it goes as a sledge does. Lifted off the shoulder by the haft, the
+ * lower hand coming forward and down while the haft keeps its slant, so the
+ * head comes up off the shoulder still behind the line of the head (see
+ * `SWAP_LIFT`), the other hand having reached across to take it further up;
+ * swung out past that shoulder and down, both hands on it, the head going
+ * down past the knee on its own side -- out to the side, clear of the face
+ * from wherever it is seen; hung from the hands at the waist, the head low
+ * in front of the feet; swung across under the hands to the other side, up
+ * past the knee and out past the other shoulder, and laid back on it. Taken at one pace along that way rather
+ * than by the side's own easing (see `shoulder`), so the head never goes
+ * faster than it does through the middle, about a unit in a sixtieth of a
+ * second -- through the first and last hundredths of the way it went five.
+ * Only the way off the left shoulder is given; the way onto the right is
+ * the same mirrored.
  */
-const SWAP_WAY: Array<[number, V3, V3]> = [
-  [0.22, [-1.3, 1.6, -0.2], [-0.6, 0.75, -0.25]],
-  [0.5, [-0.3, 1.7, -1.1], [0, 0.55, -0.83]],
-  [0.78, [1.3, 1.6, -0.2], [0.6, 0.75, -0.25]],
+const SWAP_HALF: Array<[number, V3, V3]> = [
+  [0.26, [-0.4, 1.2, -0.2], [-0.92, 0.36, 0.12]],
+  [0.4, [-0.5, 1.6, -0.15], [-0.6, 0.45, -0.66]],
+  [0.5, [0, 1.65, 0.1], [0, 0.5, -0.87]],
 ];
-/** How far up the haft from the lower hand the other takes hold, in units. */
-const SWAP_REACH = 1.2;
+const SWAP_WAY: Array<[number, V3, V3]> = [
+  ...SWAP_HALF,
+  ...SWAP_HALF.filter(([u]) => u < 0.5).reverse().map(([u, g, d]): [number, V3, V3] => [1 - u, [-g[0], g[1], g[2]], [-d[0], d[1], d[2]]]),
+];
+/**
+ * The lift off the shoulder, `SWAP_LIFT` of the way along: the lower hand
+ * forward and down from where it carries by `SWAP_LIFT_HAND`, out to its
+ * own side, and the haft only tipped by `SWAP_LIFT_TIP` toward upright and
+ * forward -- most of its slant kept, so the head rises off the shoulder and
+ * comes forward over it rather than swinging out from it.
+ */
+const SWAP_LIFT = 0.12;
+const SWAP_LIFT_HAND: V3 = [0.1, 0.9, -1.0];
+const SWAP_LIFT_TIP: V3 = [0.3, 0.2, 0.05];
+/** How much of the swap's time the weapon takes to get up to its pace at the start, and to come to rest at the end. */
+const SWAP_RAMP = 0.22;
+/**
+ * How far along the haft from the lower hand the other takes hold: half
+ * way to the head of a hafted weapon, so it is carried between two hands a
+ * forearm apart and not hung from one fist; and on a sword's grip, below
+ * the first, the blade being no place for a hand.
+ */
+const swapReach = (w: Weapon): number => (w.headUp ? 2.6 : -0.75);
 
 /**
  * Carrying `w` over the shoulders, `side` of the way from the left to the
  * right (see `Kept`): on one, as `onShoulder` has it; between, held in both
  * hands on the way of `SWAP_WAY`, the weapon's frame put in `r.swapping` and the
  * hands on it -- the one it came off the shoulder in at the butt, the other
- * taking hold further up as it comes round and sliding down to the butt as
- * it goes up, and the first letting go. Either way round, the same way.
+ * taking hold further up as it is stood up and sliding down to the butt as
+ * it goes up onto the other shoulder, and the first letting go. Either way
+ * round, the same way.
  */
 function shoulder(r: Rig, fr: Frame, w: Weapon, side: number, facing: number): void {
   if (side <= 0 || side >= 1) {
@@ -7420,22 +7515,48 @@ function shoulder(r: Rig, fr: Frame, w: Weapon, side: number, facing: number): v
     const into = (v: V3): V3 => [c[0] * v[0] + c[3] * v[1] + c[6] * v[2], c[1] * v[0] + c[4] * v[1] + c[7] * v[2], c[2] * v[0] + c[5] * v[1] + c[8] * v[2]];
     return { xf, g: into([g[0] - chest.t[0], g[1] - chest.t[1], g[2] - chest.t[2]]), d: into(d) };
   });
-  // Along the way, curved smoothly through its keys, and never so low that the far end goes into the ground.
-  const keys: Array<[number, V3, V3]> = [[0, ends[0].g, ends[0].d], ...SWAP_WAY, [1, ends[1].g, ends[1].d]];
-  // Eased off one shoulder and onto the other, but kept moving through the middle, where the hands change over.
-  const u = 0.5 * (side + ease(side));
-  let i = 0;
-  while (i < keys.length - 2 && keys[i + 1][0] < u) i++;
-  const x = (u - keys[i][0]) / (keys[i + 1][0] - keys[i][0]);
-  const at = (j: number, m: 1 | 2): V3 => keys[Math.max(0, Math.min(keys.length - 1, j))][m];
-  const curve = (m: 1 | 2): V3 => {
-    const a = at(i - 1, m), b = at(i, m), c = at(i + 1, m), d = at(i + 2, m);
-    const x2 = x * x, x3 = x2 * x;
-    return [0, 1, 2].map((n) => 0.5 * (2 * b[n] + (c[n] - a[n]) * x + (2 * a[n] - 5 * b[n] + 4 * c[n] - d[n]) * x2 + (3 * b[n] - a[n] - 3 * c[n] + d[n]) * x3)) as V3;
+  // Lifted off each shoulder: from where it carries there, out to that side.
+  const lift = (k: number): [number, V3, V3] => {
+    const s = k ? 1 : -1, { g, d } = ends[k], H = SWAP_LIFT_HAND, P = SWAP_LIFT_TIP;
+    return [k ? 1 - SWAP_LIFT : SWAP_LIFT, [g[0] + s * H[0], g[1] + H[1], g[2] + H[2]], unit([d[0] + s * P[0], d[1] + P[1], d[2] + P[2]])];
   };
-  const g = place(chest, curve(1));
-  let d = unit(mv(chest.m, curve(2)));
-  const far = (w.to ?? 0) - (w.fist ?? 0), low = g[2] + HIP * T - 0.6;
+  const keys: Array<[number, V3, V3]> = [[0, ends[0].g, ends[0].d], lift(0), ...SWAP_WAY, lift(1), [1, ends[1].g, ends[1].d]];
+  // Along the way at `x` of it, curved smoothly through its keys: the lower hand, and the haft's way, of unit length.
+  const along = (x: number): [V3, V3] => {
+    let i = 0;
+    while (i < keys.length - 2 && keys[i + 1][0] < x) i++;
+    const v = (x - keys[i][0]) / (keys[i + 1][0] - keys[i][0]), v2 = v * v, v3 = v2 * v;
+    const at = (j: number, m: 1 | 2): V3 => keys[Math.max(0, Math.min(keys.length - 1, j))][m];
+    const curve = (m: 1 | 2): V3 => {
+      const a = at(i - 1, m), b = at(i, m), c = at(i + 1, m), d = at(i + 2, m);
+      return [0, 1, 2].map((n) => 0.5 * (2 * b[n] + (c[n] - a[n]) * v + (2 * a[n] - 5 * b[n] + 4 * c[n] - d[n]) * v2 + (3 * b[n] - a[n] - 3 * c[n] + d[n]) * v3)) as V3;
+    };
+    return [curve(1), unit(curve(2))];
+  };
+  /*
+   * How far along the way it is: at one pace by the distance the head goes,
+   * and a little of the hand's, getting up to it over the first `SWAP_RAMP` of the
+   * time and coming to rest over the last. Eased by the side alone, the
+   * first and last tenths of the way, where the head swings furthest for
+   * the least of the hand, went by in four frames.
+   */
+  const far = (w.to ?? 0) - (w.fist ?? 0), N = 24, gone = [0];
+  let [pg, pd] = along(0);
+  for (let j = 1; j <= N; j++) {
+    const [g, d] = along(j / N);
+    gone.push(gone[j - 1] + 0.3 * Math.hypot(g[0] - pg[0], g[1] - pg[1], g[2] - pg[2]) + Math.hypot(g[0] + far * d[0] - pg[0] - far * pd[0], g[1] + far * d[1] - pg[1] - far * pd[1], g[2] + far * d[2] - pg[2] - far * pd[2]));
+    [pg, pd] = [g, d];
+  }
+  const A = SWAP_RAMP, top = 1 / (1 - A);
+  const paced = side < A ? (top * side * side) / (2 * A) : side > 1 - A ? 1 - (top * (1 - side) * (1 - side)) / (2 * A) : top * (side - A / 2);
+  const want = paced * gone[N];
+  let j = 0;
+  while (j < N - 1 && gone[j + 1] < want) j++;
+  const u = (j + Math.max(0, Math.min(1, (want - gone[j]) / (gone[j + 1] - gone[j] || 1)))) / N;
+  const [cg, cd] = along(u);
+  const g = place(chest, cg);
+  let d = unit(mv(chest.m, cd));
+  const low = g[2] + HIP * T - 0.6;
   if (d[2] * far < -low) {
     const flat = Math.hypot(d[0], d[1]) || 1, z = -low / far;
     d = [(d[0] / flat) * Math.sqrt(1 - z * z), (d[1] / flat) * Math.sqrt(1 - z * z), z];
@@ -7455,9 +7576,12 @@ function shoulder(r: Rig, fr: Frame, w: Weapon, side: number, facing: number): v
   const ax = unit([0, 1, 2].map((j) => x0[j] * Math.cos(twist) + y0[j] * Math.sin(twist)) as V3);
   const ay = cross(d, ax), o: V3 = [g[0] - d[0] * (w.fist ?? 0), g[1] - d[1] * (w.fist ?? 0), g[2] - d[2] * (w.fist ?? 0)];
   r.swapping = { m: [ax[0], ay[0], d[0], ax[1], ay[1], d[1], ax[2], ay[2], d[2]], t: o };
-  // The hands on it: the left at the butt until it lets go past the middle, the right taking hold up the haft as it comes round
-  // and sliding down to the butt as it goes up -- and the other way about going the other way.
-  const grip = [{ on: 1 - step(u, 0.5, 0.8), up: 0 }, { on: step(u, 0.2, 0.5), up: SWAP_REACH * (1 - step(u, 0.55, 0.92)) }];
+  // The hands on it: the right reaching across to take hold up the haft by the left shoulder before it is lifted off, the two
+  // changing over along the haft while it hangs, the right to the butt and the left up to where the right was, and the left
+  // letting go once it is down on the right shoulder -- and the other way about going the other way. Taken hold of over a fifth of
+  // the time, not of the way: a hand reaching across the chest in the first frames of the way went five units a frame.
+  const reach = swapReach(w), over = step(u, 0.42, 0.58);
+  const grip = [{ on: 1 - step(side, 0.8, 1), up: reach * over }, { on: step(side, 0, 0.2), up: reach * (1 - over) }];
   const free = copy();
   for (let k = 0; k < 2; k++) {
     if (grip[k].on <= 0) continue;
@@ -8127,6 +8251,10 @@ function wield(out: Part[], named: Map<string, Part[]>, r: Rig, b: Bones, gear: 
       const mid = place(xf, [0, 0, (arm.from + arm.to) / 2]), ch = b.chest.t;
       const whole = bit(c.whole, xf, 0.03, { after: on('chest', 'abdomen', 'upper0', 'upper1'), front: within(xf, unit([mid[0] - ch[0], mid[1] - ch[1], 0])) });
       for (const h of [...(named.get('hand0') ?? []), ...(named.get('hand1') ?? [])]) h.after = whole;
+      // And under the head and whatever is on it while its head is further off than the skull: lifted off the shoulder from behind
+      // it, it was put after the chest and so over the head, and a maul's head was drawn on the back of the crown.
+      const top = place(xf, [0, 0, arm.to - 1]), skull = place(b.head, SKULL.c), T = viewOf(facing).T;
+      if ((top[0] - skull[0]) * T[0] + (top[1] - skull[1]) * T[1] + (top[2] - skull[2]) * T[2] < 0) whole.under = on('head', 'ears', 'cap', 'top', 'fall', 'beard', 'nose', 'tails', 'neck');
     } else if (held && r.thrown && held.hand === 1) {
       // Thrown: out of the hand and on its way (the spell draws it in flight), with nothing put away in its place.
     } else if (held && arm.carry === 'shoulder') {
