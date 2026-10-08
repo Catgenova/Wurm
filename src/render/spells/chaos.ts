@@ -320,7 +320,8 @@ function thorns(k: FxScene, b: { x: number; y: number; z: number }, o: {
     const sx1 = k.eye.worldToScreenX(tx, ty), sy1 = k.eye.worldToScreenY(tx, ty, tz);
     (sy0 > cy ? front : back).push(sx0, sy0, sx1, sy1);
   }
-  const main = o.main ?? k.pal.main, deep = o.deep ?? k.pal.deep, ink = k.pal.ink, inkW = Math.max(0.8, 0.7 * k.zoom);
+  // A thin thorn gets a thin edge: an ink line as wide as the thorn would leave nothing but ink.
+  const main = o.main ?? k.pal.main, deep = o.deep ?? k.pal.deep, ink = k.pal.ink, inkW = Math.max(0.6, Math.min(0.7 * k.zoom, W * 0.45));
   const draw = (list: number[]) => (g: CanvasRenderingContext2D): void => {
     g.globalAlpha = clamp(a);
     g.lineJoin = 'miter';
@@ -445,23 +446,37 @@ function cracks(k: FxScene, c: { x: number; y: number }, r: number, o: { n?: num
   });
 }
 
-/** A ragged pool lying on the ground, `r` tiles, its edge torn by the cast's own seed: rot, blood. */
-function pool(k: FxScene, c: { x: number; y: number }, r: number, colour: string, alpha: number, salt = 0): void {
+/**
+ * A ragged pool lying on the ground, `r` tiles, its edge torn by the cast's
+ * own seed: rot, blood -- and, given `inner`, a second pool inside it in
+ * another colour, drawn in the same record, since everything on the ground
+ * is drawn again for every line of the ground it lies across.
+ */
+function pool(k: FxScene, c: { x: number; y: number }, r: number, colour: string, alpha: number, salt = 0,
+  inner?: { share: number; colour: string; alpha: number; salt: number }): void {
   if (alpha <= 0.01 || r <= 0.03) return;
-  const n = k.facets(r, 26), pts: number[] = [];
-  for (let i = 0; i < n; i++) {
-    const an = (i / n) * TAU;
-    const rr = r * (0.72 + 0.28 * hashOf(k.seed + 41 + salt, i));
-    onGround(k, c.x + Math.cos(an) * rr, c.y + Math.sin(an) * rr, pts, 0.08);
-  }
+  const ring = (rad: number, sl: number): number[] => {
+    const n = k.facets(rad, 26), pts: number[] = [];
+    for (let i = 0; i < n; i++) {
+      const an = (i / n) * TAU;
+      const rr = rad * (0.72 + 0.28 * hashOf(k.seed + 41 + sl, i));
+      onGround(k, c.x + Math.cos(an) * rr, c.y + Math.sin(an) * rr, pts, 0.08);
+    }
+    return pts;
+  };
+  const outer = ring(r, salt), within = inner ? ring(r * inner.share, inner.salt) : null;
   k.groundDraw(c.x, c.y, r + 0.4, (g) => {
-    g.globalAlpha = clamp(alpha);
-    g.fillStyle = colour;
-    g.beginPath();
-    g.moveTo(pts[0], pts[1]);
-    for (let i = 2; i < pts.length; i += 2) g.lineTo(pts[i], pts[i + 1]);
-    g.closePath();
-    g.fill();
+    const fill = (pts: number[], col: string, al: number): void => {
+      g.globalAlpha = clamp(al);
+      g.fillStyle = col;
+      g.beginPath();
+      g.moveTo(pts[0], pts[1]);
+      for (let i = 2; i < pts.length; i += 2) g.lineTo(pts[i], pts[i + 1]);
+      g.closePath();
+      g.fill();
+    };
+    fill(outer, colour, alpha);
+    if (within && inner) fill(within, inner.colour, inner.alpha);
   });
 }
 
@@ -1243,19 +1258,17 @@ export const CHAOS: Record<string, SpellVisual> = {
       // It spreads: a ragged pool of rot running out to the edge of what it sickens, the edge marked.
       impact: { secs: 1.2, draw: (k, u) => {
         const R = radiusOf(PLAGUE), e = easeOut(u * 1.3);
-        pool(k, k.spot, R * e, ROT_DEEP, 0.55, 0);
-        pool(k, k.spot, R * 0.8 * e, ROT, 0.3, 7);
+        pool(k, k.spot, R * e, ROT_DEEP, 0.55, 0, { share: 0.8, colour: ROT, alpha: 0.3, salt: 7 });
         k.ring(k.spot, R * e, { band: 0.12, alpha: 0.9, main: ROT, deep: ROT_DEEP, dash: 0, glow: 0.3 });
         k.light(k.spot, R, 0.5 * (1 - u * 0.5), '#7dff6a');
       } },
       // Festering for its seconds: the pool bubbling, a green haze crawling over it, the edge and the time it has left.
       linger: { draw: (k, age, left) => {
         const R = radiusOf(PLAGUE), a = fadeOf(age, left, 0.3, 1.5);
-        pool(k, k.spot, R, ROT_DEEP, 0.4 * a, 0);
-        pool(k, k.spot, R * 0.8, ROT, 0.18 * a, 7);
+        pool(k, k.spot, R, ROT_DEEP, 0.4 * a, 0, { share: 0.8, colour: ROT, alpha: 0.18 * a, salt: 7 });
         k.ring(k.spot, R, { band: 0.05, alpha: 0.3 * a, main: ROT, deep: ROT_DEEP, dash: 5, turn: age * 0.05, glow: 0 });
         timeArc(k, k.spot, R, left / lastsOf(PLAGUE), { alpha: 0.8 * a, band: 0.1, main: ROT });
-        k.emit(k.on(k.spot.x, k.spot.y, 2), 14 * a, { kind: 'smoke', colour: [ROT, ROT_DEEP], size: 3, life: [1, 1.8], speed: [0.02, 0.1], up: [2, 6], gravity: -1, jitter: R * 0.6 });
+        k.emit(k.on(k.spot.x, k.spot.y, 2), 8 * a, { kind: 'smoke', colour: [ROT, ROT_DEEP], size: 3.4, life: [1, 1.8], speed: [0.02, 0.1], up: [2, 6], gravity: -1, jitter: R * 0.6 });
         // A bubble breaks each second somewhere in it, on the beat the creatures in it bleed.
         if (ticked(k, age, 'beat') && left > 0.5) {
           const an = k.rand() * TAU, rr = Math.sqrt(k.rand()) * R * 0.8;
@@ -1502,7 +1515,7 @@ export const CHAOS: Record<string, SpellVisual> = {
         chaosStar(k, k.spot, R, { grow: g, turn: 0.1, alpha: 0.85 * g });
         cracks(k, k.spot, R * 0.85, { n: 10, grow: seg(t, 0.38, 0.5), alpha: 0.9 });
         if (t > 0.4) k.emit(k.on(k.spot.x, k.spot.y, 1), 40, { kind: 'dust', colour: ['#5a4a3e', '#3e3430'], size: 2.4, life: [0.3, 0.6], speed: [0.1, 0.4], up: [2, 8], gravity: 10, jitter: R * 0.6 });
-        k.light(k.spot, R * 0.7, 0.5 * g);
+        if (t < 0.5) k.light(k.spot, R * 0.7, 0.5 * g);
       },
       hit: (k) => {
         const R = radiusOf(CATACLYSM);
