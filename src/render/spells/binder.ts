@@ -1199,7 +1199,9 @@ const tether: SpellVisual = {
       const tip = arcAt(from, to, u, lift), tail = arcAt(from, to, Math.max(0, u - back), lift);
       crystal(k, tail, tip, 1.7, { waist: 0.2, turn: 0.4 });
       const pts: P3[] = [];
-      for (let i = 0; i <= 6; i++) pts.push(arcAt(from, tail, i / 6, -2 - k.dist));
+      // The chain sags by how much of it is paid out: none at all while the stake is still at the hand.
+      const sag = -Math.min(2 + k.dist, 4 * Math.hypot(tail.x - from.x, tail.y - from.y));
+      for (let i = 0; i <= 6; i++) pts.push(arcAt(from, tail, i / 6, sag));
       chain(k, pts, { link: 2.8, alpha: 0.9 });
     } },
     hit: (k) => {
@@ -1522,7 +1524,6 @@ const lock: SpellVisual = {
     } },
     hit: (k) => {
       shatterBurst(k, k.heart(k.target), 16, undefined, 0.8);
-      k.flash(0.05);
     },
     impact: { secs: 0.7, draw: (k, u) => {
       const from = mid3(k.hand(0), k.hand(1), 0.5), to = k.heart(k.target);
@@ -1565,7 +1566,7 @@ function plates(k: FxScene, b: Body, grow: number, a: number, sweep: number): vo
     const s = easeBack(seg(grow, i * 0.06, i * 0.06 + 0.4));
     if (s <= 0.02) return;
     // Only what is on the side toward the viewer: the far arm's and leg's plates are behind the body.
-    if (!always && k.sy({ x: (p0.x + p1.x) / 2, y: (p0.y + p1.y) / 2, z: b.z }) < cy - 0.5 * k.zoom) return;
+    if (!always && k.sy({ x: (p0.x + p1.x) / 2, y: (p0.y + p1.y) / 2, z: b.z }) < cy - 1.5 * k.zoom) return;
     const ax = k.sx(p0), ay = k.sy(p0), bx = k.sx(p1), by = k.sy(p1);
     const mx = (ax + bx) / 2, my = (ay + by) / 2;
     const half = s * 0.82;
@@ -1632,7 +1633,6 @@ const stillSkin: SpellVisual = {
     },
     hit: (k) => {
       shatterBurst(k, k.at(k.caster, 0.55), 8, undefined, 0.7);
-      k.flash(0.04);
     },
     impact: { secs: 0.5, draw: (k, u) => {
       k.ring(k.caster, 0.25 + 0.7 * easeOut(u), { band: 0.07 * (1 - u), alpha: 0.9 * (1 - u), glow: 0.5 });
