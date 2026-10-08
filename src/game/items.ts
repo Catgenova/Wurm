@@ -127,7 +127,7 @@ export const ITEM_DEFS: Record<string, ItemDef> = {
   circlet: { name: 'Circlet', category: 'misc', weight: 0.2, decay: 1, description: 'A gold band worn on the head, in place of a helm. It takes up to {stones:w} stones, each set from the stone\'s own menu, and worn, each favours its trade in you at {share:share} what it would in a ring: {each:pct} more skill from every go at it.' },
   horseshoe: { name: 'Horseshoes', category: 'material', weight: 0.25, stackable: true, decay: 1, description: '{per:W} to a lump and {shoes.perMount:w} to a mount, nailed on by a farrier with a mallet. They hold for {shoes.days:w} days: {shoes.quicker:share} quicker on laid stone, and a step {shoes.step} height units steeper.' },
   horseshoe_mould: { name: 'Horseshoe mould', category: 'tool', weight: 1.2, decay: 1 },
-  coin_die: { name: 'Coin die', category: 'tool', weight: 1.5, description: 'A stamp of hard metal cut with a face. Set a lump of silver or gold on the anvil under it, strike, and it is {coinsPerLump:w} coins. It wears with every strike.' },
+  coin_die: { name: 'Coin die', category: 'tool', weight: 1.5, description: 'A stamp of hard metal cut with a face. Set a lump of gold on the anvil under it, strike, and it is {coinsPerLump:w} coins. It wears with every strike.' },
   coin_die_mould: { name: 'Coin die mould', category: 'tool', weight: 1.2, decay: 1 },
   // What a poured mould cools into, named for its piece by `itemName` and
   // stacked by it: a shovel head casting is not a hatchet head casting.
@@ -136,7 +136,7 @@ export const ITEM_DEFS: Record<string, ItemDef> = {
   statue_casting: { name: 'Statue casting', category: 'misc', weight: 24, description: 'A figure cast whole in a big mould. Set it on a slab and it stands.' },
   bell_mould: { name: 'Bell mould', category: 'tool', weight: 3, decay: 1, description: 'A sand mould, big enough for a bell. It wears a little every time it is filled, and no mould can be mended.' },
   statue_mould: { name: 'Statue mould', category: 'tool', weight: 4, decay: 1, description: 'A sand mould the size of a person. It wears a little every time it is filled, and no mould can be mended.' },
-  coin: { name: 'Coins', category: 'misc', weight: 0.005, stackable: true, description: 'Struck from a lump of silver or gold under a die, {coinsPerLump:w} to the lump. Metal that goes in a pocket, and comes back out of the fire as a lump.' },
+  coin: { name: 'Coins', category: 'misc', weight: 0.005, stackable: true, description: 'Struck from a lump of gold under a die, {coinsPerLump:w} to the lump. Metal that goes in a pocket, and comes back out of the fire as a lump.' },
   needle: { name: 'Needle', category: 'tool', weight: 0.05, description: 'Carved from bone. Needed to improve cloth and leather.' },
   awl: { name: 'Awl', category: 'tool', weight: 0.2, description: 'A bone spike for punching holes in hide. Needed to improve leather.' },
   mallet: { name: 'Mallet', category: 'tool', weight: 1.5, description: 'Plans buildings and drives wooden walls together.' },
@@ -649,7 +649,8 @@ describeFrom('circlet', { stones: CIRCLET_STONES, share: CIRCLET_SHARE, each: JE
  * came up empty at run time with "TREASURE_ACTIONS is not iterable". It
  * builds perfectly either way; only running it says so.
  */
-export const HOARD_METALS = ['adamantine_lump', 'glimmersteel_lump', 'mithril_lump', 'seryll_lump', 'gold_lump', 'silver_lump'];
+/** Gold is not among them: the Northeast Tundra's mountain is the one place it comes out of the ground. */
+export const HOARD_METALS = ['adamantine_lump', 'glimmersteel_lump', 'mithril_lump', 'seryll_lump', 'silver_lump'];
 
 export interface Item {
   uid: number;

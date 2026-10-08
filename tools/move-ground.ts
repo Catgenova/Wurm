@@ -22,6 +22,9 @@
  * themselves, taken off and the ground under them laid as the generator lays
  * it now (`clearTrees`).
  *
+ * And a third: gold seams anywhere but under the Northeast Tundra's mountain
+ * become what the generator lays there now (`goldOff`).
+ *
  * Each island it has done goes into `land_move`, and an island already there
  * is skipped without reading its land, so a deploy can run this every time.
  *
@@ -194,6 +197,55 @@ export async function clearTrees(sb: SupabaseClient, world: World): Promise<void
   console.log(`${world.name}: ${cleared} trees taken off where none grow of themselves`);
 }
 
+const GOLD_MOVE = '2026-10-08 gold only under the Northeast Tundra';
+const GOLD = ROCK_VARIANTS.findIndex((r) => r.yields === 'gold_ore');
+
+/**
+ * The third move: gold is the Northeast Tundra's alone, under its mountain, so
+ * every gold seam anywhere else on an island founded before becomes what the
+ * generator lays there now (iron, as any seam that belongs to another island
+ * does). Nothing writes rock after founding, so every such seam is the old
+ * generator's.
+ */
+export async function goldOff(sb: SupabaseClient, world: World): Promise<void> {
+  const atlas = readAtlas();
+  const S = world.size;
+  let moved = 0;
+  for (let y0 = 0; y0 < S; y0 += BAND) {
+    const h = Math.min(BAND, S - y0);
+    const { data: land, error } = await sb.from('land_tile')
+      .select('y, rock').eq('world_id', world.id).gte('y', y0).lt('y', y0 + h);
+    if (error) throw new Error(`could not read the land at ${y0}: ${error.message}`);
+    const rows = (land ?? []) as Array<{ y: number; rock: string }>;
+    const withGold = rows.map((r) => ({ y: r.y, rock: bytes(r.rock) })).filter((r) => r.rock.includes(GOLD));
+    if (!withGold.length) continue;
+    const win = generateAtlasWindow(world.seed, atlas, 0, y0, S, h, S);
+    for (const row of withGold) {
+      const j = row.y - y0;
+      const xs: number[] = [], to: number[] = [];
+      for (let x = 0; x < S; x++) {
+        if (row.rock[x] !== GOLD || win.rock[j * S + x] === GOLD) continue;
+        xs.push(x); to.push(win.rock[j * S + x]);
+      }
+      if (!xs.length) continue;
+      const { data: n, error: we } = await sb.rpc('land_regrow_row', {
+        p_world: world.id, p_y: row.y, p_rock_x: xs, p_rock: to,
+        p_tree_x: [], p_tree_from: [], p_tree_to: [], p_tree: TileType.Tree,
+      });
+      if (we) throw new Error(`could not write row ${row.y}: ${we.message}`);
+      moved += Number(n ?? 0);
+    }
+    process.stdout.write(`  ${y0}/${S}\r`);
+  }
+  if (moved) {
+    const { error: ce } = await sb.from('land_chunk').delete().eq('world_id', world.id);
+    if (ce) throw new Error(`could not forget the land chunks: ${ce.message}`);
+  }
+  const { error: le } = await sb.from('land_move').insert({ world_id: world.id, move: GOLD_MOVE, rock: moved });
+  if (le) throw new Error(`could not record the move: ${le.message}`);
+  console.log(`${world.name}: ${moved} gold seams off the islands that no longer hold gold`);
+}
+
 async function main(): Promise<void> {
   const url = process.env.SUPABASE_URL || PROJECT.url;
   const key = process.env.SUPABASE_KEY || '';
@@ -201,7 +253,7 @@ async function main(): Promise<void> {
   const sb = createClient(url, key, { auth: { persistSession: false } });
   const { data: worlds, error } = await sb.from('world').select('id, name, seed, size').eq('ready', true);
   if (error) throw new Error(`could not read the worlds: ${error.message}`);
-  for (const [name, run] of [[MOVE, move], [CLEAR, clearTrees]] as const) {
+  for (const [name, run] of [[MOVE, move], [CLEAR, clearTrees], [GOLD_MOVE, goldOff]] as const) {
     const { data: done, error: de } = await sb.from('land_move').select('world_id').eq('move', name);
     if (de) throw new Error(`could not read the moves: ${de.message}`);
     const had = new Set(((done ?? []) as Array<{ world_id: string }>).map((d) => d.world_id));

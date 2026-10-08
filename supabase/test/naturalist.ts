@@ -28,7 +28,7 @@ import { Game } from '../../src/game/game';
 import { ACTION_BY_ID, GRASS_PER_CUT, REED_CUT, type Target } from '../../src/game/actions';
 import { TINCTURE_BONUS, TINCTURE_SECONDS, TINCTURE_SKILLS } from '../../src/game/boons';
 import { DRESS_CHECK } from '../../src/game/firstaid';
-import { EMPTY_CHANCE, rollsAt } from '../../src/game/forage';
+import { COIN_FIND_ONE_IN, COIN_FINDS_A_DAY, EMPTY_CHANCE, rollsAt } from '../../src/game/forage';
 import { hiveRate, HIVE_WAX } from '../../src/game/furniture';
 import { ITEM_DEFS, RARITIES } from '../../src/game/items';
 import { perksOf, type PerkDef } from '../../src/game/perks';
@@ -494,6 +494,28 @@ begin
   delete from creature where world_id = w and id = v_c;
   delete from placed where id = v_hive;
 
+  /* ---- Gold coins in the grass: found when the dice fall under the odds, no more than a day's worth for one person. ---- */
+  delete from item where world_id = w and holder = 'player' and holder_uid = u and def = 'coin';
+  delete from coin_found where world_id = w and uid = u;
+  ${dice(0.001)};
+  delete from foraged where world_id = w; ${onTile('forage', 1, 1)};
+  delete from foraged where world_id = w; ${onTile('forage', 1, 1)};
+  delete from foraged where world_id = w; ${onTile('forage', 1, 1)};
+  delete from foraged where world_id = w; ${onTile('forage', 1, 1)};
+  delete from foraged where world_id = w; ${onTile('forage', 1, 1)};
+  v_t := (select coalesce(sum(i.count), 0) from item i where i.world_id = w and i.holder = 'player' and i.holder_uid = u and i.def = 'coin' and i.extra = 'Gold')::text;
+  -- The next dawn of the woods: the count starts again.
+  update coin_found set dawn = dawn - 1 where world_id = w and uid = u;
+  delete from foraged where world_id = w; ${onTile('forage', 1, 1)};
+  v_t := v_t || ':' || (select coalesce(sum(i.count), 0) from item i where i.world_id = w and i.holder = 'player' and i.holder_uid = u and i.def = 'coin' and i.extra = 'Gold');
+  -- And over the odds, none.
+  ${dice(0.5)};
+  delete from foraged where world_id = w; ${onTile('forage', 1, 1)};
+  insert into said values ('GOLD', v_t || ':' || (select coalesce(sum(i.count), 0) from item i where i.world_id = w and i.holder = 'player' and i.holder_uid = u and i.def = 'coin' and i.extra = 'Gold') || '|' || coalesce((select e.text from event e where e.world_id = w and e.uid = u
+    and e.text like 'Something glints%' order by e.n desc limit 1), 'unsaid'));
+  ${nodice};
+  delete from item where world_id = w and holder = 'player' and holder_uid = u and def = 'coin';
+
   insert into said values ('NODES', (select count(*) from class_node where id ~ '^naturalist_')::text || ':'
     || (select count(*) from player_node where node ~ '^naturalist_[0-9]_[0-9]$'));
 end $$;
@@ -680,6 +702,10 @@ check('the browser offers to dress somebody else without any perk', ACTION_BY_ID
 game.player.stats.stamina = 0.5;
 const tea = game.inventory.add('herb_tea', { ql: 40 });
 ACTION_BY_ID.get('drink_tea')!.perform?.({ kind: 'item', uid: tea.uid }, game);
+const [goldNums, goldSaid] = say('GOLD').split('|');
+const [goldDay, goldNext, goldOver] = goldNums.split(':').map(Number);
+check(`foraging finds a gold coin one go in ${COIN_FIND_ONE_IN}, no more than ${COIN_FINDS_A_DAY} a day, and the count starts again at the next dawn`,
+  goldDay === COIN_FINDS_A_DAY && goldNext === COIN_FINDS_A_DAY + 1 && goldOver === COIN_FINDS_A_DAY + 1 && goldSaid.startsWith('Something glints'), say('GOLD'));
 check('its herb tea puts back as much', near(game.player.stats.stamina, 0.5 + stamina));
 game.player.boons = [];
 const drop = game.inventory.add('tincture', { ql: 40 });

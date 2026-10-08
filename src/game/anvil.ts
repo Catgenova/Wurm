@@ -5,7 +5,7 @@ import type { Game } from './game';
 import { itemDef, makersMark, rarityOf, rollRarity, RARITY_ODDS, RARITY_WORD } from './items';
 import { matOf, matOfItem, workingQl } from './materials';
 import { metalOfItem } from './melt';
-import { COIN_DIFFICULTY, COIN_METALS, COINS_PER_LUMP, DIE_WEAR, isCasting, isMetalStock, METAL_BY_ID, METAL_BY_LUMP, metalOfBar, MOULD_BY_MAKES, type MouldDef } from './metal';
+import { COIN_DIFFICULTY, COIN_METALS, COIN_REFUSAL, coinPurity, COINS_PER_LUMP, DIE_WEAR, isCasting, isMetalStock, METAL_BY_ID, METAL_BY_LUMP, metalOfBar, MOULD_BY_MAKES, type MouldDef } from './metal';
 import type { CraftStock } from './recipes';
 
 /**
@@ -165,7 +165,7 @@ export const ANVIL_ACTIONS: ActionDef[] = [
       if (!g.inventory.has('coin_die')) return 'You need a coin die.';
       const lump = lumpFor(g, t.kind === 'anvil' ? t.itemUid : undefined)?.item;
       if (!lump) return 'You have no metal to strike.';
-      if (!COIN_METALS.includes(metalOfBar(lump.id)?.id ?? '')) return 'Coins are struck from silver or gold.';
+      if (!COIN_METALS.includes(metalOfBar(lump.id)?.id ?? '')) return COIN_REFUSAL;
       return null;
     },
     perform: (t, g) => {
@@ -176,6 +176,7 @@ export const ANVIL_ACTIONS: ActionDef[] = [
       const lump = stack?.item;
       const metal = lump && METAL_BY_LUMP.get(lump.id);
       if (!die || !stack || !lump || !metal || !COIN_METALS.includes(metal.id)) return;
+      const lumpQl = lump.ql;
       if (!stack.spend(1)) return;
       // The die wears with every strike, good or bad, and no die can be mended.
       const dieQl = Math.max(1, die.ql - die.dmg / 2);
@@ -184,9 +185,12 @@ export const ANVIL_ACTIONS: ActionDef[] = [
       if (broke) g.inventory.remove(die.uid, 1);
       g.events.emit('inventory');
       const hard = COIN_DIFFICULTY + matOfItem(lump).difficulty;
-      if (!sureHand(g, 'strike_coins', g.skillCheck('blacksmithing', hard, anvilQl(a), g.mindEase()))) {
+      // The smith's hand, and then the gold itself: poor metal will not take the die however well it is struck.
+      const struck = g.skillCheck('blacksmithing', hard, anvilQl(a), g.mindEase());
+      const pure = g.rand() < coinPurity(lumpQl);
+      if (!sureHand(g, 'strike_coins', struck && pure)) {
         g.gainSkill('blacksmithing', tryGain(false, SMITH_GAIN));
-        g.logMsg(`The blanks come out smeared and you throw the metal back.${broke ? ' The die is worn through.' : ''}`, 'event');
+        g.logMsg(`${struck ? 'The gold is too poor to take the die and the blanks crack' : 'The blanks come out smeared'}; the lump is lost.${broke ? ' The die is worn through.' : ''}`, 'event');
         return;
       }
       const ql = smithQl(g, { skill: 'blacksmithing' } as MouldDef, dieQl, lump.ql, a);

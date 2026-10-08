@@ -8507,6 +8507,9 @@ export class Game {
     }
   }
 
+  /** Gold coins found foraging since the woods' last dawn, and which dawn that was. */
+  coinFinds = { dawn: 0, n: 0 };
+
   markForaged(x: number, y: number, kind: string): void {
     this.foraged.set(this.forageKey(x, y, kind), this.time);
   }

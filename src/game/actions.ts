@@ -51,7 +51,7 @@ import { BAUBLE_ACTIONS } from './baubles';
 import { SACRIFICE_ACTIONS } from './sacrifice';
 import { MEDITATION_ACTIONS } from './meditation';
 import { SPECIES, type Stance } from './creatures';
-import { BOTANIZE_TABLE, BOTANIZE_WATER_TABLE, EMPTY_CHANCE, FIND_CHECK, FORAGE_TABLE, listOf, rollsAt, rollTable } from './forage';
+import { BOTANIZE_TABLE, BOTANIZE_WATER_TABLE, COIN_FIND_ONE_IN, COIN_FINDS_A_DAY, EMPTY_CHANCE, FIND_CHECK, FORAGE_TABLE, listOf, rollsAt, rollTable } from './forage';
 import { atWaterEdge, WATER_GARDEN_ACTIONS } from './watergarden';
 import { CELLAR_DEPTH, CELLAR_LEVEL, floorOf, type FloorKind, type RoofShape, type Side, type StairHand, type WallType } from './building';
 import { DEED_RADIUS, rankAtLeast, type Game } from './game';
@@ -630,7 +630,7 @@ export const oreNeeds = (g: Game, level: number): number => Math.max(0, level - 
  * A Miner's Pan: sand with water at a corner, washed in a pan. What comes out
  * of it when anything does, each as likely, and how long a go takes.
  */
-export const PAN_ORES = ['copper_ore', 'tin_ore', 'silver_ore', 'gold_ore'];
+export const PAN_ORES = ['copper_ore', 'tin_ore', 'silver_ore'];
 export const PAN_TIME = 8;
 /** Whether a tile has water at one of its corners, which panning wants. */
 export const besideWater = (g: Game, x: number, y: number): boolean =>
@@ -2039,6 +2039,14 @@ export const ACTIONS: ActionDef[] = [
       // Naturalist's Keen Eye once more again.
       const rolls = searches(g, 'forage', 'foraging');
       const found = lookOver(g, 'forage', 'foraging', FORAGE_TABLE, rolls);
+      // Now and then a gold coin in the grass, and no more than so many a day.
+      const dawn = lastDawn(Date.now() / 1000);
+      if (g.coinFinds.dawn !== dawn) g.coinFinds = { dawn, n: 0 };
+      if (g.coinFinds.n < COIN_FINDS_A_DAY && g.rand() < 1 / COIN_FIND_ONE_IN) {
+        g.coinFinds.n++;
+        const coin = g.inventory.add('coin', { ql: g.productQl('foraging'), extra: 'Gold', count: 1 });
+        g.logMsg(`Something glints in the grass: a gold coin. (QL ${coin.ql.toFixed(1)})`, 'event');
+      }
       if (!found.length) {
         g.missed();
         g.logMsg(rolls > 1 ? `You go over the ground ${rolls} times and find nothing edible.` : 'You find nothing edible.', 'event');

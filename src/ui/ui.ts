@@ -58,7 +58,7 @@ import { abilitiesOf, CHOOSE_AT, MEDITATION, nextStep, PATHS, PATH_LIST, sitting
 import { canImprove } from '../game/improve';
 import { BREWS } from '../game/brewing';
 import { fireAnchor, fireState, FIRE_COST, isFuel, type PlacedCampfire } from '../game/campfire';
-import { COIN_METALS, DIE_WEAR, INGOT_LUMPS, MOULD_BY_ID, MOULD_BY_MAKES, isCasting, isIngot, isLump, isMetalStock, isMould, isOreItem, lumpsIn, metalOfBar, mouldLumps, mouldUsesLeft } from '../game/metal';
+import { COIN_METALS, COIN_REFUSAL, DIE_WEAR, INGOT_LUMPS, MOULD_BY_ID, MOULD_BY_MAKES, isCasting, isIngot, isLump, isMetalStock, isMould, isOreItem, lumpsIn, metalOfBar, mouldLumps, mouldUsesLeft } from '../game/metal';
 import { meltable } from '../game/melt';
 import { jobName, smelterAnchor, smelterState, type PlacedSmelter } from '../game/smelter';
 import { isGreenware, kilnAnchor, kilnState, type PlacedKiln } from '../game/kiln';
@@ -2256,7 +2256,7 @@ export class UI {
           : undefined,
       });
     }
-    // Coins: a die in the pack, and a lump of silver or gold named off the menu.
+    // Coins: a die in the pack, and a lump of gold named off the menu.
     const strikeDef = ACTION_BY_ID.get('strike_coins');
     const die = g.inventory.find('coin_die');
     const precious = lumps.filter((s) => COIN_METALS.includes(metalOfBar(s.item.id)?.id ?? ''));
@@ -2264,7 +2264,7 @@ export class UI {
       entries.push({
         label: 'Strike coins',
         disabled: !die || !precious.length,
-        hint: !die ? 'You need a coin die.' : !precious.length ? 'Coins are struck from silver or gold.' : undefined,
+        hint: !die ? 'You need a coin die.' : !precious.length ? COIN_REFUSAL : undefined,
         note: die ? `${Math.ceil((100 - die.dmg) / DIE_WEAR)} strikes left in the die` : undefined,
         children:
           die && precious.length

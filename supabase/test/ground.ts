@@ -76,11 +76,15 @@ const marks = {
  * made treeless: where the generator would have put a tree there it leaves the
  * tundra or grass under it. `tools/move-ground.ts` carries that onto islands
  * already founded too, taking off the trees nobody had touched.
+ *
+ * `rock` moved once more when gold became the Northeast Tundra's alone: a gold
+ * seam anywhere else is iron, and the move tool's third move writes that into
+ * every island already founded.
  */
 const PINNED: Record<keyof typeof marks, string> = {
   tiles: 'd5d42e470e6f2bfb',
   data: '24435ee0a65a8797',
-  rock: '89aab580b6161a21',
+  rock: '3e048a98cb7bcb9c',
   heights: '561c219755d4479c',
   dirt: '2c0887dc7256457a',
 };

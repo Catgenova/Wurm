@@ -4,7 +4,7 @@ import type { Item } from './items';
  * What a coin is worth, and how a pile of them is counted.
  *
  * Coins have existed on this island since there was an anvil to strike them
- * on. They are struck twenty to a lump from silver or gold, they go in a
+ * on. They are struck twenty to a lump from gold (silver ones were, once), they go in a
  * pocket, they melt back down into the lump they came from — and they have
  * never once bought anything, because there has never been anything to buy
  * them with or anybody to buy from. A currency nobody can spend is a metal

@@ -50,7 +50,7 @@ import { ANCIENT_EFFECTS, ANCIENT_PLUS, BAUBLE_HIGH, BAUBLE_KINDS, BAUBLE_LOW, B
 import { MOTE_CHANCE } from '../../game/sacrifice';
 import { HERB_HEAL, healAmount, SUITS_HEAL } from '../../game/firstaid';
 import { BAIT_BY_ID, biteShare, FISH, LINE_REACH } from '../../game/fishing';
-import { PER_ROLL, rollsAt, watersideOdds } from '../../game/forage';
+import { COIN_FIND_ONE_IN, COIN_FINDS_A_DAY, PER_ROLL, rollsAt, watersideOdds } from '../../game/forage';
 import { BUCKET_LITRES, FURNITURE, furnitureDef, POND_EVERY, teamSaid, WELL_TRICKLE, WELL_TRICKLE_QL } from '../../game/furniture';
 import { STONES_DEPTH, STONES_DIFFICULTY, STONES_SLABS, WATER_GARDEN_ACTIONS, yearSays } from '../../game/watergarden';
 import { WATER_PLANT_BY_ID, WATER_PLANT_DEEPEST, WATER_PLANT_SHALLOWEST, WATER_ROOTING, type WaterPlantDef } from '../../world/waterplants';
@@ -74,7 +74,7 @@ import { candleBurn, FIRE_REACH, HELD_LIGHTS, lanternReach, OVEN_REACH, torchBur
 import { MARK_CAP } from '../../game/marks';
 import { MATERIAL_BY_ID, type MaterialDef } from '../../game/materials';
 import { CHOOSE_AT, PATH_LIST, SIT_REST, SIT_WORTH } from '../../game/meditation';
-import { COIN_METALS, INGOT_LUMPS, INGOT_WEIGHT, METALS, MOULDS, NAILS_PER_LUMP, RARE_METALS } from '../../game/metal';
+import { COIN_METALS, COIN_QL_WEIGHT, COINS_PER_LUMP, coinPurity, INGOT_LUMPS, INGOT_WEIGHT, METALS, MOULDS, NAILS_PER_LUMP, PRECIOUS_METALS, RARE_METALS } from '../../game/metal';
 import { COIN_WORTH } from '../../game/money';
 import { ORDER_LIFE } from '../../game/orders';
 import { KEPT_BEST, NUTRIENT_HOURS, NUTRIENT_NAMES, NUTRIENTS, TABLE_BEST } from '../../game/nutrition';
@@ -340,7 +340,7 @@ const MONSTER_SORTS = Object.values(SPECIES).filter((s) => s.monster);
 const NOTICED = MONSTER_SORTS.map((s) => s.notice ?? HUNT_SIGHT).sort((a, b) => a - b);
 const MONSTER_WEIGHT = MONSTERS.reduce((n, [, w]) => n + w, 0);
 /** A hoard's deep metals: the ones nobody strikes a coin from. */
-const HOARD_DEEP = HOARD_METALS.filter((id) => !COIN_METALS.some((m) => id === `${m}_lump`));
+const HOARD_DEEP = HOARD_METALS.filter((id) => !PRECIOUS_METALS.some((m) => id === `${m}_lump`));
 /** The composite bow, the best of the wooden ones, and what a suit of scale takes. */
 const COMPOSITE = WEAPONS.find((w) => w.id === 'composite_bow') ?? WEAPONS[0];
 const BEST_WOOD_BOW = [...WOOD_BOWS].sort((a, b) => (b.range ?? 0) - (a.range ?? 0))[0] ?? WEAPONS[0];
@@ -430,7 +430,7 @@ const DEED_ACROSS = DEED_RADIUS * 2 + 1;
 const GOLD = (COIN_WORTH.Gold ?? 0) / (COIN_WORTH.Silver ?? 1);
 const POCKET = 5;
 /** The metals out of the deep seams: the rare ones nobody strikes a coin from. */
-const DEEP_METALS = [...RARE_METALS].filter((m) => !COIN_METALS.includes(m));
+const DEEP_METALS = [...RARE_METALS].filter((m) => !PRECIOUS_METALS.includes(m));
 /** A quality to show a hatchet at, and a helping at. */
 const HATCHET_QL = 40;
 const BOON_QL = 70;
@@ -1688,6 +1688,15 @@ export function helpText(): string {
     silver</b>, every price is named in silver, and change comes back in silver. Paying takes your
     largest coins first, so ${numberWord(GOLD + 1)} silver out of a gold and ${numberWord(POCKET)} leaves you the ${numberWord(POCKET - 1)} rather than
     breaking the small change.</p>
+    <p><b>New coins are struck from ${COIN_METALS.join(' or ')} alone</b>, ${numberWord(COINS_PER_LUMP)} to a lump, at an anvil with a coin die in your pack.
+    The lump is spent on every strike: a strike that fails loses it. Past the smith's check, the gold itself
+    decides: it takes the die every time at QL ${QL_TOP}, ${percent(coinPurity(QL_TOP / 2))} of the time at QL ${QL_TOP / 2} and
+    ${percent(1 - COIN_QL_WEIGHT)} at the bottom of the scale, in a straight line between. Gold comes out of the
+    ground in one place, under the mountain of ${REGIONS.filter((R) => R.mountain?.includes('gold_ore')).map((R) => islandName(R.name)).join(' and ')}, and
+    nowhere else: no pan washes it and no hoard holds it. And now and then a gold coin turns up in the grass:
+    a go of <b>foraging</b> finds one one time in ${numberWord(COIN_FIND_ONE_IN)}, up to ${numberWord(COIN_FINDS_A_DAY)} a day for each person
+    between one dawn of the woods and the next. Only your own foraging finds them; a worker foraging for a
+    deed never does. Silver coins still change hands and come back as change; nobody strikes new ones.</p>
     <p>Goods change hands in the ways below, each the answer to a different question, and a board
     finds what is for sale and what is wanted. The <b>Market</b> window (<kbd>U</kbd>) holds all of them.</p>
     <p><b>The market board</b> is read at a settlement token or a mailbox: every stall on the island,
@@ -2689,7 +2698,7 @@ export function helpText(): string {
     where you click (the small marker) and takes a spadeful of that soil; when the last of it is gone
     your shovel grates on rock and will go no further. Strip every corner of a tile bare and the
     rock beneath is exposed, and the tile becomes rock &mdash; whatever kind lies there, which may be a
-    seam of silver or gold. Drop dirt on a corner to bury the rock again.</p>
+    seam of metal. Drop dirt on a corner to bury the rock again.</p>
     <p><b>The level.</b> Right-click a corner and choose <b>Take the level here</b> and that corner's
     height becomes the mark every job works to. <b>Flatten</b> aims at it instead of at the tile you
     are standing on, so a whole yard can be brought to one height from wherever you happen to stand.

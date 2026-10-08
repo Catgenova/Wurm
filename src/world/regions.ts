@@ -180,7 +180,7 @@ export const SPAWN_REGION = 0;
 const OWNER = new Map<string, number>();
 REGIONS.forEach((R, i) => {
   if (R.stone !== 'rock_shards') OWNER.set(R.stone, i);
-  for (const ore of R.ores) OWNER.set(ore, i);
+  for (const ore of [...R.ores, ...(R.mountain ?? [])]) OWNER.set(ore, i);
 });
 
 /** Whether this material is restricted at all, and to whom. */

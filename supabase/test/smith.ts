@@ -30,7 +30,7 @@ import { ARMOUR_BY_ID, HIT_CAP, hitChance, pieceSoak, SOAK_CAP, WEAPON_BY_ID } f
 import { improveStep, improveStepAt } from '../../src/game/improve';
 import { ITEM_DEFS, makersMark, markSays, partsMark, RARITY_ODDS, rarityStep, rollRarity, temperOf, type Item } from '../../src/game/items';
 import { MELT_KEEP, MELT_SHARE, meltLumps, meltQl } from '../../src/game/melt';
-import { FORGE_WORK, INGOT_LUMPS, INGOT_WEIGHT, ingotOf, lumpsIn, METAL_BY_ID, MOULD_BY_ID, MOULD_DENT, mouldUsesLeft } from '../../src/game/metal';
+import { COIN_REFUSAL, COINS_PER_LUMP, coinPurity, FORGE_WORK, INGOT_LUMPS, INGOT_WEIGHT, ingotOf, lumpsIn, METAL_BY_ID, MOULD_BY_ID, MOULD_DENT, mouldUsesLeft } from '../../src/game/metal';
 import { perksOf, type PerkDef } from '../../src/game/perks';
 import { CRAFT_REACH, RECIPE_BY_ID, RECIPES, recipeStatus } from '../../src/game/recipes';
 
@@ -244,14 +244,14 @@ begin
   ${casting('rake_head', 2)};
   perform act_perform(w, u, 'smith', ${atAnvil('v_cast')});
   v_t := ${count('rake_head')} || ':' || ${count('casting')};
-  perform give(w, u, 'coin_die', 1, 50); perform give(w, u, 'silver_lump', 2, 50);
-  perform act_perform(w, u, 'strike_coins', ${atAnvil(newest('silver_lump'))});
+  perform give(w, u, 'coin_die', 1, 50); perform give(w, u, 'gold_lump', 2, 100);
+  perform act_perform(w, u, 'strike_coins', ${atAnvil(newest('gold_lump'))});
   v_t := v_t || ':' || ${count('coin')};
   ${hold('Sure Hammer')};
   perform act_perform(w, u, 'smith', ${atAnvil('v_cast')});
-  perform act_perform(w, u, 'strike_coins', ${atAnvil(newest('silver_lump'))});
+  perform act_perform(w, u, 'strike_coins', ${atAnvil(newest('gold_lump'))});
   insert into said values ('HAMMER', v_t || '|' || ${count('rake_head')} || ':' || ${count('coin')});
-  ${clear('rake_head', 'casting', 'coin', 'silver_lump')};
+  ${clear('rake_head', 'casting', 'coin', 'gold_lump')};
 
   /* ---- Second Heat: a failed go keeps its casting. ---- */
   ${hold('Second Heat')};
@@ -366,12 +366,26 @@ begin
   ${craft('make_bronze', newest('tin_lump'))};
   insert into said values ('BARMIX', v_t || '|' || ${count('bronze_lump')} || ':' || ${count('copper_lump')} || ':' || ${count('copper_ingot')});
   ${clear('bronze_lump', 'copper_lump', 'copper_ingot', 'tin_lump')};
-  -- Coins from a silver bar.
-  perform give(w, u, 'coin_die', 1, 50); perform give(w, u, 'silver_ingot', 1, 50);
-  v_t := ${refused('strike_coins', atAnvil(newest('silver_ingot')))};
-  perform act_perform(w, u, 'strike_coins', ${atAnvil(newest('silver_ingot'))});
-  insert into said values ('BARCOIN', v_t || '|' || ${count('coin')} || ':' || ${count('silver_lump')} || ':' || ${count('silver_ingot')});
-  ${clear('coin', 'silver_lump', 'silver_ingot', 'coin_die')};
+  -- Coins from a gold bar.
+  perform give(w, u, 'coin_die', 1, 50); perform give(w, u, 'gold_ingot', 1, 100);
+  v_t := ${refused('strike_coins', atAnvil(newest('gold_ingot')))};
+  perform act_perform(w, u, 'strike_coins', ${atAnvil(newest('gold_ingot'))});
+  insert into said values ('BARCOIN', v_t || '|' || ${count('coin')} || ':' || ${count('gold_lump')} || ':' || ${count('gold_ingot')});
+  ${clear('coin', 'gold_lump', 'gold_ingot')};
+  -- Not from silver any more.
+  perform give(w, u, 'silver_lump', 1, 50);
+  insert into said values ('SILVERNO', ${refused('strike_coins', atAnvil(newest('silver_lump')))} || '|' || ${count('silver_lump')});
+  ${clear('silver_lump')};
+  -- The gold decides, past a hand that never misses: always at QL 100, about half the time at QL 0, and the lump gone either way.
+  perform give(w, u, 'coin_die', 2, 100);
+  perform give(w, u, 'gold_lump', 20, 100);
+  perform act_perform(w, u, 'strike_coins', ${atAnvil(newest('gold_lump'))}) from generate_series(1, 20);
+  v_t := ${count('coin')} || ':' || ${count('gold_lump')};
+  ${clear('coin')};
+  perform give(w, u, 'gold_lump', 60, 0);
+  perform act_perform(w, u, 'strike_coins', ${atAnvil(newest('gold_lump'))}) from generate_series(1, 60);
+  insert into said values ('PURE', v_t || '|' || ${count('coin')} || ':' || ${count('gold_lump')} || '|' || coalesce(${last('The gold is too poor%')}, 'unsaid'));
+  ${clear('coin', 'gold_lump', 'coin_die')};
 
   /* ---- Metal Polisher: a pass of Improve on an iron hatchet, from an iron bar. ---- */
   perform give(w, u, 'file', 1, 50); perform give(w, u, 'whetstone', 1, 50);
@@ -533,9 +547,18 @@ const [bronze, copperLeft, copperBars] = mixAfter.split(':').map(Number);
 check('a mix counts a copper bar as its lumps, and gives back what it does not use',
   mixOk === 'ALLOWED' && bronze === BRONZE.count && copperLeft === INGOT_LUMPS - (BRONZE.inputs[0].count ?? 1) && copperBars === 0, say('BARMIX'));
 const [coinOk, coinAfter] = say('BARCOIN').split('|');
-const [coins, silverLeft, silverBars] = coinAfter.split(':').map(Number);
-check('and a strike of coins a silver bar', coinOk === 'ALLOWED' && coins > 0 && silverLeft === INGOT_LUMPS - 1 && silverBars === 0,
+const [coins, goldLeft, goldBars] = coinAfter.split(':').map(Number);
+check('and a strike of coins a gold bar', coinOk === 'ALLOWED' && coins > 0 && goldLeft === INGOT_LUMPS - 1 && goldBars === 0,
   say('BARCOIN'));
+const [silverNo, silverKept] = say('SILVERNO').split('|');
+check(`no coin is struck from silver: "${COIN_REFUSAL}"`, silverNo === COIN_REFUSAL && silverKept === '1', say('SILVERNO'));
+const [pureTop, pureLow, pureSaid] = say('PURE').split('|');
+const [topCoins, topLeft] = pureTop.split(':').map(Number);
+const [lowCoins, lowLeft] = pureLow.split(':').map(Number);
+const lowShare = lowCoins / COINS_PER_LUMP / 60;
+check(`gold at QL 100 takes the die every time, at QL 0 about ${coinPurity(0)} of the time (${lowShare.toFixed(2)}), and a strike that fails loses the lump`,
+  topCoins === 20 * COINS_PER_LUMP && topLeft === 0 && lowLeft === 0 && lowShare > coinPurity(0) - 0.2 && lowShare < coinPurity(0) + 0.2
+    && pureSaid.endsWith('the lump is lost.'), say('PURE'));
 const kgs = say('KG').split(',').map((s) => s.split(':'));
 check('every metal has an ingot on the island, weighing what the browser says',
   kgs.length === Object.keys(ITEM_DEFS).filter((id) => id.endsWith('_ingot')).length

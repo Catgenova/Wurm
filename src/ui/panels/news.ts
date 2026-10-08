@@ -19,6 +19,7 @@ import { favourCap, PRAYER_GAIN, PRAYER_PEAKS, PRAYER_REST, prayerWorth } from '
 import { tryGain } from '../../game/learn';
 import { DRIVING_TOP, drivingPace, SAILING_TOP, sailingPace, TRAVEL_TOP_AT, VEHICLE_QL_TOP, vehicleQlPace } from '../../game/travel';
 import { deckBill, metres, PIER_CLEAR, PIER_DROP, PIER_WALL_DROP, PIER_WATER } from '../../game/piers';
+import { COIN_FIND_ONE_IN, COIN_FINDS_A_DAY } from '../../game/forage';
 import { ROCK_VARIANTS, TILE_DEFS, TileType, TREE_AGES, TREE_DAWN_UTC, TREE_DEFS } from '../../world/tiles';
 import { REGIONS } from '../../world/regions';
 import { SEASON_DAYS, seasonLine, YEAR_DAYS, YEAR_FROM } from '../../world/calendar';
@@ -26,7 +27,7 @@ import { BLOOMS, BUSH_FLOWER_FROM, evergreen, LEAF_DAYS, SHED_DAYS, TURN_DAYS } 
 import { lifeSeasons } from '../../render/life';
 import { furnitureDef, liquidCapacity, POND_EVERY, type PlacedFurniture } from '../../game/furniture';
 import { billWords, countOf, type Item } from '../../game/items';
-import { INGOT_LUMPS, INGOT_WEIGHT, MOULD_BY_ID } from '../../game/metal';
+import { COIN_METALS, coinPurity, INGOT_LUMPS, INGOT_WEIGHT, MOULD_BY_ID } from '../../game/metal';
 import { meltLumps } from '../../game/melt';
 import { ORDER_LIFE } from '../../game/orders';
 import { POST_LIFE_MIN } from '../../game/posts';
@@ -1392,6 +1393,19 @@ export const NEWS: News[] = [
       ...(R.monsters ? [`Everything wild that stands up on the ${R.name.replace(/^The /, '')} is a monster, never a wildermon, and it holds ${times(R.monsters)} `
         + `as many of each as the rest of the chart shares: ${listed(MONSTERS.map(([id]) => `${numberWord((MONSTER_CAP[id] ?? 1) * (R.monsters ?? 1))} ${SPECIES[id].name.toLowerCase()}${(MONSTER_CAP[id] ?? 1) * (R.monsters ?? 1) === 1 ? '' : 's'}`))}.`] : []),
     ]),
+  },
+  {
+    n: 103,
+    day: '2026-10-08',
+    lines: () => [
+      `New coins are struck from ${COIN_METALS.join(' or ')} alone. Silver coins still change hands and come back as change.`,
+      `A strike of coins loses its lump when it fails, and past the smith's check the gold decides: it takes the die every time at QL ${QL_TOP} and `
+        + `${percent(coinPurity(0))} of the time at the bottom of the scale, in a straight line between.`,
+      `Gold comes out of the ground only under the mountain of the ${REGIONS.filter((R) => R.mountain?.includes('gold_ore')).map((R) => R.name.replace(/^The /, '')).join(' and ')}. `
+        + 'No pan washes it and no hoard or chest holds it any more; gold seams anywhere else are iron now.',
+      `Foraging turns up a gold coin one go in ${numberWord(COIN_FIND_ONE_IN)}, up to ${numberWord(COIN_FINDS_A_DAY)} a day for each person. `
+        + 'A worker foraging for a deed never finds one.',
+    ],
   },
 ];
 

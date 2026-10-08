@@ -76,16 +76,31 @@ export const lumpsIn = (it: { id: string; count: number }): number =>
   METAL_BY_INGOT.has(it.id) ? it.count * INGOT_LUMPS : METAL_BY_LUMP.has(it.id) ? it.count : 0;
 
 /**
- * Coins: a lump of silver or gold struck into twenty under a die, at the
- * anvil. A compact store of metal that goes in a pocket, and comes back out
- * of the fire as a lump when it is melted down. The die wears with every
- * strike. The island reads the same three.
+ * Coins: a lump of gold struck into twenty under a die, at the anvil. A
+ * compact store of metal that goes in a pocket, and comes back out of the
+ * fire as a lump when it is melted down. The die wears with every strike.
+ * The island reads the same three.
  */
 export const COINS_PER_LUMP = 20;
 export const DIE_WEAR = 2;
 export const COIN_DIFFICULTY = 12;
-/** The metals a coin is struck from. */
-export const COIN_METALS = ['silver', 'gold'];
+/**
+ * The metals a coin is struck from: gold alone. Silver coins still change
+ * hands and are given as change, and nobody strikes new ones.
+ */
+export const COIN_METALS = ['gold'];
+/** Silver and gold: the two metals that are worth something without being deep. */
+export const PRECIOUS_METALS = ['silver', 'gold'];
+/**
+ * How much a strike leans on the quality of the gold under the die. A strike
+ * that passes the smith's check still comes good only `coinPurity` of the
+ * time: every time on gold at QL 100, and this much less often at QL 0. A
+ * strike that fails either way loses the lump.
+ */
+export const COIN_QL_WEIGHT = 0.5;
+/** What the anvil says to a lump coins are not struck from. */
+export const COIN_REFUSAL = `Coins are struck from ${COIN_METALS.join(' or ')} alone.`;
+export const coinPurity = (ql: number): number => 1 - COIN_QL_WEIGHT * (1 - Math.min(100, Math.max(0, ql)) / 100);
 /**
  * Nails: five to a filling of the nail mould, asked for, down from a hundred.
  * A nail still weighs ten grams on the item table; how far a lump goes is a

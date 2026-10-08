@@ -58,6 +58,14 @@ export const PER_ROLL = 20;
 export const EMPTY_CHANCE = 0.2;
 /** How hard a look is: the skill check each one asks after the empty ground. */
 export const FIND_CHECK = 5;
+/**
+ * A go of foraging turns up a gold coin one time in this many, and nobody
+ * finds more than `COIN_FINDS_A_DAY` of them between one dawn of the woods and
+ * the next. Only a person's own foraging finds them: a worker that forages
+ * for a deed never does.
+ */
+export const COIN_FIND_ONE_IN = 200;
+export const COIN_FINDS_A_DAY = 3;
 
 /**
  * How many times a tile is searched in one go. Skill does not only make a find
