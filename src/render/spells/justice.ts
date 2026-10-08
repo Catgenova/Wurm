@@ -24,6 +24,7 @@ import {
   arcAt, bump, clamp, easeBack, easeIn, easeOut, flashOf, glowPicture, hashOf, lerp, mid3, seg, smooth, TAU,
   type Body, type FxScene, type P3, type SpellPalette,
 } from './kit';
+import { weaponCarry } from '../figure';
 import { euler, one } from './poses';
 
 /** The scales: silver blue and a pale violet. */
@@ -311,7 +312,7 @@ function chain(k: FxScene, a: P3, b: P3, o: { alpha?: number; sag?: number; link
   if (gl > 0) {
     const light = k.pal.light;
     k.glowDraw((g) => {
-      g.globalAlpha = clamp(al * gl * 0.28);
+      g.globalAlpha = clamp(al * gl * 0.18);
       g.strokeStyle = light;
       g.lineWidth = L * 1.6;
       g.lineCap = 'round';
@@ -608,7 +609,8 @@ function flatSparks(k: FxScene, at: P3, n: number, speed = 1.6): void {
  * the release named; the stage blends into it and out of it. Arms are
  * [forward, out, turned in]: ninety forward is level ahead, a hundred and
  * eighty straight up; out is away from the side, and below nought across the
- * front. Hands joined before the chest -- Justice's resting prayer -- are
+ * front -- until the arm is raised past level, when out turns it back
+ * across, so arms held up wide are out below nought. Hands joined before the chest -- Justice's resting prayer -- are
  * `JOINED`, the elbow at `JOINED_BEND`.
  */
 const JOINED = [24, -18, 40] as const;
@@ -790,7 +792,7 @@ const temperPose: CastPose = (r, t, c) => {
 const JUDGMENT_T = { secs: 1.8, release: 0.58 };
 const judgmentPose: CastPose = (r, t) => {
   for (let k = 0; k < 2; k++) {
-    r.arm[k] = euler(t, [[0, HANG], [0.18, [20, 70, -10]], [0.36, [118, 56, -10]], [0.5, [156, 30, 0]], [0.58, [44, 42, -14]], [0.8, [40, 42, -14]], [1, HANG]]);
+    r.arm[k] = euler(t, [[0, HANG], [0.18, [20, 70, -10]], [0.36, [112, -56, -10]], [0.5, [150, -34, 0]], [0.58, [44, 42, -14]], [0.8, [40, 42, -14]], [1, HANG]]);
     r.elbow[k] = one(t, [[0, 15], [0.18, 10], [0.5, 8], [0.58, 4], [0.8, 6], [1, 15]]);
     r.hand[k] = euler(t, [[0, [0, 0, 0]], [0.5, [20, 0, 0]], [0.58, [-36, 0, 0]], [0.8, [-30, 0, 0]], [1, [0, 0, 0]]]);
     r.knee[k] = one(t, [[0, 4], [0.5, 0], [0.58, 20], [0.8, 16], [1, 4]]);
@@ -837,7 +839,7 @@ const EXECUTION_T = { secs: 2.1, release: 0.62 };
 const executionPose: CastPose = (r, t, c) => {
   const shake = t > 0.46 && t < 0.6 ? tremor(t * c.timing.secs, 1.4) : 0;
   for (let k = 0; k < 2; k++) {
-    r.arm[k] = euler(t, [[0, HANG], [0.14, JOINED], [0.24, [100, -12, 30]], [0.44, [168, -16, 12]], [0.58, [170, -16, 12]], [0.62, [52, -18, 30]], [0.84, [50, -18, 30]], [1, HANG]]);
+    r.arm[k] = euler(t, [[0, HANG], [0.14, JOINED], [0.24, [100, -12, 30]], [0.44, [168, 14, 12]], [0.58, [170, 14, 12]], [0.62, [52, -18, 30]], [0.84, [50, -18, 30]], [1, HANG]]);
     r.arm[k][0] += shake;
     r.elbow[k] = one(t, [[0, 15], [0.14, JOINED_BEND], [0.24, 80], [0.44, 22], [0.58, 20], [0.62, 6], [0.84, 10], [1, 15]]);
   }
@@ -856,7 +858,7 @@ const executionPose: CastPose = (r, t, c) => {
 /** Oath: the right hand raised beside the head, palm out, sworn, and the left laid flat on the heart, still; then the right hand let down and held out to the friend, palm up. */
 const OATH_T = { secs: 1.45, release: 0.56 };
 const oathPose: CastPose = (r, t) => {
-  r.arm[1] = euler(t, [[0, HANG], [0.24, [120, 30, -14]], [0.48, [122, 30, -14]], [0.56, [80, 10, -18]], [0.82, [78, 10, -18]], [1, HANG]]);
+  r.arm[1] = euler(t, [[0, HANG], [0.24, [120, -26, -14]], [0.48, [122, -26, -14]], [0.56, [80, 10, -18]], [0.82, [78, 10, -18]], [1, HANG]]);
   r.elbow[1] = one(t, [[0, 15], [0.24, 108], [0.48, 110], [0.56, 14], [0.82, 18], [1, 15]]);
   r.hand[1] = euler(t, [[0, [0, 0, 0]], [0.24, [40, 0, 0]], [0.48, [40, 0, 0]], [0.56, [10, 0, -70]], [0.82, [10, 0, -66]], [1, [0, 0, 0]]]);
   r.arm[0] = euler(t, [[0, HANG], [0.24, [22, -20, 44]], [0.82, [22, -20, 44]], [1, HANG]]);
@@ -872,7 +874,7 @@ const oathPose: CastPose = (r, t) => {
 const REWARD_T = { secs: 1.5, release: 0.58 };
 const rewardPose: CastPose = (r, t) => {
   for (let k = 0; k < 2; k++) {
-    r.arm[k] = euler(t, [[0, HANG], [0.2, JOINED], [0.3, JOINED], [0.46, [150, -8, 20]], [0.58, [156, 50, 0]], [0.82, [154, 50, 0]], [1, HANG]]);
+    r.arm[k] = euler(t, [[0, HANG], [0.2, JOINED], [0.3, JOINED], [0.46, [154, 12, 12]], [0.58, [150, -40, 0]], [0.82, [148, -40, 0]], [1, HANG]]);
     r.elbow[k] = one(t, [[0, 15], [0.2, JOINED_BEND], [0.3, JOINED_BEND], [0.46, 50], [0.58, 10], [0.82, 12], [1, 15]]);
     r.hand[k] = euler(t, [[0, [0, 0, 0]], [0.46, [0, 0, 0]], [0.58, [30, 0, 0]], [1, [0, 0, 0]]]);
   }
@@ -1079,7 +1081,7 @@ function braid(k: FxScene, a: P3, b: P3, amp: number, phase: number, o: { alpha?
   }, 1);
   const light = k.pal.light;
   k.glowDraw((g) => {
-    g.globalAlpha = clamp(al * 0.3);
+    g.globalAlpha = clamp(al * 0.16);
     g.strokeStyle = light;
     g.lineWidth = A * 2.4;
     g.lineCap = 'round';
@@ -2056,6 +2058,8 @@ function equityBeam(k: FxScene, tilt: number, alpha: number, share: number): voi
 
 /** Along the thing Temper is cast on, nought at the fist and one at its far end; the hand itself when nothing is held. */
 function temperAt(k: FxScene, u: number): P3 {
-  const held = !!k.caster.figure?.gear?.weapon;
+  // Only a fist-held thing follows the forearm and so can be found along it; a bow or a staff is set off the hips.
+  const w = k.caster.figure?.gear?.weapon;
+  const held = !!w && weaponCarry(w.id)?.carry === 'fist';
   return held ? k.weaponAt(1 + u * 9) : mid3(k.hand(1), k.hand(0), u * 0.5);
 }
