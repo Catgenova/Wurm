@@ -2400,8 +2400,8 @@ function walk(r: Rig, phi: number, g: number, fr: Frame, facing = 2): void {
      * back -- and the shoulder goes no further forward than puts the fist
      * there; how far the elbow is bent comes in with the square of the
      * gait, so half way to a run is not a pair of forearms held up still.
-     * Walking, the elbow is bent a third of a right angle at rest and half
-     * of one coming forward, so the forearm comes up off the line of the
+     * Walking, the elbow is bent a quarter of a right angle at rest and
+     * half of one coming forward, so the forearm comes up off the line of the
      * thigh and in across the body: bent less, in armour at the size the
      * island is played at the arms were two tubes against the body.
      */
@@ -3329,6 +3329,9 @@ function rigOf(p: FigurePose, fr: Frame, left = lefty(p.facing)): Rig {
   // At a run the body goes lower on bent knees, and the bow is held that much higher.
   if (held && held.carry === 'bow' && !r.stowed) bowArm(r, fr, held, p.moving ? 1.3 * Math.max(0, Math.min(1, p.gait ?? 0)) : 0, p.facing);
   if (p.moving && !p.swimming && !p.driving && !r.stowed) carrying(r, held || undefined, !!p.gear?.offhand, Math.max(0, Math.min(1, p.gait ?? 0)), fr, p.facing);
+  // Standing, the arm with something in it kept off the legs as on the move (see `clearOfLegs`): stood at rest, a sword lay through
+  // the thigh and was turned out of it in the fist.
+  else if (held && held.carry !== 'shoulder' && !r.stowed && !p.swimming && !p.driving) clearOfLegs(r, fr, held, p.facing, 0);
   // A hand with something in it is closed on it.
   if (held && !r.stowed) r.loose[held.carry === 'bow' ? 0 : held.carry === 'shoulder' ? r.carried : 1] = false;
   if (p.gear?.offhand && !r.stowed) r.loose[0] = false;
@@ -3378,7 +3381,7 @@ function carrying(r: Rig, held: Weapon | undefined, shield: boolean, g: number, 
     r.arm[0][2] = L(0, 10);
     r.elbow[0] = L(34, 76) + 0.3 * e;
   }
-  // And the arm with something in it out from the side as far as keeps it off the legs and the face (see `clearOfLegs`).
+  // And the arm with something in it out from the side as far as keeps it off the legs (see `clearOfLegs`).
   if (held && held.carry !== 'shoulder') clearOfLegs(r, fr, held, facing, g);
 }
 
@@ -6437,7 +6440,8 @@ function cutsOf(w: Weapon): { fore: Mesh; aft: Mesh; whole: Mesh; sheathed?: Mes
  * The left arm holding a bow upright at its side, the hand raised as far as
  * the bow's length needs for its lower tip to clear the ground by a margin --
  * a short bow hangs at arm's length, a long bow is held up at the hip -- and
- * kept there through a stride, as a bow is carried.
+ * kept there through a stride, as a bow is carried; `wide` units further
+ * out, for keeping its lower limb off the leg (`clearOfLegs`).
  */
 function bowArm(r: Rig, fr: Frame, w: Weapon, up: number, facing: number, wide = 0): void {
   const T = fr.tall, dir = bowUp(facing);
@@ -6624,8 +6628,28 @@ function uprightHeld(b: Bones, w: Weapon, facing: number, wrist: Xf, swung = 0):
 const LEG_CLEAR = 0.25;
 /** How far the arm carrying it may be taken out from the side for that, in degrees; a bow's hand, in units for each of those. */
 const CLEAR_OUT = 34, BOW_OUT_BY = 0.05;
+/** How far an upright one may be swung out about the hand where the arm has not kept it clear, in degrees: see `wield`. */
+const UPRIGHT_OUT = 12;
 /** How far from the middle of the head, on the screen, a spear's shaft or a bow's stave is kept: past the hair and the ears. */
 const FACE_CLEAR = 3.2;
+
+/**
+ * The least turn, from nought to `most` degrees, that leaves `room` at
+ * nought or more: stepped toward from nought by how fast the room grows
+ * with the turn, a few times, so that it changes smoothly as the pose does.
+ * Halving to the edge of what clears jumped to the far end of the range
+ * the moment nothing in it cleared, and the blade with it, a quarter turn
+ * in a frame.
+ */
+function leastTurn(room: (by: number) => number, most: number): number {
+  let by = 0, r = room(0);
+  for (let q = 0; q < 3 && r < 0; q++) {
+    const h = by + 2 <= most ? 2 : -2, slope = (room(by + h) - r) / h;
+    by = Math.max(0, Math.min(most, by - (r * slope) / (slope * slope + 1e-4)));
+    r = room(by);
+  }
+  return by;
+}
 
 /**
  * How far what is carried in hand at `xf` is clear of the legs as `b` has
@@ -7124,25 +7148,15 @@ function wield(out: Part[], named: Map<string, Part[]>, r: Rig, b: Bones, gear: 
       const fist = place(b.wrist1, [0, 0, GRIP]);
       let xf = fistHeld(r, b, arm, facing, b.wrist1);
       /*
-       * Wherever it would still go through a leg -- standing, or blended
-       * from one pose to another -- turned out from the body about the fist
-       * by as little as clears it, found by halving rather than tried a few
-       * ways round, so that it turns out smoothly and back as the leg comes
-       * and goes rather than jumping between them.
+       * Wherever it would still go through a leg -- part way through a
+       * blend from one pose to another -- turned out from the body about
+       * the fist by as little as clears it (`leastTurn`), rather than the
+       * cheapest of a few ways round tried afresh every frame, so that it
+       * turns out smoothly and back as the leg comes and goes rather than
+       * jumping between them.
        */
       const turned = (by: number): Xf => (by ? { m: mm(rz(-by * DEG), xf.m), t: fist } : xf);
-      const room = (by: number): number => legsRoom(b, arm, turned(by)) + LEG_CLEAR;
-      if (room(0) < 0) {
-        let lo = 0, hi = CLEAR_OUT;
-        if (room(hi) >= 0) {
-          for (let q = 0; q < 8; q++) {
-            const mid = (lo + hi) / 2;
-            if (room(mid) >= 0) hi = mid;
-            else lo = mid;
-          }
-        }
-        xf = turned(hi);
-      }
+      xf = turned(leastTurn((by) => legsRoom(b, arm, turned(by)) + LEG_CLEAR, CLEAR_OUT));
       // A blow struck by a spell: carried by the forearm, `wield` of the way, so the swing of the arm swings it.
       if ((r.wield ?? 0) > 0) xf = wielded(xf, b.wrist1, fist, Math.min(1, r.wield ?? 0));
       const grip = bit(arm.grip, xf, 0.02);
@@ -7151,41 +7165,33 @@ function wield(out: Part[], named: Map<string, Part[]>, r: Rig, b: Bones, gear: 
     } else if (!r.stowed) {
       const hand = arm.carry === 'bow' ? 0 : 1;
       // A staff leant out from the body as well as forward, so its shaft passes beside the face rather than across it (see
-      // `uprightHeld`); on the move the arm carrying it keeps its lower end clear of the legs and its length off the face
-      // (`clearOfLegs`).
+      // `uprightHeld`); the arm carrying it keeps its lower end clear of the legs (`clearOfLegs`).
       let xf = uprightHeld(b, arm, facing, b[`wrist${hand}`]);
       /*
        * Wherever the lower end -- a spear's butt, a bow's lower limb --
-       * would still go through a leg, standing or blended between poses:
-       * swung out from the body about the hand by as little as clears it,
-       * found by halving, and never so far that the length above the hand
-       * comes in over the face on the screen. It was swung five degrees at a
-       * time, which jumped, with only the top kept off the head, and the
-       * shaft below the top went across the face.
+       * would still go through a leg, blended between poses: swung out from
+       * the body about the hand by as little as clears it (`leastTurn`), a
+       * few degrees at most, and never so far that the length above the
+       * hand comes in over the face on the screen. It was swung five degrees
+       * at a time, which jumped, with only the top kept off the head, and
+       * the shaft below the top went across the face.
        */
-      const view = viewOf(facing), wrist = b[`wrist${hand}`];
-      const legs = (by: number): number => legsRoom(b, arm, uprightHeld(b, arm, facing, wrist, by)) + LEG_CLEAR;
-      if (legs(0) < 0) {
-        let lo = 0, hi = 25;
-        if (legs(hi) >= 0) {
-          for (let q = 0; q < 8; q++) {
-            const mid = (lo + hi) / 2;
-            if (legs(mid) >= 0) hi = mid;
-            else lo = mid;
+      const wrist = b[`wrist${hand}`], at = (by: number): Xf => uprightHeld(b, arm, facing, wrist, by);
+      if (legsRoom(b, arm, xf) + LEG_CLEAR < 0) {
+        const view = viewOf(facing);
+        let most = UPRIGHT_OUT;
+        if (faceRoom(b, arm, at(most), view) < 0) {
+          let ok = 0;
+          if (faceRoom(b, arm, xf, view) >= 0) {
+            for (let q = 0; q < 6; q++) {
+              const mid = (ok + most) / 2;
+              if (faceRoom(b, arm, at(mid), view) >= 0) ok = mid;
+              else most = mid;
+            }
           }
+          most = ok;
         }
-        // As far out as that, short of where the face would be crossed.
-        const face = (by: number): number => faceRoom(b, arm, uprightHeld(b, arm, facing, wrist, by), view);
-        if (face(hi) < 0) {
-          let ok = 0, bad = hi;
-          for (let q = 0; q < 8; q++) {
-            const mid = (ok + bad) / 2;
-            if (face(mid) >= 0) ok = mid;
-            else bad = mid;
-          }
-          hi = ok;
-        }
-        xf = uprightHeld(b, arm, facing, wrist, hi);
+        xf = at(leastTurn((by) => legsRoom(b, arm, at(by)) + LEG_CLEAR, most));
       }
       const grip = bit(arm.grip, xf, 0.02);
       bit(arm.head, xf, 0.035);
