@@ -1548,9 +1548,10 @@ interface Kit {
   beard?: Mesh;
   upper: Mesh;
   lower: Mesh;
-  /** Left and right, each with its thumb on the inside: fists, and open. */
+  /** Left and right, each with its thumb on the inside: fists, open, and hanging loose. */
   hands: [Mesh, Mesh];
   open: [Mesh, Mesh];
+  loose: [Mesh, Mesh];
   /** What is in each hand while at work. */
   mallet: Mesh;
   chisel: Mesh;
@@ -1702,7 +1703,9 @@ function kitOf(look: Look, lod: number): Kit {
   const collar = decals([{ q: newell(vee)[1] < 0 ? [...vee].reverse() : vee, m: 'skin' }]);
   return {
     fr,
-    pelvis: rings([[-1, 1.36 * fr.hi, 1.12, 0, -0.05], [0.3, 1.55 * fr.hi, 1.2, 0, -0.05], [1.15, 1.45 * fr.wa, 1.14]], 8, 'trousers'),
+    // Open at the top, where the body goes down into it: closed, the lid was sorted over the coat's back by its middle when the body
+    // leant into a run, a pale oval of trouser in the belt seen from behind.
+    pelvis: rings([[-1, 1.36 * fr.hi, 1.12, 0, -0.05], [0.3, 1.55 * fr.hi, 1.2, 0, -0.05], [1.15, 1.45 * fr.wa, 1.14]], 8, 'trousers', { top: false }),
     // A band of the darker trim round the hem.
     skirt: rings([[-1.35, 1.92 * fr.hi, 1.55], [-1.08, 1.9 * fr.hi, 1.53], [0.2, 1.74 * fr.hi, 1.36], [1.25, 1.53 * fr.wa, 1.22]], 8, (band) => (band === 0 ? 'trim' : 'tunic'), { top: false, bottom: false }),
     belt: join(
@@ -1736,6 +1739,13 @@ function kitOf(look: Look, lod: number): Kit {
         fine(chain([[0, y, -0.84], [0, y + l * Math.sin(a * DEG), -0.84 - l * Math.cos(a * DEG)]], [0.12, 0.09], 4, 'skin'), 0.24 * 1.15 * HAND)),
       fine(chain([[-s * 0.06, 0.32, -0.18], [-s * 0.08, 0.62, -0.46], [-s * 0.08, 0.78, -0.74]], [0.13, 0.11, 0.08], 4, 'skin'), 0.26 * 1.15 * HAND),
     )))) as [Mesh, Mesh],
+    // Hanging loose at a walk: the fingers together and a little curled toward the palm, flat across and as broad as the open
+    // hand, with the thumb lying along the front of it -- longer and flatter than the fist, which is what reads as a hand not
+    // holding anything rather than one clenched on nothing.
+    loose: [-1, 1].map((s) => handSized(join(
+      rings([[-1.2, 0.15, 0.3, -s * 0.07, 0.04], [-0.86, 0.19, 0.42, -s * 0.03, 0.02], [-0.45, 0.22, 0.45], [0.08, 0.24, 0.37]], 6, 'skin'),
+      chain([[-s * 0.1, 0.3, -0.18], [-s * 0.16, 0.42, -0.46], [-s * 0.16, 0.42, -0.7]], [0.12, 0.1, 0.07], 4, 'skin'),
+    ))) as [Mesh, Mesh],
     // A mallet through the fist, its haft out past the thumb and its head square across the end, faced the way the palm is.
     mallet: join(
       chain([[0, -0.45, GRIP], [0, MALLET_HEAD[1], GRIP]], [0.11, 0.1], 4, 'haft'),
@@ -1749,7 +1759,9 @@ function kitOf(look: Look, lod: number): Kit {
     // From up inside the hips, so a thigh swung forward or back does not come out from under them, to the knee and down into the boot,
     // with the calf a little fuller behind under the knee.
     ...legTube([[-1.6, 0.7, 0.74], [-KNEE_SPAN, 0.78, 0.82, 0, -0.03], [0, 0.8, 0.84], [KNEE_SPAN, 0.84, 0.88], [THIGH * fr.tall - 0.8, thighTop(fr), 1.04]], 6, 'trousers'),
-    boot: rings([[-1.3, 0.84, 0.88], [-1.62, 0.8, 0.84], [-1.66, 0.72, 0.76], [-3.02, 0.66, 0.7], [-3.15, 0.61, 0.64]], 6, (band) => (band === 0 ? 'cuff' : 'boot'), { bottom: false }),
+    // Bottom first, so the facets face out: made top first it was inside out, its far side drawn in its place and lit as the near
+    // side would be from the other side, and a shin folded up behind at a run showed the inside of the shaft.
+    boot: rings([[-3.15, 0.61, 0.64], [-3.02, 0.66, 0.7], [-1.66, 0.72, 0.76], [-1.62, 0.8, 0.84], [-1.3, 0.84, 0.88]], 6, (band) => (band === 3 ? 'cuff' : 'boot'), { top: false }),
     foot: footMesh(),
   };
 }
@@ -1804,16 +1816,19 @@ interface Rig {
    * A run carried on a curve rather than stood on whichever foot is lowest:
    * `h` above where the hips are at mid-stance, `w` of the way (nought at a
    * walk, one at a run), and the stance leg's thigh and knee angles at
-   * mid-stance, which is what says where the hips are then. Never lower
-   * than a foot on the ground allows.
+   * mid-stance, which is what says where the hips are then; and the gait,
+   * nought walking and one running. Never lower than a foot on the ground
+   * allows.
    */
-  hover?: { h: number; w: number; thigh: number; knee: number };
+  hover?: { h: number; w: number; thigh: number; knee: number; g: number };
   /** Each shoulder raised this far, for an arm lifted high. */
   shrug: [number, number];
   /** How firmly each foot is on the ground, for the body carried on a curve: its knee gives or straightens to keep it there. */
   plant?: [number, number];
   /** Each hand open rather than closed. */
   open: [boolean, boolean];
+  /** Each hand hanging loose, neither open nor closed: walking with nothing in it. */
+  loose: [boolean, boolean];
   /** The hands wanted for something else -- work, the water, the reins, a wave or a hop -- and whatever they held put away. */
   stowed: boolean;
   /** Which shoulder something heavy is carried over: the right (1), or the left (0) from where the right would put it behind the head. */
@@ -1827,7 +1842,7 @@ function rest(): Rig {
     at: [0, 0, 0], pelvis: [0, 0, 0], spine: [0, 0, 0], chest: [0, 0, 0], neck: [0, 0, 0], head: [0, 0, 0],
     arm: [[4, 8, 0], [4, 8, 0]], elbow: [10, 10], hand: [[0, 0, 0], [0, 0, 0]],
     leg: [[0, 2, 0], [0, 2, 0]], knee: [3, 3], foot: [0, 0], flat: [true, true],
-    tail: [0, 0, 0], lift: 0, sink: 0, blink: false, reins: false, tool: false, lefty: false, shrug: [0, 0], open: [false, false], stowed: false, carried: 1, spin: 0,
+    tail: [0, 0, 0], lift: 0, sink: 0, blink: false, reins: false, tool: false, lefty: false, shrug: [0, 0], open: [false, false], loose: [false, false], stowed: false, carried: 1, spin: 0,
   };
 }
 
@@ -1851,6 +1866,7 @@ function mirror(r: Rig): void {
   r.flat = [r.flat[1], r.flat[0]];
   r.shrug = [r.shrug[1], r.shrug[0]];
   r.open = [r.open[1], r.open[0]];
+  r.loose = [r.loose[1], r.loose[0]];
   if (r.plant) r.plant = [r.plant[1], r.plant[0]];
   r.lefty = !r.lefty;
 }
@@ -1924,51 +1940,195 @@ function idle(r: Rig, t: number): void {
   }
 }
 
-/**
- * Walking into running, `g` between them. The legs swing through the
- * stride with the knee folding under the body as it passes, heel down on
- * landing and toe down leaving; the hips turn with the leading leg and the
- * shoulders the other way, the arms swing against the legs, and at a run the
- * whole leans in, the knees come up behind, the elbows bend and there is a
- * moment with both feet off the ground.
+/*
+ * A stride as an animator keys it, for one leg from the moment its heel
+ * comes down (nought) to the next: the thigh's angle from upright in the
+ * ground's terms (forward positive -- the hips' own tilt is taken off it),
+ * the knee's bend, and the toe's lift off flat. The other leg is the same
+ * half a stride on. Between the keys it is curved smoothly (`loop`).
+ *
+ * Walking: the heel down with the leg reaching (contact); the knee giving as
+ * the weight comes onto it and the foot slapping flat (down); the leg upright
+ * under the body as the other comes past (passing); the heel peeling up as the
+ * body goes over the toes (up); the toe last off the ground with the knee
+ * already folding, the foot carried through low under the body, and the shin
+ * swung out ahead to reach for the next. Each foot is on the ground for
+ * `WALK_DOWN` of the stride, so both are down for a tenth of each step.
+ *
+ * Running: landing nearly under the body rather than out ahead of it; sinking
+ * onto the knee to mid-stance; the leg driven out straight behind to the toe;
+ * the heel flicked up under the seat as the thigh comes through; the knee
+ * driven up high in front, and the shin swung out and pawed back under the
+ * body for the landing. Each foot is down for `RUN_DOWN` of the stride, and
+ * between steps the body is in the air.
  */
-function walk(r: Rig, phi: number, g: number): void {
+const WALK_LEG: Key[] = [
+  { at: 0, v: [25, 3, 16] },
+  { at: 0.1, v: [18, 15, 0] },
+  { at: 0.3, v: [3, 5, 0] },
+  { at: 0.45, v: [-9, 4, -7] },
+  { at: 0.55, v: [-15, 20, -24] },
+  { at: 0.63, v: [-10, 42, -30] },
+  { at: 0.74, v: [9, 60, -8] },
+  { at: 0.86, v: [24, 34, 4] },
+  { at: 0.94, v: [27, 9, 13] },
+];
+const RUN_LEG: Key[] = [
+  { at: 0, v: [22, 16, 6] },
+  { at: 0.1, v: [8, 34, 0] },
+  { at: 0.2, v: [-8, 28, -6] },
+  { at: 0.31, v: [-25, 14, -32] },
+  { at: 0.42, v: [-18, 72, -30] },
+  { at: 0.55, v: [8, 118, -12] },
+  { at: 0.67, v: [42, 104, 0] },
+  { at: 0.79, v: [54, 58, 8] },
+  { at: 0.89, v: [38, 22, 10] },
+  { at: 0.95, v: [28, 14, 8] },
+];
+/** How much of a stride each foot is on the ground, walking and running. */
+const WALK_DOWN = 0.62;
+const RUN_DOWN = 0.32;
+/*
+ * How far the hips are let down from where a straight leg would hold them,
+ * through one step (nought at a heel strike), walking and running: what puts
+ * the weight in a stride. Walking, lowest just after the heel comes down
+ * with the knee giving, highest as the legs pass. Running, lowest at
+ * mid-stance sunk on the knee, and up into the air off the toe, highest
+ * between the steps with both feet off the ground.
+ */
+const WALK_DROP: Key[] = [
+  { at: 0, v: [0.26] },
+  { at: 0.18, v: [0.38] },
+  { at: 0.55, v: [0.03] },
+  { at: 0.8, v: [0.08] },
+];
+const RUN_DROP: Key[] = [
+  { at: 0, v: [0.35] },
+  { at: 0.28, v: [0.48] },
+  { at: 0.64, v: [0.1] },
+  { at: 0.84, v: [-0.1] },
+];
+
+/**
+ * Walking into running, `g` between them: the two strides keyed above mixed,
+ * with the body over them. A foot on the ground stays where it was put down:
+ * from its heel strike to its toe leaving, the hip and the knee are turned to
+ * keep it on a track going back under the body at an even pace, rolling from
+ * the heel over the flat of the foot to the toe -- the pace the keyed contact
+ * and toe-off poses imply, so the stride is the keys' and not a number of its
+ * own. The hips turn with the leading leg and drop on the side of the leg in
+ * the air; the shoulders turn the other way; the arms swing against the legs
+ * from the shoulder, the forearm and hand following through a moment behind;
+ * and the head is held level and looking where it is going whatever the body
+ * under it is doing. At a run the whole body leans in from the ankles and
+ * the arms are bent and driven.
+ */
+function walk(r: Rig, phi: number, g: number, fr: Frame): void {
   const L = (a: number, b: number): number => a + (b - a) * g;
-  const A = L(26, 40);
-  const lean = L(4, 13);
+  const frac = (x: number): number => x - Math.floor(x);
+  const T = fr.tall, A = THIGH * T, B = SHIN * T;
+  // Leg 0's stride, from its heel strike; and the step, from either's.
+  const u0 = frac(phi / TAU - 0.25);
+  const step = frac(2 * u0);
+  // Leaning into the run from the ankles, the hips tipped with the body: the back bent forward over them instead opened a gap
+  // between the coat and the belt behind, and the trousers showed in it.
+  const tip = -L(1, 10);
+  const down = L(WALK_DOWN, RUN_DOWN);
+  // The keyed leg at `u` of its stride: [thigh from upright, knee, toe up].
+  const keyed = (u: number): number[] => {
+    const w = loop(WALK_LEG, u), n = loop(RUN_LEG, u);
+    return [L(w[0], n[0]), L(w[1], n[1]), L(w[2], n[2])];
+  };
+  // The hips turn with the leading leg (see below), which carries each hip forward and back.
+  const hipsAt = (u: number): number => -L(6, 9) * Math.cos(TAU * u);
+  const hipY = (k: number, u: number): number => (k ? 1 : -1) * fr.hi * Math.sin(hipsAt(u) * DEG);
+  // A point of the sole, from the ankle, with the foot tipped `a` toe up: along the way of going, and up.
+  const sole = (p: V3, a: number): Pt => [p[1] * Math.cos(a * DEG) - p[2] * Math.sin(a * DEG), p[1] * Math.sin(a * DEG) + p[2] * Math.cos(a * DEG)];
+  const ankleY = (q: number[]): number => A * Math.sin(q[0] * DEG) + B * Math.sin((q[0] - q[1]) * DEG);
+  const HEEL = SOLE[0], TOE: V3 = [0, SOLE[2][1], SOLE[0][2]];
+  // Where the heel comes down, from the hip, and how far the ground goes back under the body in a stride: from there to where the
+  // toe leaves it, keyed, with the sole between.
+  const strike = keyed(0), off = keyed(down);
+  const heel0 = ankleY(strike) + sole(HEEL, strike[2])[0];
+  const pace = (heel0 + (TOE[1] - HEEL[1]) - ankleY(off) - sole(TOE, off[2])[0]) / down;
+  // The body carried on a curve rather than stood on whichever foot is lowest, which jolts: how far the hips are let down, here.
+  const H0 = A + B - HEEL[2];
+  let H = H0 - L(loop(WALK_DROP, step)[0], loop(RUN_DROP, step)[0]);
+  // Where a foot on the ground has its ankle, from the hip, with the hips `h` up: the heel it rolls over on the track while the
+  // toe is up, the toe once the heel has lifted.
+  // The hips dropped on one side (see below) put that hip lower, and with the leg turned out from them the sole's outer edge too.
+  const drop = L(4, 3) * Math.sin(TAU * (u0 + 0.05));
+  const ankleOf = (k: number, u: number, a: number, h: number): Pt => {
+    const s = k ? 1 : -1, tilt = (drop - s * L(2.5, 1.2)) * DEG;
+    const y = hipY(k, 0) + heel0 - pace * u - hipY(k, u);
+    const [py, pz] = a >= 0 ? sole(HEEL, a) : sole(TOE, a);
+    // Down the leg's own plane, which the hips' roll and the leg's turn out of them tip from upright.
+    return [y + (a >= 0 ? 0 : TOE[1] - HEEL[1]) - py, (-h + s * fr.hi * Math.sin(drop * DEG) - pz + SOLE[1][0] * Math.abs(Math.sin(tilt))) / Math.cos(tilt)];
+  };
+  const reach = 0.998 * (A + B);
+  const legs = [0, 1].map((k) => {
+    // Its stride, counted from a little before the heel comes down so the weight can come onto it as it lands.
+    const u = frac(u0 + k / 2), early = u > 0.8 ? u - 1 : u;
+    // On the ground from the heel strike to the toe leaving it, the weight coming on and going off over a few hundredths.
+    return { u: early, q: keyed(u), on: ramp(early, -0.04, 0.02) * (1 - ramp(early, down - 0.07, down)) };
+  });
+  // Never higher than a foot on the ground reaches with its knee all but straight, which would leave it standing on nothing: let
+  // down smoothly toward that rather than stopped at it in a kink.
   for (let k = 0; k < 2; k++) {
-    const psi = phi + k * Math.PI;
-    const s = Math.sin(psi);
-    const swing = Math.max(0, Math.cos(psi - L(0, -0.55)));
-    r.leg[k] = [A * s + L(0, 9), L(2, 3), 0];
-    // Folded through the swing; and at a run bent under the body's weight through the stance, so the body is lowest there and highest in the air.
-    r.knee[k] = L(5, 12) + L(46, 102) * Math.pow(swing, L(2, 1.3)) + L(4, 34) * Math.pow(Math.max(0, -Math.cos(psi)), 1.5);
-    r.foot[k] = 14 * Math.pow(Math.max(0, s), 6) * (1 - g) - L(24, 34) * Math.pow(Math.max(0, -s), 5);
-    // The arm against the leg: at a run bent hard coming forward, the hand up by the chest, and opening going back past the hip.
-    r.arm[k] = [-L(20, 44) * s + L(3, 4), L(7, 10), L(0, 18)];
-    r.elbow[k] = L(12, 68) + L(14, 52) * Math.max(0, -s) - L(0, 10) * Math.max(0, s);
+    const { u, q, on } = legs[k];
+    if (on <= 0) continue;
+    const [y, z] = ankleOf(k, u, q[2], H);
+    const by = -z - Math.sqrt(Math.max(0, reach * reach - y * y));
+    if (by > -0.06) H -= on * (by > 0.06 ? by : ((by + 0.06) * (by + 0.06)) / 0.24);
   }
-  // The hips turn with the leading leg and the shoulders the other way. The lean is along the way of going, not the way the hips are
-  // turned -- which would tip the whole body to each side in turn -- so the spine takes the hips' turn back out before it leans.
-  const hips = -L(8, 11) * Math.sin(phi);
-  r.pelvis = [0, -L(3, 2) * Math.cos(phi), hips];
-  r.spine = [-lean, 0, -hips];
-  r.chest = [-L(0, 3), L(2, 1) * Math.cos(phi), L(13, 17) * Math.sin(phi) + hips];
-  r.neck = [lean * 0.45, 0, -L(4, 5) * Math.sin(phi)];
-  r.head = [lean * 0.3, 0, 0];
-  r.at = [L(0.16, 0.06) * Math.cos(phi), 0, 0];
-  // The body is carried on a curve rather than stood on whichever foot is lowest, which jolts. At a run: lowest at mid-stance with the knee giving under it, one smooth rise into the air between steps, and down again.
-  // At a walk, a quarter of a tenth of a metre lower just after each heel comes down than just after mid-stance.
-  const u = (((phi / Math.PI) % 1) + 1) % 1;
-  const air = Math.abs(u - 0.5) < 0.3 ? 0.5 * (1 + Math.cos((Math.PI * (u - 0.5)) / 0.3)) : 0;
-  // And at a run a seventh of a tenth of a metre lower at mid-stance than as the foot lands or leaves, sinking onto the knee, so the body does not glide level between strides.
-  const stance = Math.min(u, 1 - u);
-  const sink = stance < 0.2 ? 0.5 * (1 + Math.cos((Math.PI * stance) / 0.2)) : 0;
-  const settle = 0.5 + 0.5 * Math.cos(TAU * (u - 0.6));
-  r.hover = { h: L(-0.25 * settle, 0.62 * air - 0.14 * sink), w: 1, thigh: L(0, 9), knee: L(5, 12) + L(4, 34) };
-  // The foot going back under the body is on the ground -- except in the air between strides at a run.
-  r.plant = [0, 1].map((k) => (1 - air * g) * ramp(-Math.cos(phi + k * Math.PI), 0.02, 0.25)) as [number, number];
-  r.tail = [L(8, 30) + 10 * Math.sin(phi * 2 + 1), 5 * Math.sin(phi), 0];
+  r.plant = [0, 0];
+  for (let k = 0; k < 2; k++) {
+    const { u, q, on } = legs[k];
+    let [thigh, knee] = q;
+    if (on > 0) {
+      // The leg that puts the ankle there: the knee's bend from how far it is, and the thigh from which way.
+      const [y, z] = ankleOf(k, u, q[2], H);
+      const d = Math.min(reach, Math.hypot(y, z));
+      const bend = Math.acos(Math.max(-1, Math.min(1, (d * d - A * A - B * B) / (2 * A * B))));
+      const at = Math.atan2(y, -z) - Math.atan2(-B * Math.sin(bend), A + B * Math.cos(bend));
+      thigh += on * (at / DEG - thigh);
+      knee += on * (bend / DEG - knee);
+    }
+    r.leg[k] = [thigh - tip, L(2.5, 1.2), 0];
+    r.knee[k] = knee;
+    r.foot[k] = q[2];
+    r.plant[k] = on;
+    // The arm against the leg, so with the other leg: forward as that heel comes down, a moment behind it, and the forearm a moment
+    // behind the upper arm again -- still folding forward as the arm starts back, and opening behind as it starts forward.
+    const v = frac(u + 0.5);
+    const swing = Math.cos(TAU * (v - L(0.04, 0.03)));
+    const follow = Math.cos(TAU * (v - L(0.12, 0.09)));
+    r.arm[k] = [L(3, 6) + L(20, 40) * swing, L(6, 9) - L(0, 4) * Math.max(0, swing), L(3, 20)];
+    r.elbow[k] = L(20, 90) + L(12, 18) * follow;
+    // The hand hanging loose trails the swing walking; closed in a fist at a run, it goes with the forearm.
+    r.hand[k] = [L(7, 2) * Math.cos(TAU * (v - 0.22)), 0, 0];
+    r.loose[k] = g < 0.5;
+  }
+  // The hips turn with the leading leg, and drop on the side whose leg is off the ground, most just after the other heel takes the
+  // weight; the body goes over the foot it is on. The back takes the hips' turn and drop back out, so the lean is along the way of
+  // going and the shoulders turn against the hips from square.
+  const hips = hipsAt(u0);
+  // At a run the body gives forward a little at each landing, sunk on the knee, and comes up straight off the toe.
+  const give = L(0.5, 1.5) * (0.5 - 0.5 * Math.cos(TAU * Math.min(1, step / L(0.6, 0.64))));
+  r.pelvis = [tip, drop, hips];
+  r.spine = [-L(2, 1) - give, -0.6 * drop, -hips];
+  const turn = L(6, 13) * Math.cos(TAU * (u0 - 0.03));
+  r.chest = [-L(0.5, 1), -0.25 * drop, turn];
+  // The head held level and looking ahead, the neck taking most of what the body under it turns and tips.
+  const pitch = tip + r.spine[0] + r.chest[0], roll = drop + r.spine[1] + r.chest[1];
+  const ahead = -L(1, 3) - pitch;
+  r.neck = [0.6 * ahead, -0.6 * roll, -0.55 * turn];
+  r.head = [0.4 * ahead, -0.4 * roll, -0.38 * turn];
+  r.at = [-L(0.16, 0.05) * Math.sin(TAU * u0), 0, 0];
+  // Carried at that height, the feet that are down kept on the ground by their knees for whatever the hips' roll leaves (`plantFoot`).
+  r.hover = { h: H - H0, w: 1, thigh: 0, knee: 0, g };
+  // Hair that hangs bouncing with the steps, and streaming out behind at a run.
+  r.tail = [L(8, 30) + L(5, 9) * Math.sin(TAU * (step - 0.25)), 5 * Math.sin(TAU * u0), 0];
 }
 
 /**
@@ -2222,7 +2382,7 @@ function rigOf(p: FigurePose, fr: Frame): Rig {
   const r = rest();
   if (p.swimming) swim(r, p.phase, p.moving);
   else if (p.driving) drive(r, p.phase, p.moving);
-  else if (p.moving) walk(r, p.phase, Math.max(0, Math.min(1, p.gait ?? 0)));
+  else if (p.moving) walk(r, p.phase, Math.max(0, Math.min(1, p.gait ?? 0)), fr);
   else if (p.working) work(r, p.phase, fr, p.facing);
   else idle(r, p.phase / 6);
   if (p.emote && !p.swimming && !p.driving) emote(r, p.emote, p.emoteT ?? 0, p.facing);
@@ -2232,9 +2392,50 @@ function rigOf(p: FigurePose, fr: Frame): Rig {
   if (held && held.carry === 'shoulder' && !r.stowed) shoulder(r, fr, held, overLeft(p.facing) ? 0 : 1, p.facing);
   // At a run the body goes lower on bent knees, and the bow is held that much higher.
   if (held && held.carry === 'bow' && !r.stowed) bowArm(r, fr, held, p.moving ? 1.3 * Math.max(0, Math.min(1, p.gait ?? 0)) : 0, p.facing);
-  // A blade or a club swung low at the side on the move, the elbow kept from coming up and pointing it at the sky.
-  if (held && held.carry === 'fist' && !r.stowed && p.moving) r.elbow[1] = Math.min(r.elbow[1], 24 + 0.25 * r.elbow[1]);
+  if (p.moving && !p.swimming && !p.driving && !r.stowed) carrying(r, held || undefined, !!p.gear?.offhand, Math.max(0, Math.min(1, p.gait ?? 0)));
+  // A hand with something in it is closed on it.
+  if (held && !r.stowed) r.loose[held.carry === 'bow' ? 0 : held.carry === 'shoulder' ? r.carried : 1] = false;
+  if (p.gear?.offhand && !r.stowed) r.loose[0] = false;
   return r;
+}
+
+/**
+ * The arms on the move with something in them, at gait `g`: an arm holding
+ * a weight does not swing as a free one does. A blade or a hatchet in the
+ * right fist swings a little over half as far, held out from the thigh so the
+ * blade goes by the leg and not through it, and at a run is carried with the
+ * elbow bent at the hip rather than pumped up at the chest; a spear upright in
+ * it hardly swings at all, the hand at the side where its slant (`staffUp`)
+ * keeps the shaft off the face, out from the hip and up a little so the butt
+ * rides beside the stride and not down among the feet; and a shield on the left forearm is carried steady at the side, the
+ * elbow bent and the arm out from the body, swinging a fraction as far.
+ */
+function carrying(r: Rig, held: Weapon | undefined, shield: boolean, g: number): void {
+  const L = (a: number, b: number): number => a + (b - a) * g;
+  // The arm's swing about where it hangs from, `keep` of it kept.
+  const steady = (k: number, keep: number, fore = L(3, 6)): void => {
+    r.arm[k][0] = fore + keep * (r.arm[k][0] - L(3, 6));
+  };
+  if (held?.carry === 'fist') {
+    const e = r.elbow[1] - L(20, 90);
+    steady(1, L(0.55, 0.45), L(3, 10));
+    r.arm[1][1] += L(6, 9);
+    r.arm[1][2] = L(0, 6);
+    r.elbow[1] = L(24, 46) + 0.4 * e;
+  } else if (held?.carry === 'staff') {
+    const e = r.elbow[1] - L(20, 90);
+    steady(1, L(0.25, 0.2), L(-4, -2));
+    r.arm[1][1] += 9;
+    r.arm[1][2] = 0;
+    r.elbow[1] = L(44, 52) + 0.2 * e;
+  }
+  if (shield && held?.carry !== 'bow') {
+    const e = r.elbow[0] - L(20, 90);
+    steady(0, L(0.3, 0.3), L(8, 14));
+    r.arm[0][1] += L(5, 4);
+    r.arm[0][2] = L(0, 10);
+    r.elbow[0] = L(34, 76) + 0.3 * e;
+  }
 }
 
 /* ---- one pose into the next -------------------------------------------------- */
@@ -2254,8 +2455,11 @@ function mixRig(a: Rig, b: Rig, w: number): Rig {
     arm: [e(a.arm[0], b.arm[0]), e(a.arm[1], b.arm[1])], elbow: [n(a.elbow[0], b.elbow[0]), n(a.elbow[1], b.elbow[1])], hand: [e(a.hand[0], b.hand[0]), e(a.hand[1], b.hand[1])],
     leg: [e(a.leg[0], b.leg[0]), e(a.leg[1], b.leg[1])], knee: [n(a.knee[0], b.knee[0]), n(a.knee[1], b.knee[1])], foot: [n(a.foot[0], b.foot[0]), n(a.foot[1], b.foot[1])],
     flat: b.flat, tail: e(a.tail, b.tail), lift: n(a.lift, b.lift), sink: n(a.sink, b.sink), blink: b.blink, reins: b.reins, tool: b.tool, lefty: b.lefty,
-    hover: b.hover && { ...b.hover, w: b.hover.w * w }, shrug: [n(a.shrug[0], b.shrug[0]), n(a.shrug[1], b.shrug[1])], open: b.open, stowed: b.stowed, carried: b.carried, spin: b.spin,
-    plant: b.plant && [b.plant[0] * w, b.plant[1] * w],
+    // Carried on the curve as much as the walk being blended into or out of is, so that stopping in the air at a run comes down
+    // over the blend rather than dropping onto the lower foot at once.
+    hover: b.hover ? { ...b.hover, w: b.hover.w * w } : a.hover && { ...a.hover, w: a.hover.w * (1 - w) },
+    shrug: [n(a.shrug[0], b.shrug[0]), n(a.shrug[1], b.shrug[1])], open: b.open, loose: b.loose, stowed: b.stowed, carried: b.carried, spin: b.spin,
+    plant: b.plant ? [b.plant[0] * w, b.plant[1] * w] : a.plant && [a.plant[0] * (1 - w), a.plant[1] * (1 - w)],
   };
 }
 
@@ -2271,6 +2475,8 @@ interface Held {
   turnFrom: number;
   turnSince: number;
   seen: number;
+  /** How far the head and shoulders are turned ahead of the body toward where it is turning, in degrees: see `settle`. */
+  lead: number;
 }
 
 const held = new Map<string, Held>();
@@ -2282,10 +2488,11 @@ function settle(id: string, p: FigurePose, target: Rig, now: number): { rig: Rig
   let h = held.get(id);
   // A body not drawn for a while -- off screen, or just arrived -- starts where it is.
   if (!h || now - h.seen > 0.5) {
-    h = { doing: doing(p), rig: target, from: target, since: -1, facing: goal, goal, turnFrom: goal, turnSince: -1, seen: now };
+    h = { doing: doing(p), rig: target, from: target, since: -1, facing: goal, goal, turnFrom: goal, turnSince: -1, seen: now, lead: 0 };
     held.set(id, h);
     if (held.size > 256) for (const [k, v] of held) if (now - v.seen > 5) held.delete(k);
   }
+  const dt = Math.max(0, Math.min(0.1, now - h.seen));
   h.seen = now;
   if (doing(p) !== h.doing) {
     h.doing = doing(p);
@@ -2304,7 +2511,33 @@ function settle(id: string, p: FigurePose, target: Rig, now: number): { rig: Rig
   d -= 8 * Math.round(d / 8);
   const k = Math.min(1, Math.max(0, (now - h.turnSince) / (TURN * Math.max(1, Math.abs(d)))));
   h.facing = k < 1 ? h.turnFrom + d * ease(k) : h.goal;
-  return { rig: h.rig, facing: h.facing, changing: w < 1 || k < 1 };
+  /*
+   * Turned as a body turns rather than as a figure on a turntable: the head
+   * goes round first, the shoulders after it and the hips last, and each
+   * comes to rest a moment after the turn is done -- the head and
+   * shoulders by how much of the turn is still to come, and the hips that
+   * much behind. Followed rather than set, so a turn started, or changed, in
+   * the middle of another does not snap the head round.
+   */
+  let togo = h.goal - h.facing;
+  togo -= 8 * Math.round(togo / 8);
+  const want = Math.max(-LEAD_MOST, Math.min(LEAD_MOST, togo * 45 * LEAD));
+  h.lead += (want - h.lead) * Math.min(1, dt * LEAD_RATE);
+  if (Math.abs(h.lead) < 0.05) h.lead = 0;
+  const rig = h.lead ? turnedAhead(h.rig, h.lead) : h.rig;
+  return { rig, facing: h.facing, changing: w < 1 || k < 1 || h.lead !== 0 };
+}
+
+/** How far ahead of the body the head and shoulders turn, as a share of the turn still to come, and at most, in degrees; and how quickly they follow it, per second. */
+const LEAD = 0.7;
+const LEAD_MOST = 60;
+const LEAD_RATE = 22;
+
+/** A pose with the body turned `lead` degrees ahead of its facing, most at the head and least at the hips, which are behind it. */
+function turnedAhead(r: Rig, lead: number): Rig {
+  const yaw = (e: Euler, by: number): Euler => [e[0], e[1], e[2] + by * lead];
+  // Of the lead: the hips -0.3, the chest +0.25 and the head +0.6 of it, from the ground.
+  return { ...r, pelvis: yaw(r.pelvis, -0.3), spine: yaw(r.spine, 0.4), chest: yaw(r.chest, 0.15), neck: yaw(r.neck, 0.15), head: yaw(r.head, 0.2) };
 }
 
 type Bones = Record<string, Xf>;
@@ -2369,32 +2602,39 @@ function skeleton(fr: Frame, r: Rig): Bones {
 }
 
 /**
- * A foot put down on the ground, `weight` of the way, by bending or
- * straightening its knee: the rest of the leg as it was, the body `dz` above
- * where the bones were built, and the foot kept level if it was being kept so.
- * Or, `clear`, only lifted out of the ground if it is in it.
+ * A foot put down on the ground, `weight` of the way, by turning the leg at
+ * the hip and the knee together so the foot goes straight down to it (or up)
+ * and stays where it is along the ground: the body `dz` above where the
+ * bones were built, and the foot kept level if it was being kept so. The knee
+ * alone did it once, which swung the foot forward or back along the ground as
+ * it bent -- a foot that should have been still slid under the body. Or,
+ * `clear`, only lifted out of the ground if it is in it.
  */
 function plantFoot(b: Bones, r: Rig, fr: Frame, k: number, dz: number, weight: number, clear = false): void {
-  const T = fr.tall, S = SHIN * T;
-  const lp = r.leg[k][0];
-  let kap = r.knee[k] * DEG;
-  for (let q = 0; q < 3; q++) {
+  const T = fr.tall, A = THIGH * T, B = SHIN * T;
+  const s = k ? 1 : -1, [, la, lt] = r.leg[k];
+  // The hip's frame before its pitch, which the leg swings in.
+  const F = joint(b.pelvis, [s * 1.0 * fr.hi, 0, -0.1], 0, -s * la, s * lt);
+  const m = F.m;
+  for (let q = 0; q < 2; q++) {
     let low = Infinity;
     for (const p of SOLE) low = Math.min(low, place(b[`ankle${k}`], p)[2]);
-    // How far the sole is off the ground, to take out.
-    const off = clear ? Math.min(0, low + dz) : (low + dz) * weight;
+    // How far the sole is off the ground, to take out. A foot coming down or leaving is put part of the way down, but out of the
+    // ground all the way: pushed into it, it stood the whole body up off the other foot.
+    const off = clear || low + dz < 0 ? Math.min(0, low + dz) : (low + dz) * weight;
     if (Math.abs(off) < 1e-3) return;
-    // The ankle's height below the knee is S times (h1 sin + h2 cos) of the knee's bend, h the hip frame's reach upward; solved for the bend that moves it by `off`.
-    const m = b[`hip${k}`].m;
-    const h1 = m[7], h2 = m[8];
-    const rho = Math.hypot(h1, h2) || 1, alpha = Math.atan2(h1, h2);
-    const c = Math.max(-1, Math.min(1, (rho * Math.cos(kap - alpha) + off / S) / rho));
-    const d = Math.acos(c);
-    kap = alpha + (kap - alpha >= 0 ? d : -d);
-    const deg = kap / DEG;
-    b[`knee${k}`] = joint(b[`hip${k}`], [0, 0, -THIGH * T], -deg);
+    // The ankle moved straight down by that, in the hip's frame.
+    const at = b[`ankle${k}`].t;
+    const w: V3 = [at[0] - F.t[0], at[1] - F.t[1], at[2] - off - F.t[2]];
+    const y = m[1] * w[0] + m[4] * w[1] + m[7] * w[2], z = m[2] * w[0] + m[5] * w[1] + m[8] * w[2];
+    // The knee's bend from how far that is, never bent backward and never past straight; and the thigh's swing from which way.
+    const d = Math.max(Math.abs(A - B) + 1e-3, Math.min(0.9995 * (A + B), Math.hypot(y, z)));
+    const bend = Math.acos(Math.max(-1, Math.min(1, (d * d - A * A - B * B) / (2 * A * B))));
+    const lp = (Math.atan2(y, -z) - Math.atan2(-B * Math.sin(bend), A + B * Math.cos(bend))) / DEG, deg = bend / DEG;
+    b[`hip${k}`] = joint(b.pelvis, [s * 1.0 * fr.hi, 0, -0.1], lp, -s * la, s * lt);
+    b[`knee${k}`] = joint(b[`hip${k}`], [0, 0, -A], -deg);
     const level = r.flat[k] ? -(r.pelvis[0] + lp - deg) : 0;
-    b[`ankle${k}`] = joint(b[`knee${k}`], [0, 0, -SHIN * T], level + r.foot[k]);
+    b[`ankle${k}`] = joint(b[`knee${k}`], [0, 0, -B], level + r.foot[k]);
   }
 }
 
@@ -4137,7 +4377,8 @@ const SEAT = -1.15;
 function bentWith(v: V3[], r: Rig, fr: Frame): V3[] {
   // How far apart the legs are, fore and aft: the hem swings out wider the longer the stride, as a skirt does at a run.
   const stride = Math.min(1, 1.2 * Math.abs(Math.sin(r.leg[0][0] * DEG) - Math.sin(r.leg[1][0] * DEG)));
-  const run = r.hover?.w ?? 0;
+  // How far toward a run, and nought standing: the hem flies out only at a run.
+  const run = (r.hover?.w ?? 0) * (r.hover?.g ?? 0);
   const hip = -0.1;
   return v.map((p0) => {
     const down = Math.max(0, Math.min(1, (hip - p0[2]) / SKIRT_TURNS));
@@ -4688,6 +4929,8 @@ const FIST_OUT = [58, 130, 38, 38, 70, 130, 38, 38];
 const fistOut = (facing: number): number => byFacing(FIST_OUT, facing);
 /** How far down from level a blade in the fist points, and how much of the arm's swing it takes, in degrees and as a share. */
 const FIST_DOWN = 30, FIST_SWING = 0.4;
+/** How much nearer level than `FIST_DOWN` a blade is carried at a run, in degrees. */
+const FIST_RUN = 16;
 
 /** A value given for each of the eight facings, at `facing` as drawn: eased from one to the next as the body comes round. */
 function byFacing(table: number[], facing: number): number {
@@ -5114,7 +5357,9 @@ function wield(out: Part[], named: Map<string, Part[]>, r: Rig, b: Bones, gear: 
         const dir: V3 = [h[0] * Math.cos(tip), h[1] * Math.cos(tip), -Math.sin(tip)];
         return { m: aimed(b.pelvis, [0, 0, 0], dir, [Math.cos(out), -Math.sin(out), 0]).m, t: fist };
       };
-      let down = (arm.down ?? FIST_DOWN) * DEG;
+      // At a run a blade is carried nearer level, so its point goes along over the knees coming through rather than down across them.
+      const run = (r.hover?.w ?? 0) * (r.hover?.g ?? 0);
+      let down = (arm.down ?? FIST_DOWN - FIST_RUN * run) * DEG;
       let xf = aim(down);
       // Raised toward level, a step at a time, wherever that would put its point in the ground.
       for (let q = 0; q < 9 && place(xf, [0, 0, arm.to])[2] < 0.5; q++) xf = aim((down -= 8 * DEG));
@@ -5254,7 +5499,7 @@ function partsOf(kit: Kit, r: Rig, b: Bones, gear?: GearLook, pal?: Palette, fac
     parts.push(
       name(`upper${k}`, { mesh: k ? kit.upper : mirrored(kit.upper), xf: b[`arm${k}`], bias: 0, convex: true }),
       name(`lower${k}`, { mesh: kit.lower, xf: b[`elbow${k}`], bias: 0.02 }),
-      name(`hand${k}`, { mesh: r.open[k] ? kit.open[k] : kit.hands[k], xf: b[`wrist${k}`], bias: 0.03 }),
+      name(`hand${k}`, { mesh: r.open[k] ? kit.open[k] : r.loose[k] ? kit.loose[k] : kit.hands[k], xf: b[`wrist${k}`], bias: 0.03 }),
     );
     const bend = kneeBend(b, k);
     const shin = name(`shin${k}`, { mesh: kit.shin, xf: b[`knee${k}`], v: kneeBent(kit.shin.v, bend, true), bias: 0, convex: true });
