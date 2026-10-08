@@ -29,6 +29,7 @@ import { LAYERS, TRIAL_SECONDS } from '../../render/timings';
 import { SWELL_RATE } from '../../render/water';
 import { WALK_FRAMES } from '../../render/figure';
 import { BEARD_ODDS } from '../../game/look';
+import { EMOTE_BY_ID } from '../../game/emotes';
 import { furnitureDef, liquidCapacity, POND_EVERY, type PlacedFurniture } from '../../game/furniture';
 import { billWords, countOf, type Item } from '../../game/items';
 import { COIN_METALS, coinPurity, INGOT_LUMPS, INGOT_WEIGHT, MOULD_BY_ID } from '../../game/metal';
@@ -1440,6 +1441,17 @@ export const NEWS: News[] = [
         + 'finer, higher-arched brows, a lash line on each eye and fuller lips. Neither has half of the body\'s difference and none of the face\'s.',
       `Roll me one gives a man a beard ${percent(BEARD_ODDS.man)} of the time, neither ${percent(BEARD_ODDS.neither)}, `
         + `and a woman ${BEARD_ODDS.woman ? percent(BEARD_ODDS.woman) : 'never'}. Any build can still choose any beard.`,
+    ],
+  },
+  {
+    n: 107,
+    day: '2026-10-08',
+    lines: () => [
+      'A leg is one tube from hip to ankle that bends at the knee, and an arm one from shoulder to wrist that bends at the elbow, with no separate knee or elbow cap.',
+      'Walking and running are keyed step by step: the foot on the ground stays put while the body passes over it, the knee is driven forward, and a turn is led by the head.',
+      'An arm holding a blade, spear or shield swings less than a free one and holds it off the leg.',
+      `Standing still shifts the weight from foot to foot; waving and hopping were redone, and a hop lasts ${EMOTE_BY_ID.get('hop')!.seconds} seconds.`,
+      'Swimming is a breaststroke with the body cut at the waterline, leaving rings behind; a driver sits on the seat of the cart, wagon or boat, holds the reins or pulls the oars.',
     ],
   },
 ];

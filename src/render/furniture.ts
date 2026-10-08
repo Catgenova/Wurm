@@ -1,4 +1,5 @@
 import { FACINGS, FURNITURE, furnitureDef } from '../game/furniture';
+import type { Seat } from './figure';
 import { CROP_LIST, CROP_STAGES, type CropDef } from '../game/farming';
 import { cropPlant } from './crops';
 import { materialOf } from '../game/materials';
@@ -1613,6 +1614,27 @@ function climbingRoses(sc: Scene, side: (q: number) => V3, face: number, trim: n
 /** A hull's sheer, `S` high amidships: rising to both ends, and most to the bow, `t` running from stern to stem. */
 const sheerOf = (S: number) => (t: number): number => S + 0.9 * (2 * t - 1) ** 2 + 1.2 * t ** 8;
 
+/** How many lengths a hull is built in, stern to stem. */
+const HULL_STATIONS = 14;
+/** Her floor, boarded over the bottom, above the waterline. */
+const HULL_FLOOR = 0.8;
+
+/**
+ * The stations a hull is built on, stern to stem: how far along each is
+ * (`t`, nought to one, and `x`), where her waterline is (`xw`, raked at the
+ * stem) and how wide it is there (`w`), and how wide she is at her sheer
+ * (`b`) and how high it is (`s`).
+ */
+function stationsOf(xs: number, xb: number, B: number, S: number): Array<{ t: number; x: number; xw: number; b: number; w: number; s: number }> {
+  const breadth = (t: number): number => (t < 0.45 ? 0.7 + 0.3 * Math.sin((t / 0.45) * (Math.PI / 2)) : Math.cos(((t - 0.45) / 0.55) * (Math.PI / 2)) ** 0.85);
+  const sheer = sheerOf(S);
+  return Array.from({ length: HULL_STATIONS + 1 }, (_, i) => {
+    const t = i / HULL_STATIONS, x = xs + (xb - xs) * t;
+    // The stem rakes: the waterline ends a little short of where the sheer does.
+    return { t, x, xw: x - 0.9 * t ** 6, b: B * breadth(t), w: B * breadth(t) * 0.8, s: sheer(t) };
+  });
+}
+
 /**
  * A clinker hull from the waterline up -- all of one that shows -- with the
  * stern at `xs`, a transom across it, the stem at `xb`, `B` across at her
@@ -1628,14 +1650,8 @@ const sheerOf = (S: number) => (t: number): number => S + 0.9 * (2 * t - 1) ** 2
 function hull(sc: Scene, wood: Paint, xs: number, xb: number, B: number, S: number,
   inside: (seat: (x: number, z: number, w: number) => void, deck: (from: number) => void) => void,
   above?: { draw: () => void; reach: number; top: number }): void {
-  const N = 14;
-  const breadth = (t: number): number => (t < 0.45 ? 0.7 + 0.3 * Math.sin((t / 0.45) * (Math.PI / 2)) : Math.cos(((t - 0.45) / 0.55) * (Math.PI / 2)) ** 0.85);
-  const sheer = sheerOf(S);
-  const st = Array.from({ length: N + 1 }, (_, i) => {
-    const t = i / N, x = xs + (xb - xs) * t;
-    // The stem rakes: the waterline ends a little short of where the sheer does.
-    return { t, x, xw: x - 0.9 * t ** 6, b: B * breadth(t), w: B * breadth(t) * 0.8, s: sheer(t) };
-  });
+  const N = HULL_STATIONS;
+  const st = stationsOf(xs, xb, B, S);
   const at = (x: number): (typeof st)[number] => st[Math.max(0, Math.min(N, Math.round(((x - xs) / (xb - xs)) * N)))];
   // What stands up out of her -- a mast, a sail swung out over the side -- is hers to draw, so her box takes it in.
   const reach = Math.max(B, above?.reach ?? 0);
@@ -1688,7 +1704,7 @@ function hull(sc: Scene, wood: Paint, xs: number, xb: number, B: number, S: numb
       if (f.end) for (const [a, b] of [[0, 3], [1, 2]]) sc.line(P[a], P[b], rgb(wood.ink, 1, 0.6), sc.ink * 0.8);
     }
     // Her floor, boarded fore and aft.
-    const fl = 0.8, span = st.slice(1, N - 1);
+    const fl = HULL_FLOOR, span = st.slice(1, N - 1);
     const floor: Pt[] = [...span.map((q) => sc.P(q.xw + 0.3, -q.w * 0.8, fl)), ...[...span].reverse().map((q) => sc.P(q.xw + 0.3, q.w * 0.8, fl))];
     sc.fillInk(floor, rgb(wood.body, 0.92), wood.ink, 0.6);
     g.save();
@@ -3917,7 +3933,7 @@ const MODELS: Record<string, Model> = {
     sc.rod([hw - 0.5, -W + 0.9, 2.05], [hw - 0.5, W - 0.9, 2.05], 0.3, wood);
   },
   large_cart: ({ sc, wood, hw, hd }) => {
-    const L0 = -hw + 1, L1 = hw - 6, W = hd - 3, floor = 6.7, t = 0.6, top = floor + 3.4;
+    const { L0, L1, W, floor, top, bench } = boxOf('large_cart', hw, hd), t = BOX_BOARD.large_cart;
     const r = 4.8, ax = -2, wy = W + 1;
     sc.shadows = [[L0, L1, -W - 1.4, W + 1.4]];
     sc.rod([ax, -W + 0.4, r], [ax, W - 0.4, r], 0.45, IRON);
@@ -3933,8 +3949,8 @@ const MODELS: Record<string, Model> = {
     sc.box(L0, L1, W - t, W, floor, top, wood, { front: staked, back: staked });
     sc.box(L0, L0 + t, -W + t, W - t, floor, top, wood, { left: staked, right: staked });
     sc.box(L1 - t, L1, -W + t, W - t, floor, top, wood, { left: staked, right: staked });
-    for (const s of [-1, 1]) sc.box(-0.6, 0.6, s * (W - 1.6) - 0.5, s * (W - 1.6) + 0.5, floor, 8.8, wood);
-    sc.box(-1.2, 1.2, -W + t, W - t, 8.8, 9.4, wood, { top: grain(sc, wood, 2) });
+    for (const s of [-1, 1]) sc.box(-0.6, 0.6, s * (W - 1.6) - 0.5, s * (W - 1.6) + 0.5, floor, bench - 0.6, wood);
+    sc.box(-1.2, 1.2, -W + t, W - t, bench - 0.6, bench, wood, { top: grain(sc, wood, 2) });
     sc.rod([L1 + 0.2, 0, floor - 1.3], [hw - 0.6, 0, 4.4], 0.5, wood);
     sc.box(hw - 1.6, hw - 0.6, -6.4, 6.4, 4.1, 5, wood);
     for (const s of [-1, 1]) sc.part(hw - 1.4, hw - 0.8, s * 3.6 - 1.6, s * 3.6 + 1.6, 1.8, 4.1, () => {
@@ -3947,7 +3963,7 @@ const MODELS: Record<string, Model> = {
     });
   },
   wagon: ({ sc, wood, hw, hd }) => {
-    const L0 = -hw + 1, L1 = hw - 8, W = hd - 5, floor = 8.4, t = 0.7, top = floor + 3.8;
+    const { L0, L1, W, floor, top, bench } = boxOf('wagon', hw, hd), t = BOX_BOARD.wagon;
     const wy = W + 1.2, rear = [-12, 5.4] as const, front = [6, 4.4] as const;
     sc.shadows = [[L0, L1, -W - 1.6, W + 1.6]];
     for (const [ax, r] of [rear, front]) {
@@ -3967,8 +3983,8 @@ const MODELS: Record<string, Model> = {
     sc.box(L0, L1, W - t, W, floor, top, wood, { front: staked, back: staked });
     sc.box(L0, L0 + t, -W + t, W - t, floor, top, wood, { left: staked, right: staked });
     sc.box(L1 - t, L1, -W + t, W - t, floor, top, wood, { left: staked, right: staked });
-    for (const s of [-1, 1]) sc.box(-0.7, 0.7, s * (W - 2) - 0.6, s * (W - 2) + 0.6, floor, 10.6, wood);
-    sc.box(-1.4, 1.4, -W + t, W - t, 10.6, 11.2, wood, { top: grain(sc, wood, 2) });
+    for (const s of [-1, 1]) sc.box(-0.7, 0.7, s * (W - 2) - 0.6, s * (W - 2) + 0.6, floor, bench - 0.6, wood);
+    sc.box(-1.4, 1.4, -W + t, W - t, bench - 0.6, bench, wood, { top: grain(sc, wood, 2) });
     sc.rod([L1 + 0.2, 0, 5.2], [hw - 0.4, 0, 4.6], 0.55, wood);
     for (const yx of [L1 + 3.2, hw - 1.2]) {
       sc.box(yx - 0.5, yx + 0.5, -6.6, 6.6, 4.4, 5.3, wood);
@@ -3992,13 +4008,14 @@ const MODELS: Record<string, Model> = {
    * the sail swings out to leeward and fills as far as `trim` says, which is
    * the wind's side and how hard it is drawing.
    */
-  rowing_boat: ({ sc, wood, hw, hd }) => {
+  rowing_boat: ({ sc, wood, hw, hd, trim }) => {
     sc.shadows = [];
     const OAR = paintOf(mix(wood.body, [255, 250, 240], 0.2));
-    hull(sc, wood, -hw + 1.6, hw - 0.4, hd - 2.2, 3.6, (seat) => {
-      for (const tx of [-5.2, 1.8]) seat(tx, 2.4, 0.6);
-      // The oars, shipped: looms along the thwarts, blades aft.
-      for (const s of [-1, 1]) {
+    const { xs, xb, B, S, thwarts, thwart } = HULLS.rowing_boat(hw, hd);
+    hull(sc, wood, xs, xb, B, S, (seat) => {
+      for (const tx of thwarts) seat(tx, thwart, 0.6);
+      // The oars, shipped: looms along the thwarts, blades aft. Out, they are in the hands of whoever is rowing her (`trim` one).
+      if (!trim) for (const s of [-1, 1]) {
         sc.drawRod([-8.6, s * 2.4, 2.95], [9.4, s * 2, 3.05], 0.26, OAR);
         sc.drawPanel([[-8.6, s * 2.05, 2.98], [-12.2, s * 1.85, 2.98], [-12.2, s * 3.05, 2.98], [-8.6, s * 2.75, 2.98]], OAR);
       }
@@ -4006,7 +4023,7 @@ const MODELS: Record<string, Model> = {
   },
   sailing_boat: ({ sc, wood, hw, hd, trim, tint }) => {
     sc.shadows = [];
-    const xs = -hw + 2.2, xb = hw - 0.4, B = hd - 3.4, S = 5.2;
+    const { xs, xb, B, S, thwarts, thwart, tiller } = HULLS.sailing_boat(hw, hd);
     const sheer = sheerOf(S);
     const xm = xs + (xb - xs) * 0.6, zb = S + 2.4, zt = 30, luff = 16, boom = 15, gaff = 10;
     const set = trim ?? 0.25;
@@ -4019,10 +4036,11 @@ const MODELS: Record<string, Model> = {
     const SAIL = tint ? paintOf(hex(tint.colour), 0.55) : paintOf(hex('#f1e8d2'));
     const lerp = (a: V3, b: V3, t: number): V3 => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t];
     hull(sc, wood, xs, xb, B, S, (seat, deck) => {
-      for (const tx of [-9, -2.5]) seat(tx, S - 1.4, 0.7);
+      for (const tx of thwarts) seat(tx, thwart, 0.7);
       deck(0.72);
       sc.drawRod([xm, 0, 0.8], [xm, 0, S + 0.6], 0.45, wood);
-      sc.drawRod([xs - 0.6, 0, sheer(0) + 0.6], [xs + 4.4, 0, sheer(0) + 1.2], 0.3, wood);
+      // The tiller, from the rudder's head forward over the stern sheets to the helmsman's hand.
+      sc.drawRod([xs - 0.6, 0, sheer(0) + 0.6], tiller, 0.3, wood);
     }, { reach: boom + belly + 1, top: zt + 1, draw: () => {
       // Stays from the masthead to the stem and down to either side, then the mast and the sail in the order they stand.
       for (const [x, y, z] of [[xb - 0.4, 0, sheer(1)], [xm - 2, B * 0.85, S], [xm - 2, -B * 0.85, S]] as V3[]) {
@@ -4498,6 +4516,137 @@ const planterHolds = (trim: number | undefined): { crop: CropDef; stage: number 
   const crop = CROP_LIST[Math.floor((trim - 1) / CROP_STAGES)];
   return crop ? { crop, stage: (trim - 1) % CROP_STAGES } : null;
 };
+
+/* ---- where a driver sits ---------------------------------------------------- */
+
+/**
+ * The box of a large cart and of a wagon: its ends along it (`L0` at the
+ * back, `L1` at the front) and its half-width, its floor, the top of its
+ * sides, and the top of the bench across it over the axle.
+ */
+const BOX_MEASURES = {
+  large_cart: { back: 1, front: 6, side: 3, floor: 6.7, rise: 3.4, bench: 9.4 },
+  wagon: { back: 1, front: 8, side: 5, floor: 8.4, rise: 3.8, bench: 11.2 },
+};
+/** How thick a box's boards are. */
+const BOX_BOARD = { large_cart: 0.6, wagon: 0.7 };
+function boxOf(kind: keyof typeof BOX_MEASURES, hw: number, hd: number): { L0: number; L1: number; W: number; floor: number; top: number; bench: number } {
+  const m = BOX_MEASURES[kind];
+  return { L0: -hw + m.back, L1: hw - m.front, W: hd - m.side, floor: m.floor, top: m.floor + m.rise, bench: m.bench };
+}
+
+/**
+ * The two small hulls' lines: stern and stem, half her beam, her sheer
+ * amidships, where her thwarts are along her and the height of their tops;
+ * and the sailing boat's tiller, to the end of it. Her helmsman sits on the
+ * after thwart beside the tiller, near enough its end to have it in hand.
+ */
+const HULLS = {
+  rowing_boat: (hw: number, hd: number) => ({ xs: -hw + 1.6, xb: hw - 0.4, B: hd - 2.2, S: 3.6, thwarts: [-5.2, 1.8], thwart: 2.4, tiller: null }),
+  sailing_boat: (hw: number, hd: number) => {
+    const xs = -hw + 2.2, S = 5.2;
+    return { xs, xb: hw - 0.4, B: hd - 3.4, S, thwarts: [xs + 5.6, -2.5], thwart: S - 1.4, tiller: [xs + 6.6, 0, sheerOf(S)(0) + 1.2] as V3 };
+  },
+};
+
+/**
+ * Where whoever drives a piece sits in it, and what is to hand there, in the
+ * piece's own frame -- along it the way it goes, across it to starboard, and
+ * up -- off the measures its model is built to, so the body is put on the
+ * bench that is drawn. `at` is the floor the feet go on, under where the
+ * body sits; `up` the top of the seat over that floor; `aft` sat facing
+ * her stern, as a rower is; `grip` where the reins go to, the starboard
+ * rowlock, or the end of the tiller; `rim` the top of the sides round the
+ * seat, and `hull` whatever else of the sides makes their outline from
+ * outside.
+ */
+interface DriverPlace { hands: Seat['hands']; at: V3; up: number; aft?: boolean; grip: V3; rim: V3[]; hull: V3[] }
+const places = new Map<string, DriverPlace | null>();
+/** The reins of a team: out ahead of the middle of the piece to over its yokes, as high over the bench as the driver's hands are. */
+export const REIN_REACH = 14;
+export const REIN_HANDS = 2.9;
+function placeOf(kind: string): DriverPlace | null {
+  let p = places.get(kind);
+  if (p !== undefined) return p;
+  const def = furnitureDef(kind);
+  const hw = def.w * 5, hd = def.h * 5;
+  p = null;
+  if (kind === 'large_cart' || kind === 'wagon') {
+    const { L0, L1, W, floor, top, bench } = boxOf(kind, hw, hd), t = BOX_BOARD[kind];
+    const box = (x0: number, x1: number, w: number, z: number): V3[] => [[x0, -w, z], [x1, -w, z], [x1, w, z], [x0, w, z]];
+    p = {
+      hands: 'reins', at: [0, 0, floor], up: bench - floor, grip: [REIN_REACH, 0, bench + REIN_HANDS],
+      rim: box(L0 + t, L1 - t, W - t, top), hull: [...box(L0, L1, W, top), ...box(L0, L1, W, floor - 0.8)],
+    };
+  } else if (kind === 'rowing_boat' || kind === 'sailing_boat') {
+    const h = HULLS[kind](hw, hd), st = stationsOf(h.xs, h.xb, h.B, h.S);
+    const rim: V3[] = [...st.map((q): V3 => [q.x, q.b, q.s]), ...[...st].reverse().map((q): V3 => [q.x, -q.b, q.s])];
+    const hull: V3[] = [...rim, ...st.map((q): V3 => [q.xw, q.w, 0]), ...st.map((q): V3 => [q.xw, -q.w, 0])];
+    const near = (x: number): (typeof st)[number] => st[Math.max(0, Math.min(HULL_STATIONS, Math.round(((x - h.xs) / (h.xb - h.xs)) * HULL_STATIONS)))];
+    if (kind === 'rowing_boat') {
+      // On the forward thwart facing aft, the rowlocks on her gunwales a long forearm's reach toward the stern.
+      const x = h.thwarts[1], lock = x - 3;
+      p = { hands: 'oars', at: [x, 0, HULL_FLOOR], up: h.thwart - HULL_FLOOR, aft: true, grip: [lock, near(lock).b, near(lock).s + 0.3], rim, hull };
+    } else {
+      // On the after thwart, to port of the tiller.
+      p = { hands: 'tiller', at: [h.thwarts[0], -3, HULL_FLOOR], up: h.thwart - HULL_FLOOR, grip: h.tiller as V3, rim, hull };
+    }
+  }
+  places.set(kind, p);
+  return p;
+}
+
+/** Where the reins of a piece's team go to over it, in its own frame, for the team's reins to come to: null for one nobody drives with reins. */
+export const reinsTo = (kind: string): V3 | null => {
+  const p = placeOf(kind);
+  return p?.hands === 'reins' ? p.grip : null;
+};
+
+/** Whether a piece is driven sat at its oars, which are then out in the rower's hands rather than shipped in her. */
+export const rowedPiece = (kind: string): boolean => placeOf(kind)?.hands === 'oars';
+
+/**
+ * Somebody driving a piece drawn as `view` says: where on the screen their
+ * feet go from where the piece stands, at zoom one, and how much of that is
+ * the height of the floor they are on, the way they face (one
+ * of the eight, or between, as the piece is turned), and what they are sat
+ * on and holding, in their own frame (`Seat` in `./figure`). Null for a
+ * piece nobody sits in to drive.
+ */
+export function driverOn(kind: string, view: PieceView): { dx: number; dy: number; lift: number; facing: number; seat: Seat } | null {
+  const p = placeOf(kind);
+  if (!p) return null;
+  const P = (x: number, y: number, z: number): Pt => [x * view.ux + y * view.vx, x * view.uy + y * view.vy - z * HEIGHT_SCALE];
+  const [dx, dy] = P(p.at[0], p.at[1], p.at[2]);
+  // The way the piece points, back out of the screen into the world: its length is along it, and the body faces along it (or back along it).
+  const a = (view.ux * UNITS_PER_TILE) / HALF_W, b = (view.uy * UNITS_PER_TILE) / HALF_H;
+  const ahead = Math.atan2((b - a) / 2, (a + b) / 2);
+  const facing = ((((1 - (4 * ahead) / Math.PI + (p.aft ? 4 : 0)) % 8) + 8) % 8);
+  // From the piece's frame to the body's: across to its right, forward, up from the floor its feet are on.
+  const k = p.aft ? -1 : 1;
+  const body = (q: V3): [number, number, number] => [k * (q[1] - p.at[1]), k * (q[0] - p.at[0]), q[2] - p.at[2]];
+  const on = (q: V3): Pt => { const s = P(q[0], q[1], q[2]); return [s[0] - dx, s[1] - dy]; };
+  const grip = body(p.grip);
+  // A rowlock: the one to the body's right, whichever of hers that is.
+  if (p.hands === 'oars') grip[0] = Math.abs(grip[0]);
+  return { dx, dy, lift: p.at[2] * HEIGHT_SCALE, facing, seat: { hands: p.hands, up: p.up, grip, sides: { outline: hullOf(p.hull.map(on)), rim: p.rim.map(on) } } };
+}
+
+/** The outline round a set of points on the screen: the smallest convex shape holding them all. */
+function hullOf(ps: Pt[]): Pt[] {
+  const s = [...ps].sort((a, b) => a[0] - b[0] || a[1] - b[1]);
+  const turn = (o: Pt, a: Pt, b: Pt): number => (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0]);
+  const half = (list: Pt[]): Pt[] => {
+    const h: Pt[] = [];
+    for (const q of list) {
+      while (h.length >= 2 && turn(h[h.length - 2], h[h.length - 1], q) <= 0) h.pop();
+      h.push(q);
+    }
+    h.pop();
+    return h;
+  };
+  return [...half(s), ...half([...s].reverse())];
+}
 
 /* ---- sizes, for the renderer ------------------------------------------------ */
 

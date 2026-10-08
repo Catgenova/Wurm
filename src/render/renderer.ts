@@ -68,7 +68,7 @@ import { kilnCentre, type PlacedKiln } from '../game/kiln';
 import { furnitureCentre, furnitureDef, type PlacedFurniture, facingOf as pieceFacing, furnitureFootprint } from '../game/furniture';
 import { UNSEEN, VISIBLE } from '../game/vision';
 import { DAWN, DUSK } from '../game/game';
-import { clothInWind, crewOrder, deviceOf, drawFurniture, drawFurnitureLive, furnitureHoles, furnitureSpan, FURNITURE_HEIGHT, glowsAtNight, headingView, mossTrim, PIECE_STAGES, pieceView, planterTrim, roseTrim, type Air, type Crew, type PieceView } from './furniture';
+import { clothInWind, crewOrder, deviceOf, drawFurniture, drawFurnitureLive, driverOn, furnitureHoles, reinsTo, rowedPiece, furnitureSpan, FURNITURE_HEIGHT, glowsAtNight, headingView, mossTrim, PIECE_STAGES, pieceView, planterTrim, roseTrim, type Air, type Crew, type PieceView } from './furniture';
 import { roseStage } from '../game/roses';
 import { fieldRate } from '../game/growth';
 import { dyeOf } from '../game/dyestuffs';
@@ -183,16 +183,19 @@ import { hingeKey, hingeOf, isDrawbridge, landingOf } from '../game/gates';
 import { bridgeDone, type Bridge } from '../game/bridges';
 import { SmallLife, type Mote } from './life';
 import { lookStep, yearAt } from './foliage';
-import { FIGURE_TOP } from './figure';
+import { FIGURE_TOP, type Seat } from './figure';
 /**
  * How much larger a beast in the traces is drawn than one loose: enough that
  * a grown orse, the draught beast, stands a quarter again as tall as a body
  * (`FIGURE_TOP`), as a horse in harness stands over its driver. The rest of a
  * team is drawn up by the same, so a team keeps its kinds' sizes to each other.
  */
-/** How far out from the middle of a cart or wagon, toward its team, the driver's hands are, in tiles; and how far over the seat. */
-const REIN_REACH = 0.35;
-const REIN_HANDS = 9;
+/**
+ * A rider in the saddle: astride, the seat where the saddle is, and the reins
+ * out over the withers to the bit, ahead of the saddle and up at the height
+ * of the beast's mouth.
+ */
+const SADDLE: Seat = { hands: 'reins', up: 0, astride: true, grip: [0, 7.5, 2.5] };
 /** Reins: dark leather, inked. */
 const REIN_LEATHER = 'rgb(112, 74, 46)';
 const REIN_LINE = 'rgba(46, 30, 22, 0.85)';
@@ -290,6 +293,14 @@ interface Entity {
   drawDy?: number;
   /** On a deck on their feet rather than sat at a helm or on a seat. */
   standing?: boolean;
+  /**
+   * Sat driving something with a seat of its own (`driverOn` in
+   * `./furniture`): what is sat on and held, and the way the body faces,
+   * square along the piece however it is turned rather than the nearest of
+   * the eight ways, so it sits square on the bench.
+   */
+  seat?: Seat;
+  seatFacing?: number;
   /** Which way round a piece is drawn this frame, worked out once where it is taken, so its layers and its crew agree. */
   view?: PieceView;
   /** For a hull drawn in layers round the people on her (`takeAboard`): which layer this is. */
@@ -921,6 +932,8 @@ export class Renderer {
     e.drawDx = undefined;
     e.drawDy = undefined;
     e.standing = undefined;
+    e.seat = undefined;
+    e.seatFacing = undefined;
     e.rare = undefined;
     e.view = undefined;
     e.layer = undefined;
@@ -3589,6 +3602,10 @@ export class Renderer {
         if (flight) pe.clip = flight.clip;
         // At a helm on a deck of its own the driver stands there, not in her middle.
         if (drivenBy && furnitureDef(drivenBy.kind).boat?.helm) this.onDeck(pe, drivenBy, this.game.helmSpot(drivenBy), pe.lift, true);
+        // Anything else with a seat, on that seat with what is to hand there.
+        else if (drivenBy) this.seatOn(pe, drivenBy, zoom);
+        // A rider, astride.
+        else if (up) pe.seat = SADDLE;
       }
       // A wall laid at the end of the line is laid again over one already laid, which took the wash off it then.
       this.wallLift = null;
@@ -3893,6 +3910,8 @@ export class Renderer {
         const e = this.take('peer', x, y, fe.sx, sy, null);
         e.peer = peer;
         this.onDeck(e, f, at(peer), deck * zoom, standing);
+        // Whoever has the helm of a boat with no deck of its own to stand at it is sat at her oars or her tiller.
+        if (spot === 0 && !standing) this.seatOn(e, f, zoom);
       } });
     };
     if (f.helm) aboard(f.helm, 0, () => this.game.helmSpot(f), boat.seat, !!boat.helm);
@@ -3921,6 +3940,21 @@ export class Renderer {
     for (const h of hands) if (!order.includes(h.spot)) h.take(fe.sy + HAIR * (2 * order.length + 1));
   }
 
+  /**
+   * Somebody driving `f`, sat where its driver sits (`driverOn`): their feet
+   * put that far from wherever they are drawn from now, and lifted to the
+   * floor under the seat, which is what makes them a driver.
+   */
+  private seatOn(e: Entity, f: PlacedFurniture, zoom: number): void {
+    const d = driverOn(f.kind, this.viewOf(f));
+    if (!d) return;
+    e.lift = d.lift * zoom;
+    e.drawDx = (e.drawDx ?? 0) + d.dx * zoom;
+    e.drawDy = (e.drawDy ?? 0) + d.dy * zoom + e.lift;
+    e.seat = d.seat;
+    e.seatFacing = d.facing;
+  }
+
   /** Somebody on `f`, drawn at `wx`, `wy` on her rather than where they sort, `lift` up. */
   private onDeck(e: Entity, f: PlacedFurniture, [wx, wy]: [number, number], lift: number, standing: boolean): void {
     const cam = this.camera;
@@ -3940,17 +3974,18 @@ export class Renderer {
    */
   private drawReins(ctx: CanvasRenderingContext2D, cr: Creature, sx: number, sy: number, facing: number, big: number, zoom: number): void {
     const f = cr.hitchedTo !== null ? this.game.furniture.get(cr.hitchedTo) : undefined;
-    const v = f && furnitureDef(f.kind).vehicle;
-    if (!f || !v) return;
+    const to = f && reinsTo(f.kind);
+    if (!f || !to) return;
     const cam = this.camera;
     const head = wildermonHead(cr.species, facing) ?? [0, -(wildermonTop(cr.species) ?? 20) * 0.8];
     const hx = sx + head[0] * zoom * big, hy = sy + head[1] * zoom * big;
     // The driver's hands: over the front of the box, toward the team, where the seat is.
     const [cx, cy] = furnitureCentre(f);
     const dx = cr.x - cx, dy = cr.y - cy, d = Math.hypot(dx, dy) || 1;
-    const wx = cx + (dx / d) * REIN_REACH, wy = cy + (dy / d) * REIN_REACH;
+    // Where the driver's own reins come to (`Seat.grip`), so the two are one line.
+    const wx = cx + (dx / d) * (to[0] / UNITS_PER_TILE), wy = cy + (dy / d) * (to[0] / UNITS_PER_TILE);
     const bx = cam.worldToScreenX(wx, wy);
-    const by = cam.worldToScreenY(wx, wy, this.pieceBase(f, wx, wy)) - (v.seat + REIN_HANDS) * zoom;
+    const by = cam.worldToScreenY(wx, wy, this.pieceBase(f, wx, wy)) - to[2] * HEIGHT_SCALE * zoom;
     // A pair a hand apart, sagging by a little of the length between.
     const nx = -(hy - by), ny = hx - bx, nl = Math.hypot(nx, ny) || 1;
     const sag = Math.min(14, Math.hypot(hx - bx, hy - by) * 0.12) * zoom;
@@ -4194,10 +4229,11 @@ export class Renderer {
             // On a deck it is the hull that is going somewhere, not the feet.
             moving: player.moving && !ent.standing,
             gait: this.gaits.of('player', player.x, player.y, this.frameDt),
-            facing: this.playerFacing,
+            facing: ent.seatFacing ?? this.playerFacing,
             swimming: player.swimming,
             working: this.game.action?.state === 'performing',
             driving: (ent.lift ?? 0) > 0 && !ent.standing,
+            seat: ent.seat,
             look: player.look,
             // Everything on, each piece drawn in its own material, dye and rarity.
             gear: gearFrom(wornWire((slot) => this.game.worn(slot))),
@@ -4232,10 +4268,11 @@ export class Renderer {
             phase: peer.moving ? peer.walkPhase : this.time * 6,
             moving: peer.moving && !ent.standing,
             gait: this.gaits.of('o' + peer.id, peer.x, peer.y, this.frameDt),
-            facing: peer.facing,
+            facing: ent.seatFacing ?? peer.facing,
             swimming: peer.swimming,
             working: peer.working,
             driving: (ent.lift ?? 0) > 0 && !ent.standing,
+            seat: ent.seat,
             tunic: peer.tunic,
             trousers: peer.trousers,
             look: peer.look,
@@ -12714,6 +12751,8 @@ export class Renderer {
   }
 
   private pieceTrim(f: PlacedFurniture): number | undefined {
+    // A rowing boat somebody is rowing has her oars out in their hands, not shipped in her.
+    if (rowedPiece(f.kind)) return f.driven || f.helm ? 1 : 0;
     // A lantern post or pillar, with its lantern in it or without (`lamps.ts`).
     if (isLampPiece(f)) return f.lamp ? 1 : 0;
     // An arch's roses: their variety, which is its place's, and how far they have grown (`roses.ts`).
