@@ -1649,13 +1649,23 @@ function stationsOf(xs: number, xb: number, B: number, S: number): Array<{ t: nu
  */
 function hull(sc: Scene, wood: Paint, xs: number, xb: number, B: number, S: number,
   inside: (seat: (x: number, z: number, w: number) => void, deck: (from: number) => void) => void,
-  above?: { draw: () => void; reach: number; top: number }): void {
+  above?: { draw: () => void; reach: number; top: number; box?: { x0: number; x1: number; y0: number; y1: number } }): void {
   const N = HULL_STATIONS;
   const st = stationsOf(xs, xb, B, S);
   const at = (x: number): (typeof st)[number] => st[Math.max(0, Math.min(N, Math.round(((x - xs) / (xb - xs)) * N)))];
-  // What stands up out of her -- a mast, a sail swung out over the side -- is hers to draw, so her box takes it in.
-  const reach = Math.max(B, above?.reach ?? 0);
-  sc.part(xs, xb, -reach, reach, 0, Math.max(above?.top ?? 0, ...st.map((q) => q.s)), () => {
+  const sheerTop = Math.max(...st.map((q) => q.s));
+  /*
+   * What stands up out of her -- a mast, a sail swung out over the side -- is
+   * hers to draw, so her box takes it in; or, given a box of its own, it is a
+   * part of its own over her, sorted by where it stands, so somebody sat in
+   * her (`Scene.standIns`) can go between her and it: under a mast and a sail
+   * nearer you than they are, and over them when they are further off. She is
+   * then the floor such a body is put on.
+   */
+  const rig = above?.box;
+  if (above && rig) sc.part(rig.x0, rig.x1, rig.y0, rig.y1, sheerTop, above.top, above.draw);
+  const reach = Math.max(B, rig ? 0 : above?.reach ?? 0);
+  sc.part(xs, xb, -reach, reach, 0, rig ? sheerTop : Math.max(above?.top ?? 0, sheerTop), () => {
     const g = sc.g;
     type Face = { q: V3[]; n: V3; d: number; end: boolean };
     const outer: Face[] = [], inner: Face[] = [];
@@ -1755,8 +1765,8 @@ function hull(sc: Scene, wood: Paint, xs: number, xb: number, B: number, S: numb
       if (f.end) for (const [a, b] of [[0, 3], [1, 2]]) sc.line(P[a], P[b], rgb(wood.ink), sc.ink);
     }
     if (bowNear) stem();
-    above?.draw();
-  });
+    if (!rig) above?.draw();
+  }, !!rig);
 }
 
 /**
@@ -4035,13 +4045,19 @@ const MODELS: Record<string, Model> = {
     const lee: V3 = [Math.sin(swing), side * Math.cos(swing), 0];
     const SAIL = tint ? paintOf(hex(tint.colour), 0.55) : paintOf(hex('#f1e8d2'));
     const lerp = (a: V3, b: V3, t: number): V3 => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t];
+    // What the mast, the spars and the sail stand in: from the after end of the boom and the gaff to the stem the stays run to, and
+    // across from the mast out to where the sail's belly reaches on her lee side. The helmsman sits aft of all of it.
+    const rigBox = (): { x0: number; x1: number; y0: number; y1: number } => {
+      const out = side * (Math.max(Math.abs(clew[1]), Math.abs(peak[1])) + belly);
+      return { x0: Math.min(clew[0], peak[0]) - 0.4, x1: xb, y0: Math.min(0, out) - 0.5, y1: Math.max(0, out) + 0.5 };
+    };
     hull(sc, wood, xs, xb, B, S, (seat, deck) => {
       for (const tx of thwarts) seat(tx, thwart, 0.7);
       deck(0.72);
       sc.drawRod([xm, 0, 0.8], [xm, 0, S + 0.6], 0.45, wood);
       // The tiller, from the rudder's head forward over the stern sheets to the helmsman's hand.
       sc.drawRod([xs - 0.6, 0, sheer(0) + 0.6], tiller, 0.3, wood);
-    }, { reach: boom + belly + 1, top: zt + 1, draw: () => {
+    }, { reach: boom + belly + 1, top: zt + 1, box: rigBox(), draw: () => {
       // Stays from the masthead to the stem and down to either side, then the mast and the sail in the order they stand.
       for (const [x, y, z] of [[xb - 0.4, 0, sheer(1)], [xm - 2, B * 0.85, S], [xm - 2, -B * 0.85, S]] as V3[]) {
         sc.line(sc.P(xm, 0, zt - 0.6), sc.P(x, y, z), rgb(ROPE.ink, 1, 0.55), sc.ink * 0.5);
@@ -4646,6 +4662,18 @@ function hullOf(ps: Pt[]): Pt[] {
     return h;
   };
   return [...half(s), ...half([...s].reverse())];
+}
+
+/**
+ * Where the helmsman of a hull with a rig over her middle sits, in her own
+ * units -- along her, across her and the floor under the feet -- for baking
+ * her in layers round them (`Crew`): the sailing boat's, sat aft of her mast
+ * and sail and under them, which were drawn over him from forward. Nothing for
+ * any other piece.
+ */
+export function helmSeat(kind: string): V3 | null {
+  const p = kind === 'sailing_boat' ? placeOf(kind) : null;
+  return p ? [p.at[0], p.at[1], p.at[2]] : null;
 }
 
 /* ---- sizes, for the renderer ------------------------------------------------ */
