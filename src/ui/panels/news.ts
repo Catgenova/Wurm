@@ -17,7 +17,7 @@ import { WORLD_PACE } from '../../game/pace';
 import { GAIN_RATE, MIN_GAIN, SKILL_BY_ID, skillGain } from '../../game/skills';
 import { favourCap, PRAYER_GAIN, PRAYER_PEAKS, PRAYER_REST, prayerWorth } from '../../game/faith';
 import { tryGain } from '../../game/learn';
-import { DRIVING_TOP, drivingPace, SAILING_TOP, sailingPace, TRAVEL_TOP_AT } from '../../game/travel';
+import { DRIVING_TOP, drivingPace, SAILING_TOP, sailingPace, TRAVEL_TOP_AT, VEHICLE_QL_TOP, vehicleQlPace } from '../../game/travel';
 import { deckBill, metres, PIER_CLEAR, PIER_DROP, PIER_WALL_DROP, PIER_WATER } from '../../game/piers';
 import { TILE_DEFS, TileType, TREE_AGES, TREE_DAWN_UTC, TREE_DEFS } from '../../world/tiles';
 import { SEASON_DAYS, seasonLine, YEAR_DAYS, YEAR_FROM } from '../../world/calendar';
@@ -48,7 +48,7 @@ import { TINCTURE_NAMES } from '../../game/remedies';
 import { FED_SAID, MOTE_CHANCE } from '../../game/sacrifice';
 import { GRAVE_KEEPS, GRAVE_REACH } from '../../game/graves';
 import { RESTORE_HARM, RESTORE_HARM_SPREAD } from '../../game/archaeology';
-import { DAMAGE_MAX, DAY_SECONDS, goSeconds } from '../../game/game';
+import { DAMAGE_MAX, DAY_SECONDS, goSeconds, QL_TOP } from '../../game/game';
 import { UI_SIZE_MAX, UI_SIZE_MIN } from '../screen';
 import { defaultKey } from '../../game/keybinds';
 import { guidePages } from '../../game/guide';
@@ -1355,6 +1355,14 @@ export const NEWS: News[] = [
           + 'Whoever had them keeps them.',
       ];
     },
+  },
+  {
+    n: 100,
+    day: '2026-10-08',
+    lines: () => [
+      `A better-made cart or wagon goes faster: ${percent(VEHICLE_QL_TOP)} faster at full quality, and that share of its quality `
+        + `below it (${percent(vehicleQlPace(QL_TOP / 2) - 1)} at half), whatever is pulling it, and past the top speed a team can reach.`,
+    ],
   },
 ];
 

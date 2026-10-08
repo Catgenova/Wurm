@@ -72,7 +72,7 @@ import { jewelGain } from './gems';
 import { earnedBy, knackBonus, knackLands, KNACK_CAP, KNACK_ODDS, TITLE_BY_ID } from './titles';
 import { TileIndex, Tally, keyX, keyY, tileKey } from './tileindex';
 import { DARK_HIT, NIGHT_EYES_FROM, WORK_HAND, WORK_WIND, WORK_WIND_SPENT, HEAVY_SKILLS, WORK_BACK } from './learn';
-import { DRIVING, DRIVING_LEARN, drivingPace, SAILING, SAILING_LEARN, sailingPace } from './travel';
+import { DRIVING, DRIVING_LEARN, drivingPace, SAILING, SAILING_LEARN, sailingPace, vehicleQlPace } from './travel';
 import { AWARENESS, Vision } from './vision';
 import { blessBonus, favourCap, FAITH, FAVOUR_TRICKLE } from './faith';
 import { ATTENTIVE, FURY_MULT, FURY_SECS, GREEN_THUMB, hasStep, IRONHIDE, MEDITATION, MEND_FLESH, SENSE_REACH, STRONG_BACK, type PathId } from './meditation';
@@ -6441,9 +6441,9 @@ export class Game {
     // price oak charges for holding more and lasting longer.
     // The builder's mark goes on after the cap, as the island has it, so a
     // Carpenter's Smooth Axle is its whole share at the top of the range too;
-    // and so does the driver's hand on the reins (`drivingPace`).
+    // and so does the driver's hand on the reins (`drivingPace`), and how well the thing was built (`vehicleQlPace`).
     return Math.min(MAX_VEHICLE_SPEED, mean * pull * worst * footing(this.teamClimb(f)) * rollEase(f.material)) * markOf(f, 'speed')
-      * drivingPace(this.skills.get(DRIVING));
+      * drivingPace(this.skills.get(DRIVING)) * vehicleQlPace(f.ql);
   }
 
   /** How full a vehicle is, 0..1. An empty one rolls over anything. */

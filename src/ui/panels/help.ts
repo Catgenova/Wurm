@@ -45,7 +45,7 @@ import { CROP_BY_SEED, CROPS, cropYield, growthWords, PATCH_TIME, RIPE, STAGE_NA
 import { GLASSHOUSE_GROWTH, PLANTER_GROWTH, SEASON_GROWTH, SEASON_SECONDS, YEAR_SECONDS, YEARLESS_GROWTH } from '../../game/growth';
 import { CASTS, FAVOUR_TRICKLE, favourCap, PRAYER_BASE, PRAYER_GAIN, PRAYER_LIFT, PRAYER_PEAKS, PRAYER_REST, PRAYER_TAPER, prayerWorth } from '../../game/faith';
 import { tryGain } from '../../game/learn';
-import { DRIVING_TOP, drivingPace, SAILING_TOP, sailingPace, TRAVEL_TOP_AT } from '../../game/travel';
+import { DRIVING_TOP, drivingPace, SAILING_TOP, sailingPace, TRAVEL_TOP_AT, VEHICLE_QL_TOP, vehicleQlPace } from '../../game/travel';
 import { ANCIENT_EFFECTS, ANCIENT_PLUS, BAUBLE_HIGH, BAUBLE_KINDS, BAUBLE_LOW, BAUBLE_SHARE, BAUBLE_TIERS, baubleTimes, MAJOR_SKILLS, MINOR_SKILLS, REGRET_SHARE, YIELD_TIMES } from '../../game/baubles';
 import { MOTE_CHANCE } from '../../game/sacrifice';
 import { HERB_HEAL, healAmount, SUITS_HEAL } from '../../game/firstaid';
@@ -60,6 +60,7 @@ import {
   DAMAGE_WARN_STEP, DAWN, DAY_SECONDS, DEED_RADIUS, DEED_RADIUS_PER_LEVEL, DEED_RANKS, DEEDS_JOINED, deedWorkersAt, DUSK,
   footing, Game, goSeconds, hullSpeed, kitQl, MAX_DEED_LEVEL, MAX_MOUNT_SPEED, ORDINARY_GAIN, overDrag, QL_BARE, QL_LOW,
   QL_SPAN, QUEUE_PER_MIND, TWILIGHT, WAKE_AFTER_DAWN, wearPerUse,
+  QL_TOP,
 } from '../../game/game';
 import { ARMOUR, ARMOUR_CLASSES, BANE_BONUS, WEAPONS, type ArmourClass } from '../../game/gear';
 import { PAIR_RANGE, TIER_LEVEL } from '../../game/husbandry';
@@ -1545,6 +1546,9 @@ export function helpText(): string {
     stone at ${percent(ground(TileType.Slabs).speed)}, and only a bog really tells, at ${percent(ground(TileType.Marsh).speed)}. A <b>laden wheel</b> cares about very
     little else. An empty cart rolls over anything at its own pace; a full one is held to what the ground
     will take, and between empty and full it is a straight blend, so a half-loaded cart pays half.</p>
+    <p>A better-made cart or wagon goes faster, whatever is pulling it: ${percent(VEHICLE_QL_TOP)} faster at full quality, and that
+    share of its quality below it (${percent(vehicleQlPace(QL_TOP / 2) - 1)} at half). It counts past the top speed a team can reach,
+    as a Carpenter's mark on it does.</p>
     <p>Stone slabs and cobble cost a full wagon <b>nothing</b>. Packed dirt costs ${share(rollCost(TileType.PackedDirt))}, bare
     grass ${share(rollCost(TileType.Grass))}, sand ${share(rollCost(TileType.Sand))}, a tilled field ${share(rollCost(TileType.Field))}, and a <b>bog ${share(rollCost(TileType.Marsh))}</b>. What a full
     wagon crosses in a minute on a paved road takes it <b>${spanWords(wagonMinute(TileType.Grass))} over grass and

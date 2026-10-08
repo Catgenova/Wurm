@@ -15,7 +15,7 @@
  */
 import { execFileSync } from 'node:child_process';
 import { isQuiet, SKILL_BY_ID } from '../../src/game/skills';
-import { DRIVING, DRIVING_LEARN, DRIVING_TOP, drivingPace, SAILING, SAILING_LEARN, SAILING_TOP, sailingPace } from '../../src/game/travel';
+import { DRIVING, DRIVING_LEARN, DRIVING_TOP, drivingPace, SAILING, SAILING_LEARN, SAILING_TOP, sailingPace, VEHICLE_QL_TOP, vehicleQlPace } from '../../src/game/travel';
 
 const psql = (sql: string): string =>
   execFileSync('psql', ['-v', 'ON_ERROR_STOP=1', '-X', '-q', '-t', '-A', '-f', '-'], {
@@ -101,6 +101,12 @@ begin
   v_beast := creature_spawn(w, 'roxxen', 24.5, 21.5, 'active', now() - interval '2 years', u);
   update creature set hitched_to = v_cart, hunger = 1, traits = '{}' where world_id = w and id = v_beast;
   insert into said values ('CART', travel_speed(w, u) || '|' || vehicle_speed(w, v_cart));
+  -- And the same cart badly made and made as well as it can be.
+  update placed set ql = 0 where id = v_cart;
+  insert into said values ('QL', vehicle_speed(w, v_cart)::text);
+  update placed set ql = 100 where id = v_cart;
+  update said set v = vehicle_speed(w, v_cart) || '|' || split_part(v, '|', 1) || '|' || vehicle_ql_top() where k = 'QL';
+  update placed set ql = 50 where id = v_cart;
   insert into skill (world_id, uid, id, value) values (w, u, driving_skill(), 100);
   insert into said values ('CART100', travel_speed(w, u)::text);
   delete from skill where world_id = w and uid = u and id = driving_skill();
@@ -126,6 +132,9 @@ const num = (k: string, i = 0): number => Number((isle.get(k) ?? '').split('|')[
 check('at the helm, Sailing 100 lets a walk go as much further as it makes the boat go faster',
   num('BOAT') > 0 && near(num('BOAT100') / num('BOAT'), sailingPace(100) / sailingPace(1), 1e-9),
   `${num('BOAT').toFixed(3)} at Sailing 1, ${num('BOAT100').toFixed(3)} at 100: ${(num('BOAT100') / num('BOAT')).toFixed(4)} against ${(sailingPace(100) / sailingPace(1)).toFixed(4)}`);
+check(`a cart made at quality 100 goes ${(VEHICLE_QL_TOP * 100).toFixed(0)}% faster than one made at 0, as the browser has it`,
+  num('QL', 1) > 0 && near(num('QL', 0) / num('QL', 1), vehicleQlPace(100) / vehicleQlPace(0), 1e-9) && num('QL', 2) === VEHICLE_QL_TOP,
+  isle.get('QL') ?? 'unsaid');
 check('at the reins, Driving 100 does the same for a cart a beast is pulling',
   num('CART', 1) > 0 && near(num('CART100') / num('CART'), drivingPace(100) / drivingPace(1), 1e-9),
   `team ${num('CART', 1).toFixed(3)}, ${num('CART').toFixed(3)} at Driving 1, ${num('CART100').toFixed(3)} at 100`);
