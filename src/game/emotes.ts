@@ -25,13 +25,27 @@ export interface EmoteDef {
 
 export const EMOTES: EmoteDef[] = [
   { id: 'wave', label: 'Wave', said: '{name} waves.', seconds: 1.9 },
-  { id: 'hop', label: 'Hop', said: '{name} hops on the spot.', seconds: 1.2 },
+  { id: 'hop', label: 'Hop', said: '{name} hops on the spot.', seconds: 1.5 },
 ];
 
 export const EMOTE_BY_ID = new Map(EMOTES.map((e) => [e.id, e]));
 
 /** The longest any of them runs, which is how long a peer's is kept. */
 export const EMOTE_LONGEST = Math.max(...EMOTES.map((e) => e.seconds));
+
+/**
+ * A hop's two jumps, in the hop's own time from nought to one: when the feet
+ * leave the ground and come back to it, and how high the body goes in screen
+ * pixels at zoom one. The second is the shorter in the air, and as much
+ * lower as the same pull of the ground makes it -- by the square of the time
+ * -- so the two read as one body under one gravity rather than two bounces
+ * drawn to size.
+ */
+export const HOPS: { off: number; on: number; high: number }[] = (() => {
+  const first = { off: 0.21, on: 0.45, high: 7 };
+  const off = 0.58, on = 0.76;
+  return [first, { off, on, high: first.high * ((on - off) / (first.on - first.off)) ** 2 }];
+})();
 
 /**
  * What an emote does to a body, part way through.
@@ -43,14 +57,20 @@ export const EMOTE_LONGEST = Math.max(...EMOTES.map((e) => e.seconds));
  *
  * Eased at both ends. A hop that starts at full speed and stops dead is a
  * figure being teleported twice, and the difference between that and a jump is
- * entirely in the half-second at each end.
+ * entirely in the half-second at each end: the crouch before it, and the
+ * knees taking the landing after (the figure's `hop`).
  */
 export function emotePose(id: string, t: number): { lift: number; wave: number } {
   const k = Math.max(0, Math.min(1, t));
   if (id === 'hop') {
-    // Two hops, the second smaller, because one is a twitch and three is a dance.
-    const arc = Math.abs(Math.sin(k * Math.PI * 2));
-    return { lift: arc * 7 * (1 - k * 0.45), wave: 0 };
+    // Two hops, the second smaller, because one is a twitch and three is a dance. Each a fall under gravity: a parabola.
+    for (const h of HOPS) {
+      if (k > h.off && k < h.on) {
+        const u = (k - h.off) / (h.on - h.off);
+        return { lift: 4 * h.high * u * (1 - u), wave: 0 };
+      }
+    }
+    return { lift: 0, wave: 0 };
   }
   if (id === 'wave') {
     // Up, three swings, down: the arm rises over the first fifth and drops

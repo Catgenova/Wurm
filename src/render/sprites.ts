@@ -1,7 +1,7 @@
 import { hash2, mulberry32 } from '../world/noise';
 import { cushions, hashOf, type Cushion } from './ivy';
 import type { Look } from '../game/look';
-import { emotePose } from '../game/emotes';
+import { EMOTE_BY_ID, emotePose } from '../game/emotes';
 import { drawBust, drawFigure, shineOver, type FigurePose } from './figure';
 import { BUSH_DEFS, TREE_AGES, TREE_DEFS } from '../world/tiles';
 import { drawWildermon, drawWildermonPortrait, modelled, wildermonTop } from './wildermon';
@@ -5011,7 +5011,7 @@ export function drawPortrait(ctx: CanvasRenderingContext2D, x: number, y: number
     pose.working = true;
   } else if (motion === 'wave' || motion === 'hop') {
     // The emote over and over, with a breath between.
-    const len = motion === 'wave' ? 1.9 : 1.2;
+    const len = EMOTE_BY_ID.get(motion)?.seconds ?? 1.5;
     const k = (t % (len + 0.8)) / len;
     if (k <= 1) {
       pose.emote = motion;
