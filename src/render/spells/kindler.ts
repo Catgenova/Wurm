@@ -75,14 +75,17 @@ const FLAME_LIGHT = 0.3;
 const tonesOf = (heat: number): (typeof HEATS)[number] => HEATS[heat >= 1.5 ? 2 : heat >= 0.7 ? 1 : 0];
 
 /**
- * Draw a tongue: a teardrop of straight facets, its base rounded under it and
- * its tip swayed by `wob`, the side facing up and left lit and the other
- * shaded, a hotter heart up the middle and an ink edge round the whole.
+ * A tongue's outline into the current path, as a closed subpath: `part`
+ * nought its whole body, one the shaded band down its far side, two its
+ * heart. A teardrop of straight facets, its base rounded under it and its tip
+ * swayed by `wob`, the side facing up and left lit and the other shaded, a
+ * hotter heart up the middle toward the light. False when it is too small to
+ * draw at all; a tongue of a few pixels is given its body alone.
  */
-function drawFlame(g: CanvasRenderingContext2D, f: Flame, inkW: number, light = false): void {
+function traceFlame(g: CanvasRenderingContext2D, f: Flame, part: 0 | 1 | 2): boolean {
   let ax = f.tx - f.bx, ay = f.ty - f.by;
   const L = Math.hypot(ax, ay);
-  if (L < 0.6 || f.w < 0.2) return;
+  if (L < 0.6 || f.w < 0.2 || (part > 0 && L < 5)) return false;
   ax /= L;
   ay /= L;
   // Across it, turned so that plus is the side the light is on.
@@ -92,56 +95,99 @@ function drawFlame(g: CanvasRenderingContext2D, f: Flame, inkW: number, light = 
     py = -py;
   }
   const w = f.w, s = f.wob * w;
-  const X = (a: number, n: number): number => f.bx + ax * a * L + px * n;
-  const Y = (a: number, n: number): number => f.by + ay * a * L + py * n;
-  const bx = f.bx - ax * w * 0.75, by = f.by - ay * w * 0.75;
-  const t = tonesOf(f.heat);
-  // Half-widths up the tongue, the belly just over the base and the tip drawn out, swayed more the higher it is.
-  const up = [0.24, 0.52, 0.8];
-  const half = [1.08, 0.74, 0.34];
-  const lean = [0.25, 0.6, 0.85];
-  const side = (q: number, i: number): [number, number] => [X(up[i], q * w * half[i] + s * lean[i]), Y(up[i], q * w * half[i] + s * lean[i])];
-  const outer = (): void => {
-    g.beginPath();
-    g.moveTo(bx, by);
-    g.lineTo(X(-0.02, w * 0.8), Y(-0.02, w * 0.8));
-    for (let i = 0; i < 3; i++) g.lineTo(...side(1, i));
-    g.lineTo(X(1, s), Y(1, s));
-    for (let i = 2; i >= 0; i--) g.lineTo(...side(-1, i));
-    g.lineTo(X(-0.02, -w * 0.8), Y(-0.02, -w * 0.8));
-    g.closePath();
+  const to = (a: number, n: number, first = false): void => {
+    const x = f.bx + ax * a * L + px * n, y = f.by + ay * a * L + py * n;
+    if (first) g.moveTo(x, y);
+    else g.lineTo(x, y);
   };
-  outer();
+  if (part === 2) {
+    // The heart: a smaller tongue inside, low and toward the lit side, where a flame is hottest.
+    to(-0.35 * w / L, w * 0.1, true);
+    to(0.02, w * 0.62);
+    to(0.26, w * 0.66 + s * 0.25);
+    to(0.66, w * 0.14 + s * 0.65);
+    to(0.3, -w * 0.28 + s * 0.3);
+    to(0.02, -w * 0.36);
+    g.closePath();
+    return true;
+  }
+  // Half-widths up the tongue, the belly just over the base and the tip drawn out, swayed more the higher it is.
+  to(-0.75 * w / L, 0, true);
+  to(-0.02, -w * 0.8);
+  to(0.24, -w * 1.08 + s * 0.25);
+  to(0.52, -w * 0.74 + s * 0.6);
+  to(0.8, -w * 0.34 + s * 0.85);
+  to(1, s);
+  if (part === 1) {
+    // The shaded side: a band down the far edge, back down inside it, so the lit body stays the most of it.
+    to(0.8, -w * 0.12 + s * 0.85);
+    to(0.5, -w * 0.42 + s * 0.6);
+    to(0.2, -w * 0.62 + s * 0.25);
+  } else {
+    to(0.8, w * 0.34 + s * 0.85);
+    to(0.52, w * 0.74 + s * 0.6);
+    to(0.24, w * 1.08 + s * 0.25);
+    to(-0.02, w * 0.8);
+  }
+  g.closePath();
+  return true;
+}
+
+/** One tongue, body, ink, shade and heart, over whatever is under it. */
+function drawFlame(g: CanvasRenderingContext2D, f: Flame, inkW: number): void {
+  const t = tonesOf(f.heat);
+  g.beginPath();
+  if (!traceFlame(g, f, 0)) return;
   g.fillStyle = t.lit;
   g.fill();
-  if (!light) {
-    g.lineWidth = inkW;
-    g.strokeStyle = PALETTE.ink;
-    g.stroke();
+  g.lineWidth = inkW;
+  g.strokeStyle = PALETTE.ink;
+  g.stroke();
+  g.beginPath();
+  if (traceFlame(g, f, 1)) {
+    g.fillStyle = t.shade;
+    g.fill();
   }
-  // The shaded side: a band down the far edge, so the lit body stays the most of it.
   g.beginPath();
-  g.moveTo(bx, by);
-  g.lineTo(X(-0.02, -w * 0.8), Y(-0.02, -w * 0.8));
-  for (let i = 0; i < 3; i++) g.lineTo(...side(-1, i));
-  g.lineTo(X(1, s), Y(1, s));
-  g.lineTo(X(0.8, -w * 0.12 + s * 0.85), Y(0.8, -w * 0.12 + s * 0.85));
-  g.lineTo(X(0.5, -w * 0.42 + s * 0.6), Y(0.5, -w * 0.42 + s * 0.6));
-  g.lineTo(X(0.2, -w * 0.62 + s * 0.25), Y(0.2, -w * 0.62 + s * 0.25));
-  g.closePath();
-  g.fillStyle = t.shade;
-  if (!light) g.fill();
-  // The heart: a smaller tongue inside, low and toward the lit side, where a flame is hottest.
-  g.beginPath();
-  g.moveTo(f.bx - ax * w * 0.35 + px * w * 0.1, f.by - ay * w * 0.35 + py * w * 0.1);
-  g.lineTo(X(0.02, w * 0.62), Y(0.02, w * 0.62));
-  g.lineTo(X(0.26, w * 0.66 + s * 0.25), Y(0.26, w * 0.66 + s * 0.25));
-  g.lineTo(X(0.66, w * 0.14 + s * 0.65), Y(0.66, w * 0.14 + s * 0.65));
-  g.lineTo(X(0.3, -w * 0.28 + s * 0.3), Y(0.3, -w * 0.28 + s * 0.3));
-  g.lineTo(X(0.02, -w * 0.36), Y(0.02, -w * 0.36));
-  g.closePath();
-  g.fillStyle = t.heart;
-  g.fill();
+  if (traceFlame(g, f, 2)) {
+    g.fillStyle = t.heart;
+    g.fill();
+  }
+}
+
+/**
+ * Tongues drawn a tone at a time rather than a tongue at a time: every body
+ * of one heat in one fill, their ink in one stroke, then the shades, then the
+ * hearts. Three or four calls a heat however many tongues, which is what lets
+ * a ring of sixty stand round a Kindler for fifteen seconds; but a tongue's
+ * shade is laid over its neighbour's body, so it is only for tongues that
+ * stand apart (a ring) -- and for the light pass, where adding is the same in
+ * any order. `light` draws bodies and hearts only, no ink, no shade.
+ */
+function drawFlames(g: CanvasRenderingContext2D, flames: readonly Flame[], inkW: number, light: boolean): void {
+  for (let h = 0; h < 3; h++) {
+    const t = HEATS[h];
+    const mine = (f: Flame): boolean => tonesOf(f.heat) === t;
+    let any = false;
+    g.beginPath();
+    for (const f of flames) if (mine(f) && traceFlame(g, f, 0)) any = true;
+    if (!any) continue;
+    g.fillStyle = t.lit;
+    g.fill();
+    if (!light) {
+      g.lineWidth = inkW;
+      g.strokeStyle = PALETTE.ink;
+      g.stroke();
+      g.beginPath();
+      for (const f of flames) if (mine(f)) traceFlame(g, f, 1);
+      g.fillStyle = t.shade;
+      g.fill();
+    }
+    g.beginPath();
+    for (const f of flames) if (mine(f)) traceFlame(g, f, 2);
+    g.fillStyle = t.heart;
+    g.fill();
+  }
 }
 
 /** How a tongue's height breathes: never still, never in step with its neighbours. */
@@ -157,18 +203,24 @@ function upright(k: FxScene, base: P3, h: number, w: number, heat: number, lean:
 }
 
 /** Tongues drawn together, sorted with whatever stands at `at`: back to front among themselves. */
-function flameGroup(k: FxScene, at: P3, flames: Flame[], alpha = 1, bias = 0): void {
+function flameGroup(k: FxScene, at: P3, flames: Flame[], alpha = 1, bias = 0, apart = false): void {
   if (!flames.length || alpha <= 0.01) return;
   flames.sort((a, b) => a.by - b.by);
   const inkW = Math.max(0.6, 0.42 * k.zoom);
   k.worldDraw(at, (g) => {
     g.globalAlpha = clamp(alpha);
     g.lineJoin = 'round';
-    for (const f of flames) drawFlame(g, f, inkW);
+    if (apart) drawFlames(g, flames, inkW, false);
+    else for (const f of flames) drawFlame(g, f, inkW);
   }, bias);
+  flameLight(k, flames, alpha);
+}
+
+/** Tongues again in the light pass, faintly, so they burn as bright in the dark as by day. */
+function flameLight(k: FxScene, flames: readonly Flame[], alpha: number): void {
   k.glowDraw((g) => {
     g.globalAlpha = clamp(alpha * FLAME_LIGHT);
-    for (const f of flames) drawFlame(g, f, 0, true);
+    drawFlames(g, flames, 0, true);
   });
 }
 
@@ -196,12 +248,17 @@ function flameRing(k: FxScene, c: { x: number; y: number }, r: number, o: {
   h: number; w: number; n?: number; heat?: number; alpha?: number; turn?: number; from?: number; span?: number; key?: number; arcs?: number; glow?: number;
   /** Where round the ring (radians) a crest of taller flame stands, running round with it: the ring seen to turn. */
   crest?: number;
+  /**
+   * Height of the near half against the far, so a ring round a body does not hide it: the tongues in front of
+   * the middle stand this much of their height, and the slimmer for it.
+   */
+  front?: number;
 }): void {
   const a = o.alpha ?? 1;
   if (a <= 0.01 || r <= 0.02 || o.h <= 0.2) return;
   const span = o.span ?? TAU;
-  const want = o.n ?? Math.round((span * r) / 0.42);
-  const n = Math.max(3, Math.min(k.fast ? 24 : 60, want));
+  const want = o.n ?? Math.round((span * r) / 0.5);
+  const n = Math.max(3, Math.min(k.fast ? 20 : 48, want));
   const arcs = Math.max(1, Math.min(o.arcs ?? 8, n));
   const groups: Flame[][] = [];
   const at: P3[] = [];
@@ -217,9 +274,12 @@ function flameRing(k: FxScene, c: { x: number; y: number }, r: number, o: {
     const crest = o.crest === undefined ? 1 : 1 + 0.8 * Math.pow(Math.max(0, Math.cos(ang - o.crest)), 6) + 0.8 * Math.pow(Math.max(0, Math.cos(ang - o.crest - Math.PI)), 6);
     const h = o.h * crest * (0.62 + 0.38 * hashOf(key, i)) * flick(k.now, i);
     const heat = (o.heat ?? 1) + (hashOf(key + 1, i) < 0.25 ? 0.6 : 0);
-    groups[Math.min(arcs - 1, Math.floor((i / n) * arcs))].push(upright(k, k.on(x, y, 0.2), h, o.w * (0.8 + 0.4 * hashOf(key + 2, i)), heat, 0.12 * Math.sin(k.now * 3 + i), sway(k.now, i)));
+    // Nearer the viewer than the middle: lower, so whoever is inside shows over it.
+    const near = o.front !== undefined && k.sy(k.on(x, y)) > k.sy(k.on(c.x, c.y));
+    const f = upright(k, k.on(x, y, 0.2), near ? h * (o.front as number) : h, o.w * (0.8 + 0.4 * hashOf(key + 2, i)), heat, 0.12 * Math.sin(k.now * 3 + i), sway(k.now, i));
+    groups[Math.min(arcs - 1, Math.floor((i / n) * arcs))].push(f);
   }
-  for (let j = 0; j < arcs; j++) flameGroup(k, at[j], groups[j], a);
+  for (let j = 0; j < arcs; j++) flameGroup(k, at[j], groups[j], a, 0, true);
   if ((o.glow ?? 1) > 0) glowSpots(k, at.map((p) => ({ ...p, z: p.z + o.h * 0.4 })), 6 + o.h * 0.9, a * 0.45 * (o.glow ?? 1));
 }
 
@@ -326,10 +386,7 @@ function fireball(k: FxScene, head: P3, prev: P3, r: number, tail: number, rock 
     g.lineJoin = 'round';
     for (const f of flames) drawFlame(g, f, inkW);
   }, 1);
-  k.glowDraw((g) => {
-    g.globalAlpha = FLAME_LIGHT;
-    for (const f of flames) drawFlame(g, f, 0, true);
-  });
+  flameLight(k, flames, 1);
   k.orb(head, r, { ...(rock ? ROCK : { main: PALETTE.accent, deep: PALETTE.main, core: '#ffffff' }), turn: k.now * 6, bias: 2, glow: rock ? 0.5 : 1 });
 }
 
@@ -358,10 +415,7 @@ function starburst(k: FxScene, at: P3, n: number, len: number, w: number, heat: 
     g.lineJoin = 'round';
     for (const f of flames) drawFlame(g, f, inkW);
   }, 4);
-  k.glowDraw((g) => {
-    g.globalAlpha = clamp(alpha * FLAME_LIGHT);
-    for (const f of flames) drawFlame(g, f, 0, true);
-  });
+  flameLight(k, flames, alpha);
 }
 
 /** Embers drawn in from a ring toward a point, along the ground: heat gathered. `perSecond` from each of `n` places. */
@@ -1062,13 +1116,18 @@ export const KINDLER: Record<string, SpellVisual> = {
       },
       linger: {
         draw: (k, age, left) => {
-          // Banked in the fist: a small coal, a tongue off it, steady. It gutters only as the last few seconds go.
+          // Banked in the hand: a coal, no flame on it, glowing steady with two sparks going slowly round it -- heat kept
+          // for the next fire, not fire. It gutters only as the last few seconds go.
           const a = smooth(age / 0.5) * smooth(left / 1.5);
           const gutter = left < 5 ? 0.6 + 0.4 * Math.abs(Math.sin(age * 9)) : 1;
           const at = k.hand(1);
-          const coal = { ...at, z: at.z + 0.6 };
-          k.orb(coal, 1.3, { ...COAL, alpha: a, glow: 0.6 * gutter, bias: 6, turn: age });
-          handFlame(k, { ...coal, z: coal.z + 0.6 }, 2.6 * gutter, 1.1, 1.2, a);
+          const coal = { ...at, z: at.z + 1 };
+          k.orb(coal, 1.7, { ...COAL, core: PALETTE.accent, alpha: a, glow: 0.7 * gutter, bias: 6, turn: age * 0.7 });
+          for (let i = 0; i < 2; i++) {
+            const ang = age * 2.4 + i * Math.PI;
+            const p = { x: coal.x + Math.cos(ang) * 0.06, y: coal.y + Math.sin(ang) * 0.06, z: coal.z + 0.6 * Math.sin(ang * 2) };
+            k.flare(p, 2.2, 0.8 * a * gutter, PALETTE.core, ang);
+          }
           if (!k.fast) k.emit(coal, 1.5 * a, { kind: 'ember', size: 1.1, life: [0.4, 0.8], speed: [0.02, 0.06], up: [6, 12], gravity: -2 });
           k.light(coal, 1, 0.22 * a * gutter);
         },
@@ -1209,7 +1268,7 @@ export const KINDLER: Record<string, SpellVisual> = {
           const R = footOf(b);
           // A wall of flame up out of the ground all round it, climbing past its head, then sinking onto it as its burn.
           const rise = easeOut(seg(u, 0, 0.25)) * (1 - smooth(seg(u, 0.4, 1)));
-          flameRing(k, b, R * (1 - 0.3 * u), { h: (b.tall * 0.9 + 3) * rise, w: 2, n: 10, heat: cooling(u * 0.8), arcs: 4, alpha: 1 - seg(u, 0.85, 1) });
+          flameRing(k, b, R * (1 - 0.3 * u), { h: (b.tall * 0.9 + 3) * rise, w: 2, n: 10, front: 0.45, heat: cooling(u * 0.8), arcs: 4, alpha: 1 - seg(u, 0.85, 1) });
           k.sigil(b, R, { points: 6, step: 1, turn: k.seed, alpha: 0.85 * (1 - u), glow: 0.8, core: PALETTE.accent, width: 1.2 });
           k.light(b, 2.6, 0.9 * (1 - u * 0.6));
         },
@@ -1320,9 +1379,8 @@ export const KINDLER: Record<string, SpellVisual> = {
           const a = smooth(left / 0.8);
           const share = left / Math.max(0.01, age + left);
           // Knee-high tongues standing at its reach and turning with the caster, lower as its seconds run out.
-          flameRing(k, k.caster, R, { h: AURA_H * (0.6 + 0.4 * share) * a, w: 2, heat: 1, turn: k.now * AURA_TURN, alpha: a, crest: k.now * AURA_TURN * 4 });
+          flameRing(k, k.caster, R, { h: AURA_H * (0.6 + 0.4 * share) * a, w: 2, heat: 1, turn: k.now * AURA_TURN, alpha: a, crest: k.now * AURA_TURN * 4, front: 0.75 });
           k.ring(k.caster, R, { band: 0.12, alpha: 0.55 * a, glow: 0.6, turn: k.now * AURA_TURN });
-          k.disc(k.caster, R, { main: PALETTE.deep, alpha: 0.1 * a });
           k.emit(k.at(k.caster, 0.05), 12 * a, { kind: 'ember', size: 1.3, life: [0.5, 1], speed: [0.05, 0.2], up: [10, 20], gravity: -2, jitter: R * 0.9 });
           k.light(k.caster, R + 0.8, 0.5 * a);
         },
@@ -1673,7 +1731,6 @@ export const KINDLER: Record<string, SpellVisual> = {
           }
           k.disc(c, R, { main: u < 0.2 ? PALETTE.core : PALETTE.main, alpha: 0.4 * (1 - smooth(u * 1.4)) });
           k.ring(c, R, { band: 0.22, alpha: 1 - seg(u, 0.5, 1), glow: 1, main: PALETTE.accent });
-          glowSpots(k, [k.on(c.x, c.y, 6), k.on(c.x + R * 0.6, c.y, 6), k.on(c.x - R * 0.6, c.y, 6), k.on(c.x, c.y + R * 0.6, 6), k.on(c.x, c.y - R * 0.6, 6)], 18 + 10 * R, 0.6 * env);
           k.light(c, R + 1.5, 1 - 0.5 * u);
         },
       },
