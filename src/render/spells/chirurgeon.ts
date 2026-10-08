@@ -917,13 +917,13 @@ export const CHIRURGEON: Record<string, SpellVisual> = {
         const b = k.target, secs = secsOf(k, 20);
         const a = smooth(age / 0.4) * smooth(left / 0.8);
         // A stain spreading under it as it bleeds, and the seconds of the bleed in red round it.
-        k.scorch(b, 0.1 + 0.14 * seg(age, 0, secs), { colour: BLOOD_DEEP, alpha: 0.5 * a });
+        k.scorch(b, 0.16 + 0.16 * seg(age, 0, secs), { colour: BLOOD_DEEP, alpha: 0.55 * a });
         tally(k, b, tallyR(b), Math.round(secs), left, { alpha: 0.65 * a, main: BLOOD, deep: BLOOD_DEEP, ink: BLOOD_INK, light: BLOOD_LIGHT });
         // Each second's bleed: a drop off it, and a red glint at the wound.
         const tick = Math.floor(age);
         if (tick !== k.state.tick) {
           k.state.tick = tick;
-          k.burst(k.at(b, 0.5), 3, { kind: 'drop', colour: [BLOOD, BLOOD_DEEP], size: 1.6, life: [0.4, 0.6], speed: [0.02, 0.1], up: [-2, 4], gravity: 60, jitter: b.wide / 80, bias: 4 });
+          k.burst(k.at(b, 0.5), 3, { kind: 'drop', colour: [BLOOD, BLOOD_DEEP], size: 2.1, life: [0.4, 0.6], speed: [0.02, 0.1], up: [-2, 4], gravity: 60, jitter: b.wide / 80, bias: 4 });
         }
         glint(k, k.heart(b), 3, a * flashOf(age % 1, 0.1) * 0.7);
         if (!k.fast) k.emit(k.at(b, 0.7), 3 * a, { kind: 'smoke', colour: [...MIASMA], size: 1.5, life: [0.8, 1.2], speed: [0.01, 0.04], up: [3, 6], gravity: -1, jitter: b.wide / 60 });
