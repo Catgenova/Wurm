@@ -3911,12 +3911,15 @@ interface GearModel {
    */
   hairTo?: { f: number; b: number };
   /**
-   * The body's own short sleeves made of this, in its colours, while nothing
-   * is worn on the arms: a tunic's own sleeves. Left the shirt's, a padded
-   * tunic of undyed linen had a red shirt's sleeves standing out of it at
-   * either shoulder.
+   * The body's own parts made of this, in its colours, where nothing else
+   * worn takes them off: these of each part's materials as these of the
+   * piece's. A tunic's own short sleeves -- left the shirt's, a padded tunic
+   * of undyed linen had a red shirt's sleeves standing out of it at either
+   * shoulder -- and the seat of a pair of leggings, which showed in the shirt's
+   * undyed linen through every slit up a skirt over them, a pale strip down
+   * the back of a leather coat.
    */
-  sleeves?: Partial<Record<Mat, Mat>>;
+  dyes?: Partial<Record<Covers, Partial<Record<Mat, Mat>>>>;
 }
 
 /** Every side facet of a mesh worked with a pattern. */
@@ -4557,7 +4560,7 @@ const MODELS: Record<string, (b: Build, fit: number) => GearModel> = {
         { bone: 'pelvis', over: ['belt', 'skirt', 'abdomen', 'pelvis'], bias: 0.02, convex: true, mesh: beltRing(b, g + 0.01, 'belt') },
       ],
       hides: ['skirt', 'belt', 'chest', 'abdomen'],
-      sleeves: { tunic: 'cloth', trim: 'clothDark' },
+      dyes: { upper: { tunic: 'cloth', trim: 'clothDark' } },
     };
   },
   leather_jerkin: (b) => {
@@ -4781,6 +4784,7 @@ const MODELS: Record<string, (b: Build, fit: number) => GearModel> = {
         { bone: 'knee', side: 'both', over: ['shin', 'boot'], bias: 0.035, convex: true, mesh: wound(softAt(softAt(rings([-3.02, -2.72, -2.42, -2.12, -1.82, -1.52].map((z, i) => [z, 0.8 + i * 0.016, 0.84 + i * 0.016]), 6, (band) => (band % 2 ? 'cloth' : 'clothDark'), { top: false, bottom: false }), -3.02), -1.52)) },
       ],
       hides: ['thigh', 'shin'],
+      dyes: { pelvis: { trousers: 'cloth' } },
     };
   },
   leather_trousers: (b) => {
@@ -4794,6 +4798,7 @@ const MODELS: Record<string, (b: Build, fit: number) => GearModel> = {
         { bone: 'knee', side: 'both', bend: true, over: ['shin', 'boot'], bias: 0.03, convex: true, mesh: join(tube.shin, pad.shin) },
       ],
       hides: ['thigh', 'shin'],
+      dyes: { pelvis: { trousers: 'leather' } },
     };
   },
   chain_leggings: (b) => {
@@ -4809,6 +4814,7 @@ const MODELS: Record<string, (b: Build, fit: number) => GearModel> = {
         { bone: 'knee', side: 'both', bend: true, over: ['shin', 'boot'], bias: 0.04, convex: true, mesh: rings([legAt(b, 1.15, -0.86), legAt(b, 1.15, -0.6)], 6, 'leatherDark', { top: false, bottom: false }) },
       ],
       hides: ['thigh', 'shin'],
+      dyes: { pelvis: { trousers: 'mail' } },
     };
   },
   plate_legs: (b) => {
@@ -4827,6 +4833,7 @@ const MODELS: Record<string, (b: Build, fit: number) => GearModel> = {
         { bone: 'knee', side: 'both', bend: true, over: ['shin', 'boot'], bias: 0.03, convex: true, mesh: join(tube.shin, cop.shin) },
       ],
       hides: ['thigh', 'shin'],
+      dyes: { pelvis: { trousers: 'metal' } },
     };
   },
   scale_leggings: (b) => {
@@ -4842,6 +4849,7 @@ const MODELS: Record<string, (b: Build, fit: number) => GearModel> = {
         { bone: 'hip', side: 'both', bend: true, over: ['thigh', 'shin'], bias: 0.04, convex: true, mesh: teeth(legAt(b, g, 0.62), 6, 0.34, 0.08, 'scaleDark') },
       ],
       hides: ['thigh', 'shin'],
+      dyes: { pelvis: { trousers: 'scale' } },
     };
   },
 
@@ -5061,11 +5069,11 @@ function modelOf(id: string, fr: Frame, fit: number): GearModel | null {
   return m;
 }
 
-/** The body's own sleeves recoloured as a piece's (`GearModel.sleeves`), kept for each, as they are the same every frame. */
-const sleeved = new WeakMap<Mesh, WeakMap<object, Mesh>>();
-function sleevesOf(m: Mesh, to: Partial<Record<Mat, Mat>>): Mesh {
-  let byTo = sleeved.get(m);
-  if (!byTo) sleeved.set(m, (byTo = new WeakMap()));
+/** The body's own part recoloured as a piece's (`GearModel.dyes`), kept for each, as it is the same every frame. */
+const dyed = new WeakMap<Mesh, WeakMap<object, Mesh>>();
+function dyedOf(m: Mesh, to: Partial<Record<Mat, Mat>>): Mesh {
+  let byTo = dyed.get(m);
+  if (!byTo) dyed.set(m, (byTo = new WeakMap()));
   let o = byTo.get(to);
   if (!o) byTo.set(to, (o = recoloured(m, to)));
   return o;
@@ -6025,12 +6033,12 @@ function dress(parts: Part[], named: Map<string, Part[]>, kit: Kit, r: Rig, b: B
         put.push({ part, on: regionsOf(bit.over[0], k)[0], over: bit.over.flatMap((c) => regionsOf(c, k)), layer: bit.layer ?? model.layer, order, seq });
       }
     });
-    // The body's short sleeves made of the piece, where nothing worn on the arms has taken them off.
-    if (model.sleeves) {
-      for (let k = 0; k < 2; k++) {
-        for (const p of named.get(`upper${k}`) ?? []) {
+    // The body's own parts made of the piece, where nothing else worn has taken them off.
+    for (const [c, to] of Object.entries(model.dyes ?? {}) as Array<[Covers, Partial<Record<Mat, Mat>>]>) {
+      for (const key of regionsOf(c, -1)) {
+        for (const p of named.get(key) ?? []) {
           if (hidden.has(p)) continue;
-          p.mesh = sleevesOf(p.mesh, model.sleeves);
+          p.mesh = dyedOf(p.mesh, to);
           p.pal = P;
           p.rare = rare;
           p.seed = si + 1;
