@@ -53,7 +53,7 @@ const SMOKE = '#2e2420';
 const ASH = '#6b5d55';
 const STEAM = '#f2ece2';
 const STEAM_SHADE = '#cfc6b8';
-const SCALD = { main: '#ffe6b8', deep: '#e0a060', core: '#ffffff', ink: '#6a3a14' };
+const SCALD = { main: '#fff1d8', deep: '#e0a060', core: '#ffffff', ink: '#8a6a4a' };
 const DIRT = '#7d6a55';
 /** The light a big fire throws on the ground round it: a warm white, which the night takes as firelight (a wide light in
  * the fire's own orange washes the grass olive). */
@@ -349,7 +349,8 @@ function fireWall(k: FxScene, c: { x: number; y: number }, r: number, o: {
     const ol = Math.hypot(ox, oy) || 1;
     ox /= ol;
     oy /= ol;
-    const lean = (o.lean ?? 0) * h, sw = h * 0.16 * Math.sin(k.now * 6 + i * 1.9);
+    // Each point swaying on its own, wide enough that neighbours lean apart: even, upright points read as a saw blade.
+    const lean = (o.lean ?? 0) * h, sw = h * 0.28 * Math.sin(k.now * 6 + i * 1.9);
     bx.push(x);
     by.push(y);
     tx.push(x + ox * lean + sw);
@@ -357,6 +358,12 @@ function fireWall(k: FxScene, c: { x: number; y: number }, r: number, o: {
     H.push(h);
   }
   const at = (i: number): number => (whole ? ((i % n) + n) % n : clamp(i, 0, n));
+  // And each tip pushed a third of the way toward one neighbour or the other, by its own hash: uneven points.
+  for (let i = 0; i < count; i++) {
+    const q = at(i + 1), p = at(i - 1);
+    const lr = hashOf(key + 6, i) < 0.5 ? -1 : 1;
+    tx[i] += 0.3 * lr * (lr > 0 ? bx[q] - bx[i] : bx[i] - bx[p]);
+  }
   const pieces: Array<{ i0: number; i1: number; p: P3 }> = [];
   for (let j = 0; j < arcs; j++) {
     const i0 = Math.floor((j * n) / arcs), i1 = Math.floor(((j + 1) * n) / arcs);
@@ -417,7 +424,7 @@ function fireWall(k: FxScene, c: { x: number; y: number }, r: number, o: {
   }
   if (!k.fast) {
     k.glowDraw((g) => {
-      g.globalAlpha = clamp(a * FLAME_LIGHT);
+      g.globalAlpha = clamp(a * lerp(FLAME_LIGHT, 0.5, seg(k.night, 0.3, 0.7)));
       g.beginPath();
       for (const pc of pieces) body(g, pc.i0, pc.i1, 0.75);
       g.fillStyle = tones.lit;
@@ -444,6 +451,12 @@ function emberBed(k: FxScene, c: { x: number; y: number }, r: number, alpha: num
     run.push(c.x + Math.cos(ang) * rr, c.y + Math.sin(ang) * rr);
   }
   const w = (o.width ?? 3.2) * k.zoom, hot = o.hot ?? 1;
+  // On fast graphics the bed is one stroke, its deep red: three strokes round a six-tile ring are the ground pass's
+  // dearest line.
+  if (k.fast) {
+    k.groundShape(c.x, c.y, r + 0.5, [{ kind: 'stroke', colour: PALETTE.deep, alpha: clamp(alpha), width: w + 0.6 * k.zoom, paths: [run], join: 'round', cap: 'round', lift: 0.14 }]);
+    return;
+  }
   k.groundShape(c.x, c.y, r + 0.5, [
     { kind: 'stroke', colour: PALETTE.ink, alpha: clamp(alpha * 0.8), width: w + 1.6 * k.zoom, paths: [run], join: 'round', cap: 'round', lift: 0.12 },
     { kind: 'stroke', colour: PALETTE.deep, alpha: clamp(alpha), width: w, paths: [run], join: 'round', cap: 'round', lift: 0.14 },
@@ -458,22 +471,29 @@ function emberBed(k: FxScene, c: { x: number; y: number }, r: number, alpha: num
  */
 function cracks(k: FxScene, c: { x: number; y: number }, r: number, n: number, grow: number, alpha: number, salt: number): void {
   if (alpha <= 0.01 || grow <= 0.01) return;
-  const runs: number[][] = [];
+  // Each a thin jagged run of five short legs, the last one apart so it can be drawn finer: a crack narrows to its end.
+  // Thin and square-ended, as a split in the ground is; thick and round-capped they read as sticks lying on it.
+  const runs: number[][] = [], tips: number[][] = [];
   for (let i = 0; i < n; i++) {
     const a0 = (i / n) * TAU + hashOf(k.seed + salt, i) * 0.8;
     const len = r * (0.6 + 0.4 * hashOf(k.seed + salt + 1, i)) * grow;
     const run: number[] = [];
-    for (let s = 0; s <= 3; s++) {
-      const d = len * (0.15 + 0.85 * (s / 3));
-      const jag = s === 0 ? 0 : (hashOf(k.seed + salt + 2, i * 7 + s) - 0.5) * 0.8;
-      run.push(c.x + Math.cos(a0 + jag) * d, c.y + Math.sin(a0 + jag) * d);
+    let ang = a0;
+    for (let s = 0; s <= 5; s++) {
+      const d = len * (0.12 + 0.88 * (s / 5));
+      if (s > 0) ang = a0 + (hashOf(k.seed + salt + 2, i * 7 + s) - 0.5) * 1.1;
+      run.push(c.x + Math.cos(ang) * d, c.y + Math.sin(ang) * d);
     }
-    runs.push(run);
+    tips.push(run.slice(-4));
+    runs.push(run.slice(0, -2));
   }
+  const z = k.zoom;
+  // The fine end in the fire's own colour alone; on fast graphics no white-hot thread down the middle.
   k.groundShape(c.x, c.y, r + 0.5, [
-    { kind: 'stroke', colour: PALETTE.ink, alpha: clamp(alpha), width: 2.6 * k.zoom, paths: runs, join: 'miter', cap: 'round', lift: 0.12 },
-    { kind: 'stroke', colour: PALETTE.main, alpha: clamp(alpha), width: 1.3 * k.zoom, paths: runs, join: 'miter', cap: 'round', lift: 0.14, glow: 0.6 + 0.4 * k.night },
-    { kind: 'stroke', colour: PALETTE.core, alpha: clamp(alpha * grow), width: 0.5 * k.zoom, paths: runs, join: 'miter', cap: 'round', lift: 0.15 },
+    { kind: 'stroke', colour: PALETTE.ink, alpha: clamp(alpha), width: 1.4 * z, paths: runs, join: 'miter', cap: 'butt', lift: 0.12 },
+    { kind: 'stroke', colour: PALETTE.main, alpha: clamp(alpha), width: 0.8 * z, paths: runs, join: 'miter', cap: 'butt', lift: 0.14, glow: 0.6 + 0.4 * k.night },
+    { kind: 'stroke', colour: PALETTE.main, alpha: clamp(alpha * 0.85), width: 0.55 * z, paths: tips, join: 'miter', cap: 'butt', lift: 0.14 },
+    ...(k.fast ? [] : [{ kind: 'stroke' as const, colour: PALETTE.core, alpha: clamp(alpha * grow), width: 0.35 * z, paths: runs, join: 'miter' as const, cap: 'butt' as const, lift: 0.15 }]),
   ]);
 }
 
@@ -481,11 +501,11 @@ function cracks(k: FxScene, c: { x: number; y: number }, r: number, n: number, g
  * A fire: a tall tongue with two shorter ones leaning off it, which is how
  * flame stands on anything that is not a wall of it. `h` height units.
  */
-function fireCluster(k: FxScene, base: P3, h: number, heat: number, key: number, out: Flame[]): void {
+function fireCluster(k: FxScene, base: P3, h: number, heat: number, key: number, out: Flame[], most = 2): void {
   const H = k.hpx(h);
   if (H < 1) return;
   const bx = k.sx(base), by = k.sy(base);
-  out.push({ bx, by, tx: bx + 0.1 * H * Math.sin(k.now * 4 + key), ty: by - H, w: 0.26 * H, heat: heat + 0.35, wob: sway(k.now, key) });
+  out.push({ bx, by, tx: bx + 0.1 * H * Math.sin(k.now * 4 + key), ty: by - H, w: 0.26 * H, heat: Math.min(most, heat + 0.35), wob: sway(k.now, key) });
   for (const q of [-1, 1]) {
     const hh = H * (0.56 + 0.12 * Math.sin(k.now * 9 + key * 2 + q));
     out.push({ bx: bx + q * 0.2 * H, by: by + 0.05 * H, tx: bx + q * (0.2 * H + 0.22 * hh), ty: by - hh, w: 0.27 * hh, heat, wob: sway(k.now, key + q * 3) });
@@ -538,7 +558,9 @@ function burnOn(k: FxScene, b: Body, age: number, power: number, life: number, a
         base = k.local(b, (hashOf(hk, 1) * 2 - 1) * b.wide * 0.35, (hashOf(hk, 2) * 2 - 1) * b.wide * 0.6, b.tall * (0.7 + 0.15 * hashOf(hk, 3)));
       }
       const h = (3 + 5 * power) * size * (0.35 + 0.65 * env) * (0.8 + 0.4 * hashOf(hk, 4));
-      fireCluster(k, base, h, 0.7 + 0.7 * life * env, i * 5 + half, k.sy(k.on(base.x, base.y)) > footY ? front : back);
+      // Orange through, its lead tongue never white: white-hot is the blow's, and a burn that starts white washes the
+      // creature's head and chest out to a glare.
+      fireCluster(k, base, h, 0.7 + 0.7 * life * env, i * 5 + half, k.sy(k.on(base.x, base.y)) > footY ? front : back, 1.45);
     }
   }
   // Unlit -- one of many burning at once -- it is one record: the few tongues behind the body drawn with the rest.
@@ -549,7 +571,8 @@ function burnOn(k: FxScene, b: Body, age: number, power: number, life: number, a
   k.glow(heart, 9 + 8 * power, (0.35 + 0.25 * power) * alpha * (0.85 + 0.15 * Math.sin(k.now * 13)));
   if (lit) k.light(b, 1.3 + 1.2 * power, (0.25 + 0.25 * power) * alpha * (0.9 + 0.1 * Math.sin(k.now * 17)));
   k.emit(k.at(b, 0.8), (5 + 9 * power) * alpha, { kind: 'ember', colour: [GOLD, PALETTE.main], size: 1.4, life: [0.4, 0.9], speed: [0.05, 0.25], up: [10, 22], gravity: -4, drag: 0.4, jitter: b.wide / 40, jitterZ: 2 });
-  k.emit(k.at(b, 0.85), (1.5 + 3 * power) * alpha * life, { kind: 'smoke', colour: [SMOKE, ASH], size: 2.2 + power * 1.5, life: [0.8, 1.5], speed: [0.02, 0.1], up: [8, 14], gravity: -4, drag: 0.5, jitter: b.wide / 50 });
+  // Smoke off it: small soft dark puffs, not grey tiles over its head.
+  k.emit(k.at(b, 0.85), (1.5 + 3 * power) * alpha * life, { kind: 'mist', colour: SMOKE, size: 1.6 + power, sizeEnd: 3.6 + 2 * power, life: [0.8, 1.5], speed: [0.02, 0.1], up: [8, 14], gravity: -4, drag: 0.5, jitter: b.wide / 50 });
 }
 
 /** A burn's share of its strength, from its own fraction of health a second: the hottest the Kindler has (Inferno's) is one. */
@@ -656,6 +679,30 @@ function alight(k: FxScene, b: Body, h: number, heat: number, alpha: number, key
 }
 
 /**
+ * Short tongues standing off a body all round it, between a third and two
+ * thirds of its height, `h` height units long, leaning `lean` of their length
+ * out from it (in, when negative): a Combust's fire drawn into a creature and
+ * thrown out of it. The ones behind it drawn behind it and the rest before.
+ */
+function popTongues(k: FxScene, b: Body, h: number, lean: number, heat: number, alpha: number): void {
+  if (h <= 0.3 || alpha <= 0.01) return;
+  const front: Flame[] = [], back: Flame[] = [];
+  const foot = k.on(b.x, b.y), fy = k.sy(foot), mid = k.at(b, 0.5), mx = k.sx(mid), my = k.sy(mid);
+  const n = k.fast ? 6 : 8;
+  for (let i = 0; i < n; i++) {
+    const ang = (i / n) * TAU + k.seed;
+    const base = k.local(b, Math.cos(ang) * b.wide * 0.45, Math.sin(ang) * b.wide * 0.6, b.tall * (0.3 + 0.4 * hashOf(k.seed + 121, i)));
+    const f = upright(k, base, h * (0.7 + 0.5 * hashOf(k.seed + 123, i)) * flick(k.now, i), 1.2, heat, 0, sway(k.now, i));
+    const ox = f.bx - mx, oy = f.by - my, ol = Math.hypot(ox, oy) || 1, len = f.by - f.ty;
+    f.tx += (ox / ol) * len * lean;
+    f.ty += (oy / ol) * len * lean * 0.6;
+    (k.sy(k.on(base.x, base.y)) > fy ? front : back).push(f);
+  }
+  flameGroup(k, foot, back, alpha, -3);
+  flameGroup(k, foot, front, alpha, 3);
+}
+
+/**
  * A ball of fire on its way: tongues streaming back from it along where it
  * has been, a hot gem at its head. `r` pixels at zoom one; `tail` how many of
  * its own widths the tongues stream; a rock rather than fire for a meteor.
@@ -727,11 +774,15 @@ function quarryOf(k: FxScene): Body | null {
   return null;
 }
 
-/** The creature a Heat Seeker has found, picked out `found` (nought to one) of the way: a ring closing at its feet, its heart lit. */
+/**
+ * The creature a Heat Seeker has found, picked out `found` (nought to one) of the way: a ring of small tongues
+ * licking up round its feet, closing in on it, and its heart lit. It comes and goes by its height, never by fading,
+ * so it never washes olive over the grass.
+ */
 function quarryMark(k: FxScene, q: Body, found: number): void {
   if (found <= 0.01) return;
-  k.ring(q, footOf(q) * (1.6 - 0.5 * found), { band: 0.05, alpha: 0.85 * found, glow: 0.7, main: PALETTE.accent, deep: PALETTE.main, dash: 3, turn: k.now });
-  k.glow(k.heart(q), 7, 0.5 * found, PALETTE.accent);
+  flameRing(k, q, footOf(q) * (1.4 - 0.4 * found), { h: 3 * found, w: 1.2, n: 8, front: 0.5, heat: 1.2, arcs: 2, turn: k.now * 0.6, glow: 0.6 });
+  k.glow(k.heart(q), 7, 0.5 * found, PALETTE.accent, true);
 }
 
 /** A star of tongues bursting out of a point, `n` of them, `len` pixels long at zoom one: a detonation. */
@@ -851,10 +902,11 @@ const scorchPose: CastPose = cast((r, t, c) => {
 const emberPose: CastPose = cast((r, t, c) => {
   const b = beats(c);
   const pinch = b.top * 0.38;
-  r.arm[0] = euler(t, [[0, [20, 10, 0]], [pinch, [60, -6, 30]], [b.top, [40, 4, 20]], [b.let, [26, 14, 8]], [1, [16, 10, 0]]]);
-  r.elbow[0] = one(t, [[0, 30], [pinch, 104], [b.top, 90], [b.let, 60], [1, 28]]);
-  r.arm[1] = euler(t, [[0, [20, 10, 0]], [pinch, [62, -16, 34]], [b.top, [-55, 20, 0]], [b.let, [60, 6, 0]], [b.through, [92, 6, 0]], [1, [24, 10, 0]]]);
-  r.elbow[1] = one(t, [[0, 30], [pinch, 104], [b.top, 10], [b.let, 14], [b.through, 20], [1, 28]]);
+  // The pinch at the chest, not the face.
+  r.arm[0] = euler(t, [[0, [20, 10, 0]], [pinch, [44, 4, 24]], [b.top, [40, 4, 20]], [b.let, [26, 14, 8]], [1, [16, 10, 0]]]);
+  r.elbow[0] = one(t, [[0, 30], [pinch, 96], [b.top, 90], [b.let, 60], [1, 28]]);
+  r.arm[1] = euler(t, [[0, [20, 10, 0]], [pinch, [46, -10, 30]], [b.top, [-55, 20, 0]], [b.let, [60, 6, 0]], [b.through, [92, 6, 0]], [1, [24, 10, 0]]]);
+  r.elbow[1] = one(t, [[0, 30], [pinch, 100], [b.top, 10], [b.let, 14], [b.through, 20], [1, 28]]);
   r.hand[1] = euler(t, [[0, [0, 0, 0]], [b.top, [-30, 0, 0]], [b.let, [24, 0, 0]], [b.through, [10, 0, 0]], [1, [0, 0, 0]]]);
   r.open[1] = t > b.let - 0.02 && t < 0.9;
   r.chest = euler(t, [[0, [0, 0, 0]], [pinch, [-4, 0, 0]], [b.top, [-8, 0, -18]], [b.let, [4, 0, 8]], [1, [0, 0, 0]]]);
@@ -922,14 +974,17 @@ const immolatePose: CastPose = cast((r, t, c) => {
   const b = beats(c);
   r.arm[0] = euler(t, [[0, [20, 10, 0]], [b.top * 0.4, [84, 6, -4]], [b.through, [82, 6, -4]], [1, [18, 10, 0]]]);
   r.elbow[0] = one(t, [[0, 30], [b.top * 0.4, 6], [b.through, 10], [1, 28]]);
-  r.arm[1] = euler(t, [[0, [20, 10, 0]], [b.top * 0.35, [30, 30, -20]], [b.top, [34, 30, -18]], [b.let, [70, 24, -10]], [b.through, [68, 22, -8]], [1, [22, 10, 0]]]);
-  r.elbow[1] = one(t, [[0, 30], [b.top * 0.35, 40], [b.top, 44], [b.let, 30], [b.through, 36], [1, 28]]);
+  // The right hand lifts out to the side, away from the pointing arm, then closes up toward the shoulder: from the
+  // side two arms held straight out together were a sleepwalker's.
+  const lifted = armOut(1, 85, 70, [0, 0, 1]), closed = armOut(1, 85, 78, [0, 0, 1]);
+  r.arm[1] = euler(t, [[0, [20, 10, 0]], [b.top * 0.35, [30, 30, -20]], [b.top, [34, 30, -18]], [b.let, lifted], [b.through, closed], [1, [22, 10, 0]]]);
+  r.elbow[1] = one(t, [[0, 30], [b.top * 0.35, 40], [b.top, 44], [b.let, 40], [b.through, 96], [1, 28]]);
   r.hand[1] = euler(t, [[0, [0, 0, 0]], [b.top * 0.35, [0, 0, -80]], [b.top, [10, 0, -70]], [b.let, [-20, 0, 0]], [1, [0, 0, 0]]]);
   r.open[1] = t > 0.06 && t < b.let - 0.02;
   r.chest = euler(t, [[0, [0, 0, 0]], [b.top * 0.4, [0, 0, -8]], [b.top, [-4, 0, -12]], [b.let, [4, 0, -4]], [1, [0, 0, 0]]]);
   r.spine = euler(t, [[0, [0, 0, 0]], [b.top, [-10, 0, 0]], [b.let, [2, 0, 0]], [1, [0, 0, 0]]]);
   r.head = euler(t, [[0, [0, 0, 0]], [b.top * 0.4, [-6, 0, 6]], [b.top, [-4, 0, 6]], [b.let, [-6, 0, 4]], [1, [0, 0, 0]]]);
-  feet(r, t, c, [[0, STAND], [b.top * 0.4, [0, 2, 0, 0, 0, 0, 0, 0, -0.2, 20]], [b.top, [0, 2, 0, 0, 0, 0, 0, 0.2, -0.2, 22]],
+  feet(r, t, c, [[0, STAND], [b.top * 0.4, [0, 2, 0, 0, 0, 0, 0, 0, -0.2, 22]], [b.top, [0, 2, 0, 0, 0, 0, 0, 0.2, -0.2, 30]],
     [b.let, [0, 2, 0, 0, 0, 0, 0, 1, -0.3, 6]], [b.through, [0, 2, 0, 0, 0, 0, 0, 0.8, -0.2, 6]], [0.95, STAND]]);
   // The left forefinger names it; the right palm, up, lifts the fire out of the ground and clutches it at the let.
   r.shape = [shapeAt(t, [[0, {}], [b.top * 0.4, { point: 1 }], [b.through, { point: 1 }], [1, {}]]),
@@ -995,7 +1050,9 @@ const meteorPose: CastPose = cast((r, t, c) => {
   const reach = b.top * 0.55;
   const hold = Math.min(0.9, b.through + 0.2);
   const strain = bump(t, reach, b.top, b.let) * Math.sin(t * 120);
-  const up: [Euler, Euler] = [armToward(0, [0.22, 0.2, 0.95]), armToward(1, [0.62, 0.15, 0.77])];
+  // Up and back over the right shoulder, the body arched after it: from the side a reach behind the head, where
+  // Pyre's fists are cocked together and Firestorm's arms are thrown up and forward.
+  const up: [Euler, Euler] = [armToward(0, [0.3, -0.2, 0.93]), armToward(1, [0.62, -0.35, 0.7])];
   for (let k = 0; k < 2; k++) {
     r.arm[k] = euler(t, [[0, [20, 10, 0]], [reach * 0.5, k ? [70, 30, 0] : [70, -10, 20]], [reach, up[k]], [b.top, up[k]], [b.let, k ? [40, -30, 30] : [30, -10, 34]], [hold, k ? [36, -28, 30] : [26, -8, 30]], [1, [18, 10, 0]]]);
     r.elbow[k] = one(t, [[0, 30], [reach, 12], [b.top, 6], [b.let, k ? 50 : 70], [hold, k ? 56 : 76], [1, 28]]) + 3 * strain;
@@ -1003,7 +1060,7 @@ const meteorPose: CastPose = cast((r, t, c) => {
     r.shrug[k] = one(t, [[0, 0], [reach, k ? 0.6 : 0.4], [b.top, k ? 0.7 : 0.5], [b.let, 0], [1, 0]]);
   }
   // Leaning up and over to the right after the star, then the trunk wrenched down and round to the left.
-  r.spine = euler(t, [[0, [0, 0, 0]], [reach, [8, 10, -8]], [b.top, [10, 12, -10]], [b.let, [-20, -4, 14]], [hold, [-16, -2, 10]], [1, [0, 0, 0]]]);
+  r.spine = euler(t, [[0, [0, 0, 0]], [reach, [12, 10, -8]], [b.top, [14, 12, -10]], [b.let, [-20, -4, 14]], [hold, [-16, -2, 10]], [1, [0, 0, 0]]]);
   r.chest = euler(t, [[0, [0, 0, 0]], [b.top, [8, 6, -12]], [b.let, [-10, 0, 18]], [hold, [-8, 0, 14]], [1, [0, 0, 0]]]);
   r.head = euler(t, [[0, [0, 0, 0]], [reach, [26, 0, -20]], [b.top, [30, 0, -24]], [b.let, [-6, 0, -20]], [hold, [-2, 0, -16]], [1, [0, 0, 0]]]);
   feet(r, t, c, [[0, STAND], [reach, [0, 0, 0, 0.5, 0, 0, 1, 0, 0.7, 4]], [b.top, [0, 0, 0, 0.5, 0, 0, 1.2, 0, 0.8, 2]],
@@ -1082,28 +1139,31 @@ const stokePose: CastPose = cast((r, t, c) => {
 });
 
 /**
- * Firebrand: an hourglass written in the air with the right forefinger -- its top bar, its right side in to the
- * waist and out, its bottom bar, its left side back up, so it is a glass from the second stroke -- then pressed into
- * the raised left forearm, where it stays.
+ * Firebrand: an hourglass written in the air with the right forefinger, low before the body -- its left side in to
+ * the waist and out, its bottom bar, its right side back up, its top bar -- then pressed into the left forearm held
+ * level across the belly, where it stays.
  */
 const firebrandPose: CastPose = free((r, t, c) => {
   const b = beats(c);
   const [w0, w1] = BRAND_WRITE;
   // The right arm goes round the glass's corners as the hand is put on them (`brandPoint`): the arm's own keys.
   const u = seg(t, w0, w1) * BRAND_SEGS, i = Math.min(BRAND_SEGS - 1, Math.floor(u)), f = smooth(u - i);
-  const toArm = (q: readonly [number, number]): [number, number] => [lerp(70, 106, (q[1] + 1) / 2), lerp(-10, 24, (q[0] + 1) / 2)];
+  // Near where the reach puts the hand, so the reach only refines it: an arm keyed far from it flips the elbow over.
+  const toArm = (q: readonly [number, number]): [number, number] => [lerp(48, 84, (q[1] + 1) / 2), lerp(-6, 28, (q[0] + 1) / 2)];
   const p0 = toArm(BRAND_CORNERS[i]), p1 = toArm(BRAND_CORNERS[i + 1]);
   const writing: [number, number, number] = [lerp(p0[0], p1[0], f), lerp(p0[1], p1[1], f), 0];
   const first = toArm(BRAND_CORNERS[0]);
   const start = track1(t, [[0, [20, 10, 0]], [w0, [first[0], first[1], 0]]]);
-  const after = track1(t, [[w1, [first[0], first[1], 0]], [b.let, [52, -24, 34]], [b.through, [56, -22, 32]], [1, [22, 10, 0]]]);
+  // Down onto the forearm at the belly, the palm flat on it.
+  const after = track1(t, [[w1, [first[0], first[1], 0]], [b.let, [30, -20, 30]], [b.through, [32, -18, 28]], [1, [22, 10, 0]]]);
   r.arm[1] = (t < w0 ? start : t < w1 ? writing : after) as [number, number, number];
   r.elbow[1] = one(t, [[0, 30], [w0, 26], [w1, 26], [b.let, 104], [b.through, 100], [1, 28]]);
   r.open[1] = t > b.let - 0.06 && t < 0.92;
   r.hand[1] = euler(t, [[0, [0, 0, 0]], [w0, [-10, 0, 0]], [b.let, [-20, 0, 0]], [1, [0, 0, 0]]]);
   // The left forearm raised across the body to take it.
-  r.arm[0] = euler(t, [[0, [20, 10, 0]], [w1 - 0.08, [24, 10, 0]], [b.let, [64, -4, 30]], [b.through, [74, -2, 26]], [1, [16, 10, 0]]]);
-  r.elbow[0] = one(t, [[0, 30], [w1 - 0.08, 30], [b.let, 96], [b.through, 104], [1, 28]]);
+  // Across the belly, low and level: a press, not the hands at the face that Stoke's breath is.
+  r.arm[0] = euler(t, [[0, [20, 10, 0]], [w1 - 0.08, [24, 10, 0]], [b.let, [40, -4, 34]], [b.through, [44, -2, 30]], [1, [16, 10, 0]]]);
+  r.elbow[0] = one(t, [[0, 30], [w1 - 0.08, 30], [b.let, 100], [b.through, 104], [1, 28]]);
   r.chest = euler(t, [[0, [0, 0, 0]], [w0, [2, 0, -6]], [w1, [2, 0, -4]], [b.let, [-6, 0, 10]], [b.through, [4, 0, 6]], [1, [0, 0, 0]]]);
   r.spine = euler(t, [[0, [0, 0, 0]], [b.let, [-6, 0, 0]], [b.through, [4, 0, 0]], [1, [0, 0, 0]]]);
   r.head = euler(t, [[0, [0, 0, 0]], [w0, [-10, 0, 0]], [w1, [-16, 0, 0]], [b.let, [-18, 0, 14]], [b.through, [-6, 0, 12]], [1, [0, 0, 0]]]);
@@ -1157,13 +1217,15 @@ const firestormPose: CastPose = cast((r, t, c) => {
   const tremble = bump(t, low * 0.6, low, b.top) * Math.sin(t * 150);
   for (let k = 0; k < 2; k++) {
     const s = k ? 1 : -1;
-    const rise = armToward(k, [s * 0.35, 0.45, 0.82]), vee = armToward(k, [s * 0.75, 0.15, 0.65]);
+    // The V thrown up and forward, out over the ground the wall rolls across: from the side it is arms flung ahead
+    // and up, not straight up as Meteor's and Pyre's tops are.
+    const rise = armToward(k, [s * 0.35, 0.5, 0.8]), vee = armToward(k, [s * 0.7, 0.45, 0.55]);
     r.arm[k] = euler(t, [[0, [20, 10, 0]], [low, [58, -30, 40]], [b.top, rise], [b.let, vee], [b.through, vee], [1, [18, 12, 0]]]);
     r.elbow[k] = one(t, [[0, 30], [low, 122], [b.top, 50], [b.let, 6], [b.through, 10], [1, 26]]) + 3 * tremble;
     r.open[k] = t > b.top - 0.04 && t < 0.92;
     r.shrug[k] = one(t, [[0, 0], [b.top, 0.3], [b.let, 0.5], [b.through, 0.4], [1, 0]]);
   }
-  r.spine = euler(t, [[0, [0, 0, 0]], [low, [-20, 0, 0]], [b.top, [0, 0, 0]], [b.let, [10, 0, 0]], [b.through, [8, 0, 0]], [1, [0, 0, 0]]]);
+  r.spine = euler(t, [[0, [0, 0, 0]], [low, [-20, 0, 0]], [b.top, [0, 0, 0]], [b.let, [2, 0, 0]], [b.through, [0, 0, 0]], [1, [0, 0, 0]]]);
   r.chest = euler(t, [[0, [0, 0, 0]], [low, [-10, 0, 0]], [b.let, [10, 0, 0]], [1, [0, 0, 0]]]);
   r.head = euler(t, [[0, [0, 0, 0]], [low, [-20, 0, 0]], [b.top, [6, 0, 0]], [b.let, [24, 0, 0]], [b.through, [20, 0, 0]], [1, [0, 0, 0]]]);
   feet(r, t, c, [[0, STAND], [low, [-1, 0, 0, 1, 0, 0, 0, -0.5, 0, 56]], [b.top, [-1, 0, 0, 1, 0, 0, 0, 0, 0, 12]], [b.let, [-1, 0, 0, 1, 0, 0, 0, 0, 0, 2]],
@@ -1199,7 +1261,8 @@ const pyrePose: CastPose = free((r, t, c) => {
   // The clasped fists: over the left shoulder at the top, then driven down before the front knee, held there.
   const fists: Array<[number, V3, V3, number]> = [
     [clasp, [-0.6, 4, 11], [0.6, 4, 11], 0.6],
-    [b.top, [-4.6, 0.2, 21], [-3.2, 1, 21], 1],
+    // Behind the head and together, a hammer cocked over the shoulder: from the side not arms straight up.
+    [b.top, [-2.6, -4.2, 16.5], [-1.8, -3.8, 16.5], 1],
     [b.let, [-0.7, 3.5, 3.5], [0.7, 3.5, 3.5], 1],
     [hold, [-0.7, 3.5, 3.6], [0.7, 3.5, 3.6], 1],
   ];
@@ -1219,11 +1282,11 @@ function track1(t: number, keys: ReadonlyArray<readonly [number, readonly [numbe
 /** When the Firebrand's hourglass is written, as shares of the cast. */
 const BRAND_WRITE = [0.12, 0.44] as const;
 /**
- * The hourglass's outline in the order it is written, across and up (minus one to one): its top bar, its right
- * side in to the narrow waist and out again, its bottom bar, its left side back up -- a glass from the second stroke,
- * where the other order (bar, diagonal, bar) read as a Z until the last.
+ * The hourglass's outline in the order it is written, across and up (minus one to one): its left side in to the
+ * narrow waist and out again, its bottom bar, its right side back up, its top bar -- half a glass on its base after
+ * the first two strokes, where starting with the top bar read as a "7".
  */
-const BRAND_CORNERS: ReadonlyArray<readonly [number, number]> = [[-1, 1], [1, 1], [0.3, 0], [1, -1], [-1, -1], [-0.3, 0], [-1, 1]];
+const BRAND_CORNERS: ReadonlyArray<readonly [number, number]> = [[-1, 1], [-0.3, 0], [-1, -1], [1, -1], [0.3, 0], [1, 1], [-1, 1]];
 const BRAND_SEGS = BRAND_CORNERS.length - 1;
 
 /**
@@ -1244,8 +1307,8 @@ function brandPoint(facing: number, u: number): V3 {
   const across = lerp(c0[0], c1[0], f) * BRAND_W, up = lerp(c0[1], c1[1], f) * BRAND_H;
   return [BRAND_AT[0] + ax * across, BRAND_AT[1] + ay * across, BRAND_AT[2] + up];
 }
-/** Where the glyph is written, before the chest and a little to the right, and its half width and half height (figure units). */
-const BRAND_AT: V3 = [2.6, 5.5, 11.5];
+/** Where the glyph is written, before the belly and out to the right, so the hand stays below the chin; its half width and half height (figure units). */
+const BRAND_AT: V3 = [3.6, 6, 9.5];
 const BRAND_W = 2.2;
 const BRAND_H = 2.8;
 
@@ -1356,28 +1419,70 @@ function scaldSheet(k: FxScene, from: P3, to: P3, u: number, lift: number): void
     if (j % 2) tips.push(p);
   }
   for (let i = n; i >= 0; i--) outline.push(at(mid[i], -wide[i], -thick(wide[i])));
+  // The light caught along it, bent with it, nearer the front.
   const streak: Array<[number, number]> = [];
-  for (let i = 1; i <= n; i++) streak.push(at(mid[i], wide[i] * 0.25, 0.3));
+  for (let i = 3; i <= n; i++) streak.push(at(mid[i], wide[i] * 0.3, thick(wide[i]) * 0.3 + 0.3));
+  // The front breaking up: round drops just ahead of it, coming off its lumps.
+  const beads: Array<[number, number, number]> = [];
+  for (let j = 0; j < 4; j++) {
+    const th = (j / 3 - 0.5) * 2.2;
+    const ahead = step * (2.6 + 1.4 * hashOf(k.seed + 85, j) + 0.8 * Math.sin(k.now * 9 + j));
+    const p = { x: head.x + fwd.x * ahead + side.x * W * 0.7 * Math.sin(th), y: head.y + fwd.y * ahead + side.y * W * 0.7 * Math.sin(th), z: head.z + fwd.z * ahead };
+    beads.push([k.sx(p), k.sy(p), (1.2 + 0.6 * hashOf(k.seed + 86, j)) * k.zoom]);
+  }
   const z = k.zoom;
-  k.worldDraw(head, (g) => {
-    g.globalAlpha = 0.95;
-    g.lineJoin = 'round';
-    g.beginPath();
-    outline.forEach(([x, y], i) => (i ? g.lineTo(x, y) : g.moveTo(x, y)));
+  // A closed curve through the midpoints of the outline: rounded all round, as a body of liquid is, never a cut sheet.
+  const smoothPath = (g: CanvasRenderingContext2D, pts: Array<[number, number]>): void => {
+    const m = pts.length;
+    const midOf = (i: number): [number, number] => [(pts[i % m][0] + pts[(i + 1) % m][0]) / 2, (pts[i % m][1] + pts[(i + 1) % m][1]) / 2];
+    const s0 = midOf(0);
+    g.moveTo(s0[0], s0[1]);
+    for (let i = 1; i <= m; i++) {
+      const c = pts[i % m], e = midOf(i);
+      g.quadraticCurveTo(c[0], c[1], e[0], e[1]);
+    }
     g.closePath();
+  };
+  // The tail half alone, for the thin end: drawn fainter under the whole, so the sheet thins to nothing behind.
+  const half = Math.floor(n / 2), body = outline.length;
+  const front = outline.slice(half, body - half);
+  k.worldDraw(head, (g) => {
+    g.lineJoin = 'round';
+    g.lineCap = 'round';
+    // See-through, as liquid is: thin behind, fuller at the front.
+    g.globalAlpha = 0.35;
+    g.beginPath();
+    smoothPath(g, outline);
     g.fillStyle = SCALD.main;
     g.fill();
+    g.globalAlpha = 0.6;
+    g.beginPath();
+    smoothPath(g, front);
+    g.fill();
+    g.globalAlpha = 0.8;
+    g.beginPath();
+    smoothPath(g, front);
     g.lineWidth = Math.max(0.7, 0.55 * z);
     g.strokeStyle = SCALD.ink;
     g.stroke();
-    // The lit run down it, where the light catches the sheet.
+    g.globalAlpha = 0.95;
     g.beginPath();
     streak.forEach(([x, y], i) => (i ? g.lineTo(x, y) : g.moveTo(x, y)));
-    g.lineCap = 'round';
-    g.lineWidth = 1.3 * z;
+    g.lineWidth = 1.1 * z;
     g.strokeStyle = SCALD.core;
     g.stroke();
-    g.lineCap = 'butt';
+    // The drops, round, each with its glint.
+    for (const [x, y, r] of beads) {
+      g.beginPath();
+      g.arc(x, y, r, 0, TAU);
+      g.fillStyle = SCALD.main;
+      g.fill();
+      g.lineWidth = Math.max(0.5, 0.4 * z);
+      g.strokeStyle = SCALD.ink;
+      g.stroke();
+      g.fillStyle = SCALD.core;
+      g.fillRect(x - r * 0.5, y - r * 0.6, r * 0.5, r * 0.5);
+    }
   }, 2);
   for (const tip of tips) k.emit(tip, 14, { kind: 'drop', colour: [SCALD.core, SCALD.main], size: 1.5, life: [0.2, 0.35], speed: [0.05, 0.3], up: [-4, 4], gravity: 90 });
 }
@@ -1388,26 +1493,79 @@ function scaldSheet(k: FxScene, from: P3, to: P3, u: number, lift: number): void
  * drawn behind it and the rest before it.
  */
 function scaldCrown(k: FxScene, b: Body, u: number): void {
-  const h = 7 * Math.sin(Math.PI * Math.min(1, u * 1.15));
+  const h = 6 * Math.sin(Math.PI * Math.min(1, u * 1.15));
   if (h <= 0.3) return;
-  const r0 = footOf(b) * 0.75, r1 = r0 * (1.25 + 0.5 * easeOut(u));
-  const n = k.fast ? 7 : 11, foot = k.on(b.x, b.y), fy = k.sy(foot);
-  const back: ShapePiece[] = [], front: ShapePiece[] = [];
-  const ring = (ang: number, r: number, z: number): P3 => k.on(b.x + Math.cos(ang) * r, b.y + Math.sin(ang) * r, z);
-  for (let i = 0; i < n; i++) {
-    const ang = (i / n) * TAU + hashOf(k.seed + 81, i) * 0.4;
-    const tall = h * (0.55 + 0.6 * hashOf(k.seed + 83, i));
-    // A curling lip of liquid, wide at its foot, and the drop it throws off its tip going up and out ahead of it.
-    const pts = [ring(ang - 0.2, r0, 0.3), ring(ang - 0.07, (r0 + r1) / 2, tall * 0.6), ring(ang, r1, tall), ring(ang + 0.07, (r0 + r1) / 2, tall * 0.62), ring(ang + 0.2, r0, 0.3)];
-    const d = ring(ang, r1 * (1 + 0.25 * u), tall + 2 + 4 * u), s = 1;
-    const drop = [{ ...d, z: d.z + s * 1.6 }, { ...d, x: d.x + 0.025 }, { ...d, z: d.z - s }, { ...d, x: d.x - 0.025 }];
-    const into = k.sy(ring(ang, r0, 0)) > fy ? front : back;
-    into.push({ pts, fill: i % 3 ? SCALD.main : SCALD.core, ink: SCALD.ink, width: 0.6 });
-    if (u > 0.2) into.push({ pts: drop, fill: SCALD.main, ink: false });
+  // One thin, see-through skirt of liquid thrown up all round it -- a splash's crown -- its top edge rounded into
+  // lobes that each throw a round drop off their crest, opening out as it rises and falling back. Its far side drawn
+  // behind the creature and its near side before it.
+  const r0 = footOf(b) * 0.55, r1 = r0 * (1.3 + 0.6 * easeOut(u));
+  const m = k.fast ? 24 : 36, lobes = 7, turn = hashOf(k.seed + 81, 0) * TAU;
+  const foot = k.on(b.x, b.y), fy = k.sy(foot);
+  const bot: Array<[number, number]> = [], top: Array<[number, number]> = [];
+  for (let i = 0; i < m; i++) {
+    const ang = (i / m) * TAU;
+    const lobe = 0.6 + 0.4 * Math.cos(lobes * ang + turn);
+    const pb = k.on(b.x + Math.cos(ang) * r0, b.y + Math.sin(ang) * r0, 0.3);
+    const pt = k.on(b.x + Math.cos(ang) * r1, b.y + Math.sin(ang) * r1, h * lobe * (0.85 + 0.3 * hashOf(k.seed + 82, i)));
+    bot.push([k.sx(pb), k.sy(pb)]);
+    top.push([k.sx(pt), k.sy(pt)]);
   }
-  const a = 1 - seg(u, 0.75, 1);
-  k.shapes(foot, back, { alpha: a, bias: -3 });
-  k.shapes(foot, front, { alpha: a, bias: 3 });
+  const drops: Array<[number, number, number]> = [];
+  if (u > 0.15) {
+    for (let j = 0; j < lobes; j++) {
+      const ang = (j * TAU - turn) / lobes;
+      const d = k.on(b.x + Math.cos(ang) * r1 * (1 + 0.3 * u), b.y + Math.sin(ang) * r1 * (1 + 0.3 * u), h + 2 + 4 * u);
+      drops.push([k.sx(d), k.sy(d), (0.9 + 0.5 * hashOf(k.seed + 84, j)) * k.zoom]);
+    }
+  }
+  const a = 1 - seg(u, 0.75, 1), z = k.zoom;
+  const W = 400 * z;
+  const draw = (near: boolean) => (g: CanvasRenderingContext2D): void => {
+    g.save();
+    g.beginPath();
+    if (near) g.rect(-W + bot[0][0], fy, 2 * W, W);
+    else g.rect(-W + bot[0][0], fy - W, 2 * W, W);
+    g.clip();
+    g.globalAlpha = clamp(0.5 * a);
+    g.beginPath();
+    for (let i = 0; i < m; i++) {
+      const q = (i + 1) % m;
+      g.moveTo(bot[i][0], bot[i][1]);
+      g.lineTo(top[i][0], top[i][1]);
+      g.lineTo(top[q][0], top[q][1]);
+      g.lineTo(bot[q][0], bot[q][1]);
+      g.closePath();
+    }
+    g.fillStyle = SCALD.main;
+    g.fill();
+    // Its rim, rounded through the lobes: inked, and lit white along it where the light catches the liquid.
+    g.beginPath();
+    const midOf = (i: number): [number, number] => [(top[i % m][0] + top[(i + 1) % m][0]) / 2, (top[i % m][1] + top[(i + 1) % m][1]) / 2];
+    const s0 = midOf(0);
+    g.moveTo(s0[0], s0[1]);
+    for (let i = 1; i <= m; i++) {
+      const c = top[i % m], e = midOf(i);
+      g.quadraticCurveTo(c[0], c[1], e[0], e[1]);
+    }
+    g.lineJoin = 'round';
+    g.globalAlpha = clamp(0.8 * a);
+    g.lineWidth = Math.max(0.6, 0.5 * z);
+    g.strokeStyle = SCALD.ink;
+    g.stroke();
+    g.lineWidth = Math.max(0.5, 0.35 * z);
+    g.strokeStyle = SCALD.core;
+    g.stroke();
+    g.globalAlpha = clamp(0.9 * a);
+    for (const [x, y, r] of drops) {
+      g.beginPath();
+      g.arc(x, y, r, 0, TAU);
+      g.fillStyle = SCALD.main;
+      g.fill();
+    }
+    g.restore();
+  };
+  k.worldDraw(foot, draw(false), -3);
+  k.worldDraw(foot, draw(true), 3);
 }
 
 /**
@@ -1417,18 +1575,23 @@ function scaldCrown(k: FxScene, b: Body, u: number): void {
  */
 function scaldPatch(k: FxScene, b: Body, grow: number, size: number, alpha = 1): void {
   if (alpha <= 0.01 || grow <= 0.01) return;
-  const R = footOf(b) * 1.5 * grow * size, n = 13;
-  const outer: number[] = [], inner: number[] = [];
+  const R = footOf(b) * 0.8 * grow * size, n = 13;
+  const outer: number[] = [], glint: number[][] = [];
   for (let i = 0; i < n; i++) {
     const ang = (i / n) * TAU;
     const rr = R * (0.6 + 0.4 * hashOf(k.seed + 87, i));
     outer.push(b.x + Math.cos(ang) * rr, b.y + Math.sin(ang) * rr);
-    inner.push(b.x + Math.cos(ang + 0.2) * rr * 0.5, b.y + Math.sin(ang + 0.2) * rr * 0.5);
+  }
+  // Two small bright glints where the wet catches the light: what says wet rather than stained.
+  for (let j = 0; j < 2; j++) {
+    const ang = -2.2 + j * 0.9, d = R * (0.35 + 0.15 * j), l = R * 0.18;
+    const x = b.x + Math.cos(ang) * d, y = b.y + Math.sin(ang) * d;
+    glint.push([x - l, y + l * 0.3, x + l, y - l * 0.3]);
   }
   k.groundShape(b.x, b.y, R + 0.5, [
-    { kind: 'fill', colour: SCALD.deep, alpha: clamp(0.32 * alpha), paths: [outer], lift: 0.08 },
-    { kind: 'stroke', colour: SCALD.ink, alpha: clamp(0.35 * alpha), width: 0.8 * k.zoom, paths: [outer], closed: true, join: 'round', lift: 0.09 },
-    { kind: 'fill', colour: SCALD.main, alpha: clamp(0.55 * alpha * size), paths: [inner], lift: 0.1, glow: 0.3 * k.night, light: SCALD.main },
+    { kind: 'fill', colour: STEAM_SHADE, alpha: clamp(0.5 * alpha), paths: [outer], lift: 0.08, glow: 0.3 * k.night, light: STEAM },
+    { kind: 'stroke', colour: SCALD.ink, alpha: clamp(0.45 * alpha), width: 0.6 * k.zoom, paths: [outer], closed: true, join: 'round', lift: 0.09 },
+    { kind: 'stroke', colour: '#ffffff', alpha: clamp(0.8 * alpha * size), width: 1.1 * k.zoom, paths: glint, cap: 'round', lift: 0.1 },
   ]);
 }
 
@@ -1518,7 +1681,7 @@ export const KINDLER: Record<string, SpellVisual> = {
       hit: (k) => {
         const at = k.heart(k.target);
         k.burst(at, 18, { kind: 'spark', colour: [PALETTE.core, GOLD], size: 1.6, life: [0.2, 0.4], speed: [0.6, 1.6], up: [4, 24], heading: k.toward(k.caster, k.target), cone: 2.2, gravity: 50, drag: 0.1 });
-        k.burst(at, 6, { kind: 'smoke', colour: SMOKE, size: 2, life: [0.4, 0.8], speed: [0.05, 0.2], up: [6, 12] });
+        k.burst(at, 6, { kind: 'mist', colour: SMOKE, size: 2, life: [0.4, 0.8], speed: [0.05, 0.2], up: [6, 12] });
       },
       impact: {
         secs: 0.45,
@@ -1577,7 +1740,8 @@ export const KINDLER: Record<string, SpellVisual> = {
         const near = seg(t, 0.2, 0.5);
         if (near > 0 && near < 1) {
           const r = 0.35 + 2.4 * easeOut(near), a = smooth(near * 5) * (1 - smooth(seg(near, 0.5, 1)));
-          k.ring(k.caster, r, { band: 0.07, dash: 2, alpha: 0.9 * a, glow: 0.8, main: PALETTE.accent, deep: PALETTE.main, turn: k.now * 0.8 });
+          // A run of coals going out over the ground: the group's own shape, not a painted band.
+          emberBed(k, k.caster, r, 0.9 * a, { width: 2 });
           for (let i = 0; i < (k.fast ? 3 : 6); i++) {
             const ang = (i / (k.fast ? 3 : 6)) * TAU + k.now * 0.8;
             k.emit(k.on(k.caster.x + Math.cos(ang) * r, k.caster.y + Math.sin(ang) * r, 1), 14 * a, { kind: 'spark', colour: [PALETTE.core, GOLD], size: 1.2, life: [0.15, 0.3], speed: [0.05, 0.2], up: [8, 18], gravity: 20, over: true });
@@ -1585,7 +1749,7 @@ export const KINDLER: Record<string, SpellVisual> = {
         }
         // The edge of the reach lit as the second pulse arrives, gone by the time the wisp is sent.
         const edge = bump(t, 0.46, 0.52, 0.6);
-        k.ring(k.caster, R, { band: 0.08, alpha: 0.5 * edge, dash: 3, glow: 0.5, main: PALETTE.main, deep: PALETTE.deep, turn: k.now * 0.2 });
+        k.ring(k.caster, R, { band: 0.08, alpha: 0.5 * edge, dash: 3, glow: 0.5, main: PALETTE.main, deep: PALETTE.deep, turn: k.now * 0.2, n: 48 });
         // What it found, picked out as the second pulse goes over it; from the release it is the travel's to hold.
         if (t > 0.36 && k.released < 0) {
           const q = quarryOf(k);
@@ -1652,7 +1816,7 @@ export const KINDLER: Record<string, SpellVisual> = {
         if (!q) return;
         const at = k.heart(q);
         k.burst(at, 24, { kind: 'spark', colour: [PALETTE.core, GOLD], size: 1.7, life: [0.2, 0.45], speed: [0.6, 1.8], up: [4, 30], gravity: 50, drag: 0.1 });
-        k.burst(at, 6, { kind: 'smoke', colour: SMOKE, size: 2.2, life: [0.4, 0.8], speed: [0.05, 0.2], up: [6, 12] });
+        k.burst(at, 6, { kind: 'mist', colour: SMOKE, size: 2.2, life: [0.4, 0.8], speed: [0.05, 0.2], up: [6, 12] });
       },
       impact: {
         secs: 0.6,
@@ -1733,10 +1897,17 @@ export const KINDLER: Record<string, SpellVisual> = {
           st.ly = b.y;
           st.v = lerp(st.v ?? 0, clamp(moved / 2), 0.1);
           const drag = st.v;
-          // Steam that hangs low round its legs and will not lift: the weight it carries.
-          k.emit(k.at(b, 0.12), (5 + 3 * life) * a, { kind: 'mist', colour: [STEAM, STEAM_SHADE], size: 1.8, sizeEnd: 4.5, life: [0.8, 1.3], speed: [0.02, 0.06], up: [1, 3], gravity: -0.5, drag: 0.4, jitter: footOf(b) * 0.8, jitterZ: 1 });
-          // Hot drops running off its belly onto the ground, many more while it drags itself along.
-          k.emit(k.at(b, 0.42), (4 + 22 * drag) * a, { kind: 'drop', colour: [SCALD.main, SCALD.core, SCALD.deep], size: 1.5, life: [0.25, 0.4], speed: [0, 0.04], up: [-4, 0], gravity: 70, jitter: b.wide / 45 });
+          // The weight it carries: heavy steam round its legs that sinks and rolls along the ground rather than lifting,
+          // left trailing behind it as it goes -- dragged, a pace that is not its own.
+          const vx = st.vx = lerp(st.vx ?? 0, st.lx0 === undefined ? 0 : (b.x - st.lx0) / Math.max(1e-3, k.dt), 0.1);
+          const vy = st.vy = lerp(st.vy ?? 0, st.ly0 === undefined ? 0 : (b.y - st.ly0) / Math.max(1e-3, k.dt), 0.1);
+          st.lx0 = b.x;
+          st.ly0 = b.y;
+          const vl = Math.hypot(vx, vy);
+          const behind = vl > 0.05 ? { x: -vx / vl, y: -vy / vl } : undefined;
+          k.emit(k.at(b, 0.18), (10 + 12 * drag) * a, { kind: 'mist', colour: [STEAM, STEAM_SHADE], size: 2.6, sizeEnd: 6, life: [0.9, 1.4], speed: behind ? [0.15 + 0.4 * drag, 0.3 + 0.6 * drag] : [0.02, 0.06], heading: behind, cone: 0.6, up: [-2, 0], gravity: 1.5, drag: 0.4, jitter: footOf(b) * 0.7, jitterZ: 1 });
+          // Hot drops running off its legs onto the ground, a few always and many more while it drags itself along.
+          k.emit(k.at(b, 0.3), (5 + 22 * drag) * a, { kind: 'drop', colour: [SCALD.core, SCALD.main], size: 1.6, life: [0.25, 0.4], speed: [0, 0.03], up: [-4, 0], gravity: 70, jitter: b.wide / 40 });
           // The scalded hide glistening, the heat in it pulsing slowly.
           k.glow(k.at(b, 0.45), 7, 0.3 * a * (0.6 + 0.4 * Math.sin(age * 3)), SCALD.deep, true);
         },
@@ -1763,16 +1934,18 @@ export const KINDLER: Record<string, SpellVisual> = {
           k.emit(mid, 30 * g, { kind: 'spark', colour: [PALETTE.core, GOLD], size: 1.2, life: [0.1, 0.22], speed: [0.4, 1], up: [-6, 10], gravity: 0, drag: 0.2 });
         }
       },
-      hit: (k) => {
-        const at = k.heart(k.target), dir = k.toward(k.caster, k.target);
-        k.burst(at, 46, { kind: 'spark', colour: [PALETTE.core, GOLD, PALETTE.main], size: 1.8, life: [0.2, 0.5], speed: [1.2, 3], up: [0, 24], heading: dir, cone: 1.4, gravity: 40, drag: 0.1 });
-        k.burst(at, 14, { kind: 'ember', size: 1.8, life: [0.4, 0.8], speed: [0.3, 0.9], up: [8, 24], gravity: 10 });
-        k.burst(k.at(k.target, 0.6), 10, { kind: 'smoke', colour: [SMOKE, ASH], size: 3, life: [0.6, 1], speed: [0.1, 0.4], up: [8, 14], heading: dir, cone: 1.2 });
-      },
       impact: {
         secs: 0.55,
         draw: (k, u) => {
           const from = mid3(k.hand(0), k.hand(1), 0.5), to = k.heart(k.target);
+          // What it throws off the creature, as the cone reaches it and not before.
+          if (u >= 0.14 && k.state.hit === undefined) {
+            k.state.hit = 1;
+            const dir = k.toward(k.caster, k.target);
+            k.burst(to, 46, { kind: 'spark', colour: [PALETTE.core, GOLD, PALETTE.main], size: 1.8, life: [0.2, 0.5], speed: [1.2, 3], up: [0, 24], heading: dir, cone: 1.4, gravity: 40, drag: 0.1, over: true });
+            k.burst(to, 14, { kind: 'ember', size: 1.8, life: [0.4, 0.8], speed: [0.3, 0.9], up: [8, 24], gravity: 10 });
+            k.burst(k.at(k.target, 0.6), 8, { kind: 'mist', colour: SMOKE, size: 3, life: [0.6, 1], speed: [0.1, 0.4], up: [8, 14], heading: dir, cone: 1.2 });
+          }
           // The cone: tongues laid out along the shove, fanned, reaching past the creature; it pours, holds and burns back.
           const grow = easeOut(seg(u, 0, 0.18)), die = smooth(seg(u, 0.25, 0.8));
           const fx = k.sx(from), fy = k.sy(from), tx = k.sx(to), ty = k.sy(to);
@@ -1791,7 +1964,8 @@ export const KINDLER: Record<string, SpellVisual> = {
           for (let rk = 0; rk < ranks; rk++) {
             for (let i = 0; i < across; i++) {
               const q = across > 1 ? (i / (across - 1)) * 2 - 1 : 0;
-              const a = q * (0.05 + 0.035 * rk) + 0.05 * Math.sin(k.now * 13 + i * 2.7 + rk);
+              // Fanned less at the far end than it was, so it billows there as one body, not four spikes.
+              const a = q * (0.05 + 0.02 * rk) + 0.05 * Math.sin(k.now * 13 + i * 2.7 + rk);
               const c = Math.cos(a), sn = Math.sin(a);
               const vx = dx * c - dy * sn, vy = dx * sn + dy * c;
               const jig = 0.8 + 0.35 * hashOf(k.seed + Math.floor(k.now * 14), rk * 5 + i);
@@ -1801,16 +1975,17 @@ export const KINDLER: Record<string, SpellVisual> = {
               const bx = fx + vx * off, by = fy + vy * off;
               // Fire rises: the tips lift off the line of the shove a little, a little more as less is pushing it.
               const rise = len * (0.12 + 0.18 * die);
-              flames.push({ bx, by, tx: bx + vx * len, ty: by + vy * len - rise, w: len * 0.13, heat: cooling(u) * 0.6 + 0.9 - 0.45 * rk, wob: sway(k.now, rk * 3 + i) * 0.8 });
+              flames.push({ bx, by, tx: bx + vx * len, ty: by + vy * len - rise, w: len * (rk ? 0.22 : 0.15), heat: cooling(u) * 0.6 + 0.9 - 0.45 * rk, wob: sway(k.now, rk * 3 + i) });
             }
           }
           // Sorted with whichever end is nearer the viewer, so it lies over the nearer of the two.
           const near = to.y + to.x > from.y + from.x ? to : from;
           flameGroup(k, near, flames, 1 - seg(u, 0.8, 1), 4);
-          k.flare(to, 10 * (1 - u), 0.8 * flashOf(u, 0.08), '#ffffff');
-          k.glow(mid3(from, to, 0.5), 18 * (1 - die), 0.7 * (1 - die));
+          // The flash and the glow go with the fire: nothing lights the creature before the cone reaches it.
+          k.flare(to, 10 * (1 - u), 0.8 * flashOf(seg(u, 0.12, 1), 0.08), '#ffffff');
+          k.glow(mid3(from, to, 0.5 * grow), 18 * (1 - die), 0.7 * (1 - die) * grow);
           k.light(mid3(from, to, 0.6), 2, 1 - u, WARM);
-          k.scorch(k.target, 0.4, { alpha: 0.3 * smooth(u * 4) * (1 - seg(u, 0.7, 1)) });
+          k.scorch(k.target, 0.35, { alpha: 0.2 * smooth(seg(u, 0.14, 0.4)) * (1 - seg(u, 0.7, 1)) });
         },
       },
     },
@@ -1826,8 +2001,10 @@ export const KINDLER: Record<string, SpellVisual> = {
     cast: { timing: { secs: 1.4, release: STOKE_LET }, pose: stokePose },
     fx: {
       charge: (k, t) => {
-        const cup = mid3(k.hand(0), k.hand(1), 0.5);
-        const lift = { ...cup, z: cup.z + 1.2 };
+        // The coal held a little out before the cupped hands, in front of the mouth rather than on it, so the face shows
+        // through the breaths.
+        const cup = mid3(k.hand(0), k.hand(1), 0.5), ahead = k.facingDir(k.caster), out = 1.5 / UNITS_PER_TILE;
+        const lift = { x: cup.x + ahead.x * out, y: cup.y + ahead.y * out, z: cup.z + 1.2 };
         kindle(k, lift, seg(t, 0, 0.2), 1.4);
         // How hot it is: a step up at each breath, the breaths at the pose's own, as the chest falls.
         const breaths = seg(t, STOKE_UP, STOKE_LET) * 2;
@@ -1836,7 +2013,7 @@ export const KINDLER: Record<string, SpellVisual> = {
         const a = smooth(seg(t, 0.08, 0.2)) * (1 - seg(t, STOKE_LET + 0.02, STOKE_LET + 0.06));
         if (a > 0.01) {
           k.orb(lift, 2.2 + 0.4 * heat, { ...COAL, core: heat > 0.7 ? PALETTE.core : COAL.core, alpha: a, glow: 0.4 + heat, bias: 1, turn: k.now });
-          k.glow(lift, 6 + 8 * heat, 0.4 + 0.5 * heat * a);
+          k.glow(lift, 3 + 4 * heat, 0.4 + 0.5 * heat * a);
           k.light(lift, 1.2 + 1.5 * heat, (0.3 + 0.5 * heat) * a);
           // The breath fans it: sparks blown off it as each one lands.
           if (pulse > 0.5) k.emit(lift, 40 * pulse, { kind: 'spark', colour: [GOLD, PALETTE.core], size: 1.2, life: [0.15, 0.35], speed: [0.2, 0.6], up: [6, 20], heading: k.toward(k.caster, k.target), cone: 2, gravity: 10, over: true });
@@ -1847,7 +2024,7 @@ export const KINDLER: Record<string, SpellVisual> = {
         const at = k.hand(1);
         // Shut in the fist: the heat squeezed out between the fingers in a puff of sparks.
         k.burst(at, 16, { kind: 'spark', colour: [PALETTE.core, GOLD], size: 1.4, life: [0.15, 0.35], speed: [0.3, 0.8], up: [2, 16], gravity: 30, over: true });
-        k.burst(at, 4, { kind: 'smoke', colour: [SMOKE, ASH], size: 1.8, life: [0.4, 0.7], speed: [0.02, 0.1], up: [6, 12] });
+        k.burst(at, 4, { kind: 'mist', colour: SMOKE, size: 1.8, life: [0.4, 0.7], speed: [0.02, 0.1], up: [6, 12] });
       },
       impact: {
         secs: 0.6,
@@ -1908,12 +2085,24 @@ export const KINDLER: Record<string, SpellVisual> = {
         for (let j = 0; j <= whole; j++) pts.push(on(j));
         if (end > whole) pts.push(on(end));
         const xs = pts.map((q) => k.sx(q)), ys = pts.map((q) => k.sy(q));
-        const c = mid3(on(2), on(5), 0.5);
+        // The whole glass there faintly from the first stroke, written over: an hourglass at every moment of it.
+        const guide: Array<[number, number]> = [];
+        for (let j = 0; j <= BRAND_SEGS; j++) {
+          const q = on(j);
+          guide.push([k.sx(q), k.sy(q)]);
+        }
+        const c = mid3(on(1), on(4), 0.5);
         const z = k.zoom;
         k.worldDraw(c, (g) => {
-          g.globalAlpha = clamp(a);
           g.lineJoin = 'round';
           g.lineCap = 'round';
+          g.globalAlpha = clamp(a * 0.3 * (1 - press));
+          g.beginPath();
+          guide.forEach(([x, y], j) => (j ? g.lineTo(x, y) : g.moveTo(x, y)));
+          g.strokeStyle = PALETTE.main;
+          g.lineWidth = 1.2 * z;
+          g.stroke();
+          g.globalAlpha = clamp(a);
           g.beginPath();
           g.moveTo(xs[0], ys[0]);
           for (let j = 1; j < xs.length; j++) g.lineTo(xs[j], ys[j]);
@@ -1938,7 +2127,8 @@ export const KINDLER: Record<string, SpellVisual> = {
         // Pressed in: it sizzles on the skin, a few sparks spat off and a curl of smoke.
         const arm = mid3(k.joint(k.caster, 'elbow0', [0, 0, 0]), k.hand(0), 0.55);
         k.burst(arm, 10, { kind: 'spark', colour: [PALETTE.core, GOLD], size: 1.2, life: [0.12, 0.3], speed: [0.2, 0.6], up: [4, 14], gravity: 40, over: true });
-        k.burst(arm, 8, { kind: 'smoke', colour: [SMOKE, ASH], size: 1.6, sizeEnd: 3.4, life: [0.6, 1.1], speed: [0.02, 0.08], up: [8, 14], gravity: -3 });
+        // Low and drifting off ahead, away from the face.
+        k.burst(arm, 6, { kind: 'mist', colour: SMOKE, size: 1.2, sizeEnd: 2.8, life: [0.6, 1.1], speed: [0.04, 0.1], up: [3, 6], heading: k.facingDir(k.caster), cone: 0.8, gravity: -1 });
       },
       impact: {
         secs: 0.6,
@@ -1946,7 +2136,7 @@ export const KINDLER: Record<string, SpellVisual> = {
           // The brand taking on the skin: the glass white-hot as it goes in, cooling to the brand's own orange.
           const elbow = k.joint(k.caster, 'elbow0', [0, 0, 0]), wrist = k.hand(0);
           brandMark(k, elbow, wrist, 2 - smooth(u), 1);
-          if (u < 0.6) k.emit(mid3(elbow, wrist, 0.55), 16 * (1 - u), { kind: 'smoke', colour: [SMOKE, ASH], size: 1.2, sizeEnd: 3, life: [0.5, 0.9], speed: [0.01, 0.04], up: [8, 12], gravity: -3 });
+          if (u < 0.6) k.emit(mid3(elbow, wrist, 0.55), 12 * (1 - u), { kind: 'mist', colour: SMOKE, size: 1.1, sizeEnd: 2.6, life: [0.5, 0.9], speed: [0.03, 0.08], up: [3, 6], heading: k.facingDir(k.caster), cone: 0.8, gravity: -1 });
           k.light(wrist, 1.4, 0.4 * (1 - u));
         },
       },
@@ -1989,16 +2179,17 @@ export const KINDLER: Record<string, SpellVisual> = {
         const b = k.target;
         const R = footOf(b);
         const live = k.released < 0 ? 1 : 0;
-        cracks(k, b, R * 1.5, 6, g, 0.95 * live, 91);
+        cracks(k, b, R * 1.15, 6, g, 0.95 * live, 91);
         k.disc(b, R * 0.9, { main: PALETTE.deep, alpha: 0.35 * g * live });
-        k.emit(k.at(b, 0.05), 14 * g * live, { kind: 'smoke', colour: [SMOKE, ASH], size: 2, life: [0.5, 0.9], speed: [0.02, 0.1], up: [6, 12], jitter: R * 0.8 });
+        k.emit(k.at(b, 0.05), 14 * g * live, { kind: 'mist', colour: SMOKE, size: 1.6, sizeEnd: 4, life: [0.5, 0.9], speed: [0.02, 0.1], up: [6, 12], jitter: R * 0.8 });
         k.emit(k.at(b, 0.05), 16 * g * live, { kind: 'ember', size: 1.2, life: [0.3, 0.6], speed: [0.02, 0.1], up: [8, 18], gravity: 0, jitter: R * 0.8 });
         k.light(b, 1.5, 0.4 * g * live);
       },
       hit: (k) => {
         const b = k.target;
-        k.burst(k.at(b, 0.1), 40, { kind: 'spark', colour: [PALETTE.core, GOLD], size: 1.6, life: [0.3, 0.6], speed: [0.1, 0.5], up: [30, 60], gravity: 40, jitter: b.wide / 40 });
-        k.burst(k.at(b, 0.5), 10, { kind: 'smoke', colour: [SMOKE, ASH], size: 3, life: [0.6, 1.1], speed: [0.05, 0.3], up: [10, 18] });
+        // A few sparks kicked up off the ground as it goes up, low, so the creature shows through them.
+        k.burst(k.at(b, 0.1), 20, { kind: 'spark', colour: [PALETTE.core, GOLD], size: 1.5, life: [0.3, 0.6], speed: [0.1, 0.5], up: [10, 30], gravity: 40, jitter: b.wide / 40, over: true });
+        k.burst(k.at(b, 0.5), 8, { kind: 'mist', colour: SMOKE, size: 2.4, sizeEnd: 5, life: [0.6, 1.1], speed: [0.05, 0.3], up: [10, 18] });
       },
       impact: {
         secs: 0.8,
@@ -2007,8 +2198,11 @@ export const KINDLER: Record<string, SpellVisual> = {
           const R = footOf(b);
           // A wall of flame up out of the ground all round it, climbing past its head, then sinking onto it as its burn.
           const rise = easeOut(seg(u, 0, 0.25)) * (1 - smooth(seg(u, 0.4, 1)));
-          flameRing(k, b, R * (1 - 0.3 * u), { h: (b.tall * 0.9 + 3) * rise, w: 2, n: 10, front: 0.45, heat: cooling(u * 0.8), arcs: 4, alpha: 1 - seg(u, 0.85, 1) });
-          cracks(k, b, R * 1.5, 6, 1, 0.95 * (1 - smooth(u)), 91);
+          // One body of flame, its foot unbroken round it, sinking onto it as a whole rather than shrinking into tongues.
+          // It closes in on the body as it sinks, so it goes down onto it as its burn, not out as a hoop on the ground.
+          const close = smooth(seg(u, 0.3, 0.9));
+          fireWall(k, b, R * (0.85 - 0.45 * close), { h: (b.tall * 0.9 + 3) * rise, front: 0.45, heat: 1.6 - 0.9 * smooth(u), arcs: 4, spacing: 0.12, alpha: 1 - seg(u, 0.65, 0.9), glow: 0.7 });
+          cracks(k, b, R * 1.15, 6, 1, 0.95 * (1 - smooth(u)), 91);
           k.light(b, 2, 0.9 * (1 - u * 0.6), WARM);
         },
       },
@@ -2019,7 +2213,7 @@ export const KINDLER: Record<string, SpellVisual> = {
           burnLinger(k, age, left);
           // The ground it was lit from stays scorched under it for the first few seconds.
           const b = k.target;
-          k.scorch(b, footOf(b), { alpha: 0.4 * (1 - seg(age, 2, 5)) });
+          k.scorch(b, footOf(b) * 0.7, { alpha: 0.25 * (1 - seg(age, 2, 5)) });
         },
       },
     },
@@ -2048,7 +2242,8 @@ export const KINDLER: Record<string, SpellVisual> = {
           // Its fire drawn in on itself: embers pulled in from round it, a rim of heat tightening round it (a rim only:
           // filled, orange over grass went olive).
           drawIn(k, k.at(b, 0.3), 0.9, k.fast ? 3 : 6, 10 * grip, k.now * 2, 0.35, 6);
-          k.shell(b, { size: 1.5 - 0.6 * grip, alpha: 0.9 * grip, turn: k.now * 3, back: 0, lit: false, rim: 1.4, ink: PALETTE.main, glow: 0 });
+          // Its fire drawn in: tongues on it leaning in toward its heart, tighter as the grip closes.
+          popTongues(k, b, 3 * grip, -0.5 * grip, 1.2, 0.8 * grip);
           k.glow(heart, 6 + 10 * grip, 0.7 * grip, PALETTE.accent);
           k.light(b, 1.6, 0.6 * grip);
         }
@@ -2064,10 +2259,11 @@ export const KINDLER: Record<string, SpellVisual> = {
             for (let i = 0; i < 6; i++) {
               const ang = (i / 6) * TAU + k.seed;
               const base = k.on(b.x + Math.cos(ang) * R, b.y + Math.sin(ang) * R, b.tall * (0.35 + 0.3 * suck));
-              const f = upright(k, base, 4 * (1 - suck), 1.1, 1.4 + suck * 0.6, 0, sway(k.now, i));
+              const f = upright(k, base, 4 * (1 - suck) * (1 - 0.5 * suck), 1.1, 1.4 + suck * 0.6, 0, sway(k.now, i));
               // Leaning in toward the heart on the screen.
-              f.tx += (k.sx(at) - f.bx) * 0.7;
-              f.ty += (k.sy(at) - f.by) * 0.4;
+              // By a third of the way, and shorter as they go: they shrink into it rather than cross it.
+              f.tx += (k.sx(at) - f.bx) * 0.35;
+              f.ty += (k.sy(at) - f.by) * 0.2;
               fl.push(f);
             }
             flameGroup(k, k.on(b.x, b.y), fl, 1, 3);
@@ -2082,17 +2278,18 @@ export const KINDLER: Record<string, SpellVisual> = {
               k.burst(at, 50, { kind: 'spark', colour: [PALETTE.core, GOLD, PALETTE.main], size: 1.8, life: [0.25, 0.55], speed: [1.5, 3.5], up: [0, 30], gravity: 40, drag: 0.08, over: true });
               k.burst(at, 14, { kind: 'ember', size: 2, life: [0.5, 1], speed: [0.4, 1.2], up: [10, 30], gravity: 14 });
               // The smoke ring: thrown flat out round it.
-              k.burst(k.at(b, 0.35), 22, { kind: 'smoke', colour: [SMOKE, ASH], size: 3.2, sizeEnd: 6, life: [0.7, 1.2], speed: [1.2, 1.8], up: [0, 3], gravity: -2, drag: 0.08 });
+              k.burst(k.at(b, 0.35), 18, { kind: 'mist', colour: SMOKE, size: 2.6, sizeEnd: 6, life: [0.7, 1.2], speed: [1.2, 1.8], up: [0, 3], gravity: -2, drag: 0.08 });
             }
             const out = easeOut(v);
-            k.shell(b, { size: 0.95 + 0.4 * out, alpha: 0.95 * (1 - smooth(v)), back: 0, lit: false, rim: 2.6 * (1 - 0.6 * v), ink: '#ffffff', glow: 0 });
-            k.shell(b, { size: 1.05 + 0.6 * out, alpha: 0.8 * (1 - smooth(v)), back: 0, lit: false, rim: 1.6, ink: PALETTE.accent, glow: 0 });
+            // Its own fire bursting out of it: short tongues thrown outward off its body all round, white to orange,
+            // the creature seen between them.
+            popTongues(k, b, 4.5 * (1 - 0.6 * out) * (1 - smooth(seg(v, 0.5, 1))), 0.6 + 0.6 * out, cooling(v * 0.5), 1);
             k.glow(at, 9 * (1 - 0.5 * v), 0.4 * (1 - v), PALETTE.core);
             starburst(k, at, k.fast ? 5 : 7, 8 * (0.4 + 0.6 * out), 1.3, cooling(v), 0.5 * (1 - smooth(v)), k.seed);
           }
           k.light(b, 2.4, u < 0.14 ? 0.5 + 3 * u : 1 - u, WARM);
           // What is left: a thin column of smoke going up off it, not a flame on it.
-          if (u > 0.35) k.emit(k.at(b, 0.7), 14 * (1 - u), { kind: 'smoke', colour: [SMOKE, ASH], size: 2.4, life: [0.8, 1.3], speed: [0.02, 0.08], up: [12, 18], gravity: -2 });
+          if (u > 0.35) k.emit(k.at(b, 0.7), 14 * (1 - u), { kind: 'mist', colour: SMOKE, size: 2, sizeEnd: 5, life: [0.8, 1.3], speed: [0.02, 0.08], up: [12, 18], gravity: -2 });
         },
       },
     },
@@ -2162,7 +2359,7 @@ export const KINDLER: Record<string, SpellVisual> = {
           // It stands up: out of the laid ring, at its height, up tall and white for a beat, then down to the aura's
           // own height, its heat and its bed easing into the linger's.
           const h = u < 0.2 ? lerp(AURA_H * 0.6, AURA_H * 2.2, easeOut(u / 0.2)) : lerp(AURA_H * 2.2, AURA_H, smooth((u - 0.2) / 0.8));
-          fireWall(k, k.caster, R, { h, heat: lerp(1.6, 1, smooth(u)), turn: k.now * AURA_TURN, front: 0.75, crest: k.now * AURA_TURN * 4 * smooth(u) });
+          fireWall(k, k.caster, R, { h, heat: lerp(1.6, 1, smooth(u)), turn: k.now * AURA_TURN, front: 0.75, crest: k.now * AURA_TURN * 4 * smooth(u), arcs: 6 });
           emberBed(k, k.caster, R, 0.9);
           k.light(k.caster, R + 0.5, lerp(0.9, 0.5, smooth(u)), WARM);
         },
@@ -2176,16 +2373,23 @@ export const KINDLER: Record<string, SpellVisual> = {
           const share = left / Math.max(0.01, age + left);
           // A low wall of fire standing at exactly its reach and turning with the caster -- a run of taller flame going
           // round it -- lower as its seconds run out.
-          fireWall(k, k.caster, R, { h: AURA_H * (0.6 + 0.4 * share) * a, heat: 1, turn: k.now * AURA_TURN, alpha: a, crest: k.now * AURA_TURN * 4, front: 0.75 });
+          fireWall(k, k.caster, R, { h: AURA_H * (0.6 + 0.4 * share) * a, heat: 1, turn: k.now * AURA_TURN, alpha: a, crest: k.now * AURA_TURN * 4, front: 0.75, arcs: 6 });
           emberBed(k, k.caster, R, 0.9 * a, { hot: 0.6 + 0.4 * share });
           // Its fire on whatever stands in it, a round a second: a lick of flame up each one.
           const round = age - 0.6, lick = round - Math.floor(round);
           if (lick < 0.5) {
+            // A fire up each: one record a creature for the first few, sorted with it; any more share one.
             let i = 0;
+            const rest: Flame[] = [];
+            const h = 5 * easeOut(lick * 5) * (1 - smooth(seg(lick, 0.15, 0.5)));
             for (const b of k.enemiesWithin(R, k.caster)) {
-              starburst(k, k.heart(b), 4, 6 * easeOut(lick * 4), 1.4, cooling(lick * 2), a * (1 - seg(lick, 0.25, 0.5)), k.seed + Math.floor(round) + i);
-              alight(k, b, 4 * (1 - smooth(seg(lick, 0.1, 0.5))), 1, a, i++);
+              const fl = i < 4 ? [] as Flame[] : rest;
+              fireCluster(k, k.at(b, 0.5), h, cooling(lick * 2) * 0.7 + 0.3, i, fl, 1.6);
+              if (i < 4) flameGroup(k, k.on(b.x, b.y), fl, a, 3);
+              k.glow(k.heart(b), 6 + h, 0.5 * a * (1 - seg(lick, 0.25, 0.5)));
+              i++;
             }
+            flameGroup(k, k.caster, rest, a, 3);
           }
           k.emit(k.at(k.caster, 0.05), 10 * a, { kind: 'ember', size: 1.3, life: [0.5, 1], speed: [0.05, 0.2], up: [10, 20], gravity: -2, jitter: R * 0.9, over: true });
           k.light(k.caster, R + 0.5, 0.5 * a, WARM);
@@ -2218,7 +2422,7 @@ export const KINDLER: Record<string, SpellVisual> = {
       release: (k) => {
         const mid = mid3(k.hand(0), k.hand(1), 0.5);
         k.burst(mid, 24, { kind: 'spark', colour: [PALETTE.core, GOLD], size: 1.8, life: [0.15, 0.35], speed: [0.8, 2], up: [0, 12], heading: k.toward(k.caster, k.target), cone: 1.4, gravity: 20 });
-        k.burst(mid, 3, { kind: 'smoke', colour: [SMOKE, ASH], size: 2.5, life: [0.4, 0.7], speed: [0.1, 0.4], up: [6, 12] });
+        k.burst(mid, 3, { kind: 'mist', colour: SMOKE, size: 2.5, life: [0.4, 0.7], speed: [0.1, 0.4], up: [6, 12] });
       },
       travel: {
         secs: (tiles) => 0.12 + tiles * 0.065,
@@ -2232,14 +2436,15 @@ export const KINDLER: Record<string, SpellVisual> = {
           fireball(k, head, back, 6.5, 5);
           k.light(head, 2.2, 0.85, WARM);
           k.emit(head, 50, { kind: 'ember', colour: [GOLD, PALETTE.main], size: 1.8, life: [0.25, 0.5], speed: [0.05, 0.3], up: [-4, 8], gravity: 4, jitter: 0.06, over: true });
-          k.emit(back, 30, { kind: 'smoke', colour: [SMOKE, ASH], size: 2.8, sizeEnd: 7, life: [0.5, 0.9], speed: [0.02, 0.1], up: [2, 8], gravity: -3, jitter: 0.05 });
+          // A plume of smoke off the ball itself, one continuous soft trail rather than a row of puffs.
+          k.emit(head, 40, { kind: 'mist', colour: SMOKE, size: 2, sizeEnd: 5, life: [0.4, 0.7], speed: [0.01, 0.05], up: [2, 6], gravity: -3, jitter: 0.03 });
         },
       },
       hit: (k) => {
         const b = k.target, at = k.heart(b);
         k.burst(at, 60, { kind: 'spark', colour: [PALETTE.core, GOLD, PALETTE.main], size: 2, life: [0.3, 0.7], speed: [1.2, 3.2], up: [0, 40], gravity: 50, drag: 0.08, over: true });
         k.burst(k.at(b, 0.05), 24, { kind: 'dust', colour: [DIRT, ASH], size: 3.5, sizeEnd: 7, life: [0.5, 0.9], speed: [0.6, 1.4], up: [2, 8], gravity: 3, drag: 0.15 });
-        k.burst(k.at(b, 1), 14, { kind: 'smoke', colour: [SMOKE, ASH], size: 4, sizeEnd: 8, life: [0.8, 1.4], speed: [0.2, 0.5], up: [14, 24], gravity: -3 });
+        k.burst(k.at(b, 1), 14, { kind: 'mist', colour: SMOKE, size: 4, sizeEnd: 8, life: [0.8, 1.4], speed: [0.2, 0.5], up: [14, 24], gravity: -3 });
       },
       impact: {
         secs: 0.8,
@@ -2253,23 +2458,32 @@ export const KINDLER: Record<string, SpellVisual> = {
           // Narrow, so the creature shows through either side of it: a tall tongue, two lower ones off it.
           const H = k.hpx(top * fall), fx = k.sx(k.on(b.x, b.y, 0.3)), fy = k.sy(k.on(b.x, b.y, 0.3));
           if (H > 1) {
-            col.push({ bx: fx, by: fy, tx: fx + 0.05 * H * Math.sin(k.now * 9), ty: fy - H, w: 0.11 * H, heat: cooling(u * 1.2), wob: sway(k.now, 1) });
+            col.push({ bx: fx, by: fy, tx: fx + 0.05 * H * Math.sin(k.now * 9), ty: fy - H, w: 0.14 * H, heat: cooling(u * 1.2), wob: sway(k.now, 1) });
             for (const q of [-1, 1]) col.push({ bx: fx + q * 0.08 * H, by: fy, tx: fx + q * 0.2 * H, ty: fy - 0.5 * H, w: 0.09 * H, heat: cooling(u * 1.2) - 0.4, wob: sway(k.now, 2 + q) });
           }
           flameGroup(k, k.on(b.x, b.y), col, 1, 4);
-          // The cap: tongues thrown out from the top of the column and curling down, white to orange.
-          const cx = k.sx(k.on(b.x, b.y, top * fall)), cy = k.sy(k.on(b.x, b.y, top * fall));
-          const cap: Flame[] = [], n = k.fast ? 5 : 8, len = k.hpx(4 + 5 * rise) * fall;
-          for (let i = 0; i < n; i++) {
-            const ang = (i / n) * TAU + k.seed;
-            const ox = Math.cos(ang), oy = Math.sin(ang) * 0.5;
-            const bx = cx + ox * len * 0.25, by = cy + oy * len * 0.25;
-            cap.push({ bx, by, tx: bx + ox * len, ty: by + oy * len + len * 0.35 * smooth(u * 2), w: len * 0.22, heat: cooling(u * 1.1), wob: sway(k.now, i) });
+          // The cap: a mushroom of flame on the column's head. A broad dome of fire licking up over the top, and round
+          // its rim the fire rolling over and hanging down and out, of mixed lengths, white to orange. The dome is what
+          // makes it one head: rim tongues alone, on a thin stalk, read as a palm or a flower.
+          const capH = k.hpx(3 + 4 * rise) * fall;
+          if (capH > 1.5) {
+            const cx = k.sx(k.on(b.x, b.y, top * fall)), cy = k.sy(k.on(b.x, b.y, top * fall)) + capH * 0.2;
+            const cap: Flame[] = [];
+            const n = k.fast ? 4 : 6, roll = smooth(seg(u, 0.05, 0.35));
+            for (let i = 0; i < n; i++) {
+              const ang = (i / n) * TAU + k.seed;
+              const ox = Math.cos(ang), oy = Math.sin(ang) * 0.5;
+              const l = capH * (0.6 + 0.4 * hashOf(k.seed + 71, i));
+              const bx = cx + ox * capH * 0.75, by = cy + oy * capH * 0.75 - capH * 0.3;
+              cap.push({ bx, by, tx: bx + ox * l * 0.6, ty: by + oy * l * 0.3 + l * lerp(0, 0.75, roll), w: l * 0.3, heat: cooling(u * 1.1) - 0.4, wob: sway(k.now, i) });
+            }
+            // The dome last, over the rim's roots.
+            cap.push({ bx: cx, by: cy, tx: cx + 0.08 * capH * Math.sin(k.now * 8), ty: cy - capH * 1.3, w: capH * 0.85, heat: cooling(u * 1.1), wob: sway(k.now, 9) });
+            flameGroup(k, k.on(b.x, b.y), cap, 1 - seg(u, 0.75, 1), 5);
           }
-          if (len > 1) flameGroup(k, k.on(b.x, b.y), cap, 1 - seg(u, 0.75, 1), 5);
           // The splash along the ground: low fire thrown out flat from its feet in a ring.
-          fireWall(k, b, 0.15 + 0.5 * easeOut(u), { h: 6 * (1 - smooth(seg(u, 0, 0.65))), lean: 0.9, heat: cooling(u), arcs: 4, front: 0.6, spacing: 0.1, glow: 0.6 });
-          k.flare(k.heart(b), 12 * (1 - u), 0.8 * flashOf(u, 0.06), '#ffffff');
+          fireWall(k, b, 0.15 + 0.5 * easeOut(u), { h: 6 * (1 - smooth(seg(u, 0, 0.65))), lean: 0.9, heat: Math.min(1.6, cooling(u)), arcs: 4, front: 0.45, spacing: 0.1, glow: 0.6 });
+          k.flare(k.heart(b), 8 * (1 - u), 0.6 * flashOf(u, 0.06), '#ffffff');
           k.light(b, 2.2, 1 - 0.6 * u, WARM);
         },
       },
@@ -2279,7 +2493,7 @@ export const KINDLER: Record<string, SpellVisual> = {
         draw: (k, age, left) => {
           burnLinger(k, age, left);
           // The one scorch it leaves where it struck, darkening as the splash dies and gone in a few seconds.
-          k.scorch(k.target, 0.5, { alpha: 0.38 * smooth(age * 2.5) * (1 - seg(age, 1.5, 4)) });
+          k.scorch(k.target, 0.35, { alpha: 0.28 * smooth(age * 2.5) * (1 - seg(age, 1.5, 4)) });
         },
       },
     },
@@ -2309,7 +2523,9 @@ export const KINDLER: Record<string, SpellVisual> = {
         const s = smooth(seg(t, 0.15, 0.45)) * live;
         k.flare(star, 4 + 10 * s, s, PALETTE.core, k.now);
         k.glow(star, 10 + 14 * s, 0.6 * s);
-        k.light(k.spot, 2.4, 0.35 * s, WARM);
+        // Its light is the travel's from the release, which asks for two of its own -- and the frame the release comes
+        // in draws this before it, so it goes a beat early.
+        if (k.released < 0 && t < (k.timing?.release ?? 0.5) - 0.03) k.light(k.spot, 2.4, 0.35 * s, WARM);
       },
       travel: {
         secs: () => 0.6,
@@ -2322,7 +2538,7 @@ export const KINDLER: Record<string, SpellVisual> = {
           fireball(k, head, back, 8, 5.5, true);
           k.light(head, 3, 0.9);
           k.light(k.spot, 2.4, 0.35 + 0.5 * u, WARM);
-          k.emit(back, 40, { kind: 'smoke', colour: [SMOKE, ASH], size: 3, sizeEnd: 7, life: [0.5, 1], speed: [0.02, 0.1], up: [0, 4], gravity: -2, jitter: 0.1, jitterZ: 3 });
+          k.emit(back, 40, { kind: 'mist', colour: SMOKE, size: 3, sizeEnd: 7, life: [0.5, 1], speed: [0.02, 0.1], up: [0, 4], gravity: -2, jitter: 0.1, jitterZ: 3 });
           k.emit(head, 50, { kind: 'ember', size: 1.8, life: [0.2, 0.45], speed: [0.1, 0.4], up: [0, 10], gravity: 10, jitter: 0.05, over: true });
           // The ground under it brightening as it comes.
           meteorMark(k, W, 1, u, 1);
@@ -2351,12 +2567,24 @@ export const KINDLER: Record<string, SpellVisual> = {
           const wave = easeOut(seg(u, 0, 0.55));
           const r = 0.3 + (W - 0.3) * wave;
           k.ring(c, Math.min(W, r + 0.12), { band: 0.05, alpha: 0.8 * (1 - seg(u, 0.4, 0.6)), glow: 0, main: '#e8dcc4', deep: DIRT, ink: ASH });
-          fireWall(k, c, r, { h: 18 * (1 - 0.55 * wave) * (1 - seg(u, 0.5, 0.95)), lean: 0.55, heat: cooling(wave * 0.8), alpha: 1 - seg(u, 0.85, 1), spacing: 0.15, arcs: 6 });
-          // The column where it struck, taller than a man, and the crater glowing under it.
-          const col = 1 - seg(u, 0, 0.45);
-          flameRing(k, c, 0.35, { h: 60 * col * easeOut(u * 8), w: 5, n: 11, heat: 2, arcs: 2, glow: 1, alpha: col });
-          k.disc(c, 0.55, { main: PALETTE.main, alpha: 0.75 * (1 - u * 0.4) });
-          k.scorch(c, 0.95, { alpha: 0.55 * smooth(u * 4) });
+          fireWall(k, c, r, { h: 18 * (1 - 0.55 * wave) * (1 - seg(u, 0.5, 0.95)), lean: 0.55, heat: cooling(wave * 0.8), alpha: 1 - seg(u, 0.85, 1), spacing: 0.15, arcs: 4 });
+          // The column where it struck, taller than a man: one roaring body of fire, white only at its heart -- a great
+          // tongue up the middle, a ring of broad ones close round its foot -- and the crater glowing under it.
+          const col = 1 - seg(u, 0, 0.45), H = 60 * col * easeOut(u * 8);
+          if (H > 1) {
+            const fl: Flame[] = [];
+            const foot = k.on(c.x, c.y, 0.3);
+            fl.push(upright(k, foot, H, 9, cooling(u * 2), 0.05 * Math.sin(k.now * 7), sway(k.now, 1)));
+            for (let i = 0; i < 6; i++) {
+              const ang = (i / 6) * TAU + k.seed;
+              const f = upright(k, k.on(c.x + Math.cos(ang) * 0.22, c.y + Math.sin(ang) * 0.22, 0.3), H * (0.45 + 0.25 * hashOf(k.seed + 7, i)) * flick(k.now, i), 6, cooling(u * 2) - 0.6, 0, sway(k.now, i + 2));
+              f.tx += (f.bx - k.sx(foot)) * 0.6;
+              fl.push(f);
+            }
+            flameGroup(k, foot, fl, col, 2);
+            k.glow({ ...foot, z: foot.z + H * 0.4 }, 14 + H * 0.3, 0.6 * col);
+          }
+          crater(k, c, 0, smooth(seg(u, 0.1, 0.5)));
           rocks(k, c, 0.95, easeOut(seg(u, 0.05, 0.3)), 1.6 - u);
           k.ring(c, W, { band: 0.08, alpha: 0.8 * (1 - u), glow: 0.6, main: PALETTE.deep, deep: PALETTE.ink });
           k.light(c, W + 0.5, 1 - 0.4 * u, WARM);
@@ -2382,12 +2610,16 @@ export const KINDLER: Record<string, SpellVisual> = {
           // The crater left: molten at the heart, cooling to coals, the stone's pieces round it going dark, a few
           // tongues on its lip, smoke going up.
           const cool = clamp((age - METEOR_BLAST) / 4);
-          k.scorch(c, 0.95, { alpha: 0.55 * a });
-          k.disc(c, 0.55, { main: PALETTE.deep, alpha: 0.65 * a });
-          k.disc(c, 0.32, { main: dry(PALETTE.main, cool * 0.7), alpha: 0.7 * a * (0.8 + 0.2 * Math.sin(age * 5)) });
+          crater(k, c, cool, a);
           rocks(k, c, 0.95, 1, 0.6 * (1 - cool), a);
-          flameRing(k, c, 0.55, { h: 5 * a * (1 - 0.6 * cool), w: 1.6, n: 7, heat: 0.9, arcs: 2, alpha: a, glow: 0.6 });
-          k.emit(k.on(c.x, c.y, 2), 10 * a, { kind: 'smoke', colour: [SMOKE, ASH], size: 3, sizeEnd: 7, life: [1, 1.8], speed: [0.02, 0.1], up: [8, 14], gravity: -3, jitter: 0.6 });
+          // A few fires left burning on its lip, each where the stone's heat caught.
+          const lip: Flame[] = [];
+          for (let i = 0; i < (k.fast ? 2 : 4); i++) {
+            const ang = hashOf(k.seed + 31, i) * TAU, d = 0.5 + 0.25 * hashOf(k.seed + 33, i);
+            fireCluster(k, k.on(c.x + Math.cos(ang) * d, c.y + Math.sin(ang) * d, 0.2), (3 + 3 * hashOf(k.seed + 35, i)) * a * (1 - 0.6 * cool), 0.9 * (1 - 0.5 * cool), i * 3, lip);
+          }
+          flameGroup(k, c, lip, a, 2);
+          k.emit(k.on(c.x, c.y, 2), 10 * a, { kind: 'mist', colour: SMOKE, size: 3, sizeEnd: 7, life: [1, 1.8], speed: [0.02, 0.1], up: [8, 14], gravity: -3, jitter: 0.6 });
           k.emit(k.on(c.x, c.y, 1), 8 * a * (1 - cool), { kind: 'ember', size: 1.4, life: [0.5, 1], speed: [0.05, 0.2], up: [8, 18], gravity: 0, jitter: 0.8, over: true });
           k.light(c, 1.6, 0.5 * a * (1 - 0.5 * cool), WARM);
         },
@@ -2441,7 +2673,8 @@ export const KINDLER: Record<string, SpellVisual> = {
           // over ahead of it, stopping there. Behind it the ground it has crossed is burnt dark.
           const wave = easeOut(seg(u, 0, 0.7));
           const r = 0.5 + (R - 0.5) * wave;
-          k.disc(c, r, { main: '#2a1a12', alpha: 0.3 * (1 - seg(u, 0.7, 1)) });
+          // The ground it has crossed burnt behind it, at the strength the linger keeps it: handed over, not faded out.
+          burntRound(k, c, r, 1);
           emberBed(k, c, r, 1 - seg(u, 0.75, 1), { width: 4 });
           fireWall(k, c, r, { h: (22 - 10 * wave) * (1 - seg(u, 0.7, 1)), heat: cooling(wave * 0.7), lean: 0.35, turn: k.seed, front: 0.8, spacing: 0.2, arcs: 6 });
           k.light(c, R * 0.6, 1 - 0.4 * u, WARM);
@@ -2468,32 +2701,41 @@ export const KINDLER: Record<string, SpellVisual> = {
             if (age > lit) burnWatched(k, b, `f${i}`, age - lit, k.fx.secs ?? age + left, burnPower(k.fx.each), false);
           }
           const total = k.fx.secs ?? age + left;
-          // The field is the wall's until it has reached the edge.
-          if (age < FIRESTORM_WAVE * 0.85 || age >= total) return;
+          // The field is the wall's until it is done.
+          if (age < FIRESTORM_WAVE || age >= total) return;
           const a = smooth((total - age) / 1.2);
-          // Fires left on the ground it swept, each going out at its own moment over the storm's seconds, so the field
-          // burns down rather than switching off: three groups, back to front, and their burnt patches in one record.
-          const n = k.fast ? 5 : 10;
+          // The whole round it swept stays burnt for its seconds, as the wall left it.
+          burntRound(k, c, R, a);
+          // Fires left burning on the ground it swept, big and few, each going out at its own moment over the storm's
+          // seconds, so the field burns down rather than switching off: three groups, back to front, and the blacker
+          // ground each burns on in one record.
+          const n = k.fast ? 3 : 6;
           const groups: Flame[][] = [[], [], []];
           const patches: number[][] = [];
           const cy = k.sy(c), spread = Math.max(1, k.sy(k.on(c.x + R, c.y + R)) - cy);
           for (let i = 0; i < n; i++) {
             const out = total * (0.35 + 0.65 * hashOf(k.seed + 41, i));
             const life = clamp((out - age) / Math.max(0.5, out));
-            const at = inDisc(k, c, R * 0.92, i, 43);
-            const pr = (0.35 + 0.2 * hashOf(k.seed + 47, i)) * (0.6 + 0.4 * smooth(age / 1.5));
+            const at = inDisc(k, c, R * 0.85, i, 43);
+            // An uneven blackened run under it, longer one way than the other.
+            const pr = 0.45 + 0.3 * hashOf(k.seed + 47, i), stretch = 1.3 + 0.6 * hashOf(k.seed + 48, i), tilt = hashOf(k.seed + 46, i) * Math.PI;
             const patch: number[] = [];
-            for (let j = 0; j < 7; j++) {
-              const ang = (j / 7) * TAU, rr = pr * (0.6 + 0.4 * hashOf(k.seed + 49 + i, j));
-              patch.push(at.x + Math.cos(ang) * rr, at.y + Math.sin(ang) * rr);
+            for (let j = 0; j < 9; j++) {
+              const ang = (j / 9) * TAU, rr = pr * (0.45 + 0.55 * hashOf(k.seed + 49 + i, j));
+              const ex = Math.cos(ang) * rr * stretch, ey = Math.sin(ang) * rr;
+              patch.push(at.x + ex * Math.cos(tilt) - ey * Math.sin(tilt), at.y + ex * Math.sin(tilt) + ey * Math.cos(tilt));
             }
             patches.push(patch);
             if (life <= 0) continue;
             const base = k.on(at.x, at.y, 0.2);
             const band = clamp(Math.floor(((k.sy(base) - cy) / spread + 1) * 1.5), 0, 2);
-            fireCluster(k, base, (5 + 4 * hashOf(k.seed + 45, i)) * (0.35 + 0.65 * life) * smooth(life * 4), 0.5 + 0.8 * life, i * 3, groups[band]);
+            const h = (8 + 6 * hashOf(k.seed + 45, i)) * (0.35 + 0.65 * life) * smooth(life * 4);
+            fireCluster(k, base, h, 0.5 + 0.8 * life, i * 3, groups[band]);
+            // A second fire beside the first, lower, so each is a patch of burning ground and not a campfire.
+            const side = k.on(at.x + Math.cos(tilt) * pr * 0.8, at.y + Math.sin(tilt) * pr * 0.8, 0.2);
+            fireCluster(k, side, h * 0.6, 0.4 + 0.7 * life, i * 3 + 1, groups[band]);
           }
-          k.groundShape(c.x, c.y, R + 0.5, [{ kind: 'fill', colour: '#1d1612', alpha: clamp(0.4 * a), paths: patches, lift: 0.08 }]);
+          k.groundShape(c.x, c.y, R + 0.5, [{ kind: 'fill', colour: '#1d1612', alpha: clamp(0.3 * a), paths: patches, lift: 0.09 }]);
           const lit: Flame[] = [];
           for (let j = 0; j < 3; j++) {
             const at = k.on(c.x + (j - 1) * R * 0.5, c.y + (j - 1) * R * 0.5);
@@ -2504,7 +2746,7 @@ export const KINDLER: Record<string, SpellVisual> = {
           // Its reach, faintly, so the burnt ground reads as the storm's: the bed of coals at its edge, dying.
           emberBed(k, c, R, 0.6 * a, { hot: 0.5 * (1 - age / total) });
           k.emit(k.on(c.x, c.y, 1), 18 * a, { kind: 'ember', size: 1.4, life: [0.6, 1.2], speed: [0.05, 0.2], up: [10, 20], gravity: -2, jitter: R * 0.8, over: true });
-          k.emit(k.on(c.x, c.y, 2), 6 * a, { kind: 'smoke', colour: [SMOKE, ASH], size: 3, sizeEnd: 7, life: [1, 1.8], speed: [0.02, 0.1], up: [8, 14], gravity: -3, jitter: R * 0.7 });
+          k.emit(k.on(c.x, c.y, 2), 6 * a, { kind: 'mist', colour: SMOKE, size: 3, sizeEnd: 7, life: [1, 1.8], speed: [0.02, 0.1], up: [8, 14], gravity: -3, jitter: R * 0.7 });
           k.light(c, R * 0.55, (0.45 * ((total - age) / total) + 0.1) * a, WARM);
         },
       },
@@ -2535,12 +2777,14 @@ export const KINDLER: Record<string, SpellVisual> = {
       travel: {
         secs: (tiles) => 0.25 + tiles * 0.08,
         draw: (k, u) => {
-          const from = k.hand(1), to = k.heart(k.target), lift = 5 + k.dist * 2.2;
+          // From where it was let go, kept: the hand goes on moving, and an arc tied to it bent into a rod.
+          const from = k.once('from', () => k.hand(1)), to = k.heart(k.target), lift = 5 + k.dist * 2.2;
           const head = arcAt(from, to, u, lift);
           const pts: P3[] = [];
-          for (let i = 5; i >= 0; i--) pts.push(arcAt(from, to, Math.max(0, u - i * 0.04), lift));
-          // A live coal, red through and glowing, trailing a thread of its own fire: it has to read at play size.
-          k.ribbon(pts, { width: 2.4, alpha: 0.8, main: PALETTE.main, core: PALETTE.accent, glow: 0.5, edge: false });
+          // A short thread, an eighth of its flight, and none of it from the hand: from the hand it read as a rod.
+          for (let i = 5; i >= 0; i--) pts.push(arcAt(from, to, Math.max(0, u - i * 0.025 * smooth(seg(u, 0.1, 0.25))), lift));
+          // A live coal, red through and glowing, trailing a thread of its own fire once it is clear of the hand.
+          if (u > 0.12) k.ribbon(pts, { width: 2.4, alpha: 0.8, main: PALETTE.main, core: PALETTE.accent, glow: 0.5, edge: false, taper: 'start' });
           k.orb(head, 2.4, { main: '#c4421a', deep: COAL.main, core: '#ffc070', ink: COAL.ink, turn: k.now * 8, glow: 1.2 });
           k.light(head, 1.3, 0.45);
           k.emit(head, 14, { kind: 'ember', size: 1.1, life: [0.2, 0.45], speed: [0.02, 0.1], up: [-2, 4], gravity: 6, over: true });
@@ -2549,7 +2793,7 @@ export const KINDLER: Record<string, SpellVisual> = {
       hit: (k) => {
         const at = k.heart(k.target);
         k.burst(at, 14, { kind: 'spark', colour: [GOLD, PALETTE.main], size: 1.4, life: [0.2, 0.4], speed: [0.4, 1], up: [8, 22], gravity: 50 });
-        k.burst(at, 5, { kind: 'smoke', colour: SMOKE, size: 2, life: [0.5, 0.9], speed: [0.05, 0.15], up: [6, 12] });
+        k.burst(at, 5, { kind: 'mist', colour: SMOKE, size: 2, life: [0.5, 0.9], speed: [0.05, 0.15], up: [6, 12] });
       },
       impact: {
         secs: 0.7,
@@ -2587,7 +2831,8 @@ export const KINDLER: Record<string, SpellVisual> = {
         k.glow(fists, 4 + 8 * g, (0.3 + 0.5 * g) * (1 - seg(t, 0.4, 0.45)), g > 0.6 ? PALETTE.core : PALETTE.light);
         k.light(fists, 1.5 + 1.5 * g, 0.5 * g);
         k.ring(k.caster, R, { band: 0.04, alpha: 0.6 * g, glow: 0.4 * k.night, turn: k.now * 0.4, main: PALETTE.deep, deep: PALETTE.ink });
-        k.disc(k.caster, R, { main: '#2a140c', alpha: 0.22 * g });
+        // The ground it will burn, foreshadowed exactly.
+        pyreGround(k, k.caster, R, 0.4 * g);
         drawIn(k, k.at(k.caster, 0), R, k.fast ? 3 : 6, 8 * g, k.now, 0.5, 2);
       },
       hit: (k) => {
@@ -2612,18 +2857,22 @@ export const KINDLER: Record<string, SpellVisual> = {
           // with two leaning off it -- white, then orange; then dying down where they stand, low and red, rather than
           // shrinking away to sparks.
           const up = easeOut(seg(u, 0, 0.1)), down = smooth(seg(u, 0.3, 0.95));
+          // Each fire goes out at its own moment, so the field burns down from all of them to none rather than
+          // shrinking all at once into dots.
           const heat = cooling(seg(u, 0.1, 0.8));
           const n = k.fast ? 8 : 16, arcs = 4;
           const groups: Flame[][] = Array.from({ length: arcs + 1 }, () => []);
           for (let i = 0; i < n; i++) {
             const at = inDisc(k, c, R * 0.95, i, 67);
             const d = Math.hypot(at.x - c.x, at.y - c.y);
-            const h = (10 + 9 * hashOf(k.seed + 69, i)) * up * (1 - 0.75 * down) * flick(k.now, i);
+            const out = 0.35 + 0.5 * hashOf(k.seed + 75, i), left = 1 - smooth(seg(u, out - 0.15, out));
+            if (left <= 0.01) continue;
+            const h = (10 + 9 * hashOf(k.seed + 69, i)) * up * (1 - 0.6 * down) * left * flick(k.now, i);
             const sector = d < R * 0.3 ? arcs : Math.floor(((Math.atan2(at.y - c.y, at.x - c.x) + Math.PI) / TAU) * arcs) % arcs;
             const into = groups[sector], from = into.length;
             fireCluster(k, k.on(at.x, at.y, 0.2), h, heat - 0.5 * down + (hashOf(k.seed + 73, i) < 0.3 ? 0.4 : 0), i, into);
             // Dying down, a fire stays as wide as it stood: low and broad, not small.
-            for (let j = from; j < into.length; j++) into[j].w = Math.max(into[j].w, k.hpx(3.2) * up);
+            for (let j = from; j < into.length; j++) into[j].w = Math.max(into[j].w, k.hpx(3.2) * up * left);
           }
           const lit: Flame[] = [];
           for (let j = 0; j <= arcs; j++) {
@@ -2650,7 +2899,7 @@ export const KINDLER: Record<string, SpellVisual> = {
           const a = lateFade(left, 1.2);
           const c = k.on(k.state.x ?? k.caster.x, k.state.y ?? k.caster.y);
           pyreGround(k, c, R, a);
-          k.emit(k.on(c.x, c.y, 1), 14 * a, { kind: 'smoke', colour: [SMOKE, ASH], size: 2.5, sizeEnd: 6, life: [0.8, 1.4], speed: [0.02, 0.08], up: [8, 14], gravity: -3, jitter: R * 0.8 });
+          k.emit(k.on(c.x, c.y, 1), 14 * a, { kind: 'mist', colour: SMOKE, size: 2.5, sizeEnd: 6, life: [0.8, 1.4], speed: [0.02, 0.08], up: [8, 14], gravity: -3, jitter: R * 0.8 });
           k.emit(k.on(c.x, c.y, 0.5), 14 * a, { kind: 'ember', size: 1.3, life: [0.4, 0.9], speed: [0.02, 0.1], up: [6, 14], gravity: 0, jitter: R * 0.8, over: true });
           k.light(c, 2, 0.3 * a, WARM);
         },
@@ -2679,6 +2928,22 @@ function pyreGround(k: FxScene, c: { x: number; y: number }, R: number, alpha: n
     { kind: 'fill', colour: '#1d1612', alpha: clamp(0.25 * alpha), paths: [inner], lift: 0.09 },
     { kind: 'stroke', colour: PALETTE.deep, alpha: clamp(0.7 * alpha), width: 1.4 * k.zoom, paths: [edge], closed: true, join: 'round', lift: 0.1, glow: 0.3 + 0.5 * k.night },
   ]);
+}
+
+/**
+ * The round a Firestorm's wall swept, `r` tiles out: burnt dark and ragged at
+ * its edge, one shape over all of it. The impact lays it as the wall goes out
+ * and the linger keeps it, at the same strength, for the storm's seconds.
+ */
+function burntRound(k: FxScene, c: { x: number; y: number }, r: number, alpha: number): void {
+  if (alpha <= 0.01 || r <= 0.05) return;
+  const n = Math.max(k.facets(r, 48), Math.round(16 + 4 * r)), edge: number[] = [];
+  for (let i = 0; i < n; i++) {
+    // Just inside the bed of coals at its edge, never past it.
+    const ang = (i / n) * TAU, rr = r * (0.94 + 0.04 * hashOf(k.seed + 105, i));
+    edge.push(c.x + Math.cos(ang) * rr, c.y + Math.sin(ang) * rr);
+  }
+  k.groundShape(c.x, c.y, r + 0.5, [{ kind: 'fill', colour: '#2a1a12', alpha: clamp(0.24 * alpha), paths: [edge], lift: 0.08 }]);
 }
 
 /**
@@ -2733,4 +2998,31 @@ function rocks(k: FxScene, c: { x: number; y: number }, r: number, grow: number,
     if (heat > 0.05) pieces.push({ pts: [mid3(q[3], top, 0.2), mid3(q[0], top, 0.55), mid3(q[2], top, 0.5)], fill: heat > 0.8 ? ROCK.core : PALETTE.deep, ink: false, alpha: clamp(heat) });
   }
   k.shapes(k.on(c.x, c.y), pieces, { alpha, bias: 2 });
+}
+
+/**
+ * The crater a Meteor leaves: a ragged pit of scorched earth, and in it a
+ * ragged pool of the stone's heat, molten as it lands and drying to dull red
+ * as `cool` goes to one. The impact lays it and the linger keeps it, so it is
+ * the same shape throughout and never pops.
+ */
+function crater(k: FxScene, c: { x: number; y: number }, cool: number, alpha: number): void {
+  if (alpha <= 0.01) return;
+  const n = 13, pit: number[] = [], pool: number[] = [], rim: number[] = [];
+  for (let i = 0; i < n; i++) {
+    const ang = (i / n) * TAU;
+    const rr = 0.95 * (0.72 + 0.28 * hashOf(k.seed + 111, i)), rp = 0.3 * (0.55 + 0.45 * hashOf(k.seed + 113, i));
+    pit.push(c.x + Math.cos(ang) * rr, c.y + Math.sin(ang) * rr);
+    rim.push(c.x + Math.cos(ang) * rr * 0.62, c.y + Math.sin(ang) * rr * 0.62);
+    pool.push(c.x + Math.cos(ang + 0.15) * rp, c.y + Math.sin(ang + 0.15) * rp);
+  }
+  const hot = dry(PALETTE.main, cool * 0.7);
+  k.groundShape(c.x, c.y, 1.5, [
+    { kind: 'fill', colour: '#2a1a12', alpha: clamp(0.5 * alpha), paths: [pit], lift: 0.08 },
+    { kind: 'fill', colour: '#3a1c12', alpha: clamp(0.7 * alpha), paths: [rim], lift: 0.09 },
+    { kind: 'fill', colour: hot, alpha: clamp(0.85 * alpha * (0.85 + 0.15 * Math.sin(k.now * 5))), paths: [pool], lift: 0.1, glow: 0.4 + 0.4 * k.night, light: hot },
+    { kind: 'stroke', colour: PALETTE.ink, alpha: clamp(0.6 * alpha), width: 1 * k.zoom, paths: [rim], closed: true, join: 'round', lift: 0.11 },
+  ]);
+  // The heat running out of the pool in cracks across the pit's floor, going dark as it cools.
+  cracks(k, c, 0.8, 7, 1, alpha * (1 - 0.7 * cool), 115);
 }
