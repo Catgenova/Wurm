@@ -68,7 +68,7 @@ import { kilnCentre, type PlacedKiln } from '../game/kiln';
 import { furnitureCentre, furnitureDef, type PlacedFurniture, facingOf as pieceFacing, furnitureFootprint } from '../game/furniture';
 import { UNSEEN, VISIBLE } from '../game/vision';
 import { DAWN, DUSK } from '../game/game';
-import { boatSway, clothInWind, crewOrder, deviceOf, drawFurniture, drawFurnitureLive, driverOn, swayOnScreen, WHEELS, WHEEL_BLUR, WHEEL_BLURRED, WHEEL_STEPS, wheelTrim, steeredByTiller, woodHex, furnitureHoles, helmSeat, reinsTo, rowedPiece, furnitureSpan, FURNITURE_HEIGHT, glowsAtNight, headingView, mossTrim, PIECE_STAGES, pieceView, planterTrim, roseTrim, type Air, type Crew, type PieceView } from './furniture';
+import { boatSway, clothInWind, crewOrder, deviceOf, drawFurniture, drawFurnitureLive, driverOn, swayOnScreen, WHEELS, wheelBlur, wheelTrim, steeredByTiller, woodHex, furnitureHoles, helmSeat, reinsTo, rowedPiece, furnitureSpan, FURNITURE_HEIGHT, glowsAtNight, headingView, mossTrim, PIECE_STAGES, pieceView, planterTrim, roseTrim, type Air, type Crew, type PieceView } from './furniture';
 import { roseStage } from '../game/roses';
 import { fieldRate } from '../game/growth';
 import { dyeOf } from '../game/dyestuffs';
@@ -262,6 +262,8 @@ export interface Pick {
 
 /** Seconds a cart's rock and bump take to come on as she sets off, and to die away as she stops (`cartRoll`). */
 const CART_EASE = 0.4;
+/** Seconds the length of a frame is steadied over, for how blurred a cart's wheels are drawn (`wheelTurn`). */
+const WHEEL_FRAME_EASE = 0.25;
 /** Her roll stood still: given to her driver all the same, so the body takes back what she has, which is nothing (`reinsIn`). */
 const CART_LEVEL = { heel: 0, pitch: 0 };
 
@@ -4139,14 +4141,16 @@ export class Renderer {
    * (`WHEEL_BLUR`, from the spokes gone by in a frame, steadied) the spokes go to a blur and the strake on the felloe goes
    * round once a turn, which a frame always can. Counted on once a frame, however often she is drawn in it.
    */
-  private readonly rolled = new Map<number, { x: number; y: number; turns: number; rate: number; at: number }>();
+  private readonly rolled = new Map<number, { x: number; y: number; turns: number; rate: number; at: number; dt: number; blur: number }>();
   private wheelTurn(f: PlacedFurniture): number | undefined {
     const w = WHEELS[f.kind];
     if (!w) return undefined;
-    const [x, y] = furnitureCentre(f);
+    // Driven by somebody else, she is where their hands are, which is read a dozen times a second; where she was set down
+    // is read once, so her wheels stood still under her while she went along, and a re-read over two tiles was not rolled.
+    const [x, y] = f.helm ? this.game.hullCentre(f) : furnitureCentre(f);
     let r = this.rolled.get(f.id);
     if (!r) {
-      r = { x, y, turns: 0, rate: 0, at: this.time };
+      r = { x, y, turns: 0, rate: 0, at: this.time, dt: this.frameDt, blur: 0 };
       this.rolled.set(f.id, r);
       if (this.rolled.size > 64) for (const [k, v] of this.rolled) if (this.time - v.at > 10) this.rolled.delete(k);
     }
@@ -4155,16 +4159,18 @@ export class Renderer {
       // A jump -- set down somewhere else, or seen again after a while -- is not rolled.
       const turns = d < 2 * UNITS_PER_TILE ? d / (2 * Math.PI * w.r) : 0;
       r.turns = (r.turns + turns) % 1;
-      if (dt > 0 && dt < 0.5) r.rate += (turns / dt - r.rate) * Math.min(1, dt / 0.15);
-      else r.rate = 0;
+      if (dt > 0 && dt < 0.5) {
+        r.rate += (turns / dt - r.rate) * Math.min(1, dt / 0.15);
+        // The length of a frame, steadied over a quarter of a second: frames come uneven, and taken one by one, a pace
+        // near a line went sharp, half and whole blur from one frame to the next.
+        r.dt += (dt - r.dt) * Math.min(1, dt / WHEEL_FRAME_EASE);
+      } else r.rate = 0;
       r.x = x;
       r.y = y;
       r.at = this.time;
+      r.blur = wheelBlur(r.rate * w.spokes * r.dt, r.blur);
     }
-    const by = r.rate * w.spokes * this.frameDt, [from, to] = WHEEL_BLUR;
-    const blur = by < from ? 0 : by < to ? 1 : 2;
-    const steps = blur ? WHEEL_BLURRED : w.spokes * WHEEL_STEPS;
-    return wheelTrim(blur, Math.floor(r.turns * steps) % steps);
+    return wheelTrim(f.kind, r.turns, r.blur);
   }
 
   /** Somebody on `f`, drawn at `wx`, `wy` on her rather than where they sort, `lift` up. */
