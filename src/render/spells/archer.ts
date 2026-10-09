@@ -29,11 +29,12 @@
  * poses keep the bow arm all but level and the trunk side-on, where an
  * upright bow is what a drawn bow looks like anyway.
  */
-import type { CastPose, SpellVisual } from './index';
+import type { CastPose, PoseCue, SpellVisual } from './index';
 import { spellInfo } from './info';
 import { arcAt, bump, clamp, easeIn, easeOut, flashOf, lerp, mid3, seg, smooth, TAU, type Body, type FxScene, type P3, type SpellPalette } from './kit';
 import { euler, one } from './poses';
 import { UNITS_PER_TILE } from '../iso';
+import { figureProportions, weaponSpan } from '../figure';
 
 /** Leaf green and fletching gold. */
 export const PALETTE: SpellPalette = {
@@ -48,7 +49,6 @@ export const PALETTE: SpellPalette = {
 /** The things an archer carries, in the island's own browns and greys rather than the trade's colours. */
 const SHAFT = '#a07d4c';
 const STEEL = '#d5dadc';
-const STRING = '#efe6c8';
 /** Leaves for the wind and the brambles, lit to shaded. */
 const LEAVES = ['#b7d77a', '#8cc56a', '#5f9a45'] as const;
 const GOLD = PALETTE.accent;
@@ -74,48 +74,34 @@ const dirOf = (a: P3, b: P3): V => unit(sub(toV(b), toV(a)));
 
 /* ---- the bow, as the figure holds it ------------------------------------------------------ */
 
-/**
- * Half each bow's length and how far out along it its string meets the limbs,
- * as the figure builds them (render/figure.ts `bowOf`: a short bow 11 long, a
- * medium 14, a long bow 18, a composite 12 with its string on the limbs where
- * the ears turn, 0.78 out). The figure does not say these, so they are read
- * off its table here.
- */
-const BOW_SPAN: Record<string, number> = { short_bow: 5.5, medium_bow: 7, long_bow: 9, composite_bow: 6 * 0.78 };
-/**
- * How the figure stands a held bow at each facing (figure.ts `BOW_FWD`,
- * `BOW_OUT`): its top leant forward and out from the body by these, in the
- * hips' frame. Wanted from the figure as a call that gives the tips.
- */
-const BOW_FWD = [6, 6, -22, -16, 6, 6, 20, -4];
-const BOW_OUT = [12, 12, -4, -4, -4, -4, -4, 12];
-const byFacing = (table: readonly number[], facing: number): number => {
-  const f = ((facing % 8) + 8) % 8, i = Math.floor(f), u = f - i;
-  return table[i % 8] + (table[(i + 1) % 8] - table[i % 8]) * u * u * (3 - 2 * u);
-};
-
-interface Bow {
-  /** The left fist, which the string runs through at rest. */
-  grip: P3;
-  top: P3;
-  bottom: P3;
+/** Whether a weapon is a bow the figure strings: one with tips. Asked of the figure's own measures, once a kind. */
+const BOWS = new Map<string, boolean>();
+function isBow(id: string | undefined): boolean {
+  if (!id) return false;
+  let y = BOWS.get(id);
+  if (y === undefined) BOWS.set(id, (y = !!weaponSpan(id)?.tips));
+  return y;
 }
 
-/** Where the caster's bow is this frame: its grip and its tips. Nothing when there is no bow in the hand. */
+interface Bow {
+  /** The middle of the left fist on the stave. */
+  grip: P3;
+  /** Where the string is made fast at either end. */
+  top: P3;
+  bottom: P3;
+  /** The string where the hand has it, drawn or not, and the point of an arrow on it. */
+  nock: P3;
+  point: P3;
+}
+
+/**
+ * Where a body's bow is this frame, as the figure holds and strings it (the
+ * pose takes it in the left fist, draws the string and nocks the arrow; see
+ * `figureJoint`). Nothing when there is no bow in the hand.
+ */
 function bowOf(k: FxScene, b: Body = k.caster): Bow | null {
-  const id = b.figure?.gear?.weapon?.id;
-  const span = id ? BOW_SPAN[id] : undefined;
-  if (!span) return null;
-  const grip = k.hand(0, b);
-  const fwd = (byFacing(BOW_FWD, b.facing) * Math.PI) / 180, out = (byFacing(BOW_OUT, b.facing) * Math.PI) / 180;
-  // The bow's upright in the hips' frame, carried onto the island by the body's own frame -- which the hips all but keep through a
-  // shot -- rather than by the posed hips, so that finding it costs no more than the hand does.
-  const o = toV(k.local(b, 0, 0, 0));
-  const u = toV(k.local(b, -Math.sin(out) * 4, Math.sin(fwd) * 4, Math.cos(out) * Math.cos(fwd) * 4));
-  let up = sub(u, o);
-  if (len(up) < 0.5) up = [0, 0, 1];
-  up = unit(up);
-  return { grip, top: along(grip, up, span), bottom: along(grip, up, -span) };
+  if (!isBow(b.figure?.gear?.weapon?.id)) return null;
+  return { grip: k.joint(b, 'grip'), top: k.joint(b, 'bowTop'), bottom: k.joint(b, 'bowBottom'), nock: k.joint(b, 'nock'), point: k.joint(b, 'arrow') };
 }
 
 /** An arrow's length in height units: three-quarters of a metre. */
@@ -188,72 +174,11 @@ function arrow(k: FxScene, head: P3, d: V, o: { long?: number; alpha?: number; f
   if ((o.glow ?? 0) > 0) k.glow(shown, 4 + 2 * (o.glow ?? 0), a * (o.glow ?? 0) * 0.7);
 }
 
-/**
- * The string drawn back to the right hand, `pull` nought (rest) to one (at
- * the anchor), and the arrow on it -- `n` of them, fanned a little, for Twin
- * Arrows -- pointing out past the grip toward the target.
- */
-function drawnString(k: FxScene, bow: Bow, o: { arrows?: number; fletch?: string; tip?: string; glow?: number } = {}): void {
-  const nock = k.hand(1);
-  const top = bow.top, bottom = bow.bottom;
-  const pts = [top, nock, bottom].map((p) => [k.sx(p), k.sy(p)]);
-  const z = k.zoom;
-  // Sorted with the bow hand: in front of the body where the bow is, behind it seen from behind.
-  k.worldDraw(bow.grip, (g) => {
-    g.globalAlpha = 1;
-    g.lineJoin = 'miter';
-    g.strokeStyle = PALETTE.ink;
-    g.lineWidth = Math.max(1.2, 0.5 * z + 0.8);
-    g.beginPath();
-    g.moveTo(pts[0][0], pts[0][1]);
-    g.lineTo(pts[1][0], pts[1][1]);
-    g.lineTo(pts[2][0], pts[2][1]);
-    g.stroke();
-    g.strokeStyle = STRING;
-    g.lineWidth = Math.max(0.7, 0.3 * z);
-    g.stroke();
-    g.lineJoin = 'round';
-  }, 1);
-  // The arrow along the line from the nock through the grip, its head out past the bow by a hand.
-  let d = dirOf(nock, bow.grip);
-  const gap = len(sub(toV(bow.grip), toV(nock)));
-  if (gap < 2) d = unit(add(d, aimOf(k), 2));
-  const n = o.arrows ?? 1;
-  for (let i = 0; i < n; i++) {
-    const fan = n > 1 ? (i - (n - 1) / 2) * 0.14 : 0;
-    const di = unit(add(d, [0, 0, 1], fan));
-    arrow(k, along(nock, di, ARROW * 0.98), di, { fletch: o.fletch, tip: o.tip, bias: 1.5, glow: o.glow });
-  }
-}
-
 /** The way to the target from the caster's chest, as a unit step: where an arrow on the string points when the hand is at the bow. */
 const aimOf = (k: FxScene): V => dirOf(k.chest(), k.heart(k.target));
 
-/**
- * The string let go: straight again, shivering, a few times and less each
- * time over `secs`. Only for a moment after the loose.
- */
-function twang(k: FxScene, bow: Bow, age: number, secs = 0.22): void {
-  if (age < 0 || age > secs) return;
-  const amp = 1.4 * (1 - age / secs) * Math.cos(age * 95);
-  const back = dirOf(bow.grip, k.hand(1));
-  const mid = along(bow.grip, back, amp);
-  const pts = [bow.top, mid, bow.bottom].map((p) => [k.sx(p), k.sy(p)]);
-  const z = k.zoom;
-  k.worldDraw(bow.grip, (g) => {
-    g.globalAlpha = 0.9;
-    g.strokeStyle = STRING;
-    g.lineWidth = Math.max(0.7, 0.3 * z);
-    g.beginPath();
-    g.moveTo(pts[0][0], pts[0][1]);
-    g.lineTo(pts[1][0], pts[1][1]);
-    g.lineTo(pts[2][0], pts[2][1]);
-    g.stroke();
-  }, 1);
-}
-
 /** Where a shot leaves from: the bow's grip, or the left hand when there is no bow to find. */
-const muzzle = (k: FxScene): P3 => k.hand(0);
+const muzzle = (k: FxScene): P3 => (isBow(k.caster.figure?.gear?.weapon?.id) ? k.joint(k.caster, 'grip') : k.hand(0));
 
 /**
  * An arrow on its way, `u` of the way from `from` to `to` on an arc `lift`
@@ -376,17 +301,17 @@ function wrap(k: FxScene, b: Body, pts: P3[], look: { width?: number; alpha?: nu
 /**
  * A shot's moments as fractions of the cast, and the shape of the draw. The
  * right hand goes to the quiver over the shoulder (when `quiver`), comes to
- * the string at `nock`, is at the anchor by `anchor` and lets go at
- * `release`; `settle` is when the body is still again.
+ * the string at `nock`, is at the anchor by `anchor` and lets go at the
+ * release.
  */
 interface Shot {
   nock: number;
   anchor: number;
-  /** The bow arm's forward angle at the anchor: 88 level, more for a lofted shot, less for a low one. */
+  /** The line of the arrow, written as the bow arm's forward angle it reads as: 88 level, more for a lofted shot, less for a low one. */
   aim: number;
-  /** How far the bow arm comes up on the loose, degrees. */
+  /** How far the bow hand comes up on the loose, as degrees of the arm. */
   kick: number;
-  /** The draw elbow at the anchor: 140 to the cheek, about 100 to the chest. */
+  /** How far back the string comes: 140 to the jaw, less stops short of it along the line (about 100 is the chest). */
   depth: number;
   /** The trunk turned side-on to the target, degrees: the left shoulder toward it. */
   side: number;
@@ -394,48 +319,71 @@ interface Shot {
   lean: number;
   /** The right hand to the quiver over the shoulder for the arrow first. */
   quiver: boolean;
+  /** The bow canted, degrees, its top to the right: a shot from the hip. */
+  cant?: number;
+  /** Down on the right knee for it, this share of the way. */
+  kneel?: number;
 }
 
-/* The figure's own proportions, in height units at a `tall` of one (render/figure.ts `skeleton`): where a shoulder hangs from the
- * chest's joint, how long the upper arm and the forearm are, and where the head sits. Read off its table, as the bow is; a build's
- * shoulders are a little wider or narrower, which moves a hand by a fraction of a unit. */
-const SHOULDER_X = 2.1, SHOULDER_Y = -0.1, SHOULDER_Z = 1.66, UPPER_ARM = 2.8, FOREARM = 2.4;
-const HEAD_AT: V = [0, -0.02, 2.74];
-/** Where the hands hang at rest in the chest's frame: the right down by the thigh, the left a little forward with the bow in it. */
-const REST_RIGHT: V = [SHOULDER_X + 0.2, 0.5, SHOULDER_Z - 4.9];
-const REST_LEFT: V = [-SHOULDER_X - 0.4, 0.9, SHOULDER_Z - 4.4];
+/*
+ * The figure's own measures (`figureProportions`), and the heights a shot is
+ * laid out from in the body's frame: x to the right, y ahead -- at the target,
+ * since the body is turned to it when the cast starts -- z up, from the middle
+ * of the feet. This is the frame `Rig.reach` puts a hand in.
+ */
+const BODY = figureProportions();
+/** The spine's joint over the soles: what a lean pitches the trunk about. */
+const SPINE_AT = BODY.hips + BODY.spine;
+/** The shoulders' joints over the soles, standing straight. */
+const SHOULDERS_AT = SPINE_AT + BODY.chest + BODY.shoulder[2];
+/** The jaw, where the string comes to: a little over half an upper arm above the shoulders. */
+const JAW_AT = SHOULDERS_AT + BODY.upper * 0.58;
+/** From a shoulder to the middle of the fist with the arm all but straight: the elbow left soft. */
+const ARM = (BODY.upper + BODY.lower + BODY.fist) * 0.96;
+/** How far down a kneel lets the trunk: the hips come down to the thigh stood upright on the knee, and the knee's own thickness. */
+const KNEEL_DROP = BODY.hips - BODY.thigh - 1.5 * BODY.fist;
+const RAD = Math.PI / 180;
 
 /**
- * An arm put where a hand is wanted: the shoulder, elbow and the joint angles
- * that bring the wrist of arm `k` (1 the right) to `to`, in the chest's own
- * frame (x to the right, y ahead, z up, from the chest's joint), the elbow
- * bent out toward `pole`. Out of reach, the arm reaches straight toward it.
- * As the figure's own `hold` does it, so a pose can say where a hand goes --
- * at the jaw, on the line to the target -- rather than how each joint turns.
+ * A point of the trunk, given standing straight, once the trunk is turned
+ * `yaw` degrees (positive turns the front to the body's left), leant back
+ * `lean` degrees about the spine's joint, and let down `drop` by a kneel.
  */
-function reach(r: Parameters<CastPose>[0], k: number, to: V, pole: V): void {
-  const s = k ? 1 : -1;
-  const S: V = [s * SHOULDER_X, SHOULDER_Y, SHOULDER_Z];
-  const a = UPPER_ARM, b = FOREARM;
-  const w = sub(to, S);
-  const n = unit(w);
-  const d = Math.min(a + b - 1e-3, Math.max(Math.abs(a - b) + 1e-3, len(w)));
-  const qn = pole[0] * n[0] + pole[1] * n[1] + pole[2] * n[2];
-  const p = unit([pole[0] - n[0] * qn, pole[1] - n[1] * qn, pole[2] - n[2] * qn]);
-  const ca = (a * a + d * d - b * b) / (2 * a * d), sa = Math.sqrt(Math.max(0, 1 - ca * ca));
-  const u: V = [n[0] * ca + p[0] * sa, n[1] * ca + p[1] * sa, n[2] * ca + p[2] * sa];
-  const f = unit([n[0] * d - u[0] * a, n[1] * d - u[1] * a, n[2] * d - u[2] * a]);
-  const x = unit([p[1] * n[2] - p[2] * n[1], p[2] * n[0] - p[0] * n[2], p[0] * n[1] - p[1] * n[0]]);
-  const z: V = [-u[0], -u[1], -u[2]];
-  const y: V = [z[1] * x[2] - z[2] * x[1], z[2] * x[0] - z[0] * x[2], z[0] * x[1] - z[1] * x[0]];
-  const DEG = 180 / Math.PI;
-  r.arm[k] = [Math.atan2(y[2], z[2]) * DEG, s * Math.asin(clamp(x[2], -1, 1)) * DEG, s * Math.atan2(x[1], x[0]) * DEG];
-  r.elbow[k] = Math.atan2(f[0] * y[0] + f[1] * y[1] + f[2] * y[2], f[0] * u[0] + f[1] * u[1] + f[2] * u[2]) * DEG;
+function trunkPoint(p: V, yaw: number, lean: number, drop: number): V {
+  const a = yaw * RAD, l = lean * RAD;
+  const x = p[0] * Math.cos(a) - p[1] * Math.sin(a), y = p[0] * Math.sin(a) + p[1] * Math.cos(a), h = p[2] - SPINE_AT;
+  return [x, y * Math.cos(l) - h * Math.sin(l), SPINE_AT + y * Math.sin(l) + h * Math.cos(l) - drop];
+}
+/** A shoulder's joint (`k` 1 the right) with the trunk turned, leant and let down so. */
+const shoulderOf = (k: number, yaw: number, lean: number, drop: number): V =>
+  trunkPoint([(k ? 1 : -1) * BODY.shoulder[0], BODY.shoulder[1], SHOULDERS_AT], yaw, lean, drop);
+
+/**
+ * Where a shot's hands go: the anchor at the right of the jaw, the line the
+ * arrow lies along from there at the target, `aim` degrees over level, the
+ * bow hand out along that line as far as the left arm reaches from its
+ * shoulder with the trunk turned `side` -- and the way the stave stands in
+ * that fist: square to the arrow (leant back for a lofted shot), canted
+ * `cant` degrees to the right.
+ */
+function shotLine(side: number, aim: number, lean: number, drop: number, cant: number): { anchor: V; dir: V; bow: V; haft: V } {
+  const up = aim * RAD, c = cant * RAD;
+  const dir: V = [0, Math.cos(up), Math.sin(up)];
+  // The head turns back to look along the arrow, so the jaw is where the head is (which a lean and a kneel move) and a little to its right.
+  const anchor = add(trunkPoint([0, 0, JAW_AT], 0, lean, drop), [0.45, 0.55, 0]);
+  const L = shoulderOf(0, side, lean, drop);
+  let lo = 0, hi = 14;
+  for (let i = 0; i < 18; i++) {
+    const m = (lo + hi) / 2;
+    if (len(sub(add(anchor, dir, m), L)) < ARM) lo = m;
+    else hi = m;
+  }
+  const haft: V = [Math.sin(c), -Math.sin(up) * Math.cos(c), Math.cos(up) * Math.cos(c)];
+  return { anchor, dir, bow: add(anchor, dir, lo), haft };
 }
 
-/** A point along keys in time, as `track` but for a place. */
-const placeAt = (t: number, keys: Array<readonly [number, V]>): V => track3(t, keys);
-function track3(t: number, keys: Array<readonly [number, V]>): V {
+/** A place along keys in time, as `track` but for a place. */
+function placeAt(t: number, keys: Array<readonly [number, V]>): V {
   if (t <= keys[0][0]) return keys[0][1];
   for (let i = 1; i < keys.length; i++) {
     const [t1, v1] = keys[i];
@@ -448,85 +396,87 @@ function track3(t: number, keys: Array<readonly [number, V]>): V {
   return keys[keys.length - 1][1];
 }
 
-/**
- * Where a shot's hands go, in the chest's frame once it is turned side-on by
- * `side`: the anchor at the right of the jaw, the line the arrow lies along
- * from there toward the target at `aim` (degrees over level), and the bow
- * hand out along that line as far as the left arm reaches.
- */
-function shotLine(side: number, aim: number): { anchor: V; dir: V; bow: V } {
-  const turn = (-side * Math.PI) / 180, up = (aim * Math.PI) / 180;
-  // The target, from the turned chest: round to the left by the turn, and up by the aim.
-  const dir: V = unit([-Math.sin(turn) * Math.cos(up), Math.cos(turn) * Math.cos(up), Math.sin(up)]);
-  // The jaw's right side, the head turned back along the line: a little right of where the line leaves the face.
-  const anchor: V = add(HEAD_AT, [0.55 + 0.25 * Math.cos(turn), 0.55, 0.15]);
-  // Out along the line until the left hand is a straight arm's length from its shoulder (less a little, so the elbow is soft).
-  const L: V = [-SHOULDER_X, SHOULDER_Y, SHOULDER_Z];
-  const want = (UPPER_ARM + FOREARM) * 0.97;
-  let lo = 0, hi = 12;
-  for (let i = 0; i < 18; i++) {
-    const m = (lo + hi) / 2;
-    if (len(sub(add(anchor, dir, m), L)) < want) lo = m;
-    else hi = m;
-  }
-  return { anchor, dir, bow: add(anchor, dir, lo) };
-}
+type Rig = Parameters<CastPose>[0];
 
 /**
  * A bow drawn and loosed, side-on: the trunk turned to put the left shoulder
  * at the target and the head turned back to look along the arrow; the bow
- * arm comes up first and straight along the line to the target, the right
- * hand fetches an arrow from over the shoulder (when it does), comes to the
- * string at the bow and draws it back to the jaw, holds, and on the loose
- * flies back past the ear and opens while the bow arm gives. The feet set
- * apart side-on under it.
+ * taken in the left fist and its arm brought up straight along the line to
+ * the target; the right hand fetching an arrow from over the shoulder (when it
+ * does), coming to the string at the bow and drawing it back to the jaw,
+ * holding, and on the loose flying back past the ear and opening while the
+ * bow arm gives and the string shivers. The feet set apart side-on under it.
  */
-function shotPose(r: Parameters<CastPose>[0], t: number, rel: number, s: Shot): void {
-  const n = s.nock, an = s.anchor;
+function shotPose(r: Rig, t: number, c: PoseCue, s: Shot): void {
+  const rel = c.timing.release, n = s.nock, an = s.anchor;
   const fly = rel + (1 - rel) * 0.22, set = rel + (1 - rel) * 0.6;
   const q = s.quiver ? n * 0.55 : -1;
-  // `aim` is written as the bow arm's forward angle (88 level), which is what it reads as; the line is that over level.
-  const line = shotLine(s.side, s.aim - 88);
-  const { anchor, dir, bow } = line;
+  // A kneel is not made on the move (the legs are the walk's), so the hands are not let down for one.
+  const kneel = c.moving ? 0 : s.kneel ?? 0;
+  const { anchor, dir, bow, haft } = shotLine(s.side, s.aim - 88, s.lean, kneel * KNEEL_DROP, s.cant ?? 0);
+  // The bow in the fist, the stave square to the arrow; the bow hand up the line, and given upward a little on the loose.
+  r.wieldBow = 1;
+  const kick = add(bow, [0, 0, 1], s.kick * 0.06);
+  r.reach = [
+    { at: placeAt(t, [[0, add(bow, [0, -2.4, -3.6])], [n * 0.85, add(bow, dir, -0.5)], [an, bow], [rel, bow], [fly, kick], [set, add(kick, [0, -0.4, -1.2])]]), haft, pole: [-0.7, -0.2, -1], w: one(t, [[0, 0], [Math.max(0.06, n * 0.6), 1], [set, 1], [1, 0.4]]) },
+    undefined,
+  ];
+  // The draw hand: to the quiver over the shoulder, to the string at the bow, back to the anchor, and flung back past the ear.
   const atBow = add(bow, dir, -1.1);
-  // How far back the hand comes: `depth` 140 is the jaw; less stops short of it along the line.
   const drawn = add(anchor, dir, (140 - s.depth) * 0.05);
-  const rest1 = REST_RIGHT, rest0 = REST_LEFT;
-  // The bow arm: up along the line, straight, then given a little upward on the loose.
-  const kick: V = add(bow, [0, 0, 1], s.kick * 0.06);
-  reach(r, 0, placeAt(t, [[0, rest0], [n * 0.85, add(bow, dir, -0.4)], [an, bow], [rel, bow], [fly, kick], [set, add(kick, [0, 0, 1], -s.kick * 0.03)], [1, rest0]]), [-0.4, -0.2, -1]);
-  // The draw hand: to the quiver over the shoulder, to the string at the bow, back to the anchor, and flung back on the loose.
-  const keys: Array<readonly [number, V]> = [[0, rest1]];
-  if (q > 0) keys.push([q, [SHOULDER_X - 0.6, -1.4, SHOULDER_Z + 2.3]], [q + (n - q) * 0.3, [SHOULDER_X - 0.8, -1.2, SHOULDER_Z + 2.1]]);
-  keys.push([n, atBow], [an, drawn], [rel, add(drawn, dir, -0.15)], [fly, add(add(drawn, dir, -1.4), [1.1, -0.2, 0.3])], [set, add(rest1, [0, 0.6, 2.2])], [1, rest1]);
-  reach(r, 1, placeAt(t, keys), [1, -0.5, 0.15]);
+  const R = shoulderOf(1, s.side, s.lean, kneel * KNEEL_DROP);
+  const keys: Array<readonly [number, V]> = [];
+  if (q > 0) keys.push([q, add(R, [-0.5, -1.0, 2.3])], [q + (n - q) * 0.3, add(R, [-0.7, -0.8, 2.0])]);
+  keys.push([n, atBow], [an, drawn], [rel, add(drawn, dir, -0.15)], [fly, add(add(drawn, dir, -1.4), [1.1, -0.2, 0.3])], [set, add(R, [0.4, 0.8, -3.4])]);
+  r.reach[1] = { at: placeAt(t, keys), pole: [0.6, -1, 0.35], w: one(t, [[0, 0], [Math.max(0.06, (q > 0 ? q : n) * 0.7), 1], [set, 1], [1, 0.3]]) };
+  // The string to the fingers from the moment the hand has it, let go at the release, and shivering back to straight after it.
+  const age = (t - rel) * c.timing.secs;
+  r.draw = t < n ? 0 : t < rel ? 1 : 0.16 * Math.max(0, 1 - age / 0.24) * Math.abs(Math.cos(age * 80));
+  r.nocked = t >= n && t < rel;
   r.open[1] = t > rel && t < set + 0.1;
   r.hand[1] = euler(t, [[0, [0, 0, 0]], [n, [-10, 0, 0]], [an, [0, 0, 0]], [fly, [-30, 0, 0]], [1, [0, 0, 0]]]);
-  r.hand[0] = euler(t, [[0, [0, 0, 0]], [n, [0, 0, 0]], [1, [0, 0, 0]]]);
   // Side-on: the spine and chest turned to put the left shoulder at the target; the head turned back to sight along the line.
   const side = s.side, look = (s.aim - 88) * 0.6;
   r.spine = euler(t, [[0, [0, 0, 0]], [n, [0, 0, side * 0.4]], [an, [s.lean, 0, side * 0.4]], [rel, [s.lean, 0, side * 0.4]], [fly, [s.lean + 2, 0, side * 0.4]], [1, [0, 0, 0]]]);
-  r.chest = euler(t, [[0, [0, 0, 0]], [n, [0, 0, side * 0.6]], [an, [2, -4, side * 0.6]], [rel, [2, -4, side * 0.6]], [fly, [3, -2, side * 0.55]], [1, [0, 0, 0]]]);
+  r.chest = euler(t, [[0, [0, 0, 0]], [n, [0, 0, side * 0.6]], [an, [0, -4, side * 0.6]], [rel, [0, -4, side * 0.6]], [fly, [1, -2, side * 0.55]], [1, [0, 0, 0]]]);
   r.head = euler(t, [[0, [0, 0, 0]], [n, [-4 + look, 0, -side * 0.9]], [an, [-4 + look, -8, -side * 0.95]], [rel, [-4 + look, -8, -side * 0.95]], [fly, [-2 + look, -4, -side * 0.9]], [1, [0, 0, 0]]]);
-  // The feet set apart side-on under it, the knees soft.
+  // The feet set apart side-on under it, the knees soft; or down on the right knee.
   r.leg[0] = euler(t, [[0, [2, 2, 0]], [n, [8, 9, -8]], [1, [3, 3, 0]]]);
   r.leg[1] = euler(t, [[0, [0, 2, 0]], [n, [-8, 9, 16]], [1, [-1, 3, 0]]]);
   r.knee[0] = one(t, [[0, 4], [n, 10], [rel, 10], [fly, 14], [1, 5]]);
   r.knee[1] = one(t, [[0, 4], [n, 8], [1, 5]]);
+  if (kneel > 0) r.kneel = kneel * one(t, [[0, 0], [n, 1], [set, 1], [1, 0]]);
 }
 
 /** A pose from `shotPose`, with whatever else the spell's own shot does written over it. */
-const shotWith = (s: Shot, more?: (r: Parameters<CastPose>[0], t: number, rel: number) => void): CastPose => (r, t, c) => {
-  shotPose(r, t, c.timing.release, s);
+const shotWith = (s: Shot, more?: (r: Rig, t: number, rel: number) => void): CastPose => (r, t, c) => {
+  shotPose(r, t, c, s);
   more?.(r, t, c.timing.release);
 };
 
-/** The string and the arrow on it while the hand has it, and the string's shiver after: a shot's charge on the bow. */
-function bowCharge(k: FxScene, t: number, s: Shot, rel: number, secs: number, o: { arrows?: number; fletch?: string; tip?: string; glow?: number } = {}): Bow | null {
+/**
+ * What a shot's charge adds to the bow the figure draws: the arrow in the
+ * hand on its way from the quiver to the string, more arrows on the string
+ * than the one the figure nocks (Twin Arrows, fanned), and a gold thread
+ * along a shot that cannot miss.
+ */
+function bowCharge(k: FxScene, t: number, s: Shot, rel: number, o: { arrows?: number; fletch?: string; glow?: number } = {}): Bow | null {
   const bow = bowOf(k);
   if (!bow) return null;
-  if (t >= s.nock && t < rel) drawnString(k, bow, o);
-  else if (t >= rel) twang(k, bow, (t - rel) * secs);
+  const q = s.quiver ? s.nock * 0.55 : -1;
+  if (q > 0 && t > q && t < s.nock) {
+    // Fetched: held by the nock end, its point swinging over from behind the shoulder toward the bow.
+    const h = k.hand(1), d = unit(add(dirOf(h, bow.grip), [0, 0, 1], 1.4 * (1 - seg(t, q, s.nock))));
+    arrow(k, along(h, d, ARROW * 0.8), d, { bias: 1 });
+  }
+  if (t < s.nock || t >= rel) return bow;
+  const d = dirOf(bow.nock, bow.point), L = len(sub(toV(bow.point), toV(bow.nock)));
+  for (let i = 1; i < (o.arrows ?? 1); i++) {
+    // The second arrow a finger's width over the first and splayed a little up from it, so the two part as they leave.
+    const di = unit(add(d, [0, 0, 1], 0.13 * i));
+    arrow(k, along(along(bow.nock, [0, 0, 1], 0.35 * i), di, L), di, { fletch: o.fletch, bias: 1.5 });
+  }
+  if (o.fletch === GOLD) k.beam(bow.nock, bow.point, { width: 0.6, alpha: 0.4 + 0.4 * (o.glow ?? 0), main: GOLD, core: PALETTE.core, glow: 0.4 + (o.glow ?? 0) });
   return bow;
 }
 
@@ -555,14 +505,14 @@ const LONG_SHOT: Shot = { nock: 0.22, anchor: 0.42, aim: 122, kick: 6, depth: 13
 const CRIPPLE = fxOf('archer_crippling_shot');
 const CRIPPLE_T = { secs: 1.2, release: 0.58, blendIn: 0.16 };
 /** From a knee, aimed low at the legs. */
-const CRIPPLE_SHOT: Shot = { nock: 0.3, anchor: 0.44, aim: 74, kick: 4, depth: 136, side: -44, lean: -4, quiver: false };
+const CRIPPLE_SHOT: Shot = { nock: 0.3, anchor: 0.44, aim: 74, kick: 4, depth: 136, side: -44, lean: -4, quiver: false, kneel: 1 };
 
 /* ---- Point Blank ---------------------------------------------------------------------------- */
 
 const BLANK = fxOf('archer_point_blank');
 const BLANK_T = { secs: 0.75, release: 0.42, blendIn: 0.08 };
 /** From the hip: a short sharp draw to the chest, the bow low at a creature at arm's length, and a step back on the loose. */
-const BLANK_SHOT: Shot = { nock: 0.12, anchor: 0.32, aim: 70, kick: 18, depth: 96, side: -30, lean: 6, quiver: false };
+const BLANK_SHOT: Shot = { nock: 0.12, anchor: 0.32, aim: 70, kick: 18, depth: 96, side: -30, lean: 6, quiver: false, cant: 38 };
 
 /* ---- Twin Arrows ---------------------------------------------------------------------------- */
 
@@ -589,24 +539,37 @@ const WIND_T = { secs: 1.35, release: 0.56 };
 const EXPOSE_T = { secs: 0.95, release: 0.46 };
 const DECOY = fxOf('archer_decoy');
 const DECOY_T = { secs: 1.05, release: 0.5 };
+/** Seconds the decoy's arrow is in the air from the hand to the ground. */
+const DECOY_FLING = 0.14;
 const DEADEYE = fxOf('archer_deadeye');
 const DEADEYE_T = { secs: 1.25, release: 0.56 };
 
+/** A place given from the chest's joint (the trunk standing straight), in the body's frame `Rig.reach` takes. */
+const CHEST_AT = SPINE_AT + BODY.chest;
+const fromChest = (x: number, y: number, z: number): V => [x, y, CHEST_AT + z];
+/** A hand's goal that comes in over the start of a cast and goes over its end: `w` keyed nought, one from `on` to `off`, nought. */
+const goal = (at: V, t: number, on: number, off: number, o: { pole?: V; haft?: V; stoop?: boolean } = {}) => ({ at, w: one(t, [[0, 0], [on, 1], [off, 1], [1, 0]]), ...o });
+
 /**
- * Read the Wind: the bow let down, the right hand lifted out to the side,
- * palm to the air, the head turned up to it; then the hand drawn slowly
- * across in front of the face, the head following it, and closed into a fist
- * on the release -- the wind caught -- and brought to the chest.
+ * Read the Wind: the bow let down, the right hand lifted out to the side
+ * above the head, open and palm to the air, the head turned up to it; then
+ * the hand drawn slowly across in front of the face, the head following it,
+ * and closed into a fist on the release -- the wind caught -- and brought to
+ * the chest.
  */
 const windPose: CastPose = (r, t, c) => {
   const rel = c.timing.release;
   const up = rel * 0.4, across = rel * 0.92, chest = rel + (1 - rel) * 0.35;
-  // The right hand up and out at the side above the head, held there feeling the air, drawn across before the face, closed, and to the chest.
-  reach(r, 1, placeAt(t, [[0, REST_RIGHT], [up, [5.3, 1.5, 4.1]], [rel * 0.66, [5.0, 2.1, 4.4]], [across, [0.4, 3.0, 3.3]], [rel, [-0.6, 2.8, 3.0]], [chest, [0.5, 1.5, 1.0]], [1, REST_RIGHT]]), [1, -0.2, -1]);
-  r.hand[1] = euler(t, [[0, [0, 0, 0]], [up, [-30, 0, -40]], [across, [-20, 0, -20]], [rel, [0, 0, 0]], [1, [0, 0, 0]]]);
+  r.reach = [
+    // The bow let down by the left side out of the way.
+    goal(fromChest(-2.9, 1.0, -2.8), t, up, chest, { pole: [-1, -0.2, -0.3] }),
+    // Up and out at the side, held there feeling the air, drawn across before the face, closed, and to the chest.
+    goal(placeAt(t, [[0, fromChest(4.4, 1.4, 2.0)], [up, fromChest(5.3, 1.5, 4.1)], [rel * 0.66, fromChest(5.0, 2.1, 4.4)], [across, fromChest(0.4, 3.0, 3.3)], [rel, fromChest(-0.6, 2.8, 3.0)], [chest, fromChest(0.5, 1.5, 1.0)]]), t, up * 0.7, chest, { pole: [1, -0.2, -1] }),
+  ];
+  // Open and flat, palm up to the air, through the reach and the sweep; a fist from the release.
+  r.shape = [undefined, { flat: smooth(seg(t, 0.06, up)) * (1 - smooth(seg(t, rel - 0.06, rel))) }];
+  r.hand[1] = euler(t, [[0, [0, 0, 0]], [up, [-30, 70, -40]], [across, [-20, 50, -20]], [rel, [0, 0, 0]], [1, [0, 0, 0]]]);
   r.open[1] = t > 0.06 && t < rel;
-  // The bow let down by the left side out of the way.
-  reach(r, 0, placeAt(t, [[0, REST_LEFT], [up, [-2.9, 1.0, -2.8]], [1, REST_LEFT]]), [-1, -0.2, -0.3]);
   r.head = euler(t, [[0, [0, 0, 0]], [up, [14, 4, -34]], [rel * 0.6, [16, 4, -38]], [across, [6, 0, 8]], [rel, [2, 0, 12]], [chest, [-6, 0, 0]], [1, [0, 0, 0]]]);
   r.neck = euler(t, [[0, [0, 0, 0]], [up, [6, 0, -10]], [across, [2, 0, 4]], [1, [0, 0, 0]]]);
   r.chest = euler(t, [[0, [0, 0, 0]], [up, [4, 2, -14]], [across, [0, 0, 10]], [rel, [-2, 0, 12]], [chest, [-4, 0, 4]], [1, [0, 0, 0]]]);
@@ -617,70 +580,86 @@ const windPose: CastPose = (r, t, c) => {
   r.knee[1] = one(t, [[0, 4], [up, 6], [rel, 10], [1, 5]]);
 };
 
+/** Expose's lean into the point, at the release: the trunk turned to the right and over forward, as the pose below has it. */
+const EXPOSE_TURN = -22, EXPOSE_LEAN = -16;
+
 /**
  * Expose: a hunter showing where to hit. The bow let down to the side; the
  * right arm drawn back across the body, then flung straight out at the
- * creature, two fingers out, the body leaning after it and a foot forward,
+ * creature, the forefinger out, the body leaning after it and a foot forward,
  * the head thrust forward along the arm -- and a short sharp flick of the
  * hand at the end, there.
  */
 const exposePose: CastPose = (r, t, c) => {
   const rel = c.timing.release;
-  const back = rel * 0.62, flick = rel + (1 - rel) * 0.14, hold = rel + (1 - rel) * 0.5;
-  // Pointing: from the right shoulder straight at the creature, which is round to the left of the chest by however far the trunk has
-  // turned to the right (the chest's and the spine's turn at the release), and a hair over level.
-  const turn = (22 * Math.PI) / 180;
-  const at: V = add([SHOULDER_X, SHOULDER_Y, SHOULDER_Z], [-Math.sin(turn), Math.cos(turn), 0.12], 4.9);
-  reach(r, 1, placeAt(t, [[0, REST_RIGHT], [back, [-0.9, 1.3, 2.5]], [rel, at], [flick, add(at, [0, 0.2, -0.5])], [hold, at], [1, REST_RIGHT]]), [0.5, 0, -1]);
+  const back = rel * 0.62, flick = rel + (1 - rel) * 0.14, hold = rel + (1 - rel) * 0.72;
+  // Pointing: from the right shoulder, where the turn and the lean have put it, straight at the creature ahead and a hair over level.
+  const at = add(shoulderOf(1, EXPOSE_TURN, EXPOSE_LEAN, 0), unit([0, 1, 0.12]), ARM);
+  r.reach = [
+    // The bow hand drops back and out of the way as the body turns into the point.
+    goal(placeAt(t, [[0, fromChest(-2.9, 1.2, -2.6)], [back, fromChest(-2.6, 1.6, -2.4)], [rel, fromChest(-3.0, -0.6, -2.6)]]), t, back * 0.6, hold, { pole: [-1, -0.2, -0.3] }),
+    goal(placeAt(t, [[0, fromChest(1.2, 1.4, 0.4)], [back, fromChest(-0.9, 1.3, 2.5)], [rel, at], [flick, add(at, [0, 0.2, -0.5])], [hold, at]]), t, back * 0.6, hold, { pole: [0.5, 0, -1] }),
+  ];
+  r.shape = [undefined, { point: smooth(seg(t, back, rel)) }];
   r.hand[1] = euler(t, [[0, [0, 0, 0]], [back, [10, 0, 0]], [rel, [-6, 0, 0]], [flick, [-28, 0, 0]], [hold, [-12, 0, 0]], [1, [0, 0, 0]]]);
-  r.open[1] = t > back;
-  // The bow hand drops back and out of the way as the body turns into the point.
-  reach(r, 0, placeAt(t, [[0, REST_LEFT], [back, [-2.6, 1.6, -2.4]], [rel, [-3.0, -0.6, -2.6]], [1, REST_LEFT]]), [-1, -0.2, -0.3]);
-  r.chest = euler(t, [[0, [0, 0, 0]], [back, [4, 0, 24]], [rel, [-6, 0, -16]], [hold, [-5, 0, -14]], [1, [0, 0, 0]]]);
-  r.spine = euler(t, [[0, [0, 0, 0]], [back, [4, 0, 8]], [rel, [-12, 0, -6]], [hold, [-10, 0, -4]], [1, [0, 0, 0]]]);
-  r.head = euler(t, [[0, [0, 0, 0]], [back, [-4, 0, -20]], [rel, [-10, 0, 12]], [hold, [-8, 0, 10]], [1, [0, 0, 0]]]);
+  r.chest = euler(t, [[0, [0, 0, 0]], [back, [4, 0, 24]], [rel, [EXPOSE_LEAN * 0.4, 0, EXPOSE_TURN * 0.7]], [hold, [-5, 0, -14]], [1, [0, 0, 0]]]);
+  r.spine = euler(t, [[0, [0, 0, 0]], [back, [4, 0, 8]], [rel, [EXPOSE_LEAN * 0.6, 0, EXPOSE_TURN * 0.3]], [hold, [-8, 0, -4]], [1, [0, 0, 0]]]);
+  r.head = euler(t, [[0, [0, 0, 0]], [back, [-4, 0, -20]], [rel, [-10, 0, 14]], [hold, [-8, 0, 12]], [1, [0, 0, 0]]]);
   r.leg[0] = euler(t, [[0, [2, 2, 0]], [back, [-2, 3, 0]], [rel, [26, 4, 0]], [hold, [24, 4, 0]], [1, [4, 2, 0]]]);
   r.knee[0] = one(t, [[0, 4], [rel, 24], [hold, 22], [1, 6]]);
   r.leg[1] = euler(t, [[0, [0, 2, 0]], [rel, [-12, 2, 0]], [1, [-2, 2, 0]]]);
   r.knee[1] = one(t, [[0, 4], [back, 10], [rel, 8], [1, 5]]);
 };
 
+/** The end of the right forefinger, pointing: out past the middle of the hand along it. */
+const fingertip = (k: FxScene): P3 => k.joint(k.caster, 'wrist1', [0, 0, -1.7], 0.6);
+
+/** Where Decoy's arrow leaves the hand, in the body's frame: out to the right and low, flung down at the end of a stooped reach. */
+const DECOY_STAB: V = [4.0, 3.0, 4.2];
+
 /**
- * Decoy: an arrow drawn and driven into the ground ahead -- a quick crouch
- * over the front knee with the right hand stabbing down -- and a step back
- * up and away from it, the bow coming up, as the decoy springs up where it
- * went in.
+ * Decoy: an arrow fetched from over the shoulder and driven into the ground
+ * out to the right -- a lunge over the front knee, the trunk bowed down after
+ * the hand, the fist stabbing -- and a step back up and away from it, the bow
+ * coming up, as the decoy springs up where it went in.
  */
 const decoyPose: CastPose = (r, t, c) => {
   const rel = c.timing.release;
-  const fetch = rel * 0.35, down = rel, away = rel + (1 - rel) * 0.4;
-  r.arm[1] = euler(t, [[0, [20, 12, 0]], [fetch, [150, 36, -36]], [rel * 0.7, [70, 14, 0]], [down, [56, 10, 6]], [away, [30, 16, 0]], [1, [20, 12, 0]]]);
-  r.elbow[1] = one(t, [[0, 30], [fetch, 128], [rel * 0.7, 50], [down, 6], [away, 20], [1, 30]]);
-  r.hand[1] = euler(t, [[0, [0, 0, 0]], [rel * 0.7, [20, 0, 0]], [down, [40, 0, 0]], [away, [0, 0, 0]]]);
+  const fetch = rel * 0.35, lift = rel * 0.7, down = rel, away = rel + (1 - rel) * 0.4;
+  const R = shoulderOf(1, 0, 0, 0);
+  r.reach = [
+    goal(placeAt(t, [[0, fromChest(-2.9, 1.0, -2.8)], [down, fromChest(-2.4, 1.8, -2.4)], [away, fromChest(-2.4, 2.6, 0.2)]]), t, fetch, away, { pole: [-1, -0.2, -0.4] }),
+    // Up over the shoulder for it, raised point down over the spot, and down onto it with the trunk bowed after the hand; then up and away.
+    goal(placeAt(t, [[0, add(R, [0.4, 0.8, -3.4])], [fetch, add(R, [-0.5, -1.0, 2.3])], [lift, add(DECOY_STAB, [-0.6, -0.5, 9])], [down, DECOY_STAB], [away, add(R, [0.8, 1.2, -2.6])]]), t, fetch * 0.6, away, { pole: [1, -0.4, -0.2], stoop: true }),
+  ];
+  r.hand[1] = euler(t, [[0, [0, 0, 0]], [lift, [20, 0, 0]], [down, [40, 0, 0]], [away, [0, 0, 0]]]);
   r.open[1] = t > down && t < away;
-  r.arm[0] = euler(t, [[0, [24, 10, 0]], [fetch, [30, 18, 0]], [down, [20, 30, 0]], [away, [58, 24, -4]], [1, [28, 10, 0]]]);
-  r.elbow[0] = one(t, [[0, 24], [down, 30], [away, 14], [1, 22]]);
-  r.spine = euler(t, [[0, [0, 0, 0]], [fetch, [4, 0, 0]], [down, [-34, 0, 6]], [away, [4, 0, 0]], [1, [0, 0, 0]]]);
-  r.chest = euler(t, [[0, [0, 0, 0]], [fetch, [4, 0, -10]], [down, [-14, 0, 8]], [away, [2, 0, 0]], [1, [0, 0, 0]]]);
-  r.head = euler(t, [[0, [0, 0, 0]], [fetch, [-4, 0, 0]], [down, [-16, 0, 0]], [away, [4, 0, 0]], [1, [0, 0, 0]]]);
-  r.leg[0] = euler(t, [[0, [2, 2, 0]], [fetch, [8, 3, 0]], [down, [52, 5, 0]], [away, [6, 3, 0]], [1, [2, 2, 0]]]);
-  r.knee[0] = one(t, [[0, 4], [fetch, 12], [down, 78], [away, 10], [1, 4]]);
-  r.leg[1] = euler(t, [[0, [0, 2, 0]], [fetch, [-4, 2, 0]], [down, [-18, 3, 0]], [away, [-22, 3, 0]], [1, [0, 2, 0]]]);
-  r.knee[1] = one(t, [[0, 4], [down, 40], [away, 12], [1, 4]]);
+  r.spine = euler(t, [[0, [0, 0, 0]], [fetch, [4, 0, 0]], [down, [-10, -6, 6]], [away, [4, 0, 0]], [1, [0, 0, 0]]]);
+  r.chest = euler(t, [[0, [0, 0, 0]], [fetch, [4, 0, -10]], [down, [-8, -6, -12]], [away, [2, 0, 0]], [1, [0, 0, 0]]]);
+  r.head = euler(t, [[0, [0, 0, 0]], [fetch, [-4, 0, 0]], [down, [-16, 0, -24]], [away, [4, 0, -10]], [1, [0, 0, 0]]]);
+  // A lunge out to the right over the right knee, the left leg long behind; then a step back from it.
+  r.leg[1] = euler(t, [[0, [0, 2, 0]], [fetch, [6, 6, 0]], [down, [40, 22, -10]], [away, [2, 4, 0]], [1, [0, 2, 0]]]);
+  r.knee[1] = one(t, [[0, 4], [fetch, 12], [down, 70], [away, 10], [1, 4]]);
+  r.leg[0] = euler(t, [[0, [2, 2, 0]], [fetch, [-4, 2, 0]], [down, [-14, 6, 0]], [away, [-18, 3, 0]], [1, [2, 2, 0]]]);
+  r.knee[0] = one(t, [[0, 4], [down, 30], [away, 12], [1, 4]]);
 };
 
 /**
- * Deadeye: the bow brought up upright before the face and the brow lowered to
- * it, the draw hand's fingers to the eye -- a breath held -- then the head
- * snapping up and the bow swept out and down to the side, ready.
+ * Deadeye: the bow taken up and stood upright before the face and the brow
+ * lowered to it, the draw hand's two fingers to the brow beside the eye -- a
+ * breath held -- then the head snapping up and the bow swept out and down to
+ * the side, ready.
  */
 const deadeyePose: CastPose = (r, t, c) => {
   const rel = c.timing.release;
   const up = rel * 0.45, out = rel + (1 - rel) * 0.3;
-  // The bow upright before the face, the draw hand's two fingers to the brow beside the eye; then the bow swept out low to the left.
-  reach(r, 0, placeAt(t, [[0, REST_LEFT], [up, [-0.3, 2.7, 1.8]], [rel, [-0.3, 2.6, 1.9]], [out, [-3.7, 2.2, -0.6]], [1, REST_LEFT]]), [-1, -0.3, -0.6]);
-  reach(r, 1, placeAt(t, [[0, REST_RIGHT], [up, [0.7, 1.5, 3.4]], [rel, [0.7, 1.4, 3.5]], [out, [2.7, 1.2, -1.4]], [1, REST_RIGHT]]), [1, -0.2, -0.6]);
-  r.open[1] = t > up * 0.6 && t < out;
+  r.wieldBow = 1;
+  r.reach = [
+    goal(placeAt(t, [[0, fromChest(-2.6, 1.6, -1.6)], [up, fromChest(-0.3, 2.7, 1.6)], [rel, fromChest(-0.3, 2.6, 1.7)], [out, fromChest(-3.7, 2.2, -0.6)]]), t, up * 0.6, out + (1 - out) * 0.5,
+      { pole: [-1, -0.3, -0.6], haft: unit([-0.6 * smooth(seg(t, rel, out)), 0.15, 1]) }),
+    goal(placeAt(t, [[0, fromChest(2.4, 1.0, -2.6)], [up, fromChest(0.6, 1.4, 3.6)], [rel, fromChest(0.6, 1.3, 3.7)], [out, fromChest(2.7, 1.2, -1.4)]]), t, up * 0.6, out, { pole: [1, -0.2, -0.6] }),
+  ];
+  r.shape = [undefined, { two: smooth(seg(t, up * 0.5, up)) * (1 - smooth(seg(t, rel, out))) }];
   r.head = euler(t, [[0, [0, 0, 0]], [up, [-11, 0, 0]], [rel, [-13, 0, 0]], [out, [6, 0, 0]], [1, [0, 0, 0]]]);
   r.neck = euler(t, [[0, [0, 0, 0]], [up, [-4, 0, 0]], [out, [2, 0, 0]], [1, [0, 0, 0]]]);
   r.chest = euler(t, [[0, [0, 0, 0]], [up, [-6, 0, 0]], [rel, [-7, 0, 0]], [out, [6, 0, -6]], [1, [0, 0, 0]]]);
@@ -751,7 +730,7 @@ export const ARCHER: Record<string, SpellVisual> = {
     cast: { timing: QUICK_T, pose: shotWith(QUICK_SHOT) },
     fx: {
       charge: (k, t) => {
-        bowCharge(k, t, QUICK_SHOT, QUICK_T.release, QUICK_T.secs);
+        bowCharge(k, t, QUICK_SHOT, QUICK_T.release);
       },
       release: (k) => {
         const d = aimOf(k);
@@ -779,6 +758,7 @@ export const ARCHER: Record<string, SpellVisual> = {
       // The next draw a second sooner: a clock hand round the draw hand, once round in that second.
       linger: {
         secs: QUICK.sooner,
+        on: 'caster',
         draw: (k, age, left) => {
           const secs = age + left;
           const u = age / secs;
@@ -826,7 +806,7 @@ export const ARCHER: Record<string, SpellVisual> = {
     fx: {
       charge: (k, t) => {
         const rel = AIMED_T.release;
-        bowCharge(k, t, AIMED_SHOT, rel, AIMED_T.secs, { fletch: GOLD });
+        bowCharge(k, t, AIMED_SHOT, rel, { fletch: GOLD });
         // The crosshair coming in from wide and turned, to tight and square, then held locked until the arrow lands.
         const close = smooth(seg(t, AIMED_SHOT.anchor - 0.08, rel - 0.06));
         const on = smooth(seg(t, AIMED_SHOT.nock, AIMED_SHOT.anchor));
@@ -959,7 +939,7 @@ export const ARCHER: Record<string, SpellVisual> = {
     fx: {
       charge: (k, t) => {
         const rel = LONG_T.release;
-        bowCharge(k, t, LONG_SHOT, rel, LONG_T.secs);
+        bowCharge(k, t, LONG_SHOT, rel);
         // The arc judged: dots laid out along it from the bow, outward, while the hand holds.
         const lay = smooth(seg(t, LONG_SHOT.anchor - 0.06, rel - 0.04));
         if (lay <= 0) return;
@@ -1010,18 +990,10 @@ export const ARCHER: Record<string, SpellVisual> = {
    */
   archer_crippling_shot: {
     palette: PALETTE,
-    cast: { timing: CRIPPLE_T, pose: shotWith(CRIPPLE_SHOT, (r, t, rel) => {
-      // Down onto the right knee as the arrow is drawn, the left foot out ahead and the shin upright; up again once it is gone.
-      const kneel = smooth(seg(t, 0.06, CRIPPLE_SHOT.nock)) * (1 - smooth(seg(t, rel + (1 - rel) * 0.35, 0.96)));
-      r.leg[0] = [lerp(r.leg[0][0], 76, kneel), lerp(r.leg[0][1], 10, kneel), lerp(r.leg[0][2], -6, kneel)];
-      r.knee[0] = lerp(r.knee[0], 84, kneel);
-      r.leg[1] = [lerp(r.leg[1][0], -14, kneel), lerp(r.leg[1][1], 8, kneel), lerp(r.leg[1][2], 10, kneel)];
-      r.knee[1] = lerp(r.knee[1], 104, kneel);
-      r.spine[0] -= 6 * kneel;
-    }) },
+    cast: { timing: CRIPPLE_T, pose: shotWith(CRIPPLE_SHOT) },
     fx: {
       charge: (k, t) => {
-        bowCharge(k, t, CRIPPLE_SHOT, CRIPPLE_T.release, CRIPPLE_T.secs);
+        bowCharge(k, t, CRIPPLE_SHOT, CRIPPLE_T.release);
       },
       travel: {
         secs: shotTravel(0.04, 0.04),
@@ -1082,7 +1054,7 @@ export const ARCHER: Record<string, SpellVisual> = {
     }) },
     fx: {
       charge: (k, t) => {
-        bowCharge(k, t, BLANK_SHOT, BLANK_T.release, BLANK_T.secs);
+        bowCharge(k, t, BLANK_SHOT, BLANK_T.release);
         // The muzzle: three chevrons thrown from the bow along the shot the moment it goes, opening out and fading in a quarter second.
         const back = (t - BLANK_T.release) * BLANK_T.secs;
         if (back >= 0 && back < 0.25) {
@@ -1135,7 +1107,7 @@ export const ARCHER: Record<string, SpellVisual> = {
     }) },
     fx: {
       charge: (k, t) => {
-        bowCharge(k, t, TWIN_SHOT, TWIN_T.release, TWIN_T.secs, { arrows: TWIN.arrows });
+        bowCharge(k, t, TWIN_SHOT, TWIN_T.release, { arrows: TWIN.arrows });
       },
       release: (k) => {
         const d = aimOf(k);
@@ -1207,7 +1179,7 @@ export const ARCHER: Record<string, SpellVisual> = {
     }) },
     fx: {
       charge: (k, t) => {
-        bowCharge(k, t, PIN_SHOT, PIN_T.release, PIN_T.secs);
+        bowCharge(k, t, PIN_SHOT, PIN_T.release);
       },
       travel: {
         secs: shotTravel(0.04, 0.05),
@@ -1286,12 +1258,12 @@ export const ARCHER: Record<string, SpellVisual> = {
     cast: { timing: EXPOSE_T, pose: exposePose },
     fx: {
       charge: (k, t) => {
-        k.glow(k.hand(1), 4, 0.6 * bump(t, EXPOSE_T.release * 0.5, EXPOSE_T.release, EXPOSE_T.release + 0.15), GOLD);
+        k.glow(fingertip(k), 4, 0.6 * bump(t, EXPOSE_T.release * 0.5, EXPOSE_T.release, EXPOSE_T.release + 0.15), GOLD);
       },
       travel: {
         secs: () => 0.18,
         draw: (k, u) => {
-          const from = k.hand(1), to = k.heart(k.target);
+          const from = fingertip(k), to = k.heart(k.target);
           const head = mid3(from, to, easeOut(u));
           k.beam(from, head, { width: 1, alpha: 0.85, main: GOLD, core: PALETTE.core, ink: GOLD_DEEP, glow: 0.4 });
           crosshairChevron(k, head, dirOf(from, to), 3, 1);
@@ -1304,8 +1276,9 @@ export const ARCHER: Record<string, SpellVisual> = {
       impact: {
         secs: 0.45,
         draw: (k, u) => {
-          const from = k.hand(1), at = k.heart(k.target);
-          k.beam(from, at, { width: 1 * (1 - u), alpha: 0.8 * (1 - u), main: GOLD, core: PALETTE.core, ink: GOLD_DEEP, glow: 0.3 });
+          const from = fingertip(k), at = k.heart(k.target);
+          const v = 1 - seg(u, 0, 0.6);
+          k.beam(from, at, { width: 1 * v, alpha: 0.8 * v, main: GOLD, core: PALETTE.core, ink: GOLD_DEEP, glow: 0.3 });
         },
       },
       linger: {
@@ -1335,20 +1308,33 @@ export const ARCHER: Record<string, SpellVisual> = {
     palette: PALETTE,
     cast: { timing: DECOY_T, pose: decoyPose },
     fx: {
-      release: (k) => {
-        const at = decoyAt(k, true);
-        k.burst(at, 6, { kind: 'dust', colour: '#7d6e58', size: 2.4, life: [0.3, 0.6], speed: [0.1, 0.3], up: [2, 6], gravity: 3 });
-        leaves(k, k.on(at.x, at.y, 6), 14, { speed: [0.3, 0.8], up: [8, 18] });
+      charge: (k, t) => {
+        // The arrow in the fist from the quiver to the throw, point down; then flung a stride off into the turf.
+        const rel = DECOY_T.release, h = k.hand(1);
+        if (t > rel * 0.35 && t < rel) {
+          const d = unit(add(dirOf(k.chest(), h), [0, 0, -1], 1.6));
+          arrow(k, along(h, d, ARROW * 0.7), d, { bias: 1 });
+        }
+        const fly = (t - rel) * DECOY_T.secs / DECOY_FLING;
+        if (fly >= 0 && fly < 1) {
+          const at = decoyAt(k, fly * DECOY_FLING < k.dt * 1.5), head = arcAt(h, at, easeIn(fly), 2);
+          arrow(k, head, dirOf(arcAt(h, at, Math.max(0, easeIn(fly) - 0.05), 2), head), { glow: 0.4 });
+        }
       },
       linger: {
         draw: (k, age, left) => {
           const at = decoyAt(k, false);
-          const rise = easeOut(age / 0.35);
+          if (age >= DECOY_FLING && !k.state.landed) {
+            k.state.landed = 1;
+            k.burst(at, 6, { kind: 'dust', colour: '#7d6e58', size: 2.4, life: [0.3, 0.6], speed: [0.1, 0.3], up: [2, 6], gravity: 3 });
+            leaves(k, k.on(at.x, at.y, 6), 14, { speed: [0.3, 0.8], up: [8, 18] });
+          }
+          const rise = easeOut((age - DECOY_FLING) / 0.35);
           const fall = smooth(left / 0.5);
           scarecrow(k, at, rise * fall, age);
           // A ring going out from it each second: the call that brings the blows to it.
-          const u = (age % 1.2) / 1.2;
-          k.ring(at, 0.15 + 0.55 * smooth(u), { band: 0.05, alpha: 0.55 * (1 - u) * fall, glow: 0.3, dash: 3, turn: age * 0.3 });
+          const u = (Math.max(0, age - DECOY_FLING) % 1.2) / 1.2;
+          k.ring(at, 0.15 + 0.55 * smooth(u), { band: 0.05, alpha: 0.55 * (1 - u) * fall * rise, glow: 0.3, dash: 3, turn: age * 0.3 });
           countdown(k, { ...k.caster, x: at.x, y: at.y }, 0.3, Math.round(DECOY.secs), Math.floor(age), 0.8 * fall * rise);
           if (left < 0.5 && !k.state.fell) {
             k.state.fell = 1;
@@ -1383,7 +1369,7 @@ export const ARCHER: Record<string, SpellVisual> = {
     fx: {
       charge: (k, t) => {
         const rel = SNIPE_T.release;
-        bowCharge(k, t, SNIPE_SHOT, rel, SNIPE_T.secs, { fletch: GOLD, glow: 0.3 * smooth(seg(t, SNIPE_SHOT.anchor, rel)) });
+        bowCharge(k, t, SNIPE_SHOT, rel, { fletch: GOLD, glow: 0.3 * smooth(seg(t, SNIPE_SHOT.anchor, rel)) });
         const on = smooth(seg(t, SNIPE_SHOT.anchor - 0.06, SNIPE_SHOT.anchor + 0.08));
         if (on <= 0) return;
         const steady = smooth(seg(t, SNIPE_SHOT.anchor, rel - 0.08));
@@ -1616,10 +1602,18 @@ function sightLine(k: FxScene, a: P3, b: P3, alpha: number, steady: number): voi
  */
 function decoyAt(k: FxScene, fresh: boolean): P3 {
   if (fresh || k.state.decoyX === undefined) {
-    // Planted off the right hand, where the pose drives the arrow in: ahead of it or behind it, whichever is further from the
-    // viewer, so the decoy stands beside the archer rather than over them.
-    const a = k.local(k.caster, 10, 7, 0), b = k.local(k.caster, 10, -5, 0);
-    const want = k.eye.worldToScreenY(a.x, a.y, 0) <= k.eye.worldToScreenY(b.x, b.y, 0) ? a : b;
+    // Flung a stride off from the right hand: ahead, behind or out to the side, whichever stands it most beside the archer on the
+    // screen rather than in front of them or hidden behind them -- what is to a body's right is toward the viewer from some ways.
+    const cx = k.eye.worldToScreenX(k.caster.x, k.caster.y), cy = k.eye.worldToScreenY(k.caster.x, k.caster.y, 0);
+    let want: P3 = k.caster, best = -Infinity;
+    for (const [r, a] of [[13, 8], [13, -7], [5, 15], [5, -14]] as const) {
+      const p = k.local(k.caster, r, a, 0);
+      const score = Math.abs(k.eye.worldToScreenX(p.x, p.y) - cx) - 0.25 * Math.max(0, k.eye.worldToScreenY(p.x, p.y, 0) - cy);
+      if (score > best) {
+        best = score;
+        want = p;
+      }
+    }
     k.state.decoyX = want.x;
     k.state.decoyY = want.y;
   }
