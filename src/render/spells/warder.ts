@@ -393,6 +393,8 @@ function skin(k: FxScene, b: Body, o: SkinLook): void {
  */
 function skinLinger(k: FxScene, b: Body, age: number, left: number, o: {
   knit: Knit; secs: number; delay?: number; skin: number; size?: number; spin?: number; pal?: SpellPalette; layer?: number;
+  /** False for a skin on somebody else covered by the same spell: no light of its own, the cast's two lights being spent. */
+  lit?: boolean;
 }): void {
   const t = age - (o.delay ?? 0);
   if (t <= 0) return;
@@ -417,7 +419,7 @@ function skinLinger(k: FxScene, b: Body, age: number, left: number, o: {
   } else if (!k.fast && t > o.secs) {
     k.emit(k.at(b, 0.5), 2.2, { kind: 'mote', colour: [pal.core, pal.main], size: 1.0, life: [0.7, 1.2], speed: [0.02, 0.06], up: [4, 10], gravity: 0, jitter: 0.1, jitterZ: 6 });
   }
-  k.light(b, 1.4, (0.26 + 0.35 * heat) * smooth(t / 0.3) * (1 - flake));
+  if (o.lit !== false) k.light(b, 1.4, (0.26 + 0.35 * heat) * smooth(t / 0.3) * (1 - flake));
 }
 
 /* ---- other shapes of a Warder's ------------------------------------------------------------ */
@@ -496,45 +498,34 @@ function hexRow(k: FxScene, c: { x: number; y: number }, R: number, cell: number
 
 /**
  * Small hexagons on the ground, each at (x, y) and scaled by its own share,
- * turned its own way -- four numbers a hexagon in `at` -- all in one picture:
- * the near ones lit and the far ones shaded, inked. However many there are it
- * is two fills and a stroke, which matters, as it is drawn again for every
- * line of the ground it crosses.
+ * turned its own way -- four numbers a hexagon in `at` -- all in one mark:
+ * the near ones lit and the far ones shaded, inked. Laid as shapes on the
+ * ground (`groundShape`), so however many there are and however wide the
+ * ring, it costs what it covers.
  */
 function hexes(k: FxScene, c: { x: number; y: number }, reach: number, at: readonly number[], cell: number, o: { alpha: number; pal?: SpellPalette; lift?: number }): void {
   const a = clamp(o.alpha);
   if (a <= 0.01 || !at.length) return;
   const pal = o.pal ?? k.pal;
-  const lit = new Path2D(), shade = new Path2D();
+  const lit: number[][] = [], shade: number[][] = [];
   const cy = k.sy(k.on(c.x, c.y));
-  let any = false;
   for (let i = 0; i < at.length; i += 4) {
     const hx = at[i], hy = at[i + 1], sc = at[i + 2], an = at[i + 3];
     if (sc <= 0.02) continue;
-    any = true;
-    const into = k.sy(k.on(hx, hy)) >= cy ? lit : shade;
+    const pts: number[] = [];
     for (let j = 0; j < 6; j++) {
       const ca = an + (j / 6) * TAU;
-      const x = hx + Math.cos(ca) * cell * sc, y = hy + Math.sin(ca) * cell * sc;
-      const sx = k.eye.worldToScreenX(x, y), sy = k.eye.worldToScreenY(x, y, k.ground(x, y) + (o.lift ?? 0.15));
-      if (j === 0) into.moveTo(sx, sy);
-      else into.lineTo(sx, sy);
+      pts.push(hx + Math.cos(ca) * cell * sc, hy + Math.sin(ca) * cell * sc);
     }
-    into.closePath();
+    (k.sy(k.on(hx, hy)) >= cy ? lit : shade).push(pts);
   }
-  if (!any) return;
-  const W = Math.max(0.8, 0.7 * k.zoom);
-  k.groundDraw(c.x, c.y, reach + 0.5, (g) => {
-    g.globalAlpha = a;
-    g.fillStyle = pal.main;
-    g.fill(lit);
-    g.fillStyle = pal.deep;
-    g.fill(shade);
-    g.strokeStyle = pal.ink;
-    g.lineWidth = W;
-    g.stroke(lit);
-    g.stroke(shade);
-  });
+  if (!lit.length && !shade.length) return;
+  const lift = o.lift ?? 0.15;
+  k.groundShape(c.x, c.y, reach + 0.5, [
+    { kind: 'fill', colour: pal.main, alpha: a, paths: lit, lift },
+    { kind: 'fill', colour: pal.deep, alpha: a, paths: shade, lift },
+    { kind: 'stroke', colour: pal.ink, alpha: a, width: Math.max(0.8, 0.7 * k.zoom), paths: [...lit, ...shade], closed: true, join: 'round', lift },
+  ]);
 }
 
 /**
@@ -785,11 +776,12 @@ const sitesFor = (cut: number): number => Math.min(STONE_SITES.length, Math.ceil
  * as the limb is posed, so it moves with the body, and a slab on the far side
  * of the body is drawn behind it.
  */
-function stoneSkin(k: FxScene, b: Body, age: number, left: number, secs: number, count: number, delay = 0): void {
+function stoneSkin(k: FxScene, b: Body, age: number, left: number, secs: number, count: number, delay = 0, tag = ''): void {
   const pal = STONE;
   const footY = k.sy(b);
   const vein = 0.2 + 0.8 * clamp(left / secs);
   const W = Math.max(0.8, 0.7 * k.zoom);
+  const veins: number[] = [];
   for (let i = 0; i < count; i++) {
     const [bone, x, y, z0, z1, wide] = STONE_SITES[i];
     const on = age - delay - i * 0.035;
@@ -798,13 +790,14 @@ function stoneSkin(k: FxScene, b: Body, age: number, left: number, secs: number,
     const bit = 1 << i;
     const p0 = k.joint(b, bone, [x, y, z0]), p1 = k.joint(b, bone, [x, y, z1]);
     const mid = mid3(p0, p1, 0.5);
-    if (!((k.state.stoneOn ?? 0) & bit)) {
-      k.state.stoneOn = (k.state.stoneOn ?? 0) | bit;
+    const onKey = 'stoneOn' + tag, offKey = 'stoneOff' + tag;
+    if (!((k.state[onKey] ?? 0) & bit)) {
+      k.state[onKey] = (k.state[onKey] ?? 0) | bit;
       k.burst(mid, 3, { kind: 'dust', colour: DUST, size: 1.4, sizeEnd: 2.6, life: [0.25, 0.45], speed: [0.05, 0.2], up: [2, 6], gravity: 6, bias: 1 });
     }
     if (off <= 0) {
-      if (!((k.state.stoneOff ?? 0) & bit)) {
-        k.state.stoneOff = (k.state.stoneOff ?? 0) | bit;
+      if (!((k.state[offKey] ?? 0) & bit)) {
+        k.state[offKey] = (k.state[offKey] ?? 0) | bit;
         k.burst(mid, 4, { kind: 'shard', colour: [pal.main, pal.deep], size: 1.6, life: [0.4, 0.7], speed: [0.1, 0.4], up: [2, 10], gravity: 60, spin: 2, bias: 1 });
         k.burst(mid, 2, { kind: 'dust', colour: DUST, size: 1.6, life: [0.3, 0.6], speed: [0.05, 0.15], up: [0, 4], gravity: 4, bias: 1 });
       }
@@ -881,8 +874,29 @@ function stoneSkin(k: FxScene, b: Body, age: number, left: number, secs: number,
       g.lineTo(cx + dx * 0.6 * s, cy + dy * 0.6 * s);
       g.stroke();
     }, behind ? -0.4 : 0.8);
+    // The same vein again as light, so it smoulders through the dark: by day it adds little.
+    if (!behind) veins.push(cx - dx * 0.7 * s, cy - dy * 0.7 * s, cx + (nx * jag * 0.9 - dx * 0.1) * s, cy + (ny * jag * 0.9 - dy * 0.1) * s, cx + dx * 0.6 * s, cy + dy * 0.6 * s);
   }
-  k.glow(k.at(b, 0.5), 14, 0.2 * vein * smooth((age - delay) / 0.3) * smooth(left / 0.6), pal.light);
+  if (veins.length) {
+    k.glowDraw((g) => {
+      g.globalAlpha = clamp(0.45 * vein);
+      g.strokeStyle = pal.accent;
+      g.lineWidth = W * 0.9;
+      g.lineCap = 'round';
+      g.beginPath();
+      for (let i = 0; i < veins.length; i += 6) {
+        g.moveTo(veins[i], veins[i + 1]);
+        g.lineTo(veins[i + 2], veins[i + 3]);
+        g.lineTo(veins[i + 4], veins[i + 5]);
+      }
+      g.stroke();
+    });
+  }
+  if (!tag) {
+    const on = smooth((age - delay) / 0.3) * smooth(left / 0.6);
+    k.glow(k.at(b, 0.5), 14, 0.2 * vein * on, pal.light);
+    k.light(b, 1.2, 0.25 * vein * on, PALETTE.light);
+  }
 }
 
 /**
@@ -893,47 +907,37 @@ function stoneSkin(k: FxScene, b: Body, age: number, left: number, secs: number,
  */
 function cracks(k: FxScene, c: { x: number; y: number }, n: number, len: number, u: number, fade: number, pal: SpellPalette): void {
   if (fade <= 0.01 || u <= 0) return;
-  const path = new Path2D();
   const run = easeOut(u);
   const steps = 5;
-  const at = (x: number, y: number): [number, number] => [k.eye.worldToScreenX(x, y), k.eye.worldToScreenY(x, y, k.ground(x, y) + 0.1)];
+  const lines: number[][] = [];
   for (let i = 0; i < n; i++) {
     // Headed along one of the six ways a hexagon's edges run, give or take.
     const an = Math.round(((i / n) * TAU + hashOf(k.seed, 40 + i) * 0.6) / (Math.PI / 3)) * (Math.PI / 3);
     const step = (len * (0.6 + 0.4 * hashOf(k.seed, 60 + i))) / steps;
     const sway = hashOf(k.seed + i, 7) < 0.5 ? 1 : -1;
     let x = c.x, y = c.y;
+    const line = [x, y];
     for (let s2 = 0; s2 < steps; s2++) {
       const want = run * steps - s2;
       if (want <= 0) break;
       const turn = (s2 % 2 ? 1 : -1) * (Math.PI / 6) * sway;
       const l = step * Math.min(1, want);
       const nx = x + Math.cos(an + turn) * l, ny = y + Math.sin(an + turn) * l;
-      const [ax, ay] = at(x, y), [bx, by] = at(nx, ny);
-      path.moveTo(ax, ay);
-      path.lineTo(bx, by);
+      line.push(nx, ny);
       if (s2 === 2 && want > 1.5) {
         // A spur off the side, along the next edge round.
-        const [sx, sy] = at(nx + Math.cos(an + turn + Math.PI / 3) * step * 0.7, ny + Math.sin(an + turn + Math.PI / 3) * step * 0.7);
-        path.moveTo(bx, by);
-        path.lineTo(sx, sy);
+        lines.push([nx, ny, nx + Math.cos(an + turn + Math.PI / 3) * step * 0.7, ny + Math.sin(an + turn + Math.PI / 3) * step * 0.7]);
       }
       x = nx;
       y = ny;
     }
+    if (line.length > 2) lines.push(line);
   }
   const W = Math.max(0.8, 0.8 * k.zoom);
-  k.groundDraw(c.x, c.y, len + 0.5, (g) => {
-    g.globalAlpha = fade;
-    g.lineCap = 'round';
-    g.strokeStyle = pal.ink;
-    g.lineWidth = W * 1.7;
-    g.stroke(path);
-    g.strokeStyle = pal.accent;
-    g.lineWidth = W * 0.8;
-    g.globalAlpha = fade * 0.9;
-    g.stroke(path);
-  });
+  k.groundShape(c.x, c.y, len + 0.5, [
+    { kind: 'stroke', colour: pal.ink, alpha: clamp(fade), width: W * 1.7, paths: lines, join: 'round', cap: 'round', lift: 0.1 },
+    { kind: 'stroke', colour: pal.accent, alpha: clamp(fade * 0.9), width: W * 0.8, paths: lines, join: 'round', cap: 'round', lift: 0.1 },
+  ]);
 }
 
 /* ---- the casts on the body ------------------------------------------------------------------- */
@@ -951,6 +955,7 @@ const wardPose: CastPose = (r, t) => {
   r.arm[0] = euler(t, [[0, [10, 10, 0]], [0.2, [46, -8, 32]], [0.72, [46, -8, 32]], [1, [10, 10, 0]]]);
   r.elbow[0] = one(t, [[0, 20], [0.2, 122], [0.72, 120], [1, 20]]);
   r.open = [t > 0.08, t > 0.08];
+  r.shape = [{ flat: one(t, [[0, 0], [0.16, 1], [0.8, 1], [1, 0]]) }, { flat: one(t, [[0, 0], [0.14, 1], [0.84, 1], [1, 0]]) }];
   r.chest = euler(t, [[0, [0, 0, 0]], [0.36, [-4, 0, 14]], [0.5, [0, 0, -2]], [0.66, [3, 0, -12]], [1, [0, 0, 0]]]);
   r.spine = euler(t, [[0, [0, 0, 0]], [0.36, [-5, 0, 0]], [0.6, [3, 0, 0]], [1, [0, 0, 0]]]);
   r.head = euler(t, [[0, [0, 0, 0]], [0.36, [-16, 0, 12]], [0.56, [-10, 0, -4]], [0.7, [-4, 0, -12]], [1, [0, 0, 0]]]);
@@ -971,6 +976,8 @@ const greaterWardPose: CastPose = (r, t) => {
     r.hand[k] = euler(t, [[0, [0, 0, 0]], [0.5, [0, 0, 0]], [0.62, [-30, 0, 0]], [0.84, [-20, 0, 0]], [1, [0, 0, 0]]]);
   }
   r.open = [t > 0.06, t > 0.06];
+  const gw = one(t, [[0, 0], [0.12, 1], [0.86, 1], [1, 0]]);
+  r.shape = [{ flat: gw }, { flat: gw }];
   r.head = euler(t, [[0, [0, 0, 0]], [0.14, [-6, 0, 0]], [0.44, [20, 0, 0]], [0.55, [8, 0, 0]], [0.72, [-12, 0, 0]], [1, [0, 0, 0]]]);
   r.chest = euler(t, [[0, [0, 0, 0]], [0.14, [-4, 0, 0]], [0.44, [8, 0, 0]], [0.72, [-4, 0, 0]], [1, [0, 0, 0]]]);
   r.spine = euler(t, [[0, [0, 0, 0]], [0.44, [4, 0, 0]], [0.72, [-4, 0, 0]], [1, [0, 0, 0]]]);
@@ -995,7 +1002,13 @@ const deepWardPose: CastPose = (r, t) => {
     r.knee[k] = one(t, [[0, 4], [0.12, 40], [0.28, 100], [0.46, 98], [0.6, 30], [0.74, 2], [1, 4]]);
   }
   r.open = [t > 0.06, t > 0.06];
-  r.spine = euler(t, [[0, [0, 0, 0]], [0.28, [-30, 0, 0]], [0.46, [-28, 0, 0]], [0.6, [-4, 0, 0]], [0.74, [5, 0, 0]], [1, [0, 0, 0]]]);
+  // Knelt, not squatting: the ground is where the skin comes up out of, and the hands are laid on it.
+  r.kneel = one(t, [[0, 0], [0.12, 0.5], [0.24, 1], [0.48, 1], [0.66, 0], [1, 0]]);
+  const press = one(t, [[0.1, 0], [0.24, 1], [0.48, 1], [0.58, 0]]);
+  if (press > 0) r.reach = [{ at: [-1.8, 3.4, 0.4], stoop: true, w: press }, { at: [1.8, 3.8, 0.4], stoop: true, w: press }];
+  const dw = one(t, [[0, 0], [0.12, 1], [0.86, 1], [1, 0]]);
+  r.shape = [{ flat: dw }, { flat: dw }];
+  r.spine = euler(t, [[0, [0, 0, 0]], [0.28, [-8, 0, 0]], [0.46, [-6, 0, 0]], [0.6, [-4, 0, 0]], [0.74, [5, 0, 0]], [1, [0, 0, 0]]]);
   r.chest = euler(t, [[0, [0, 0, 0]], [0.28, [-12, 0, 0]], [0.6, [0, 0, 0]], [0.74, [8, 0, 0]], [1, [0, 0, 0]]]);
   r.head = euler(t, [[0, [0, 0, 0]], [0.28, [-8, 0, 0]], [0.46, [-6, 0, 0]], [0.6, [6, 0, 0]], [0.76, [18, 0, 0]], [1, [0, 0, 0]]]);
 };
@@ -1012,6 +1025,7 @@ const wardOtherPose: CastPose = (r, t) => {
   r.arm[0] = euler(t, [[0, [10, 10, 0]], [0.16, [46, -8, 32]], [0.76, [44, -6, 30]], [1, [10, 10, 0]]]);
   r.elbow[0] = one(t, [[0, 20], [0.16, 120], [0.76, 116], [1, 20]]);
   r.open = [t > 0.08, t > 0.08];
+  r.shape = [{ flat: one(t, [[0, 0], [0.16, 1], [0.8, 1], [1, 0]]) }, { flat: one(t, [[0, 0], [0.4, 0.3], [0.48, 1], [0.8, 1], [1, 0]]), cup: one(t, [[0, 0], [0.2, 0.8], [0.4, 0.6], [0.48, 0]]) }];
   r.chest = euler(t, [[0, [0, 0, 0]], [0.38, [2, 0, -16]], [0.48, [-4, 0, 8]], [0.72, [-2, 0, 6]], [1, [0, 0, 0]]]);
   r.spine = euler(t, [[0, [0, 0, 0]], [0.38, [3, 0, 0]], [0.48, [-9, 0, 0]], [0.72, [-6, 0, 0]], [1, [0, 0, 0]]]);
   r.head = euler(t, [[0, [0, 0, 0]], [0.2, [-10, 0, 0]], [0.38, [-2, 0, 10]], [0.48, [-2, 0, -4]], [1, [0, 0, 0]]]);
@@ -1033,6 +1047,10 @@ const greaterWardOtherPose: CastPose = (r, t) => {
   r.elbow[1] = one(t, [[0, 20], [0.3, 110], [0.5, 4], [0.74, 10], [1, 20]]);
   for (let k = 0; k < 2; k++) r.hand[k] = euler(t, [[0, [0, 0, 0]], [0.3, [10, 0, 0]], [0.5, [-46, 0, 0]], [0.74, [-40, 0, 0]], [1, [0, 0, 0]]]);
   r.open = [t > 0.08, t > 0.08];
+  for (let k = 0; k < 2; k++) {
+    (r.shape ??= [undefined, undefined])[k] = { cup: one(t, [[0, 0], [0.14, 1], [0.42, 1], [0.48, 0]]), flat: one(t, [[0.42, 0], [0.48, 1], [0.82, 1], [1, 0]]) };
+  }
+  r.mouth = one(t, [[0.4, 0], [0.5, 0.45], [0.66, 0]]);
   r.spine = euler(t, [[0, [0, 0, 0]], [0.3, [7, 0, 0]], [0.5, [-13, 0, 0]], [0.74, [-10, 0, 0]], [1, [0, 0, 0]]]);
   r.chest = euler(t, [[0, [0, 0, 0]], [0.3, [4, 0, -10]], [0.5, [-5, 0, 4]], [1, [0, 0, 0]]]);
   r.head = euler(t, [[0, [0, 0, 0]], [0.3, [-12, 0, 0]], [0.5, [-2, 0, 0]], [1, [0, 0, 0]]]);
@@ -1051,9 +1069,12 @@ const thickenPose: CastPose = (r, t) => {
   for (let k = 0; k < 2; k++) {
     r.arm[k] = euler(t, [[0, [10, 10, 0]], [0.18, [60, -2, 14]], [0.46, [62, 20, 2]], [0.58, [60, -8, 20]], [0.76, [46, -10, 32]], [0.88, [44, -8, 30]], [1, [10, 10, 0]]]);
     r.elbow[k] = one(t, [[0, 18], [0.18, 78], [0.46, 54], [0.58, 80], [0.76, 118], [1, 18]]);
-    r.hand[k] = euler(t, [[0, [0, 0, 0]], [0.18, [0, 0, 0]], [1, [0, 0, 0]]]);
+    // Palms turned in to face each other across what grows between them.
+    r.hand[k] = euler(t, [[0, [0, 0, 0]], [0.18, [0, 70, 0]], [0.58, [0, 70, 0]], [0.76, [0, 30, 0]], [1, [0, 0, 0]]]);
   }
   r.open = [t > 0.08, t > 0.08];
+  const th = one(t, [[0, 0], [0.16, 1], [0.86, 1], [1, 0]]);
+  r.shape = [{ flat: th }, { flat: th }];
   r.head = euler(t, [[0, [0, 0, 0]], [0.18, [-16, 0, 0]], [0.46, [-18, 0, 0]], [0.58, [-10, 0, 0]], [0.8, [2, 0, 0]], [1, [0, 0, 0]]]);
   r.chest = euler(t, [[0, [0, 0, 0]], [0.46, [2, 0, 0]], [0.58, [-8, 0, 0]], [0.8, [2, 0, 0]], [1, [0, 0, 0]]]);
   r.spine = euler(t, [[0, [0, 0, 0]], [0.46, [0, 0, 0]], [0.58, [-6, 0, 0]], [0.8, [2, 0, 0]], [1, [0, 0, 0]]]);
@@ -1075,6 +1096,7 @@ const wardLinkPose: CastPose = (r, t) => {
   r.arm[0] = euler(t, [[0, [10, 10, 0]], [0.2, [18, 34, 0]], [0.5, [24, 40, 0]], [0.7, [30, 48, 0]], [1, [10, 10, 0]]]);
   r.elbow[0] = one(t, [[0, 20], [0.2, 8], [0.7, 6], [1, 20]]);
   r.open = [t > 0.08, t > 0.08];
+  r.shape = [{ flat: one(t, [[0, 0], [0.2, 1], [0.84, 1], [1, 0]]) }, { claw: one(t, [[0.36, 0], [0.5, 0.7], [0.82, 0.5], [1, 0]]), cup: one(t, [[0, 0], [0.2, 0.8], [0.4, 0.8], [0.5, 0]]) }];
   r.chest = euler(t, [[0, [0, 0, 0]], [0.2, [6, 0, 26]], [0.36, [6, 0, 30]], [0.5, [0, 0, 4]], [0.66, [-2, 0, -30]], [0.82, [0, 0, -24]], [1, [0, 0, 0]]]);
   r.spine = euler(t, [[0, [0, 0, 0]], [0.2, [3, 0, 8]], [0.5, [-2, 0, 0]], [0.66, [-4, 0, -10]], [1, [0, 0, 0]]]);
   r.head = euler(t, [[0, [0, 0, 0]], [0.2, [12, 0, 10]], [0.5, [0, 0, -6]], [0.66, [-4, 0, -24]], [0.82, [-4, 0, -20]], [1, [0, 0, 0]]]);
@@ -1096,6 +1118,7 @@ const stoneskinPose: CastPose = (r, t) => {
   }
   r.open = [false, false];
   r.loose = [false, false];
+  r.mouth = one(t, [[0.36, 0], [0.44, 0.5], [0.62, 0]]);
   r.leg[1] = euler(t, [[0, [2, 2, 0]], [0.25, [52, 4, 0]], [0.42, [6, 10, 0]], [0.74, [6, 10, 0]], [1, [2, 2, 0]]]);
   r.knee[1] = one(t, [[0, 4], [0.25, 74], [0.42, 16], [0.74, 22], [1, 4]]);
   r.leg[0] = euler(t, [[0, [2, 2, 0]], [0.25, [4, 4, 0]], [0.45, [8, 10, 0]], [0.74, [8, 10, 0]], [1, [2, 2, 0]]]);
@@ -1118,6 +1141,10 @@ const wardBurstPose: CastPose = (r, t) => {
     r.knee[k] = one(t, [[0, 4], [0.32, 44], [0.44, 48], [0.5, 4], [0.72, 8], [1, 4]]);
   }
   r.open = [t > 0.46, t > 0.46];
+  r.loose = [false, false];
+  const fl = one(t, [[0.44, 0], [0.5, 1], [0.8, 1], [1, 0]]);
+  r.shape = [{ claw: fl * 0.6, flat: fl * 0.4 }, { claw: fl * 0.6, flat: fl * 0.4 }];
+  r.mouth = one(t, [[0.44, 0], [0.5, 0.9], [0.72, 0.5], [0.9, 0]]);
   r.spine = euler(t, [[0, [0, 0, 0]], [0.32, [-14, 0, 0]], [0.44, [-16, 0, 0]], [0.5, [10, 0, 0]], [0.72, [7, 0, 0]], [1, [0, 0, 0]]]);
   r.chest = euler(t, [[0, [0, 0, 0]], [0.32, [-8, 0, 0]], [0.5, [10, 0, 0]], [0.72, [6, 0, 0]], [1, [0, 0, 0]]]);
   r.head = euler(t, [[0, [0, 0, 0]], [0.32, [-16, 0, 0]], [0.44, [-18, 0, 0]], [0.5, [16, 0, 0]], [0.72, [10, 0, 0]], [1, [0, 0, 0]]]);
@@ -1138,6 +1165,8 @@ const sanctuaryPose: CastPose = (r, t) => {
     r.leg[k] = euler(t, [[0, [2, 2, 0]], [0.3, [0, 3, 0]], [0.76, [10, 5, 0]], [1, [2, 2, 0]]]);
   }
   r.open = [t > 0.06, t > 0.06];
+  const sw = one(t, [[0, 0], [0.12, 1], [0.86, 1], [1, 0]]);
+  r.shape = [{ flat: sw }, { flat: sw }];
   r.head = euler(t, [[0, [0, 0, 0]], [0.3, [22, 0, 0]], [0.44, [22, 0, 0]], [0.6, [4, 0, 0]], [0.78, [-14, 0, 0]], [1, [0, 0, 0]]]);
   r.chest = euler(t, [[0, [0, 0, 0]], [0.3, [8, 0, 0]], [0.6, [4, 0, 0]], [0.78, [-4, 0, 0]], [1, [0, 0, 0]]]);
   r.spine = euler(t, [[0, [0, 0, 0]], [0.3, [4, 0, 0]], [0.78, [-6, 0, 0]], [1, [0, 0, 0]]]);
@@ -1157,6 +1186,11 @@ const bastionPose: CastPose = (r, t) => {
   }
   r.open = [false, false];
   r.loose = [false, false];
+  // On one knee for the blow, the fists put on the ground before it: the strike lands where the shock goes out from.
+  r.kneel = one(t, [[0.4, 0], [0.52, 1], [0.8, 1], [0.94, 0]]);
+  const strike = one(t, [[0.44, 0], [0.54, 1], [0.78, 1], [0.88, 0]]);
+  if (strike > 0) r.reach = [{ at: [-1.2, 4.4, 0.8], stoop: true, w: strike }, { at: [1.2, 4.4, 0.8], stoop: true, w: strike }];
+  r.mouth = one(t, [[0.46, 0], [0.55, 1], [0.7, 0.4], [0.86, 0]]);
   r.spine = euler(t, [[0, [0, 0, 0]], [0.38, [8, 0, 0]], [0.48, [-10, 0, 0]], [0.55, [-36, 0, 0]], [0.78, [-32, 0, 0]], [1, [0, 0, 0]]]);
   r.chest = euler(t, [[0, [0, 0, 0]], [0.38, [8, 0, 0]], [0.55, [-14, 0, 0]], [0.78, [-12, 0, 0]], [1, [0, 0, 0]]]);
   r.head = euler(t, [[0, [0, 0, 0]], [0.38, [14, 0, 0]], [0.55, [-4, 0, 0]], [0.78, [0, 0, 0]], [1, [0, 0, 0]]]);
@@ -1176,6 +1210,7 @@ const unbreakablePose: CastPose = (r, t) => {
   }
   r.open = [false, false];
   r.loose = [false, false];
+  r.mouth = one(t, [[0.5, 0], [0.57, 1], [0.7, 0.6], [0.86, 0]]);
   r.spine = euler(t, [[0, [0, 0, 0]], [0.34, [-10, 0, 0]], [0.5, [-12, 0, 0]], [0.56, [8, 0, 0]], [0.86, [6, 0, 0]], [1, [0, 0, 0]]]);
   r.chest = euler(t, [[0, [0, 0, 0]], [0.34, [-6, 0, 0]], [0.56, [12, 0, 0]], [0.86, [10, 0, 0]], [1, [0, 0, 0]]]);
   r.head = euler(t, [[0, [0, 0, 0]], [0.34, [-16, 0, 0]], [0.5, [-18, 0, 0]], [0.56, [16, 0, 0]], [0.86, [12, 0, 0]], [1, [0, 0, 0]]]);
@@ -1193,6 +1228,7 @@ const aegisPose: CastPose = (r, t) => {
   r.arm[1] = euler(t, [[0, [10, 10, 0]], [0.16, [94, -16, 30]], [0.3, [96, -14, 30]], [0.42, [82, 76, 0]], [0.6, [86, -4, 6]], [0.8, [70, 2, 4]], [1, [10, 10, 0]]]);
   r.elbow[1] = one(t, [[0, 18], [0.16, 96], [0.3, 92], [0.42, 10], [0.6, 8], [0.8, 26], [1, 18]]);
   r.open = [t > 0.62, t > 0.06];
+  r.shape = [{ flat: one(t, [[0.36, 0], [0.44, 1], [0.84, 1], [1, 0]]) }, { flat: one(t, [[0, 0], [0.12, 1], [0.84, 1], [1, 0]]) }];
   r.chest = euler(t, [[0, [0, 0, 0]], [0.3, [-4, 0, 0]], [0.42, [8, 0, 0]], [0.6, [-4, 0, 0]], [1, [0, 0, 0]]]);
   r.spine = euler(t, [[0, [0, 0, 0]], [0.42, [4, 0, 0]], [0.6, [-6, 0, 0]], [1, [0, 0, 0]]]);
   r.head = euler(t, [[0, [0, 0, 0]], [0.16, [-6, 0, 0]], [0.3, [-8, 0, 0]], [0.42, [8, 0, 0]], [0.6, [-4, 0, 0]], [1, [0, 0, 0]]]);
@@ -1213,12 +1249,45 @@ const bulwarkPose: CastPose = (r, t) => {
     r.knee[k] = one(t, [[0, 4], [0.18, 18], [0.38, 40], [0.5, 22], [0.66, 28], [0.84, 20], [1, 4]]);
   }
   r.open = [t > 0.46, t > 0.46];
+  const bc = one(t, [[0, 0], [0.16, 1], [0.44, 1], [0.5, 0]]), bf = one(t, [[0.44, 0], [0.5, 1], [0.84, 1], [1, 0]]);
+  r.shape = [{ cup: bc, flat: bf }, { cup: bc, flat: bf }];
   r.spine = euler(t, [[0, [0, 0, 0]], [0.38, [-12, 0, 0]], [0.5, [-4, 0, 0]], [0.66, [-6, 0, 0]], [1, [0, 0, 0]]]);
   r.chest = euler(t, [[0, [0, 0, 0]], [0.38, [-6, 0, 0]], [0.5, [4, 0, 0]], [1, [0, 0, 0]]]);
   r.head = euler(t, [[0, [0, 0, 0]], [0.38, [-16, 0, 0]], [0.5, [-2, 0, 0]], [0.66, [-6, 0, 0]], [1, [0, 0, 0]]]);
 };
 
 /* ---- the effects --------------------------------------------------------------------------- */
+
+/** A key for somebody in `k.state`, the same every frame. */
+const whoKey = (b: Body): string => (b.who ? (b.who.kind === 'player' ? 'me' : `${b.who.kind}${b.who.id}`) : `${Math.round(b.x * 4)},${Math.round(b.y * 4)}`);
+
+/** Whether two bodies are one: the caster found again among those near it. */
+const same = (a: Body, b: Body): boolean => (a.who && b.who ? whoKey(a) === whoKey(b) : Math.hypot(a.x - b.x, a.y - b.y) < 0.05);
+
+/**
+ * The people other than the caster a ward round them covered: whoever stood
+ * within `R` tiles the first frame it is asked (the island covers who is
+ * there as it closes, so somebody who walks in later is not drawn covered),
+ * found again each frame wherever they have gone, nearest first and at most
+ * `most` of them. Each comes with how far they stood, for a skin that
+ * reaches them a moment after the caster's.
+ */
+function covered(k: FxScene, R: number, most = 8): Array<{ b: Body; d: number }> {
+  const c = k.caster;
+  if (!k.state.counted) {
+    k.state.counted = 1;
+    for (const b of k.bodiesWithin(R, c, ['player', 'peer'])) {
+      if (!same(b, c)) k.state['in:' + whoKey(b)] = 1 + Math.hypot(b.x - c.x, b.y - c.y);
+    }
+  }
+  const out: Array<{ b: Body; d: number }> = [];
+  // Looked for a little further out than the reach, as they may have walked off; the skin goes with them.
+  for (const b of k.bodiesWithin(R + 8, c, ['player', 'peer'])) {
+    const d = k.state['in:' + whoKey(b)];
+    if (d && !same(b, c)) out.push({ b, d: d - 1 });
+  }
+  return out.sort((x, y) => x.d - y.d).slice(0, most);
+}
 
 /** A hexagon stamped on the ground round somebody's feet, spreading and going: where a skin has closed. */
 function stamp(k: FxScene, b: { x: number; y: number }, u: number, r0: number, r1: number, pal: SpellPalette = k.pal): void {
@@ -1500,27 +1569,28 @@ const wardLink = (): SpellVisual => {
           const head = { x: b.x + Math.cos(an) * R * run, y: b.y + Math.sin(an) * R * run };
           if (run < 1) k.glow(k.on(head.x, head.y, 1), 8, 0.7);
         }
-        // The thread the links are strung on, under them: chains, not beads.
-        const thread = new Path2D();
+        // A chain run straight to everybody it links, besides the six that show its reach.
+        const fade = 1 - seg(u, 0.55, 1), W = Math.max(0.8, 0.7 * k.zoom);
+        const others = covered(k, R);
+        const thread: number[][] = [];
         for (let s = 0; s < 6; s++) {
           const an = (s / 6) * TAU + Math.PI / 6;
-          for (let i = 0; i <= 8; i++) {
-            const d = (R * run * i) / 8, x = b.x + Math.cos(an) * d, y = b.y + Math.sin(an) * d;
-            const sx = k.eye.worldToScreenX(x, y), sy = k.eye.worldToScreenY(x, y, k.ground(x, y) + 0.12);
-            if (i === 0) thread.moveTo(sx, sy);
-            else thread.lineTo(sx, sy);
+          thread.push([b.x, b.y, b.x + Math.cos(an) * R * run, b.y + Math.sin(an) * R * run]);
+        }
+        for (const { b: o, d } of others) {
+          const an = Math.atan2(o.y - b.y, o.x - b.x), got = Math.min(d, R * run * 1.15);
+          thread.push([b.x, b.y, b.x + Math.cos(an) * got, b.y + Math.sin(an) * got]);
+          for (let e = step; e <= got; e += step) links.push(b.x + Math.cos(an) * e, b.y + Math.sin(an) * e, smooth((got - e) / (step * 2)), an);
+          if (got >= d && !k.state['tied' + whoKey(o)]) {
+            k.state['tied' + whoKey(o)] = 1;
+            k.burst(k.at(o, 0.6), 8, { kind: 'mote', size: 1.1, life: [0.3, 0.6], speed: [0.2, 0.5], up: [2, 8], gravity: 0 });
           }
         }
-        const fade = 1 - seg(u, 0.55, 1), W = Math.max(0.8, 0.7 * k.zoom);
-        k.groundDraw(b.x, b.y, R + 0.5, (g) => {
-          g.globalAlpha = fade;
-          g.strokeStyle = PALETTE.ink;
-          g.lineWidth = W * 2.4;
-          g.stroke(thread);
-          g.strokeStyle = PALETTE.main;
-          g.lineWidth = W;
-          g.stroke(thread);
-        });
+        // The thread the links are strung on, under them: chains, not beads.
+        k.groundShape(b.x, b.y, R + 1, [
+          { kind: 'stroke', colour: PALETTE.ink, alpha: fade, width: W * 2.4, paths: thread, cap: 'round', lift: 0.12 },
+          { kind: 'stroke', colour: PALETTE.main, alpha: fade, width: W, paths: thread, cap: 'round', lift: 0.12 },
+        ]);
         hexes(k, b, R, links, 0.12, { alpha: fade });
         hexRow(k, b, R, 0.16, { alpha: 0.9 * (1 - 0.6 * seg(u, 0.7, 1)), grow: seg(u, 0.4, 0.95), turn: Math.PI / 6 });
         k.light(b, 3, 0.7 * (1 - u));
@@ -1534,6 +1604,8 @@ const wardLink = (): SpellVisual => {
         const swell = Math.pow(Math.max(0, Math.sin((age * Math.PI) / 5)), 8);
         if (swell > 0.02) hexRow(k, b, R, 0.16, { alpha: a * 0.4 * swell, turn: Math.PI / 6 });
         link(k, k.at(b, 1.24), 4.2, { alpha: 0.9 * a, turn: age * 1.1 });
+        // A smaller pair over everybody it links: theirs is the skin that comes back.
+        for (const { b: o } of covered(k, R)) link(k, k.at(o, 1.2), 3, { alpha: 0.7 * a, turn: age * 1.1 + 1 });
         k.ring(b, 0.32, { n: 6, turn: Math.PI / 6, band: 0.04, alpha: 0.35 * a, glow: 0.2 });
       } },
     },
@@ -1613,6 +1685,17 @@ const wardBurst = (): SpellVisual => {
         k.ring(b, R, { band: 0.06, alpha: 0.6 * bump(u, 0.3, 0.42, 0.9), dash: 2, glow: 0.4 });
         k.flare(k.at(b, 0.5), 12 * (1 - u), flashOf(u, 0.05));
         k.light(b, R + 1, 0.9 * (1 - u));
+        // Every creature inside it is struck as the plates reach it: a flash and chips of topaz off it.
+        for (const c of k.bodiesWithin(R, b, ['creature'])) {
+          const at = (Math.hypot(c.x - b.x, c.y - b.y) / R) * 0.4, key = 'hit' + whoKey(c);
+          if (u < at) continue;
+          if (!k.state[key]) {
+            k.state[key] = 1;
+            k.burst(k.at(c, 0.5), 10, { kind: 'spark', size: 1.3, life: [0.2, 0.35], speed: [0.4, 0.9], up: [2, 10], gravity: 20, heading: k.toward(b, c), cone: 1.2 });
+            k.burst(k.at(c, 0.5), 6, { kind: 'shard', colour: [PALETTE.main, PALETTE.core], size: 1.4, life: [0.3, 0.5], speed: [0.3, 0.7], up: [4, 12], gravity: 60, spin: 2, heading: k.toward(b, c), cone: 1 });
+          }
+          k.flare(k.at(c, 0.5), 7, 0.9 * flashOf(clamp((u - at) / 0.3), 0.1));
+        }
       } },
     },
   };
@@ -1744,6 +1827,8 @@ const sanctuary = (): SpellVisual => {
       linger: { draw: (k, age, left) => {
         hexRow(k, k.caster, R, 0.2, { alpha: 0.85 * (1 - smooth((age - 1.2) / 2)), turn: 0.1 });
         skinLinger(k, k.caster, age, left, { knit: { from: 'down' }, secs: 0.6, delay: 0.65, skin: s });
+        // And over everybody else it closed over, as the fall of light reaches them.
+        for (const { b, d } of covered(k, R)) skinLinger(k, b, age, left, { knit: { from: 'down' }, secs: 0.6, delay: 0.7 + d * 0.06, skin: s, lit: false });
       } },
     },
   };
@@ -1775,7 +1860,7 @@ const bastion = (): SpellVisual => {
       impact: { secs: 1.2, draw: (k, u) => {
         const b = k.caster;
         const v = easeOut(clamp(u / 0.32));
-        k.ring(b, 0.2 + (R - 0.2) * v, { band: 0.35 * (1 - 0.6 * v), alpha: 1 - smooth(seg(u, 0.3, 0.6)), glow: 0.5 });
+        k.ring(b, 0.2 + (R - 0.2) * v, { band: 0.18 * (1 - 0.5 * v), alpha: 1 - smooth(seg(u, 0.3, 0.6)), glow: 0.5 });
         cracks(k, b, 8, 1.4, u / 0.3, 0.8 * (1 - smooth(seg(u, 0.4, 1))), STONE);
         k.light(b, R + 1, 0.8 * (1 - u));
       } },
@@ -1807,6 +1892,8 @@ const bastion = (): SpellVisual => {
           }
         }
         stoneSkin(k, b, age, left, secs, count, 0.12);
+        // On everybody it covered too, as the shock reaches where they stand.
+        covered(k, R, 6).forEach(({ b: o, d }, i) => stoneSkin(k, o, age, left, secs, count, 0.12 + (d / R) * 0.3, `:${i}`));
       } },
     },
   };
@@ -1931,11 +2018,19 @@ const bulwark = (): SpellVisual => {
     const hh = 6 * (0.4 + 0.6 * out);
     const w = Math.min(0.24, (TAU * rr) / n) * 0.48;
     const cy = k.sy(b);
+    // The plates in two pictures, the half of the ring beyond the caster and the half before them, each filled by
+    // colour in one go: thirty-odd plates are six fills and two strokes, not thirty records.
+    const halves = [0, 1].map(() => ({ lit: new Path2D(), shade: new Path2D(), shine: new Path2D(), any: false }));
+    let far = { x: b.x, y: b.y, z: b.z }, near = far, farY = Infinity, nearY = -Infinity;
     for (let i = 0; i < n; i++) {
       const an = (i / n) * TAU;
       const cx = Math.cos(an), sy = Math.sin(an);
       const base = { x: b.x + cx * rr, y: b.y + sy * rr };
       const gz = k.ground(base.x, base.y);
+      const foot = { x: base.x, y: base.y, z: gz };
+      const footY = k.sy(foot);
+      if (footY < farY) [farY, far] = [footY, foot];
+      if (footY > nearY) [nearY, near] = [footY, foot];
       const xs: number[] = [], ys: number[] = [];
       for (let j = 0; j < 6; j++) {
         const q = (j / 6) * TAU;
@@ -1946,30 +2041,37 @@ const bulwark = (): SpellVisual => {
         xs.push(k.sx(p));
         ys.push(k.sy(p));
       }
-      const facing = k.sy({ x: base.x + cx * 0.1, y: base.y + sy * 0.1, z: gz }) > k.sy({ x: base.x, y: base.y, z: gz });
-      const nearSide = k.sy({ x: base.x, y: base.y, z: gz }) > cy;
-      k.worldDraw({ x: base.x, y: base.y, z: gz }, (g) => {
-        g.globalAlpha = a * (nearSide ? 0.75 : 0.95);
-        g.beginPath();
-        g.moveTo(xs[0], ys[0]);
-        for (let j = 1; j < 6; j++) g.lineTo(xs[j], ys[j]);
-        g.closePath();
-        g.fillStyle = facing ? EMERALD.main : EMERALD.deep;
-        g.fill();
+      const facing = k.sy({ x: base.x + cx * 0.1, y: base.y + sy * 0.1, z: gz }) > footY;
+      const h = halves[footY > cy ? 1 : 0];
+      h.any = true;
+      const into = facing ? h.lit : h.shade;
+      into.moveTo(xs[0], ys[0]);
+      for (let j = 1; j < 6; j++) into.lineTo(xs[j], ys[j]);
+      into.closePath();
+      h.shine.moveTo(xs[0], ys[0]);
+      h.shine.lineTo(xs[1], ys[1]);
+      h.shine.lineTo((xs[0] + xs[3]) / 2, (ys[0] + ys[3]) / 2);
+      h.shine.closePath();
+    }
+    const W = Math.max(0.8, 0.7 * k.zoom);
+    halves.forEach((h, side) => {
+      if (!h.any) return;
+      k.worldDraw(side ? near : far, (g) => {
+        g.globalAlpha = a * (side ? 0.75 : 0.95);
+        g.fillStyle = EMERALD.main;
+        g.fill(h.lit);
+        g.fillStyle = EMERALD.deep;
+        g.fill(h.shade);
         g.lineJoin = 'round';
-        g.lineWidth = Math.max(0.8, 0.7 * k.zoom);
+        g.lineWidth = W;
         g.strokeStyle = EMERALD.ink;
-        g.stroke();
+        g.stroke(h.lit);
+        g.stroke(h.shade);
         g.globalAlpha = a * 0.8;
         g.fillStyle = EMERALD.core;
-        g.beginPath();
-        g.moveTo(xs[0], ys[0]);
-        g.lineTo(xs[1], ys[1]);
-        g.lineTo((xs[0] + xs[3]) / 2, (ys[0] + ys[3]) / 2);
-        g.closePath();
-        g.fill();
-      }, 0.2);
-    }
+        g.fill(h.shine);
+      }, side ? 0.6 : -0.6);
+    });
     k.ring(b, rr, { band: 0.06, alpha: 0.7 * a, glow: 0.5 });
   };
   return {
@@ -1993,7 +2095,11 @@ const bulwark = (): SpellVisual => {
         k.flare(mid3(k.hand(0), k.hand(1), 0.5), 10 * (1 - u), flashOf(u, 0.06));
         k.light(k.caster, R + 1, 0.8 * (1 - u));
       } },
-      linger: { draw: (k, age, left) => skinLinger(k, k.caster, age, left, { knit: { from: 'up' }, secs: 0.45, delay: 0.75, skin: s }) },
+      linger: { draw: (k, age, left) => {
+        skinLinger(k, k.caster, age, left, { knit: { from: 'up' }, secs: 0.45, delay: 0.75, skin: s });
+        // Everybody inside the wall as it folded in: theirs closes as the plates fall on them.
+        for (const { b, d } of covered(k, R)) skinLinger(k, b, age, left, { knit: { from: 'close', th: bearing(k, b, k.caster) + Math.PI }, secs: 0.45, delay: 0.75 + (R - d) * 0.03, skin: s, lit: false });
+      } },
     },
   };
 };
