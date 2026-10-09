@@ -3165,10 +3165,12 @@ const SWIM_STROKE = TAU / 0.9;
 /** Radians of the idle clock (six to a second) to one sweep of the hands treading water: one every second and three-quarters. */
 const TREAD_RATE = 0.6;
 /**
- * How high the head is held over the water treading it, in the middle of its bob. At 0.8 the neck stood a hand out of the
- * water side on, from the shoulders to the jaw: a head on a stalk. The water stands at the jaw a swimmer holds up out of it.
+ * How high the head is held over the water treading it, in the middle of its bob, from the front or the back: the tops of
+ * the shoulders break the surface at the top of each kick. Lowered to 0.62 for the stalk side on, it put them under at
+ * every phase front and back, where there was no stalk, and the beat of the kick went with them; side on the ceiling in
+ * `shouldersUnder` took the drop back. Side on is let down on its own (`TREAD_SIDE_SINK`).
  */
-const TREAD_FLOAT = 0.62;
+const TREAD_FLOAT = 0.8;
 /** How far out past the shoulder a hand sculls treading water, at the middle of its sweep. */
 const TREAD_REACH = 1.5;
 
@@ -3283,7 +3285,7 @@ function swim(r: Rig, phi: number, moving: boolean, fr: Frame, facing = 0): void
   r.under = moving ? 1 : 0;
   if (!moving) {
     tread(r, phi, fr);
-    shouldersUnder(r, fr, facing);
+    shouldersUnder(r, fr, facing, 0, TREAD_SIDE_SINK, TREAD_SIDE_DEEP);
     return;
   }
   const s = (((phi / SWIM_STROKE) % 1) + 1) % 1;
@@ -3331,8 +3333,9 @@ function tread(r: Rig, phi: number, fr: Frame): void {
   /*
    * Topped out a little under the shoulders, for the top of the shirt showed in a crescent inside the foam round them: so only
    * a head on a long neck ever showed, standing up out of rings. Now that what comes up out of the water by a sliver is let up
-   * gradually (`waterline`), the tops of the shoulders break the surface at the top of each kick and go back under it, the one
-   * a little before the other as the shoulders roll.
+   * gradually (`waterline`), from the front and the back the tops of the shoulders break the surface at the top of each kick
+   * and go back under it, the one a little before the other as the shoulders roll: the beat of the kick at the island's zoom.
+   * Side on they are kept under it and the body let down further (`shouldersUnder`), and the beat is the head's bob.
    */
   r.float = TREAD_FLOAT + 0.32 * Math.cos(2 * q - 0.6);
   // The shoulders let down a little with the arms out under the water, the tops of them under it with the arms.
@@ -3386,15 +3389,26 @@ const SHOULDER_ROUND = 0.95;
  * shoulders to the jaw, a head on a stalk, with nothing round its root as there is from the front.
  */
 const SIDE_ON_DEEP = 0.1;
+/**
+ * Treading water side on, how much lower the body is let down than from the front, and how much lower the ceiling over the
+ * shoulders goes with it. Lowering the ceiling alone did nothing for the stalk: the bob already stood over it, so it only
+ * pressed the bob flatter, and the neck stood as long out of the water at the top of it. Let down together, the whole bob
+ * goes down, the water half-way up the neck, and the ceiling, lowered by a little less than the body, trims the top of the
+ * bob to what it was before: the head bobs as far as it did.
+ */
+const TREAD_SIDE_SINK = 0.45;
+const TREAD_SIDE_DEEP = 0.3;
 /** How softly the bob is eased in under that ceiling: a hard stop at it was a head that rose, stuck and fell. */
 const SHOULDERS_EASE = 0.12;
-function shouldersUnder(r: Rig, fr: Frame, facing: number, give = 0): number {
+function shouldersUnder(r: Rig, fr: Frame, facing: number, give = 0, sink = 0, deep = 0): number {
   const side = Math.abs(Math.sin((facing * TAU) / 8));
   const w = Math.max(0, Math.min(1, (side - SIDE_ON_FROM) / (1 - SIDE_ON_FROM)));
   if (!w) return 0;
+  // Let down by `sink` side on, and the ceiling `deep` further under the lip (`TREAD_SIDE_SINK`).
+  r.float = (r.float ?? 0) - w * sink;
   const over = (): number => {
     const b = skeleton(fr, r);
-    return Math.max(b.arm0.t[2], b.arm1.t[2]) + SHOULDER_ROUND - SHOULDER_SLIVER + SIDE_ON_DEEP;
+    return Math.max(b.arm0.t[2], b.arm1.t[2]) + SHOULDER_ROUND - SHOULDER_SLIVER + SIDE_ON_DEEP + w * deep;
   };
   const soft = (x: number): number => SHOULDERS_EASE * Math.log(1 + Math.exp(x / SHOULDERS_EASE));
   const was = over();
@@ -5997,6 +6011,8 @@ export interface Part {
   thin?: boolean;
   /** For a `toon` part, a rim of light in this colour where its top turns away from the viewer: a cloud's silver edge. */
   sheen?: Mat;
+  /** Every facet lit as the darkest of them: one wet piece only just up out of the water (`waterline`), not a clump of facets. */
+  flat?: boolean;
   /**
    * One of the links of something in links -- a tail -- named for the whole
    * of it: the lines round every link that follows another in the drawing go
@@ -10639,6 +10655,11 @@ export function render(g: CanvasRenderingContext2D, parts: Part[], pal: Palette,
       d.push(c[0] * T[0] + c[1] * T[1] + c[2] * T[2]);
       if (part.toon) { normals.push(u); areas.push(l); }
     }
+    if (part.flat) {
+      let lo = Infinity;
+      for (let q = 0; q < k.length; q++) if (vis[q]) lo = Math.min(lo, k[q]);
+      if (lo < Infinity) k.fill(lo);
+    }
     let cx = 0, cy = 0, cz = 0;
     for (const p of pv) { cx += p[0]; cy += p[1]; cz += p[2]; }
     cx /= pv.length; cy /= pv.length; cz /= pv.length;
@@ -11356,9 +11377,14 @@ function waterline(parts: Part[], up: boolean, shoulders?: Set<Xf>, pal?: Palett
      * foam with a gap of water under it, a ball held under the jaw.
      */
     if (level > 0) for (let i = 0; i < v.length; i++) v[i] = [v[i][0], v[i][1], v[i][2] - level];
+    /*
+     * The top of the chest or a shoulder only just up is one wet piece, in one shade and lined only round it: side on at the
+     * breath, the collar of a jerkin cut there was three or four facets in as many shades under the chin, crumpled.
+     */
+    const one = level > 0 && sliver === SHOULDER_SLIVER;
     made.set(part, {
       ...part, mesh: mesh(v, faces), v: undefined, xf: ROOT, pal: level > 0 && pal ? wetted(part.pal ?? pal, level / sliver) : part.pal, hideIn: part.hideIn ?? part.xf,
-      front: part.front && mv(part.xf.m, part.front),
+      front: part.front && mv(part.xf.m, part.front), ...(one ? { flat: true, lines: false } : {}),
     });
   }
   // What is drawn after or never after another part is drawn after or never after what that part was cut to.
@@ -11420,9 +11446,14 @@ const rehomed = (face: Face, xf: Xf): Face =>
 interface Wake { at: V3; r: number; along: V3; long: number; behind?: boolean }
 /** How much wider the ring round the neck is than the neck, across the shoulders and along the body. */
 const NECK_SWELL: [number, number] = [1.6, 1.2];
+/**
+ * And how much wider again along the body, seen side on. The swell across the shoulders runs into the picture there, where
+ * it is foreshortened to half, so the ring showed only a little taller than the neck, not wider: still a stalk.
+ */
+const NECK_SIDE_SWELL = 0.6;
 /** How far the top of a shoulder stands over its joint. */
 const SHOULDER_TOP = 0.6;
-function wakeOf(b: Bones, fr: Frame): Wake[] {
+function wakeOf(b: Bones, fr: Frame, T?: V3): Wake[] {
   const out: Wake[] = [];
   const through = (p: V3, q: V3, r: number): void => {
     if ((p[2] >= 0) === (q[2] >= 0)) return;
@@ -11445,7 +11476,11 @@ function wakeOf(b: Bones, fr: Frame): Wake[] {
    */
   if (out.length && b.neck.t[2] < 0 && b.head.t[2] >= 0) {
     const n = out[out.length - 1], s0 = b.arm0.t, s1 = b.arm1.t, l = Math.hypot(s1[0] - s0[0], s1[1] - s0[1]) || 1;
-    out[out.length - 1] = { ...n, along: [(s1[0] - s0[0]) / l, (s1[1] - s0[1]) / l, 0], long: NECK_SWELL[0] * n.r, r: NECK_SWELL[1] * n.r };
+    const along: V3 = [(s1[0] - s0[0]) / l, (s1[1] - s0[1]) / l, 0];
+    // Side on, as `shouldersUnder` reckons it: the shoulder line pointing at the viewer.
+    const side = T ? Math.abs(T[0] * along[0] + T[1] * along[1]) / (Math.hypot(T[0], T[1]) || 1) : 0;
+    const w = Math.max(0, Math.min(1, (side - SIDE_ON_FROM) / (1 - SIDE_ON_FROM)));
+    out[out.length - 1] = { ...n, along, long: NECK_SWELL[0] * n.r, r: NECK_SWELL[1] * (1 + NECK_SIDE_SWELL * w) * n.r };
   }
   /*
    * The tops of the shoulders, up through the water while the root of the neck is still under it -- treading water, at the
@@ -11767,7 +11802,7 @@ function drawLive(ctx: CanvasRenderingContext2D, sx: number, sy: number, zoom: n
   const parts = partsOf(kit, r, b, pose.gear, pal, facing, gearLod(zoom));
   if (pose.swimming) {
     const above = waterline(parts, true, new Set([b.chest, ...parts.filter((p) => onJoint(p, b.arm0) || onJoint(p, b.arm1)).map((p) => p.xf)]), pal);
-    const through = wakeOf(b, kit.fr), rings = [...through, ...shouldersOut(parts, b, through, view.T), ...collarOut(above, b)];
+    const through = wakeOf(b, kit.fr, view.T), rings = [...through, ...shouldersOut(parts, b, through, view.T), ...collarOut(above, b)];
     underwater(ctx, waterline(parts, false), pal, view, ink, 1 / zoom, now);
     for (const set of ringSets(pose, now)) ripple(ctx, view, set, set.moving ? kickAt(kit.fr) : TREAD_AT, kit.fr);
     // The water's face where the body goes through it, under what of the body is over it: what is cut is open, and the water is in it.

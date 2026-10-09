@@ -734,6 +734,12 @@ class Scene {
    */
   drawWheel(c: V3, axis: 'x' | 'y', r: number, thick: number, spokes: number, p: Paint, turn = 0, blur = 0, mark = false, stage?: WheelStage): void {
     const g = this.g;
+    /*
+     * Round joins, whatever was drawn before: the tread's facets, stroked thin where the rim foreshortens, threw long mitre
+     * points with the canvas's own, a grey sliver off the top of a wagon's wheel across the bed, once the wheel's still parts
+     * were drawn on their own (`bakeRound`) and not after something that had left the joins round.
+     */
+    g.lineJoin = 'round';
     const does = (s: WheelStage): boolean => !stage || stage === s;
     const [cx, cy, cz] = c;
     const n: [number, number] = axis === 'x' ? [1, 0] : [0, 1];
@@ -777,24 +783,36 @@ class Scene {
       g.lineCap = 'round';
       const smear = WHEEL_SMEAR[Math.max(0, Math.min(2, Math.round(blur)))];
       const spokeW = Math.max(0.7, r * 0.11);
-      smear.strokes.forEach((alpha, m) => {
-        g.globalAlpha = alpha;
-        // Where the spokes were earlier in the frame: further round against the way they turn.
-        const back = (m / smear.strokes.length) * smear.over;
-        // All of them in one path, inked and then filled: a stroke a spoke was most of what a wheel cost to draw.
-        g.beginPath();
-        for (let j = 0; j < spokes; j++) {
-          const a = ((j + back) / spokes - turn) * TAU + 0.3;
-          const A = at(a, r * 0.16, 0), B = at(a, rin, 0);
-          g.moveTo(A[0], A[1]);
-          g.lineTo(B[0], B[1]);
-        }
+      const spoke = (): void => {
         g.strokeStyle = rgb(p.ink);
         g.lineWidth = spokeW + this.ink * 1.4;
         g.stroke();
         g.strokeStyle = rgb(p.body, 0.92);
         g.lineWidth = spokeW;
         g.stroke();
+      };
+      smear.strokes.forEach((alpha, m) => {
+        g.globalAlpha = alpha;
+        // Where the spokes were earlier in the frame: further round against the way they turn.
+        const back = (m / smear.strokes.length) * smear.over;
+        /*
+         * Smeared, all of them in one path, inked and then filled: a stroke a spoke was most of what a wheel cost to draw.
+         * Sharp, each inked and filled in turn, so each is outlined over the one before it: in one path each spoke's fill
+         * covered its neighbours' ink by the hub, and close up they ran together into a light star there. A sharp wheel is
+         * drawn once a step into its cell (`wheelsFor`), not a frame, so it hardly costs.
+         */
+        const each = !smear.over;
+        g.beginPath();
+        for (let j = 0; j < spokes; j++) {
+          const a = ((j + back) / spokes - turn) * TAU + 0.3;
+          const A = at(a, r * 0.16, 0), B = at(a, rin, 0);
+          g.moveTo(A[0], A[1]);
+          g.lineTo(B[0], B[1]);
+          if (!each) continue;
+          spoke();
+          g.beginPath();
+        }
+        if (!each) spoke();
       });
       g.lineCap = 'butt';
       g.globalAlpha = 1;
@@ -5243,15 +5261,20 @@ const HELM_SEEN = { most: 0.62, soft: 1.5 };
  * And the layer as it was last let fade over each helmsman, kept till his picture is drawn again or he is somewhere else
  * on it (`ver`, by a pixel of the layer's): a blurred cut-out of a layer was a millisecond or three, and was made afresh
  * every frame for every manned boat on the screen, though his picture is drawn again only a score of times a second.
+ * Kept for each layer over him, not one: a ship with crew on deck as well as at the helm has more than one layer after
+ * his, and two of them over him put each other out every frame, so both were made afresh again. Each goes with its layer.
  */
-const seen = new WeakMap<object, { pad: HTMLCanvasElement; layer: HTMLCanvasElement; ver?: number; x: number; y: number; w: number }>();
+type Seen = { pad: HTMLCanvasElement; ver?: number; x: number; y: number; w: number };
+const seen = new WeakMap<object, WeakMap<HTMLCanvasElement, Seen>>();
 function seeThrough(ctx: CanvasRenderingContext2D, c: HTMLCanvasElement, at: [number, number, number, number], helm: Silhouette): void {
   const [x, y, w, h] = at;
   // Drawn on another picture than this one -- a flash or a ring round him under the pointer -- it is nowhere here to see through.
   if (helm.ctx !== ctx) { ctx.drawImage(c, x, y, w, h); return; }
   const k = c.width / w, hx = (helm.x - x) * k, hy = (helm.y - y) * k;
-  let kept = seen.get(helm.canvas);
-  if (!kept || kept.layer !== c || helm.ver === undefined || kept.ver !== helm.ver || Math.abs(kept.x - hx) > 1 || Math.abs(kept.y - hy) > 1 || Math.abs(kept.w - helm.w * k) > 1) {
+  let his = seen.get(helm.canvas);
+  if (!his) seen.set(helm.canvas, (his = new WeakMap()));
+  let kept = his.get(c);
+  if (!kept || helm.ver === undefined || kept.ver !== helm.ver || Math.abs(kept.x - hx) > 1 || Math.abs(kept.y - hy) > 1 || Math.abs(kept.w - helm.w * k) > 1) {
     const pad = kept?.pad ?? document.createElement('canvas');
     if (pad.width !== c.width || pad.height !== c.height) {
       pad.width = c.width;
@@ -5271,8 +5294,8 @@ function seeThrough(ctx: CanvasRenderingContext2D, c: HTMLCanvasElement, at: [nu
     g.filter = 'none';
     g.globalAlpha = 1;
     g.globalCompositeOperation = 'source-over';
-    kept = { pad, layer: c, ver: helm.ver, x: hx, y: hy, w: helm.w * k };
-    seen.set(helm.canvas, kept);
+    kept = { pad, ver: helm.ver, x: hx, y: hy, w: helm.w * k };
+    his.set(c, kept);
   }
   ctx.drawImage(kept.pad, 0, 0, c.width, c.height, x, y, w, h);
 }
