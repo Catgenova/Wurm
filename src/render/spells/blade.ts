@@ -25,7 +25,7 @@
  */
 import { type Rig } from '../figure';
 import { HALF_H, HALF_W, HEIGHT_SCALE } from '../iso';
-import type { CastClose, CastPose, PoseCue, SpellVisual } from './index';
+import type { CastClose, CastPose, SpellVisual } from './index';
 import { spellInfo } from './info';
 import { bump, clamp, easeOut, flashOf, hashOf, lerp, mid3, seg, smooth, TAU, type Body, type FxScene, type GroundLayer, type Look, type P3, type SpellPalette } from './kit';
 import { armOut, euler, one, track, type Key } from './poses';
@@ -67,8 +67,9 @@ const tipOf = (k: FxScene): P3 => k.joint(k.caster, 'tip');
  * The island lets a sword strike from as far as it reaches -- 2.2 tiles -- and a blade is a quarter of a tile, so a
  * Blade standing where the island has it never touches what it strikes. Each strike closes in (`cast.close`): the
  * body is carried in over the wind-up so the blade passes through the creature on the blow, and back after the
- * follow-through. The legs run it (`dash`), and the effects stream off it (`rush`). On the move the stage does not
- * close in, so a blow still short is carried the rest of the way by a bright edge off the point (`bridge`).
+ * follow-through. The stage steps the legs, running in and bounding back, and the effects stream off the run in
+ * (`rush`). On the move the stage does not close in, so a blow still short is carried the rest of the way by a
+ * bright edge off the point (`bridge`).
  */
 
 /** When a strike closes in and goes back, as shares of the cast, and how far ahead of its feet its blow lands. */
@@ -83,58 +84,15 @@ interface Closing {
 /** The stage's closing in (`cast.close`) for a strike. */
 const closeOf = (o: Closing): CastClose => ({ from: o.from, to: o.to, back: o.back, reach: o.reach });
 
-/** How far in the stage has a closing strike at `u` of the cast, nought to one (as `stage.ts` has it). */
-const closeAt = (u: number, o: Closing): number => smooth(seg(u, o.from, o.to)) * (1 - smooth(seg(u, o.back, 1)));
-
-/** Height units a running stride covers: three or four of them over the island's whole reach. */
-const STRIDE = 24;
-
 /**
- * How hard the body is running at `t`, nought to one: its speed as the stage carries it in or back, over the pace of
- * a hard run; `dir` one going in and minus one coming away; `run` the ground covered so far, in height units.
+ * The run on the ground, for the effects: streaks off behind the body at its height while the stage runs it in
+ * (`k.travel`), and dust kicked back off its feet, as much as the steps have of the legs. Nothing in reach already,
+ * nor bounding back (a step back is not a charge). `extra` keeps them up to that share whatever the stage is doing (a
+ * Lunge's stride the island made).
  */
-function pace(t: number, secs: number, by: number, o: Closing): { w: number; dir: number; run: number } {
-  const h = 0.005;
-  const v = (Math.abs(closeAt(t + h, o) - closeAt(t - h, o)) / (2 * h)) * (by / secs);
-  const go = smooth(seg(t, o.from, o.to)), home = smooth(seg(t, o.back, 1));
-  return { w: clamp(v / 150), dir: t < (o.to + o.back) / 2 ? 1 : -1, run: by * (go + go * home) };
-}
-
-/**
- * The legs of a body the stage carries in to the blow and back (`cast.close`): a run laid over the pose's own legs,
- * a stride every `STRIDE` units of ground and as hard as the body is going -- the feet cover the ground, it does
- * not slide -- leant into going in and back coming away. Nothing when there is no way to go (in reach already) or
- * the caster is walking (the walk's legs are kept). Called after the legs are written.
- */
-function dash(r: Rig, t: number, c: PoseCue, o: Closing): number {
-  const by = c.aim?.close ?? 0;
-  if (by < 3 || c.moving) return 0;
-  const { w, dir, run } = pace(t, c.timing.secs, by, o);
-  if (w < 0.01) return 0;
-  const ph = (Math.PI * run) / STRIDE, s = Math.sin(ph), cs = Math.cos(ph), A = 44 * w;
-  r.leg[0] = [r.leg[0][0] + A * s, r.leg[0][1], r.leg[0][2]];
-  r.leg[1] = [r.leg[1][0] - A * s, r.leg[1][1], r.leg[1][2]];
-  // The leg swinging through (forward going in, back coming away) folds at the knee; the one under the body is straight.
-  r.knee = [r.knee[0] + 85 * w * Math.max(0, dir * cs), r.knee[1] + 85 * w * Math.max(0, -dir * cs)];
-  r.at = [r.at[0], r.at[1], r.at[2] + 1.4 * w * Math.abs(s)];
-  r.spine = [r.spine[0] - 12 * w * dir, r.spine[1], r.spine[2]];
-  // The free arm pumps against the legs.
-  r.arm[0] = [r.arm[0][0] - 26 * w * s, r.arm[0][1], r.arm[0][2]];
-  return w;
-}
-
-/**
- * The run on the ground, for the effects: streaks off behind the body at its height while it goes in, and dust
- * kicked back off its feet, as hard as it is going. Nothing in reach already, nor coming away (a step back is not a
- * charge). `extra` keeps them up to that share whatever the stage is doing (a Lunge's stride the island made).
- */
-function rush(k: FxScene, t: number, o: Closing, extra = 0): void {
-  const by = k.aim?.close ?? 0, timing = k.timing;
-  let run = extra;
-  if (by >= 3 && timing) {
-    const p = pace(t, timing.secs, by, o);
-    if (p.dir > 0) run = Math.max(run, p.w);
-  }
+function rush(k: FxScene, extra = 0): void {
+  const tr = k.travel;
+  const run = Math.max(extra, tr && tr.gait === 'run' && tr.by >= 3 ? tr.w : 0);
   if (run < 0.05) return;
   const f = k.toward(k.caster, k.target), back = { x: -f.x, y: -f.y };
   for (let i = 0; i < 3; i++) {
@@ -784,7 +742,7 @@ function legs(r: Rig, t: number, keys: readonly Key[]): void {
  * back out to guard.
  */
 const MEASURED: Closing = { from: 0.28, to: 0.51, back: 0.72, reach: 8 };
-const measuredCut: CastPose = (r, t, c) => {
+const measuredCut: CastPose = (r, t) => {
   // Blade: 124 at guard, 205 back over the shoulder at the top, 82 level at the blow, 72 going down and across, 116.
   r.arm[1] = euler(t, [[0, [24, 14, 0]], [0.24, [160, 16, -8]], [0.46, [162, 18, -8]], [0.55, [62, 4, 14]], [0.66, [30, -16, 40]], [1, [26, 14, 6]]]);
   r.elbow[1] = one(t, [[0, 40], [0.24, 24], [0.46, 26], [0.55, 8], [0.66, 22], [1, 40]]);
@@ -802,7 +760,6 @@ const measuredCut: CastPose = (r, t, c) => {
   legs(r, t, [[0, [2, 2, 0, 2, 4, 4]], [0.24, [6, 4, -4, 4, 16, 14]], [0.46, [6, 4, -4, 4, 18, 16]], [0.55, [40, 4, -22, 3, 45, 12]],
     [0.68, [38, 4, -21, 3, 42, 12]], [1, [8, 3, -3, 2, 8, 6]]]);
   r.wield = 1;
-  dash(r, t, c, MEASURED);
 };
 
 /**
@@ -846,8 +803,6 @@ const lunge: CastPose = (r, t, c) => {
   r.leg[1] = [v[2], v[3], 0];
   r.knee = [v[4], v[5]];
   r.wield = 1;
-  // The step back out to where the island has the body, after the thrust is held.
-  if (t > LUNGING.back) dash(r, t, c, LUNGING);
 };
 
 /**
@@ -856,7 +811,7 @@ const lunge: CastPose = (r, t, c) => {
  * level as it passes, the body turning through it and the blade carried on across the body; and up again.
  */
 const HAMSTRUNG: Closing = { from: 0.1, to: 0.44, back: 0.76, reach: 7 };
-const hamstring: CastPose = (r, t, c) => {
+const hamstring: CastPose = (r, t) => {
   // Blade: laid flat out to the right and back with the arm rolled out level, then level ahead at shin height as it
   // passes (the arm rolled out 60, the hand let down), then on across the body to the left.
   r.arm[1] = euler(t, [[0, [24, 14, 0]], [0.32, [14, 76, -24]], [0.48, [30, 60, 10]], [0.62, [34, -10, 36]], [0.75, [34, -34, 42]], [1, [28, 14, 4]]]);
@@ -872,7 +827,6 @@ const hamstring: CastPose = (r, t, c) => {
   legs(r, t, [[0, [2, 2, 0, 2, 4, 4]], [0.32, [30, 8, -14, 6, 56, 44]], [0.48, [46, 8, -26, 6, 70, 50]], [0.75, [44, 8, -24, 6, 66, 48]],
     [1, [8, 3, -3, 2, 8, 6]]]);
   r.wield = 1;
-  dash(r, t, c, HAMSTRUNG);
 };
 
 /**
@@ -881,7 +835,7 @@ const hamstring: CastPose = (r, t, c) => {
  * punched out square into the creature, the sword kept back by the hip in its carry.
  */
 const BASHING: Closing = { from: 0.06, to: 0.4, back: 0.72, reach: 7 };
-const shieldBash: CastPose = (r, t, c) => {
+const shieldBash: CastPose = (r, t) => {
   r.arm[0] = euler(t, [[0, [20, 12, 0]], [0.3, [30, 2, 44]], [0.42, [90, 2, 8]], [0.56, [86, 4, 8]], [1, [20, 14, 0]]]);
   r.elbow[0] = one(t, [[0, 40], [0.3, 108], [0.42, 34], [0.56, 40], [1, 40]]);
   // The sword kept back out of the way by the right hip, in its carry, as the shield does the work.
@@ -893,7 +847,6 @@ const shieldBash: CastPose = (r, t, c) => {
   r.head = euler(t, [[0, [0, 0, 0]], [0.3, [-6, 0, -18]], [0.42, [10, 0, 18]], [1, [0, 0, 0]]]);
   legs(r, t, [[0, [2, 2, 0, 2, 4, 4]], [0.3, [-4, 4, 10, 4, 18, 30]], [0.42, [48, 4, -30, 3, 48, 4]], [0.56, [46, 4, -28, 3, 46, 6]],
     [1, [6, 3, -2, 2, 6, 5]]]);
-  dash(r, t, c, BASHING);
 };
 
 /**
@@ -902,7 +855,7 @@ const shieldBash: CastPose = (r, t, c) => {
  * low, the blade coming up through the creature as the body arrives.
  */
 const DISARMING: Closing = { from: 0.06, to: 0.38, back: 0.7, reach: 8 };
-const disarmingCut: CastPose = (r, t, c) => {
+const disarmingCut: CastPose = (r, t) => {
   // Blade: down and ahead across the left hip (30), up through the blow (158), up and a little back at the top (194).
   r.arm[1] = euler(t, [[0, [24, 14, 0]], [0.3, [10, -30, 40]], [0.45, [110, 30, -20]], [0.56, [148, 44, -28]], [1, [28, 14, 4]]]);
   r.elbow[1] = one(t, [[0, 40], [0.3, 20], [0.45, 8], [0.56, 14], [1, 40]]);
@@ -915,7 +868,6 @@ const disarmingCut: CastPose = (r, t, c) => {
   legs(r, t, [[0, [2, 2, 0, 2, 4, 4]], [0.3, [14, 4, -6, 4, 36, 32]], [0.45, [26, 4, -14, 3, 12, 6]], [0.56, [26, 4, -14, 3, 10, 6]],
     [1, [6, 3, -2, 2, 6, 5]]]);
   r.wield = 1;
-  dash(r, t, c, DISARMING);
 };
 
 /**
@@ -1131,7 +1083,7 @@ export const BLADE: Record<string, SpellVisual> = {
           for (let i = 1; i <= 3; i++) if (grow > i / 3 - 0.02) k.flare(mid3(a, b, i / 3), 3 + (i === 3 ? 2 : 0), 0.8 * m, BRASS_CORE, 0, undefined, true);
         }
         k.glow(tipOf(k), 5, 0.6 * bump(t, 0.2, 0.42, 0.5));
-        rush(k, t, MEASURED);
+        rush(k);
         notePoint(k);
         if (t > 0.46 && t < 0.72) swept(k, 1, { secs: 0.12 });
       },
@@ -1228,7 +1180,7 @@ export const BLADE: Record<string, SpellVisual> = {
       charge: (k, t) => {
         // The rush, as hard as the island's stride goes; the closing in adds its own.
         const came = k.from ? Math.hypot(k.caster.x - k.from.x, k.caster.y - k.from.y) : 0;
-        rush(k, t, LUNGING, k.from ? clamp(came / 0.6) * (1 - smooth(seg(t, 0.3, 0.42))) : 0);
+        rush(k, k.from ? clamp(came / 0.6) * (1 - smooth(seg(t, 0.3, 0.42))) : 0);
         // The thrust's own sweep, once the blade is level and going in.
         if (t > 0.3 && t < 0.6) swept(k, 1, { secs: 0.1, inner: 0.4 });
       },
@@ -1268,7 +1220,7 @@ export const BLADE: Record<string, SpellVisual> = {
     cast: { timing: { secs: 0.85, release: 0.48 }, pose: hamstring, close: closeOf(HAMSTRUNG) },
     fx: {
       charge: (k, t) => {
-        rush(k, t, HAMSTRUNG);
+        rush(k);
         notePoint(k);
         if (t > 0.38 && t < 0.8) swept(k, 1, { secs: 0.14 });
       },
@@ -1314,7 +1266,7 @@ export const BLADE: Record<string, SpellVisual> = {
     fx: {
       charge: (k, t) => {
         k.glow(k.hand(0), 7, 0.6 * bump(t, 0.15, 0.4, 0.5));
-        rush(k, t, BASHING);
+        rush(k);
       },
       // Short of it (on the move), the shield's face goes the rest of the way.
       travel: { secs: bridgeSecs, draw: (k, u) => {
@@ -1551,7 +1503,7 @@ export const BLADE: Record<string, SpellVisual> = {
     cast: { timing: { secs: 0.8, release: 0.4 }, pose: disarmingCut, close: closeOf(DISARMING) },
     fx: {
       charge: (k, t) => {
-        rush(k, t, DISARMING);
+        rush(k);
         notePoint(k);
         if (t > 0.3 && t < 0.66) swept(k, 1, { secs: 0.13 });
       },
