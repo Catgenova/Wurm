@@ -16,26 +16,24 @@
  * `FX_OF` for a pose or a timing) and the fight's own constants, so the
  * ground mark is where the rule is.
  *
- * The figure's limit (render/figure.ts): a spear is carried upright in the
- * right fist (`carry: 'staff'`), set off the hips, and only a fist weapon
- * follows the forearm (`wield`). The casts are drawn with that spear
- * standing in the fist -- the thrusts drive the fist along the line of the
- * blow and the lance of light leaves it; the rally lifts the standing spear
- * overhead as a standard; the brace lowers it to plant the butt -- and the
- * spear's head is found from the fist the way the figure stands it
- * (`spearTip`).
+ * The spear is in the hands (`Rig.wieldStaff`): a two-handed blow puts both
+ * fists on the line it goes (`onHaft`) and the shaft lies along it, so a
+ * thrust levels the spear, a sweep swings it low, a brace grounds its butt
+ * and a whirl turns it in the fist (`haft`); the lances of light run on from
+ * its real point (`figureJoint` 'tip'), and the stances on oneself are held
+ * as long as they last (`cast.hold`).
  */
 import { WEAPON_BY_ID } from '../../game/gear';
 import { HUNT_REACH, reachOf } from '../../game/fight';
-import { weaponCarry, type Rig } from '../figure';
+import { type Rig, type V3 } from '../figure';
 import { UNITS_PER_TILE } from '../iso';
 import type { CastPose, SpellVisual } from './index';
 import { spellInfo } from './info';
 import {
   bump, clamp, easeBack, easeOut, flashOf, glowPicture, hashOf, lerp, mid3, seg, smooth, TAU,
-  type FxScene, type P3, type SpellPalette,
+  type FxScene, type GroundLayer, type P3, type SpellPalette,
 } from './kit';
-import { euler, one } from './poses';
+import { euler, heldFor, one, track } from './poses';
 
 /** Bronze and ochre, with a sky-blue edge: the line held. */
 export const PALETTE: SpellPalette = {
@@ -63,33 +61,10 @@ function reachHeld(k: FxScene): number {
 
 /* ---- where the spear is ---------------------------------------------------------------- */
 
-/*
- * The figure stands a spear in the right fist leaning forward and out past the
- * face, by a table of facings (figure.ts `staffUp`); these are that table, so
- * the head of the spear can be found for a banner or a glint on it. The figure
- * does not hand its weapon's geometry out: if it is changed there, change it here.
- */
-const STAFF_BACK = [0, 1, 0, 0, 0, 1, 0, 0];
-const STAFF_BACK_BY = -8;
-const STAFF_OUT = [10, 22, 10, 10, 10, 32, 10, 10];
-const STAFF_LEAST = [0, 0, 22, 0, 0, 0, 22, 0];
-/** A spear's lean forward in the fist, and how far its point is past the fist, in height units (figure.ts `spear`). */
-const SPEAR_LEAN = 7;
-const SPEAR_POINT = 14.4;
-
-/** The point of the spear the caster holds, or, with nothing standing in the fist, a hand's width over the fist. */
-function spearTip(k: FxScene, b = k.caster): P3 {
-  const hand = k.hand(1, b);
-  const id = b.figure?.gear?.weapon?.id;
-  if (!id || weaponCarry(id)?.carry !== 'staff') return { x: hand.x, y: hand.y, z: hand.z + 4 };
-  const f = ((Math.round(b.facing) % 8) + 8) % 8;
-  const back = STAFF_BACK[f];
-  const ahead = Math.max(SPEAR_LEAN, STAFF_LEAST[f]);
-  const fwd = ((ahead + (STAFF_BACK_BY - ahead) * back) * Math.PI) / 180, out = (STAFF_OUT[f] * Math.PI) / 180;
-  const d = [Math.sin(out), Math.sin(fwd), Math.cos(out) * Math.cos(fwd)];
-  const o = k.local(b, 0, 0, 0), q = k.local(b, d[0] * SPEAR_POINT, d[1] * SPEAR_POINT, d[2] * SPEAR_POINT);
-  return { x: hand.x + q.x - o.x, y: hand.y + q.y - o.y, z: hand.z + q.z - o.z };
-}
+/** The point of the spear the caster holds, wherever the pose has put it; the right fist with nothing in it. */
+const spearTip = (k: FxScene, b = k.caster): P3 => k.joint(b, 'tip', undefined, 0.8);
+/** The butt of it. */
+const spearButt = (k: FxScene, b = k.caster): P3 => k.joint(b, 'butt', undefined, 0.3);
 
 /* ---- ways over the ground ------------------------------------------------------------- */
 
@@ -135,6 +110,8 @@ interface LanceLook {
 function lance(k: FxScene, butt: P3, tip: P3, o: LanceLook = {}): void {
   const a = clamp(o.alpha ?? 1);
   if (a <= 0.01) return;
+  // Never back toward the caster: a target nearer than the spear's own point is struck by the spear, not the light.
+  if ((tip.x - butt.x) * (butt.x - k.caster.x) + (tip.y - butt.y) * (butt.y - k.caster.y) < 0) return;
   const x0 = k.sx(butt), y0 = k.sy(butt), x1 = k.sx(tip), y1 = k.sy(tip);
   const len = Math.hypot(x1 - x0, y1 - y0);
   if (len < 2) return;
@@ -251,51 +228,24 @@ function lance(k: FxScene, butt: P3, tip: P3, o: LanceLook = {}): void {
   }
 }
 
-/** A point on the ground projected to the screen, a hair over it. */
-function onScreen(k: FxScene, x: number, y: number, out: number[]): void {
-  out.push(k.eye.worldToScreenX(x, y), k.eye.worldToScreenY(x, y, k.ground(x, y) + 0.15));
-}
-
 /**
  * Flat shapes laid on the ground round `c` (within `r` tiles), each a list of
  * points over the land in tiles: one fill, an ink edge, and, for each, its
- * edge nearest the light picked out in `lit`. One record however many.
+ * edge nearest the light picked out in `lit`. One record however many, laid
+ * as the kit lays its own marks (`groundShape`), cut along the tiles.
  */
 function groundShapes(k: FxScene, c: V2, r: number, shapes: ReadonlyArray<ReadonlyArray<V2>>, o: { fill?: string; ink?: string; lit?: string; alpha?: number }): void {
   const a = clamp(o.alpha ?? 1);
   if (a <= 0.01 || !shapes.length) return;
-  const pts: number[][] = shapes.map((s) => {
-    const out: number[] = [];
-    for (const p of s) onScreen(k, p.x, p.y, out);
-    return out;
-  });
-  const fill = o.fill ?? k.pal.main, ink = o.ink ?? k.pal.ink, lit = o.lit;
-  const inkW = Math.max(0.8, 0.7 * k.zoom);
-  k.groundDraw(c.x, c.y, r + 0.5, (g) => {
-    g.globalAlpha = a;
-    g.beginPath();
-    for (const p of pts) {
-      g.moveTo(p[0], p[1]);
-      for (let i = 2; i < p.length; i += 2) g.lineTo(p[i], p[i + 1]);
-      g.closePath();
-    }
-    g.fillStyle = fill;
-    g.fill();
-    g.lineWidth = inkW;
-    g.strokeStyle = ink;
-    g.stroke();
-    if (lit) {
-      // The far edge of each, the one the light falls across first: its first side.
-      g.beginPath();
-      for (const p of pts) {
-        g.moveTo(p[0], p[1]);
-        g.lineTo(p[2], p[3]);
-      }
-      g.lineWidth = Math.max(0.8, 0.9 * k.zoom);
-      g.strokeStyle = lit;
-      g.stroke();
-    }
-  });
+  const paths = shapes.map((sh) => sh.flatMap((p) => [p.x, p.y]));
+  const z = k.zoom;
+  const layers: GroundLayer[] = [
+    { kind: 'fill', colour: o.fill ?? k.pal.main, alpha: a, paths, lift: 0.15 },
+    { kind: 'stroke', colour: o.ink ?? k.pal.ink, alpha: a, paths, lift: 0.15, width: Math.max(0.8, 0.7 * z), closed: true, join: 'miter' },
+  ];
+  // The far edge of each, the one the light falls across first: its first side.
+  if (o.lit) layers.push({ kind: 'stroke', colour: o.lit, alpha: a, paths: paths.map((q) => q.slice(0, 4)), lift: 0.15, width: Math.max(0.8, 0.9 * z) });
+  k.groundShape(c.x, c.y, r + 0.5, layers);
 }
 
 /** A bar on the ground across the way `d` at `c`: `half` tiles either side of the line, `thick` tiles deep, `u` of it drawn from the middle out. */
@@ -434,34 +384,69 @@ function stance(r: Rig, t: number, keys: ReadonlyArray<readonly [number, number,
   r.knee[1] = one(t, rear);
 }
 
-/** Warning Thrust: the fist drawn to the hip, a jab checked half way and held, the leading foot stamped down with it. */
+/** A key for `onHaft`: at `t`, the right fist and the left, in the body's frame from the middle of its feet (x right, y ahead, z up). */
+type HaftKey = readonly [number, V3, V3];
+/**
+ * The spear taken in both hands through the cast (`Rig.wieldStaff` and
+ * `both`): each fist put where the keys have it, closed along the line from
+ * the right through the left, which is the line the shaft lies on -- its
+ * point out past the left fist. `both` below one lets the left hand off it.
+ */
+function onHaft(r: Rig, t: number, keys: readonly HaftKey[], both = 1, w = 1): void {
+  const R = track(t, keys.map(([a, rr]) => [a, rr] as const)) as V3;
+  const L = track(t, keys.map(([a, , l]) => [a, l] as const)) as V3;
+  const along: V3 = [L[0] - R[0], L[1] - R[1], L[2] - R[2]];
+  r.wieldStaff = 1;
+  r.both = both;
+  r.reach = [both > 0.01 ? { at: L, haft: along, w: both * w } : undefined, w > 0.01 ? { at: R, haft: along, w } : undefined];
+}
+
+/**
+ * The two fists on a shaft pointing straight ahead: the right `y` ahead of the
+ * feet and `z` up, the left a little over two forearms on and `dip` lower, both
+ * kept in by the middle of the body where each arm reaches them easily -- so
+ * the line through them, which the shaft lies on, runs where the blow goes.
+ */
+const level = (y: number, z: number, dip = 0.3): [V3, V3] => [[0.1, y, z], [-0.1, y + 2.6, z - dip]];
+/** Where the hands hold the spear at the ready: level ahead at the hip. */
+const READY = level(0.2, 8.6, 0);
+
+/** Warning Thrust: the spear in the right fist alone, drawn back to the hip; a jab checked half way and held, the left palm up and out at it, the leading foot stamped down with it. */
 const WARN_T = { secs: 0.95, release: 0.42 };
 const warnPose: CastPose = (r, t) => {
   const top = 0.32, at = WARN_T.release, hold = 0.66;
-  r.arm[1] = euler(t, [[0, [20, 12, 0]], [top, [-14, 18, 6]], [at, [66, 6, 6]], [hold, [64, 6, 6]], [1, [22, 12, 0]]]);
-  r.elbow[1] = one(t, [[0, 40], [top, 96], [at, 34], [hold, 36], [1, 40]]);
+  // One-handed, along the forearm: where the forearm points, the spear points.
+  r.wieldStaff = 1;
+  r.arm[1] = euler(t, [[0, [20, 12, 0]], [top, [-16, 16, 4]], [at, [66, 6, 4]], [hold, [64, 6, 4]], [1, [22, 12, 0]]]);
+  r.elbow[1] = one(t, [[0, 40], [top, 100], [at, 20], [hold, 22], [1, 40]]);
   // The left hand up and open, palm out at it: back.
   r.arm[0] = euler(t, [[0, [20, 10, 0]], [top, [48, 10, 18]], [at, [76, 6, 10]], [hold, [74, 6, 10]], [1, [22, 10, 0]]]);
   r.elbow[0] = one(t, [[0, 30], [top, 60], [at, 22], [hold, 24], [1, 30]]);
-  r.hand[0] = euler(t, [[0, [0, 0, 0]], [top, [-30, 0, 0]], [at, [-72, 0, 0]], [hold, [-70, 0, 0]], [1, [0, 0, 0]]]);
+  r.hand[0] = euler(t, [[0, [0, 0, 0]], [top, [-30, 0, 0]], [at, [-76, 0, 0]], [hold, [-74, 0, 0]], [1, [0, 0, 0]]]);
   r.open[0] = t > 0.2 && t < 0.86;
+  r.shape = [{ flat: bump(t, 0.2, at, 0.86) }, undefined];
   // The stamp: the left foot up as the fist comes back, down hard on the jab.
   stance(r, t, [[0, 2, 4, 0, P], [top * 0.9, 34, 72, 6, 14], [at, 20, 10, 12, P], [hold, 20, 12, 12, P], [1, 4, 4, 2, P]]);
   r.spine = euler(t, [[0, [0, 0, 0]], [top, [4, 0, -4]], [at, [-8, 0, 2]], [hold, [-7, 0, 2]], [1, [0, 0, 0]]]);
   r.chest = euler(t, [[0, [0, 0, 0]], [top, [2, 0, -18]], [at, [-4, 0, 8]], [hold, [-4, 0, 8]], [1, [0, 0, 0]]]);
   r.head = euler(t, [[0, [0, 0, 0]], [top, [0, 0, 12]], [at, [-6, 0, -4]], [hold, [-8, 0, -4]], [1, [0, 0, 0]]]);
+  r.mouth = one(t, [[0, 0], [at - 0.02, 0], [at + 0.02, 0.5], [hold, 0.2], [1, 0]]);
 };
 
-/** Overreach: coiled back on the rear leg, then the longest lunge there is, one arm out to its end and the other flung back; held there, and slow to come back. */
+/** Overreach: coiled back on the rear leg, then the longest lunge there is -- the spear slid out to its butt in the one fist, the other arm flung back -- held there, and slow to come back. */
 const OVER_T = { secs: 1.25, release: 0.34, blendOut: 0.34 };
 const overPose: CastPose = (r, t) => {
-  const top = 0.27, at = OVER_T.release, hold = 0.62;
-  r.arm[1] = euler(t, [[0, [20, 12, 0]], [top, [-22, 16, 6]], [at, [96, 2, 0]], [hold, [94, 2, 0]], [0.84, [50, 8, 0]], [1, [22, 12, 0]]]);
+  const top = 0.27, at = OVER_T.release, hold = 0.7;
+  r.wieldStaff = 1;
+  // Slid through the fist as it goes, so the fist ends at the butt: every unit of the shaft out in front.
+  r.slide = one(t, [[0, 0], [top, 0], [at, 3.8], [hold, 3.8], [0.9, 1], [1, 0]]);
+  r.arm[1] = euler(t, [[0, [20, 12, 0]], [top, [-22, 16, 6]], [at, [118, 2, 0]], [hold, [116, 2, 0]], [0.84, [60, 8, 0]], [1, [22, 12, 0]]]);
   r.elbow[1] = one(t, [[0, 40], [top, 104], [at, 0], [hold, 2], [0.84, 30], [1, 40]]);
   r.hand[1] = euler(t, [[0, [0, 0, 0]], [at, [-12, 0, 0]], [hold, [-12, 0, 0]], [1, [0, 0, 0]]]);
   r.arm[0] = euler(t, [[0, [20, 10, 0]], [top, [52, 14, 14]], [at, [-48, 34, 0]], [hold, [-44, 34, 0]], [0.84, [0, 20, 0]], [1, [20, 10, 0]]]);
   r.elbow[0] = one(t, [[0, 30], [top, 50], [at, 8], [hold, 10], [1, 30]]);
   r.open[0] = t > at - 0.04 && t < 0.8;
+  r.shape = [{ flat: bump(t, at - 0.04, at, 0.8) }, undefined];
   stance(r, t, [[0, 2, 4, 0, P], [top, 16, 50, 20, P], [at, 62, 80, 40, P], [hold, 60, 78, 40, P], [0.84, 26, 34, 14, P], [1, 4, 4, 2, P]]);
   r.spine = euler(t, [[0, [0, 0, 0]], [top, [8, 0, -6]], [at, [-26, 0, 6]], [hold, [-24, 0, 6]], [0.84, [-8, 0, 2]], [1, [0, 0, 0]]]);
   r.chest = euler(t, [[0, [0, 0, 0]], [top, [4, 0, -26]], [at, [-8, 0, 18]], [hold, [-8, 0, 18]], [1, [0, 0, 0]]]);
@@ -469,57 +454,68 @@ const overPose: CastPose = (r, t) => {
   r.head = euler(t, [[0, [0, 0, 0]], [top, [-2, 0, 20]], [at, [20, 0, -12]], [hold, [18, 0, -12]], [1, [0, 0, 0]]]);
 };
 
-/** Sweep the Legs: down on both knees' worth of crouch, the fist swung low and flat from the right across the front to the left. */
+/** Sweep the Legs: down into a crouch, the spear in both hands swung round low and flat from the right across the front to the left, the point at the shins. */
 const SWEEP_T = { secs: 1.05, release: 0.46 };
 const sweepPose: CastPose = (r, t) => {
   const top = 0.34, at = SWEEP_T.release, thru = 0.62;
-  r.arm[1] = euler(t, [[0, [20, 12, 0]], [top, [14, 74, -24]], [at, [58, -8, 30]], [thru, [40, -28, 40]], [1, [20, 12, 0]]]);
-  r.elbow[1] = one(t, [[0, 40], [top, 22], [at, 6], [thru, 24], [1, 40]]);
-  r.arm[0] = euler(t, [[0, [20, 10, 0]], [top, [46, 20, 10]], [at, [12, 58, 0]], [thru, [8, 62, 0]], [1, [20, 10, 0]]]);
-  r.elbow[0] = one(t, [[0, 30], [top, 40], [at, 14], [1, 30]]);
-  r.open[0] = t > top && t < 0.86;
+  onHaft(r, t, [
+    [0.1, READY[0], READY[1]], [top, [-0.4, 0.8, 7.4], [2.2, 1.8, 6.4]], [at, [0.2, 1.6, 6.8], [0.0, 4.2, 5.0]],
+    [thru, [1.0, 2.0, 6.8], [-1.4, 3.6, 5.2]], [0.86, READY[0], READY[1]], [1, READY[0], READY[1]],
+  ]);
   stance(r, t, [[0, 2, 4, 0, P], [top, 40, 84, 10, P], [at, 46, 96, 12, P], [thru, 44, 92, 12, P], [1, 4, 4, 2, P]], 14);
   r.spine = euler(t, [[0, [0, 0, 0]], [top, [-18, 0, -8]], [at, [-24, 0, 8]], [thru, [-22, 0, 12]], [1, [0, 0, 0]]]);
   r.chest = euler(t, [[0, [0, 0, 0]], [top, [-6, 4, -40]], [at, [-10, -4, 22]], [thru, [-8, -6, 38]], [1, [0, 0, 0]]]);
   r.head = euler(t, [[0, [0, 0, 0]], [top, [-4, 0, 30]], [at, [6, 0, -16]], [thru, [6, 0, -30]], [1, [0, 0, 0]]]);
 };
 
-/** Vital Thrust: settled and still, the left hand pointing the line and the fist held back at the hip, a long aim; then a short, very fast drive and a snap back. */
+/**
+ * Vital Thrust: settled and still, the left hand pointing the way with one
+ * finger and the spear held back at the hip in the right, a long aim; then
+ * the left hand takes the shaft and both drive it, short and very fast, and
+ * snap it back.
+ */
 const VITAL_T = { secs: 1.2, release: 0.64 };
 const vitalPose: CastPose = (r, t) => {
   const set = 0.2, top = 0.56, at = VITAL_T.release, thru = 0.74;
-  r.arm[1] = euler(t, [[0, [20, 12, 0]], [set, [-14, 16, 6]], [top, [-22, 18, 8]], [at, [90, 2, 2]], [thru, [88, 2, 2]], [0.86, [34, 10, 0]], [1, [20, 12, 0]]]);
-  r.elbow[1] = one(t, [[0, 40], [set, 94], [top, 100], [at, 0], [thru, 2], [0.86, 40], [1, 40]]);
-  r.arm[0] = euler(t, [[0, [20, 10, 0]], [set, [84, 4, -6]], [top, [86, 4, -6]], [at, [42, -10, 30]], [thru, [40, -10, 30]], [1, [20, 10, 0]]]);
-  r.elbow[0] = one(t, [[0, 30], [set, 6], [top, 4], [at, 110], [thru, 108], [1, 30]]);
-  r.open[0] = t > 0.08 && t < at;
+  // Both hands on it only for the drive.
+  const drive = one(t, [[0, 0], [top, 0], [at - 0.02, 1], [thru, 1], [0.9, 0], [1, 0]]);
+  r.arm[1] = euler(t, [[0, [20, 12, 0]], [set, [-14, 16, 4]], [top, [-20, 18, 6]], [1, [20, 12, 0]]]);
+  r.elbow[1] = one(t, [[0, 40], [set, 98], [top, 102], [1, 40]]);
+  r.arm[0] = euler(t, [[0, [20, 10, 0]], [set, [84, 4, -6]], [top, [86, 4, -6]], [1, [20, 10, 0]]]);
+  r.elbow[0] = one(t, [[0, 30], [set, 6], [top, 4], [1, 30]]);
+  r.shape = [{ point: bump(t, 0.1, set, top + 0.02) }, undefined];
+  onHaft(r, t, [[top, ...level(0.0, 8.6)], [at, ...level(3.4, 9.0, 0.5)], [thru, ...level(3.2, 9.0, 0.5)], [1, ...READY]], drive, drive);
+  r.wieldStaff = 1;
+  r.slide = one(t, [[0, 0], [top, 0], [at, 1.6], [thru, 1.6], [1, 0]]);
   stance(r, t, [[0, 2, 4, 0, P], [set, 22, 40, 12, P], [top, 22, 44, 14, P], [at, 32, 52, 22, P], [thru, 32, 50, 22, P], [1, 4, 4, 2, P]]);
   r.spine = euler(t, [[0, [0, 0, 0]], [set, [-6, 0, -4]], [top, [-6, 0, -5]], [at, [-16, 0, 4]], [thru, [-15, 0, 4]], [1, [0, 0, 0]]]);
-  r.chest = euler(t, [[0, [0, 0, 0]], [set, [0, 0, -24]], [top, [0, 0, -28]], [at, [-6, 0, 14]], [thru, [-6, 0, 12]], [1, [0, 0, 0]]]);
+  r.chest = euler(t, [[0, [0, 0, 0]], [set, [0, 0, -24]], [top, [0, 0, -28]], [at, [-6, 0, 10]], [thru, [-6, 0, 10]], [1, [0, 0, 0]]]);
   // Sighting down the left arm: the head turned on to the line while the chest is turned off it, and low.
-  r.head = euler(t, [[0, [0, 0, 0]], [set, [-8, 0, 22]], [top, [-10, 0, 26]], [at, [-4, 0, -10]], [thru, [-4, 0, -8]], [1, [0, 0, 0]]]);
+  r.head = euler(t, [[0, [0, 0, 0]], [set, [-8, 0, 22]], [top, [-10, 0, 26]], [at, [-4, 0, -8]], [thru, [-4, 0, -8]], [1, [0, 0, 0]]]);
 };
 
-/** Hook: a thrust out, a beat while the barb takes, then a haul back to the hips leaning back on the rear leg. */
+/** Hook: a thrust out in both hands, a beat while the barb takes, then a haul back to the hips leaning back on the rear leg, the point lifting as it comes. */
 const HOOK_T = { secs: 1.4, release: 0.28 };
 /** When the haul starts and ends, as shares of the cast. */
 const HAUL = [0.46, 0.6] as const;
 /** Seconds from the catch to a little after the haul: how long the hook's impact plays. */
 const HOOK_AFTER = (0.82 - HOOK_T.release) * HOOK_T.secs + 0.5;
 const hookPose: CastPose = (r, t) => {
-  const top = 0.22, at = HOOK_T.release, [h0, h1] = HAUL;
-  r.arm[1] = euler(t, [[0, [20, 12, 0]], [top, [-16, 14, 6]], [at, [86, 4, 4]], [h0, [84, 4, 4]], [h1, [-12, 18, 8]], [0.76, [-10, 18, 8]], [1, [20, 12, 0]]]);
-  r.elbow[1] = one(t, [[0, 40], [top, 96], [at, 4], [h0, 8], [h1, 104], [0.76, 100], [1, 40]]);
-  r.arm[0] = euler(t, [[0, [20, 10, 0]], [top, [40, 8, 20]], [at, [80, 2, 14]], [h0, [80, 2, 14]], [h1, [18, 4, 24]], [0.76, [16, 4, 24]], [1, [20, 10, 0]]]);
-  r.elbow[0] = one(t, [[0, 30], [top, 70], [at, 18], [h0, 20], [h1, 104], [0.76, 100], [1, 30]]);
+  const top = 0.2, at = HOOK_T.release, [h0, h1] = HAUL;
+  onHaft(r, t, [
+    [0.08, ...READY], [top, ...level(-0.6, 9.0, 0)], [at, ...level(3.0, 9.6, 0.4)], [h0, ...level(2.8, 9.6, 0.4)],
+    [h1, [0.6, -1.8, 8.0], [0.2, 0.6, 9.6]], [0.76, [0.6, -1.7, 8.0], [0.2, 0.7, 9.6]], [1, ...READY],
+  ]);
+  r.slide = one(t, [[0, 0], [top, 0], [at, 1.5], [h0, 1.5], [h1, 0], [1, 0]]);
   stance(r, t, [[0, 2, 4, 0, P], [top, -2, 12, 4, P], [at, 28, 34, 16, P], [h0, 28, 36, 16, P], [h1, 40, 4, 20, P], [0.76, 40, 6, 20, P], [1, 4, 4, 2, P]]);
   // The haul is the back: leaning out over the rear leg, turned as the hands come in.
   r.spine = euler(t, [[0, [0, 0, 0]], [top, [4, 0, -4]], [at, [-12, 0, 4]], [h0, [-10, 0, 4]], [h1, [18, 0, -6]], [0.76, [16, 0, -6]], [1, [0, 0, 0]]]);
-  r.chest = euler(t, [[0, [0, 0, 0]], [top, [2, 0, -20]], [at, [-4, 0, 10]], [h0, [-4, 0, 10]], [h1, [6, 0, -22]], [0.76, [6, 0, -20]], [1, [0, 0, 0]]]);
-  r.head = euler(t, [[0, [0, 0, 0]], [top, [0, 0, 14]], [at, [-6, 0, -6]], [h1, [-10, 0, 18]], [0.76, [-10, 0, 16]], [1, [0, 0, 0]]]);
+  r.chest = euler(t, [[0, [0, 0, 0]], [top, [2, 0, -16]], [at, [-4, 0, 8]], [h0, [-4, 0, 8]], [h1, [6, 0, -18]], [0.76, [6, 0, -16]], [1, [0, 0, 0]]]);
+  r.head = euler(t, [[0, [0, 0, 0]], [top, [0, 0, 12]], [at, [-6, 0, -6]], [h1, [-10, 0, 16]], [0.76, [-10, 0, 14]], [1, [0, 0, 0]]]);
+  r.mouth = one(t, [[0, 0], [h0, 0], [h0 + 0.06, 0.6], [h1, 0.3], [0.76, 0], [1, 0]]);
 };
 
-/** Rally the Line: the spear lifted high overhead as a standard and the left fist pumped, the head back in a shout; then the butt brought down hard and the left arm swept out to call them in. */
+/** Rally the Line: the spear lifted high overhead as a standard and the left fist pumped, the head back in a shout; then the butt brought down hard by the foot and the left arm swept out to call them in. */
 const RALLY_T = { secs: 1.5, release: 0.52 };
 const rallyPose: CastPose = (r, t) => {
   const up = 0.3, top = 0.44, at = RALLY_T.release, thru = 0.7;
@@ -528,6 +524,7 @@ const rallyPose: CastPose = (r, t) => {
   r.arm[0] = euler(t, [[0, [20, 10, 0]], [up, [70, 24, 10]], [top, [104, 22, 10]], [at, [72, 70, 0]], [thru, [70, 72, 0]], [1, [20, 10, 0]]]);
   r.elbow[0] = one(t, [[0, 30], [up, 110], [top, 104], [at, 10], [thru, 12], [1, 30]]);
   r.open[0] = t > at - 0.02 && t < 0.9;
+  r.shape = [{ flat: bump(t, at - 0.02, at + 0.04, 0.9) }, undefined];
   r.leg[0] = euler(t, [[0, [2, 2, 0]], [0.18, [8, 6, 0]], [top, [4, 6, 0]], [at, [10, 10, 0]], [thru, [10, 10, 0]], [1, [2, 2, 0]]]);
   r.leg[1] = euler(t, [[0, [0, 2, 0]], [0.18, [6, 6, 0]], [top, [0, 6, 0]], [at, [-6, 10, 0]], [thru, [-6, 10, 0]], [1, [0, 2, 0]]]);
   const kn = one(t, [[0, 4], [0.18, 26], [top, 2], [at, 20], [thru, 14], [1, 4]]);
@@ -535,122 +532,146 @@ const rallyPose: CastPose = (r, t) => {
   r.spine = euler(t, [[0, [0, 0, 0]], [0.18, [-6, 0, 0]], [top, [8, 0, 0]], [at, [-6, 0, 0]], [thru, [-2, 0, 0]], [1, [0, 0, 0]]]);
   r.chest = euler(t, [[0, [0, 0, 0]], [top, [10, -6, 8]], [at, [-4, 0, -6]], [thru, [0, 0, -4]], [1, [0, 0, 0]]]);
   r.head = euler(t, [[0, [0, 0, 0]], [0.18, [-8, 0, 0]], [top, [22, 0, 0]], [at, [4, 0, 0]], [thru, [6, 0, 0]], [1, [0, 0, 0]]]);
+  // The shout: up with the standard, and again as the butt comes down.
+  r.mouth = one(t, [[0, 0], [up, 0.4], [top, 1], [at, 0.8], [thru, 0.2], [1, 0]]);
 };
 
-/** Twin Thrust: drawn back once, then two quick jabs -- the first high, a half recoil, the second low with a deeper step. */
+/** Twin Thrust: drawn back once, then two quick jabs in both hands -- the first high, a half recoil, the second low with a deeper step. */
 const TWIN_T = { secs: 1.15, release: 0.3 };
 /** When each jab lands, as shares of the cast. */
 const JABS = [TWIN_T.release, 0.56] as const;
 const twinPose: CastPose = (r, t) => {
   const top = 0.22, [j1, j2] = JABS;
-  r.arm[1] = euler(t, [[0, [20, 12, 0]], [top, [-18, 14, 4]], [j1, [94, 2, 2]], [j1 + 0.06, [92, 2, 2]], [0.44, [22, 10, 4]], [j2, [70, 0, -4]], [j2 + 0.1, [68, 0, -4]], [1, [20, 12, 0]]]);
-  r.elbow[1] = one(t, [[0, 40], [top, 96], [j1, 2], [j1 + 0.06, 4], [0.44, 84], [j2, 0], [j2 + 0.1, 4], [1, 40]]);
-  r.arm[0] = euler(t, [[0, [20, 10, 0]], [top, [52, 6, 18]], [j1, [74, 2, 14]], [0.44, [62, 4, 16]], [j2, [66, 2, 12]], [j2 + 0.1, [64, 2, 12]], [1, [20, 10, 0]]]);
-  r.elbow[0] = one(t, [[0, 30], [top, 60], [j1, 28], [0.44, 46], [j2, 30], [1, 30]]);
+  onHaft(r, t, [
+    [0.08, ...READY], [top, ...level(-0.6, 9.4, 0)], [j1, ...level(2.8, 10.0, 0.2)], [j1 + 0.06, ...level(2.7, 10.0, 0.2)],
+    [0.44, ...level(0.0, 9.0)], [j2, ...level(3.2, 8.0, 1.0)], [j2 + 0.1, ...level(3.1, 8.0, 1.0)], [1, ...READY],
+  ]);
   stance(r, t, [[0, 2, 4, 0, P], [top, 4, 16, 6, P], [j1, 22, 26, 12, P], [0.44, 22, 24, 12, P], [j2, 36, 46, 20, P], [j2 + 0.1, 34, 44, 20, P], [1, 4, 4, 2, P]]);
   r.spine = euler(t, [[0, [0, 0, 0]], [top, [4, 0, -4]], [j1, [-10, 0, 4]], [0.44, [-6, 0, -2]], [j2, [-20, 0, 4]], [j2 + 0.1, [-18, 0, 4]], [1, [0, 0, 0]]]);
-  r.chest = euler(t, [[0, [0, 0, 0]], [top, [2, 0, -20]], [j1, [-4, 0, 10]], [0.44, [0, 0, -12]], [j2, [-6, 0, 14]], [1, [0, 0, 0]]]);
+  r.chest = euler(t, [[0, [0, 0, 0]], [top, [2, 0, -16]], [j1, [-4, 0, 8]], [0.44, [0, 0, -10]], [j2, [-6, 0, 10]], [1, [0, 0, 0]]]);
   r.head = euler(t, [[0, [0, 0, 0]], [top, [0, 0, 12]], [j1, [-2, 0, -6]], [0.44, [-4, 0, 8]], [j2, [-12, 0, -8]], [1, [0, 0, 0]]]);
 };
 
-/** Reach Advantage: the long guard -- the weight kept back on a bent rear leg, the front leg straight and light, and both arms run out to their full length while the body stays away. */
+/** Reach Advantage: the long guard -- the weight kept back on a bent rear leg, the front leg straight and light, the spear run out through both hands as far as the arms go while the body stays away; then a short push of the point. */
 const REACH_T = { secs: 1.05, release: 0.5 };
 const reachPose: CastPose = (r, t) => {
   const set = 0.22, top = 0.42, at = REACH_T.release, thru = 0.7;
-  r.arm[1] = euler(t, [[0, [20, 12, 0]], [set, [34, 12, 4]], [top, [30, 12, 4]], [at, [92, 2, 2]], [thru, [90, 2, 2]], [1, [20, 12, 0]]]);
-  r.elbow[1] = one(t, [[0, 40], [set, 72], [top, 80], [at, 0], [thru, 0], [1, 40]]);
-  r.arm[0] = euler(t, [[0, [20, 10, 0]], [set, [66, 4, 14]], [top, [64, 4, 14]], [at, [90, 0, 8]], [thru, [88, 0, 8]], [1, [20, 10, 0]]]);
-  r.elbow[0] = one(t, [[0, 30], [set, 34], [top, 38], [at, 4], [thru, 6], [1, 30]]);
+  onHaft(r, t, [
+    [0.08, ...READY], [set, ...level(2.0, 10.4, 0.2)], [top, ...level(1.8, 10.4, 0.2)],
+    [at, ...level(3.4, 10.4, 0.4)], [thru, ...level(3.3, 10.4, 0.4)], [1, ...READY],
+  ]);
+  // Held near the butt: all the length of it out in front.
+  r.slide = one(t, [[0, 0], [set, 3.4], [thru, 3.4], [1, 0]]);
   stance(r, t, [[0, 2, 4, 0, P], [set, 40, 2, 14, P], [top, 40, 2, 14, P], [at, 42, 4, 14, P], [thru, 42, 4, 14, P], [1, 4, 4, 2, P]]);
   // Upright, even leaning off it: the reach is the arms', not the body's.
-  r.spine = euler(t, [[0, [0, 0, 0]], [set, [8, 0, -4]], [top, [9, 0, -4]], [at, [5, 0, 2]], [thru, [5, 0, 2]], [1, [0, 0, 0]]]);
-  r.chest = euler(t, [[0, [0, 0, 0]], [set, [0, 0, -12]], [top, [0, 0, -14]], [at, [-2, 0, 6]], [thru, [-2, 0, 6]], [1, [0, 0, 0]]]);
-  r.head = euler(t, [[0, [0, 0, 0]], [set, [-4, 0, 10]], [top, [-4, 0, 12]], [at, [-6, 0, -4]], [1, [0, 0, 0]]]);
+  r.spine = euler(t, [[0, [0, 0, 0]], [set, [10, 0, -4]], [top, [11, 0, -4]], [at, [6, 0, 2]], [thru, [6, 0, 2]], [1, [0, 0, 0]]]);
+  r.chest = euler(t, [[0, [0, 0, 0]], [set, [0, 0, -10]], [top, [0, 0, -12]], [at, [-2, 0, 4]], [thru, [-2, 0, 4]], [1, [0, 0, 0]]]);
+  r.head = euler(t, [[0, [0, 0, 0]], [set, [-6, 0, 10]], [top, [-6, 0, 12]], [at, [-8, 0, -4]], [1, [0, 0, 0]]]);
 };
 
-/** Skewer: both hands by the right hip and the knees down, then a drive with a step right through, both hands together and the body behind them, held long. */
+/** Skewer: both hands drawn back by the right hip and the knees down, then a drive with a step right through, the shaft run out through the hands and the body behind it, held long. */
 const SKEWER_T = { secs: 1.25, release: 0.44 };
 const skewerPose: CastPose = (r, t) => {
   const top = 0.36, at = SKEWER_T.release, thru = 0.58, hold = 0.74;
-  r.arm[1] = euler(t, [[0, [20, 12, 0]], [top, [-26, 18, 6]], [at, [78, 0, 8]], [thru, [84, 0, 8]], [hold, [82, 0, 8]], [1, [20, 12, 0]]]);
-  r.elbow[1] = one(t, [[0, 40], [top, 102], [at, 8], [thru, 4], [hold, 6], [1, 40]]);
-  r.arm[0] = euler(t, [[0, [20, 10, 0]], [top, [26, -6, 34]], [at, [80, -4, 16]], [thru, [84, -4, 16]], [hold, [82, -4, 16]], [1, [20, 10, 0]]]);
-  r.elbow[0] = one(t, [[0, 30], [top, 104], [at, 16], [thru, 10], [hold, 12], [1, 30]]);
+  onHaft(r, t, [
+    [0.1, ...READY], [top, [1.2, -1.6, 7.8], [1.0, 1.0, 7.8]], [at, ...level(3.2, 9.0, 0.4)],
+    [thru, ...level(4.0, 9.0, 0.4)], [hold, ...level(3.9, 9.0, 0.4)], [1, ...READY],
+  ]);
+  r.slide = one(t, [[0, 0], [top, 0], [at, 2], [hold, 2], [1, 0]]);
   stance(r, t, [[0, 2, 4, 0, P], [top, 6, 32, 10, P], [at, 46, 54, 30, P], [thru, 50, 58, 32, P], [hold, 48, 56, 32, P], [1, 4, 4, 2, P]]);
   r.spine = euler(t, [[0, [0, 0, 0]], [top, [-6, 0, -6]], [at, [-24, 0, 4]], [thru, [-30, 0, 4]], [hold, [-28, 0, 4]], [1, [0, 0, 0]]]);
-  r.chest = euler(t, [[0, [0, 0, 0]], [top, [-2, 0, -28]], [at, [-6, 0, 6]], [thru, [-6, 0, 8]], [1, [0, 0, 0]]]);
-  r.head = euler(t, [[0, [0, 0, 0]], [top, [-6, 0, 20]], [at, [12, 0, -4]], [thru, [16, 0, -6]], [hold, [14, 0, -6]], [1, [0, 0, 0]]]);
+  r.chest = euler(t, [[0, [0, 0, 0]], [top, [-2, 0, -24]], [at, [-6, 0, 6]], [thru, [-6, 0, 8]], [1, [0, 0, 0]]]);
+  r.head = euler(t, [[0, [0, 0, 0]], [top, [-6, 0, 18]], [at, [12, 0, -4]], [thru, [16, 0, -6]], [hold, [14, 0, -6]], [1, [0, 0, 0]]]);
+  r.mouth = one(t, [[0, 0], [top, 0], [at, 0.6], [thru, 0.3], [hold, 0], [1, 0]]);
 };
 
-/** Keep Away: a wide flat sweep of the spear arm from the right across to the left at the chest, the left hand thrust out open the other way. */
+/** Keep Away: the spear taken crosswise in both hands, drawn in to the chest, and shoved straight out from it with a step -- a bar thrust into whatever is there. */
 const KEEP_T = { secs: 1.0, release: 0.48 };
 const keepPose: CastPose = (r, t) => {
   const top = 0.34, at = KEEP_T.release, thru = 0.64;
-  r.arm[1] = euler(t, [[0, [20, 12, 0]], [top, [58, 62, -12]], [at, [84, -18, 28]], [thru, [72, -26, 32]], [1, [20, 12, 0]]]);
-  r.elbow[1] = one(t, [[0, 40], [top, 24], [at, 8], [thru, 20], [1, 40]]);
-  r.arm[0] = euler(t, [[0, [20, 10, 0]], [top, [40, 0, 26]], [at, [64, 62, -6]], [thru, [62, 64, -6]], [1, [20, 10, 0]]]);
-  r.elbow[0] = one(t, [[0, 30], [top, 90], [at, 6], [thru, 8], [1, 30]]);
-  r.hand[0] = euler(t, [[0, [0, 0, 0]], [top, [0, 0, 0]], [at, [-70, 0, 0]], [thru, [-68, 0, 0]], [1, [0, 0, 0]]]);
-  r.open[0] = t > top && t < 0.88;
-  r.leg[0] = euler(t, [[0, [2, 2, 0]], [top, [10, 12, 0]], [at, [14, 14, 0]], [1, [2, 2, 0]]]);
-  r.leg[1] = euler(t, [[0, [0, 2, 0]], [top, [-8, 12, 0]], [at, [-10, 14, 0]], [1, [0, 2, 0]]]);
-  const kn = one(t, [[0, 4], [top, 18], [at, 24], [thru, 22], [1, 4]]);
-  r.knee = [kn, kn];
-  r.spine = euler(t, [[0, [0, 0, 0]], [top, [2, 0, -10]], [at, [-4, 0, 10]], [1, [0, 0, 0]]]);
-  r.chest = euler(t, [[0, [0, 0, 0]], [top, [0, 4, -32]], [at, [-2, -4, 30]], [thru, [-2, -4, 34]], [1, [0, 0, 0]]]);
-  r.head = euler(t, [[0, [0, 0, 0]], [top, [0, 0, 22]], [at, [0, 0, -20]], [thru, [0, 0, -24]], [1, [0, 0, 0]]]);
+  onHaft(r, t, [
+    [0.08, ...READY], [top, [1.8, 1.0, 10.4], [-1.8, 1.0, 10.6]], [at, [1.7, 3.6, 10.8], [-1.9, 3.6, 11.0]],
+    [thru, [1.7, 3.5, 10.8], [-1.9, 3.5, 11.0]], [0.88, ...READY], [1, ...READY],
+  ]);
+  // Slid back through the right fist, so the shaft lies across the body about its middle.
+  r.slide = one(t, [[0, 0], [0.2, -3], [0.72, -3], [0.9, 0]]);
+  stance(r, t, [[0, 2, 4, 0, P], [top, 2, 14, 10, P], [at, 30, 30, 14, P], [thru, 30, 30, 14, P], [1, 4, 4, 2, P]], 8);
+  r.spine = euler(t, [[0, [0, 0, 0]], [top, [6, 0, 0]], [at, [-12, 0, 0]], [thru, [-11, 0, 0]], [1, [0, 0, 0]]]);
+  r.chest = euler(t, [[0, [0, 0, 0]], [top, [4, 0, 0]], [at, [-4, 0, 0]], [1, [0, 0, 0]]]);
+  r.head = euler(t, [[0, [0, 0, 0]], [top, [4, 0, 0]], [at, [-4, 0, 0]], [1, [0, 0, 0]]]);
+  r.mouth = one(t, [[0, 0], [at - 0.02, 0], [at + 0.02, 0.6], [thru, 0.1], [1, 0]]);
 };
 
-/** Fend Off: the spear whirled before the body, the fist going round twice, then set wide on bent knees with the left palm thrust out. */
+/** Fend Off: the spear spun in the right fist before the body, twice round and quickening, then caught in both hands across the body, point high, on bent knees: held so as long as it lasts. */
 const FEND_T = { secs: 1.0, release: 0.5 };
 /** When the whirl goes round, as shares of the cast. */
 const FEND_SPIN = [0.08, 0.44] as const;
-const fendPose: CastPose = (r, t) => {
-  const [s0, s1] = FEND_SPIN, at = FEND_T.release, thru = 0.68;
-  // The fist round a small circle before the chest, twice, quickening, as the pike of light goes round it (`fendWheel`).
-  const ph = whirlOf(t);
-  const spin = bump(t, s0, s0 + 0.08, at);
-  r.arm[1] = euler(t, [[0, [20, 12, 0]], [s0 + 0.06, [64, 18, 0]], [s1, [64, 18, 0]], [at, [52, 14, 0]], [thru, [52, 14, 0]], [1, [20, 12, 0]]]);
-  r.arm[1][0] += 12 * Math.sin(ph) * spin;
-  r.arm[1][1] += 14 * Math.cos(ph) * spin;
-  r.elbow[1] = one(t, [[0, 40], [s0 + 0.06, 50], [s1, 50], [at, 40], [1, 40]]) + 10 * Math.sin(ph + 1) * spin;
-  r.arm[0] = euler(t, [[0, [20, 10, 0]], [s1, [36, 8, 22]], [at, [84, 6, -4]], [thru, [82, 6, -4]], [1, [20, 10, 0]]]);
-  r.elbow[0] = one(t, [[0, 30], [s1, 90], [at, 6], [thru, 8], [1, 30]]);
-  r.hand[0] = euler(t, [[0, [0, 0, 0]], [s1, [0, 0, 0]], [at, [-74, 0, 0]], [thru, [-72, 0, 0]], [1, [0, 0, 0]]]);
-  r.open[0] = t > s1 - 0.04 && t < 0.88;
-  r.leg[0] = euler(t, [[0, [2, 2, 0]], [s1, [6, 8, 0]], [at, [14, 16, 0]], [thru, [14, 16, 0]], [1, [2, 2, 0]]]);
-  r.leg[1] = euler(t, [[0, [0, 2, 0]], [s1, [-4, 8, 0]], [at, [-10, 16, 0]], [thru, [-10, 16, 0]], [1, [0, 2, 0]]]);
-  const kn = one(t, [[0, 4], [s1, 12], [at, 34], [thru, 30], [1, 4]]);
-  r.knee = [kn, kn];
-  r.spine = euler(t, [[0, [0, 0, 0]], [s1, [2, 0, 0]], [at, [-6, 0, 0]], [thru, [-5, 0, 0]], [1, [0, 0, 0]]]);
-  r.chest = euler(t, [[0, [0, 0, 0]], [s1, [0, 0, -8]], [at, [-2, 0, 10]], [1, [0, 0, 0]]]);
-  r.head = euler(t, [[0, [0, 0, 0]], [at, [-4, 0, 0]], [1, [0, 0, 0]]]);
+/** Where the set is held, as a share of the cast. */
+const FEND_HOLD = 0.62;
+/** Where the right fist is while it whirls the spear, in the body's frame. */
+const WHIRL_AT: V3 = [0.6, 2.4, 10.4];
+const fendPose: CastPose = (r, t, c) => {
+  const [s0, s1] = FEND_SPIN, at = FEND_T.release;
+  const caught = one(t, [[0, 0], [s1, 0], [at, 1], [0.9, 1], [1, 0]]);
+  const port: [V3, V3] = [[2.0, 2.2, 8.0], [-1.2, 2.6, 10.6]];
+  onHaft(r, t, [[s0, WHIRL_AT, [WHIRL_AT[0] - 1.4, WHIRL_AT[1] + 0.2, WHIRL_AT[2] + 1]], [s1, WHIRL_AT, port[1]], [at, port[0], port[1]], [1, port[0], port[1]]], caught);
+  // Turned in the fist: square across it, then round with the whirl.
+  r.haft = (-90 + (whirlOf(t) * 180) / Math.PI) * (1 - caught);
+  r.arm[0] = euler(t, [[0, [20, 10, 0]], [s1, [30, 10, 10]], [1, [30, 10, 10]]]);
+  r.elbow[0] = one(t, [[0, 30], [s1, 60], [1, 60]]);
+  const breathe = Math.sin(heldFor(c) * TAU * 4);
+  stance(r, t, [[0, 2, 4, 0, P], [s1, 10, 20, 6, P], [at, 24, 46, 14, P], [1, 24, 46, 14, P]], 14);
+  r.spine = euler(t, [[0, [0, 0, 0]], [s1, [2, 0, 0]], [at, [-8, 0, 0]], [1, [-7, 0, 0]]]);
+  r.spine[0] += 1.2 * breathe;
+  r.chest = euler(t, [[0, [0, 0, 0]], [s1, [0, 0, -6]], [at, [-2, 0, 8]], [1, [-2, 0, 8]]]);
+  r.head = euler(t, [[0, [0, 0, 0]], [at, [-4, 0, -4]], [1, [-4, 0, -4]]]);
 };
 
-/** Brace for the Charge: down into a deep brace, the rear leg run out behind, the fist lowered beside the foot to plant the butt, the left hand out along the line; stamped and held. */
+/**
+ * Brace for the Charge: down on the right knee, the butt grounded by the
+ * right foot and the shaft run out through both fists at the height of a
+ * charging chest, the point well past the leading knee; held there as long
+ * as it lasts, breathing.
+ */
 const BRACE_T = { secs: 1.3, release: 0.54, blendOut: 0.2 };
-const bracePose: CastPose = (r, t) => {
-  const top = 0.42, at = BRACE_T.release, thru = 0.8;
-  r.arm[1] = euler(t, [[0, [20, 12, 0]], [top, [-4, 24, 0]], [at, [-8, 26, 0]], [thru, [-8, 26, 0]], [1, [16, 12, 0]]]);
-  r.elbow[1] = one(t, [[0, 40], [top, 10], [at, 8], [thru, 8], [1, 36]]);
-  r.arm[0] = euler(t, [[0, [20, 10, 0]], [top, [60, 4, 12]], [at, [70, 4, 10]], [thru, [70, 4, 10]], [1, [20, 10, 0]]]);
-  r.elbow[0] = one(t, [[0, 30], [top, 40], [at, 28], [thru, 28], [1, 30]]);
-  stance(r, t, [[0, 2, 4, 0, P], [top, 50, 100, 44, P], [at, 56, 112, 50, P], [thru, 56, 112, 50, P], [1, 6, 6, 4, P]], 6);
-  r.spine = euler(t, [[0, [0, 0, 0]], [top, [-20, 0, 0]], [at, [-26, 0, 4]], [thru, [-26, 0, 4]], [1, [-2, 0, 0]]]);
-  r.chest = euler(t, [[0, [0, 0, 0]], [top, [-2, 0, -8]], [at, [-2, 0, 4]], [thru, [-2, 0, 4]], [1, [0, 0, 0]]]);
-  // Looking out over the guard, not down at it.
-  r.head = euler(t, [[0, [0, 0, 0]], [top, [20, 0, 0]], [at, [26, 0, -4]], [thru, [26, 0, -4]], [1, [0, 0, 0]]]);
+/** Where the pose is held, as a share of the cast: set, after the stamp. */
+const BRACE_HOLD = 0.66;
+/** The brace's shaft: the way it points from the butt, and where the butt is grounded, in the body's frame. */
+const BRACE_UP: V3 = [0, 0.88, 0.47];
+const BRACE_BUTT: V3 = [1.1, -2.2, 0.3];
+/** A point `d` units up the braced shaft from its butt. */
+const braceAt = (d: number): V3 => [BRACE_BUTT[0] + BRACE_UP[0] * d, BRACE_BUTT[1] + BRACE_UP[1] * d, BRACE_BUTT[2] + BRACE_UP[2] * d];
+const bracePose: CastPose = (r, t, c) => {
+  const top = 0.4, at = BRACE_T.release;
+  // The fists 6.4 and 10.4 up the shaft from its butt: the shaft slid back through the right fist two units to ground it.
+  const set: [V3, V3] = [braceAt(6.4), braceAt(10.4)];
+  onHaft(r, t, [[0.08, ...READY], [top, ...level(1.4, 6.6, -1.2)], [at, ...set], [1, ...set]]);
+  r.slide = one(t, [[0, 0], [top, -1], [at, -2], [1, -2]]);
+  r.kneel = one(t, [[0, 0], [top, 1], [1, 1]]);
+  // A breath in the hold: the shoulders rising and settling, slowly.
+  const breathe = Math.sin(heldFor(c) * TAU * 3);
+  r.spine = euler(t, [[0, [0, 0, 0]], [top, [-14, 0, 0]], [at, [-18, 0, 4]], [1, [-16, 0, 4]]]);
+  r.spine[0] += 1.5 * breathe;
+  r.chest = euler(t, [[0, [0, 0, 0]], [top, [-2, 0, -8]], [at, [-2, 0, 6]], [1, [-2, 0, 6]]]);
+  // Looking out over the point, not down at it.
+  r.head = euler(t, [[0, [0, 0, 0]], [top, [10, 0, 0]], [at, [16, 0, -6]], [1, [14, 0, -6]]]);
+  r.mouth = one(t, [[0, 0], [top, 0], [at, 0.45], [at + 0.08, 0], [1, 0]]);
 };
 
 /* ---- shared moments ----------------------------------------------------------------------- */
 
-/** Where a lance leaves from: the right fist, the one that drives. */
-const fist = (k: FxScene): P3 => k.hand(1);
+/** Where a lance leaves from: the point of the spear, which the light runs on from along the line of the blow. */
+const point = (k: FxScene): P3 => spearTip(k);
 
-/** A lance that has struck held in the target for `stay` of `u`, then drawn back to the fist and gone. */
-function heldLance(k: FxScene, u: number, stay: number, to: P3, o: LanceLook = {}): void {
-  const back = smooth(seg(u, stay, 1));
-  const from = fist(k);
+/**
+ * A lance that has struck held in the target for `stay` of `u`, then drawn
+ * back into the spear's point and gone by `end` of it -- before the body
+ * that drove it has let the spear go back.
+ */
+function heldLance(k: FxScene, u: number, stay: number, to: P3, o: LanceLook = {}, end = 1): void {
+  const back = smooth(seg(u, stay, end));
+  if (back >= 1) return;
+  const from = point(k);
   lance(k, from, along(from, to, 1 - back * 0.85), { ...o, alpha: (o.alpha ?? 1) * (1 - back) });
 }
 
@@ -674,11 +695,11 @@ export const PIKEMAN: Record<string, SpellVisual> = {
     palette: PALETTE,
     cast: { timing: WARN_T, pose: warnPose },
     fx: {
-      charge: (k, t) => k.glow(fist(k), 5, 0.6 * bump(t, 0.2, WARN_T.release, WARN_T.release + 0.05)),
+      charge: (k, t) => k.glow(point(k), 5, 0.6 * bump(t, 0.2, WARN_T.release, WARN_T.release + 0.05)),
       travel: {
         secs: (tiles) => 0.06 + tiles * 0.03,
         draw: (k, u) => {
-          const from = fist(k), stop = warnStop(k);
+          const from = point(k), stop = warnStop(k);
           lance(k, from, along(from, stop, easeOut(u)), { width: 2 });
         },
       },
@@ -694,7 +715,7 @@ export const PIKEMAN: Record<string, SpellVisual> = {
         secs: 0.8,
         draw: (k, u) => {
           const stop = warnStop(k);
-          heldLance(k, u, 0.35, stop, { width: 2 });
+          heldLance(k, u, 0.26, stop, { width: 2 }, 0.5);
           k.flare(stop, 9 * (1 - u), flashOf(u, 0.06), k.pal.core, 0.8);
           k.light(stop, 1.4, 0.45 * (1 - u));
         },
@@ -732,17 +753,17 @@ export const PIKEMAN: Record<string, SpellVisual> = {
     cast: { timing: OVER_T, pose: overPose },
     fx: {
       charge: (k, t) => {
-        k.glow(fist(k), 5, 0.6 * bump(t, 0.12, OVER_T.release, OVER_T.release + 0.04));
+        k.glow(point(k), 5, 0.6 * bump(t, 0.12, OVER_T.release, OVER_T.release + 0.04));
         overReachMark(k, smooth(seg(t, 0.12, OVER_T.release)));
       },
       travel: {
         secs: (tiles) => 0.06 + tiles * 0.045,
         draw: (k, u) => {
-          const from = fist(k), to = k.heart(k.target);
+          const from = point(k), to = k.heart(k.target);
           // Telescoped out in three steps rather than slid: each joint of it shoots on from the last.
           const step = Math.min(2.999, u * 3);
           const reach = (Math.floor(step) + easeOut(step - Math.floor(step))) / 3;
-          lance(k, from, along(from, to, reach), { width: 1.8, head: 10 });
+          lance(k, from, along(from, to, reach), { width: 2.4, head: 11 });
           overReachMark(k, 1);
           if (!k.fast) k.emit(along(from, to, reach), 50, { kind: 'mote', colour: k.pal.accent, size: 1.4, life: [0.15, 0.3], speed: [0.02, 0.1], up: [-2, 2], gravity: 0 });
         },
@@ -758,9 +779,10 @@ export const PIKEMAN: Record<string, SpellVisual> = {
           const total = 0.2 + wind;
           const age = u * total;
           const to = k.heart(k.target);
-          const back = smooth(seg(age, 0.2, total));
-          const from = fist(k);
-          lance(k, from, along(from, to, 1 - back * 0.92), { width: 1.8, head: 10, alpha: 1 - 0.75 * back });
+          // Drawn back into the point as the arm stays out; then the slow second before the next swing is the mark going.
+          const back = smooth(seg(age, 0.12, 0.4));
+          const from = point(k);
+          lance(k, from, along(from, to, 1 - back * 0.92), { width: 2.4, head: 11, alpha: 1 - back });
           landGlint(k, to, clamp(age / 0.45), 11);
           overReachMark(k, 1 - smooth(seg(age, 0.3, total)));
         },
@@ -840,7 +862,7 @@ export const PIKEMAN: Record<string, SpellVisual> = {
       travel: {
         secs: (tiles) => 0.02 + tiles * 0.02,
         draw: (k, u) => {
-          const from = fist(k), to = k.heart(k.target);
+          const from = point(k), to = k.heart(k.target);
           lance(k, from, along(from, to, u), { width: 1.8, head: 11 });
         },
       },
@@ -853,7 +875,7 @@ export const PIKEMAN: Record<string, SpellVisual> = {
         secs: 0.6,
         draw: (k, u) => {
           const at = k.heart(k.target);
-          heldLance(k, u, 0.2, at, { width: 1.8, head: 11 });
+          heldLance(k, u, 0.15, at, { width: 1.8, head: 11 }, 0.45);
           const f = flashOf(u, 0.05);
           k.flare(at, 12 * (1 - 0.4 * u), f, k.pal.core, 0);
           k.flare(at, 8 * (1 - 0.4 * u), f, k.pal.accent, Math.PI / 4);
@@ -875,11 +897,11 @@ export const PIKEMAN: Record<string, SpellVisual> = {
     palette: PALETTE,
     cast: { timing: HOOK_T, pose: hookPose },
     fx: {
-      charge: (k, t) => k.glow(fist(k), 5, 0.6 * bump(t, 0.12, HOOK_T.release, HOOK_T.release + 0.04)),
+      charge: (k, t) => k.glow(point(k), 5, 0.6 * bump(t, 0.12, HOOK_T.release, HOOK_T.release + 0.04)),
       travel: {
         secs: (tiles) => 0.05 + tiles * 0.035,
         draw: (k, u) => {
-          const from = fist(k), to = k.heart(k.target);
+          const from = point(k), to = k.heart(k.target);
           lance(k, from, along(from, to, easeOut(u)), { width: 1.8, head: 12, hook: true });
         },
       },
@@ -899,8 +921,8 @@ export const PIKEMAN: Record<string, SpellVisual> = {
           const age = u * secs;
           const h0 = (HAUL[0] - HOOK_T.release) * HOOK_T.secs, h1 = (HAUL[1] - HOOK_T.release) * HOOK_T.secs;
           const haul = smooth(seg(age, h0, h1));
-          const free = seg(age, h1 + 0.12, h1 + 0.42);
-          const to = k.heart(k.target), from = fist(k);
+          const free = seg(age, h1 + 0.04, h1 + 0.2);
+          const to = k.heart(k.target), from = point(k);
           // Taut before the haul, a tremble in it; let go after.
           if (free < 1) {
             const shake = age < h1 ? 0.4 * Math.sin(k.now * 60) * (1 - haul) : 0;
@@ -909,7 +931,7 @@ export const PIKEMAN: Record<string, SpellVisual> = {
           if (age < 0.3) landGlint(k, to, age / 0.3, 8);
           hookFurrow(k, haul, 1 - smooth(seg(age, h1 + 0.2, secs)));
           if (haul > 0 && haul < 1) k.emit(k.at(k.target, 0.04), 60, { kind: 'dust', colour: ['#8f7f62', '#a8957a'], size: 3, life: [0.35, 0.7], speed: [0.1, 0.4], up: [2, 6], gravity: 4, drag: 0.1, jitter: 0.12 });
-          if (age >= h1 + 0.12 && !k.state.snap) {
+          if (age >= h1 + 0.04 && !k.state.snap) {
             k.state.snap = 1;
             k.burst(to, 10, { kind: 'spark', colour: [k.pal.core, k.pal.accent], size: 1.6, life: [0.12, 0.3], speed: [0.6, 1.4], up: [0, 10], gravity: 50 });
           }
@@ -974,7 +996,7 @@ export const PIKEMAN: Record<string, SpellVisual> = {
     fx: {
       charge: (k, t) => {
         const [j1, j2] = JABS;
-        k.glow(fist(k), 4, 0.5 * bump(t, 0.1, j1, j1 + 0.04));
+        k.glow(point(k), 4, 0.5 * bump(t, 0.1, j1, j1 + 0.04));
         // Each jab: out in a few hundredths, held a moment, drawn back.
         jab(k, t, j1, twinAim(k, 0));
         jab(k, t, j2, twinAim(k, 1));
@@ -1007,7 +1029,7 @@ export const PIKEMAN: Record<string, SpellVisual> = {
       travel: {
         secs: (tiles) => 0.04 + tiles * 0.04,
         draw: (k, u) => {
-          const from = fist(k), to = k.heart(k.target);
+          const from = point(k), to = k.heart(k.target);
           lance(k, from, along(from, to, easeOut(u)), { width: 2.2, head: 10 });
           theirReach(k, 1, 0);
         },
@@ -1019,7 +1041,7 @@ export const PIKEMAN: Record<string, SpellVisual> = {
           const at = k.heart(k.target);
           const big = outReach(k);
           const m = big ? (k.fx.more ?? 1.5) : (k.fx.whole ?? 1);
-          heldLance(k, u, 0.3, at, { width: 2.2, head: 10 });
+          heldLance(k, u, 0.12, at, { width: 2.2, head: 10 }, 0.4);
           landGlint(k, at, u, 8 * m);
           if (big) k.flare(at, 7 * m * (1 - u), flashOf(u, 0.06), k.pal.accent, Math.PI / 4);
           theirReach(k, 1 - smooth(seg(u, 0.3, 1)), u);
@@ -1038,11 +1060,11 @@ export const PIKEMAN: Record<string, SpellVisual> = {
     palette: PALETTE,
     cast: { timing: SKEWER_T, pose: skewerPose },
     fx: {
-      charge: (k, t) => k.glow(fist(k), 5, 0.6 * bump(t, 0.12, SKEWER_T.release, SKEWER_T.release + 0.04)),
+      charge: (k, t) => k.glow(point(k), 5, 0.6 * bump(t, 0.12, SKEWER_T.release, SKEWER_T.release + 0.04)),
       travel: {
         secs: (tiles) => 0.04 + tiles * 0.04,
         draw: (k, u) => {
-          const from = fist(k), to = k.heart(k.target);
+          const from = point(k), to = k.heart(k.target);
           lance(k, from, along(from, to, u), { width: 2.4, head: 11 });
         },
       },
@@ -1056,8 +1078,8 @@ export const PIKEMAN: Record<string, SpellVisual> = {
           const far = off(k, k.target, d, behind, 0, at.z - k.ground(k.target.x, k.target.y) - 2);
           // On through it, out the far side, then drawn back.
           const on = easeOut(seg(u, 0, 0.16));
-          const back = smooth(seg(u, 0.5, 0.95));
-          const from = fist(k);
+          const back = smooth(seg(u, 0.22, 0.42));
+          const from = point(k);
           const tip = along(at, far, on);
           lance(k, from, along(from, tip, 1 - back * 0.9), { width: 2.4, head: 11, alpha: 1 - back });
           if (on >= 1 && !k.state.out) {
@@ -1082,9 +1104,8 @@ export const PIKEMAN: Record<string, SpellVisual> = {
     cast: { timing: KEEP_T, pose: keepPose },
     fx: {
       charge: (k, t) => {
-        const u = seg(t, 0.3, KEEP_T.release + 0.08);
-        if (u > 0 && u < 1) k.slash(k.caster, { u: smooth(u), from: 1.5, to: -1.5, tilt: Math.PI / 2, reach: 15, up: k.caster.tall * 0.62, width: 5, length: 1.6, alpha: 0.9 });
-        else if (u >= 1) k.slash(k.caster, { u: 1, from: 1.5, to: -1.5, tilt: Math.PI / 2, reach: 15, up: k.caster.tall * 0.62, width: 5 * (1 - seg(t, KEEP_T.release + 0.08, 0.72)), length: 1.6, alpha: 0.9 * (1 - seg(t, KEEP_T.release + 0.08, 0.72)) });
+        const u = seg(t, KEEP_T.release - 0.04, 0.74);
+        if (u > 0 && u < 1) shoveWave(k, u);
       },
       hit: (k) => {
         k.burst(k.at(k.caster, 0.04), 12, { kind: 'dust', colour: '#8f7f62', size: 3, life: [0.35, 0.6], speed: [0.8, 1.4], up: [1, 4], gravity: 3, drag: 0.1 });
@@ -1100,6 +1121,7 @@ export const PIKEMAN: Record<string, SpellVisual> = {
         },
       },
       linger: {
+        on: 'caster',
         draw: (k, age, left) => {
           const a = smooth(age / 0.4) * smooth(left / 0.8);
           const tip = spearTip(k);
@@ -1120,7 +1142,7 @@ export const PIKEMAN: Record<string, SpellVisual> = {
    */
   pikeman_fend_off: {
     palette: PALETTE,
-    cast: { timing: FEND_T, pose: fendPose },
+    cast: { timing: FEND_T, pose: fendPose, hold: { at: FEND_HOLD } },
     fx: {
       charge: (k, t) => fendWheel(k, t),
       hit: (k) => {
@@ -1134,6 +1156,7 @@ export const PIKEMAN: Record<string, SpellVisual> = {
         },
       },
       linger: {
+        on: 'caster',
         draw: (k, age, left) => {
           const a = smooth(age / 0.3) * smooth(left / 0.8);
           if (age > 0.55) fendRing(k, HUNT_REACH, 0.55 * a, 1);
@@ -1154,11 +1177,12 @@ export const PIKEMAN: Record<string, SpellVisual> = {
    */
   pikeman_brace_for_the_charge: {
     palette: PALETTE,
-    cast: { timing: BRACE_T, pose: bracePose },
+    cast: { timing: BRACE_T, pose: bracePose, hold: { at: BRACE_HOLD } },
     fx: {
       charge: (k, t) => k.glow(k.at(k.caster, 0.05), 6, 0.5 * bump(t, 0.3, BRACE_T.release, BRACE_T.release + 0.1)),
       hit: (k) => {
-        const butt = k.hand(1);
+        // Where the butt has gone into the ground.
+        const butt = spearButt(k);
         const foot = k.on(butt.x, butt.y, 0.5);
         k.burst(foot, 12, { kind: 'dust', colour: ['#8f7f62', '#a8957a'], size: 3, life: [0.35, 0.6], speed: [0.3, 0.7], up: [2, 6], gravity: 4, drag: 0.12 });
         k.burst(foot, 10, { kind: 'spark', colour: [k.pal.core, k.pal.light], size: 1.6, life: [0.15, 0.3], speed: [0.6, 1.2], up: [4, 12], gravity: 50 });
@@ -1170,6 +1194,7 @@ export const PIKEMAN: Record<string, SpellVisual> = {
         },
       },
       linger: {
+        on: 'caster',
         draw: (k, age, left) => {
           const rise = easeBack(seg(age, 0, 0.45));
           const sink = smooth(seg(left, 0, 0.7));
@@ -1184,7 +1209,7 @@ export const PIKEMAN: Record<string, SpellVisual> = {
 
 /** Where a warning jab is stopped: a pace short of the creature, never behind the fist. */
 function warnStop(k: FxScene): P3 {
-  const from = fist(k), to = k.heart(k.target);
+  const from = point(k), to = k.heart(k.target);
   const d = Math.max(0.01, k.dist);
   return along(from, to, clamp((d - 0.42) / d, 0.25, 0.9));
 }
@@ -1408,7 +1433,7 @@ function jab(k: FxScene, t: number, at: number, to: P3): void {
   const out = seg(t, at - 0.035, at);
   const back = seg(t, at + 0.06, at + 0.14);
   if (out <= 0 || back >= 1) return;
-  const from = fist(k);
+  const from = point(k);
   lance(k, from, along(from, to, easeOut(out) * (1 - 0.85 * back)), { width: 1.7, head: 8, alpha: 1 - back });
 }
 
@@ -1460,6 +1485,29 @@ function barAlong(p: V2, d: V2, len: number, side: number): V2[] {
   ];
 }
 
+/**
+ * Keep Away's shove: a wall of light in front of the body, from the shins to
+ * the chest and as wide as the shaft is long, driven straight out the one
+ * tile a blow will push and thinning as it goes.
+ */
+function shoveWave(k: FxScene, u: number): void {
+  const push = k.fx.push ?? 1;
+  const d = k.facingDir(k.caster), r = rightOf(d);
+  const out = 0.25 + push * easeOut(u);
+  const a = 0.85 * (1 - smooth(seg(u, 0.4, 1)));
+  if (a <= 0.01) return;
+  const half = 0.2 + 0.1 * u;
+  const c = k.caster;
+  const g = k.ground(c.x + d.x * out, c.y + d.y * out);
+  const pt = (s2: number, z: number): P3 => ({ x: c.x + d.x * out + r.x * s2, y: c.y + d.y * out + r.y * s2, z: g + z });
+  const lo = 3, hi = c.tall * 0.62;
+  k.ribbon([pt(-half, hi), pt(0, hi + 0.6), pt(half, hi)], { width: 5 * (1 - 0.5 * u), alpha: a, glow: 0.5 });
+  k.ribbon([pt(-half, lo), pt(0, lo + 0.3), pt(half, lo)], { width: 3.5 * (1 - 0.5 * u), alpha: a * 0.8, glow: 0.3 });
+  k.shapes(pt(0, 0), [
+    { pts: [pt(-half, lo), pt(half, lo), pt(half, hi), pt(-half, hi)], fill: k.pal.core, ink: false, alpha: 0.18 * a },
+  ]);
+}
+
 /** Arrowheads round the caster's feet at `r` tiles, `n` of them pointing out, `len` tiles long. */
 function pushRing(k: FxScene, r: number, n: number, len: number, a: number, turn: number): void {
   if (a <= 0.01) return;
@@ -1481,31 +1529,49 @@ const whirlOf = (t: number): number => {
 };
 
 /**
- * Fend Off's whirl: a pike of light spun round the fist in the body's own
- * upright plane, a hand's breadth in front of it, its head trailing an arc --
- * the wheel a pike makes whirled before the body to keep everything off it.
+ * Fend Off's whirl: the arcs the spear's two ends cut as it spins in the
+ * fist, laid behind each of them -- the wheel a pike makes whirled before the
+ * body to keep everything off it. The spear turns in the plane of the
+ * forearm and the line across the fist (`Rig.haft`), so where each end was a
+ * moment ago is where it is now turned back about the fist in that plane.
  */
 function fendWheel(k: FxScene, t: number): void {
-  const on = bump(t, FEND_SPIN[0], FEND_SPIN[0] + 0.08, FEND_T.release + 0.04);
+  const on = bump(t, FEND_SPIN[0], FEND_SPIN[0] + 0.08, FEND_T.release - 0.02);
   if (on <= 0.01) return;
   const b = k.caster;
-  const c = k.hand(1, b);
-  const o = k.local(b, 0, 0, 0), side = k.local(b, 1, 0, 0), fore = k.local(b, 0, 1, 0);
-  const rx = side.x - o.x, ry = side.y - o.y, fx = fore.x - o.x, fy = fore.y - o.y;
-  // Half the pike's length either side of the fist, in height units, and held out in front of the chest.
-  const L = 9, F = 4;
-  const at = (ph: number, len: number): P3 => ({
-    x: c.x + rx * len * Math.cos(ph) + fx * F, y: c.y + ry * len * Math.cos(ph) + fy * F, z: c.z + len * Math.sin(ph),
-  });
-  const ph = whirlOf(t) + Math.PI / 2;
-  const trail: P3[] = [];
+  const grip = k.joint(b, 'grip'), tip = spearTip(k), butt = spearButt(k);
+  const wrist = k.joint(b, 'wrist1'), elbow = k.joint(b, 'elbow1');
+  // In height units about the fist: the forearm's line, and each end.
+  const U = UNITS_PER_TILE;
+  const vec = (p: P3, o: P3): V3 => [(p.x - o.x) * U, (p.y - o.y) * U, p.z - o.z];
+  const f = norm(vec(wrist, elbow));
+  const h = whirlOf(t) - Math.PI / 2;
+  const sh = Math.sin(h);
+  if (Math.abs(sh) < 0.08) return;
+  const lag = 0.4 + 1.6 * seg(t, FEND_SPIN[0], FEND_SPIN[1]);
   const n = k.fast ? 5 : 8;
-  // The arc behind the head grows with the speed of it.
-  const lag = 0.25 + 0.9 * seg(t, FEND_SPIN[0], FEND_SPIN[1]);
-  for (let i = n; i >= 0; i--) trail.push(at(ph - (i / n) * lag * 2.2, L));
-  k.ribbon(trail, { width: 5, taper: 'start', alpha: 0.8 * on, glow: 0.6 });
-  lance(k, at(ph + Math.PI, L * 0.75), at(ph, L), { width: 1.8, head: 7, alpha: on, sortAt: at(0, 0) });
+  for (const [end, width, alpha] of [[tip, 5, 0.85], [butt, 3, 0.5]] as const) {
+    const v = vec(end, grip);
+    const len = Math.hypot(v[0], v[1], v[2]);
+    if (len < 1) continue;
+    // The end as cos(h) along the forearm and sin(h) across the fist: the across, found from where it is now.
+    const along = dot(v, f) / len;
+    const g = norm([v[0] / len - f[0] * along, v[1] / len - f[1] * along, v[2] / len - f[2] * along]).map((x) => x * Math.sign(sh));
+    const trail: P3[] = [];
+    for (let i = n; i >= 0; i--) {
+      const a = h - (i / n) * lag;
+      const c = Math.cos(a) * len, s2 = Math.sin(a) * len;
+      trail.push({ x: grip.x + (f[0] * c + g[0] * s2) / U, y: grip.y + (f[1] * c + g[1] * s2) / U, z: grip.z + f[2] * c + g[2] * s2 });
+    }
+    k.ribbon(trail, { width, taper: 'start', alpha: alpha * on, glow: 0.6 });
+  }
 }
+
+const dot = (a: V3, b: V3): number => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+const norm = (a: V3): V3 => {
+  const l = Math.hypot(a[0], a[1], a[2]) || 1;
+  return [a[0] / l, a[1] / l, a[2] / l];
+};
 
 /** Fend Off's ring at `r`: a band, and leaf points lying flat on it pointing outward. `grow` draws the points out. */
 function fendRing(k: FxScene, r: number, a: number, grow: number): void {
