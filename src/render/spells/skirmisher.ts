@@ -4,38 +4,37 @@
  * A Skirmisher fights from a few tiles off with something thrown, so nearly
  * every spell here is a throw, and what tells them apart has to be the body
  * and the flight: a flick from the ear, a crow-hop and a long lob, a sidearm
- * skim, a two-handed hurl, a low underhand at the belly, a throw and a leap
- * back, two in a rhythm, a spinning fan. The group's own marks are what
- * the weapon leaves in the air and on the ground: a two-tailed wake, thin as
- * a swallow's, behind whatever is thrown, and chevrons in sand on the land
- * -- pointing where it went, and one to a second wherever a spell lasts, so
- * a buff or a mark is seen running out.
+ * whip while turning to go, a two-handed heave, a low underhand at the
+ * belly, a throw and a leap back, two in a rhythm, a skim that glances on, a
+ * whole turn that sends a fan. The group's own marks are what the weapon
+ * leaves in the air and on the ground: a two-tailed wake, thin as a
+ * swallow's, behind whatever is thrown, and chevrons in sand on the land --
+ * pointing where it went, and one to a second wherever a spell lasts, so a
+ * buff or a mark is seen running out.
  *
  * ## The weapon that is thrown
  *
- * The figure keeps a javelin upright at the hip whatever the arm does, and
- * keeps a throwing axe or a knife in the fist after it has gone. So the
- * casts here put the weapon away (`Rig.stowed`) for as long as the hand is
- * empty, and draw what is thrown themselves:
+ * It is the figure's own weapon up to the moment it leaves the hand: a
+ * javelin taken into the arms (`Rig.wieldStaff`) and laid along the line of
+ * the throw by putting the fist where the throw has it, closed along that
+ * line (`reach` with a `haft`), an axe or a knife carried by the forearm
+ * (`wield`). As it goes the hand is emptied (`Rig.thrown`) and the effects
+ * take it over from where the figure had it -- its grip and its point, read
+ * off the posed figure every frame up to the release -- so the one in the air
+ * starts exactly where the one in the hand was. The hand comes back for the
+ * next (over the shoulder for a javelin, to the hip for an axe or a knife),
+ * and the weapon is in it again from then.
  *
- *   - a javelin (carried 'staff'): put on the back from the first moments of
- *     the cast, and drawn here in the hand, lying along the line of the
- *     throw, until it leaves; the hand reaches back over the shoulder to
- *     draw the next as the cast ends, which is when the real one comes back.
- *   - an axe or a knife (carried in the fist): swung by the forearm
- *     (`Rig.wield`) up to the release, put away on the belt as it leaves the
- *     hand, and drawn again from the hip in the recovery.
- *
- * `HELD` below is when each spell has what in the hand, read by the pose and
+ * `Held` below is when each spell has what in the hand, read by the pose and
  * the effects alike so that the two never disagree.
  */
 import { KNIFE_BLEED_SECS, STAGGER_MAUL } from '../../game/fight';
-import { weaponCarry, type Euler, type Rig } from '../figure';
-import { UNITS_PER_TILE } from '../iso';
+import { weaponCarry, weaponSpan, type Euler, type Rig } from '../figure';
+import { HALF_W, UNITS_PER_TILE } from '../iso';
 import type { CastPose, CastTiming, PoseCue, SpellVisual } from './index';
 import { spellInfo } from './info';
-import { arcAt, bump, clamp, easeBack, easeOut, flashOf, hashOf, lerp, mid3, seg, smooth, TAU, type Body, type FxScene, type P3, type SpellPalette } from './kit';
-import { euler, one, type Key } from './poses';
+import { arcAt, bump, clamp, easeBack, easeOut, flashOf, hashOf, lerp, mid3, seg, smooth, TAU, type Body, type FxScene, type GroundLayer, type P3, type SpellPalette } from './kit';
+import { euler, one, track, type Key } from './poses';
 
 /** Sea teal and sand: quick, light, gone. */
 export const PALETTE: SpellPalette = {
@@ -52,19 +51,12 @@ export const PALETTE: SpellPalette = {
 /** A spell's own numbers, read off the game's tables, so nothing here is written twice. */
 const fxOf = (id: string): Readonly<Record<string, number>> => spellInfo(`skirmisher_${id}`)?.fx ?? {};
 
-/** How much of the pose is the cast's at `t`, as the stage blends it (`castWeight`): a switch in the pose holds from a half. */
-const castW = (t: number, timing: CastTiming): number => {
-  const a = timing.blendIn ?? 0.12, b = timing.blendOut ?? 0.25;
-  return smooth(a > 0 ? t / a : 1) * smooth(b > 0 ? (1 - t) / b : 1);
-};
-
 /* ---- what is in the hand, and when ------------------------------------------------------ */
 
 /**
- * When a throw's weapon leaves the hand and when the next is drawn, as
+ * When a throw's weapon leaves the hand and when the next is in it, as
  * fractions of the cast: `throws[i]` it goes, `draws[i]` the next is in the
- * hand. Javelins are drawn by the effects up to each throw; an axe or a knife
- * is the figure's own, swung by the forearm.
+ * hand.
  */
 interface Held {
   timing: CastTiming;
@@ -72,41 +64,74 @@ interface Held {
   draws: readonly number[];
 }
 
-/** Whether the right hand holds a javelin drawn by the effects at `t`. */
-function javelinInHand(h: Held, t: number): boolean {
-  if (castW(t, h.timing) < 0.5) return false;
-  if (t < h.throws[0]) return true;
-  for (let i = 1; i < h.throws.length; i++) if (t >= h.draws[i - 1] && t < h.throws[i]) return true;
-  return false;
+/** Whether the hand is empty at `t`: between a throw and the drawing of the next. */
+const emptyAt = (h: Held, t: number): boolean => h.throws.some((at, i) => t >= at && t < h.draws[i]);
+/** The next throw at or after `t`, or -1 when all are gone. */
+const nextThrow = (h: Held, t: number): number => h.throws.findIndex((at) => t < at);
+
+/**
+ * The weapon in the arms and the hand emptied, as `Held` says: what every
+ * throw's pose ends with. Empty, the throwing hand is opened and spread, as a
+ * hand that has just let something go is.
+ */
+function holdFor(r: Rig, t: number, c: PoseCue, h: Held): void {
+  const gone = emptyAt(h, t);
+  r.thrown = gone;
+  if (c.carry === 'fist') r.wield = 1;
+  else r.wieldStaff = 1;
+  if (gone) r.shape = [r.shape?.[0], { flat: 0.55, claw: 0.3 }];
 }
 
-/** The figure's weapon put away or wielded, as `Held` says: what every throw's pose ends with. */
-function holdFor(r: Rig, t: number, c: PoseCue, h: Held): void {
-  if (c.carry === 'fist') {
-    let gone = false;
-    for (let i = 0; i < h.throws.length; i++) if (t >= h.throws[i] && t < h.draws[i]) gone = true;
-    r.stowed = gone;
-    r.wield = gone ? 0 : 1;
-  } else if (c.carry === 'staff' || c.carry === null) {
-    // A javelin rides on the back the whole cast but for the moment of drawing the next, which is when it is in the fist again.
-    r.stowed = t < h.draws[h.draws.length - 1];
-  }
+/** A place for the right fist and the way a javelin in it lies, at a moment of a throw: the body's frame, from its feet. */
+interface JavelinKey {
+  t: number;
+  /** Where the fist is: right, ahead, up, in height units from the middle of the feet. */
+  at: readonly [number, number, number];
+  /** Which way the javelin lies through it, point first. */
+  lie: readonly [number, number, number];
+  /** Where the elbow goes. */
+  pole?: readonly [number, number, number];
+}
+
+/** The fist and the javelin as a carry has them, hanging by the right hip and leant forward: where a throw starts and ends. */
+const CARRIED: Omit<JavelinKey, 't'> = { at: [2.5, 0.9, 6.9], lie: [0.16, 0.36, 0.92], pole: [3, -2, 4] };
+/** Reaching up by the right shoulder for the next one, out of a quiver on the back, and coming forward with it over the shoulder. */
+const OVER_SHOULDER: Omit<JavelinKey, 't'> = { at: [1.9, -0.9, 15.2], lie: [0.05, 0.45, 0.89], pole: [5, 0, 10] };
+
+/**
+ * A javelin thrown, for a pose with one in the hand (`carry 'staff'`, or
+ * nothing in the hand at all): the right fist put through `keys`, closed along
+ * the way the javelin lies at each, and the javelin taken into it. Turned with
+ * the hips by `spin` degrees, for a throw made turning. An axe or a knife is
+ * left to the arm's own angles.
+ */
+function javelinThrow(r: Rig, t: number, c: PoseCue, keys: readonly JavelinKey[], spin = 0): void {
+  if (c.carry === 'fist') return;
+  const at = track(t, keys.map((q) => [q.t, q.at] as const));
+  const lie = track(t, keys.map((q) => [q.t, q.lie] as const));
+  const pole = track(t, keys.map((q) => [q.t, q.pole ?? [3, -2, 4]] as const));
+  const turn = (v: number[]): [number, number, number] => {
+    if (!spin) return [v[0], v[1], v[2]];
+    const a = (spin * Math.PI) / 180, cs = Math.cos(a), sn = Math.sin(a);
+    return [v[0] * cs - v[1] * sn, v[0] * sn + v[1] * cs, v[2]];
+  };
+  // Square across the fist is along the hand's own y, which is the way `reach` closes it.
+  r.haft = -90;
+  r.reach = [r.reach?.[0], { at: turn(at), haft: turn(lie), pole: turn(pole) }];
 }
 
 /**
- * The arm reaching for the next weapon after a throw, from `from` to `to`
- * of the cast: over the right shoulder for a javelin, down to the right hip
- * for an axe or a knife. Laid over whatever the arm was doing between.
+ * The arm reaching for the next axe or knife after a throw, from `from` to
+ * `to` of the cast: down to the right hip, where it hangs. Laid over whatever
+ * the arm was doing between. A javelin's reach is in its keys.
  */
 function reachForNext(r: Rig, t: number, c: PoseCue, from: number, at: number, to: number): void {
-  if (t <= from || t >= to) return;
+  if (c.carry !== 'fist' || t <= from || t >= to) return;
   const w = t < at ? smooth(seg(t, from, at)) : 1 - smooth(seg(t, at, to));
-  const back = c.carry === 'fist' ? ([-8, 22, -6] as const) : ([148, 34, -44] as const);
-  const bend = c.carry === 'fist' ? 62 : 128;
+  const back = [-8, 22, -6];
   for (let j = 0; j < 3; j++) r.arm[1][j] = lerp(r.arm[1][j], back[j], w);
-  r.elbow[1] = lerp(r.elbow[1], bend, w);
+  r.elbow[1] = lerp(r.elbow[1], 62, w);
   r.open[1] = false;
-  r.head[2] = lerp(r.head[2], c.carry === 'fist' ? r.head[2] : 10, w * 0.5);
 }
 
 /* ---- directions in the world ---------------------------------------------------------------- */
@@ -122,11 +147,6 @@ const unitV = (x: number, y: number, z: number): V => {
 const along = (p: P3, d: V, len: number): P3 => ({ x: p.x + (d.x * len) / U, y: p.y + (d.y * len) / U, z: p.z + d.z * len });
 const between = (a: P3, b: P3): V => unitV((b.x - a.x) * U, (b.y - a.y) * U, b.z - a.z);
 const mixV = (a: V, b: V, u: number): V => unitV(lerp(a.x, b.x, u), lerp(a.y, b.y, u), lerp(a.z, b.z, u));
-/** A direction in a body's own terms: to its right, ahead of it and up. */
-function bodyDir(k: FxScene, b: Body, right: number, ahead: number, up: number): V {
-  const o = k.local(b, 0, 0, 0), p = k.local(b, right, ahead, up);
-  return unitV((p.x - o.x) * U, (p.y - o.y) * U, p.z - o.z);
-}
 /** Which way along the arc of a throw it is going `u` of the way: the slope of `arcAt`. */
 const arcDir = (a: P3, b: P3, u: number, lift: number): V => unitV((b.x - a.x) * U, (b.y - a.y) * U, b.z - a.z + 4 * lift * (1 - 2 * u));
 /** The level unit step across a direction, to its left as it goes. */
@@ -152,8 +172,9 @@ function thrownBy(k: FxScene): Thrown {
   return id.includes('knife') ? 'knife' : 'axe';
 }
 
-/** A javelin's length behind the fist and ahead of it, height units (the figure's own javelin, butt to point). */
-const JAV_BACK = 2.6, JAV_AHEAD = 10.8;
+/** A javelin's length behind the fist and ahead of it, in height units: the figure's own javelin, butt to point. */
+const JAV = weaponSpan('javelin');
+const JAV_BACK = -(JAV?.from ?? 0), JAV_AHEAD = JAV?.to ?? 0;
 
 /**
  * A javelin as it is drawn on the body, gripped at `grip` and lying along `d`:
@@ -335,19 +356,13 @@ function wake(k: FxScene, path: (u: number) => P3, u: number, o: { span?: number
 
 /** The shadow of something in the air, on the ground under it: smaller and fainter the higher it is. */
 function shadowOf(k: FxScene, p: P3, r = 3): void {
-  const gz = k.ground(p.x, p.y);
-  const high = Math.max(0, p.z - gz);
+  const high = Math.max(0, p.z - k.ground(p.x, p.y));
   const a = 0.26 * clamp(1 - high / 60);
   if (a <= 0.02) return;
-  const q = k.on(p.x, p.y, 0.1);
-  const x = k.sx(q), y = k.sy(q), R = r * k.zoom * (1 - 0.4 * clamp(high / 60));
-  k.groundDraw(p.x, p.y, 0.3, (g) => {
-    g.globalAlpha = a;
-    g.fillStyle = '#0d1a14';
-    g.beginPath();
-    g.ellipse(x, y, R, R * 0.45, 0, 0, TAU);
-    g.fill();
-  });
+  // A flat ellipse on the land, `r` pixels at zoom one across and half that deep: in tiles, as the ground shapes are.
+  const R = (r * (1 - 0.4 * clamp(high / 60))) / (HALF_W * 0.7), pts: number[] = [];
+  for (let i = 0; i < 8; i++) pts.push(p.x + Math.cos((i / 8) * TAU) * R, p.y + Math.sin((i / 8) * TAU) * R);
+  k.groundShape(p.x, p.y, R + 0.1, [{ kind: 'fill', colour: '#0d1a14', alpha: a, paths: [pts], lift: 0.1 }]);
 }
 
 /* ---- chevrons ------------------------------------------------------------------------------ */
@@ -355,53 +370,39 @@ function shadowOf(k: FxScene, p: P3, r = 3): void {
 /**
  * A chevron lying on the ground at (x, y), pointing along (dx, dy), `s`
  * tiles from notch to point: the group's mark on the land. Added to `out` as
- * screen points, four to a chevron.
+ * a path of points on the ground, in tiles.
  */
-function chevronOn(k: FxScene, x: number, y: number, dx: number, dy: number, s: number, out: number[]): void {
+function chevronOn(x: number, y: number, dx: number, dy: number, s: number, out: number[][]): void {
   const l = Math.hypot(dx, dy) || 1;
   const ux = dx / l, uy = dy / l, tx = -uy, ty = ux;
-  const pts = [[s * 0.6, 0], [-s * 0.4, s * 0.55], [-s * 0.1, 0], [-s * 0.4, -s * 0.55]];
-  for (const [a, b] of pts) {
-    const px = x + ux * a + tx * b, py = y + uy * a + ty * b;
-    out.push(k.sx({ x: px, y: py, z: k.ground(px, py) + 0.2 }), k.sy({ x: px, y: py, z: k.ground(px, py) + 0.2 }));
-  }
+  const pts: number[] = [];
+  for (const [a, b] of [[s * 0.6, 0], [-s * 0.4, s * 0.55], [-s * 0.1, 0], [-s * 0.4, -s * 0.55]]) pts.push(x + ux * a + tx * b, y + uy * a + ty * b);
+  out.push(pts);
 }
 
 /**
- * Chevrons on the ground (`chevronOn`'s points), each at its own alpha by
- * `alphas`. Those at the same alpha -- all of a count but the one going out --
- * go down as one path, one fill and one inking, as this is drawn again for
- * every line of the ground it lies across.
+ * Chevrons on the ground (`chevronOn`'s paths), each at its own alpha by
+ * `alphas`: laid on the land as the kit's own ground marks are, those at the
+ * same alpha -- all of a count but the one going out -- in one fill and one
+ * inking.
  */
-function drawChevrons(k: FxScene, cx: number, cy: number, reach: number, pts: number[], alphas: number[], colour = k.pal.accent): void {
-  if (!pts.length) return;
-  const ink = k.pal.ink, w = Math.max(0.8, 0.6 * k.zoom);
-  k.groundDraw(cx, cy, reach + 0.5, (g) => {
-    g.lineJoin = 'miter';
-    g.fillStyle = colour;
-    g.lineWidth = w;
-    g.strokeStyle = ink;
-    let i = 0;
-    while (i < alphas.length) {
-      const a = alphas[i];
-      let j = i;
-      g.beginPath();
-      for (; j < alphas.length && Math.abs(alphas[j] - a) < 0.004; j++) {
-        for (let q = 0; q < 4; q++) {
-          const x = pts[8 * j + 2 * q], y = pts[8 * j + 2 * q + 1];
-          if (q) g.lineTo(x, y);
-          else g.moveTo(x, y);
-        }
-        g.closePath();
-      }
-      if (a > 0.01) {
-        g.globalAlpha = clamp(a);
-        g.fill();
-        g.stroke();
-      }
-      i = j;
+function drawChevrons(k: FxScene, cx: number, cy: number, reach: number, paths: number[][], alphas: number[], colour = k.pal.accent): void {
+  if (!paths.length) return;
+  const layers: GroundLayer[] = [];
+  const width = Math.max(0.8, 0.6 * k.zoom);
+  let i = 0;
+  while (i < alphas.length) {
+    const a = alphas[i];
+    let j = i;
+    while (j < alphas.length && Math.abs(alphas[j] - a) < 0.004) j++;
+    if (a > 0.01) {
+      const some = paths.slice(i, j);
+      layers.push({ kind: 'fill', colour, alpha: clamp(a), paths: some, lift: 0.2 });
+      layers.push({ kind: 'stroke', colour: k.pal.ink, alpha: clamp(a), paths: some, lift: 0.2, width, closed: true, join: 'miter' });
     }
-  });
+    i = j;
+  }
+  if (layers.length) k.groundShape(cx, cy, reach + 0.3, layers);
 }
 
 /**
@@ -414,7 +415,7 @@ function tally(k: FxScene, c: { x: number; y: number }, r: number, total: number
   const n = Math.max(1, Math.round(total));
   const a = o.alpha ?? 1;
   if (a <= 0.01) return;
-  const pts: number[] = [], alphas: number[] = [];
+  const pts: number[][] = [], alphas: number[] = [];
   const s = o.size ?? Math.min(0.1, ((TAU * r) / n) * 0.45);
   for (let i = 0; i < n; i++) {
     // The first at the far side, round clockwise as the screen shows it, so the one going out is always the last before it.
@@ -423,7 +424,7 @@ function tally(k: FxScene, c: { x: number; y: number }, r: number, total: number
     const lit = clamp(left - i);
     if (lit <= 0) continue;
     const dir = o.point === 'in' ? [-ux, -uy] : o.point === 'out' ? [ux, uy] : [-uy, ux];
-    chevronOn(k, c.x + ux * r, c.y + uy * r, dir[0], dir[1], s, pts);
+    chevronOn(c.x + ux * r, c.y + uy * r, dir[0], dir[1], s, pts);
     alphas.push(a * smooth(lit));
   }
   drawChevrons(k, c.x, c.y, r + s, pts, alphas, o.colour);
@@ -456,6 +457,25 @@ function airChevron(g: CanvasRenderingContext2D, x: number, y: number, ang: numb
 function scuff(k: FxScene, at: P3, n: number, heading?: { x: number; y: number }, far = 1): void {
   k.burst(at, n, { kind: 'dust', colour: ['#9a8a6c', '#b3a383'], size: 1.5, sizeEnd: 3.2, life: [0.3, 0.55], speed: [0.3 * far, 0.8 * far], up: [1, 5], gravity: 6, drag: 0.06, heading, cone: heading ? 1.6 : undefined, bias: -1 });
 }
+
+/* ---- other creatures ------------------------------------------------------------------ */
+
+/** A creature's number, from who the stage says it is; -1 for anything else. */
+const creatureNo = (b: Body): number => (b.who && b.who.kind === 'creature' ? b.who.id : -1);
+/** Whether two bodies are the same one: by who they are when the stage says, else by where they stand. */
+const sameBody = (a: Body, b: Body): boolean =>
+  a.who && b.who ? a.who.kind === b.who.kind && creatureNo(a) === creatureNo(b) : Math.hypot(a.x - b.x, a.y - b.y) < 0.05;
+/**
+ * The other creatures standing within `r` tiles of what was hit, nearest
+ * first: who a glance or a fan finds. The island does not say who it reached,
+ * so this is who is there -- which is who it picks from.
+ */
+const othersNear = (k: FxScene, r: number): Body[] =>
+  k.bodiesWithin(r, k.target, ['creature']).filter((b) => !sameBody(b, k.target) && creatureNo(b) >= 0)
+    .sort((a, b) => Math.hypot(a.x - k.target.x, a.y - k.target.y) - Math.hypot(b.x - k.target.x, b.y - k.target.y));
+/** A creature found by its number near a point, this frame; null when it is gone from there. */
+const creatureBy = (k: FxScene, no: number, c: { x: number; y: number }, r: number): Body | null =>
+  k.bodiesWithin(r, c, ['creature']).find((b) => creatureNo(b) === no) ?? null;
 
 /* ---- the moment it lands ---------------------------------------------------------------- */
 
@@ -490,28 +510,62 @@ interface Flight {
 }
 const flightSecs = (f: Flight) => (tiles: number): number => f.base + tiles * f.perTile;
 
-/** Where the throw left the hand: kept at the release, so the flight starts there whatever the arm does after. */
-function keepFrom(k: FxScene, key = 'h'): void {
-  const h = k.hand(1);
-  k.state[`${key}x`] = h.x;
-  k.state[`${key}y`] = h.y;
-  k.state[`${key}z`] = h.z;
+/**
+ * The weapon as the figure holds it, kept every frame it is in the hand
+ * before a throw: its fist and its point. Read off the posed figure, so the
+ * one that flies starts where the one in the hand was on the last frame it
+ * was there, whatever the pose did.
+ */
+function followHeld(k: FxScene, h: Held, t: number): void {
+  if (emptyAt(h, t) || nextThrow(h, t) < 0) return;
+  const g = k.joint(k.caster, 'grip'), q = k.joint(k.caster, 'tip');
+  k.state.gx = g.x; k.state.gy = g.y; k.state.gz = g.z;
+  k.state.qx = q.x; k.state.qy = q.y; k.state.qz = q.z;
 }
-const keptFrom = (k: FxScene, key = 'h'): P3 => (`${key}x` in k.state ? { x: k.state[`${key}x`], y: k.state[`${key}y`], z: k.state[`${key}z`] } : k.hand(1));
+
+/** At a throw: where it left the hand, kept under `key` for its flight. */
+function letGo(k: FxScene, key = 'h'): void {
+  for (const a of ['x', 'y', 'z']) {
+    k.state[`${key}g${a}`] = k.state[`g${a}`] ?? k.hand(1)[a as 'x'];
+    k.state[`${key}q${a}`] = k.state[`q${a}`] ?? k.hand(1)[a as 'x'];
+  }
+}
+
+/** Where a throw kept under `key` starts its flight -- a javelin's point, an axe's or a knife's middle -- and how it lay as it went. */
+function launchOf(k: FxScene, key = 'h'): { from: P3; lay: V } {
+  if (k.state[`${key}gx`] === undefined) {
+    const hand = k.hand(1);
+    return { from: hand, lay: between(hand, aimAt(k)) };
+  }
+  const g = { x: k.state[`${key}gx`], y: k.state[`${key}gy`], z: k.state[`${key}gz`] };
+  const q = { x: k.state[`${key}qx`], y: k.state[`${key}qy`], z: k.state[`${key}qz`] };
+  const near = Math.hypot((q.x - g.x) * U, (q.y - g.y) * U, q.z - g.z) < 0.5;
+  const lay = near ? between(g, aimAt(k)) : between(g, q);
+  return { from: thrownBy(k) === 'javelin' ? q : mid3(g, q, 0.5), lay };
+}
 
 /**
- * A throw on its way, `u` of it, from `from` to `to`: the weapon at its
- * point of the arc turned along it, the wake behind, its shadow on the
- * ground and a little light round its head at night.
+ * A throw on its way, `u` of it, from where it left the hand to `to`: the
+ * weapon at its point of the arc -- a javelin swinging from how it lay in the
+ * hand onto the line of its flight over the first of it, an axe or a knife
+ * turning end over end from how it was held -- the wake behind, its shadow on
+ * the ground and a little light round its head at night.
  */
-function flying(k: FxScene, f: Flight, from: P3, to: P3, u: number, o: { wake?: Parameters<typeof wake>[3]; scale?: number; light?: number; alpha?: number } = {}): { at: P3; d: V } {
+function flying(k: FxScene, f: Flight, launch: { from: P3; lay: V }, to: P3, u: number, o: { wake?: Parameters<typeof wake>[3]; scale?: number; light?: number; alpha?: number; lift?: number } = {}): { at: P3; d: V } {
   const kind = thrownBy(k);
-  const lift = f.lift(k.dist);
+  const from = launch.from;
+  const lift = o.lift ?? f.lift(k.dist);
   const path = (v: number): P3 => arcAt(from, to, v, lift);
   const at = path(u), d = arcDir(from, to, u, lift);
   wake(k, path, u, o.wake);
-  const spin = (k.now - (k.state.t0 ?? k.now)) * f.turns * TAU;
-  thrownAt(k, kind, at, d, spin + (k.seed % 7), { sheen: 0.9, scale: o.scale, alpha: o.alpha });
+  if (kind === 'javelin') thrownAt(k, kind, at, mixV(launch.lay, d, smooth(u / 0.2)), 0, { sheen: 0.9, scale: o.scale, alpha: o.alpha });
+  else {
+    // From how the haft lay in the fist, end over end in the plane of the flight.
+    const fl = Math.hypot(d.x, d.y) || 1;
+    const spin0 = Math.atan2((launch.lay.x * d.x + launch.lay.y * d.y) / fl, launch.lay.z);
+    const spin = spin0 + (k.now - (k.state.t0 ?? k.now)) * f.turns * TAU;
+    thrownAt(k, kind, at, d, spin, { sheen: 0.9, scale: o.scale, alpha: o.alpha });
+  }
   shadowOf(k, at, kind === 'javelin' ? 4 : 3);
   k.glow(at, 7, 0.45 * (o.alpha ?? 1));
   if (o.light) k.light(at, 0.8, o.light);
@@ -547,6 +601,15 @@ const snapPose: CastPose = (r, t, c) => {
   r.leg[1] = E(t, [[0, [-2, 3, 0]], [rel, [-12, 3, 0]], [1, [-3, 3, 0]]]);
   r.knee[1] = one(t, [[0, 10], [rel, 14], [1, 6]]);
   reachForNext(r, t, c, 0.6, 0.8, 0.95);
+  javelinThrow(r, t, c, [
+    { t: 0, ...CARRIED },
+    { t: cock, at: [2.4, -0.7, 14.4], lie: [0.02, 0.95, 0.3], pole: [5, -1, 9] },
+    { t: rel, at: [2.0, 3.4, 14.8], lie: [0, 0.98, 0.2], pole: [4, 0, 8] },
+    { t: thr, at: [1.0, 4.4, 10.8], lie: [0, 0.98, 0.2], pole: [4, -1, 6] },
+    { t: 0.66, at: [1.6, 1.4, 12.8], lie: [0, 0.6, 0.8], pole: [5, 0, 8] },
+    { t: SNAP.draws[0], ...OVER_SHOULDER },
+    { t: 1, ...CARRIED },
+  ]);
   holdFor(r, t, c, SNAP);
 };
 
@@ -575,6 +638,19 @@ const longPose: CastPose = (r, t, c) => {
   r.knee[1] = one(t, [[0, 6], [gather, 10], [hop, 40], [top, 26], [rel, 18], [thr, 52], [1, 6]]);
   r.lift = one(t, [[0, 0], [gather, 0], [hop, 2.6], [top, 0], [1, 0]]);
   reachForNext(r, t, c, 0.7, 0.84, 0.97);
+  // Raised by the head, drawn right back at arm's length through the hop and the plant, then up and over high.
+  javelinThrow(r, t, c, [
+    { t: 0, ...CARRIED },
+    { t: gather, at: [2.8, 0.6, 13.2], lie: [0.02, 0.9, 0.42], pole: [4, -2, 8] },
+    { t: hop, at: [3.2, -3.6, 12.8], lie: [0.02, 0.92, 0.38], pole: [3, -2, 6] },
+    { t: top, at: [3.0, -5.4, 12.4], lie: [0, 0.9, 0.44], pole: [3, -3, 6] },
+    { t: rel, at: [2.0, 3.0, 16.2], lie: [0, 0.88, 0.47], pole: [5, 0, 10] },
+    { t: thr, at: [0.4, 4.6, 8.8], lie: [0, 0.88, 0.47], pole: [4, -1, 5] },
+    { t: 0.74, at: [1.4, 2.0, 12.4], lie: [0, 0.5, 0.86], pole: [5, 0, 8] },
+    { t: LONG.draws[0], ...OVER_SHOULDER },
+    { t: 1, ...CARRIED },
+  ]);
+  r.mouth = one(t, [[0, 0], [top, 0.1], [rel, 0.5], [thr, 0.2], [0.8, 0]]);
   holdFor(r, t, c, LONG);
 };
 
@@ -603,6 +679,16 @@ const runPose: CastPose = (r, t, c) => {
   r.leg[1] = E(t, [[0, [0, 2, 0]], [rel, [-14, 4, 0]], [thr, [-22, 12, 0]], [off, [-26, 14, 0]], [1, [-2, 2, 0]]]);
   r.knee[1] = one(t, [[0, 6], [wind, 18], [rel, 10], [off, 34], [1, 6]]);
   reachForNext(r, t, c, 0.6, 0.78, 0.95);
+  // Drawn back low at the hip, whipped flat across the front, and the arm up to the shoulder for the next as the body turns off.
+  javelinThrow(r, t, c, [
+    { t: 0, ...CARRIED },
+    { t: wind, at: [4.0, -2.4, 10.2], lie: [0.05, 0.99, 0.12], pole: [3, -3, 5] },
+    { t: rel, at: [2.2, 4.2, 11.6], lie: [0, 0.99, 0.12], pole: [5, 0, 6] },
+    { t: thr, at: [-0.4, 3.6, 9.6], lie: [0, 0.99, 0.12], pole: [3, -1, 4] },
+    { t: 0.66, at: [1.8, 0.6, 12.5], lie: [0, 0.4, 0.9], pole: [5, 0, 8] },
+    { t: RUN.draws[0], ...OVER_SHOULDER },
+    { t: 1, ...CARRIED },
+  ]);
   holdFor(r, t, c, RUN);
 };
 
@@ -630,6 +716,26 @@ const heavyPose: CastPose = (r, t, c) => {
   r.leg[1] = E(t, [[0, [0, 2, 0]], [up, [-8, 2, 0]], [top, [-16, 3, 0]], [rel, [-30, 3, 0]], [thr, [-48, 3, 0]], [1, [-2, 2, 0]]]);
   r.knee[1] = one(t, [[0, 6], [up, 14], [top, 20], [rel, 26], [thr, 58], [1, 6]]);
   reachForNext(r, t, c, 0.72, 0.84, 0.97);
+  // A javelin heaved two-handed as a harpoon is: both fists on the shaft over the head, the left ahead of the right along it,
+  // drawn back over the arched back and driven out together; the left lets go as it leaves.
+  javelinThrow(r, t, c, [
+    { t: 0, ...CARRIED },
+    { t: up, at: [1.6, -2.6, 16.6], lie: [0, 0.92, 0.4], pole: [4, -2, 12] },
+    { t: top, at: [1.4, -3.8, 16.6], lie: [0, 0.9, 0.44], pole: [4, -3, 12] },
+    { t: hold, at: [1.4, -4.0, 16.5], lie: [0, 0.9, 0.44], pole: [4, -3, 12] },
+    { t: rel, at: [1.2, 3.0, 15.8], lie: [0, 0.95, 0.3], pole: [5, 0, 9] },
+    { t: thr, at: [0.6, 4.2, 9.0], lie: [0, 0.95, 0.3], pole: [4, -1, 5] },
+    { t: 0.74, at: [1.4, 2.0, 12.4], lie: [0, 0.5, 0.86], pole: [5, 0, 8] },
+    { t: HEAVY.draws[0], ...OVER_SHOULDER },
+    { t: 1, ...CARRIED },
+  ]);
+  if (c.carry !== 'fist') {
+    const both = one(t, [[0.12, 0], [up, 1], [rel - 0.01, 1], [rel + 0.03, 0]]);
+    r.both = both;
+    const left = track(t, [[0, [-1.5, 3, 15]], [up, [0.2, 0.6, 17.6]], [top, [0.1, -0.6, 17.8]], [hold, [0.1, -0.8, 17.7]], [rel, [0, 6, 16.2]]]);
+    r.reach = [{ at: [left[0], left[1], left[2]], w: both, pole: [-4, -1, 10] }, r.reach?.[1]];
+  }
+  r.mouth = one(t, [[0, 0], [hold, 0.15], [rel, 0.85], [thr, 0.6], [0.85, 0]]);
   holdFor(r, t, c, HEAVY);
 };
 
@@ -653,41 +759,65 @@ const gutPose: CastPose = (r, t, c) => {
   r.chest = E(t, [[0, [0, 0, 0]], [back, [-6, -4, -20]], [rel, [-8, 2, 10]], [1, [0, 0, 0]]]);
   r.head = E(t, [[0, [0, 0, 0]], [back, [20, 0, 10]], [rel, [24, 0, -4]], [thr, [18, 0, -4]], [1, [0, 0, 0]]]);
   r.leg[0] = E(t, [[0, [2, 4, 0]], [back, [30, 6, 0]], [rel, [44, 6, 0]], [thr, [40, 6, 0]], [1, [6, 3, 0]]]);
-  r.knee[0] = one(t, [[0, 8], [back, 46], [rel, 64], [thr, 58], [1, 10]]);
+  r.knee[0] = one(t, [[0, 8], [back, 58], [rel, 76], [thr, 66], [1, 10]]);
   r.leg[1] = E(t, [[0, [0, 4, 0]], [back, [-6, 6, 0]], [rel, [-16, 6, 0]], [1, [-2, 3, 0]]]);
-  r.knee[1] = one(t, [[0, 8], [back, 50], [rel, 56], [thr, 48], [1, 8]]);
+  r.knee[1] = one(t, [[0, 8], [back, 62], [rel, 68], [thr, 56], [1, 8]]);
   reachForNext(r, t, c, 0.64, 0.82, 0.96);
+  // Swung back low past the hip and through underhand, let go at the belt, flat.
+  javelinThrow(r, t, c, [
+    { t: 0, ...CARRIED },
+    { t: 0.18, at: [3.0, -0.6, 8.0], lie: [0.05, 0.97, 0.2], pole: [3.5, -1, 6] },
+    { t: back, at: [3.2, -4.4, 6.4], lie: [0.04, 0.99, 0.1], pole: [3.5, -1, 6] },
+    { t: rel, at: [2.2, 4.2, 7.0], lie: [0, 0.995, 0.08], pole: [3.5, -2, 5] },
+    { t: thr, at: [1.8, 5.0, 10.5], lie: [0, 0.995, 0.08], pole: [4, -1, 6] },
+    { t: 0.7, at: [1.4, 2.0, 12.4], lie: [0, 0.5, 0.86], pole: [5, 0, 8] },
+    { t: GUT.draws[0], ...OVER_SHOULDER },
+    { t: 1, ...CARRIED },
+  ]);
   holdFor(r, t, c, GUT);
 };
 
 /*
- * Parting Throw: the island puts the body its leap back (`fx.leap` tiles,
- * where ground allows) the moment it says yes, before the cast is drawn, so
- * the cast begins in the air at the far end of the leap: coming down
- * crouched, arms flung forward for the balance, a skid of dust -- and
- * throwing from the crouch as it rises. Behind it a streak runs back the way
- * it came and a chevron for every tile of the leap points along it.
+ * Parting Throw: a quick throw from where it stands, and before the arm has
+ * finished coming through the knees drop and the body springs straight back
+ * off both feet, arms flung forward for the balance, and lands crouched
+ * `fx.leap` tiles off (the island has already put it there; the stage
+ * carries the body over the leap, `cast.move`). Behind it a streak of the two
+ * tails runs back the way it went and a chevron for every tile it crossed
+ * points along it.
  */
-const PART: Held = { timing: { secs: 1.0, release: 0.5, blendIn: 0.03, blendOut: 0.22 }, throws: [0.5], draws: [0.86] };
+const PART: Held = { timing: { secs: 1.15, release: 0.3, blendIn: 0.1, blendOut: 0.2 }, throws: [0.3], draws: [0.88] };
 const PART_FLIGHT: Flight = { perTile: 0.042, base: 0.04, lift: (d) => 1.6 + d * 1.1, turns: 2.6 };
-/** When the feet come down from the leap, as a fraction of the cast. */
-const PART_DOWN = 0.16;
+/** When the feet leave the ground and come down again: the leap the stage carries the body over. */
+const PART_OFF = 0.4, PART_DOWN = 0.72;
 const partPose: CastPose = (r, t, c) => {
-  const down = PART_DOWN, low = 0.24, cock = 0.38, rel = 0.5, thr = 0.62;
-  r.arm[1] = E(t, [[0, [70, 30, 0]], [down, [56, 30, 4]], [low, [40, 34, 0]], [cock, [150, 30, -22]], [rel, [94, 10, 16]], [thr, [56, 4, 26]], [1, [18, 12, 0]]]);
-  r.elbow[1] = one(t, [[0, 20], [down, 30], [low, 50], [cock, 100], [rel, 10], [thr, 24], [1, 26]]);
-  r.arm[0] = E(t, [[0, [84, 30, 0]], [down, [64, 34, 0]], [low, [40, 30, 0]], [cock, [84, 12, -6]], [rel, [28, 24, 0]], [1, [10, 10, 0]]]);
-  r.elbow[0] = one(t, [[0, 14], [down, 20], [low, 30], [cock, 14], [rel, 40], [1, 22]]);
-  r.open = [t < cock || (t > rel && t < 0.95), t < low];
-  r.spine = E(t, [[0, [-14, 0, 0]], [down, [-24, 0, 0]], [low, [-26, 0, 0]], [cock, [4, 0, -6]], [rel, [-12, 0, 6]], [thr, [-14, 0, 6]], [1, [-1, 0, 0]]]);
-  r.chest = E(t, [[0, [-4, 0, 0]], [down, [-6, 0, 0]], [cock, [6, -4, -22]], [rel, [-8, 4, 18]], [thr, [-8, 2, 22]], [1, [0, 0, 0]]]);
-  r.head = E(t, [[0, [12, 0, 0]], [down, [18, 0, 0]], [low, [16, 0, 0]], [cock, [0, 0, 18]], [rel, [-4, 0, -6]], [1, [0, 0, 0]]]);
-  r.leg[0] = E(t, [[0, [40, 6, 0]], [down, [36, 6, 0]], [low, [34, 6, 0]], [cock, [22, 4, 0]], [rel, [26, 4, 0]], [1, [4, 2, 0]]]);
-  r.knee[0] = one(t, [[0, 70], [down, 64], [low, 70], [cock, 30], [rel, 28], [1, 6]]);
-  r.leg[1] = E(t, [[0, [30, 6, 0]], [down, [20, 6, 0]], [low, [18, 6, 0]], [cock, [-6, 4, 0]], [rel, [-16, 3, 0]], [1, [-2, 2, 0]]]);
-  r.knee[1] = one(t, [[0, 64], [down, 60], [low, 68], [cock, 22], [rel, 16], [1, 6]]);
-  r.lift = one(t, [[0, 6], [down * 0.5, 4.5], [down, 0], [1, 0]]);
-  reachForNext(r, t, c, 0.7, 0.86, 1);
+  const cock = 0.18, rel = 0.3, thr = 0.36, dip = PART_OFF - 0.02, high = 0.56, down = PART_DOWN;
+  r.arm[1] = E(t, [[0, [24, 14, 0]], [cock, [150, 30, -22]], [rel, [92, 10, 16]], [thr, [60, 10, 20]], [high, [84, 20, 0]], [down, [50, 26, 0]], [1, [18, 12, 0]]]);
+  r.elbow[1] = one(t, [[0, 34], [cock, 100], [rel, 10], [thr, 22], [high, 16], [down, 30], [1, 26]]);
+  r.arm[0] = E(t, [[0, [20, 10, 0]], [cock, [80, 12, -6]], [rel, [28, 24, 0]], [dip, [-14, 20, 0]], [high, [86, 24, 0]], [down, [50, 30, 0]], [1, [10, 10, 0]]]);
+  r.elbow[0] = one(t, [[0, 26], [cock, 14], [rel, 40], [dip, 24], [high, 14], [down, 28], [1, 22]]);
+  r.open[0] = t > rel && t < 0.95;
+  r.shape = [t > dip && t < 0.9 ? { flat: 0.8 } : undefined, undefined];
+  r.chest = E(t, [[0, [0, 0, 0]], [cock, [6, -4, -22]], [rel, [-8, 4, 18]], [dip, [-6, 0, 8]], [high, [-6, 0, 0]], [1, [0, 0, 0]]]);
+  // Leant forward over the knees going back through the air, as a body leaping backward has to be to land on its feet.
+  r.spine = E(t, [[0, [0, 0, 0]], [cock, [6, 0, -6]], [rel, [-12, 0, 6]], [dip, [-18, 0, 2]], [high, [-16, 0, 0]], [down, [-20, 0, 0]], [0.84, [-8, 0, 0]], [1, [-1, 0, 0]]]);
+  r.head = E(t, [[0, [0, 0, 0]], [cock, [0, 0, 18]], [rel, [-4, 0, -6]], [high, [6, 0, 0]], [down, [8, 0, 0]], [1, [0, 0, 0]]]);
+  r.leg[0] = E(t, [[0, [2, 2, 0]], [cock, [14, 3, 0]], [rel, [22, 3, 0]], [dip, [22, 4, 0]], [PART_OFF + 0.04, [6, 4, 0]], [high, [44, 5, 0]], [down, [30, 5, 0]], [0.86, [12, 3, 0]], [1, [4, 2, 0]]]);
+  r.knee[0] = one(t, [[0, 6], [rel, 22], [dip, 48], [PART_OFF + 0.04, 12], [high, 70], [down, 56], [0.86, 24], [1, 6]]);
+  r.leg[1] = E(t, [[0, [0, 2, 0]], [cock, [-8, 2, 0]], [rel, [-14, 2, 0]], [dip, [12, 4, 0]], [PART_OFF + 0.04, [-4, 4, 0]], [high, [36, 5, 0]], [down, [24, 5, 0]], [0.86, [8, 3, 0]], [1, [-2, 2, 0]]]);
+  r.knee[1] = one(t, [[0, 6], [rel, 14], [dip, 50], [PART_OFF + 0.04, 10], [high, 66], [down, 58], [0.86, 22], [1, 6]]);
+  r.lift = one(t, [[0, 0], [PART_OFF, 0], [high, 4.5], [down, 0], [1, 0]]);
+  reachForNext(r, t, c, 0.78, PART.draws[0], 1);
+  javelinThrow(r, t, c, [
+    { t: 0, ...CARRIED },
+    { t: cock, at: [2.4, -0.8, 14.4], lie: [0.02, 0.95, 0.3], pole: [5, -1, 9] },
+    { t: rel, at: [2.0, 3.4, 14.8], lie: [0, 0.98, 0.2], pole: [4, 0, 8] },
+    { t: thr, at: [1.0, 4.0, 10.5], lie: [0, 0.98, 0.2], pole: [4, -1, 6] },
+    { t: high, at: [2.0, 4.4, 11.5], lie: [0, 0.6, 0.8], pole: [5, -1, 6] },
+    { t: down, at: [2.4, 3.0, 9.0], lie: [0, 0.4, 0.9], pole: [4, -2, 5] },
+    { t: PART.draws[0], ...OVER_SHOULDER },
+    { t: 1, ...CARRIED },
+  ]);
   holdFor(r, t, c, PART);
 };
 
@@ -717,6 +847,20 @@ const doublePose: CastPose = (r, t, c) => {
   r.knee[1] = one(t, [[0, 6], [r1, 10], [c2, 16], [r2, 20], [t2, 36], [1, 6]]);
   reachForNext(r, t, c, r1 + 0.03, DOUBLE.draws[0], c2 - 0.02);
   reachForNext(r, t, c, 0.72, DOUBLE.draws[1], 0.98);
+  // A flick from the ear, the hand straight up over the shoulder for the second, and that one drawn right back and thrown through.
+  javelinThrow(r, t, c, [
+    { t: 0, ...CARRIED },
+    { t: c1, at: [2.4, -0.6, 14.4], lie: [0.02, 0.95, 0.3], pole: [5, -1, 9] },
+    { t: r1, at: [2.0, 3.4, 14.8], lie: [0, 0.98, 0.2], pole: [4, 0, 8] },
+    { t: t1, at: [1.4, 3.6, 12.4], lie: [0, 0.98, 0.2], pole: [4, 0, 7] },
+    { t: DOUBLE.draws[0], ...OVER_SHOULDER },
+    { t: c2, at: [2.9, -2.8, 14.0], lie: [0.02, 0.95, 0.3], pole: [4, -2, 8] },
+    { t: r2, at: [2.0, 3.8, 15.2], lie: [0, 0.97, 0.24], pole: [5, 0, 9] },
+    { t: t2, at: [0.3, 4.4, 8.6], lie: [0, 0.97, 0.24], pole: [4, -1, 5] },
+    { t: 0.76, at: [1.4, 2.0, 12.4], lie: [0, 0.5, 0.86], pole: [5, 0, 8] },
+    { t: DOUBLE.draws[1], ...OVER_SHOULDER },
+    { t: 1, ...CARRIED },
+  ]);
   holdFor(r, t, c, DOUBLE);
 };
 
@@ -745,6 +889,16 @@ const ricoPose: CastPose = (r, t, c) => {
   r.leg[1] = E(t, [[0, [0, 4, 0]], [wind, [-10, 20, 0]], [rel, [-16, 24, 0]], [1, [-2, 3, 0]]]);
   r.knee[1] = one(t, [[0, 8], [wind, 40], [rel, 46], [1, 8]]);
   reachForNext(r, t, c, 0.62, 0.8, 0.95);
+  // Out to the side at the knee, swept flat round in front low over the ground, and on across.
+  javelinThrow(r, t, c, [
+    { t: 0, ...CARRIED },
+    { t: wind, at: [4.6, -2.0, 7.4], lie: [0.05, 0.99, -0.04], pole: [3, -3, 3] },
+    { t: rel, at: [2.6, 4.4, 7.0], lie: [0, 1, -0.02], pole: [5, 0, 4] },
+    { t: thr, at: [-1.0, 3.8, 7.6], lie: [0, 1, -0.02], pole: [3, -1, 4] },
+    { t: 0.68, at: [1.4, 2.0, 12.4], lie: [0, 0.5, 0.86], pole: [5, 0, 8] },
+    { t: RICO.draws[0], ...OVER_SHOULDER },
+    { t: 1, ...CARRIED },
+  ]);
   holdFor(r, t, c, RICO);
 };
 
@@ -785,6 +939,17 @@ const fanPose: CastPose = (r, t, c) => {
   r.leg[1] = E(t, [[0, [0, 4, 0]], [wound, [-8, 10, 0]], [rel, [-12, 12, 0]], [1, [-2, 3, 0]]]);
   r.knee[1] = one(t, [[0, 8], [wound, 36], [0.45, 40], [rel, 28], [round, 22], [1, 8]]);
   reachForNext(r, t, c, 0.72, FAN.draws[0], 0.98);
+  // Held out at arm's length from the shoulder through the turn, point leading round, and swung onto the line as it goes.
+  javelinThrow(r, t, c, [
+    { t: 0, ...CARRIED },
+    { t: wound, at: [4.2, -1.2, 10.6], lie: [0.9, 0.3, 0.25], pole: [3, -2, 5] },
+    { t: 0.45, at: [6.2, 0.6, 11.6], lie: [0.85, 0.5, 0.12], pole: [3, -2, 6] },
+    { t: rel, at: [3.0, 4.8, 12.4], lie: [0.1, 0.99, 0.12], pole: [5, 0, 7] },
+    { t: round, at: [-0.4, 4.4, 9.6], lie: [0.1, 0.99, 0.12], pole: [3, -1, 4] },
+    { t: 0.76, at: [1.4, 2.0, 12.4], lie: [0, 0.5, 0.86], pole: [5, 0, 8] },
+    { t: FAN.draws[0], ...OVER_SHOULDER },
+    { t: 1, ...CARRIED },
+  ], spin);
   holdFor(r, t, c, FAN);
 };
 
@@ -803,7 +968,10 @@ const oppPose: CastPose = (r, t) => {
   // The free left hand does the looking; the right keeps its weapon low and ready.
   r.arm[0] = E(t, [[0, [20, 10, 0]], [low, [34, 20, -4]], [look, [40, 20, -6]], [tap, [146, 10, -50]], [rel, [150, 12, -50]], [out, [96, 30, -6]], [0.86, [80, 26, -4]], [1, [12, 10, 0]]]);
   r.elbow[0] = one(t, [[0, 26], [low, 40], [tap, 150], [rel, 146], [out, 10], [0.86, 16], [1, 22]]);
-  r.open[0] = t > tap - 0.06 && t < 0.92;
+  // Two fingers to the temple, then the hand flicked open and out at the opening seen.
+  const two = one(t, [[low, 0], [look, 0.6], [tap, 1], [rel, 1], [out, 0], [1, 0]]);
+  const flick = one(t, [[rel, 0], [out, 1], [0.86, 0.6], [1, 0]]);
+  r.shape = [{ two, flat: flick * 0.7, point: flick * 0.3 }, r.shape?.[1]];
   r.arm[1] = E(t, [[0, [22, 12, 0]], [low, [36, 22, -6]], [rel, [34, 22, -6]], [1, [20, 12, 0]]]);
   r.elbow[1] = one(t, [[0, 30], [low, 70], [rel, 74], [1, 28]]);
   r.spine = E(t, [[0, [0, 0, 0]], [low, [-14, 0, 0]], [rel, [-12, 0, 0]], [out, [-8, 0, 0]], [1, [-1, 0, 0]]]);
@@ -825,6 +993,8 @@ const oppPose: CastPose = (r, t) => {
 const FADE: CastTiming = { secs: 0.9, release: 0.46, blendIn: 0.12, blendOut: 0.28 };
 const fadePose: CastPose = (r, t) => {
   const sweep = 0.32, rel = 0.46, low = 0.6;
+  // The sweeping hand flat, a cloak's edge; let down open and loose.
+  r.shape = [{ flat: one(t, [[0.1, 0], [sweep, 1], [low, 1], [0.9, 0.3], [1, 0]]) }, r.shape?.[1]];
   r.arm[0] = E(t, [[0, [20, 10, 0]], [sweep, [108, -24, 44]], [rel, [104, -26, 46]], [low, [70, -10, 30]], [1, [10, 10, 0]]]);
   r.elbow[0] = one(t, [[0, 26], [sweep, 124], [rel, 128], [low, 100], [1, 22]]);
   r.arm[1] = E(t, [[0, [20, 12, 0]], [sweep, [-10, 26, 0]], [rel, [-14, 30, 0]], [low, [10, 34, 0]], [1, [16, 12, 0]]]);
@@ -850,7 +1020,10 @@ const markPose: CastPose = (r, t) => {
   const eye = 0.32, hold = 0.44, rel = 0.56, thr = 0.68;
   r.arm[0] = E(t, [[0, [20, 10, 0]], [eye, [138, -6, 48]], [hold, [140, -6, 50]], [rel, [96, 4, 0]], [thr, [94, 4, 0]], [0.86, [80, 6, 0]], [1, [10, 10, 0]]]);
   r.elbow[0] = one(t, [[0, 26], [eye, 150], [hold, 150], [rel, 0], [thr, 2], [1, 22]]);
-  r.open[0] = t > 0.18;
+  // Two fingers to the eye -- seen -- and then one pointed at it.
+  const two = one(t, [[0.12, 0], [eye, 1], [hold, 1], [rel, 0], [1, 0]]);
+  const point = one(t, [[hold, 0], [rel, 1], [0.86, 1], [1, 0]]);
+  r.shape = [{ two, point }, r.shape?.[1]];
   r.hand[0] = E(t, [[0, [0, 0, 0]], [rel, [-10, 0, 0]], [1, [0, 0, 0]]]);
   r.arm[1] = E(t, [[0, [22, 12, 0]], [eye, [28, 16, 0]], [rel, [14, 18, 0]], [1, [20, 12, 0]]]);
   r.elbow[1] = one(t, [[0, 30], [eye, 40], [rel, 36], [1, 28]]);
@@ -865,40 +1038,13 @@ const markPose: CastPose = (r, t) => {
 
 /* ---- the effects of a throw ------------------------------------------------------------------- */
 
-/**
- * The javelin in the hand while the hand has it (`HELD`): from the slant it
- * is carried at as the cast begins, round over the wind-up to lie along the
- * line it will leave on by the release, its edge coming up in the group's
- * light as it goes.
- */
-function heldJavelin(k: FxScene, h: Held, t: number, f: Flight, aimBy: number, to: P3 = aimAt(k), lie?: (k: FxScene, t: number) => V | null): void {
-  if (thrownBy(k) !== 'javelin' || !javelinInHand(h, t)) return;
-  const b = k.caster, f8 = ((Math.round(b.facing) % 8) + 8) % 8;
-  // As the figure carries one: leant forward, or back three-quarters on, and out.
-  const lean = (f8 === 1 || f8 === 5 ? -8 : 22) * (Math.PI / 180), out = (f8 % 4 === 1 ? 22 : 10) * (Math.PI / 180);
-  const carried = bodyDir(k, b, Math.sin(out), Math.sin(lean), Math.cos(out) * Math.cos(lean));
-  const grip = k.hand(1);
-  const launch = arcDir(along(grip, between(grip, to), JAV_AHEAD), to, 0, f.lift(k.dist));
-  const first = h.throws.findIndex((x) => t < x);
-  const start = first > 0 ? h.draws[first - 1] : 0.06;
-  const u = smooth(seg(t, start, Math.max(start + 0.05, aimBy * h.throws[first])));
-  // A throw that is not along the line until the last moment (a turn) says how the javelin lies before then.
-  const own = lie?.(k, t);
-  javelin(k, grip, own ?? mixV(carried, launch, u), { sheen: 0.8 * bump(t, start, h.throws[first], h.throws[first] + 0.05) });
-}
-
 /** The throw's flight as a `travel`: the weapon from where it left the hand to what it was thrown at, `to` it lands. */
 function throwTravel(f: Flight, o: { to?: (k: FxScene) => P3; wake?: Parameters<typeof wake>[3]; light?: number } = {}): NonNullable<SpellVisualFx['travel']> {
   return {
     secs: flightSecs(f),
     draw: (k, u) => {
       if (k.state.t0 === undefined) k.state.t0 = k.now;
-      const to = o.to ? o.to(k) : aimAt(k);
-      const from = keptFrom(k);
-      const kind = thrownBy(k);
-      // A javelin's point flies from where it was in the hand, out ahead of the fist.
-      const start = kind === 'javelin' ? along(from, arcDir(from, to, 0, f.lift(k.dist)), JAV_AHEAD) : from;
-      const { d } = flying(k, f, start, to, u, { wake: o.wake, light: o.light });
+      const { d } = flying(k, f, launchOf(k), o.to ? o.to(k) : aimAt(k), u, { wake: o.wake, light: o.light });
       k.state.dx = d.x;
       k.state.dy = d.y;
       k.state.dz = d.z;
@@ -930,13 +1076,12 @@ export const SKIRMISHER: Record<string, SpellVisual> = {
     cast: { timing: SNAP.timing, pose: snapPose },
     fx: {
       charge: (k, t) => {
-        heldJavelin(k, SNAP, t, SNAP_FLIGHT, 0.6);
+        followHeld(k, SNAP, t);
         // The flick: a glint off the fingers the instant it goes.
         k.flare(k.hand(1), 4.5, bump(t, 0.34, 0.4, 0.5), k.pal.core, 0.3);
       },
       release: (k) => {
-        keepFrom(k);
-        k.burst(k.hand(1), 4, { kind: 'mote', size: 1.4, life: [0.15, 0.3], speed: [0.4, 0.9], up: [0, 6], heading: k.toward(k.caster, k.target), cone: 0.8, gravity: 0 });
+        letGo(k);
       },
       travel: throwTravel(SNAP_FLIGHT, { wake: { span: 0.12, spread: 0.03, width: 1.8 } }),
       hit: (k) => bite(k, aimAt(k), landedDir(k), 0.8),
@@ -982,27 +1127,27 @@ export const SKIRMISHER: Record<string, SpellVisual> = {
     cast: { timing: LONG.timing, pose: longPose },
     fx: {
       charge: (k, t) => {
-        heldJavelin(k, LONG, t, LONG_FLIGHT, 0.55);
+        followHeld(k, LONG, t);
         // Where it will come down, measured out over the ground: a chevron a half tile, running out to it as the arm goes back.
         const run = smooth(seg(t, 0.14, 0.5));
         const gone = 1 - smooth(seg(t, 0.56, 0.8));
         if (run > 0 && gone > 0) {
           const d = k.toward(k.caster, k.spot), far = k.dist;
           const n = Math.max(2, Math.round(far / 0.5));
-          const pts: number[] = [], alphas: number[] = [];
+          const pts: number[][] = [], alphas: number[] = [];
           for (let i = 1; i <= n; i++) {
             const s = (i / n) * far;
             const show = clamp(run * far * 1.1 - s + 0.4);
             if (show <= 0) continue;
             // The last `fx.past` tiles of it, beyond where a throw would reach, in the brighter colour.
-            chevronOn(k, k.caster.x + d.x * (s - 0.25), k.caster.y + d.y * (s - 0.25), d.x, d.y, i === n ? 0.2 : 0.12, pts);
+            chevronOn(k.caster.x + d.x * (s - 0.25), k.caster.y + d.y * (s - 0.25), d.x, d.y, i === n ? 0.2 : 0.12, pts);
             alphas.push(0.85 * show * gone * (far - s < LONG_PAST ? 1 : 0.55));
           }
           drawChevrons(k, (k.caster.x + k.spot.x) / 2, (k.caster.y + k.spot.y) / 2, far / 2 + 0.3, pts, alphas);
         }
       },
       release: (k) => {
-        keepFrom(k);
+        letGo(k);
         const foot = k.joint(k.caster, 'ankle0', [0, 0, 0], 0.02);
         scuff(k, foot, 8, k.toward(k.caster, k.target));
       },
@@ -1025,9 +1170,9 @@ export const SKIRMISHER: Record<string, SpellVisual> = {
     palette: PALETTE,
     cast: { timing: RUN.timing, pose: runPose },
     fx: {
-      charge: (k, t) => heldJavelin(k, RUN, t, RUN_FLIGHT, 0.7),
+      charge: (k, t) => followHeld(k, RUN, t),
       release: (k) => {
-        keepFrom(k);
+        letGo(k);
         const away = k.toward(k.target, k.caster);
         scuff(k, k.at(k.caster, 0.02), 7, { x: -away.x, y: -away.y });
       },
@@ -1037,18 +1182,19 @@ export const SKIRMISHER: Record<string, SpellVisual> = {
         glint(k, aimAt(k), u);
         stuck(k, thrownBy(k), aimAt(k), landedDir(k), u * 1.3, landedSpin(k));
       } },
-      // The pace, on the caster for its seconds: wind at the heels and a trail of chevrons behind, one to a second, the last going out.
-      linger: { draw: (k, age, left) => {
+      // The pace, on the caster for its seconds whatever becomes of what was hit: wind at the heels and a trail of chevrons behind,
+      // one to a second, the last going out.
+      linger: { on: 'caster', draw: (k, age, left) => {
         const b = k.caster;
         const a = smooth(age / 0.3) * smooth(left / 0.6);
         const fwd = k.facingDir(b);
-        const pts: number[] = [], alphas: number[] = [];
+        const pts: number[][] = [], alphas: number[] = [];
         const n = Math.round(RUN_SECS);
         for (let i = 0; i < n; i++) {
           const lit = clamp(left - i);
           if (lit <= 0) continue;
           const s = 0.3 + i * 0.22;
-          chevronOn(k, b.x - fwd.x * s, b.y - fwd.y * s, fwd.x, fwd.y, 0.13, pts);
+          chevronOn(b.x - fwd.x * s, b.y - fwd.y * s, fwd.x, fwd.y, 0.13, pts);
           alphas.push(a * 0.85 * smooth(lit) * (1 - i / (n + 2)));
         }
         drawChevrons(k, b.x, b.y, 0.3 + n * 0.22, pts, alphas);
@@ -1072,14 +1218,14 @@ export const SKIRMISHER: Record<string, SpellVisual> = {
     cast: { timing: HEAVY.timing, pose: heavyPose },
     fx: {
       charge: (k, t) => {
-        heldJavelin(k, HEAVY, t, HEAVY_FLIGHT, 0.75);
+        followHeld(k, HEAVY, t);
         // The weight coming up off the ground into the hands, held at the top.
         const g = bump(t, 0.2, 0.46, 0.56);
         if (g > 0.05 && !k.fast) k.emit(k.at(k.caster, 0.02), 10 * g, { kind: 'dust', colour: ['#9a8a6c', '#b3a383'], size: 1.1, sizeEnd: 1.8, life: [0.4, 0.7], speed: [0.02, 0.1], up: [5, 12], gravity: -2, jitter: 0.35, bias: -1 });
         k.glow(mid3(k.hand(0), k.hand(1), 0.5), 5, 0.3 * g, k.pal.light);
       },
       release: (k) => {
-        keepFrom(k);
+        letGo(k);
         const foot = k.joint(k.caster, 'ankle0', [0, 0, 0], 0.02);
         scuff(k, foot, 10, undefined, 1.3);
       },
@@ -1130,10 +1276,9 @@ export const SKIRMISHER: Record<string, SpellVisual> = {
     palette: PALETTE,
     cast: { timing: GUT.timing, pose: gutPose },
     fx: {
-      charge: (k, t) => heldJavelin(k, GUT, t, GUT_FLIGHT, 0.6, gutOf(k)),
+      charge: (k, t) => followHeld(k, GUT, t),
       release: (k) => {
-        keepFrom(k);
-        k.burst(k.hand(1), 4, { kind: 'mote', size: 1.4, life: [0.2, 0.35], speed: [0.3, 0.7], up: [0, 4], heading: k.toward(k.caster, k.target), cone: 0.7, gravity: 0 });
+        letGo(k);
       },
       travel: throwTravel(GUT_FLIGHT, { to: (k) => gutOf(k), wake: { span: 0.14, spread: 0.035, width: 2 } }),
       hit: (k) => {
@@ -1148,8 +1293,13 @@ export const SKIRMISHER: Record<string, SpellVisual> = {
       // The bleed, a second at a time for as long as a knife's: a pulse of drops each second, and a pool spreading under it.
       linger: { secs: KNIFE_BLEED_SECS, draw: (k, age, left) => {
         const at = gutOf(k), b = k.target;
+        // Stanched before its time -- the island says the bleed is no longer running -- it dries up there and then. Given a
+        // second and a half first, for the word that it started to arrive.
+        if (b.kind === 'creature' && b.bleeding === false && age > 1.5 && k.state.dry === undefined) k.state.dry = age;
+        const dry = k.state.dry === undefined ? 1 : 1 - smooth((age - k.state.dry) / 0.6);
+        if (dry <= 0) return;
         const tick = Math.floor(age);
-        if ((k.state.tick ?? -1) < tick) {
+        if ((k.state.tick ?? -1) < tick && dry === 1) {
           k.state.tick = tick;
           k.burst(at, 5, { kind: 'drop', colour: ['#8e1c1c', '#6a1212'], size: 1.8, life: [0.35, 0.6], speed: [0.05, 0.25], up: [-2, 4], gravity: 70, bias: 2 });
         }
@@ -1158,8 +1308,8 @@ export const SKIRMISHER: Record<string, SpellVisual> = {
         // The wound itself: a short stub of teal where it went in, breathing with the pulse.
         k.flare(at, 3 + 2 * pulse, 0.5 + 0.4 * pulse, k.pal.light, 0.8);
         const pool = 0.12 + 0.18 * smooth(age / KNIFE_BLEED_SECS);
-        k.disc(b, pool, { main: '#5a1010', alpha: 0.5 * smooth(age / 0.6) * smooth(left / 1) });
-        tally(k, b, footOf(b), KNIFE_BLEED_SECS, left, { point: 'in', size: 0.1, alpha: 0.6 * smooth(age / 0.4), colour: '#c46a5a' });
+        k.disc(b, pool, { main: '#5a1010', alpha: 0.5 * dry * smooth(age / 0.6) * smooth(left / 1) });
+        tally(k, b, footOf(b), KNIFE_BLEED_SECS, left, { point: 'in', size: 0.1, alpha: 0.6 * dry * smooth(age / 0.4), colour: '#c46a5a' });
       } },
     },
   },
@@ -1167,43 +1317,45 @@ export const SKIRMISHER: Record<string, SpellVisual> = {
   // Parting Throw (throw, on enemy): a throw at 100%, and you leap 3 tiles straight back from it, over ground you could walk.
   skirmisher_parting_throw: {
     palette: PALETTE,
-    cast: { timing: PART.timing, pose: partPose },
+    cast: { timing: PART.timing, pose: partPose, move: { from: PART_OFF, to: PART_DOWN } },
     fx: {
       charge: (k, t) => {
-        heldJavelin(k, PART, t, PART_FLIGHT, 0.75);
-        // Where the leap began: the leap's length back toward what it is thrown at, kept from the first frame, as the body
-        // is already where it came down. Short of the leap only when what it is thrown at is nearer than that.
-        if (k.state.ox === undefined) {
-          const to = k.toward(k.caster, k.target), far = Math.min(PART_LEAP, Math.max(0.5, k.dist * 0.85));
-          k.state.ox = k.caster.x + to.x * far;
-          k.state.oy = k.caster.y + to.y * far;
-          k.state.far = far;
+        followHeld(k, PART, t);
+        k.flare(k.hand(1), 4, bump(t, PART.throws[0] - 0.05, PART.throws[0], PART.throws[0] + 0.08), k.pal.core, 0.3);
+        // The leap, when the island made one: dust off both feet as it goes, again as it lands.
+        const from = k.from;
+        if (!from) return;
+        if (t >= PART_OFF && k.state.off === undefined) {
+          k.state.off = 1;
+          scuff(k, k.on(from.x, from.y, 0.5), 12, k.toward(k.target, from), 1.3);
         }
         if (t >= PART_DOWN && k.state.landed === undefined) {
           k.state.landed = 1;
-          scuff(k, k.at(k.caster, 0.02), 12, k.toward(k.target, k.caster), 1.4);
+          scuff(k, k.at(k.caster, 0.02), 12, k.toward(from, k.caster), 1.4);
         }
-        const ox = k.state.ox, oy = k.state.oy, far = k.state.far;
-        const bx = k.caster.x, by = k.caster.y;
-        const ax = (bx - ox) / (far || 1), ay = (by - oy) / (far || 1);
-        // The streak of the leap: the group's two tails from where it began to the body, reeled in after it as it lands.
-        const reel = 1 - smooth(seg(t, 0.02, 0.32));
+        if (t < PART_OFF) return;
+        const bx = k.caster.x, by = k.caster.y, far = Math.hypot(bx - from.x, by - from.y);
+        if (far < 0.2) return;
+        const ax = (bx - from.x) / far, ay = (by - from.y) / far;
+        // The streak of it: the two tails from where it left the ground to the body, reeled in after it once it is down.
+        const reel = 1 - smooth(seg(t, PART_DOWN, 0.95));
         if (reel > 0.02) {
           const hip = k.caster.tall * 0.5;
-          const path = (v: number): P3 => k.on(lerp(ox, bx, v), lerp(oy, by, v), hip * (0.6 + 0.8 * v * (1 - v)));
-          wake(k, path, 1, { span: reel, spread: 0.1, width: 2.4, alpha: 0.8 * smooth(t / 0.03) * Math.min(1, reel * 2) });
+          const path = (v: number): P3 => k.on(lerp(from.x, bx, v), lerp(from.y, by, v), hip * (0.5 + 0.9 * v * (1 - v)) + k.caster.z - k.ground(bx, by));
+          wake(k, path, 1, { span: reel, spread: 0.1, width: 2.4, alpha: 0.8 * Math.min(1, reel * 2) });
         }
-        // A chevron for each tile of the leap, pointing the way it went, the one furthest back going out first.
-        const n = Math.max(1, Math.round(far));
-        const pts: number[] = [], alphas: number[] = [];
+        // A chevron for every tile it has crossed, pointing the way it went, put down as the body passes over each.
+        const n = Math.max(1, Math.round(PART_LEAP));
+        const pts: number[][] = [], alphas: number[] = [];
         for (let i = 0; i < n; i++) {
-          const show = smooth(seg(t, 0, 0.08)) * (1 - smooth(seg(t, 0.45 + (i / n) * 0.3, 0.6 + (i / n) * 0.3)));
-          chevronOn(k, ox + ax * (i + 0.5) * (far / n), oy + ay * (i + 0.5) * (far / n), ax, ay, 0.16, pts);
-          alphas.push(0.9 * show);
+          const s = i + 0.5;
+          if (s > far) break;
+          chevronOn(from.x + ax * s, from.y + ay * s, ax, ay, 0.16, pts);
+          alphas.push(0.9 * (1 - smooth(seg(t, 0.82 + i * 0.04, 0.97))));
         }
-        drawChevrons(k, (ox + bx) / 2, (oy + by) / 2, far / 2 + 0.3, pts, alphas);
+        drawChevrons(k, (from.x + bx) / 2, (from.y + by) / 2, far / 2 + 0.3, pts, alphas);
       },
-      release: (k) => keepFrom(k),
+      release: (k) => letGo(k),
       travel: throwTravel(PART_FLIGHT, { wake: { span: 0.16, spread: 0.045, width: 2.2 } }),
       hit: (k) => bite(k, aimAt(k), landedDir(k)),
       impact: { secs: 0.5, draw: (k, u) => {
@@ -1227,12 +1379,12 @@ export const SKIRMISHER: Record<string, SpellVisual> = {
       cast: { timing: DOUBLE.timing, pose: doublePose },
       fx: {
         charge: (k, t) => {
-          heldJavelin(k, DOUBLE, t, DOUBLE_FLIGHT, 0.7);
+          followHeld(k, DOUBLE, t);
           for (let i = 0; i < DOUBLE.throws.length; i++) k.flare(k.hand(1), 4, bump(t, DOUBLE.throws[i] - 0.05, DOUBLE.throws[i], DOUBLE.throws[i] + 0.08), k.pal.core, 0.3);
           // The second leaves the hand while the first is in the air: kept where it left, as the first was at the release.
-          if (t >= DOUBLE.throws[1] && k.state.h2x === undefined) keepFrom(k, 'h2');
+          if (t >= DOUBLE.throws[1] && k.state.h2gx === undefined) letGo(k, 'h2');
         },
-        release: (k) => keepFrom(k),
+        release: (k) => letGo(k),
         travel: {
           secs: (tiles) => gap + fly(tiles),
           draw: (k, u) => {
@@ -1242,10 +1394,7 @@ export const SKIRMISHER: Record<string, SpellVisual> = {
               const v = (el - i * gap) / f;
               const to = into(k, i);
               if (v >= 0 && v < 1) {
-                const from = i ? keptFrom(k, 'h2') : keptFrom(k);
-                const kind = thrownBy(k);
-                const start = kind === 'javelin' ? along(from, arcDir(from, to, 0, DOUBLE_FLIGHT.lift(k.dist)), JAV_AHEAD) : from;
-                const { d } = flying(k, DOUBLE_FLIGHT, start, to, v, { wake: { span: 0.14, spread: 0.04, width: 2 } });
+                const { d } = flying(k, DOUBLE_FLIGHT, launchOf(k, i ? 'h2' : 'h'), to, v, { wake: { span: 0.14, spread: 0.04, width: 2 } });
                 k.state[`d${i}x`] = d.x;
                 k.state[`d${i}y`] = d.y;
                 k.state[`d${i}z`] = d.z;
@@ -1278,20 +1427,36 @@ export const SKIRMISHER: Record<string, SpellVisual> = {
   // Ricochet (throw, on enemy): a throw at 100% that, when it lands, glances on to the nearest other enemy within 3 tiles of it at 60%.
   skirmisher_ricochet: (() => {
     const glanceSecs = 0.34;
-    /** Where the glance goes: off the side the seed says, a skimmed stone's angle off the way it came, most of the reach on. */
-    const glanceTo = (k: FxScene): P3 => {
+    /**
+     * Where the glance goes, decided as it lands: the nearest other creature within `fx.reach` of what it hit, followed as
+     * it moves; with none there, off the side a skimmed stone would go, spent in the grass a tile on.
+     */
+    const pick = (k: FxScene): void => {
+      if (k.state.gno !== undefined) return;
+      const next = othersNear(k, RICO_REACH)[0];
+      k.state.gno = next ? creatureNo(next) : -1;
       const d = landedDir(k), at = aimAt(k);
-      const s = hashOf(k.seed, 3) < 0.5 ? -1 : 1, ang = s * 0.95;
+      const sd = hashOf(k.seed, 3) < 0.5 ? -1 : 1, ang = sd * 0.95;
       const dx = d.x * Math.cos(ang) - d.y * Math.sin(ang), dy = d.x * Math.sin(ang) + d.y * Math.cos(ang), l = Math.hypot(dx, dy) || 1;
-      const far = RICO_REACH * 0.8;
-      return k.on(at.x + (dx / l) * far, at.y + (dy / l) * far, k.target.tall * 0.45);
+      const end = next ? aimAt(k, next) : k.on(at.x + (dx / l) * 1.2, at.y + (dy / l) * 1.2, 0.5);
+      k.state.ex = end.x; k.state.ey = end.y; k.state.ez = end.z;
+    };
+    const glanceTo = (k: FxScene): P3 => {
+      pick(k);
+      const kept = { x: k.state.ex, y: k.state.ey, z: k.state.ez };
+      if (k.state.gno < 0) return kept;
+      const b = creatureBy(k, k.state.gno, kept, 1.5);
+      if (!b) return kept;
+      const at = aimAt(k, b);
+      k.state.ex = at.x; k.state.ey = at.y; k.state.ez = at.z;
+      return at;
     };
     return {
       palette: PALETTE,
       cast: { timing: RICO.timing, pose: ricoPose },
       fx: {
-        charge: (k, t) => heldJavelin(k, RICO, t, RICO_FLIGHT, 0.6),
-        release: (k) => keepFrom(k),
+        charge: (k, t) => followHeld(k, RICO, t),
+        release: (k) => letGo(k),
         travel: throwTravel(RICO_FLIGHT, { wake: { span: 0.16, spread: 0.03, width: 2 } }),
         hit: (k) => {
           const d = landedDir(k), at = aimAt(k);
@@ -1314,11 +1479,17 @@ export const SKIRMISHER: Record<string, SpellVisual> = {
             thrownAt(k, kind, path(v), arcDir(at, to, v, 3), k.now * RICO_FLIGHT.turns * TAU, { sheen: 0.9, alpha: 0.85, scale: 0.85 });
             shadowOf(k, path(v), 3);
           } else {
+            const into = k.state.gno >= 0;
             if (k.state.glanced === undefined) {
               k.state.glanced = 1;
-              k.burst(to, 10, { kind: 'spark', colour: [k.pal.core, k.pal.light], size: 1.6, life: [0.15, 0.35], speed: [0.8, 2], up: [0, 16], gravity: 50 });
+              // Into the next creature, bitten as a throw is but lighter; or down into the grass with nothing to find.
+              if (into) bite(k, to, arcDir(at, to, 1, 3), 0.6);
+              else scuff(k, to, 6);
             }
-            glint(k, to, clamp((el - glanceSecs) / 0.45), 5);
+            if (into) {
+              glint(k, to, clamp((el - glanceSecs) / 0.45), 5);
+              stuck(k, thrownBy(k), to, arcDir(at, to, 1, 3), clamp((el - glanceSecs) / 0.5), landedSpin(k));
+            } else stuck(k, thrownBy(k), to, { x: 0, y: 0, z: -1 }, clamp((el - glanceSecs) / 0.5), landedSpin(k));
           }
         } },
       },
@@ -1413,15 +1584,48 @@ export const SKIRMISHER: Record<string, SpellVisual> = {
 
   // Fan of Blades (throw, on enemy): a throw at 60% at the enemy you aim at and at every other enemy within 3 tiles of it.
   skirmisher_fan_of_blades: (() => {
-    /** Where each blade of the fan comes down: the middle one at what was aimed at, the rest across the reach round it. */
-    const landing = (k: FxScene, i: number): P3 => {
-      const mid = (FAN_BLADES - 1) / 2;
-      if (i === mid) return aimAt(k);
+    const mid = (FAN_BLADES - 1) / 2;
+    /** Where a blade with nothing to go at comes down: across the reach round what was aimed at, in the order the arm sweeps. */
+    const open = (k: FxScene, i: number): P3 => {
       const d = k.toward(k.caster, k.target), side = { x: -d.y, y: d.x };
       const s = (i - mid) / mid, R = FAN_REACH * 0.75;
       const x = k.target.x + side.x * s * R + d.x * (Math.abs(s) - 0.6) * R * 0.5;
       const y = k.target.y + side.y * s * R + d.y * (Math.abs(s) - 0.6) * R * 0.5;
       return k.on(x, y, 3);
+    };
+    /**
+     * Who the fan goes at, decided as it leaves the hand: every other creature within `fx.reach` of what was aimed at,
+     * nearest first, each given the blade whose open place is nearest it, so the sweep still runs from one side to the
+     * other. The blades left over go into the ground across the reach -- the fan always goes out whole.
+     */
+    const pick = (k: FxScene): void => {
+      if (k.state.picked !== undefined) return;
+      k.state.picked = 1;
+      for (const b of othersNear(k, FAN_REACH).slice(0, FAN_BLADES - 1)) {
+        let best = -1, bestFar = Infinity;
+        for (let i = 0; i < FAN_BLADES; i++) {
+          if (i === mid || k.state[`no${i}`] !== undefined) continue;
+          const o = open(k, i), far = Math.hypot(o.x - b.x, o.y - b.y);
+          if (far < bestFar) [best, bestFar] = [i, far];
+        }
+        if (best < 0) break;
+        const at = aimAt(k, b);
+        k.state[`no${best}`] = creatureNo(b);
+        k.state[`x${best}`] = at.x; k.state[`y${best}`] = at.y; k.state[`z${best}`] = at.z;
+      }
+    };
+    /** Where each blade of the fan comes down this frame: the middle one at what was aimed at, the rest at whoever they went at. */
+    const landing = (k: FxScene, i: number): P3 => {
+      if (i === mid) return aimAt(k);
+      pick(k);
+      const no = k.state[`no${i}`];
+      if (no === undefined) return open(k, i);
+      const kept = { x: k.state[`x${i}`], y: k.state[`y${i}`], z: k.state[`z${i}`] };
+      const b = creatureBy(k, no, kept, 1.5);
+      if (!b) return kept;
+      const at = aimAt(k, b);
+      k.state[`x${i}`] = at.x; k.state[`y${i}`] = at.y; k.state[`z${i}`] = at.z;
+      return at;
     };
     const fly = flightSecs(FAN_FLIGHT);
     const far = (k: FxScene, i: number): number => Math.hypot(landing(k, i).x - k.caster.x, landing(k, i).y - k.caster.y);
@@ -1430,24 +1634,18 @@ export const SKIRMISHER: Record<string, SpellVisual> = {
       cast: { timing: FAN.timing, pose: fanPose },
       fx: {
         charge: (k, t) => {
-          // Through the turn it lies out along the arm, the point leading, and swings onto the line only as it goes.
-          heldJavelin(k, FAN, t, FAN_FLIGHT, 0.2, aimAt(k), (q, w) => {
-            if (w < 0.18) return null;
-            const grip = q.hand(1), out = between(q.chest(), grip), launch = between(grip, aimAt(q));
-            const lead = unitV(out.x + 0.3 * launch.x, out.y + 0.3 * launch.y, out.z * 0.3 + 0.12);
-            return mixV(mixV(between(q.hand(1), aimAt(q)), lead, smooth(seg(w, 0.18, 0.3))), launch, smooth(seg(w, 0.47, 0.55)));
-          });
+          followHeld(k, FAN, t);
           k.glow(k.hand(1), 6, 0.6 * bump(t, 0.3, 0.55, 0.62));
         },
         release: (k) => {
-          keepFrom(k);
-          k.burst(k.hand(1), 8, { kind: 'mote', size: 1.5, life: [0.2, 0.4], speed: [0.4, 1], up: [0, 6], heading: k.toward(k.caster, k.target), cone: 1.6, gravity: 0 });
+          letGo(k);
+          pick(k);
         },
         travel: {
           secs: (tiles) => fly(tiles + FAN_REACH * 0.4) + FAN_STAGGER * (FAN_BLADES - 1),
           draw: (k, u) => {
             if (k.state.t0 === undefined) k.state.t0 = k.now;
-            const total = fly(k.dist + FAN_REACH * 0.4) + FAN_STAGGER * (FAN_BLADES - 1), el = u * total, from = keptFrom(k), mid = (FAN_BLADES - 1) / 2;
+            const total = fly(k.dist + FAN_REACH * 0.4) + FAN_STAGGER * (FAN_BLADES - 1), el = u * total, from = launchOf(k).from;
             for (let i = 0; i < FAN_BLADES; i++) {
               // Each a little after the last as the arm sweeps across, from one side of the fan to the other.
               const to = landing(k, i), f = fly(far(k, i)), v = (el - i * FAN_STAGGER) / f;
@@ -1462,11 +1660,11 @@ export const SKIRMISHER: Record<string, SpellVisual> = {
                 k.state[`d${i}x`] = d.x;
                 k.state[`d${i}y`] = d.y;
               } else {
-                // Down: the one aimed at bites as any throw does; the rest go into whatever is there (the ground, as drawn).
+                // Down: into a creature it bites as any throw does; with nothing there, into the ground.
                 const d = { x: k.state[`d${i}x`] ?? 0, y: k.state[`d${i}y`] ?? 1, z: -0.3 };
                 if (k.state[`in${i}`] === undefined) {
                   k.state[`in${i}`] = 1;
-                  if (i === mid) bite(k, to, d, 0.8);
+                  if (i === mid || k.state[`no${i}`] !== undefined) bite(k, to, d, i === mid ? 0.8 : 0.6);
                   else {
                     k.burst(to, 6, { kind: 'spark', colour: [k.pal.core, k.pal.light], size: 1.5, life: [0.15, 0.3], speed: [0.6, 1.6], up: [0, 14], gravity: 50 });
                     scuff(k, k.on(to.x, to.y, 0.5), 4);
@@ -1483,7 +1681,7 @@ export const SKIRMISHER: Record<string, SpellVisual> = {
           reachRing(k, k.target, FAN_REACH, u, 16);
           for (let i = 0; i < FAN_BLADES; i++) {
             const at = landing(k, i), d = { x: k.state[`d${i}x`] ?? 0, y: k.state[`d${i}y`] ?? 1, z: -0.3 };
-            glint(k, at, clamp(u * 1.4 - i * 0.04), i === (FAN_BLADES - 1) / 2 ? 7 : 4.5);
+            glint(k, at, clamp(u * 1.4 - i * 0.04), i === mid || k.state[`no${i}`] !== undefined ? 7 : 4);
             stuck(k, thrownBy(k), at, d, 0.2 + 0.8 * u, i);
           }
         } },
