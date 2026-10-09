@@ -31,9 +31,9 @@
  */
 import { KNIFE_BLEED_SECS, reachOf, STAGGER_MAUL } from '../../game/fight';
 import { WEAPON_BY_ID } from '../../game/gear';
-import { weaponCarry, weaponSpan, type Euler, type Rig } from '../figure';
+import { figureStance, standFeet, weaponCarry, weaponSpan, type Euler, type Rig } from '../figure';
 import { HALF_W, UNITS_PER_TILE } from '../iso';
-import type { CastPose, CastTiming, PoseCue, SpellVisual } from './index';
+import type { CastClose, CastPose, CastTiming, PoseCue, SpellVisual } from './index';
 import { spellInfo } from './info';
 import { arcAt, bump, clamp, dry, easeBack, easeOut, eatTail, flashOf, hashOf, lateFade, lerp, mid3, seg, smooth, TAU, type Body, type FxScene, type GroundLayer, type P3, type SpellPalette } from './kit';
 import { euler, one, stepIn, track, type Key } from './poses';
@@ -426,13 +426,13 @@ function chevronOn(x: number, y: number, dx: number, dy: number, s: number, out:
  * same alpha -- all of a count but the one going out -- in one fill and one
  * inking.
  */
-function drawChevrons(k: FxScene, cx: number, cy: number, reach: number, paths: number[][], alphas: number[], colour = k.pal.accent, extra: GroundLayer[] = []): void {
+function drawChevrons(k: FxScene, cx: number, cy: number, reach: number, paths: number[][], alphas: number[], colour = k.pal.accent, extra: GroundLayer[] = [], night = 1): void {
   if (!paths.length && !extra.length) return;
   const layers: GroundLayer[] = [...extra];
   const width = Math.max(0.8, 0.6 * k.zoom);
   // After dark the ink and the sand go down into the night's ground: each is laid again in the glow pass, in its own
-  // sand, so a count of seconds still reads at night. Nought by day.
-  const rim = k.night;
+  // sand, so a count of seconds still reads at night (`night` of the full rim). By day not laid at all.
+  const rim = k.night >= 0.05 ? k.night * night : 0;
   let i = 0;
   while (i < alphas.length) {
     const a = alphas[i];
@@ -440,8 +440,14 @@ function drawChevrons(k: FxScene, cx: number, cy: number, reach: number, paths: 
     while (j < alphas.length && Math.abs(alphas[j] - a) < 0.004) j++;
     if (a > 0.01) {
       const some = paths.slice(i, j);
-      layers.push({ kind: 'fill', colour, alpha: clamp(a), paths: some, lift: 0.2, glow: 0.9 * rim, light: colour });
-      layers.push({ kind: 'stroke', colour: k.pal.ink, alpha: clamp(a), paths: some, lift: 0.2, width, closed: true, join: 'miter', glow: 0.5 * rim, light: colour });
+      const fill: GroundLayer = { kind: 'fill', colour, alpha: clamp(a), paths: some, lift: 0.2 };
+      const ink: GroundLayer = { kind: 'stroke', colour: k.pal.ink, alpha: clamp(a), paths: some, lift: 0.2, width, closed: true, join: 'miter' };
+      if (rim) {
+        fill.glow = 0.9 * rim;
+        fill.light = ink.light = colour;
+        ink.glow = 0.5 * rim;
+      }
+      layers.push(fill, ink);
     }
     i = j;
   }
@@ -507,8 +513,13 @@ function reachRing(k: FxScene, c: { x: number; y: number }, R: number, u: number
       dashes.push(d);
     }
   }
-  const line: GroundLayer = { kind: 'stroke', colour: k.night > 0.5 ? k.pal.accent : k.pal.ink, alpha: 0.4 * a, paths: dashes, lift: 0.15, width: Math.max(0.8, k.zoom), cap: 'butt', glow: 0.8 * k.night, light: k.pal.accent };
-  drawChevrons(k, c.x, c.y, r + s, pts, alphas, k.pal.accent, dashes.length ? [line] : []);
+  const line: GroundLayer = { kind: 'stroke', colour: k.night > 0.5 ? k.pal.accent : k.pal.ink, alpha: 0.4 * a, paths: dashes, lift: 0.15, width: Math.max(0.8, k.zoom), cap: 'butt' };
+  // After dark a faint rim to the line, no more: the ring says how far, it is not the thing that happened.
+  if (k.night >= 0.05) {
+    line.glow = 0.35 * k.night;
+    line.light = k.pal.accent;
+  }
+  drawChevrons(k, c.x, c.y, r + s, pts, alphas, k.pal.accent, dashes.length ? [line] : [], 0.4);
 }
 
 /** A chevron standing in the air, in screen points: pointing at `ang` (screen radians), `s` pixels now from notch to point. */
@@ -525,13 +536,27 @@ function airChevron(g: CanvasRenderingContext2D, x: number, y: number, ang: numb
 type AirMark = readonly [number, number, number, number];
 
 /**
- * Chevrons standing in the air (`airChevron`), filled in `colour` and inked, as one record sorted at `at`; after dark
- * their outlines laid again in the glow pass in the same colour, so they still read at night.
+ * Drawn over everything, as a sight is held over what it is on: laid in the glow pass but painted, not added, so it
+ * is the same by day and by night and no body or facing hides it.
  */
-function airChevrons(k: FxScene, at: P3, marks: readonly AirMark[], alpha: number, o: { colour?: string; bias?: number } = {}): void {
+function overDraw(k: FxScene, draw: (g: CanvasRenderingContext2D) => void): void {
+  k.glowDraw((g) => {
+    g.globalCompositeOperation = 'source-over';
+    draw(g);
+    g.globalCompositeOperation = 'lighter';
+  });
+}
+
+/**
+ * Chevrons standing in the air (`airChevron`), filled in `colour` and inked, as one record sorted at `at` (or `over`
+ * everything, `overDraw`); after dark their outlines laid again in the glow pass in the same colour, so they still
+ * read at night.
+ */
+function airChevrons(k: FxScene, at: P3, marks: readonly AirMark[], alpha: number, o: { colour?: string; bias?: number; over?: boolean } = {}): void {
   if (alpha <= 0.01 || !marks.length) return;
   const colour = o.colour ?? k.pal.accent, ink = k.pal.ink, z = k.zoom;
-  k.worldDraw(at, (g) => {
+  const put = (draw: (g: CanvasRenderingContext2D) => void): void => (o.over ? overDraw(k, draw) : k.worldDraw(at, draw, o.bias ?? 0));
+  put((g) => {
     g.globalAlpha = clamp(alpha);
     g.lineJoin = 'miter';
     for (const [x, y, ang, s] of marks) {
@@ -542,7 +567,7 @@ function airChevrons(k: FxScene, at: P3, marks: readonly AirMark[], alpha: numbe
       g.strokeStyle = ink;
       g.stroke();
     }
-  }, o.bias ?? 0);
+  });
   if (k.night > 0.05) {
     k.glowDraw((g) => {
       g.globalAlpha = clamp(alpha * k.night * 0.55);
@@ -597,22 +622,63 @@ function glint(k: FxScene, at: P3, u: number, r = 7): void {
   k.flare(at, r * (1.2 - 0.5 * u), flashOf(u, 0.1), k.pal.core, 0.4 + u * 0.4);
 }
 
+/** How far a javelin goes into what it hits, in height units: near half of what is ahead of the fist, its head and more. */
+const JAV_IN = Math.max(2.2, JAV_AHEAD * 0.45);
+
 /**
- * What was thrown, stood in what it hit for a beat after, its point in: then gone, fading over the last third. Never
- * steeper than a lob comes down at, so a short lob's javelin does not stand up out of the creature's back taller
- * than it; `ghost` for one of a fan's conjured copies.
+ * What was thrown, stood in what it hit for a beat after, its point in at `at`: then gone, fading over the last third.
+ * A javelin goes in by `JAV_IN`, lies no steeper than four in ten, and where its butt would still stand higher over
+ * the point than the point is over the ground it is sunk further, then laid flatter -- so it stands no taller than
+ * what it is in, wherever it came down from. `ghost` for one of a fan's conjured copies.
  */
 function stuck(k: FxScene, kind: Thrown, at: P3, d: V, u: number, spin: number, o: { ghost?: boolean; alpha?: number } = {}): void {
   const a = (1 - smooth(seg(u, 0.6, 1))) * (o.alpha ?? 1);
+  if (a <= 0.01) return;
   let h = Math.hypot(d.x, d.y);
   let dx = d.x, dy = d.y;
   if (h < 0.25) {
     const f = k.toward(k.caster, at);
     dx = f.x; dy = f.y; h = 1;
   }
-  const lay = unitV(dx, dy, Math.max(d.z, -0.55 * h));
-  if (kind === 'javelin') javelin(k, along(at, lay, -JAV_AHEAD + 2.2), lay, { alpha: a, ahead: JAV_AHEAD, ghost: o.ghost, scale: o.ghost ? 0.7 : 1 });
-  else spinner(k, kind, along(at, lay, -1.2), lay, spin, { alpha: a, ghost: o.ghost });
+  if (kind !== 'javelin') {
+    const lay = unitV(dx, dy, Math.max(d.z, -0.55 * h));
+    spinner(k, kind, along(at, lay, -1.2), lay, spin, { alpha: a, ghost: o.ghost });
+    return;
+  }
+  const sc = o.ghost ? 0.7 : 1, whole = (JAV_AHEAD + JAV_BACK) * sc;
+  let lay = unitV(dx, dy, Math.max(d.z, -0.4 * h));
+  let sunk = JAV_IN * sc;
+  // The most the butt may stand over the point: six-tenths of the point's own height over the ground.
+  const room = Math.max(1.5, 0.6 * (at.z - k.ground(at.x, at.y)));
+  if (-lay.z * (whole - sunk) > room) {
+    sunk = Math.min(whole * 0.55, whole - room / -lay.z);
+    const out = whole - sunk;
+    if (-lay.z * out > room) {
+      const z = -room / out, l = Math.sqrt(Math.max(0, 1 - z * z)) / (Math.hypot(lay.x, lay.y) || 1);
+      lay = { x: lay.x * l, y: lay.y * l, z };
+    }
+  }
+  // Drawn up to where it goes in and no further: the head is in it.
+  javelin(k, along(at, lay, -(JAV_AHEAD * sc - sunk)), lay, { alpha: a, ahead: JAV_AHEAD - sunk / sc, ghost: o.ghost, scale: sc });
+}
+
+/**
+ * A throw that found nothing: down in the grass at `at`, laid along the way it was going (`d`) and skidding a fifth of
+ * a tile on as it slows, then gone over the last third -- something thrown that came down, not stuck up in the turf.
+ */
+function skid(k: FxScene, kind: Thrown, at: P3, d: V, u: number): void {
+  const a = 1 - smooth(seg(u, 0.6, 1));
+  if (a <= 0.01) return;
+  const fl = Math.hypot(d.x, d.y) > 0.05 ? unitV(d.x, d.y, 0) : (() => {
+    const f = k.toward(k.caster, at);
+    return unitV(f.x, f.y, 0);
+  })();
+  const on = along(at, fl, 0.2 * U * easeOut(clamp(u / 0.5)));
+  const p = k.on(on.x, on.y, kind === 'axe' ? 1 : 0.6);
+  if (kind === 'javelin') {
+    const lay = unitV(fl.x, fl.y, -0.03);
+    javelin(k, along(p, lay, -(JAV_AHEAD - JAV_BACK) / 2), lay, { alpha: a });
+  } else spinner(k, kind, p, fl, Math.PI / 2, { alpha: a });
 }
 
 /* ---- a flight ----------------------------------------------------------------------------- */
@@ -731,16 +797,17 @@ const snapPose: CastPose = (r, t, c) => {
   if (c.carry === 'fist') {
     // Up the outside: out from the hip to the side first, then up by the ear.
     const w = one(t, [[0.02, 0], [0.1, 1], [rel - 0.03, 0.5], [rel + 0.02, 0]]);
-    const at = track(t, [[0, [3.2, 0.8, 7.0]], [0.12, [5.2, 0.4, 10.4]], [cock, [4.2, -0.4, 14.8]], [rel, [3.0, 2.4, 14.2]]]);
-    if (w > 0) r.reach = [r.reach?.[0], { at: [at[0], at[1], at[2]], pole: [8, -1, 9], w }];
+    const at = track(t, [[0, [3.2, 0.8, 7.0]], [0.12, [5.8, 0.2, 10.4]], [cock, [5.2, -0.8, 14.2]], [rel, [3.4, 2.4, 13.8]]]);
+    if (w > 0) r.reach = [r.reach?.[0], { at: [at[0], at[1], at[2]], pole: [9, -1, 9], w }];
   }
   javelinThrow(r, t, c, [
     { t: 0, ...CARRIED },
     // Up the outside of the arm, never across the face.
     { t: 0.12, at: [4.4, 0.6, 10.6], lie: [0.1, 0.7, 0.7], pole: [7, -1, 7] },
     { t: cock, at: [3.0, 1.0, 14.2], lie: [0.02, 0.8, 0.6], pole: [6, -1, 9] },
-    { t: rel, at: [2.4, 3.6, 14.2], lie: [0, 0.99, 0.12], pole: [4.5, 0, 8] },
-    { t: thr, at: [2.0, 4.4, 12.2], lie: [0, 0.94, -0.34], pole: [4.5, -1, 7] },
+    // Let go beside the face, not across it.
+    { t: rel, at: [3.0, 3.4, 13.6], lie: [0, 0.99, 0.12], pole: [5, 0, 8] },
+    { t: thr, at: [2.4, 4.4, 11.8], lie: [0, 0.94, -0.34], pole: [5, -1, 7] },
     ...backToHip(thr, SNAP.draws[0]),
   ]);
   holdFor(r, t, c, SNAP);
@@ -801,10 +868,12 @@ const longPose: CastPose = (r, t, c) => {
  */
 const RUN: Held = { timing: { secs: 0.75, release: 0.42, blendIn: 0.1 }, throws: [0.42], draws: [0.78] };
 const RUN_FLIGHT: Flight = { perTile: 0.038, base: 0.04, lift: (d) => 1 + d * 0.8, turns: 3.4 };
-/** The knife's dart in, the cut across and the spring back out, as fractions of the cast. */
 /** Tiles the wind streams back off a heel. */
 const RUN_STREAM = 0.22;
+/** The knife's stride in, the cut across, through, and the spring back out, as fractions of the cast. */
 const RUN_IN = 0.1, RUN_CUT = 0.34, RUN_THROUGH = 0.46, RUN_OUT = 0.74;
+/** How far a knife cut reaches past the chest, in height units: the arm and the blade. */
+const RUN_BLADE = 6 + (weaponSpan('hunting_knife')?.to ?? 2.6) + 4;
 
 /**
  * Whether the caster's weapon is a knife, which the pose cannot see (it is told only that it is carried in the
@@ -814,9 +883,36 @@ const RUN_IN = 0.1, RUN_CUT = 0.34, RUN_THROUGH = 0.46, RUN_OUT = 0.74;
 const KNIFE_IN = new WeakMap<object, boolean>();
 const NO_LOOK = {};
 const knifeIn = (c: PoseCue): boolean => c.carry === 'fist' && (KNIFE_IN.get(c.look ?? NO_LOOK) ?? false);
+
+/**
+ * The Hit and Run casts going, by the caster's look: whether each is a knife blow, and when it was last drawn (the
+ * drawing clock). A knife blow is struck from the weapon's melee reach, two tiles off, so the stage carries the body
+ * in for it (`cast.close`) -- and a throw must not be carried anywhere. The stage asks the spell's `close` without
+ * saying whose cast it asks for, so it is given only while every Hit and Run being drawn is a knife blow: one caster at
+ * a time, as it nearly always is. With a throw and a knife blow going at once the knife lunges where it stands
+ * (`runKnifePose`) and its cut is drawn at its own reach.
+ */
+const RUN_GOING = new Map<object, { knife: boolean; seen: number }>();
+let RUN_NOW = 0;
 const sayKnife = (k: FxScene): void => {
-  KNIFE_IN.set(k.caster.figure?.look ?? NO_LOOK, thrownBy(k) === 'knife');
+  const look = k.caster.figure?.look ?? NO_LOOK, knife = thrownBy(k) === 'knife';
+  KNIFE_IN.set(look, knife);
+  RUN_NOW = Math.max(RUN_NOW, k.now);
+  RUN_GOING.set(look, { knife, seen: k.now });
 };
+/** Whether Hit and Run closes in now: every one going is a knife blow (and there is one). */
+function runCloses(): boolean {
+  let any = false;
+  for (const [look, g] of RUN_GOING) {
+    if (RUN_NOW - g.seen > 1) {
+      RUN_GOING.delete(look);
+      continue;
+    }
+    if (!g.knife) return false;
+    any = true;
+  }
+  return any;
+}
 
 const runThrowPose: CastPose = (r, t, c) => {
   const wind = 0.28, rel = 0.42, thr = 0.56, off = 0.74;
@@ -845,17 +941,19 @@ const runThrowPose: CastPose = (r, t, c) => {
   holdFor(r, t, c, RUN);
 };
 
+/** How the stage carries a knife blow in: over the running stride to the cut, and back out from the follow-through. */
+const RUN_CLOSE: CastClose = { from: RUN_IN - 0.06, to: RUN_CUT, back: RUN_THROUGH + 0.04 };
+
 /**
- * Hit and Run with a knife: a dart in on the front foot, the knife cut across the body from out on the right to the
- * left hip at what it strikes, and a spring back out with the hips already turning away and the head left looking
- * back. The body darts in by what the knife is short of the creature's near side, up to a stride (further and the
- * body would leave its own shadow behind: the stage's `cast.close` cannot be had for a knife alone, see the report),
- * and back.
+ * Hit and Run with a knife: a running stride in, the knife cut across the body from out on the right to the left hip
+ * through what it strikes, and a spring back out with the hips already turning away and the head left looking back.
+ * The stage carries the body (and its shadow) in to the creature over the stride and back out after (`RUN_CLOSE`);
+ * the stride is light on its feet, off the ground a little at the middle of each. Not carried (walking, or a throw
+ * going at once, `runCloses`), it is a lunge on the spot instead: the front foot put down further on, the back one
+ * kept.
  */
-const RUN_DART = 12;
 const runKnifePose: CastPose = (r, t, c) => {
-  const by = c.aim ? clamp(c.aim.near - 16, 0, RUN_DART) : 0;
-  const go = smooth(seg(t, RUN_IN, RUN_CUT - 0.04)) * (1 - smooth(seg(t, RUN_THROUGH + 0.04, RUN_OUT)));
+  const carried = (c.aim?.close ?? 0) > 0;
   r.wield = 1;
   r.arm[1] = E(t, [[0, [22, 14, 0]], [RUN_IN, [40, 40, -10]], [RUN_CUT - 0.06, [96, 70, -30]], [RUN_CUT, [92, 40, 10]], [RUN_THROUGH, [62, -24, 50]], [RUN_OUT, [20, 10, 10]], [1, [16, 10, 4]]]);
   r.elbow[1] = one(t, [[0, 32], [RUN_IN, 70], [RUN_CUT - 0.06, 80], [RUN_CUT, 20], [RUN_THROUGH, 30], [RUN_OUT, 40], [1, 30]]);
@@ -871,8 +969,8 @@ const runKnifePose: CastPose = (r, t, c) => {
   r.knee[0] = one(t, [[0, 6], [RUN_IN, 30], [(RUN_IN + RUN_CUT) / 2, 50], [RUN_CUT, 40], [RUN_THROUGH, 36], [(RUN_THROUGH + RUN_OUT) / 2, 40], [RUN_OUT, 16], [1, 6]]);
   r.leg[1] = E(t, [[0, [0, 2, 0]], [RUN_IN, [-8, 2, 0]], [(RUN_IN + RUN_CUT) / 2, [-30, 4, 0]], [RUN_CUT, [-34, 4, 0]], [RUN_THROUGH, [-22, 10, 0]], [(RUN_THROUGH + RUN_OUT) / 2, [-30, 14, 0]], [RUN_OUT, [-26, 14, 0]], [1, [-2, 2, 0]]]);
   r.knee[1] = one(t, [[0, 6], [RUN_IN, 20], [(RUN_IN + RUN_CUT) / 2, 60], [RUN_CUT, 24], [RUN_THROUGH, 20], [(RUN_THROUGH + RUN_OUT) / 2, 50], [RUN_OUT, 34], [1, 6]]);
-  r.lift = (r.lift ?? 0) + 2.4 * (Math.sin(Math.PI * seg(t, RUN_IN, RUN_CUT - 0.04)) + Math.sin(Math.PI * seg(t, RUN_THROUGH + 0.04, RUN_OUT))) * Math.min(1, by / 12);
-  r.at = [r.at[0], r.at[1] + by * go, r.at[2]];
+  if (carried) r.lift = (r.lift ?? 0) + 1.4 * (Math.sin(Math.PI * seg(t, RUN_IN, RUN_CUT - 0.04)) + Math.sin(Math.PI * seg(t, RUN_THROUGH + 0.04, RUN_OUT)));
+  else stepIn(r, t, c, { hit: RUN_CUT, from: RUN_IN, back: RUN_THROUGH + 0.04, most: 12, bend: 16 });
 };
 
 const runPose: CastPose = (r, t, c) => (knifeIn(c) ? runKnifePose : runThrowPose)(r, t, c);
@@ -1003,6 +1101,13 @@ const partPose: CastPose = (r, t, c) => {
     ...backToHip(held, PART.draws[0]),
   ]);
   holdFor(r, t, c, PART);
+  // The island could not leap it (the ground behind was not to be had): no leap drawn either. The knees drop as they
+  // would and the crouch is held where it stands, both feet on the ground.
+  if ((c.moved ?? 0) < 0.3) {
+    r.lift = 0;
+    const crouch = one(t, [[cock, 0], [dip, 0.8], [held, 0.8], [0.93, 0.15], [1, 0]]);
+    standFeet(r, figureStance(c.look), { bend: lerp(8, 70, crouch), look: c.look });
+  }
 };
 
 /*
@@ -1036,8 +1141,10 @@ const doublePose: CastPose = (r, t, c) => {
     { t: r1, at: [2.0, 4.6, 13.0], lie: [0, 0.99, 0.08], pole: [4, 0, 9] },
     { t: t1, at: [2.0, 5.0, 12.2], lie: [0, 0.99, 0.08], pole: [4, 0, 8] },
     { t: d1, at: [2.6, -1.0, 7.5], lie: CARRIED.lie, pole: [3.5, -2.5, 4] },
-    { t: c2, at: [2.9, -2.8, 14.0], lie: [0.02, 0.95, 0.3], pole: [4, -2, 8] },
-    { t: r2, at: [2.0, 3.8, 15.2], lie: [0, 0.97, 0.24], pole: [5, 0, 9] },
+    // Behind the shoulder at arm's length, the shaft going back past it, as a Long Throw draws: never over the forehead.
+    { t: c2, at: [3.8, -4.6, 14.6], lie: [0.3, 0.8, 0.5], pole: [5, -3, 9] },
+    // And let go outside the head.
+    { t: r2, at: [2.6, 3.6, 14.6], lie: [0, 0.97, 0.24], pole: [5, 0, 9] },
     { t: t2, at: [0.3, 4.4, 8.6], lie: [0, 0.97, 0.24], pole: [4, -1, 5] },
     ...backToHip(t2, DOUBLE.draws[1]),
   ]);
@@ -1127,7 +1234,8 @@ const fanPose: CastPose = (r, t, c) => {
   javelinThrow(r, t, c, [
     { t: 0, ...CARRIED },
     { t: wound, at: [4.2, -1.2, 10.6], lie: [0.9, 0.3, 0.25], pole: [3, -2, 5] },
-    { t: 0.45, at: [6.2, 0.6, 11.6], lie: [0.85, 0.5, 0.12], pole: [3, -2, 6] },
+    // Below the head and trailing out from it, so the shaft never passes through the head as the body comes round.
+    { t: 0.45, at: [6.2, 0.6, 10.0], lie: [0.95, 0.25, 0.05], pole: [3, -2, 5] },
     { t: rel, at: [3.0, 4.8, 12.4], lie: [0.1, 0.99, 0.12], pole: [5, 0, 7] },
     { t: round, at: [-0.4, 4.4, 9.6], lie: [0.1, 0.99, 0.12], pole: [3, -1, 4] },
     ...backToHip(round, FAN.draws[0]),
@@ -1249,6 +1357,8 @@ const landedSpin = (k: FxScene): number => 0.5 + (k.seed % 5) * 0.2;
 /* ---- the twelve ------------------------------------------------------------------------------ */
 
 const SNAP_SOONER = fxOf('snap_throw').sooner ?? 0;
+/** Snap Throw's dial: its radius, and how far its middle is put out from the middle of the body, in pixels at zoom one. */
+const SNAP_DIAL = 4.6, SNAP_DIAL_OUT = 11.5;
 const RUN_SECS = fxOf('hit_and_run').secs ?? 0;
 const DOUBLE_N = fxOf('double_throw').throws ?? 2;
 const RICO_REACH = fxOf('ricochet').reach ?? 0;
@@ -1276,15 +1386,16 @@ function hunterNear(k: FxScene, r: number): Body | null {
 }
 
 /**
- * A ring drawn in the air round a point on the screen, `r` pixels, from the top round `turn` of the way (all of it
- * when `turn` is one) -- inked under and in `colour` over, as one record sorted at `at`; after dark its line again in
- * the glow pass, so it still reads at night.
+ * A ring drawn in the air round a point on the screen (`at`, or `x`, `y` given), `r` pixels, from the top round `turn`
+ * of the way (all of it when `turn` is one) -- inked under and in `colour` over, as one record sorted at `at` (or
+ * `over` everything, `overDraw`); after dark its line again in the glow pass, so it still reads at night.
  */
-function airRing(k: FxScene, at: P3, r: number, turn: number, alpha: number, colour: string, bias = 0): void {
+function airRing(k: FxScene, at: P3, r: number, turn: number, alpha: number, colour: string, o: { bias?: number; over?: boolean; x?: number; y?: number } = {}): void {
   if (alpha <= 0.01) return;
-  const x = k.sx(at), y = k.sy(at), R = r * k.zoom, z = k.zoom, ink = k.pal.ink;
+  const x = o.x ?? k.sx(at), y = o.y ?? k.sy(at), R = r * k.zoom, z = k.zoom, ink = k.pal.ink;
   const end = -Math.PI / 2 + clamp(turn) * TAU;
-  k.worldDraw(at, (g) => {
+  const put = (draw: (g: CanvasRenderingContext2D) => void): void => (o.over ? overDraw(k, draw) : k.worldDraw(at, draw, o.bias ?? 0));
+  put((g) => {
     g.globalAlpha = clamp(alpha);
     g.lineCap = 'butt';
     g.beginPath();
@@ -1295,7 +1406,7 @@ function airRing(k: FxScene, at: P3, r: number, turn: number, alpha: number, col
     g.strokeStyle = colour;
     g.lineWidth = 1.1 * z;
     g.stroke();
-  }, bias);
+  });
   if (k.night > 0.05) {
     k.glowDraw((g) => {
       g.globalAlpha = clamp(alpha * k.night * 0.6);
@@ -1330,16 +1441,19 @@ export const SKIRMISHER: Record<string, SpellVisual> = {
         glint(k, aimAt(k), u, 6);
         stuck(k, thrownBy(k), aimAt(k), landedDir(k), u * 1.4, landedSpin(k));
       } },
-      // The second it buys, from when it lands: a sand hand going once round the grip of the weapon that will swing next,
-      // and the weapon itself flashing when it is round -- ready.
+      // The second it buys, from when it lands: a sand hand going once round a dial beside the weapon that will swing next
+      // -- at the height of its grip, out past the body on the side the weapon is, and over everything, so no facing
+      // hides it behind the body -- and the weapon itself flashing when it is round: ready.
       linger: { secs: SNAP_SOONER, draw: (k, age, left) => {
         const u = clamp(age / Math.max(0.01, age + left));
         const grip = k.joint(k.caster, 'grip');
         const a = smooth(age / 0.12) * (1 - smooth(seg(u, 0.92, 1)));
-        airRing(k, grip, 4.6, u, 0.9 * a, k.pal.accent, 4);
+        const z = k.zoom, bx = k.sx(k.caster), gx = k.sx(grip), side = gx < bx - 2 * z ? -1 : 1;
+        const x = bx + side * SNAP_DIAL_OUT * z, y = k.sy(grip), R = SNAP_DIAL * z;
+        airRing(k, grip, SNAP_DIAL, u, 0.9 * a, k.pal.accent, { over: true, x, y });
         // The hand of it, a chevron at its head.
-        const ang = -Math.PI / 2 + u * TAU, R = 4.6 * k.zoom;
-        airChevrons(k, grip, [[k.sx(grip) + Math.cos(ang) * R, k.sy(grip) + Math.sin(ang) * R, ang + Math.PI / 2, 2.8 * k.zoom]], a, { bias: 4.5 });
+        const ang = -Math.PI / 2 + u * TAU;
+        airChevrons(k, grip, [[x + Math.cos(ang) * R, y + Math.sin(ang) * R, ang + Math.PI / 2, 2.8 * z]], a, { over: true });
         if (left < 0.18) {
           const w = flashOf(1 - left / 0.18, 0.25);
           const tip = k.joint(k.caster, 'tip');
@@ -1389,9 +1503,8 @@ export const SKIRMISHER: Record<string, SpellVisual> = {
       impact: { secs: 0.75, draw: (k, u) => {
         const at = aimAt(k), el = u * 0.75;
         glint(k, at, u, 8);
+        // No ring: a lob that comes down in one creature is not an area. The bite and the scuff at its feet say it landed.
         stuck(k, thrownBy(k), at, landedDir(k), u, landedSpin(k));
-        const r = footOf(k.target);
-        k.ring(k.target, r + 0.25 * easeOut(u), { band: 0.05 * (1 - u), alpha: 0.8 * (1 - u), main: k.pal.accent, deep: k.pal.deep, glow: 0.4 });
         // Where it came down, lit for a moment at night: not along the way, a javelin is not a lamp.
         if (el < 0.4) k.light(at, 1.4, 0.7 * (1 - el / 0.4), '#fff1d6');
       } },
@@ -1403,7 +1516,10 @@ export const SKIRMISHER: Record<string, SpellVisual> = {
     const thrown = throwTravel(RUN_FLIGHT, { wake: { span: 0.14, spread: 0.04, width: 2 } });
     return {
       palette: PALETTE,
-      cast: { timing: RUN.timing, pose: runPose },
+      // Closed in for a knife blow alone (`runCloses`): read each frame, as the stage asks it each frame.
+      cast: { timing: RUN.timing, pose: runPose, get close() {
+        return runCloses() ? RUN_CLOSE : false;
+      } },
       fx: {
         charge: (k, t) => {
           sayKnife(k);
@@ -1411,24 +1527,28 @@ export const SKIRMISHER: Record<string, SpellVisual> = {
             followHeld(k, RUN, t);
             return;
           }
-          // The knife: the cut is the blade's own sweep; and on what it strikes, a cut opened across it as the blade goes
-          // through, eaten from its tail, with a bite.
+          // The knife: the cut is the blade's own sweep; and where the blade goes through -- in what it strikes, carried in
+          // to it, or at the blade's own reach when it is not -- a cut opened across, eaten from its tail, with a bite on
+          // what it reached and nothing on air.
           if (t > RUN_CUT - 0.07 && t < RUN_THROUGH + 0.1) k.trail(k.caster, { secs: 0.08, inner: 0.25, alpha: 0.95 });
-          const at = aimAt(k);
+          const chest = k.chest(), aim = aimAt(k), on = between(chest, aim);
+          const far = Math.hypot((aim.x - chest.x) * U, (aim.y - chest.y) * U, aim.z - chest.z) - k.target.wide;
+          const reaches = far <= RUN_BLADE;
+          const at = reaches ? aim : along(chest, on, RUN_BLADE);
           if (t >= RUN_CUT && k.state.cut === undefined) {
             k.state.cut = 1;
-            bite(k, at, between(k.chest(), at), 0.8);
+            if (reaches) bite(k, at, on, 0.8);
           }
           const cut = seg(t, RUN_CUT - 0.03, RUN_THROUGH + 0.16);
           if (cut > 0 && cut < 1) {
-            const side = across(between(k.chest(), at)), w = Math.max(3, k.target.wide * 0.9) / U;
+            const side = across(on), w = Math.max(3, (reaches ? k.target.wide : 4) * 0.9) / U;
             const a0 = { x: at.x + side.x * w, y: at.y + side.y * w, z: at.z + 2.5 }, a1 = { x: at.x - side.x * w, y: at.y - side.y * w, z: at.z - 2.5 };
             // Opened from its near end across, then eaten from that end after it.
             const head = smooth(Math.min(1, cut / 0.3)), tail = head * smooth(seg(cut, 0.45, 1));
             const drawn = [tail, (tail + head) / 2, head].map((v) => mid3(a0, a1, v));
             k.ribbon(drawn, { width: 2.4, taper: 'both', alpha: 0.95, main: k.pal.core, edge: true, glow: 0.6 });
           }
-          k.flare(at, 6, bump(t, RUN_CUT - 0.02, RUN_CUT + 0.02, RUN_CUT + 0.14), k.pal.core, 0.5);
+          if (reaches) k.flare(at, 6, bump(t, RUN_CUT - 0.02, RUN_CUT + 0.02, RUN_CUT + 0.14), k.pal.core, 0.5);
         },
         release: (k) => {
           if (thrownBy(k) !== 'knife') letGo(k);
@@ -1462,17 +1582,18 @@ export const SKIRMISHER: Record<string, SpellVisual> = {
             alphas.push(a * 0.85 * smooth(lit) * (1 - i / (n + 2)));
           }
           drawChevrons(k, b.x, b.y, 0.3 + n * 0.22, pts, alphas);
-          // A streamer of wind off each heel at the height of the shin, trailing half a tile back and lifting and falling at
-          // its far end as it streams. Put by the body's own frame rather than found on the posed leg: five seconds of a
-          // figure posed again every frame is the cost of the whole spell, and at a heel the difference does not show.
+          // A streamer of wind off the back of each heel, trailing a fifth of a tile behind and lifting and falling at its far
+          // end as it streams, sorted round the body so it goes behind the legs it trails. Put by the body's own frame
+          // rather than found on the posed leg: five seconds of a figure posed again every frame is the cost of the whole
+          // spell, and at a heel the difference does not show.
           for (let s = 0; s < 2; s++) {
-            const heel = k.local(b, s ? 1.3 : -1.3, -0.8, 2.6);
+            const heel = k.local(b, s ? 1.3 : -1.3, -2.6, 1.8);
             const line: P3[] = [];
             for (let i = 3; i >= 0; i--) {
               const v = i / 3, wave = Math.sin(k.now * 8 + s * 2.2 - v * 2.6) * 1.2 * v;
               line.push({ x: heel.x - fwd.x * RUN_STREAM * v, y: heel.y - fwd.y * RUN_STREAM * v, z: heel.z + 1.2 * v + wave });
             }
-            k.ribbon(line, { width: 2, taper: 'start', alpha: a * 0.65, edge: false, glow: 0.4, main: k.pal.light });
+            k.ribbon(line, { width: 2, taper: 'start', alpha: a * 0.65, edge: false, glow: 0.4, main: k.pal.light, around: b, bias: -1 });
           }
         } },
       },
@@ -1509,9 +1630,10 @@ export const SKIRMISHER: Record<string, SpellVisual> = {
         const at = aimAt(k), d = landedDir(k);
         glint(k, at, u, 11);
         stuck(k, thrownBy(k), at, d, u, landedSpin(k));
-        // The jolt: a tight band of shock at its feet -- it, not an area -- and two lines either side of it driven on the way the blow went.
-        const r = footOf(k.target);
-        k.ring(k.target, r + 0.15 * easeOut(u), { band: 0.05 * (1 - u), alpha: 0.9 * (1 - u * u), main: k.pal.accent, deep: '#8a7450', glow: 0.3 });
+        // The jolt: a tight band of shock at its feet as wide as it is -- it, not an area -- and two lines either side of it
+        // driven on the way the blow went.
+        const r = (k.target.wide / U) * 1.1;
+        k.ring(k.target, r + 0.04 * easeOut(u), { band: 0.04 * (1 - u), alpha: 0.9 * (1 - u * u), main: k.pal.accent, deep: '#8a7450', glow: 0.3 });
         const side = across(d), w = 0.22 * k.target.wide / 5;
         for (const s of [-1, 1]) {
           const base = { x: at.x + side.x * w * s, y: at.y + side.y * w * s, z: at.z + 2 * s };
@@ -1571,9 +1693,11 @@ export const SKIRMISHER: Record<string, SpellVisual> = {
         const pulse = flashOf(age - tick, 0.08) * smooth(left / 0.5);
         // The wound: dark red laid over, swelling with each pulse -- not a sparkle.
         k.glow(at, 3.5 + 1.5 * pulse, 0.55 + 0.35 * pulse, '#9a1a14', true);
-        // The pool: an irregular blot, drying darker as it goes, and spots on the side the throw came from.
-        const grow = 0.07 + 0.11 * smooth(age / KNIFE_BLEED_SECS);
-        const shade = dry('#7a0f0f', 0.6 * smooth(age / KNIFE_BLEED_SECS));
+        // The pool: an irregular blot, going darker red as it goes -- near opaque, so the grass never shows through it as
+        // mud -- and spots on the side the throw came from.
+        // Going out at the end by drawing in (and only the last of it by fading), so it never thins to a brown film.
+        const grow = (0.07 + 0.11 * smooth(age / KNIFE_BLEED_SECS)) * (0.35 + 0.65 * lateFade(left, 0.6));
+        const shade = dry('#7a0f0f', smooth(age / KNIFE_BLEED_SECS), '#4a0808');
         const blot: number[] = [];
         for (let i = 0; i < 7; i++) {
           const ang = (i / 7) * TAU + hashOf(k.seed, i) * 0.5, rr = grow * (0.7 + 0.5 * hashOf(k.seed, 10 + i));
@@ -1587,7 +1711,7 @@ export const SKIRMISHER: Record<string, SpellVisual> = {
           for (let j = 0; j < 5; j++) sp.push(sx + Math.cos((j / 5) * TAU) * rr, sy + Math.sin((j / 5) * TAU) * rr);
           spots.push(sp);
         }
-        k.groundShape(at.x, at.y, grow + 0.35, [{ kind: 'fill', colour: shade, alpha: 0.65 * stop * smooth(age / 0.6) * lateFade(left, 0.6), paths: [blot, ...spots], lift: 0.1 }]);
+        k.groundShape(at.x, at.y, grow + 0.35, [{ kind: 'fill', colour: shade, alpha: 0.85 * stop * smooth(age / 0.6) * lateFade(left, 0.2), paths: [blot, ...spots], lift: 0.1 }]);
         tally(k, b, footOf(b), KNIFE_BLEED_SECS, left, { point: 'in', size: 0.1, alpha: 0.75 * stop * smooth(age / 0.4), colour: '#d2584a' });
       } },
     },
@@ -1616,17 +1740,20 @@ export const SKIRMISHER: Record<string, SpellVisual> = {
         const bx = k.caster.x, by = k.caster.y, far = Math.hypot(bx - from.x, by - from.y);
         if (far < 0.25) return;
         const ax = (bx - from.x) / far, ay = (by - from.y) / far;
-        // The smear of it: one tapered ribbon from where it left the ground to the body at the height of the knees, eaten
-        // from its tail once the body is down.
+        // The smear of it: one tapered ribbon along the ground from where it left it to the body at the height of the knees,
+        // eaten from its tail once the body is down. As wide as the leap is across the screen: seen down the leap (from
+        // the front or the back) it thins to a streak at the feet, and the chevrons carry the way it went.
         const eaten = smooth(seg(t, PART_DOWN - 0.02, 0.95));
         if (eaten < 0.98) {
           const n = Math.round(clamp((far - 0.25) / 2.75) * 2) + 8, knee = 5;
           const line: P3[] = [];
           for (let i = 0; i <= n; i++) {
             const v = i / n, x = lerp(from.x, bx, v), y = lerp(from.y, by, v);
-            line.push({ x, y, z: k.ground(x, y) + knee + 3 * Math.sin(Math.PI * v) * (1 - eaten) });
+            line.push({ x, y, z: k.ground(x, y) + knee * (1 - 0.6 * (1 - v)) });
           }
-          k.ribbon(eatTail(line, eaten), { width: 3.2, taper: 'start', alpha: 0.75, edge: false, glow: 0.5, main: k.pal.main });
+          const sx = k.sx(k.caster) - k.sx(k.on(from.x, from.y)), sy = k.sy(k.caster) - k.sy(k.on(from.x, from.y));
+          const wide = Math.max(0.35, Math.abs(sx) / (Math.hypot(sx, sy) || 1));
+          k.ribbon(eatTail(line, eaten), { width: 3.2 * wide, taper: 'start', alpha: 0.75, edge: false, glow: 0.5, main: k.pal.main });
         }
         // A chevron for every tile it has crossed, pointing the way it went, put down as the body passes over each.
         const n = Math.max(1, Math.round(PART_LEAP));
@@ -1760,7 +1887,8 @@ export const SKIRMISHER: Record<string, SpellVisual> = {
           if (v < 1) {
             // On, lighter: the glance, at three-fifths of the throw.
             const path = (w: number): P3 => arcAt(at, to, w, 3);
-            wake(k, path, v, { span: 0.3, spread: 0.03, width: 1.6, alpha: 0.75 });
+            // Its tails no wider apart than a short glance can carry without closing into a hoop round it.
+            wake(k, path, v, { span: 0.3, spread: Math.min(0.03, 0.012 * Math.hypot(to.x - at.x, to.y - at.y)), width: 1.6, alpha: 0.75 });
             const kind = thrownBy(k);
             thrownAt(k, kind, path(v), arcDir(at, to, v, 3), k.now * RICO_FLIGHT.turns * TAU, { sheen: 0.9, alpha: 0.85, scale: 0.85 });
             shadowOf(k, path(v), 3);
@@ -1775,7 +1903,7 @@ export const SKIRMISHER: Record<string, SpellVisual> = {
             if (into) {
               glint(k, to, clamp((el - glanceSecs) / 0.45), 5);
               stuck(k, thrownBy(k), to, arcDir(at, to, 1, 3), clamp((el - glanceSecs) / 0.5), landedSpin(k));
-            } else stuck(k, thrownBy(k), to, { x: 0, y: 0, z: -1 }, clamp((el - glanceSecs) / 0.5), landedSpin(k));
+            } else skid(k, thrownBy(k), to, between(at, to), clamp((el - glanceSecs) / 0.5));
           }
         } },
       },
@@ -1819,9 +1947,11 @@ export const SKIRMISHER: Record<string, SpellVisual> = {
         if (seen > 0.01) {
           const b = hunterNear(k, 10);
           if (b) {
-            const over = k.at(b, 1.15), x = k.sx(over), y = k.sy(over), z = k.zoom;
-            airChevrons(k, over, [[x, y - (1 - seen) * 5 * z, Math.PI / 2, 6 * z]], seen, { bias: 4 });
-            k.flare(over, 4, seen * 0.8, k.pal.accent, 0.3, k.pal.accent, true);
+            // A big chevron over it pointing down, and a tick from it to the creature's head: that one.
+            const over = k.at(b, 1.4), x = k.sx(over), y = k.sy(over), z = k.zoom;
+            k.beam(k.at(b, 1.3), k.at(b, 1.02), { width: 1, alpha: 0.5 * seen, main: k.pal.accent, glow: 0 });
+            airChevrons(k, over, [[x, y - (1 - seen) * 5 * z, Math.PI / 2, 9 * z]], seen, { bias: 4 });
+            k.flare(over, 5, seen * 0.8, k.pal.accent, 0.3, k.pal.accent, true);
           }
         }
       } },
@@ -1858,11 +1988,12 @@ export const SKIRMISHER: Record<string, SpellVisual> = {
               if (v < 0) continue;
               const ang = (w * TAU) / 3 + v * 5.5;
               const r = (0.09 + 0.05 * v) * (b.wide / 4);
-              pts.push({ x: b.x + Math.cos(ang) * r, y: b.y + Math.sin(ang) * r, z: b.z + b.tall * Math.min(1.1, v * 0.85) });
+              pts.push({ x: b.x + Math.cos(ang) * r, y: b.y + Math.sin(ang) * r, z: b.z + b.tall * Math.min(0.8, v * 0.7) });
             }
-            if (pts.length >= 2) k.ribbon(pts, { width: 3, taper: 'both', alpha: 0.45 * (1 - smooth(seg(u, 0.4, 1))), edge: false, main: HAZE, core: '#8fa8a2', deep: HAZE, glow: 0 });
+            if (pts.length >= 2) k.ribbon(pts, { width: 2.2, taper: 'both', alpha: 0.35 * (1 - smooth(seg(u, 0.4, 1))), edge: false, main: HAZE, core: '#8fa8a2', deep: HAZE, glow: 0 });
           }
-          k.ring(b, footOf(b) + 0.4 * easeOut(u), { band: 0.04 * (1 - u), alpha: 0.5 * (1 - u), main: '#a9bcb6', deep: HAZE, glow: 0 });
+          // A pale band at the feet as wide as the body, opening a little: the body, not an area.
+          k.ring(b, (b.wide / U) * 1.4 + 0.15 * easeOut(u), { band: 0.04 * (1 - u), alpha: 0.5 * (1 - u), main: '#a9bcb6', deep: HAZE, glow: 0 });
         } },
         // While it lasts: the body thin and grey, a haze low at the feet, and a broken ring of chevrons pointing out -- eyes
         // turned off you -- one to a second; and every couple of seconds over the nearest creature hunting about, a grey
@@ -1880,7 +2011,7 @@ export const SKIRMISHER: Record<string, SpellVisual> = {
               const over = k.at(h, 1.15), x = k.sx(over), y = k.sy(over), z = k.zoom;
               // At you, then turned away from you.
               const toYou = Math.atan2(k.sy(b) - y, k.sx(b) - x), turn = toYou + Math.PI * smooth(seg(w, 0.08, 0.32));
-              airChevrons(k, over, [[x, y, turn, 6 * z]], lost, { colour: '#d6e2de', bias: 4 });
+              airChevrons(k, over, [[x, y, turn, 8 * z]], lost, { colour: '#d6e2de', bias: 4 });
             }
           }
         } },
@@ -2067,8 +2198,13 @@ export const SKIRMISHER: Record<string, SpellVisual> = {
           const at = aimAt(k);
           // Breathing in a little now and then, as a sight is held on it.
           const held = age - MARK_LOCK, breathe = 1 + 0.12 * Math.sin(held * 2.4);
-          // Taken over from the impact's sight once it has locked, from where that one left it.
-          if (held >= 0) reticle(k, at, 6 * breathe, held * 0.25, 0.85 * a);
+          // Taken over from the impact's sight once it has locked, from where that one left it, and lifted clear over its
+          // head and drawn in smaller, so for its seconds it marks the creature without covering it.
+          if (held >= 0) {
+            const up = smooth(seg(held, 0.15, 0.6));
+            const above = b.figure ? { ...k.head(b), z: k.head(b).z + 6 } : k.at(b, 1.25);
+            reticle(k, mid3(at, above, up), lerp(6, 4.5, up) * breathe, held * 0.25, 0.85 * a);
+          }
           tally(k, b, footOf(b) + 0.08, SECS, left, { point: 'in', alpha: 0.8 * a, size: 0.09 });
         } },
       },
