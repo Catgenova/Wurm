@@ -95,7 +95,7 @@ import { drawPlantsFlat, drawPlantUpright, plantFoot, standsUp, type PlantFrame 
 import type { WaterPlant } from '../world/waterplants';
 import type { WaterField } from '../world/springs';
 import { Dust } from './dust';
-import { Gaits } from './gait';
+import { BEAST_WALK, Gaits } from './gait';
 import type { Peer } from '../game/roster';
 import { css, HAZE_REACH, rgba, skyAt, unknownInk, type Sky } from './sky';
 
@@ -4423,7 +4423,7 @@ export class Renderer {
       const [x, y] = game.roster.drawnAt(peer);
       const z = this.footOn(x, y, peer.level) + peer.level * WALL_HEIGHT;
       return personBody(x, y, z, peer.facing, 'peer', {
-        id: 'o' + peer.id, phase: peer.moving ? peer.walkPhase : this.time * 6, moving: peer.moving, facing: peer.facing, swimming: peer.swimming, working: !!peer.working,
+        id: 'o' + peer.id, phase: peer.moving ? peer.stepPhase : this.time * 6, moving: peer.moving, facing: peer.facing, swimming: peer.swimming, working: !!peer.working,
         look: peer.look, gear: peer.gear,
       });
     }
@@ -4616,7 +4616,8 @@ export class Renderer {
         this.paint(ctx, zoom, hovering ? 'hover' : 'none', 0, ex, ey, (g, px, py) =>
           drawPlayer(g, px, py, zoom, {
             id: 'o' + peer.id,
-            phase: peer.moving ? peer.walkPhase : this.time * 6,
+            // On their own feet the ground they cover times their stride (`stepPhase`); on a seat, the clock times its rock.
+            phase: peer.moving ? ((ent.lift ?? 0) > 0 && !ent.standing ? peer.walkPhase : peer.stepPhase) : this.time * 6,
             moving: peer.moving && !ent.standing,
             gait: this.gaits.of('o' + peer.id, peer.x, peer.y, this.frameDt),
             facing: ent.seatFacing ?? peer.facing,
@@ -4704,7 +4705,7 @@ export class Renderer {
             facing: turned,
             phase: cr.walkPhase,
             moving: cr.moving,
-            gait: this.gaits.of('c' + cr.id, cr.x, cr.y, this.frameDt),
+            gait: this.gaits.of('c' + cr.id, cr.x, cr.y, this.frameDt, BEAST_WALK),
             colors: def.variants[cr.variant] ?? def.variants[0],
             health: cr.health / maxHealth(cr, def),
             fleece: cr.fleece,

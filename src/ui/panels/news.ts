@@ -67,7 +67,7 @@ import { JEWEL_PIECES } from '../../game/gems';
 import { itemDef, RARITIES, rarityChance } from '../../game/items';
 import { weaponCarry } from '../../render/figure';
 import { TRY_LEARN } from '../../game/learn';
-import { CLIMB_LEARN_FROM, CLIMB_PER_LEVEL, MAX_STEP } from '../../game/player';
+import { BASE_SPEED, CLIMB_LEARN_FROM, CLIMB_PER_LEVEL, MAX_STEP, strideAt } from '../../game/player';
 import { ALL_GOALS } from '../../game/journal';
 import { COMPANION_SIGHT, MONSTER_CAP, MONSTERS, SPECIES } from '../../game/creatures';
 import { betterThanCommon, CHANNELS, husbandryOdds, pct as cardPct } from '../../game/traits';
@@ -1462,6 +1462,18 @@ export const NEWS: News[] = [
       `Every class, faith and arcane spell (${SPELL_VISUALS.size} of them) is drawn when the island accepts it: `
         + 'the caster moves through a cast, and the spell shows on the way to its target, where it lands and for as long as it lasts. '
         + 'Other people see your casts and you see theirs. A spell the island refuses draws nothing.',
+    ],
+  },
+  {
+    n: 109,
+    day: '2026-10-09',
+    lines: () => [
+      `Walking on your own feet is ${Number(BASE_SPEED.toFixed(2))} tiles a second on open ground, down from 2.4: one stride of the legs drawn under you `
+        + 'for each stride\'s worth of ground, so a foot on the ground stays where it was put. Roads, wading, swimming, slopes, wounds, a load, '
+        + 'drawing a bow and Hit and Run are each the same share of this pace as they were of the old one.',
+      `Going faster than a walk on foot, a jog or a run takes longer strides as well as quicker ones, up to ${times(strideAt(1) / strideAt(0))} `
+        + 'a walking stride at a flat run, and its feet stay planted too.',
+      'Mounts, carts, wagons and boats go exactly as fast as they did, and so do wildermon and monsters.',
     ],
   },
 ];

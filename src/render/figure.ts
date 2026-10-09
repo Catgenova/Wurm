@@ -4,6 +4,7 @@ import {
 } from '../game/look';
 import { HALF_H, HALF_W, HEIGHT_SCALE, UNITS_PER_TILE } from './iso';
 import { rarityOf } from '../game/items';
+import { BASE_SPEED, CADENCE } from '../game/player';
 
 /**
  * People, as low-poly bodies.
@@ -11533,8 +11534,8 @@ function kickAt(fr: Frame): V3 {
   }
   return at;
 }
-/** Units of water covered to a radian of the walk's phase, which goes eleven radians to a walking pace's worth of tiles a second, at any pace. */
-const SWUM = (UNITS_PER_TILE * 2.4) / 11;
+/** Units of water covered to a radian of the walk's phase, which goes `CADENCE` radians to a walking pace's worth of tiles a second, at a swimmer's pace (`phasePerTile`). */
+const SWUM = (UNITS_PER_TILE * BASE_SPEED) / CADENCE;
 /** How far behind a swimmer its rings are drawn before they are let go: inside the picture a body is kept in. */
 const RIPPLE_REACH = 22;
 

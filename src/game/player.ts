@@ -53,7 +53,79 @@ export const SLOW_SLOPE = 40;
 export const SWIM_DEPTH = 4;
 /** Share of walking speed kept in deep water before any swimming skill. */
 export const SWIM_SPEED = 0.42;
-export const BASE_SPEED = 2.4; // tiles per second
+
+const TAU = Math.PI * 2;
+/**
+ * Radians of the walk's phase a second at a walking pace. A whole stride --
+ * the left foot down and up and the right -- is a turn of it, so this is
+ * `CADENCE / TAU` strides a second, about two and a half: five steps. It was
+ * eleven, three and a half steps; asked to be twice that for a quicker walk,
+ * and twice that read as a scurry (seven steps a second, a step every eight
+ * or nine frames, quicker than a sprinter's feet), so this is the most that
+ * still reads as a brisk walk at the size the island is played at.
+ */
+export const CADENCE = 16;
+/**
+ * How far the ground goes back under a planted foot in one whole stride, in
+ * tiles, at a gait of nought (a walk), an eighth, a quarter and so on to one
+ * (a flat run): the figure's own stride (`walk` in `../render/figure`), the
+ * pace its keyed heel strike and toe-off imply, measured over the time a foot
+ * is on the ground and averaged over its three builds, which are within two
+ * per cent of each other. Written in the figure's units, `UNITS_PER_TILE` to a
+ * tile; `supabase/test/paced.ts` measures the figure again and holds these to
+ * it. A run's stride is getting on for twice a walk's, which is most of what
+ * makes it a run.
+ */
+export const STRIDE: readonly number[] = [10.25, 10.12, 10.18, 10.55, 11.5, 13.1, 14.93, 16.52, 17.87].map((u) => u / UNITS_PER_TILE);
+/** How far one whole stride goes at gait `g` (nought a walk, one a run), between the ones measured. */
+export function strideAt(g: number): number {
+  const at = Math.max(0, Math.min(1, g)) * (STRIDE.length - 1), i = Math.min(STRIDE.length - 2, Math.floor(at));
+  return STRIDE[i] + (STRIDE[i + 1] - STRIDE[i]) * (at - i);
+}
+/**
+ * Walking pace on your own feet, in tiles a second: one walking stride for
+ * every turn of the walk's phase at `CADENCE`, so that a foot on the ground
+ * stays where it was put. It was 2.4 -- nearly ten metres a second on a
+ * four-metre tile, more than five times what the legs drawn under it carried
+ * at the eleven radians a second they stepped at then, so every planted foot
+ * skated forward over the ground under every step. Everything on foot is reckoned from this one number, on both sides:
+ * the island's `base_speed()` is the same.
+ */
+export const BASE_SPEED = (STRIDE[0] * CADENCE) / TAU;
+/**
+ * How fast against `BASE_SPEED` a body has to be going to be drawn going
+ * harder than a walk (`WALK_GAIT`), and to be drawn at a flat run
+ * (`RUN_GAIT`), with a jog between: what `../render/gait` reads off the ground
+ * a body actually covers, and what `strideAt` is asked at.
+ */
+export const WALK_GAIT = 1.05;
+export const RUN_GAIT = 1.85;
+/**
+ * The gait a body going steadily at `speed` tiles a second is drawn at,
+ * nought a walk and one a run, against a walk of `walk` tiles a second: a
+ * person's own, unless it is asked of something with legs of its own
+ * (`BEAST_WALK` in `../render/gait`).
+ */
+export function gaitAt(speed: number, walk = BASE_SPEED): number {
+  return Math.max(0, Math.min(1, (speed / walk - WALK_GAIT) / (RUN_GAIT - WALK_GAIT)));
+}
+/**
+ * Radians of the walk's phase to a tile gone on your own feet at `speed`: a
+ * whole turn to a stride at the gait that pace is drawn at, so the feet keep
+ * up with the ground at a jog and a run as well as a walk. A jog takes longer
+ * strides rather than only quicker ones; at `BASE_SPEED` this is `CADENCE` a
+ * second, exactly as before.
+ */
+export const phasePerTile = (speed: number): number => TAU / strideAt(gaitAt(speed));
+/**
+ * And carried -- a saddle, a seat, a deck -- the phase only times the rock of
+ * the ride (`drive` and `cartSway` in `../render/figure`), and goes as it always
+ * has: `RIDE_CADENCE` radians a second at the 2.4 tiles that used to be a walk,
+ * so eleven to 2.4 tiles. Nothing is planted on the ground for it to keep up
+ * with.
+ */
+export const RIDE_CADENCE = 11;
+export const RIDE_PHASE = RIDE_CADENCE / 2.4;
 /**
  * What is left of your pace half again over the limit.
  *
@@ -335,7 +407,8 @@ export class Player {
       this.dirY = vy;
     }
     this.moving = moved > 0;
-    if (this.moving) this.walkPhase += dt * 11 * (speed / BASE_SPEED);
+    // On your own feet, a stride for every stride's worth of ground, so a planted foot stays planted (`phasePerTile`).
+    if (this.moving) this.walkPhase += dt * speed * (this.carried || this.speedMul !== 1 ? RIDE_PHASE : phasePerTile(speed));
     return moved;
   }
 

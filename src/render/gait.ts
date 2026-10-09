@@ -1,4 +1,4 @@
-import { BASE_SPEED } from '../game/player';
+import { gaitAt } from '../game/player';
 
 /**
  * How hard a thing is going.
@@ -20,11 +20,23 @@ import { BASE_SPEED } from '../game/player';
  * is nothing past a flat run that a drawing can say.
  */
 
-/** Speed at which a thing is judged to be running rather than walking. */
-const RUN_SPEED = BASE_SPEED * 1.85;
+/*
+ * Where a walk ends and a run begins, as multiples of the walking pace, are
+ * `WALK_GAIT` and `RUN_GAIT` in `../game/player`, read through `gaitAt`: a
+ * person's own legs are timed against the same two numbers (`phasePerTile`),
+ * so the stride drawn and the stride stepped are the same stride.
+ */
 
-/** And below which it is simply walking, however it got there. */
-const WALK_SPEED = BASE_SPEED * 1.05;
+/**
+ * The walk a wildermon's gait is read against, in tiles a second: what a
+ * person's walk was when their strides were drawn and their paces set, and
+ * not a person's walk now. A person's was cut to what their own legs carry
+ * (`BASE_SPEED`); an animal's legs are timed off its own measured strides
+ * (`strideRate` in `./beasts`) and it ambles at the one to three tiles a
+ * second it always has, which against a person's walk now would read as a
+ * flat run whatever it was doing.
+ */
+export const BEAST_WALK = 2.4;
 
 /**
  * How fast the reading follows the truth, per second.
@@ -41,9 +53,10 @@ export class Gaits {
   /**
    * Note where something is, and say how hard it is going. Called once a
    * frame per body; anything not asked about for a while is forgotten, so a
-   * herd that wanders out of the view costs nothing.
+   * herd that wanders out of the view costs nothing. Against a person's walk
+   * unless `walk` says otherwise (`BEAST_WALK`).
    */
-  of(id: string, x: number, y: number, dt: number): number {
+  of(id: string, x: number, y: number, dt: number, walk?: number): number {
     const had = this.seen.get(id);
     if (!had) {
       this.seen.set(id, { x, y, v: 0 });
@@ -58,7 +71,7 @@ export class Gaits {
     had.v += (raw - had.v) * k;
     had.x = x;
     had.y = y;
-    return Math.max(0, Math.min(1, (had.v - WALK_SPEED) / (RUN_SPEED - WALK_SPEED)));
+    return gaitAt(had.v, walk);
   }
 
   /** Forget everything, for a world that has been put down and another taken up. */

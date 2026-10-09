@@ -125,7 +125,7 @@ check('nothing offers to hitch it again, and it can be taken out',
 
 // Back to the cart, and a dozen tiles east on the seat.
 game.moveTo(px + 1, py + 1);
-for (let t = 0; t < 100 && game.player.path; t++) game.update(0.2);
+for (let t = 0; t < 600 && game.player.path; t++) game.update(0.2);
 const reins = { kind: 'furniture' as const, id: cart.id };
 check('back at the cart the reins are there to take', board.applies(reins, game) && !board.check?.(reins, game),
   board.check?.(reins, game) ?? 'nothing in the way');
