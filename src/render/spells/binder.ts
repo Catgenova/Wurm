@@ -1213,12 +1213,15 @@ function weight(k: FxScene, top: P3, w: number, turn: number, o: { alpha?: numbe
 }
 /** How tall a weight `w` pixels broad is drawn, in height units. */
 const weightTall = (w: number): number => (w * 2.2) / HEIGHT_SCALE;
+/** The least a weight hangs under its clasp, in height units: enough chain to be seen at play size. */
+const HANG = 3;
 
 /** The limbs a weight hangs from: a person's two wrists, a creature's four legs at the knee, read off its own build. */
 function limbs(k: FxScene, b: Body): P3[] {
   if (b.figure) return [k.hand(0, b), k.hand(1, b)];
   const { len, side } = build(k, b);
-  const w = side * 0.75, l = len * 0.7, z = b.tall * 0.3;
+  // Spread a full side's width apart, so the four weights hang clear of one another.
+  const w = side * 1.0, l = len * 0.7, z = b.tall * 0.3;
   return [k.local(b, -w, l, z), k.local(b, w, l, z), k.local(b, -w, -l, z), k.local(b, w, -l, z)];
 }
 
@@ -1258,18 +1261,20 @@ const heavyLimbs: SpellVisual = {
       const a = life(age, left, 0.05, 0.5);
       const drop = easeBack(seg(age, 0, 0.35));
       const ahead = k.facingDir(b);
-      const ww = HEAVY_W * (b.figure ? 0.85 : 0.7), wt = weightTall(ww);
+      const ww = HEAVY_W * (b.figure ? 0.85 : 0.55), wt = weightTall(ww);
       let i = 0;
       for (const clasp of limbs(k, b)) {
         // A slow, heavy swing that lags behind the limb and dies away: dragged, not dangling.
         const ph = age * 1.6 + i * 1.7;
         const swing = (Math.sin(ph) * 0.045 + Math.sin(ph * 0.5 + 1) * 0.015) * (1 - 0.6 * smooth(age / 3));
-        // Hung just under the limb, its bottom always clear of the ground: a weight, not a stake.
-        const lowest = b.z + 1.5 + wt;
-        const hang = Math.max(1.2, clasp.z - lowest) * drop;
-        const bob = { x: clasp.x + ahead.x * swing, y: clasp.y + ahead.y * swing, z: Math.max(lowest, clasp.z - hang) };
+        // Hung on a chain HANG units long, its point always clear of the ground: a weight, not a stake. A creature's knee
+        // is too low for that, so its chain is clasped higher on the flank over the leg, never above the middle of it.
+        const lowest = b.z + (b.figure ? 1.5 : 0.3) + wt;
+        const top = { ...clasp, z: Math.max(clasp.z, Math.min(lowest + HANG, b.z + b.tall * 0.42)) };
+        const hang = Math.max(HANG, top.z - lowest) * drop;
+        const bob = { x: top.x + ahead.x * swing, y: top.y + ahead.y * swing, z: Math.max(lowest, top.z - hang) };
         const foot = { x: clasp.x, y: clasp.y, z: b.z };
-        chain(k, [clasp, mid3(clasp, bob, 0.5), bob], { link: 1.8, alpha: a, at: foot, glow: 0 });
+        chain(k, [top, mid3(top, bob, 0.5), bob], { link: 2.4, alpha: a, at: foot, glow: 0 });
         weight(k, bob, ww, age * 0.4 + i, { alpha: a, at: foot, bias: 1, glow: 0 });
         i++;
       }
@@ -1392,10 +1397,11 @@ const dullClaws: SpellVisual = {
       const foot = { x: b.x, y: b.y, z: b.z };
       let i = 0;
       for (const p of weapons(k, b)) {
-        // A short, broad cap of crystal round each forefoot, from the ground up over the paw.
+        // A blunt cap of dull lead round each forefoot: broadest near its top and cut off flat just above, a stub over the
+        // paw rather than a point (a point would say sharper, and Root's).
         const s = (b.figure ? 2 : 1.7) * cap;
-        const lo = b.figure ? p.z - s * 0.9 : b.z;
-        crystal(k, { ...p, z: lo }, { ...p, z: lo + s * (b.figure ? 1.8 : 1.2) }, s, { waist: b.figure ? 0.5 : 0.3, alpha: a, turn: 0.4 + i * 1.6, glow: 0, bias: 2, at: foot, core: ROOT_CORE });
+        const lo = b.figure ? p.z - s * 0.5 : b.z;
+        crystal(k, { ...p, z: lo }, { ...p, z: lo + s * (b.figure ? 1 : 0.7) }, s * 1.1, { waist: 0.75, alpha: a, turn: 0.4 + i * 1.6, glow: 0, bias: 2, at: foot, ...LEAD, ink: nightInk(k, LEAD.core) });
         i++;
       }
       k.glow(k.at(b, 0.1), 9, a * (0.3 + 0.3 * k.night));
@@ -1550,10 +1556,9 @@ function crazing(k: FxScene, b: Body, grow: number, alpha: number, sweep: number
       runs.push([fx, fy, fx + Math.cos(fa) * rx * fl, fy + Math.sin(fa) * ry * fl]);
     }
   }
-  // Hairlines: a thin ink either side of a thinner light line, cracks on glass rather than lightning.
-  const coreW = Math.max(0.5, 0.35 * k.zoom), inkW = Math.max(0.9, 0.55 * k.zoom);
-  k.worldDraw({ x: b.x, y: b.y, z: b.z }, (g) => {
-    g.globalAlpha = clamp(alpha);
+  // A light line with a narrower ink edge either side: cracks in glass at play size rather than dark hatching.
+  const coreW = Math.max(1, 0.45 * k.zoom), inkW = Math.max(0.6, 0.3 * k.zoom);
+  const trace = (g: CanvasRenderingContext2D): void => {
     g.lineJoin = 'miter';
     g.lineCap = 'butt';
     g.beginPath();
@@ -1561,13 +1566,27 @@ function crazing(k: FxScene, b: Body, grow: number, alpha: number, sweep: number
       g.moveTo(xy[0], xy[1]);
       for (let i = 2; i < xy.length; i += 2) g.lineTo(xy[i], xy[i + 1]);
     }
+  };
+  k.worldDraw({ x: b.x, y: b.y, z: b.z }, (g) => {
+    trace(g);
+    // The ink only edges the light; at full strength it would swallow a one-pixel core at play size.
+    g.globalAlpha = clamp(alpha * 0.6);
     g.lineWidth = inkW + coreW;
     g.strokeStyle = P.ink;
     g.stroke();
+    g.globalAlpha = clamp(alpha);
     g.lineWidth = coreW;
     g.strokeStyle = P.core;
     g.stroke();
   }, 6);
+  // By night the light line also shines, so the craze is not lost to the dark.
+  if (k.night > 0.05) k.glowDraw((g) => {
+    trace(g);
+    g.globalAlpha = clamp(alpha * 0.55 * k.night);
+    g.lineWidth = coreW;
+    g.strokeStyle = P.core;
+    g.stroke();
+  });
   // A glint running out along one branch and then the next.
   const which = Math.floor(sweep) % runs.length;
   const run = runs[which];
@@ -1577,9 +1596,9 @@ function crazing(k: FxScene, b: Body, grow: number, alpha: number, sweep: number
     const s = Math.min(n - 1e-3, v * n), q = Math.floor(s) * 2, f = s - Math.floor(s);
     const gx = lerp(run[q], run[q + 2], f), gy = lerp(run[q + 1], run[q + 3], f);
     k.glowDraw((g) => {
-      g.globalAlpha = clamp(alpha * Math.sin(v * Math.PI));
+      g.globalAlpha = clamp(Math.sin(v * Math.PI) * Math.min(1, alpha * 1.25));
       g.fillStyle = P.core;
-      const R = 2.4 * k.zoom;
+      const R = 3 * k.zoom;
       g.beginPath();
       g.moveTo(gx, gy - R);
       g.lineTo(gx + R * 0.3, gy);
@@ -1622,7 +1641,9 @@ const brittle: SpellVisual = {
     linger: { draw: (k, age, left) => {
       const b = k.target;
       const a = life(age, left, 0.02, 0.5);
-      crazing(k, b, easeOut(seg(age, 0, 0.4)), a * 0.95, age * 0.8 + 0.3);
+      // The body goes pale as glass, which reads at any zoom and at night where the craze is a few pixels.
+      k.tint(b, { colour: P.core, share: a * (0.25 + 0.07 * Math.sin(age * 2)) });
+      crazing(k, b, easeOut(seg(age, 0, 0.4)), a, age * 0.8 + 0.3);
       if (!k.fast) k.emit(k.heart(b), 2.5 * a, { kind: 'shard', colour: [P.core, P.main], size: 1.2, life: [0.5, 0.9], speed: [0.05, 0.2], up: [0, 4], gravity: 40, jitter: girth(b) * 0.4, jitterZ: b.tall * 0.25 });
       tally(k, b, girth(b) * 2.1, left, age + left, 0.8 * a);
       k.light(b, 1.2, 0.3 * a);
@@ -2317,11 +2338,11 @@ const massRoot: SpellVisual = {
           k.worldDraw(sortAt, (g) => { for (const s of stones) s.paint(g); }, 0);
         }
       }
-      // Each creature caught is rooted when the crack running its way reaches it.
-      caught(k, c, MASS_R).forEach((b, i) => {
+      // Each creature caught is rooted when the crack running its way reaches it: one mark on all of them, one shape.
+      k.together(() => caught(k, c, MASS_R).forEach((b, i) => {
         const reached = seg(run, Math.hypot(b.x - c.x, b.y - c.y) / MASS_R - 0.05, 1);
         if (reached > 0) rootSpikes(k, b, seg(age, 0.5 * Math.hypot(b.x - c.x, b.y - c.y) / MASS_R, 1) * sink, a, 60 + i * 5, 5, false);
-      });
+      }));
       // How long is left, round the rim of what it reaches -- not at the caster's feet, where it would say the caster is held.
       tally(k, c, MASS_R * 1.04, left, age + left, 0.8 * a, 24);
       if (left < 0.6 && once(k, 'sank')) k.burst({ ...c, z: c.z + 0.5 }, 16, { kind: 'dust', colour: '#8f8a7a', size: 3, life: [0.4, 0.8], speed: [0.6, 1.6], up: [2, 6], gravity: 4 });
@@ -2628,12 +2649,12 @@ const stillfield: SpellVisual = {
       // Whatever is caught stops where it stands: a band of frost round it, clasped with a stone on the side toward the
       // viewer -- on the band, not hung over its head.
       const d = k.toward({ x: 0, y: 0 }, { x: 1, y: 1 });
-      caught(k, c, r).forEach((b, i) => {
+      k.together(() => caught(k, c, r).forEach((b, i) => {
         const s = smooth(seg(age, 0.15 + 0.05 * i, 0.4 + 0.05 * i));
         const rr = girth(b) * lerp(1.8, 1.05, easeBack(s)), z = b.z + b.tall * 0.45;
         hoop(k, b, z, rr, { alpha: a * s, h: band(b) * 0.7, n: 8, glow: 0.3, main: P.core, core: '#ffffff' });
         gemAt(k, { x: b.x + d.x * rr, y: b.y + d.y * rr, z }, s, 1.3, 0.4 + i, { alpha: a, bias: 6 });
-      });
+      }));
       // How long is left, round the rim of the field -- not at the caster's feet.
       tally(k, c, FIELD_R * 1.05, left, age + left, 0.8 * a, 24);
       k.light(c, FIELD_R * 0.6, 0.3 * a, '#fff1d6');
