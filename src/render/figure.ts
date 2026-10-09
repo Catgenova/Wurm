@@ -3097,6 +3097,11 @@ const SINK = 10.2;
 const SWIM_STROKE = TAU / 0.9;
 /** Radians of the idle clock (six to a second) to one sweep of the hands treading water: one every second and three-quarters. */
 const TREAD_RATE = 0.6;
+/**
+ * How high the head is held over the water treading it, in the middle of its bob. At 0.8 the neck stood a hand out of the
+ * water side on, from the shoulders to the jaw: a head on a stalk. The water stands at the jaw a swimmer holds up out of it.
+ */
+const TREAD_FLOAT = 0.62;
 /** How far out past the shoulder a hand sculls treading water, at the middle of its sweep. */
 const TREAD_REACH = 1.5;
 
@@ -3205,12 +3210,13 @@ const ARM_LEAD = 0.04;
 /** How much further out, and how much lower, the right elbow is set than the left, swimming: each arm has its own habit. */
 const ELBOW_ODD: [number, number] = [0.18, -0.15];
 
-function swim(r: Rig, phi: number, moving: boolean, fr: Frame): void {
+function swim(r: Rig, phi: number, moving: boolean, fr: Frame, facing = 0): void {
   r.flat = [false, false];
   r.sink = SINK;
   r.under = moving ? 1 : 0;
   if (!moving) {
     tread(r, phi, fr);
+    shouldersUnder(r, fr, facing);
     return;
   }
   const s = (((phi / SWIM_STROKE) % 1) + 1) % 1;
@@ -3222,13 +3228,15 @@ function swim(r: Rig, phi: number, moving: boolean, fr: Frame): void {
   r.neck = [-(lean + 2 * arch) * 0.62, 0, 0];
   r.head = [-(lean + 2 * arch) * 0.38 + 4, 0, 0];
   r.float = up;
+  // And the hands where they were on the body: kept as deep under the water, the forearm rose to them and a hand came up by the jaw.
+  const sunk = shouldersUnder(r, fr, facing, BREATH_GIVE);
   for (let k = 0; k < 2; k++) {
     // Each arm a little off the stroke the body is at: the right a touch ahead, the left a touch behind.
     const [, , ax, ay, az, apx, apz, awr] = loop(BREAST, (s + (k ? ARM_LEAD : -ARM_LEAD) + 1) % 1);
     r.hand[k] = [0, 0, awr];
     r.open[k] = 1;
     const odd = k ? 0.5 : -0.5;
-    swimHand(r, fr, k, [ax, ay, az], [apx + odd * ELBOW_ODD[0], -0.2, apz + odd * ELBOW_ODD[1]]);
+    swimHand(r, fr, k, [ax, ay, az - sunk], [apx + odd * ELBOW_ODD[0], -0.2, apz + odd * ELBOW_ODD[1]]);
     r.leg[k] = [lp, la, 0];
     r.knee[k] = kn;
     r.foot[k] = ft;
@@ -3259,7 +3267,7 @@ function tread(r: Rig, phi: number, fr: Frame): void {
    * gradually (`waterline`), the tops of the shoulders break the surface at the top of each kick and go back under it, the one
    * a little before the other as the shoulders roll.
    */
-  r.float = 0.8 + 0.32 * Math.cos(2 * q - 0.6);
+  r.float = TREAD_FLOAT + 0.32 * Math.cos(2 * q - 0.6);
   // The shoulders let down a little with the arms out under the water, the tops of them under it with the arms.
   r.shrug = [-0.15, -0.15];
   for (let k = 0; k < 2; k++) {
@@ -3289,20 +3297,46 @@ function tread(r: Rig, phi: number, fr: Frame): void {
  * read as a ball held under the chin however it was wetted and let down. From the front or the back the same two caps
  * are a line across the root of the neck and read as shoulders. So, turned side on, the body is let up only as far as
  * keeps the tops of the shoulders under the lip of the water (`waterline`), eased into that rather than stopped at it, and
- * the head bobs by what is left; it comes on from three quarters round to side on.
+ * the head bobs by what is left.
+ *
+ * It came on only from past three quarters round, so the three-quarter facings had none of it and side on all of it:
+ * turning from the one to the other, the body dropped by the whole of the cut between two of the eight ways. Now it comes
+ * on from a little short of three quarters round, which gives those a third of it and halves the step.
+ *
+ * Under way the breath brought the same cap up under the jaw side on, for the ceiling was only kept treading water. Now
+ * it is kept swimming too, but the head is not let down by all of it: the shoulders are let down from the neck by half
+ * of what is cut (`give`), up to `BREATH_SHRUG`, and the body by the rest, so the breath still lifts the face out of the
+ * water while the shoulder stays under.
  */
-const SIDE_ON_FROM = 0.75;
+const SIDE_ON_FROM = 0.3;
+/** What share of the cut the shoulders take, let down from the neck, swimming under way; and how far at most. */
+const BREATH_GIVE = 0.5;
+const BREATH_SHRUG = 0.45;
 /** How far the top of the chest's round over each shoulder stands over the arm's joint, at any build: what showed side on. */
 const SHOULDER_ROUND = 0.95;
+/**
+ * And how far under the lip it is kept: at the lip, side on, the neck stood bare out of a ring as thin as itself from the
+ * shoulders to the jaw, a head on a stalk, with nothing round its root as there is from the front.
+ */
+const SIDE_ON_DEEP = 0.1;
 /** How softly the bob is eased in under that ceiling: a hard stop at it was a head that rose, stuck and fell. */
 const SHOULDERS_EASE = 0.12;
-function shouldersUnder(r: Rig, fr: Frame, facing: number): void {
+function shouldersUnder(r: Rig, fr: Frame, facing: number, give = 0): number {
   const side = Math.abs(Math.sin((facing * TAU) / 8));
   const w = Math.max(0, Math.min(1, (side - SIDE_ON_FROM) / (1 - SIDE_ON_FROM)));
-  if (!w) return;
-  const b = skeleton(fr, r);
-  const over = Math.max(b.arm0.t[2], b.arm1.t[2]) + SHOULDER_ROUND - SHOULDER_SLIVER;
-  r.float = (r.float ?? 0) - w * SHOULDERS_EASE * Math.log(1 + Math.exp(over / SHOULDERS_EASE));
+  if (!w) return 0;
+  const over = (): number => {
+    const b = skeleton(fr, r);
+    return Math.max(b.arm0.t[2], b.arm1.t[2]) + SHOULDER_ROUND - SHOULDER_SLIVER + SIDE_ON_DEEP;
+  };
+  const soft = (x: number): number => SHOULDERS_EASE * Math.log(1 + Math.exp(x / SHOULDERS_EASE));
+  const was = over();
+  if (give) {
+    const s = Math.min(BREATH_SHRUG, give * w * soft(was));
+    r.shrug = [r.shrug[0] - s, r.shrug[1] - s];
+  }
+  r.float = (r.float ?? 0) - w * soft(over());
+  return was - over();
 }
 
 /*
@@ -3528,6 +3562,13 @@ const ROW_OVER = 0.18;
  * at the same moment are a pair: the lead is four hundredths now, and the blades are not turned together.
  */
 const ROW_FEATHER_LAG = 0.02;
+/**
+ * How far behind the oars the back swings, as a share of a stroke. The back opened in the same instant the blades went
+ * in, so the catch read as the body throwing the oars round rather than as the blades taking hold of the water and the
+ * body then taking the weight of them; now the back stays reached out a moment after the blades bite, the arms
+ * straightening on the handles, and then swings. At the finish it is the same: the hands go away first and the body after.
+ */
+const ROW_LOAD = 0.03;
 /** How far back in the stroke the head is following the back from, as a share of it, and how much of the difference it keeps. */
 const ROW_HEAD_LAG = 0.1;
 const ROW_HEAD_GIVE = 0.5;
@@ -3535,9 +3576,11 @@ const ROW_HEAD_GIVE = 0.5;
 function row(r: Rig, phi: number, moving: boolean, seat: Seat, fr: Frame): void {
   const st = (((phi / ROW_STROKE) % 1) + 1) % 1;
   const still = (): number[] => [10, 0.02, 1, 4 + 1.5 * Math.sin(phi / 6 * TAU / 4.2)];
-  const [, , , swing] = moving ? loop(STROKE, st) : still();
+  // The back a little behind the oars all through the stroke (`ROW_LOAD`).
+  const sb = (st + 1 - ROW_LOAD) % 1;
+  const [, , , swing] = moving ? loop(STROKE, sb) : still();
   // Where the back was a moment ago, which the head follows: it lags the swing a little, as a weight on the neck does.
-  const was = moving ? loop(STROKE, (st + 1 - ROW_HEAD_LAG) % 1)[3] : swing;
+  const was = moving ? loop(STROKE, (sb + 1 - ROW_HEAD_LAG) % 1)[3] : swing;
   // The legs out along the boards to the stretcher, the knees down under the gunwales.
   r.leg = [[92, 12, -4], [92, 12, -4]];
   r.knee = [50, 50];
@@ -3992,8 +4035,7 @@ function rigOf(p: FigurePose, fr: Frame, left = lefty(p.facing), kept: Kept = {}
   const side = kept.side ?? (overLeft(p.facing) ? 0 : 1);
   const busy = busyOf(p, p.facing, kept.bound ?? side);
   if (p.swimming) {
-    swim(r, p.phase, p.moving, fr);
-    if (!p.moving) shouldersUnder(r, fr, p.facing);
+    swim(r, p.phase, p.moving, fr, p.facing);
   } else if (p.driving) drive(r, p.phase, p.moving, p.seat ?? BOX, fr);
   else if (p.moving) walk(r, p.phase + TAU * strideSeed(p.id), Math.max(0, Math.min(1, p.gait ?? 0)), fr, p.facing);
   else if (p.working) work(r, p.phase, fr, left, left ? 1 - byFacing(LEFTY, p.facing) : byFacing(LEFTY, p.facing));
@@ -10783,7 +10825,9 @@ function waterline(parts: Part[], up: boolean, shoulders?: Set<Xf>, pal?: Palett
         }
       }
       if (idx.length < 3) continue;
-      faces.push({ ...rehomed(face, part.xf), i: idx, soft: true, pat: undefined });
+      // Mail keeps its rings down to the water, counted off what is left of the facet: plain, the wet band at the foot of a
+      // coif's cape was a smooth grey can under a hood of mail. Anything else is drawn plain where it is cut.
+      faces.push({ ...rehomed(face, part.xf), i: idx, soft: true, pat: face.pat === 'mail' ? face.pat : undefined });
     }
     if (!faces.length || (level > 0 && shownArea(v, faces) < SPECK)) continue;
     /*
@@ -10854,6 +10898,8 @@ const rehomed = (face: Face, xf: Xf): Face =>
  * along its slant.
  */
 interface Wake { at: V3; r: number; along: V3; long: number; behind?: boolean }
+/** How much wider the ring round the neck is than the neck, across the shoulders and along the body. */
+const NECK_SWELL: [number, number] = [1.6, 1.2];
 /** How far the top of a shoulder stands over its joint. */
 const SHOULDER_TOP = 0.6;
 function wakeOf(b: Bones, fr: Frame): Wake[] {
@@ -10873,6 +10919,14 @@ function wakeOf(b: Bones, fr: Frame): Wake[] {
   through(b.pelvis.t, b.chest.t, 1.75 * fr.wa);
   through(b.chest.t, b.neck.t, 1.9 * fr.sh);
   through(b.neck.t, b.head.t, 0.85);
+  /*
+   * Through the neck, the water stands up round it a little as it does round anything it moves past, wider across the line
+   * of the shoulders under it: a ring as thin as the neck was, side on, a head stood on a stalk.
+   */
+  if (out.length && b.neck.t[2] < 0 && b.head.t[2] >= 0) {
+    const n = out[out.length - 1], s0 = b.arm0.t, s1 = b.arm1.t, l = Math.hypot(s1[0] - s0[0], s1[1] - s0[1]) || 1;
+    out[out.length - 1] = { ...n, along: [(s1[0] - s0[0]) / l, (s1[1] - s0[1]) / l, 0], long: NECK_SWELL[0] * n.r, r: NECK_SWELL[1] * n.r };
+  }
   /*
    * The tops of the shoulders, up through the water while the root of the neck is still under it -- treading water, at the
    * top of a kick -- are in a ring of their own across them, which opens out from nothing as they come up: with only the
@@ -11299,6 +11353,8 @@ interface Still {
   dev: number;
   /** Where it was last put down: on what, and where in that one's own units. */
   put?: { ctx: CanvasRenderingContext2D; x: number; y: number; w: number; h: number };
+  /** How many times it has been drawn, so whatever is made from it knows when to make it again (`figurePicture`). */
+  drawn?: number;
 }
 
 const stills = new Map<string, Still>();
@@ -11308,9 +11364,9 @@ const stills = new Map<string, Still>();
  * as one (see `drawStill`): what a boat's sail in front of my own helmsman is
  * let fade over, so he shows through it (`seeThrough` in `./furniture`).
  */
-export function figurePicture(id: string): { ctx: CanvasRenderingContext2D; canvas: HTMLCanvasElement; x: number; y: number; w: number; h: number } | null {
+export function figurePicture(id: string): { ctx: CanvasRenderingContext2D; canvas: HTMLCanvasElement; x: number; y: number; w: number; h: number; ver: number } | null {
   const st = stills.get(id);
-  return st?.put ? { ...st.put, canvas: st.canvas } : null;
+  return st?.put ? { ...st.put, canvas: st.canvas, ver: st.drawn ?? 0 } : null;
 }
 
 function drawStill(ctx: CanvasRenderingContext2D, sx: number, sy: number, zoom: number, pose: FigurePose, kit: Kit, r: Rig, facing: number, changing: boolean, ink: number, now: number): void {
@@ -11358,6 +11414,7 @@ function drawStill(ctx: CanvasRenderingContext2D, sx: number, sy: number, zoom: 
     st.dev = dev;
     st.key = key;
     st.at = now;
+    st.drawn = (st.drawn ?? 0) + 1;
     st.g.setTransform(1, 0, 0, 1, 0, 0);
     st.g.clearRect(0, 0, w, h);
     st.g.setTransform(dev, 0, 0, dev, st.ox, st.oy);
