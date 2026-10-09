@@ -367,13 +367,15 @@ function tally(k: FxScene, c: { x: number; y: number }, r: number, left: number,
     for (const [rr, aa] of [[r + dr, an], [r, an + da], [r - dr, an], [r, an - da]] as const) pts.push(c.x + Math.cos(aa) * rr, c.y + Math.sin(aa) * rr);
     (i < Math.floor(lit) ? on : i < lit ? going : off).push(pts);
   }
-  const fading = lit - Math.floor(lit);
+  // Two layers and no ink: every layer of a ground shape is cut along the tiles and laid line by line, and a tally is on
+  // every bound thing at once, so it is kept to the least that reads -- lit stones in the school's blue, spent ones dark,
+  // the one going out joining the dark once it is half gone.
   const lift = 0.15;
+  if (lit - Math.floor(lit) > 0.5) on.push(...going);
+  else off.push(...going);
   const layers: GroundLayer[] = [
-    { kind: 'fill', colour: k.pal.deep, alpha: clamp(alpha * 0.3), paths: off, lift },
-    { kind: 'fill', colour: k.pal.accent, alpha: clamp(alpha * (0.3 + 0.7 * fading)), paths: going, lift },
+    { kind: 'fill', colour: k.pal.ink, alpha: clamp(alpha * 0.55), paths: off, lift },
     { kind: 'fill', colour: k.pal.main, alpha: clamp(alpha), paths: on, lift },
-    { kind: 'stroke', colour: k.pal.ink, alpha: clamp(alpha * 0.85), width: Math.max(0.7, 0.6 * k.zoom), paths: [...on, ...going, ...off], closed: true, lift },
   ];
   k.groundShape(c.x, c.y, r + 0.2, layers);
 }
@@ -1734,7 +1736,8 @@ function slick(k: FxScene, c: { x: number; y: number }, r: number, age: number, 
     for (let i = 0; i < m; i++) ring.push(c.x + Math.cos((i / m) * TAU) * rr, c.y + Math.sin((i / m) * TAU) * rr);
     rings.push(ring);
   }
-  // Bubbles that swell as little faceted blisters and burst as rings opening on the surface.
+  // Bubbles that swell as little blisters lit on one side and burst as rings opening on the surface. Each stroked layer of a
+  // ground shape is cut at every tile edge it crosses, so the slick has three and the blisters none.
   const domes: number[][] = [], lights: number[][] = [], bursts: number[][] = [];
   for (let i = 0; i < 9; i++) {
     const v = (t * 0.5 + hashOf(k.seed + 80, i)) % 1;
@@ -1756,11 +1759,9 @@ function slick(k: FxScene, c: { x: number; y: number }, r: number, age: number, 
   const burst = bursts.length ? 1 : 0;
   k.groundShape(c.x, c.y, r + 0.3, [
     { kind: 'fill', colour: LEAD.deep, alpha: clamp(a * 0.26), paths: [edge], lift: 0.1 },
-    { kind: 'stroke', colour: P.ink, alpha: clamp(a * 0.9), width: inkW * 1.3, paths: [edge], closed: true, lift: 0.1 },
-    { kind: 'stroke', colour: P.accent, alpha: clamp(a * 0.9), width: inkW * 0.6, paths: [edge], closed: true, lift: 0.1 },
+    { kind: 'stroke', colour: P.accent, alpha: clamp(a * 0.9), width: inkW, paths: [edge], closed: true, lift: 0.1 },
     { kind: 'stroke', colour: P.main, alpha: clamp(a * 0.35), width: Math.max(0.7, 0.55 * Z), paths: rings, closed: true, lift: 0.12 },
     { kind: 'fill', colour: LEAD.main, alpha: clamp(a * 0.85), paths: domes, lift: 0.12 },
-    { kind: 'stroke', colour: P.ink, alpha: clamp(a * 0.85), width: thin, paths: domes, closed: true, lift: 0.12 },
     { kind: 'fill', colour: LEAD.core, alpha: clamp(a * 0.85), paths: lights, lift: 0.13 },
     { kind: 'stroke', colour: P.main, alpha: clamp(a * 0.5 * burst), width: thin, paths: bursts, closed: true, lift: 0.12 },
   ]);
@@ -1821,7 +1822,7 @@ function massLines(k: FxScene, c: { x: number; y: number }): P3[][] {
   for (let i = 0; i < MASS_ARMS; i++) {
     const an = (i / MASS_ARMS) * TAU + (hashOf(k.seed + 90, i) - 0.5) * 0.4;
     // From a little way out, so the cracks start at the palms rather than running up through the caster.
-    out.push(cracked(k, { x: c.x + Math.cos(an) * 0.25, y: c.y + Math.sin(an) * 0.25 }, { x: c.x + Math.cos(an) * MASS_R, y: c.y + Math.sin(an) * MASS_R }, 90 + i, 8, 0.2));
+    out.push(cracked(k, { x: c.x + Math.cos(an) * 0.25, y: c.y + Math.sin(an) * 0.25 }, { x: c.x + Math.cos(an) * MASS_R, y: c.y + Math.sin(an) * MASS_R }, 90 + i, 6, 0.2));
   }
   return out;
 }
