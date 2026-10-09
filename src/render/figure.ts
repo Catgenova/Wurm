@@ -1645,16 +1645,17 @@ function footMesh(): Mesh {
  * neither is inked along it, so the leg is one outline and not a thigh and a
  * shin with a line round the knee between them.
  */
-function legTube(rs: number[][], n: number, mat: Mat | ((band: number, j: number) => Mat), shut = false): { thigh: Mesh; shin: Mesh } {
-  const knee = rs.findIndex((r) => r[0] === 0);
+function legTube(rs: number[][], n: number, mat: Mat | ((band: number, j: number) => Mat), shut = false, crease = true): { thigh: Mesh; shin: Mesh } {
+  const knee = rs.findIndex((r) => r[0] === 0), span = rs.findIndex((r) => r[0] >= -KNEE_SPAN - 1e-6);
   const m = (band: number, j: number): Mat => (typeof mat === 'function' ? mat(band, j) : mat);
+  const back = (t: Mesh, f: Face): boolean => f.i.every((i) => t.v[i][1] < 0);
   const half = (from: number, to: number, foot: boolean, shin: boolean): Mesh => {
     const t = rings(rs.slice(from, to + 1), n, (band, j) => m(band + from, j), { top: false, bottom: foot });
     const z0 = rs[from][0], below = rs[Math.max(0, knee - 2)][0];
     return {
       ...t,
-      f: t.f.map((f) => (f.i.every((i) => t.v[i][2] === z0) && foot ? { ...f, seam: true } : f.i.some((i) => t.v[i][2] === 0) ? { ...f, soft: true, ...(f.i.every((i) => t.v[i][1] < 0) ? { crease: shin, seam: true } : {}) }
-        : shin && f.i.every((i) => t.v[i][2] >= below && t.v[i][1] < 0) ? { ...f, crease: true } : f)),
+      f: t.f.map((f) => (f.i.every((i) => t.v[i][2] === z0) && foot ? { ...f, seam: true } : f.i.some((i) => t.v[i][2] === 0) ? { ...f, soft: true, ...(back(t, f) ? { crease: crease && f.i.some((i) => t.v[i][2] < 0), seam: true } : {}) }
+        : shin && crease && f.i.every((i) => t.v[i][2] >= below && t.v[i][1] < 0) ? { ...f, crease: true, soft: f.i.some((i) => t.v[i][2] === rs[span][0]) } : f)),
     };
   };
   // `shut`: the foot of the shin closed, the lid a seam (`Face.seam`), for a leg that comes down to the foot -- kicked up behind at a
@@ -1662,8 +1663,17 @@ function legTube(rs: number[][], n: number, mat: Mat | ((band: number, j: number
   // The shin's facets at the back of the knee are its crease (`Face.crease`), and the band under them as well: the calf swelling
   // out under the crease caught the light, and seen from behind the brightest stripe on the leg was just under the back of the knee.
   // The facets either side of the fold at the back are seams (`Face.seam`): folded nearly edge on, their edges were inked as short
-  // ticks across the bend.
-  return { thigh: half(knee, rs.length - 1, false, false), shin: half(0, knee, shut, true) };
+  // ticks across the bend. `crease` false for polished plate, which takes its own light in the fold: lit as a crease, side on at a
+  // run the back of a plate knee was a black wedge cut into the leg.
+  // The shin's facets in the fold at the back of the knee, up from the foot of the bend (`KNEE_SPAN`), go with the thigh, first of
+  // its facets: with the knee bent hard they are folded up inside the thigh facing out through it, and drawn with the shin, over
+  // the thigh, they were a grey wedge cut into the side of the knee. With the thigh, its own side covers them.
+  const thigh = half(span, rs.length - 1, false, false), shin = half(0, knee, shut, true);
+  const fold = (t: Mesh, f: Face): boolean => back(t, f) && f.i.every((i) => t.v[i][2] <= 0 && t.v[i][2] >= rs[span][0]) && f.i.some((i) => t.v[i][2] < 0);
+  return {
+    thigh: mesh(thigh.v, thigh.f.filter((f) => f.i.some((i) => thigh.v[i][2] > 0) || fold(thigh, f)).map((f) => (fold(thigh, f) ? { ...f, soft: true, seam: true, crease } : f))),
+    shin: mesh(shin.v, shin.f.filter((f) => !fold(shin, f))),
+  };
 }
 
 /** A winding round a limb: every ring tipped across it, so the bands slant round it rather than going round it level. */
@@ -5421,7 +5431,9 @@ const KNEE_POINT = 0.5;
 /** The most the front of the knee is pushed out, of its own round. */
 const KNEE_POINT_MOST = 0.15;
 /** The most the front of a plate leg's knee is pushed out, of its own round (see `GearBit.point`). */
-const KNEE_PLATE = 0.06;
+const KNEE_PLATE = 0.03;
+/** How far either side of the knee's ring a plate leg has a ring of its poleyn as well (`plate_legs`). */
+const POLEYN = 0.15;
 /** How far the front corners of the knee come out toward the ridge between them, bent square, of their own round. */
 const KNEE_SQUARE = 0.45;
 const KNEE_FOLD = 0.9;
@@ -5594,13 +5606,13 @@ const CAP_EASY = 40;
  * top of the shoulder, it is over the joint whichever way the arm goes up.
  */
 const CAP_MOST = 65;
-const CAP_FOLD = 0.5;
+const CAP_FOLD = 0.85;
 const CAP_PIVOT: V3 = [0.4, 0, 0.9];
 const capTurn = (a: number): number => {
   const easy = CAP_EASY * DEG, most = CAP_MOST * DEG, room = most - easy * 0.5;
   return a < easy ? a * 0.5 : most - room * Math.exp((easy - a) * 0.7 / room);
 };
-function heldOnShoulder(v: readonly V3[], r: Rig, k: number): V3[] {
+function heldOnShoulder(v: readonly V3[], r: Rig, k: number, top: number, foot: number): V3[] {
   const { n, angle } = shoulderTurn(r, k);
   if (angle < 0.01) return [...v];
   // Where the arm points, in its frame as it hangs: the cap goes round toward that, by `capTurn` of the way, and does not twist
@@ -5616,15 +5628,31 @@ function heldOnShoulder(v: readonly V3[], r: Rig, k: number): V3[] {
   // overhead, as a pauldron's lames ride on their rivets: held whole and tipped only as the dome is, an arm raised forward to
   // strike left the lames hanging where the arm had been, down the front of the chest. And no corner of it lifted higher than the
   // top of it as it hangs, but for a quarter of the rise: tipped up and out, the inner edge of a pauldron came up past the collar
-  // to the jaw.
-  let top = -Infinity, foot = Infinity;
-  for (const p of v) { top = Math.max(top, p[2]); foot = Math.min(foot, p[2]); }
-  const tip = capTurn(swing), fold = top - 0.45 * (top - foot), keep = 1 - CAP_FOLD * ramp(swing / DEG, CAP_EASY, CAP_EASY + 80);
+  // to the jaw. `top` and `foot` are the whole cap's, over every bit of it carried so (`capSpan`): measured bit by bit, the trim of
+  // points round a scale cap's rim had its own rim for a top, so half its ring was squashed down under the dome it trims and it
+  // came off the cap as a loose dark ribbon under the raised arm.
+  // The lames hang from the dome's foot: as the arm goes on up past `CAP_EASY` they are turned back from the dome's tip, coming in
+  // down their height, until with the arm overhead they hang plumb under it, folded up `CAP_FOLD` of their height. Tipped whole
+  // with the dome, an arm raised to strike left them standing out below it into the armpit, a fringe of slats past the elbow.
+  const tip = capTurn(swing), up = ramp(swing / DEG, CAP_EASY, CAP_EASY + 80), fold = top - 0.45 * (top - foot), keep = 1 - CAP_FOLD * up;
+  const back = tip * up, deep = 0.35 * (fold - foot);
   return v.map((p) => {
-    const q = turnedAbout([p[0] - o[0], p[1] - o[1], (p[2] < fold ? fold + (p[2] - fold) * keep : p[2]) - o[2]], m, tip);
+    let l: V3 = p;
+    if (p[2] < fold) {
+      const h = turnedAbout([p[0], p[1], (p[2] - fold) * keep], m, -back * ramp(fold - p[2], 0, deep));
+      l = [h[0], h[1], h[2] + fold];
+    }
+    const q = turnedAbout([l[0] - o[0], l[1] - o[1], l[2] - o[2]], m, tip);
     const z = q[2] + o[2];
     return turnedAbout([q[0] + o[0], q[1] + o[1], z > top ? top + (z - top) * 0.25 : z], n, angle);
   });
+}
+
+/** The height of the top and the foot of what a piece carries whole on the arm (`heldOnShoulder`), over all of its bits. */
+function capSpan(bits: readonly GearBit[]): [number, number] {
+  let top = -Infinity, foot = Infinity;
+  for (const bit of bits) if (bit.whole && bit.bone === 'arm') for (const p of bit.mesh.v) { top = Math.max(top, p[2]); foot = Math.min(foot, p[2]); }
+  return [top, foot];
 }
 
 /* ---- drawing ------------------------------------------------------------------ */
@@ -6158,9 +6186,12 @@ interface GearModel {
   dyes?: Partial<Record<Covers, Partial<Record<Mat, Mat>>>>;
 }
 
-/** Every side facet of a mesh worked with a pattern. */
+/**
+ * Every side facet of a mesh worked with a pattern, but for its seams (`Face.seam`): the folds at the back of a knee lie inside
+ * the thigh when it bends, and the pattern, drawn over a part after all of its facets, showed through it in short strokes.
+ */
 const worn = (m: Mesh, pat: Pattern, only?: (face: Face) => boolean): Mesh =>
-  ({ ...m, f: m.f.map((f) => (f.i.length === 4 && (!only || only(f)) ? { ...f, pat } : f)) });
+  ({ ...m, f: m.f.map((f) => (f.i.length === 4 && !f.seam && (!only || only(f)) ? { ...f, pat } : f)) });
 /** A mesh with some of its materials swapped for others. */
 const recoloured = (m: Mesh, to: Partial<Record<Mat, Mat>>): Mesh => ({ ...m, f: m.f.map((f) => (to[f.m] ? { ...f, m: to[f.m] as Mat } : f)) });
 /** Grown `k` about its own origin across (x, y) and `kz` up it. */
@@ -6316,22 +6347,27 @@ const undercut = (m: Mesh): Mesh => seamed(m, (p) => Math.hypot(p[0], p[1]) < 0.
  * the camera looking down, the far one rose beside the jaw to the mouth. Its dome low and flat over the top of the rerebrace, and
  * `PAULDRON_DEEP` as deep front to back as it is wide, as a pauldron is: seen three-quarters on from above, the top of the far one
  * is its back edge, and domed high and as deep as wide, that edge was still level with the mouth. Tipped more steeply, the outer
- * edge rose instead.
+ * edge rose instead. And all of it, and the rerebrace's top under it, `PAULDRON_DROP` down the arm: that far up, seen
+ * three-quarters on at rest, the far one's top was still beside the jaw, and tipped three times as far as it is, its outer edge
+ * was. The step in under each lame is a seam (`Face.seam`), no edge of the plate: inked, with the arm raised and the lames' feet
+ * seen from below, each lame ended in a jagged hexagon of teeth.
  */
-const PAULDRON_SLOPE = 0.12;
+const PAULDRON_SLOPE = 0.04;
 const PAULDRON_DEEP = 0.8;
+const PAULDRON_DROP = 0.28;
 function pauldron(): Mesh {
-  const lames = [[-1.5, 1.1, 1.08, 0.24], [-0.62, 1.26, 1.24, 0.27]], lip = 0.1, count = 2;
-  const rs: number[][] = underRings(-1.5);
+  const lames = [[-1.5, 1.1, 1.08, 0.24], [-0.62, 1.26, 1.24, 0.27]], lip = 0.08, count = 2;
+  const rs: number[][] = underRings(-1.5), steps: number[] = [];
   for (let k = 0; k < count; k++) {
     const lo = profileAt(lames, k / count), hi = profileAt(lames, (k + 1) / count);
     rs.push([lo[0], lo[1] + lip, lo[2] + lip, lo[3], lo[4]], [hi[0] - 0.002, hi[1], hi[2], hi[3], hi[4]]);
+    steps.push(hi[0]);
   }
   rs.push([-0.62, 1.36, 1.32, 0.29], [-0.3, 1.3, 1.27, 0.26], [0, 0.94, 0.9, 0.14], [0.16, 0.42, 0.4, 0.06]);
   // The underside dark; the lames and the step under each, and the dome's foot, the metal; the dome over it lit.
   const dome = 2 * count + 1;
-  const m = undercut(rings(rs, 6, (band) => (band <= 0 ? 'metalDark' : band > dome ? 'metalLit' : 'metal')));
-  return { ...m, v: m.v.map(([x, y, z]): V3 => [x, y * PAULDRON_DEEP, z + PAULDRON_SLOPE * x]) };
+  const m = seamed(undercut(rings(rs, 6, (band) => (band <= 0 ? 'metalDark' : band > dome ? 'metalLit' : 'metal'))), (p) => steps.some((z) => Math.abs(p[2] - z + 0.001) < 0.0015));
+  return { ...m, v: m.v.map(([x, y, z]): V3 => [x, y * PAULDRON_DEEP, z + PAULDRON_SLOPE * x - PAULDRON_DROP]) };
 }
 
 /**
@@ -7048,7 +7084,7 @@ const MODELS: Record<string, (b: Build, fit: number) => GearModel> = {
       // lames under its edge -- ring on ring all the way up, it is a bellows.
       {
         bone: 'arm', side: 'both', over: ['upper'], bias: 0.02, convex: true,
-        mesh: softAt(capped(rings([...overElbow(b.fr, 1.16, 0.05, [0.94 * b.arm, 0.9]), [0.05, 0.94 * b.arm, 0.9]], 6, 'metal', { bottom: false })), -UPPER * b.fr.tall),
+        mesh: softAt(capped(rings([...overElbow(b.fr, 1.16, -PAULDRON_DROP, [0.94 * b.arm, 0.9]), [-PAULDRON_DROP, 0.94 * b.arm, 0.9]], 6, 'metal', { bottom: false })), -UPPER * b.fr.tall),
       },
       {
         bone: 'arm', side: 'both', over: ['upper'], bias: 0.2, whole: true,
@@ -7159,8 +7195,11 @@ const MODELS: Record<string, (b: Build, fit: number) => GearModel> = {
     // -- and polished: a cup of its own standing off the knee was what the knee was drawn as when it was stacked tubes,
     // and seen edge on, with the leg kicked up behind at a run, it was a dark needle out of the fold.
     // Widened there rather than carried forward: carried forward, the ring's front was the corner of the bend, a prow at a run.
-    const rs = legRings(b, g, -2.7).filter((r) => r[0] <= KNEE_SPAN).map((r) => (r[0] === 0 ? [0, r[1] + 0.1, r[2] + 0.06] : r));
-    const tube = legTube(rs, 6, overBoot('metal'), true), cop = kneePad(rs, 0.5, 0.7, 'metalLit');
+    // And over three rings, `POLEYN` either side of the knee's as well as at it, so a hard bend turns over two hinges rather than
+    // one: on the knee's ring alone, at the top of a run the front of the knee was a single corner.
+    const cup = (z: number, w: number): number[] => { const [, rx, ry, cx = 0, cy = 0] = legAt(b, g, z); return [z, rx + w, ry + w * 0.6, cx, cy]; };
+    const rs = [...legRings(b, g, -2.7).filter((r) => r[0] < 0), cup(-POLEYN, 0.08), cup(0, 0.1), cup(POLEYN, 0.08), legAt(b, g, KNEE_SPAN)];
+    const tube = legTube(rs, 6, overBoot('metal'), true, false), cop = kneePad(rs, 0.5, 0.7, 'metalLit');
     const cuisse = shingled([legAt(b, g, KNEE_SPAN), legAt(b, g, top - 0.9), [top + 0.25, 1.1 * b.fr.hi * g, 1.12 * g]], 3, 0.1, 'metal');
     return {
       layer: 5,
@@ -7485,11 +7524,16 @@ const SKIRT_SLIT: [number, number] = [0.08, 0.34];
  * Mail, which is heavy and has no body of its own: it swings out at a stride `MAIL_FLARE` of the hem's width rather than a cloth
  * skirt's 0.14, its back flies out behind `MAIL_FLY` as far, and where no thigh pushes it out it hangs in toward the line between the
  * legs by `MAIL_HANG` of its fore-and-aft round at the hem at a full stride. Swung as cloth is, a hauberk at a run was a stiff
- * lampshade carried tilted on the legs, its banded hem one flat ring.
+ * lampshade carried tilted on the legs, its banded hem one flat ring. It goes round with a thigh `MAIL_TURN` as far as cloth, and
+ * `MAIL_LAG` of that at a slit's edge; and its hem dips in folds, deeper at every other corner of the ring, by up to twice
+ * `MAIL_FOLD` at a full stride and three tenths of that standing.
  */
 const MAIL_FLARE = 0.06;
 const MAIL_FLY = 0.5;
 const MAIL_HANG = 0.16;
+const MAIL_TURN = 0.4;
+const MAIL_LAG = 0.4;
+const MAIL_FOLD = 0.08;
 function bentWith(v: V3[], r: Rig, fr: Frame, mail = false): V3[] {
   // How far apart the legs are, fore and aft: the hem swings out wider the longer the stride, as a skirt does at a run.
   const stride = Math.min(1, 1.2 * Math.abs(Math.sin(r.leg[0][0] * DEG) - Math.sin(r.leg[1][0] * DEG)));
@@ -7498,6 +7542,7 @@ function bentWith(v: V3[], r: Rig, fr: Frame, mail = false): V3[] {
   const most = 1 - (1 - SKIRT_RUN) * run;
   const roll = -SKIRT_HANG * r.pelvis[1] * DEG;
   const hip = -0.1;
+  const sat = ramp(Math.min(r.leg[0][0], r.leg[1][0]), 45, 85);
   return v.map((p0) => {
     const down = Math.max(0, Math.min(1, (hip - p0[2]) / SKIRT_TURNS));
     if (!down) return [...p0] as V3;
@@ -7509,6 +7554,11 @@ function bentWith(v: V3[], r: Rig, fr: Frame, mail = false): V3[] {
     const ahead = p0[1] / l, across = p0[0] / (1.25 * fr.hi) / l;
     let turn = 0, seat = 0, pushed = 0;
     const slit = ramp(Math.abs(across), SKIRT_SLIT[0], SKIRT_SLIT[1]);
+    // Mail goes round with a thigh `MAIL_TURN` as far as cloth does, and less again toward a slit (`MAIL_LAG` of that at its edge),
+    // so each half bends across its width and its slit edges hang: carried as far as cloth, each half turned as one flat plate,
+    // the back slit opening into two stiff flaps at a run and the front half lifting on a raised knee like a lid. But all the way
+    // sat down, both thighs up, when it lies along the lap: left hanging, it was a flap between the knees.
+    const lag = mail ? 1 - (1 - MAIL_TURN * (MAIL_LAG + (1 - MAIL_LAG) * slit)) * (1 - sat) : 1;
     for (let k = 0; k < 2; k++) {
       const s = k ? 1 : -1, a = r.leg[k][0] * DEG;
       // Over this leg rather than the other: half each at the front and the back, all of it at its own side; and just half within
@@ -7520,7 +7570,7 @@ function bentWith(v: V3[], r: Rig, fr: Frame, mail = false): V3[] {
       // over the leg, a short skirt's hardly at all, and none of it further than the thigh does.
       const off = Math.max(Math.sign(a) * y, SKIRT_CLEAR + 0.05);
       const clear = Math.max(0, Math.abs(a) - Math.acos(SKIRT_CLEAR / Math.hypot(off, z)) + Math.atan2(-z, off));
-      turn += Math.sign(a) * Math.min(Math.abs(a) * most, clear) * over * toward * down;
+      turn += Math.sign(a) * Math.min(Math.abs(a) * most * lag, clear) * over * toward * down;
       // And a thigh raised far enough to sit on sits on what is behind it and beside it.
       seat = Math.max(seat, over * (1 - toward) * ramp(a / DEG, 45, 85));
       pushed = Math.max(pushed, over * toward * ramp(Math.abs(a) / DEG, 5, 30));
@@ -7532,6 +7582,9 @@ function bentWith(v: V3[], r: Rig, fr: Frame, mail = false): V3[] {
       y *= 1 - hang;
       x *= 1 - 0.4 * hang;
       z -= 2 * hang;
+      // And its hem dips at every other corner of the ring, a little standing and more in a stride, so it hangs in folds and is not
+      // one level band round the bell; not sat on, when it lies on the seat.
+      z -= MAIL_FOLD * (1 + Math.cos(6 * Math.atan2(p0[1], p0[0]))) * down * down * (0.3 + 0.7 * stride) * (1 - sat);
     }
     const c = Math.cos(turn), sn = Math.sin(turn);
     [y, z] = [c * y - sn * z, sn * y + c * z];
@@ -9052,6 +9105,7 @@ function dress(parts: Part[], named: Map<string, Part[]>, kit: Kit, r: Rig, b: B
   worn.forEach(([si, piece, model], order) => {
     const P = shaftIn(gearPalette(pal, piece, STEP[DRESSED[si]] ?? 0), DRESSED[si] === 'legs' ? shaft : undefined);
     const rare = piece.rare || undefined;
+    const [capTop, capFoot] = capSpan(model.bits);
     model.bits.forEach((bit, seq) => {
       if (bit.unless && worn.some(([, p]) => p.id === bit.unless)) return;
       const sides = bit.side === 'both' ? [0, 1] : bit.side === undefined ? [-1] : [bit.side];
@@ -9062,7 +9116,7 @@ function dress(parts: Part[], named: Map<string, Part[]>, kit: Kit, r: Rig, b: B
         const xf = bit.bend && bit.bone === 'hip' ? joint(bone, [0, 0, -THIGH * fr.tall])
           : bit.at || bit.turn || bit.whole ? joint(bone, bit.at ?? [0, 0, 0], ...(bit.turn ?? [0, 0, 0])) : bone;
         const v = bit.skirt ? bentWith(m.v, r, fr, bit.skirt === 'mail') : bit.bend ? kneeBent(m.v, kneeBend(b, k), bit.bone === 'knee', bit.point)
-          : bit.whole && bit.bone === 'arm' ? heldOnShoulder(m.v, r, k) : undefined;
+          : bit.whole && bit.bone === 'arm' ? heldOnShoulder(m.v, r, k, capTop, capFoot) : undefined;
         const part: Part = { mesh: m, xf, bias: bit.bias ?? 0.02, pal: P, rare, seed: si + 1, convex: bit.convex, front: bit.front, v, hide: bit.hide };
         // What is worn on a thigh goes under the tunic's skirt as the thigh does, where the skirt is still to be seen.
         if (bit.bone === 'hip' && !bit.skirt && r.leg[k][0] < THIGH_UNDER) part.under = (named.get('skirt') ?? []).filter((p) => !hidden.has(p));
