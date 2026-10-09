@@ -5606,7 +5606,7 @@ const CAP_EASY = 40;
  * top of the shoulder, it is over the joint whichever way the arm goes up.
  */
 const CAP_MOST = 65;
-const CAP_FOLD = 0.85;
+const CAP_FOLD = 0.75;
 const CAP_PIVOT: V3 = [0.4, 0, 0.9];
 const capTurn = (a: number): number => {
   const easy = CAP_EASY * DEG, most = CAP_MOST * DEG, room = most - easy * 0.5;
@@ -5634,8 +5634,10 @@ function heldOnShoulder(v: readonly V3[], r: Rig, k: number, top: number, foot: 
   // The lames hang from the dome's foot: as the arm goes on up past `CAP_EASY` they are turned back from the dome's tip, coming in
   // down their height, until with the arm overhead they hang plumb under it, folded up `CAP_FOLD` of their height. Tipped whole
   // with the dome, an arm raised to strike left them standing out below it into the armpit, a fringe of slats past the elbow.
+  // Turned back a little more at each lame down the whole of their height, so they fan as lames: turned all within the top third
+  // and folded up nearer all their height, from behind they were one crumpled block in the armpit with a V at its foot.
   const tip = capTurn(swing), up = ramp(swing / DEG, CAP_EASY, CAP_EASY + 80), fold = top - 0.45 * (top - foot), keep = 1 - CAP_FOLD * up;
-  const back = tip * up, deep = 0.35 * (fold - foot);
+  const back = tip * up, deep = fold - foot;
   return v.map((p) => {
     let l: V3 = p;
     if (p[2] < fold) {
@@ -7053,8 +7055,9 @@ const MODELS: Record<string, (b: Build, fit: number) => GearModel> = {
       { bone: 'arm', side: 'both', over: ['upper'], bias: 0.02, convex: true, mesh: upperShell(b, 1.1, undefined, 'leather') },
       {
         bone: 'elbow', side: 'both', over: ['lower'], bias: 0.025,
-        // Bracers of the darker hide, stiff and standing off the forearm, laced down the inside.
-        mesh: join(rings(BRACER, 6, 'leatherDark', { top: false, bottom: false }), decals([-0.9, -1.35, -1.8].flatMap((z) => laceOver(BRACER, z)))),
+        // Bracers of the darker hide, stiff and standing off the forearm, laced down the inside. Not inked round the top, under the
+        // elbow: seen edge on, the inked rim stood proud of the forearm as a lip.
+        mesh: join(softAt(rings(BRACER, 6, 'leatherDark', { top: false, bottom: false }), BRACER[BRACER.length - 1][0]), decals([-0.9, -1.35, -1.8].flatMap((z) => laceOver(BRACER, z)))),
       },
       { bone: 'elbow', side: 'both', over: ['lower'], bias: 0.02, convex: true, mesh: forearmShell(1.1, 'leather') },
     ],
@@ -7197,7 +7200,9 @@ const MODELS: Record<string, (b: Build, fit: number) => GearModel> = {
     // Widened there rather than carried forward: carried forward, the ring's front was the corner of the bend, a prow at a run.
     // And over three rings, `POLEYN` either side of the knee's as well as at it, so a hard bend turns over two hinges rather than
     // one: on the knee's ring alone, at the top of a run the front of the knee was a single corner.
-    const cup = (z: number, w: number): number[] => { const [, rx, ry, cx = 0, cy = 0] = legAt(b, g, z); return [z, rx + w, ry + w * 0.6, cx, cy]; };
+    // Deepened toward the front only, the back of its ring the leg's own: a cup is over the front of a knee, and widened all round,
+    // the back of a plate knee seen walking away bulged either side of the fold into a bow tie across the leg.
+    const cup = (z: number, w: number): number[] => { const [, rx, ry, cx = 0, cy = 0] = legAt(b, g, z); return [z, rx, ry + w * 0.5, cx, cy + w * 0.5]; };
     const rs = [...legRings(b, g, -2.7).filter((r) => r[0] < 0), cup(-POLEYN, 0.08), cup(0, 0.1), cup(POLEYN, 0.08), legAt(b, g, KNEE_SPAN)];
     const tube = legTube(rs, 6, overBoot('metal'), true, false), cop = kneePad(rs, 0.5, 0.7, 'metalLit');
     const cuisse = shingled([legAt(b, g, KNEE_SPAN), legAt(b, g, top - 0.9), [top + 0.25, 1.1 * b.fr.hi * g, 1.12 * g]], 3, 0.1, 'metal');
@@ -7206,8 +7211,10 @@ const MODELS: Record<string, (b: Build, fit: number) => GearModel> = {
       bits: [
         // Its knee pushed out less than a leg's when bent hard (`KNEE_PLATE`): the poleyn is already carried out of the ring, and with
         // the leg's own point on top of it, at the top of a run the knee came to a blunt prow.
+        // The shin not inked round its top behind, where the fold's facets go with the thigh (`legTube`): seen from behind with the
+        // knee bent, its rim there was an inked V under the fold, the foot of the bow tie.
         { bone: 'hip', side: 'both', bend: true, point: KNEE_PLATE, over: ['thigh'], bias: 0.015, convex: true, mesh: join(underHem(tube.thigh, b.fr), cop.thigh, worn(underHem(cuisse, b.fr), 'lames')) },
-        { bone: 'knee', side: 'both', bend: true, point: KNEE_PLATE, over: ['shin', 'boot'], bias: 0.03, convex: true, mesh: join(tube.shin, cop.shin) },
+        { bone: 'knee', side: 'both', bend: true, point: KNEE_PLATE, over: ['shin', 'boot'], bias: 0.03, convex: true, mesh: join(softAt(tube.shin, -KNEE_SPAN), cop.shin) },
       ],
       hides: ['thigh', 'shin'],
       dyes: { pelvis: { trousers: 'metal' } },
@@ -7525,16 +7532,16 @@ const SKIRT_SLIT: [number, number] = [0.08, 0.34];
  * skirt's 0.14, its back flies out behind `MAIL_FLY` as far, and where no thigh pushes it out it hangs in toward the line between the
  * legs by `MAIL_HANG` of its fore-and-aft round at the hem at a full stride. Swung as cloth is, a hauberk at a run was a stiff
  * lampshade carried tilted on the legs, its banded hem one flat ring. It goes round with a thigh `MAIL_TURN` as far as cloth, and
- * `MAIL_LAG` of that at a slit's edge; and its hem dips in folds, deeper at every other corner of the ring, by up to twice
- * `MAIL_FOLD` at a full stride and three tenths of that standing.
+ * `MAIL_LAG` of that at a slit's edge, where it also flares, flies and keeps clear of a thigh that much; and its hem hangs in
+ * folds, in toward the legs by up to `MAIL_FOLD` of its round and down by twice that at a full stride, half as much standing.
  */
 const MAIL_FLARE = 0.06;
-const MAIL_FLY = 0.5;
+const MAIL_FLY = 0.7;
 const MAIL_HANG = 0.16;
 const MAIL_TURN = 0.4;
 const MAIL_LAG = 0.4;
-const MAIL_FOLD = 0.08;
-function bentWith(v: V3[], r: Rig, fr: Frame, mail = false): V3[] {
+const MAIL_FOLD = 0.14;
+function bentWith(v: V3[], r: Rig, fr: Frame, mail = false, phase = 0): V3[] {
   // How far apart the legs are, fore and aft: the hem swings out wider the longer the stride, as a skirt does at a run.
   const stride = Math.min(1, 1.2 * Math.abs(Math.sin(r.leg[0][0] * DEG) - Math.sin(r.leg[1][0] * DEG)));
   // How far toward a run, and nought standing: the hem flies out only at a run.
@@ -7546,19 +7553,28 @@ function bentWith(v: V3[], r: Rig, fr: Frame, mail = false): V3[] {
   return v.map((p0) => {
     const down = Math.max(0, Math.min(1, (hip - p0[2]) / SKIRT_TURNS));
     if (!down) return [...p0] as V3;
-    const swing = 1 + (mail ? MAIL_FLARE : 0.14) * stride * down;
-    let x = p0[0] * swing;
-    let y = p0[1] * swing, z = p0[2] - hip;
     // How far round to the front of the body it is, from straight behind to straight ahead, and to the right, from the left.
     const l = Math.hypot(p0[0] / (1.25 * fr.hi), p0[1]) || 1;
     const ahead = p0[1] / l, across = p0[0] / (1.25 * fr.hi) / l;
-    let turn = 0, seat = 0, pushed = 0;
     const slit = ramp(Math.abs(across), SKIRT_SLIT[0], SKIRT_SLIT[1]);
+    // Mail does at a slit's edge `MAIL_LAG` of what the rest of its half does: it turns with the thigh, flares and flies out behind
+    // that much less there. Only its turn held back, the hem's corner at the slit still flared and flew out at full strength, further
+    // than anything beside it, and at a run stood out from the outline as a long sharp point. Not at the fork, where the halves meet
+    // the whole skirt above it: held back there too, the top of the slit sank under the ring above and opened a dark notch.
+    const edge = mail ? 1 - (1 - MAIL_LAG) * (1 - slit) * ramp(-p0[2], 1.4, 2.5) : 1;
+    const swing = 1 + (mail ? MAIL_FLARE * edge : 0.14) * stride * down;
+    let x = p0[0] * swing;
+    let y = p0[1] * swing, z = p0[2] - hip;
+    let turn = 0, seat = 0, pushed = 0;
     // Mail goes round with a thigh `MAIL_TURN` as far as cloth does, and less again toward a slit (`MAIL_LAG` of that at its edge),
     // so each half bends across its width and its slit edges hang: carried as far as cloth, each half turned as one flat plate,
     // the back slit opening into two stiff flaps at a run and the front half lifting on a raised knee like a lid. But all the way
     // sat down, both thighs up, when it lies along the lap: left hanging, it was a flap between the knees.
-    const lag = mail ? 1 - (1 - MAIL_TURN * (MAIL_LAG + (1 - MAIL_LAG) * slit)) * (1 - sat) : 1;
+    const lag = mail ? 1 - (1 - MAIL_TURN * edge) * (1 - sat) : 1;
+    // And it keeps clear of a raised thigh by as much less toward a slit, the slit's edge lying between the thighs rather than over
+    // one: held clear all alike, at a full knee lift the clearance and not the free turn was what turned the front half, and it went
+    // up as one sheet, slit edge and all. Sat down, it is all held clear, as it lies on the lap.
+    const hold = mail ? edge + (1 - edge) * sat : 1;
     for (let k = 0; k < 2; k++) {
       const s = k ? 1 : -1, a = r.leg[k][0] * DEG;
       // Over this leg rather than the other: half each at the front and the back, all of it at its own side; and just half within
@@ -7570,9 +7586,11 @@ function bentWith(v: V3[], r: Rig, fr: Frame, mail = false): V3[] {
       // over the leg, a short skirt's hardly at all, and none of it further than the thigh does.
       const off = Math.max(Math.sign(a) * y, SKIRT_CLEAR + 0.05);
       const clear = Math.max(0, Math.abs(a) - Math.acos(SKIRT_CLEAR / Math.hypot(off, z)) + Math.atan2(-z, off));
-      turn += Math.sign(a) * Math.min(Math.abs(a) * most * lag, clear) * over * toward * down;
-      // And a thigh raised far enough to sit on sits on what is behind it and beside it.
-      seat = Math.max(seat, over * (1 - toward) * ramp(a / DEG, 45, 85));
+      turn += Math.sign(a) * Math.min(Math.abs(a) * most * lag, clear * hold) * over * toward * down;
+      // And a thigh raised far enough to sit on sits on what is behind it and beside it; at a run, where the knee comes up as high
+      // and nothing sits, three tenths as much: all of it, the back of the skirt behind the leading thigh went up near to the belt
+      // while the other side hung, and the hem's corner where they met stood out from the outline as a long sharp point.
+      seat = Math.max(seat, over * (1 - toward) * ramp(a / DEG, 45, 85) * (1 - 0.7 * run));
       pushed = Math.max(pushed, over * toward * ramp(Math.abs(a) / DEG, 5, 30));
     }
     // Mail hangs where no thigh pushes it out: drawn in toward the line between the legs at the hem, and down a little, so the hem
@@ -7582,9 +7600,16 @@ function bentWith(v: V3[], r: Rig, fr: Frame, mail = false): V3[] {
       y *= 1 - hang;
       x *= 1 - 0.4 * hang;
       z -= 2 * hang;
-      // And its hem dips at every other corner of the ring, a little standing and more in a stride, so it hangs in folds and is not
-      // one level band round the bell; not sat on, when it lies on the seat.
-      z -= MAIL_FOLD * (1 + Math.cos(6 * Math.atan2(p0[1], p0[0]))) * down * down * (0.3 + 0.7 * stride) * (1 - sat);
+      // And its hem hangs in folds: in toward the legs and down where it falls in, out where it stands, deepest at the hem and
+      // nothing from the fork (a hauberk's is 1.4 under the hips) up, half as deep standing as in a stride; not where a thigh pushes
+      // it out, nor sat on, when it lies on the seat. Round the ring at three to the turn from where `phase` sets them, so they fall
+      // on the corners unevenly and not every piece alike: dipped only, and at every other corner, they were a pixel or two on an
+      // edge seen end on, and a regular crown where they were deep enough to see.
+      const fold = (0.5 + 0.5 * Math.cos(3 * Math.atan2(p0[1], p0[0]) + phase)) * ramp(-p0[2], 1.4, 3)
+        * (0.5 + 0.5 * stride) * (1 - pushed) * (1 - sat);
+      x *= 1 - MAIL_FOLD * fold;
+      y *= 1 - MAIL_FOLD * fold;
+      z -= 2 * MAIL_FOLD * fold;
     }
     const c = Math.cos(turn), sn = Math.sin(turn);
     [y, z] = [c * y - sn * z, sn * y + c * z];
@@ -7607,7 +7632,7 @@ function bentWith(v: V3[], r: Rig, fr: Frame, mail = false): V3[] {
     // from the one in front of it.
     if (run > 0 && y < 0.2) {
       const t = Math.min(1, (0.2 - y) / 1.6) * ramp(Math.abs(ahead), 0.2, 0.6);
-      const fly = mail ? MAIL_FLY : 1;
+      const fly = mail ? MAIL_FLY * edge : 1;
       y -= 0.45 * run * stride * down * t * fly;
       z += 0.6 * run * stride * down * t * fly;
     }
@@ -9115,7 +9140,7 @@ function dress(parts: Part[], named: Map<string, Part[]>, kit: Kit, r: Rig, b: B
         // A bit carried whole is on a frame of its own, the bone's own frame being what is bent.
         const xf = bit.bend && bit.bone === 'hip' ? joint(bone, [0, 0, -THIGH * fr.tall])
           : bit.at || bit.turn || bit.whole ? joint(bone, bit.at ?? [0, 0, 0], ...(bit.turn ?? [0, 0, 0])) : bone;
-        const v = bit.skirt ? bentWith(m.v, r, fr, bit.skirt === 'mail') : bit.bend ? kneeBent(m.v, kneeBend(b, k), bit.bone === 'knee', bit.point)
+        const v = bit.skirt ? bentWith(m.v, r, fr, bit.skirt === 'mail', 2.4 * (si + 1)) : bit.bend ? kneeBent(m.v, kneeBend(b, k), bit.bone === 'knee', bit.point)
           : bit.whole && bit.bone === 'arm' ? heldOnShoulder(m.v, r, k, capTop, capFoot) : undefined;
         const part: Part = { mesh: m, xf, bias: bit.bias ?? 0.02, pal: P, rare, seed: si + 1, convex: bit.convex, front: bit.front, v, hide: bit.hide };
         // What is worn on a thigh goes under the tunic's skirt as the thigh does, where the skirt is still to be seen.
