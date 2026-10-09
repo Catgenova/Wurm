@@ -32,12 +32,14 @@
  * `bowTop`, `bowBottom`, `nock`, `arrow`; `weaponSpan` a weapon's own
  * measures (a bow's tips among them); `figureProportions`, `reachHand`,
  * and `armToward`, which points an arm -- past level ahead, a positive `out`
- * in `arm[k]` carries the arm back across the body, and is left so.
+ * in `arm[k]` carries the arm back across the body, and is left so; `armOut`
+ * here opens it away from the body at any height. `stepIn` steps the body in
+ * over a blow by what the cue says is missing (`c.aim`).
  */
-import type { Euler, Rig } from '../figure';
+import { armToward, figureStance, standFeet, type Euler, type Rig, type V3 } from '../figure';
 import type { CastPose, PoseCue } from './index';
 import type { CastKind } from './info';
-import { clamp, smooth } from './kit';
+import { clamp, seg, smooth } from './kit';
 
 /** A key: at `t` (nought to one through the cast), these numbers. */
 export type Key = readonly [number, readonly number[]];
@@ -291,3 +293,52 @@ export const onSelf = (c: PoseCue): boolean => c.at === 'self';
  * is held (`Math.sin(c.held * ...)`) and settle as it ends.
  */
 export const heldFor = (c: PoseCue): number => c.held ?? 0;
+
+/**
+ * A step in over a blow, to get the weapon to what it strikes: the body carried `by` height units ahead (+y) from
+ * `from` to `hit` (fractions of the cast), the lead foot (`lead`, the left by default, for a right-handed blow)
+ * lifted and put down that much further on, the back foot kept where it stood and both legs solved to their feet --
+ * then back again from `back` to the end, the lead foot drawn back under the body. Call it last in a pose: it writes
+ * `r.at`, the hips' height and both legs (`leg`, `knee`), over whatever the pose put there.
+ *
+ * `by` defaults to what is missing, from the cue: the target's near side (`c.aim.near`), less what the stage
+ * already carries the body in by (`c.aim.close`, from `cast.close`), less how far ahead of the feet the blow
+ * reaches standing (`reach`, 16 units: an arm and a hand weapon), and never more than `most` (12 units, a long
+ * lunge); nought for a cast with no target. While the caster walks the legs are the walk's and only the trunk goes
+ * with it. Returns how far the body is carried at `t`, in height units, for the effects to match.
+ */
+export function stepIn(r: Rig, t: number, c: PoseCue, o: { hit: number; from?: number; back?: number; by?: number; reach?: number; most?: number; lead?: 0 | 1; bend?: number }): number {
+  const want = o.by ?? (c.aim ? c.aim.near - c.aim.close - (o.reach ?? 16) : 0);
+  const by = clamp(want, 0, o.most ?? 12);
+  if (by <= 0.01) return 0;
+  const from = o.from ?? Math.max(0, o.hit - 0.25), back = o.back ?? o.hit + (1 - o.hit) * 0.35;
+  const go = smooth(seg(t, from, o.hit)), home = smooth(seg(t, back, 1));
+  const now = by * go * (1 - home);
+  const lead = o.lead ?? 0, rear = 1 - lead;
+  const feet = figureStance(c.look);
+  // The hips end a little over half way between the feet, so the lead foot goes further than the body does.
+  const stride = now / 0.6;
+  // Off the ground while it travels, out and back: a step, not a slide.
+  const lift = 1.4 * (Math.sin(Math.PI * seg(t, from, o.hit)) + Math.sin(Math.PI * seg(t, back, 1)));
+  const put: [V3, V3] = [[...feet[0]] as V3, [...feet[1]] as V3];
+  put[lead] = [feet[lead][0], feet[lead][1] + stride, feet[lead][2] + lift];
+  put[rear] = [...feet[rear]] as V3;
+  r.at = [r.at[0], r.at[1] + now, r.at[2]];
+  // The weight on the back foot while the lead one is up, and over onto it as it lands.
+  const on = (lead ? 1 : -1) * (lift > 0.2 ? -0.6 : 0.4);
+  standFeet(r, put, { on, bend: o.bend ?? 10, look: c.look });
+  return now;
+}
+
+/**
+ * Arm `k` raised `forward` degrees from hanging (90 level ahead, 180 straight up) and then opened `out` degrees away
+ * from the body to its own side -- always away, at any height. What `arm[k] = [forward, out, turned]` does not do
+ * past level ahead: there the roll "out" carries the arm back across the body, and `[140, 60, -10]` crosses the arms
+ * over the head (kept so, for the poses written with it). `armOut(k, 140, 60)` is a V flung up and wide;
+ * `armOut(k, 90, 90)` straight out to the side; `bend` is the way the elbow folds the forearm (ahead by default).
+ */
+export function armOut(k: number, forward: number, out: number, bend?: V3): Euler {
+  const f = (forward * Math.PI) / 180, o = (Math.min(90, Math.max(-90, out)) * Math.PI) / 180, s = k ? 1 : -1;
+  const d: V3 = [s * Math.sin(o), Math.sin(f) * Math.cos(o), -Math.cos(f) * Math.cos(o)];
+  return armToward(k, d, bend);
+}

@@ -92,12 +92,39 @@ export function headingView(angle: number, rotation: number): PieceView {
 
 /**
  * The wheels of what is driven with reins, which turn as it goes: the
- * radius of the big ones, and how many spokes each has. The picture of one
- * is baked with them `trim` of the way from one spoke to the next, in
- * `WHEEL_STEPS` steps, which is how far round they have rolled.
+ * radius of the big ones, how many spokes each has, and how many times the
+ * small front wheels of a wagon go round to her rear's once. They went
+ * round with the rear, a quarter of a turn short every turn. Four fifths of
+ * the rear's size, they turn a quarter of a spoke further at each of the
+ * rear's sixtieths of a turn, so the picture of all four is the same again
+ * once the rear have gone round once; only the rear carry the mark that
+ * comes round once a turn (`drawWheel`), for one on the front would not be
+ * back where it started then.
  */
-export const WHEELS: Partial<Record<string, { r: number; spokes: number }>> = { large_cart: { r: 4.8, spokes: 10 }, wagon: { r: 5.4, spokes: 12 } };
+export const WHEELS: Partial<Record<string, { r: number; spokes: number; front?: number }>> = {
+  large_cart: { r: 4.8, spokes: 10 },
+  wagon: { r: 5.4, spokes: 12, front: 5 / 4 },
+};
+/**
+ * The picture of one is baked at a step of how far round they are (`wheelTrim`): `WHEEL_STEPS` to a spoke while the
+ * spokes can be followed, and `WHEEL_BLURRED` to a turn once they go by too fast to be (`WHEEL_BLUR`), when only the
+ * mark that comes round once a turn is seen to go round.
+ */
 export const WHEEL_STEPS = 5;
+export const WHEEL_BLURRED = 12;
+/**
+ * Spokes going by in a drawn frame at which the spokes start to blur, and are a blur: a wheel drawn sharp going faster
+ * than that stands still or turns backwards, as a wheel filmed does, which is why they were let turn at most four spokes
+ * a second, and so crept round while the cart covered the ground at seven times that.
+ */
+export const WHEEL_BLUR: [number, number] = [0.3, 0.55];
+/** A piece's wheels as its `trim`: how blurred (0 sharp, 1 half, 2 a blur) and which step of the way round they are. */
+export const wheelTrim = (blur: number, step: number): number => blur * 1000 + step;
+function wheelsOf(kind: string, trim: number | undefined): { turn: number; front: number; blur: number } {
+  const w = WHEELS[kind]!, t = trim ?? 0, blur = Math.floor(t / 1000);
+  const turn = (t % 1000) / (blur ? WHEEL_BLURRED : w.spokes * WHEEL_STEPS);
+  return { turn, front: (turn * (w.front ?? 1)) % 1, blur: blur / 2 };
+}
 
 /* ---- colour --------------------------------------------------------------- */
 
@@ -653,14 +680,19 @@ class Scene {
    * 'x') or its y: the iron tyre round the tread, the felloe and the spokes
    * on whichever face is toward you, and the hub, `thick` across.
    */
-  wheel(c: V3, axis: 'x' | 'y', r: number, thick: number, spokes: number, p: Paint, turn = 0): void {
+  wheel(c: V3, axis: 'x' | 'y', r: number, thick: number, spokes: number, p: Paint, turn = 0, blur = 0, mark = false): void {
     const [cx, cy, cz] = c;
     const ax = axis === 'x' ? thick / 2 : r, ay = axis === 'y' ? thick / 2 : r;
-    this.part(cx - ax, cx + ax, cy - ay, cy + ay, cz - r, cz + r, () => this.drawWheel(c, axis, r, thick, spokes, p, turn));
+    this.part(cx - ax, cx + ax, cy - ay, cy + ay, cz - r, cz + r, () => this.drawWheel(c, axis, r, thick, spokes, p, turn, blur, mark));
   }
 
-  /** And `turn` of the way from one spoke to the next, rolled forward: the top of it toward the piece's +x or +y. */
-  drawWheel(c: V3, axis: 'x' | 'y', r: number, thick: number, spokes: number, p: Paint, turn = 0): void {
+  /**
+   * And `turn` of the way round, rolled forward: the top of it toward the piece's +x or +y. `blur` (0 to 1) is how far
+   * the spokes have gone to a blur, going by faster than a frame can show them: faded toward a soft disc of the wheel's
+   * wood between the hub and the felloe. With `mark`, one joint of the felloe has an iron strake over it, which comes
+   * round once a turn: going fast, it is what the eye follows round at the wheel's true speed.
+   */
+  drawWheel(c: V3, axis: 'x' | 'y', r: number, thick: number, spokes: number, p: Paint, turn = 0, blur = 0, mark = false): void {
     const g = this.g;
     const [cx, cy, cz] = c;
     const n: [number, number] = axis === 'x' ? [1, 0] : [0, 1];
@@ -689,15 +721,25 @@ class Scene {
       g.fillStyle = rgb(p.body, this.light(nx, ny, nz) * 0.8);
       g.fill();
     }
-    // Spokes from the hub to the felloe, in the middle of the wheel's thickness.
+    // Spokes from the hub to the felloe, in the middle of the wheel's thickness; going too fast to follow, a blur of them.
+    if (blur > 0) {
+      const disc = ring(rin, 0);
+      g.beginPath();
+      disc.forEach(([x, y], j) => (j ? g.lineTo(x, y) : g.moveTo(x, y)));
+      g.closePath();
+      g.fillStyle = rgb(p.body, 0.78, 0.5 * blur);
+      g.fill();
+    }
+    g.globalAlpha = 1 - 0.8 * blur;
     g.lineCap = 'round';
     for (let j = 0; j < spokes; j++) {
-      const a = ((j - turn) / spokes) * TAU + 0.3;
+      const a = (j / spokes - turn) * TAU + 0.3;
       const A = at(a, r * 0.16, 0), B = at(a, rin, 0);
       this.line(A, B, rgb(p.ink), Math.max(0.7, r * 0.11) + this.ink * 1.4);
       this.line(A, B, rgb(p.body, 0.92), Math.max(0.7, r * 0.11));
     }
     g.lineCap = 'butt';
+    g.globalAlpha = 1;
     // The tread, where it is toward you.
     for (let j = 0; j < N; j++) {
       const a0 = (j / N) * TAU, a1 = ((j + 1) / N) * TAU, am = (a0 + a1) / 2;
@@ -733,6 +775,14 @@ class Scene {
     g.stroke();
     this.poly(frontIn);
     g.stroke();
+    if (mark) {
+      // Over the joint between two spokes, the same way round as they go.
+      const a0 = (0.5 / spokes - turn) * TAU + 0.3, span = (0.45 / spokes) * TAU;
+      const strake: Pt[] = [];
+      for (let j = 0; j <= 4; j++) strake.push(at(a0 - span / 2 + (span * j) / 4, r * 0.95, near + side * 0.05));
+      for (let j = 4; j >= 0; j--) strake.push(at(a0 - span / 2 + (span * j) / 4, rin * 0.97, near + side * 0.05));
+      this.fillInk(strake, rgb(IRON.body, k * 0.62), IRON.ink);
+    }
     const hub = ring(r * 0.2, near + side * 0.25);
     this.fillInk(hub, rgb(p.body, k * 1.02), p.ink);
     this.fillInk(ring(r * 0.08, near + side * 0.3), rgb(tread.body, 1.1), tread.ink);
@@ -3959,7 +4009,8 @@ const MODELS: Record<string, Model> = {
     const { r, spokes } = WHEELS.large_cart!, ax = -2, wy = W + 1;
     sc.shadows = [[L0, L1, -W - 1.4, W + 1.4]];
     sc.rod([ax, -W + 0.4, r], [ax, W - 0.4, r], 0.45, IRON);
-    for (const s of [-1, 1]) sc.wheel([ax, s * wy, r], 'y', r, 0.9, spokes, wood, trim ?? 0);
+    const { turn, blur } = wheelsOf('large_cart', trim);
+    for (const s of [-1, 1]) sc.wheel([ax, s * wy, r], 'y', r, 0.9, spokes, wood, turn, blur, true);
     for (const s of [-1, 1]) sc.box(L0 + 1, L1 - 1, s * (W - 1.8) - 0.5, s * (W - 1.8) + 0.5, floor - 1.8, floor - 0.8, wood);
     sc.box(L0, L1, -W, W, floor - 0.8, floor, wood, { front: grain(sc, wood, 1), back: grain(sc, wood, 1) });
     const staked = (F: FaceAt, w: number, h: number): void => {
@@ -3986,11 +4037,12 @@ const MODELS: Record<string, Model> = {
   },
   wagon: ({ sc, wood, hw, hd, trim }) => {
     const { L0, L1, W, floor, top, bench } = boxOf('wagon', hw, hd), t = BOX_BOARD.wagon;
-    const wy = W + 1.2, rear = [-12, WHEELS.wagon!.r] as const, front = [6, 4.4] as const;
+    const { r: big, spokes, front: more } = WHEELS.wagon!, { turn, front: ahead, blur } = wheelsOf('wagon', trim);
+    const wy = W + 1.2, rear = [-12, big, turn] as const, front = [6, big / more!, ahead] as const;
     sc.shadows = [[L0, L1, -W - 1.6, W + 1.6]];
-    for (const [ax, r] of [rear, front]) {
+    for (const [ax, r, t] of [rear, front]) {
       sc.rod([ax, -W + 0.4, r], [ax, W - 0.4, r], 0.5, IRON);
-      for (const s of [-1, 1]) sc.wheel([ax, s * wy, r], 'y', r, 1, WHEELS.wagon!.spokes, wood, trim ?? 0);
+      for (const s of [-1, 1]) sc.wheel([ax, s * wy, r], 'y', r, 1, spokes, wood, t, blur, r === big);
     }
     sc.box(L0 + 2, L1 - 2, -0.6, 0.6, 4.6, 5.8, wood);
     for (const s of [-1, 1]) sc.box(L0 + 1, L1 - 1, s * (W - 2.2) - 0.6, s * (W - 2.2) + 0.6, floor - 2, floor - 0.9, wood);
@@ -4880,13 +4932,13 @@ export function drawFurniture(ctx: CanvasRenderingContext2D, sx: number, sy: num
 export interface Silhouette { ctx: CanvasRenderingContext2D; canvas: CanvasImageSource & { width: number; height: number }; x: number; y: number; w: number; h: number }
 
 /**
- * One's own helmsman seen through what is in front of him. Sailing toward
+ * A helmsman seen through what is in front of him. Sailing toward
  * you, the sailing boat's mast and sail are between you and whoever has her
  * tiller, and hid all of him but his shins: at one heading in eight you lost
  * sight of yourself. So, as games seen from above do with whatever stands in
  * front of the player, a layer baked in front of your own helmsman is let
- * fade where it is over him, and he shows through it. Only your own: anybody
- * else's helmsman is hidden as it should be.
+ * fade where it is over him, and he shows through it; and anybody else's
+ * helmsman too, who was otherwise not to be seen at all at that heading.
  *
  * The fade was an oval round where he sits, which took in open water behind
  * the sail beside him -- a soft blue beam down the sail by his face -- and

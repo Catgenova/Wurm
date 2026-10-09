@@ -40,7 +40,7 @@ import { DYE_BY_ID } from '../game/dyestuffs';
 import { hash2 } from '../world/noise';
 import { bareRock, DAMP_SAND, dustiness, FLAT, growth, oreWash, PAVED, ROCK_VARIANTS, SLAB_VARIANTS, STREWN, TileType, TILE_DEFS, COVERED, bushSpecies, slabVariant, trailGround, stonesBed, treeSpecies, treeVariant } from '../world/tiles';
 import { HALF_H, HALF_W, HEIGHT_SCALE, UNITS_PER_TILE } from './iso';
-import { HUNT_REACH, inFightReach, isFightJob, WIND_UP } from '../game/fight';
+import { beastReach, HUNT_REACH, inFightReach, isFightJob, WIND_UP } from '../game/fight';
 import { depthOf, type View } from './view';
 import { FALLS, roofModel, type Fall, type RoofGable, type RoofModel, type RoofPt } from './roofshape';
 import { COVER_PPT, covering } from './roofing';
@@ -68,7 +68,7 @@ import { kilnCentre, type PlacedKiln } from '../game/kiln';
 import { furnitureCentre, furnitureDef, type PlacedFurniture, facingOf as pieceFacing, furnitureFootprint } from '../game/furniture';
 import { UNSEEN, VISIBLE } from '../game/vision';
 import { DAWN, DUSK } from '../game/game';
-import { boatSway, clothInWind, crewOrder, deviceOf, drawFurniture, drawFurnitureLive, driverOn, swayOnScreen, WHEELS, WHEEL_STEPS, steeredByTiller, woodHex, furnitureHoles, helmSeat, reinsTo, rowedPiece, furnitureSpan, FURNITURE_HEIGHT, glowsAtNight, headingView, mossTrim, PIECE_STAGES, pieceView, planterTrim, roseTrim, type Air, type Crew, type PieceView } from './furniture';
+import { boatSway, clothInWind, crewOrder, deviceOf, drawFurniture, drawFurnitureLive, driverOn, swayOnScreen, WHEELS, WHEEL_BLUR, WHEEL_BLURRED, WHEEL_STEPS, wheelTrim, steeredByTiller, woodHex, furnitureHoles, helmSeat, reinsTo, rowedPiece, furnitureSpan, FURNITURE_HEIGHT, glowsAtNight, headingView, mossTrim, PIECE_STAGES, pieceView, planterTrim, roseTrim, type Air, type Crew, type PieceView } from './furniture';
 import { roseStage } from '../game/roses';
 import { fieldRate } from '../game/growth';
 import { dyeOf } from '../game/dyestuffs';
@@ -183,6 +183,7 @@ import { hingeKey, hingeOf, isDrawbridge, landingOf } from '../game/gates';
 import { bridgeDone, type Bridge } from '../game/bridges';
 import { SmallLife, type Mote } from './life';
 import { personBody, SpellStage, type Aim, type Who } from './spells/stage';
+import { creatureWide } from './spells/kit';
 import { spellInfo } from './spells/info';
 import type { Body as SpellBody, WorldRec as SpellRec } from './spells/kit';
 import type { CastAt } from '../game/events';
@@ -259,8 +260,10 @@ export interface Pick {
   down?: boolean;
 }
 
-/** The most spokes a second a cart's wheels are drawn going by (`wheelTurn`). */
-const WHEEL_RATE = 4;
+/** Seconds a cart's rock and bump take to come on as she sets off, and to die away as she stops (`cartRoll`). */
+const CART_EASE = 0.4;
+/** Her roll stood still: given to her driver all the same, so the body takes back what she has, which is nothing (`reinsIn`). */
+const CART_LEVEL = { heel: 0, pitch: 0 };
 
 /** A sway on the screen, about `ox`, `oy` (`swayOnScreen` in `./furniture`). */
 interface Swayed { ox: number; oy: number; a: number; b: number; c: number; d: number; up: number }
@@ -1293,7 +1296,7 @@ export class Renderer {
     // A spell cast, yours or anybody's in sight: drawn from whoever cast it at whatever it was cast at.
     game.events.on('cast', (c) => {
       const by: Who = c.by === null ? { kind: 'player' } : { kind: 'peer', id: c.by };
-      this.spells.play(c.spell, by, this.spellAim(c.at), { mine: c.by === null, companion: c.companion, from: c.from });
+      this.spells.play(c.spell, by, this.spellAim(c.at), { mine: c.by === null, companion: c.companion, from: c.from, targetFrom: c.targetFrom });
     });
     game.events.on('reset', () => {
       this.spells.clear();
@@ -2893,7 +2896,7 @@ export class Renderer {
     this.roomTiles = this.myRoom();
     this.shades.clear();
     // The spells first: what they light is among what is burning.
-    this.spells.update({ eye: this.camera, now: performance.now() / 1000, dt, fast: this.fast });
+    this.spells.update({ eye: this.camera, now: performance.now() / 1000, dt, fast: this.fast, night: this.game.darkness() });
     this.game.spellLights = this.spells.lights;
     // What is burning, for glass to glow with at night, and last frame's glow gone.
     this.lightsNow = this.game.darkness() > 0.02 ? this.game.lights() : [];
@@ -3670,8 +3673,9 @@ export class Renderer {
         if (drivenBy && furnitureDef(drivenBy.kind).boat?.helm) this.onDeck(pe, drivenBy, this.game.helmSpot(drivenBy), pe.lift, true);
         // Anything else with a seat, on that seat with what is to hand there.
         else if (drivenBy) {
-          this.seatOn(pe, drivenBy, zoom);
-          if (reinsTo(drivenBy.kind)) pe.sway = this.cartSwayOf(drivenBy, cam.worldToScreenX(vx, vy), cam.worldToScreenY(vx, vy, this.pieceBase(drivenBy, vx, vy)), zoom);
+          const reined = !!reinsTo(drivenBy.kind);
+          this.seatOn(pe, drivenBy, zoom, reined ? this.cartRoll(drivenBy) ?? CART_LEVEL : undefined);
+          if (reined) pe.sway = this.cartSwayOf(drivenBy, cam.worldToScreenX(vx, vy), cam.worldToScreenY(vx, vy, this.pieceBase(drivenBy, vx, vy)), zoom);
         }
         // A rider, astride.
         else if (up) pe.seat = SADDLE;
@@ -3970,7 +3974,19 @@ export class Renderer {
   private helming: PlacedFurniture | null = null;
   private takeAboard(f: PlacedFurniture, fe: Entity, x: number, y: number, zoom: number): void {
     const boat = furnitureDef(f.kind).boat;
-    if (!boat) return;
+    if (!boat) {
+      /*
+       * Somebody else on the reins of a cart or a wagon: sat on her box as I am on mine, and rocked with her. They were
+       * left out of the people on the island for being at her reins, and drawn nowhere.
+       */
+      const peer = f.helm && reinsTo(f.kind) ? this.game.roster.list().find((p) => p.uid === f.helm) : undefined;
+      if (!peer) return;
+      const e = this.take('peer', x, y, fe.sx, fe.sy + 0.01, null);
+      e.peer = peer;
+      this.seatOn(e, f, zoom, this.cartRoll(f) ?? CART_LEVEL);
+      e.sway = this.cartSwayOf(f, fe.sx, fe.sy, zoom);
+      return;
+    }
     const waist = boat.waist ?? boat.seat;
     const me = this.game.player;
     const sway = this.swayOf(f, fe, zoom);
@@ -4083,44 +4099,72 @@ export class Renderer {
    * one stood still.
    */
   private cartSwayOf(f: PlacedFurniture, ox: number, oy: number, zoom: number): Swayed | undefined {
-    const by = this.driverOf(f);
-    if (!by?.moving) return undefined;
+    const s = this.cartRoll(f);
+    if (!s) return undefined;
     const def = furnitureDef(f.kind);
-    return { ox, oy, ...swayOnScreen(this.viewOf(f), cartSway(by.walkPhase, true), zoom, def.w / Math.max(1, def.h)) };
+    return { ox, oy, ...swayOnScreen(this.viewOf(f), s, zoom, def.w / Math.max(1, def.h)) };
   }
 
   /**
-   * How far round the wheels of a cart or a wagon are, as a share of the turn
-   * from one spoke to the next (`WHEELS` in `./furniture`): from how far she
-   * has come, so they roll as far as she goes and stop where she stops. They
-   * stood still under a cart going along a track. Counted on once a frame,
-   * however often she is drawn in it.
+   * Her rock and bump this frame, let come on and die away over `CART_EASE` as her driver sets off and stops: she stopped
+   * dead, the box jumping level in a frame. Counted on once a frame; and where she has stopped, her driver's clock is
+   * held where it was, so she settles from the roll she had rather than rocking on while she does.
    */
-  private readonly rolled = new Map<number, { x: number; y: number; turn: number; at: number }>();
+  private readonly carting = new Map<number, { on: number; phase: number; seen: number }>();
+  private cartRoll(f: PlacedFurniture): { heel: number; pitch: number; lift: number } | undefined {
+    const by = this.driverOf(f), going = by?.moving ? 1 : 0;
+    let w = this.carting.get(f.id);
+    if (!w || this.time - w.seen > 1) {
+      if (!going) return undefined;
+      w = { on: 0, phase: by!.walkPhase, seen: this.time };
+      this.carting.set(f.id, w);
+      if (this.carting.size > 64) for (const [k, v] of this.carting) if (this.time - v.seen > 10) this.carting.delete(k);
+    }
+    if (w.seen !== this.time) {
+      const dt = Math.max(0, Math.min(0.1, this.time - w.seen));
+      w.on += Math.max(-dt / CART_EASE, Math.min(dt / CART_EASE, going - w.on));
+      w.seen = this.time;
+    }
+    if (going) w.phase = by!.walkPhase;
+    if (w.on <= 0) return undefined;
+    const s = cartSway(w.phase, true), k = w.on * w.on * (3 - 2 * w.on);
+    return { heel: s.heel * k, pitch: s.pitch * k, lift: s.lift * k };
+  }
+
+  /**
+   * How far round the wheels of a cart or a wagon are, and how blurred, as her `trim` (`wheelTrim` in `./furniture`):
+   * from how far she has come, so they roll as far as she goes and stop where she stops. They stood still under a cart
+   * going along a track; then they were let turn at most four spokes a second, so as not to strobe, and crept round while
+   * she covered the ground at seven times that, skidding. Now they turn at the true rate, and above what a frame can show
+   * (`WHEEL_BLUR`, from the spokes gone by in a frame, steadied) the spokes go to a blur and the strake on the felloe goes
+   * round once a turn, which a frame always can. Counted on once a frame, however often she is drawn in it.
+   */
+  private readonly rolled = new Map<number, { x: number; y: number; turns: number; rate: number; at: number }>();
   private wheelTurn(f: PlacedFurniture): number | undefined {
     const w = WHEELS[f.kind];
     if (!w) return undefined;
     const [x, y] = furnitureCentre(f);
     let r = this.rolled.get(f.id);
     if (!r) {
-      r = { x, y, turn: 0, at: this.time };
+      r = { x, y, turns: 0, rate: 0, at: this.time };
       this.rolled.set(f.id, r);
       if (this.rolled.size > 64) for (const [k, v] of this.rolled) if (this.time - v.at > 10) this.rolled.delete(k);
     }
     if (r.at !== this.time) {
-      const d = Math.hypot(x - r.x, y - r.y) * UNITS_PER_TILE;
-      /*
-       * A jump -- set down somewhere else, or seen again after a while -- is not rolled. And never faster than
-       * `WHEEL_RATE` spokes a second: at a cart's pace the spokes go by thirty or forty times a second, which drawn
-       * frame by frame is a wheel standing still or turning backwards, as a wheel filmed does.
-       */
-      const spokes = d / ((2 * Math.PI * w.r) / w.spokes), most = WHEEL_RATE * Math.max(0, this.time - r.at);
-      if (d < 2 * UNITS_PER_TILE) r.turn = (r.turn + Math.min(spokes, most)) % 1;
+      const d = Math.hypot(x - r.x, y - r.y) * UNITS_PER_TILE, dt = this.time - r.at;
+      // A jump -- set down somewhere else, or seen again after a while -- is not rolled.
+      const turns = d < 2 * UNITS_PER_TILE ? d / (2 * Math.PI * w.r) : 0;
+      r.turns = (r.turns + turns) % 1;
+      if (dt > 0 && dt < 0.5) r.rate += (turns / dt - r.rate) * Math.min(1, dt / 0.15);
+      else r.rate = 0;
       r.x = x;
       r.y = y;
       r.at = this.time;
     }
-    return Math.round(r.turn * WHEEL_STEPS) / WHEEL_STEPS;
+    const by = r.rate * w.spokes * this.frameDt, [from, to] = WHEEL_BLUR;
+    const blur = by < from ? 0 : by < to ? 1 : 2;
+    const steps = blur ? WHEEL_BLURRED : w.spokes * WHEEL_STEPS;
+    return wheelTrim(blur, Math.floor(r.turns * steps) % steps);
   }
 
   /** Somebody on `f`, drawn at `wx`, `wy` on her rather than where they sort, `lift` up. */
@@ -4361,7 +4405,7 @@ export class Renderer {
       const p = game.player;
       const z = this.footOn(p.x, p.y, Math.max(0, p.level)) + Math.max(0, p.visualLevel) * WALL_HEIGHT;
       return personBody(p.x, p.y, z, this.playerFacing, 'player', {
-        phase: p.moving ? p.walkPhase : this.time * 6, moving: p.moving, gait: 0, facing: this.playerFacing, swimming: p.swimming, working: false,
+        id: 'player', phase: p.moving ? p.walkPhase : this.time * 6, moving: p.moving, gait: 0, facing: this.playerFacing, swimming: p.swimming, working: false,
         look: p.look, gear: gearFrom(wornWire((slot) => game.worn(slot))),
       });
     }
@@ -4371,7 +4415,7 @@ export class Renderer {
       const [x, y] = game.roster.drawnAt(peer);
       const z = this.footOn(x, y, peer.level) + peer.level * WALL_HEIGHT;
       return personBody(x, y, z, peer.facing, 'peer', {
-        phase: peer.moving ? peer.walkPhase : this.time * 6, moving: peer.moving, facing: peer.facing, swimming: peer.swimming, working: !!peer.working,
+        id: 'o' + peer.id, phase: peer.moving ? peer.walkPhase : this.time * 6, moving: peer.moving, facing: peer.facing, swimming: peer.swimming, working: !!peer.working,
         look: peer.look, gear: peer.gear,
       });
     }
@@ -4381,8 +4425,9 @@ export class Renderer {
     const big = ageDef(cr, game.time).scale * rarityOf(cr).size;
     const tall = Math.max(22 * rarityOf(cr).size, (wildermonTop(def.id) ?? 0) * big) / HEIGHT_SCALE;
     return {
-      x: cr.x, y: cr.y, z: game.laidOver(Math.floor(cr.x), Math.floor(cr.y)) ?? this.footAt(cr.x, cr.y), tall, wide: 5 * rarityOf(cr).size,
-      facing: this.beastFacing.get(cr.id) ?? 0, kind: 'creature',
+      x: cr.x, y: cr.y, z: game.laidOver(Math.floor(cr.x), Math.floor(cr.y)) ?? this.footAt(cr.x, cr.y), tall, wide: creatureWide(def.id) * rarityOf(cr).size,
+      facing: this.beastFacing.get(cr.id) ?? 0, kind: 'creature', species: def.id, reach: beastReach(def),
+      tame: cr.mode !== 'wild', companion: cr.mode === 'active', hostile: cr.enemy !== null,
       // What is on it that the payload says: a burn or a bleed still running, a trap holding it.
       burning: (cr.burnUntil ?? 0) > game.time, bleeding: cr.bleedRate > 0 && cr.bleedUntil > game.time, held: cr.trapped != null,
     };
@@ -4536,6 +4581,7 @@ export class Renderer {
             emote: player.emote,
             emoteT: emoteAt(player.emote, player.emoteAt, performance.now() / 1000) ?? undefined,
             cast: this.spells.poseOf(PLAYER_CASTS),
+            veil: this.spells.veilOf(PLAYER_CASTS),
           }),
         );
         if (ent.clip) ctx.restore();
@@ -4577,6 +4623,7 @@ export class Renderer {
             emote: peer.emote,
             emoteT: emoteAt(peer.emote, peer.emoteAt, performance.now() / 1000) ?? undefined,
             cast: this.spells.poseOf({ kind: 'peer', id: peer.id }),
+            veil: this.spells.veilOf({ kind: 'peer', id: peer.id }),
           }),
         );
         if (ent.clip) ctx.restore();
@@ -4639,7 +4686,9 @@ export class Renderer {
         const hit = this.flashOf(cr.attackedAt);
         // Drawing back for a heavy blow: its reach on the ground under it, filling as the blow comes (`WIND_UP`).
         if (cr.windup > 0) this.drawWindupReach(ctx, ent.sx, ent.sy, zoom, cr.windup);
-        this.paint(ctx, zoom, hit > 0 ? 'flash' : hovering ? 'hover' : 'none', hit * 0.92, ent.sx, ent.sy, (g, px, py) =>
+        // Drawn back toward where it stood while a spell that moved it carries it over (`cast.pull`).
+        const [csx, csy] = this.spellShift({ kind: 'creature', id: cr.id });
+        this.paint(ctx, zoom, hit > 0 ? 'flash' : hovering ? 'hover' : 'none', hit * 0.92, ent.sx + csx, ent.sy + csy, (g, px, py) =>
           drawCreature(g, px, py, zoom, {
             species: def.id,
             facing: turned,
@@ -4667,11 +4716,13 @@ export class Renderer {
         this.creatureHits.push({ x: ent.x, y: ent.y, left: ent.sx - wide * zoom, top: ent.sy - tall * zoom, w: 2 * wide * zoom, h: (tall + 2) * zoom, creature: cr.id });
         continue;
       }
-      // The layers of a hull in front of somebody on her deck; see `takeAboard`. At my own helm, I am seen through them.
+      // The layers of a hull in front of somebody on her deck; see `takeAboard`. Whoever is at her helm is seen through them:
+      // anybody else's helmsman was hidden whole behind her sail at one heading in eight, as mine was.
       if (ent.kind === 'hull' && ent.piece && ent.view) {
         const piece = ent.piece;
+        const helm = this.helming === piece ? 'player' : piece.helm ? this.game.roster.list().find((p) => p.uid === piece.helm) : undefined;
         drawFurniture(ctx, ent.sx, ent.sy + (ent.drawDy ?? 0), zoom, piece.kind, !!piece.lit, dyeOf(piece) ?? undefined, this.pieceTrim(piece), ent.view, piece.material, crewOf(piece.kind) ?? undefined, ent.layer, true,
-          this.helming === piece ? figurePicture('player') : null, this.manned(piece));
+          helm ? figurePicture(helm === 'player' ? helm : 'o' + helm.id) : null, this.manned(piece));
         continue;
       }
       if (ent.kind === 'furniture' && ent.piece) {
