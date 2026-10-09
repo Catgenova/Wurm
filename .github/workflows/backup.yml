@@ -71,11 +71,14 @@ jobs:
             exit 1
           fi
           supabase link --project-ref "$PROJECT_REF"
-          mkdir -p "$RUNNER_TEMP/dump"
-          cd "$RUNNER_TEMP/dump"
-          supabase db dump --linked --role-only -f roles.sql
-          supabase db dump --linked -f schema.sql
-          supabase db dump --linked --data-only --use-copy -f data.sql
+          # The link is written under supabase/ in the checkout, and the CLI
+          # only finds it from there: the dumps run here and write elsewhere.
+          d="$RUNNER_TEMP/dump"
+          mkdir -p "$d"
+          supabase db dump --linked --role-only -f "$d/roles.sql"
+          supabase db dump --linked -f "$d/schema.sql"
+          supabase db dump --linked --data-only --use-copy -f "$d/data.sql"
+          cd "$d"
           ls -l
           # The data is the island: a dump without it is no backup.
           if [ ! -s data.sql ]; then
