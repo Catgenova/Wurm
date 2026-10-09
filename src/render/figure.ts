@@ -7282,7 +7282,11 @@ const MODELS: Record<string, (b: Build, fit: number) => GearModel> = {
         // each half goes with its leg -- split to the waist, at a run the slits stood open to the belt -- with a
         // band of bright rings round the hem: of its own metal, as brass it was a band of the gold that says fantastic, on every hauberk.
         { bone: 'pelvis', over: ['skirt', 'thigh', 'pelvis'], bias: 0.16, skirt: 'mail', mesh: worn(splitSkirt(skirt, -1.4, SLIT, 4, 'mail'), 'mail') },
-        { bone: 'pelvis', over: ['skirt', 'thigh', 'pelvis'], bias: 0.18, skirt: 'mail', mesh: join(...SLIT.map(([a, c]) => facetArcs(profileHem(skirt, 0.05, 0.26), 8, a, c, 'metalLit'))) },
+        // The band in a front and a back half, the back one under the skirt and the legs while it is turned well away (`front`):
+        // as one band drawn over the skirt from every side, at a run the far side of the hem, flown up behind and turned edge on,
+        // showed through the front half as thin pale or inked lines from the hip toward the hem.
+        { bone: 'pelvis', over: ['skirt', 'thigh', 'pelvis'], bias: 0.18, skirt: 'mail', mesh: join(...[[-30, 89], [91, 210]].map(([a, c]) => facetArcs(profileHem(skirt, 0.05, 0.26), 8, a, c, 'metalLit'))) },
+        { bone: 'pelvis', over: ['skirt', 'thigh', 'pelvis'], bias: 0.18, skirt: 'mail', front: [0, -1, 0], mesh: join(...[[210, 269], [-89, -30]].map(([a, c]) => facetArcs(profileHem(skirt, 0.05, 0.26), 8, a, c, 'metalLit'))) },
         { bone: 'pelvis', over: ['belt', 'skirt', 'abdomen', 'pelvis'], bias: 0.02, convex: true, mesh: beltRing(b, g + 0.02, 'belt') },
         // And short sleeves of it to halfway down the upper arm, but for over a sleeve of mail, which is the hauberk's own sleeve
         // carried on down the arm: worn over it, its open foot stood off the sleeve under it and was a row of teeth along the top
@@ -7825,6 +7829,11 @@ const SEAT = -1.15;
  * knees. No stride or hop raises a thigh so far.
  */
 const THIGH_UNDER = 70;
+/**
+ * Whether a skirt, by its corners in the hips' frame, reaches further from the hips' joints than a knee is: then the knee is up
+ * inside it, and the shin goes under it as the thigh does. A hauberk's or a tunic's does; a jerkin's, faulds or a scale skirt do not.
+ */
+const pastKnee = (v: V3[], fr: Frame): boolean => v.some((p) => Math.hypot(p[1], p[2] + 0.1) > THIGH * fr.tall);
 /** How much of a thigh's swing the cloth in front of it goes with at a run, at most: all of it, and the front of a coat flew up level. */
 const SKIRT_RUN = 0.6;
 /** How much of the hips' roll from side to side the hem is let hang back from: it hangs, and does not tip with them like a plate. */
@@ -7849,6 +7858,15 @@ const MAIL_HANG = 0.16;
 const MAIL_TURN = 0.4;
 const MAIL_LAG = 0.4;
 const MAIL_FOLD = 0.14;
+/**
+ * Where round the hem a piece's folds fall (`bentWith`'s `phase`), from what the piece is, of what and in what dye: from its slot,
+ * every hauberk hung in the same folds as every other.
+ */
+function foldsOf(piece: GearPiece): number {
+  let h = 2166136261;
+  for (const c of `${piece.id}:${piece.material ?? ''}:${piece.dye ?? ''}`) h = Math.imul(h ^ c.charCodeAt(0), 16777619);
+  return ((h >>> 0) / 4294967296) * 2 * Math.PI;
+}
 function bentWith(v: V3[], r: Rig, fr: Frame, mail = false, phase = 0): V3[] {
   // How far apart the legs are, fore and aft: the hem swings out wider the longer the stride, as a skirt does at a run.
   const stride = Math.min(1, 1.2 * Math.abs(Math.sin(r.leg[0][0] * DEG) - Math.sin(r.leg[1][0] * DEG)));
@@ -9445,6 +9463,8 @@ function dress(parts: Part[], named: Map<string, Part[]>, kit: Kit, r: Rig, b: B
   // a brown disc at the ankle.
   const feet = worn.find(([si]) => DRESSED[si] === 'feet');
   const shaft = feet && gearPalette(pal, feet[1], STEP.feet ?? 0)[mostOf(feet[2].bits[0].mesh)];
+  // Skirts long enough to reach past the knee (`pastKnee`), for the shins to go under.
+  const long: Part[] = [];
   worn.forEach(([si, piece, model], order) => {
     const P = shaftIn(gearPalette(pal, piece, STEP[DRESSED[si]] ?? 0), DRESSED[si] === 'legs' ? shaft : undefined);
     const rare = piece.rare || undefined;
@@ -9458,11 +9478,12 @@ function dress(parts: Part[], named: Map<string, Part[]>, kit: Kit, r: Rig, b: B
         // A bit carried whole is on a frame of its own, the bone's own frame being what is bent.
         const xf = bit.bend && bit.bone === 'hip' ? joint(bone, [0, 0, -THIGH * fr.tall])
           : bit.at || bit.turn || bit.whole ? joint(bone, bit.at ?? [0, 0, 0], ...(bit.turn ?? [0, 0, 0])) : bone;
-        const v = bit.skirt ? bentWith(m.v, r, fr, bit.skirt === 'mail', 2.4 * (si + 1)) : bit.bend ? kneeBent(m.v, kneeBend(b, k), bit.bone === 'knee', bit.point)
+        const v = bit.skirt ? bentWith(m.v, r, fr, bit.skirt === 'mail', foldsOf(piece)) : bit.bend ? kneeBent(m.v, kneeBend(b, k), bit.bone === 'knee', bit.point)
           : bit.whole && bit.bone === 'arm' ? heldOnShoulder(m.v, r, k, capTop, capFoot) : undefined;
         const part: Part = { mesh: m, xf, bias: bit.bias ?? 0.02, pal: P, rare, seed: si + 1, convex: bit.convex, front: bit.front, v, hide: bit.hide };
         // What is worn on a thigh goes under the tunic's skirt as the thigh does, where the skirt is still to be seen.
         if (bit.bone === 'hip' && !bit.skirt && r.leg[k][0] < THIGH_UNDER) part.under = (named.get('skirt') ?? []).filter((p) => !hidden.has(p));
+        if (bit.skirt && pastKnee(m.v, fr)) long.push(part);
         out.push(part);
         put.push({ part, on: regionsOf(bit.over[0], k)[0], over: bit.over.flatMap((c) => regionsOf(c, k)), layer: bit.layer ?? model.layer, order, seq });
       }
@@ -9506,6 +9527,35 @@ function dress(parts: Part[], named: Map<string, Part[]>, kit: Kit, r: Rig, b: B
       }
     }
     if (leads.length) w.part.after = leads;
+  }
+  /*
+   * And the shin under a skirt that reaches past its knee, the body's own and all that is on it, as the thigh is: the knee is up
+   * inside the skirt, and a knee raised toward the viewer had the shin's middle nearer than the skirt's, so the shin from the knee
+   * to the boot top was drawn across the front half of a hauberk. Under it at a run too, where the knee comes up level with the
+   * hips, past `THIGH_UNDER`, and the skirt is carried up with it only `SKIRT_RUN` as far: the knee goes up through the front of it
+   * rather than lifting it, and drawn over it the shin stood out on the mail from the middle of the skirt down. Not sat or knelt,
+   * thigh as high and still, when the skirt lies along the thigh to the knee and the shin hangs down in front of the rest of it.
+   * The boot with it, the body's own and what is worn on it, or a legging put down under the skirt went under the boot round it.
+   * And each kept on its own side of what it goes on over or under (`after`, `front`): all put down to the same place under the
+   * skirt they went down in the order they were made, and the pale stocking a shoe puts on under the trousers went over them.
+   * Not the skirt drawn after the shins instead, which carried it and the belt round it over an arm swung across in front.
+   */
+  const running = (r.hover?.w ?? 0) * (r.hover?.g ?? 0) > 0;
+  const T = viewOf(facing).T;
+  const listOf = (x?: Part | Part[]): Part[] => (x ? (Array.isArray(x) ? x : [x]) : []);
+  for (let k = 0; long.length && k < 2; k++) {
+    if (!running && r.leg[k][0] >= THIGH_UNDER) continue;
+    const on = [`shin${k}`, `boot${k}`];
+    const shins = [...on.flatMap((key) => named.get(key) ?? []).filter((p) => !hidden.has(p)), ...put.filter((o) => on.includes(o.on)).map((o) => o.part)];
+    for (const p of shins) p.under = [...listOf(p.under), ...long];
+    for (const q of shins) {
+      const fw = q.front && mv(q.xf.m, q.front), away = !!fw && fw[0] * T[0] + fw[1] * T[1] + fw[2] * T[2] <= -1 / 3;
+      for (const p of listOf(q.after)) {
+        if (!shins.includes(p)) continue;
+        if (away) q.under = [...listOf(q.under), p];
+        else p.under = [...listOf(p.under), q];
+      }
+    }
   }
   wield(out, named, r, b, gear, pal, put, fr, fit, facing);
   return out;
