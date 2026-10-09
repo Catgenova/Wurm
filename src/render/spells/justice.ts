@@ -21,7 +21,7 @@
 import type { CastPose, SpellVisual } from './index';
 import { spellInfo } from './info';
 import {
-  arcAt, bump, clamp, dry, easeBack, easeIn, easeOut, flashOf, hashOf, lerp, mid3, seg, smooth, TAU,
+  arcAt, bump, clamp, dry, easeBack, easeIn, easeOut, flashOf, hashOf, lateFade, lerp, mid3, seg, smooth, TAU,
   type Body, type FxScene, type GroundLayer, type P3, type ShapePiece, type SpellPalette,
 } from './kit';
 import { armToward, type HandShape } from '../figure';
@@ -166,7 +166,7 @@ const swordSizes = (U: number) => ({ L: U * 0.72, bw: U * 0.05, gw: U * 0.17, gh
  * crosswise and tied off, its ends hanging: a sword that is not to be drawn.
  */
 function paintSword(g: CanvasRenderingContext2D, k: FxScene, x: number, y: number, U: number, sheath = false): void {
-  const { L, bw, gw, gh, G, pr } = swordSizes(U);
+  const { L, bw, gw: gw0, gh, G, pr } = swordSizes(U);
   const { core, main, deep, ink } = k.pal;
   const iw = inkOf(k) * 1.1;
   g.lineJoin = 'miter';
@@ -181,24 +181,19 @@ function paintSword(g: CanvasRenderingContext2D, k: FxScene, x: number, y: numbe
   g.stroke();
   poly(g, [[x, y], [x - bw, shoulder], [x - bw, y - L], [x + bw, y - L], [x + bw, shoulder]], null, ink, iw);
   const gy0 = y - L;
+  // Sheathed, the guard broader, so the cross of a sword over its scabbard is what reads first at play size.
+  const gw = sheath ? gw0 * 1.3 : gw0;
   if (sheath) {
-    // The scabbard over all but a hand of the blade: deep, its lit edge a line of main, a steel chape at its foot and a
-    // band at its throat.
-    const sw = bw * 1.45, top = gy0 + L * 0.1, foot = y + bw * 0.6;
+    // The scabbard over all but a hand of the blade, hardly broader than the blade in it: deep, its lit edge a line of
+    // main, a steel chape at its foot and a band at its throat.
+    const sw = bw * 1.15, top = gy0 + L * 0.1, foot = y + bw * 0.6;
     poly(g, [[x - sw, top], [x + sw, top], [x + sw, foot - sw * 1.6], [x, foot], [x - sw, foot - sw * 1.6]], deep, ink, iw);
     poly(g, [[x - sw, top], [x - sw * 0.35, top], [x - sw * 0.35, foot - sw * 1.2], [x - sw, foot - sw * 1.6]], SHEATH_LIT, null);
     poly(g, [[x - sw, foot - sw * 3.4], [x + sw, foot - sw * 3.4], [x + sw, foot - sw * 1.6], [x, foot], [x - sw, foot - sw * 1.6]], STEEL, ink, iw);
     poly(g, [[x - sw * 1.1, top], [x + sw * 1.1, top], [x + sw * 1.1, top + sw * 1.1], [x - sw * 1.1, top + sw * 1.1]], main, ink, iw);
-  }
-  poly(g, [[x - gw, gy0], [x - gw * 0.8, gy0 - gh], [x + gw * 0.8, gy0 - gh], [x + gw, gy0], [x + gw * 0.8, gy0 + gh], [x - gw * 0.8, gy0 + gh]], main, ink, iw);
-  poly(g, [[x - gw * 0.8, gy0 - gh], [x + gw * 0.8, gy0 - gh], [x + gw, gy0], [x - gw, gy0]], core, null);
-  poly(g, [[x - bw * 0.55, gy0 - gh], [x + bw * 0.55, gy0 - gh], [x + bw * 0.55, gy0 - gh - G], [x - bw * 0.55, gy0 - gh - G]], deep, ink, iw);
-  const py = gy0 - gh - G - pr;
-  poly(g, [[x, py - pr], [x - pr * 0.75, py], [x, py + pr], [x + pr * 0.75, py]], core, ink, iw);
-  if (sheath) {
-    // The peace-bond: a cord from the grip over the guard to the scabbard's throat, wound crosswise twice, and its two ends
-    // hanging from the guard with a tassel each.
-    const top = gy0 + L * 0.1, cw = Math.max(1.4, bw * 0.55);
+    // The peace-bond: a cord from the grip to the scabbard's throat, wound crosswise twice, and its two ends hanging from
+    // the guard with a tassel each -- under the guard and the grip, so the hilt reads over it.
+    const cw = Math.max(1.4, bw * 0.55);
     const wraps: Pt[][] = [
       [[x - bw * 1.2, gy0 - gh - G * 0.7], [x + bw * 1.6, top + bw * 1.2]],
       [[x + bw * 1.2, gy0 - gh - G * 0.7], [x - bw * 1.6, top + bw * 1.2]],
@@ -225,6 +220,11 @@ function paintSword(g: CanvasRenderingContext2D, k: FxScene, x: number, y: numbe
       poly(g, [[tx, ty - r * 0.4], [tx - r * 0.7, ty + r * 0.9], [tx + r * 0.7, ty + r * 0.9]], CORD, ink, iw * 0.8);
     }
   }
+  poly(g, [[x - gw, gy0], [x - gw * 0.8, gy0 - gh], [x + gw * 0.8, gy0 - gh], [x + gw, gy0], [x + gw * 0.8, gy0 + gh], [x - gw * 0.8, gy0 + gh]], main, ink, iw);
+  poly(g, [[x - gw * 0.8, gy0 - gh], [x + gw * 0.8, gy0 - gh], [x + gw, gy0], [x - gw, gy0]], core, null);
+  poly(g, [[x - bw * 0.55, gy0 - gh], [x + bw * 0.55, gy0 - gh], [x + bw * 0.55, gy0 - gh - G], [x - bw * 0.55, gy0 - gh - G]], deep, ink, iw);
+  const py = gy0 - gh - G - pr;
+  poly(g, [[x, py - pr], [x - pr * 0.75, py], [x, py + pr], [x + pr * 0.75, py]], core, ink, iw);
 }
 /** Truce's scabbard: its lit edge. */
 const SHEATH_LIT = '#6a78c4';
@@ -250,11 +250,16 @@ function sword(k: FxScene, tip: P3, len: number, o: { alpha?: number; glow?: num
   const gy = k.sy(ground);
   const b = o.through;
   // Thin where it covers the priest: only when it is drawn over them, and only if the two overlap at all.
-  let box: readonly number[] | null = null;
+  let box: readonly number[] | null = null, litBox: readonly number[] | null = null;
   const c = o.clear;
-  if (c && sortsOver(k, b ?? ground, c)) {
+  if (c) {
     const bx = screenBox(k, c);
-    if (bx[0] < x + gw && bx[2] > x - gw && bx[1] < Math.min(gy, y) && bx[3] > top) box = bx;
+    if (bx[0] < x + gw && bx[2] > x - gw && bx[1] < Math.min(gy, y) && bx[3] > top) {
+      // Its light goes over everything after dark, so it is kept off the priest from either side; the blade itself only
+      // from the near side.
+      litBox = bx;
+      if (sortsOver(k, b ?? ground, c)) box = bx;
+    }
   }
   const clipped = (lo: number, hi: number) => (g: CanvasRenderingContext2D): void => {
     const h = Math.min(hi, showTo, gy + 0.5);
@@ -278,6 +283,15 @@ function sword(k: FxScene, tip: P3, len: number, o: { alpha?: number; glow?: num
   if (lit > 0.02) {
     const light = k.pal.light, w = U * 0.09, from = Math.min(y, gy), to = y - L;
     k.glowDraw((g) => {
+      // Not over the priest: where the blade is thinned over them its light is left off altogether.
+      if (litBox) {
+        const [x0, y0, x1, y1] = litBox;
+        g.save();
+        g.beginPath();
+        g.rect(-1e5, -1e5, 2e5, 2e5);
+        g.rect(x0, y0, x1 - x0, y1 - y0);
+        g.clip('evenodd');
+      }
       g.globalAlpha = clamp(lit);
       g.strokeStyle = light;
       g.lineWidth = w;
@@ -287,6 +301,7 @@ function sword(k: FxScene, tip: P3, len: number, o: { alpha?: number; glow?: num
       g.lineTo(x, to);
       g.stroke();
       g.lineCap = 'butt';
+      if (litBox) g.restore();
     });
   }
 }
@@ -524,7 +539,7 @@ function chain(k: FxScene, a: P3, b: P3, o: { alpha?: number; sag?: number; link
  * a surveyor does, square to the tiles. Its edges and studs keep a rim of light
  * after dark (`glow`, a share of the night rim).
  */
-function square(k: FxScene, c: { x: number; y: number }, half: number, o: { band?: number; alpha?: number; glow?: number; studs?: boolean; draw?: number } = {}): void {
+function square(k: FxScene, c: { x: number; y: number }, half: number, o: { band?: number; alpha?: number; glow?: number; studs?: boolean; draw?: number; dry?: number } = {}): void {
   const a = o.alpha ?? 1;
   if (half <= 0.02 || a <= 0.01) return;
   const band = Math.min(half * 0.6, o.band ?? 0.08);
@@ -550,9 +565,12 @@ function square(k: FxScene, c: { x: number; y: number }, half: number, o: { band
       studs.push([x - r, y, x, y - r, x + r, y, x, y + r]);
     }
   }
-  const { core, main, deep, ink } = k.pal;
+  // Going, it dries toward its own deep tone (`dry`) rather than thinning into the grass.
+  const d = o.dry ?? 0;
+  const core = d > 0 ? dry(k.pal.core, d, k.pal.main) : k.pal.core, main = d > 0 ? dry(k.pal.main, d, k.pal.deep) : k.pal.main;
+  const deep = d > 0 ? dry(k.pal.deep, d, k.pal.ink) : k.pal.deep, ink = k.pal.ink;
   const iw = inkOf(k);
-  const gl = (o.glow ?? 1) * nightRim(k);
+  const gl = (o.glow ?? 1) * nightRim(k) * (1 - 0.7 * d);
   k.groundShape(c.x, c.y, half + 0.3, [
     { kind: 'fill', colour: main, alpha: clamp(a), paths: near, lift: 0.15 },
     { kind: 'fill', colour: deep, alpha: clamp(a), paths: far, lift: 0.15 },
@@ -572,7 +590,7 @@ const SQUARE_CORNERS = [[-1, -1], [1, -1], [1, 1], [-1, 1]] as const;
  * the count reads by shape as well as tone; the ring and the lit ticks keep a
  * rim of light after dark. `grow` draws the ring and its ticks on.
  */
-function tally(k: FxScene, c: { x: number; y: number }, r: number, n: number, lit: number, o: { alpha?: number; turn?: number; grow?: number; tick?: number; ring?: boolean; band?: number } = {}): void {
+function tally(k: FxScene, c: { x: number; y: number }, r: number, n: number, lit: number, o: { alpha?: number; turn?: number; grow?: number; tick?: number; ring?: boolean; band?: number; dry?: number } = {}): void {
   const a = o.alpha ?? 1;
   if (a <= 0.01 || r <= 0.05) return;
   const grow = clamp(o.grow ?? 1);
@@ -597,7 +615,10 @@ function tally(k: FxScene, c: { x: number; y: number }, r: number, n: number, li
     }
   }
   const layers: GroundLayer[] = [];
-  const { core, main, deep, ink } = k.pal;
+  // Going, it dries toward its deep tones (`dry`) rather than thinning into the grass.
+  const d = o.dry ?? 0, ink = k.pal.ink;
+  const core = d > 0 ? dry(k.pal.core, d, k.pal.main) : k.pal.core, main = d > 0 ? dry(k.pal.main, d, k.pal.deep) : k.pal.main;
+  const deep = d > 0 ? dry(k.pal.deep, d, k.pal.ink) : k.pal.deep;
   const w = Math.max(1, 1.4 * k.zoom), under = Math.max(1, 0.8 * k.zoom);
   const rim = nightRim(k, 0.12);
   if (o.ring !== false && grow > 0) {
@@ -620,15 +641,34 @@ function tally(k: FxScene, c: { x: number; y: number }, r: number, n: number, li
     { kind: 'stroke', colour: ink, alpha: clamp(a * 0.35), width: w * 0.7 + under, paths: off, cap: 'butt', lift: 0.2 },
     { kind: 'stroke', colour: deep, alpha: clamp(a * 0.35), width: w * 0.7, paths: off, cap: 'butt', lift: 0.2 },
     { kind: 'stroke', colour: ink, alpha: fading, width: w * 1.6 + under, paths: going, cap: 'butt', lift: 0.2 },
-    { kind: 'stroke', colour: core, alpha: fading, width: w * 1.6, paths: going, cap: 'butt', lift: 0.2, glow: rim * goingOn },
+    { kind: 'stroke', colour: core, alpha: fading, width: w * 1.6, paths: going, cap: 'butt', lift: 0.2 },
     { kind: 'stroke', colour: ink, alpha: clamp(a), width: w * 1.6 + under, paths: on, cap: 'butt', lift: 0.2 },
-    { kind: 'stroke', colour: core, alpha: clamp(a), width: w * 1.6, paths: on, cap: 'butt', lift: 0.2, glow: rim * 0.7 },
+    { kind: 'stroke', colour: core, alpha: clamp(a), width: w * 1.6, paths: on, cap: 'butt', lift: 0.2 },
   );
   k.groundShape(c.x, c.y, r + len + 0.3, layers);
+  // After dark the lit ticks keep their light as ticks: square-ended strokes a little wider than they are drawn, laid over
+  // the night -- a ground layer's own glow is three times as wide with round ends, and a short tick became a bead.
+  const shine = k.night * (k.fast ? 0.8 : 1) * a;
+  if (shine > 0.02 && (on.length || going.length)) {
+    const z = k.ground(c.x, c.y) + 0.2, light = k.pal.light;
+    const lines = [...on, ...going].map((t) => [k.sx({ x: t[0], y: t[1], z }), k.sy({ x: t[0], y: t[1], z }), k.sx({ x: t[2], y: t[3], z }), k.sy({ x: t[2], y: t[3], z })]);
+    k.glowDraw((g) => {
+      g.globalAlpha = clamp(shine * 0.55);
+      g.strokeStyle = light;
+      g.lineWidth = w * 2.2;
+      g.lineCap = 'butt';
+      g.beginPath();
+      for (const [x0, y0, x1, y1] of lines) {
+        g.moveTo(x0, y0);
+        g.lineTo(x1, y1);
+      }
+      g.stroke();
+    });
+  }
 }
 
 /** A ring hung level round a body at `share` of its height, `r` height units out: its back half behind the body and its front before it. */
-function hoop(k: FxScene, b: Body, share: number, r: number, o: { alpha?: number; width?: number; colour?: string } = {}): Pt[] {
+function hoop(k: FxScene, b: Body, share: number, r: number, o: { alpha?: number; width?: number; colour?: string; front?: number } = {}): Pt[] {
   const a = o.alpha ?? 1;
   const n = k.fast ? 12 : 20;
   const z = b.z + b.tall * share;
@@ -643,7 +683,7 @@ function hoop(k: FxScene, b: Body, share: number, r: number, o: { alpha?: number
   const { core, ink } = k.pal;
   const colour = o.colour ?? core;
   const half = (front: boolean) => (g: CanvasRenderingContext2D): void => {
-    g.globalAlpha = clamp(a * (front ? 1 : 0.6));
+    g.globalAlpha = clamp(a * (front ? o.front ?? 1 : 0.6));
     g.lineCap = 'round';
     g.beginPath();
     for (let i = 0; i < n; i++) {
@@ -708,7 +748,7 @@ function postPainter(k: FxScene, posts: ReadonlyArray<{ foot: { x: number; y: nu
  * A goods-box, a thing carried: a little block of light, its lit top, its left and its shaded right face, `s` height
  * units; `long` stretches it along itself (a tool, a blade in its wrapping) and `tall` raises or flattens it.
  */
-function box(k: FxScene, p: P3, s: number, o: { alpha?: number; spin?: number; dx?: number; long?: number; tall?: number } = {}): void {
+function box(k: FxScene, p: P3, s: number, o: { alpha?: number; spin?: number; dx?: number; long?: number; tall?: number; bias?: number } = {}): void {
   const a = o.alpha ?? 1;
   if (a <= 0.01) return;
   const x = k.sx(p) + (o.dx ?? 0), y = k.sy(p), S = k.hpx(s) * 0.5;
@@ -734,7 +774,7 @@ function box(k: FxScene, p: P3, s: number, o: { alpha?: number; spin?: number; d
       poly(g, [top[f], top[side], sd, fd], top[side][0] < top[f][0] ? main : deep, ink, iw);
     }
     poly(g, top, core, ink, iw);
-  }, 2);
+  }, o.bias ?? 2);
 }
 
 /** A chevron, point up (`dir` the screen way it points otherwise), `s` height units across: a rank gained, or the way something must go. */
@@ -747,9 +787,10 @@ function chevron(k: FxScene, p: P3, s: number, o: { alpha?: number; dir?: Pt; bi
   const dx = dx0 / l, dy = dy0 / l, nx = -dy, ny = dx;
   const th = S * 0.5;
   const P = (along: number, across: number): Pt => [x + dx * along + nx * across, y + dy * along + ny * across];
-  // `solid`: a filled arrowhead with a notch in its back -- "this way" -- its lit half and its shaded half.
+  // `solid`: "this way" in Justice's own shapes -- a lozenge drawn out two and a half to one along the way, its lit
+  // half and its shaded half, and an open chevron following behind it, pointing the same way: a needle, not a pointer.
   const shape: Pt[] = o.solid
-    ? [P(S * 0.75, 0), P(-S * 0.55, S * 0.82), P(-S * 0.22, 0), P(-S * 0.55, -S * 0.82)]
+    ? [P(S * 0.85, 0), P(0, S * 0.34), P(-S * 0.85, 0), P(0, -S * 0.34)]
     : [P(S * 0.6, 0), P(-S * 0.4, S), P(-S * 0.4 - th, S * 0.72), P(S * 0.6 - th * 1.25, 0), P(-S * 0.4 - th, -S * 0.72), P(-S * 0.4, -S)];
   const { core, main, deep, ink } = k.pal;
   const iw = inkOf(k);
@@ -757,11 +798,32 @@ function chevron(k: FxScene, p: P3, s: number, o: { alpha?: number; dir?: Pt; bi
     g.globalAlpha = clamp(a);
     g.lineJoin = 'miter';
     if (o.solid) {
-      // Lit on whichever half is upper on the screen.
+      // Two chevrons behind, their arms swept well back: the needle's way said twice over.
+      g.lineCap = 'round';
+      for (const [w, colour] of [[Math.max(2.2, S * 0.2) + iw * 2, ink], [Math.max(1.1, S * 0.2), main]] as const) {
+        g.lineWidth = w;
+        g.strokeStyle = colour;
+        g.beginPath();
+        for (const at of [1.05, 1.45]) {
+          const tail: Pt[] = [P(-S * (at + 0.42), S * 0.3), P(-S * at, 0), P(-S * (at + 0.42), -S * 0.3)];
+          g.moveTo(tail[0][0], tail[0][1]);
+          g.lineTo(tail[1][0], tail[1][1]);
+          g.lineTo(tail[2][0], tail[2][1]);
+        }
+        g.stroke();
+      }
+      g.lineCap = 'butt';
+      // The needle lit on whichever half is upper on the screen, a slit of light down its length.
       const upper = shape[1][1] < shape[3][1] ? 1 : 3;
-      poly(g, [shape[0], shape[1], shape[2]], upper === 1 ? core : deep, null);
-      poly(g, [shape[0], shape[3], shape[2]], upper === 3 ? core : deep, null);
+      poly(g, [shape[0], shape[1], shape[2]], upper === 1 ? core : main, null);
+      poly(g, [shape[0], shape[3], shape[2]], upper === 3 ? core : main, null);
       poly(g, shape, null, ink, iw * 1.2);
+      g.strokeStyle = deep;
+      g.lineWidth = Math.max(0.8, S * 0.06);
+      g.beginPath();
+      g.moveTo(shape[0][0] * 0.7 + shape[2][0] * 0.3, shape[0][1] * 0.7 + shape[2][1] * 0.3);
+      g.lineTo(shape[2][0] * 0.8 + shape[0][0] * 0.2, shape[2][1] * 0.8 + shape[0][1] * 0.2);
+      g.stroke();
     } else {
       poly(g, shape, main, ink, iw);
       poly(g, [shape[0], shape[5], shape[4], shape[3]], core, null);
@@ -797,7 +859,8 @@ function cracks(k: FxScene, c: { x: number; y: number }, r: number, n: number, o
 function squareOut(k: FxScene, c: { x: number; y: number }, u: number, half: number, alpha = 1): void {
   if (u <= 0 || u >= 1) return;
   const h = 0.06 + half * easeOut(u);
-  square(k, c, h, { band: Math.min(h * 0.3, 0.09 * (1 - 0.6 * u)), alpha: alpha * (1 - u * u), glow: 0.8, studs: false });
+  // Dried toward its deep tone as it goes out and let go by alpha only over its last quarter, so it never thins to khaki.
+  square(k, c, h, { band: Math.min(h * 0.3, 0.09 * (1 - 0.6 * u)), alpha: alpha * lateFade(1 - u, 0.25), glow: 0.8, studs: false, dry: u });
 }
 
 /** Once, the first frame `when` is true for this cast: for a burst wanted on a moment inside an impact or a linger. */
@@ -807,9 +870,58 @@ function once(k: FxScene, key: string, when: boolean): boolean {
   return true;
 }
 
+/**
+ * Justice's motes: the palette's pale blues laid over the picture in their own colour (`over`), so a glint fading over
+ * grass stays silver-blue rather than going mint.
+ */
+const MOTE = (k: FxScene) => ({ kind: 'mote' as const, colour: [k.pal.core, k.pal.accent, k.pal.main], over: true });
+
 /** Sparks knocked flat out along the ground, the way a blow from above throws them. */
 function flatSparks(k: FxScene, at: P3, n: number, speed = 1.6): void {
   k.burst(at, n, { kind: 'spark', size: 2, colour: [k.pal.core, k.pal.main, STEEL], life: [0.2, 0.45], speed: [speed * 0.5, speed], up: [2, 14], gravity: 50, drag: 0.05 });
+}
+
+/**
+ * A cuff round the caster's wrist (`side`), square to the forearm and a little up it: a band of steel standing round the
+ * arm as a cuff does, not a ring laid level, so two wrists held together read as two cuffs and not one dish.
+ */
+function cuff(k: FxScene, side: 0 | 1, alpha: number): void {
+  if (alpha <= 0.01) return;
+  const n = k.fast ? 8 : 12, r = 0.85;
+  const pts: Pt[] = [];
+  for (let i = 0; i < n; i++) {
+    const a = (i / n) * TAU;
+    const p = k.joint(k.caster, `wrist${side}`, [Math.cos(a) * r, Math.sin(a) * r, 2.2]);
+    pts.push([k.sx(p), k.sy(p)]);
+  }
+  const at = k.joint(k.caster, `wrist${side}`, [0, 0, 2.2]);
+  const { core, ink } = k.pal;
+  const w = Math.max(1.2, 1.15 * k.zoom);
+  k.worldDraw(at, (g) => {
+    g.globalAlpha = clamp(alpha);
+    g.lineJoin = 'round';
+    g.beginPath();
+    g.moveTo(pts[0][0], pts[0][1]);
+    for (let i = 1; i < n; i++) g.lineTo(pts[i][0], pts[i][1]);
+    g.closePath();
+    g.strokeStyle = ink;
+    g.lineWidth = w + Math.max(1.2, k.zoom);
+    g.stroke();
+    g.strokeStyle = STEEL;
+    g.lineWidth = w;
+    g.stroke();
+    // Its lit upper edge.
+    let top = 0;
+    for (let i = 1; i < n; i++) if (pts[i][1] < pts[top][1]) top = i;
+    const p0 = pts[(top + n - 1) % n], p1 = pts[top], p2 = pts[(top + 1) % n];
+    g.strokeStyle = core;
+    g.lineWidth = Math.max(0.7, w * 0.4);
+    g.beginPath();
+    g.moveTo(p0[0], p0[1]);
+    g.lineTo(p1[0], p1[1]);
+    g.lineTo(p2[0], p2[1]);
+    g.stroke();
+  }, 3);
 }
 
 /* ---- the casts ----------------------------------------------------------------------------------- */
@@ -833,13 +945,15 @@ const flat = (w: number): HandShape => ({ flat: w });
 
 /** Mark of Judgment: hands joined and the head bowed; then the right hand lifted and pressed out and down at the creature, as a seal is pressed into wax. */
 const MARK_T = { secs: 1.05, release: 0.52 };
+/** The hand cocked for the press: the upper arm out to the side at the shoulder's height, the forearm up, the palm out past the shoulder and clear of the face. */
+const MARK_COCK = armToward(1, [0.9, 0.3, -0.05], [0.3, 0.7, 0.8]);
 const markPose: CastPose = (r, t) => {
   r.arm[0] = euler(t, [[0, HANG], [0.18, JOINED], [0.44, [38, -14, 34]], [1, [36, -12, 32]]]);
   r.elbow[0] = one(t, [[0, 15], [0.18, JOINED_BEND], [1, 110]]);
   // Lifted to the shoulder and cocked; then driven forward and down from the trunk and the front knee, the hand finishing
   // below the shoulder and the wrist bent down into what it presses.
-  r.arm[1] = euler(t, [[0, HANG], [0.18, JOINED], [0.32, JOINED], [0.44, [98, 22, -6]], [0.52, [70, 4, 2]], [0.72, [68, 4, 2]], [1, [30, 10, 0]]]);
-  r.elbow[1] = one(t, [[0, 15], [0.18, JOINED_BEND], [0.32, JOINED_BEND], [0.44, 112], [0.52, 20], [0.72, 22], [1, 20]]);
+  r.arm[1] = euler(t, [[0, HANG], [0.18, JOINED], [0.32, JOINED], [0.44, MARK_COCK], [0.52, [70, 4, 2]], [0.72, [68, 4, 2]], [1, [30, 10, 0]]]);
+  r.elbow[1] = one(t, [[0, 15], [0.18, JOINED_BEND], [0.32, JOINED_BEND], [0.44, 80], [0.52, 20], [0.72, 22], [1, 20]]);
   r.hand[1] = euler(t, [[0, [0, 0, 0]], [0.44, [30, 0, 0]], [0.52, [-50, 0, 0]], [0.72, [-44, 0, 0]], [1, [0, 0, 0]]]);
   r.open = [t > 0.12, t > 0.12];
   r.shape = both(flat(one(t, [[0.06, 0], [0.18, 1], [0.8, 1], [1, 0]])));
@@ -869,7 +983,7 @@ const retributionPose: CastPose = (r, t) => {
   r.spine = euler(t, [[0, [0, 0, 0]], [0.42, [-6, 0, 0]], [0.5, [4, 0, 0]], [1, [0, 0, 0]]]);
 };
 
-/** Assay: down on the right knee, the right palm laid flat on the earth ahead and the head bowed over it, listening; pressed once; then up again. */
+/** Assay: down on the right knee, the trunk upright and leant out to the right, the right palm laid low on the earth at that side and the head up and turned, listening; pressed once; then up again. */
 const ASSAY_T = { secs: 2.2, release: 0.58 };
 const assayPose: CastPose = (r, t) => {
   // Down onto the knee, and up off it again with weight: the hand pushing off the front knee as the body rises.
@@ -880,7 +994,7 @@ const assayPose: CastPose = (r, t) => {
   const w = one(t, [[0.14, 0], [0.32, 1], [0.72, 1], [0.82, 0]]);
   r.reach = [
     { at: [-2.6, 4.4, 7.4], w: one(t, [[0.7, 0], [0.8, 1], [0.9, 1], [1, 0]]) },
-    { at: [4.2, 3.6, 0.5 - 0.4 * press], stoop: true, w },
+    { at: [5.2, 2.8, 1.4 - 0.4 * press], w },
   ];
   r.arm[1] = euler(t, [[0, HANG], [0.22, [50, 14, 0]], [0.72, [42, 12, 0]], [1, HANG]]);
   r.elbow[1] = one(t, [[0, 15], [0.22, 24], [0.72, 6], [1, 15]]);
@@ -888,9 +1002,9 @@ const assayPose: CastPose = (r, t) => {
   r.elbow[0] = one(t, [[0, 15], [0.26, 60], [0.72, 60], [1, 15]]);
   r.open = [t > 0.18, t > 0.18];
   r.shape = [flat(one(t, [[0.1, 0], [0.26, 0.6], [0.72, 0.6], [1, 0]])), flat(one(t, [[0.14, 0], [0.32, 1], [0.72, 1], [0.9, 0]]))];
-  r.spine = euler(t, [[0, [0, 0, 0]], [0.26, [-6, -10, 0]], [0.72, [-6, -10, 0]], [0.9, [-10, -2, 0]], [1, [0, 0, 0]]]);
+  r.spine = euler(t, [[0, [0, 0, 0]], [0.26, [-8, -24, 0]], [0.72, [-8, -24, 0]], [0.9, [-6, -2, 0]], [1, [0, 0, 0]]]);
   r.chest = euler(t, [[0, [0, 0, 0]], [0.26, [-4, -12, 6]], [0.58, [-6, -14, 6]], [0.72, [-4, -12, 6]], [0.9, [-6, 0, 0]], [1, [0, 0, 0]]]);
-  r.head = euler(t, [[0, [0, 0, 0]], [0.26, [-12, 10, 0]], [0.42, [-4, 14, -16]], [0.72, [-4, 14, -16]], [0.86, [-8, 0, 0]], [1, [0, 0, 0]]]);
+  r.head = euler(t, [[0, [0, 0, 0]], [0.26, [-4, 12, -8]], [0.42, [6, 18, -16]], [0.72, [6, 18, -16]], [0.86, [-8, 0, 0]], [1, [0, 0, 0]]]);
 };
 
 /** Sentence: both hands held out before the belly, palms up, weighing -- the right sinks, the left rises, and back; then both turned over and pressed down hard, the knees giving. */
@@ -904,8 +1018,9 @@ const sentencePose: CastPose = (r, t) => {
     const s = k ? -1 : 1;
     const hold = smooth(seg(t, 0, 0.14));
     // The two hands are the pans: one sinks as the other rises, a long way, the arms opened out from the sides.
-    const fwd = lerp(4, 34 + s * 22 * clamp(w, -1, 1), hold);
-    r.arm[k] = [lerp(fwd, 22, press), lerp(10, 26, hold), lerp(4, 6, hold)];
+    const fwd = lerp(4, 34 + s * 30 * clamp(w, -1, 1), hold);
+    // Out well clear of the body's sides, so from any side both hands stand off its outline.
+    r.arm[k] = [lerp(fwd, 22, press), lerp(10, 40, hold), lerp(4, 6, hold)];
     r.elbow[k] = lerp(lerp(15, 48 - s * 18 * clamp(w, -1, 1), hold), 12, press);
     r.hand[k] = [lerp(0, -54, press), 0, 0];
   }
@@ -936,7 +1051,8 @@ const BIND_T = { secs: 1.0, release: 0.5 };
 const bindPose: CastPose = (r, t, c) => {
   const strain = t > 0.5 && t < 0.8 ? tremor(t * c.timing.secs, 1.6) : 0;
   for (let k = 0; k < 2; k++) {
-    r.arm[k] = euler(t, [[0, HANG], [0.3, [62, -24, 38]], [0.42, [64, -26, 40]], [0.5, [10, 30, -14]], [0.8, [12, 30, -14]], [1, HANG]]);
+    // Held up side by side before the face, not crossed -- bound wrist to wrist -- so the two cuffs stay two.
+    r.arm[k] = euler(t, [[0, HANG], [0.3, [64, -10, 30]], [0.42, [66, -11, 32]], [0.5, [10, 30, -14]], [0.8, [12, 30, -14]], [1, HANG]]);
     r.arm[k][1] += strain;
     r.elbow[k] = one(t, [[0, 15], [0.3, 84], [0.42, 86], [0.5, 4], [0.8, 6], [1, 15]]);
     r.knee[k] = one(t, [[0, 4], [0.42, 8], [0.5, 30], [0.8, 26], [1, 4]]);
@@ -951,6 +1067,8 @@ const bindPose: CastPose = (r, t, c) => {
 
 /** Equity: the arms put out level to either side, palms up, the body a balance, tipping one way and the other and settling; then the hands brought together before the chest, level. */
 const EQUITY_T = { secs: 1.5, release: 0.6 };
+/** Seconds from the beam come level to the two squares gone: the light along it, the pans down, and the squares held. */
+const EQUITY_IMPACT = 1.8;
 /** How far the body's balance is tipped at `t` through Equity, nought to one either way: rocking and dying away to level at the release. */
 const equityTip = (t: number): number => (t < 0.16 ? 0 : t > 0.56 ? 0 : Math.sin(((t - 0.16) / 0.4) * TAU * 1.5) * (1 - seg(t, 0.16, 0.56)) * smooth(seg(t, 0.16, 0.24)));
 const equityPose: CastPose = (r, t) => {
@@ -961,10 +1079,10 @@ const equityPose: CastPose = (r, t) => {
     const s = k ? 1 : -1;
     const out = smooth(seg(t, 0, 0.16));
     const level: [number, number, number] = [lerp(4, 8, out), lerp(10, 84 - s * 16 * tip, out), lerp(4, -6, out)];
-    const joined: [number, number, number] = [70, -16, 36];
+    const joined: [number, number, number] = [56, -16, 36];
     const now = level.map((v, i) => lerp(v, joined[i], join)) as [number, number, number];
     r.arm[k] = now.map((v, i) => lerp(v, HANG[i], back)) as [number, number, number];
-    r.elbow[k] = lerp(lerp(lerp(15, 4, out), 104, join), 15, back);
+    r.elbow[k] = lerp(lerp(lerp(15, 4, out), 96, join), 15, back);
     r.hand[k] = [0, lerp(lerp(0, s * 70, out), 0, join), 0];
   }
   r.open = [t > 0.06, t > 0.06];
@@ -1019,11 +1137,30 @@ const summonsPose: CastPose = (r, t) => {
   r.knee[1] = one(t, [[0, 4], [0.56, 6], [0.66, 22], [0.84, 20], [1, 4]]);
 };
 
-/** Temper: the thing in the right fist held up before the face, the left palm laid flat against the fist that holds it and the head bowed to it -- a vigil kept over it; then the face lifted to it as it is tempered, and let down. */
+/** Temper: the thing in the right fist held out from the belly and stood up beside the head, the left palm laid along it and the head bowed to it -- a vigil kept over it; then the face lifted to it as it is tempered, and let down. */
 const TEMPER_T = { secs: 1.7, release: 0.6 };
+/**
+ * The way out from the body, on the ground in its own frame ([right, ahead]), that Temper's fist is held: whichever of
+ * straight out to the right and up to seventy degrees forward of it lies most across the screen for a body turned
+ * `facing` (nought at the viewer, two to screen right), so the blade stood up from the fist stands clear of the head.
+ */
+function temperHold(facing: number): [number, number] {
+  const th = (facing * Math.PI) / 4;
+  let best = 0, most = -1;
+  for (let i = 0; i <= 7; i++) {
+    const phi = (i / 7) * 1.22;
+    // Across the screen: the body's frame has screen right at (-cos, sin) of its turn.
+    const across = Math.abs(-Math.cos(th) * Math.cos(phi) + Math.sin(th) * Math.sin(phi));
+    if (across > most + 0.02) {
+      most = across;
+      best = phi;
+    }
+  }
+  return [Math.cos(best), Math.sin(best)];
+}
 const temperPose: CastPose = (r, t, c) => {
-  // The fist held at the breastbone, the thing in it stood up and out past the shoulder, clear of the head from every
-  // side, and the chest turned a little to show it; the left palm laid flat along it.
+  // Whatever is held stood up beside the head, clear of it from whichever side it is seen, and the chest turned a
+  // little to show it; the left palm laid flat along it.
   const up = one(t, [[0, 0], [0.16, 1], [0.86, 1], [1, 0]]);
   const lay = one(t, [[0.12, 0], [0.24, 1], [0.8, 1], [0.92, 0]]);
   r.arm[1] = euler(t, [[0, HANG], [0.18, [58, -14, 40]], [0.8, [60, -14, 40]], [1, HANG]]);
@@ -1032,27 +1169,32 @@ const temperPose: CastPose = (r, t, c) => {
   r.shape = [flat(lay), undefined];
   if (c.carry === 'fist') {
     r.wield = up;
-    // The upper arm down and out from the side, the forearm folded up and out from it: the fist at the breastbone's
-    // height but out past the shoulder, so the blade stands up beside the head and never across it.
-    const held = armToward(1, [0.55, 0.45, -0.7], [0.45, 0.7, 1]);
-    r.arm[1] = euler(t, [[0, HANG], [0.18, held], [0.8, held], [1, HANG]]);
-    r.elbow[1] = one(t, [[0, 15], [0.18, 84], [0.8, 84], [1, 15]]);
-    r.haft = 22 * up;
+    // The fist at the belly and out from the body, and the blade stood up from it leaning out the same way, so it rises
+    // beside the head and never through it. Which way out is chosen by the way the body is turned to the viewer: from
+    // straight out to the right side to well forward, whichever puts the fist furthest across the screen from the head.
+    const at = temperHold(c.facing);
+    r.reach = [undefined, { at: [6.2 * at[0], 6.2 * at[1], 9], haft: [0.42 * at[0], 0.42 * at[1], 1], w: up }];
+    // The blade along the haft the hand is turned to, rather than its usual third of the way toward the forearm.
+    r.haft = -30 * up;
     r.both = lay;
     r.bothAt = 3.5;
   } else if (c.carry === 'staff') {
     // A spear or a staff along the line from the right fist through the left, stood up and out past the right shoulder.
     r.wieldStaff = up;
     r.both = up;
-    r.reach = [{ at: [4.4, 4.2, 15.5], w: up }, undefined];
+    // Held out the same side as a blade is (`temperHold`), the shaft leant out from the body, both hands on it.
+    const at = temperHold(c.facing);
+    r.reach = [{ at: [5.6 * at[0], 5.6 * at[1], 13.5], w: up }, { at: [4.4 * at[0], 4.4 * at[1], 9], w: up }];
   } else {
-    // Nothing held: the left palm laid over the right fist.
-    r.arm[0] = euler(t, [[0, HANG], [0.2, [54, -28, 46]], [0.8, [54, -28, 46]], [1, HANG]]);
-    r.elbow[0] = one(t, [[0, 15], [0.2, 96], [0.8, 96], [1, 15]]);
+    // Nothing held: the left palm laid over the right fist, the two held at the breastbone, below the chin.
+    r.arm[1] = euler(t, [[0, HANG], [0.18, [44, -16, 40]], [0.8, [46, -16, 40]], [1, HANG]]);
+    r.elbow[1] = one(t, [[0, 15], [0.18, 88], [0.8, 88], [1, 15]]);
+    r.arm[0] = euler(t, [[0, HANG], [0.2, [40, -24, 42]], [0.8, [40, -24, 42]], [1, HANG]]);
+    r.elbow[0] = one(t, [[0, 15], [0.2, 90], [0.8, 90], [1, 15]]);
     r.hand[0] = euler(t, [[0, [0, 0, 0]], [0.2, [-30, 0, 0]], [0.8, [-30, 0, 0]], [1, [0, 0, 0]]]);
   }
   r.head = euler(t, [[0, [0, 0, 0]], [0.2, [-20, 0, -10]], [0.5, [-22, 0, -12]], [0.62, [8, 0, -14]], [0.8, [6, 0, -12]], [1, [0, 0, 0]]]);
-  r.chest = euler(t, [[0, [0, 0, 0]], [0.2, [-6, 0, -15]], [0.5, [-8, 0, -15]], [0.62, [4, 0, -16]], [0.8, [3, 0, -15]], [1, [0, 0, 0]]]);
+  r.chest = euler(t, [[0, [0, 0, 0]], [0.2, [-6, 0, -6]], [0.5, [-8, 0, -6]], [0.62, [4, 0, -8]], [0.8, [3, 0, -6]], [1, [0, 0, 0]]]);
   r.spine = euler(t, [[0, [0, 0, 0]], [0.5, [-4, 0, 0]], [0.62, [2, 0, 0]], [1, [0, 0, 0]]]);
 };
 
@@ -1138,9 +1280,9 @@ const OATH_T = { secs: 1.45, release: 0.56 };
 const oathPose: CastPose = (r, t) => {
   // Sworn with the upper arm out to the side and the forearm up, so the open hand stands beside the head and never
   // before the face.
-  const sworn = armToward(1, [0.9, 0.12, 0.08], [0.05, 0.3, 1]);
+  const sworn = armToward(1, [1, -0.15, 0.1], [0.5, -0.1, 1]);
   r.arm[1] = euler(t, [[0, HANG], [0.24, sworn], [0.48, sworn], [0.56, [80, 10, -18]], [0.82, [78, 10, -18]], [1, HANG]]);
-  r.elbow[1] = one(t, [[0, 15], [0.24, 100], [0.48, 102], [0.56, 14], [0.82, 18], [1, 15]]);
+  r.elbow[1] = one(t, [[0, 15], [0.24, 96], [0.48, 98], [0.56, 14], [0.82, 18], [1, 15]]);
   r.hand[1] = euler(t, [[0, [0, 0, 0]], [0.24, [10, 0, 0]], [0.48, [10, 0, 0]], [0.56, [10, 0, -70]], [0.82, [10, 0, -66]], [1, [0, 0, 0]]]);
   r.arm[0] = euler(t, [[0, HANG], [0.24, [22, -20, 44]], [0.82, [22, -20, 44]], [1, HANG]]);
   r.elbow[0] = one(t, [[0, 15], [0.24, 92], [0.82, 92], [1, 15]]);
@@ -1158,7 +1300,7 @@ const rewardPose: CastPose = (r, t) => {
   // Received rather than called down: the hands cupped low before the belly, palms up, the head bowed over them; then
   // lifted to the shoulders and opened out wide, palms up, the chest opened and the face lifted -- never overhead, and
   // the heels kept down.
-  const wide = [armOut(0, 112, 62), armOut(1, 112, 62)];
+  const wide = [armOut(0, 96, 56), armOut(1, 96, 56)];
   for (let k = 0; k < 2; k++) {
     r.arm[k] = euler(t, [[0, HANG], [0.22, [30, -10, 30]], [0.36, [32, -10, 30]], [0.5, [70, 6, 10]], [0.6, wide[k]], [0.84, wide[k]], [1, HANG]]);
     r.elbow[k] = one(t, [[0, 15], [0.22, 46], [0.36, 46], [0.5, 40], [0.6, 14], [0.84, 16], [1, 15]]);
@@ -1205,7 +1347,7 @@ const markSeal = (k: FxScene, age: number, left: number): void => {
   lozenge(k, p, 5.2, { alpha: 0.92 * a, spin: 2 * snapTurn(age / 2.5), glow: lerp(0.6, 1, k.night) });
   tally(k, b, footR(b), MARK_TICKS, (MARK_TICKS * left) / Math.max(1, lastsOf('justice_mark')), { alpha: 0.65 * a });
   k.light(over(k, b), 1.2, 0.25 * a);
-  if (!k.fast) k.emit({ x: p.x, y: p.y, z: p.z - 3 }, 2.5 * a, { kind: 'mote', size: 1.4, colour: k.pal.main, life: [0.6, 1], speed: [0.01, 0.05], up: [-10, -6], gravity: 0, jitter: 0.04 });
+  if (!k.fast) k.emit({ x: p.x, y: p.y, z: p.z - 3 }, 2.5 * a, { ...MOTE(k), size: 1.4, colour: k.pal.main, life: [0.6, 1], speed: [0.01, 0.05], up: [-10, -6], gravity: 0, jitter: 0.04 });
 };
 
 /* Retribution: four mirror plates round the body, square to the tiles. */
@@ -1224,8 +1366,12 @@ function towardViewer(k: FxScene, b: Body): number {
 }
 /** Where Retribution's plate `i` stands round a body, `r` height units out at height `z`, turned `turn` (quarter turns land it on another's place). */
 function plateAt(k: FxScene, b: Body, r: number, z: number, turn: number, i: number): P3 {
-  const ang = towardViewer(k, b) + Math.PI / 4 + turn + (i * Math.PI) / 2;
-  return { x: b.x + (Math.cos(ang) * r) / 40, y: b.y + (Math.sin(ang) * r) / 40, z };
+  const tv = towardViewer(k, b), ang = tv + Math.PI / 4 + turn + (i * Math.PI) / 2;
+  // The near pair further out and the far pair closer in and higher, so the four sit round the body on a ring as the
+  // eye reads one, each near plate clear of the far one behind it rather than stacked under it in a column.
+  const near = smooth(clamp((Math.cos(ang - tv) + 0.71) / 1.42));
+  const rr = r * lerp(0.85, 1.25, near);
+  return { x: b.x + (Math.cos(ang) * rr) / 40, y: b.y + (Math.sin(ang) * rr) / 40, z: z + (1 - near) * 0.15 * b.tall };
 }
 function plates(k: FxScene, b: Body, r: number, share: number, turn: number, alpha: number, h = 6, glint = -1): void {
   const c = { x: b.x, y: b.y, z: b.z + b.tall * share };
@@ -1239,16 +1385,19 @@ function plates(k: FxScene, b: Body, r: number, share: number, turn: number, alp
     lozenge(k, p, h, { alpha, spin: Math.acos(Math.max(0.35, face)) * (ox > 0 ? 1 : -1), wide: 0.42, glow: i === glint ? 1.6 : 0.5, bias: 0, slit: i === glint, main: STEEL });
   }
 }
-/** Retribution's plates' turn at `age`: a quarter turn every three seconds, snapped over as the glint comes, and held. */
+/** Retribution's plates' turn at `age`: half a turn every six seconds, snapped over as the glint comes, and held. */
 const retributionTurn = (age: number): number => {
-  const q = age / 3, f = q - Math.floor(q);
-  return (Math.floor(q) + easeOut(clamp(f / 0.1))) * (Math.PI / 2);
+  const q = age / RETRIBUTION_TURN, f = q - Math.floor(q);
+  return (Math.floor(q) + easeOut(clamp(f / 0.1))) * Math.PI;
 };
+/** Seconds between the half turns of Retribution's plates: each one crosses from one side of the body to the other. */
+const RETRIBUTION_TURN = 6;
 const retributionLinger = (k: FxScene, age: number, left: number): void => {
   const a = smooth((age - 0.55) / 0.3) * smooth(left / 0.8);
   if (a <= 0.01) return;
   const b = k.target;
-  // Every three seconds the plates turn a quarter and one catches the light as they land: the turned-back blow waiting.
+  // Every three seconds one plate catches the light, and every six the four snap half round the body as it does, a lit
+  // plate crossing from one side to the other: the turned-back blow waiting.
   const glint = Math.floor(age / 3) % 4;
   const g = bump((age % 3) / 3, 0.04, 0.12, 0.4);
   plates(k, b, 11, 0.55, retributionTurn(age), 0.8 * a, 6, g > 0.05 ? glint : -1);
@@ -1281,6 +1430,8 @@ function plumb(k: FxScene, spot: P3, lift: number, alpha: number, swing: number)
     g.stroke();
   }, 1);
   lozenge(k, { x: spot.x, y: spot.y, z: spot.z + lift - 2 }, 5, { alpha, wide: 0.7, glow: 0.8, bias: 1.5 });
+  // A small seal at the line's top, so it hangs from something rather than out of nothing.
+  lozenge(k, { x: top.x, y: top.y, z: top.z + 1 }, 2, { alpha, glow: 0.5, slit: false, bias: 1.5 });
 }
 
 /* Sentence */
@@ -1308,7 +1459,7 @@ const swordReach = (k: FxScene, len: number): number => {
  * blade never stands between the viewer and the priest's performance), the angle it is raised at, and the angle it
  * finishes at, its blade through the creature's middle. `s` is the way it swings: one clockwise, from the left.
  */
-function verdictSwing(k: FxScene): { x: number; y: number; start: number; end: number; s: number } {
+function verdictSwing(k: FxScene): { x: number; y: number; start: number; end: number; through: number; s: number } {
   const b = k.target, s = k.sx(k.caster) <= k.sx(b) ? -1 : 1;
   const mid = k.at(b, 0.5);
   const reach = swordReach(k, VERDICT_LEN);
@@ -1316,10 +1467,12 @@ function verdictSwing(k: FxScene): { x: number; y: number; start: number; end: n
   const x = k.sx(mid) - dx * reach * 0.5, y = k.sy(mid) - dy * reach * 0.5;
   // The point's way on the screen is (-sin, cos) of the angle: raised, it leans back away from the creature.
   const start = Math.atan2(s * 0.35, -0.94);
-  let end = Math.atan2(-dx, dy);
-  if (s > 0) while (end < start) end += TAU;
-  else while (end > start) end -= TAU;
-  return { x, y, start, end, s };
+  let through = Math.atan2(-dx, dy);
+  if (s > 0) while (through < start) through += TAU;
+  else while (through > start) through -= TAU;
+  // Followed on through and down past the body, half a radian on, so it never comes to rest lying across it.
+  const end = through + Math.sign(through - start) * 0.5;
+  return { x, y, start, end, through, s };
 }
 /** The angle of Verdict's sword at `t` through the cast: formed raised, cocked a little further back, and cut down at the release. */
 function verdictAngle(k: FxScene, t: number): number {
@@ -1345,21 +1498,37 @@ function groundWay(k: FxScene, at: { x: number; y: number }, dx: number, dy: num
 function verdictCut(k: FxScene, open: number, dryU: number, alpha: number): void {
   if (alpha <= 0.01 || open <= 0) return;
   const b = k.target, v = verdictSwing(k);
-  const way = groundWay(k, b, -Math.sin(v.end), Math.cos(v.end));
+  const way = groundWay(k, b, -Math.sin(v.through), Math.cos(v.through));
   const half = footR(b) + 0.32;
   const p0 = { x: b.x - way.x * half, y: b.y - way.y * half };
   const p1 = { x: lerp(p0.x, b.x + way.x * half, open), y: lerp(p0.y, b.y + way.y * half, open) };
-  // Tapered at both ends, as a cut is: a thin lip, the gash, and its light down the middle.
-  const n = { x: -way.y, y: way.x }, w = 0.07 * (1 - 0.4 * dryU);
+  // A cut in the turf, not a stave lying on it: narrow, its edges ragged, widest where the blade went in and running out
+  // thin; dark soil in it and the far lip turned up and catching the light.
+  const n = { x: -way.y, y: way.x }, w = 0.042 * (1 - 0.3 * dryU);
+  const along = (u: number, side: number, wide: number): number[] => {
+    const x = lerp(p0.x, p1.x, u), y = lerp(p0.y, p1.y, u);
+    return [x + n.x * side * wide, y + n.y * side * wide];
+  };
+  const prof = [0, 0.7, 1, 0.55, 0.8, 0.4, 0];
+  const lipA: number[] = [], lipB: number[] = [];
+  for (let i = 0; i < prof.length; i++) {
+    const u = i / (prof.length - 1), j = 0.75 + 0.5 * hashOf(k.seed + 41, i);
+    lipA.push(...along(u, 1, w * prof[i] * j));
+    lipB.unshift(...along(u, -1, w * prof[i] * (1.75 - j)));
+  }
+  const gash = [...lipA, ...lipB], far = lipA;
   const m = mid3({ ...p0, z: 0 }, { ...p1, z: 0 }, 0.5);
-  const gash = [p0.x, p0.y, m.x + n.x * w, m.y + n.y * w, p1.x, p1.y, m.x - n.x * w, m.y - n.y * w];
   const line = [lerp(p0.x, m.x, 0.3), lerp(p0.y, m.y, 0.3), lerp(p1.x, m.x, 0.3), lerp(p1.y, m.y, 0.3)];
-  const { core, ink } = k.pal;
-  k.groundShape(b.x, b.y, half + 0.4, [
-    { kind: 'fill', colour: ink, alpha: clamp(alpha), paths: [gash], lift: 0.12 },
-    { kind: 'stroke', colour: ink, alpha: clamp(alpha), width: Math.max(1, 1.2 * k.zoom), paths: [gash], closed: true, join: 'miter', lift: 0.12 },
-    { kind: 'stroke', colour: dry(core, dryU, k.pal.deep), alpha: clamp(alpha), width: Math.max(1, 1.3 * k.zoom), paths: [line], cap: 'round', lift: 0.14, glow: nightRim(k, 0.5) * (1 - 0.6 * dryU) },
-  ]);
+  const { core, deep, ink } = k.pal;
+  // After dark a line of light down it is what shows it.
+  const lit = smooth(seg(k.night, 0.2, 0.6));
+  const layers: GroundLayer[] = [
+    { kind: 'fill', colour: SOIL, alpha: clamp(alpha), paths: [gash], lift: 0.12 },
+    { kind: 'stroke', colour: ink, alpha: clamp(alpha * 0.8), width: Math.max(0.8, 0.8 * k.zoom), paths: [gash], closed: true, join: 'round', lift: 0.12 },
+    { kind: 'stroke', colour: EARTH, alpha: clamp(alpha * (1 - lit) * (1 - 0.5 * dryU)), width: Math.max(0.8, 0.7 * k.zoom), paths: [far], cap: 'round', join: 'round', lift: 0.13 },
+  ];
+  if (lit > 0.01) layers.push({ kind: 'stroke', colour: dry(core, dryU, deep), alpha: clamp(alpha * lit), width: Math.max(1, 1.3 * k.zoom), paths: [line], cap: 'round', lift: 0.14, glow: nightRim(k, 0.5) * (1 - 0.6 * dryU) });
+  k.groundShape(b.x, b.y, half + 0.4, layers);
 }
 
 /* Judgment */
@@ -1370,7 +1539,10 @@ const judgmentSwords = (k: FxScene): number => (k.fast ? 5 : 8);
 const JUDGMENT_SWORD = 26;
 /** The ticks of a judged creature's tally: the seconds it takes more damage. */
 const JUDGMENT_TICKS = ticksFor(lastsOf('justice_judgment'));
-/** The most creatures Judgment marks for its seconds: past it the marks would crowd the field and cost too much. */
+/**
+ * The most creatures Judgment marks for its seconds: past it the marks would crowd the field and cost too much. A sword
+ * still comes down on every creature there that there is a sword for.
+ */
 const JUDGED_MOST = 4;
 /** When Judgment's sword `i` of `n` forms over its mark: all of them formed by a little before the arms come down. */
 const judgmentForm = (t: number, i: number, n: number): number => {
@@ -1390,9 +1562,10 @@ function judged(k: FxScene): Array<Body | null> {
     const there = k.enemiesWithin(JUDGMENT_R, k.spot)
       .filter((b) => !b.companion && !(pet && Math.hypot(b.x - pet.x, b.y - pet.y) < 0.3))
       .sort((a, b) => Math.hypot(a.x - k.spot.x, a.y - k.spot.y) - Math.hypot(b.x - k.spot.x, b.y - k.spot.y));
+    // A sword for every creature there, as many as there are swords; the nearest few of them also carry the mark.
     let n = 0;
     for (const b of there) {
-      if (b.who?.kind !== 'creature' || n >= Math.min(JUDGED_MOST, judgmentSwords(k))) continue;
+      if (b.who?.kind !== 'creature' || n >= judgmentSwords(k)) continue;
       k.state[`judged${n++}`] = b.who.id;
     }
     k.state.judgedN = n;
@@ -1531,7 +1704,10 @@ function palePainter(k: FxScene, posts: ReadonlyArray<{ foot: { x: number; y: nu
     const base = k.on(p.foot.x, p.foot.y);
     return { x: k.sx(base), y: k.sy(base), H: k.hpx(p.h), a: p.alpha, h: p.h };
   });
-  const paint = postPainter(k, posts, 1.1, 2);
+  // At play size or on fast graphics a stake at every other post, the rails still unbroken: it reads as the same fence for
+  // half the drawing.
+  const sparse = k.fast || k.zoom < 1.5;
+  const paint = postPainter(k, sparse ? posts.filter((_, i) => i % 2 === 0) : posts, 1.1, 2);
   const { ink } = k.pal;
   const rw = Math.max(1, 1.1 * k.zoom);
   return (g) => {
@@ -1563,6 +1739,8 @@ const RESTITUTION_GOODS = 9;
 const restitutionGrave = (k: FxScene): { x: number; y: number } => behind(k, k.target, 0.85);
 /** A grave's stone: grey, its face lit and its side shaded. */
 const STONE = '#9aa0b0', STONE_SIDE = '#646b7e', EARTH = '#8a7d68';
+/** The dark of turned soil, in a cut. */
+const SOIL = '#2e261c';
 /**
  * The grave: a headstone with a rounded head standing out of a low mound, its shaded side showing, Justice's lozenge
  * cut into its face. `up` (0..1) is how far it has risen out of the ground; what is still under the ground is not drawn.
@@ -1630,38 +1808,45 @@ function brokenSword(k: FxScene, b: Body, tipZ: number, v: number, alpha: number
   if (alpha <= 0.01 || v >= 1) return;
   const len = EXECUTION_LEN, U = len;
   const { L, bw, gw, gh, G, pr } = swordSizes(U);
-  const { core, main, deep } = k.pal;
+  const { main, deep, ink } = k.pal;
   // Each piece in units up the sword from its point, and its outline about its own middle (across, up).
   const pieces: Array<{ at: number; pts: Array<[number, number]>; fill: string }> = [
-    { at: L * 0.12, pts: [[0, -L * 0.12], [-bw, L * 0.04], [-bw, L * 0.13], [bw, L * 0.1], [bw, L * 0.04]], fill: core },
+    { at: L * 0.12, pts: [[0, -L * 0.12], [-bw, L * 0.04], [-bw, L * 0.13], [bw, L * 0.1], [bw, L * 0.04]], fill: STEEL },
     { at: L * 0.42, pts: [[-bw, -L * 0.17], [bw, -L * 0.2], [bw, L * 0.15], [-bw, L * 0.19]], fill: STEEL },
-    { at: L * 0.78, pts: [[-bw, -L * 0.18], [bw, -L * 0.14], [bw, L * 0.2], [-bw, L * 0.2]], fill: core },
+    { at: L * 0.78, pts: [[-bw, -L * 0.18], [bw, -L * 0.14], [bw, L * 0.2], [-bw, L * 0.2]], fill: STEEL },
     { at: L + gh, pts: [[-gw, 0], [-gw * 0.8, -gh * 1.4], [gw * 0.8, -gh * 1.4], [gw, 0], [gw * 0.8, gh * 1.4], [-gw * 0.8, gh * 1.4]], fill: main },
     { at: L + gh * 2 + G * 0.6 + pr, pts: [[-bw * 0.55, G * 0.5], [bw * 0.55, G * 0.5], [bw * 0.55, -G * 0.5], [pr * 0.75, -G * 0.5 - pr], [0, -G * 0.5 - 2 * pr], [-pr * 0.75, -G * 0.5 - pr], [-bw * 0.55, -G * 0.5]], fill: deep },
   ];
   const out: ShapePiece[] = [];
   const t = v * 0.5;
+  // Going, the steel goes dark rather than thin, and is let go by alpha only at the very end.
+  const dim = smooth(seg(v, 0.5, 1));
   // Across the screen, on the ground, and how many tiles of it a height unit drawn across is.
   const wx = groundWay(k, b, 1, 0);
   const perUnit = k.hpx(1) / (Math.abs(k.sx({ x: b.x + wx.x, y: b.y + wx.y, z: b.z }) - k.sx(b)) || 1);
+  // Each piece is a slab with its thickness: its edge in the deep tone a little down and to the right of its face.
+  const th = 1.4;
+  const faces: ShapePiece[] = [];
   for (let i = 0; i < pieces.length; i++) {
     const p = pieces[i];
     const h = hashOf(k.seed + 31, i), side = i % 2 ? 1 : -1;
     // Thrown out to either side and a little up, then down under its own weight; turning as it goes.
     const vx = side * (0.5 + h * 0.7), vz = 10 + 14 * h;
     const way = { x: Math.cos(h * TAU) * vx, y: Math.sin(h * TAU) * vx };
-    const cz = tipZ + p.at + vz * t - 70 * t * t;
     const cx = b.x + way.x * t, cy = b.y + way.y * t;
     const turn = side * (3 + 4 * h) * t;
     const c = Math.cos(turn), s = Math.sin(turn);
-    // Its outline turned in the plane of the screen, in units: across is along the screen's x, as the sword was drawn.
-    const pts: P3[] = p.pts.map(([ax, az]) => {
-      const rx = ax * c - az * s, rz = ax * s + az * c;
-      return { x: cx + rx * perUnit * wx.x, y: cy + rx * perUnit * wx.y, z: Math.max(k.ground(cx, cy), cz + rz) };
-    });
-    out.push({ pts, fill: p.fill });
+    // Smaller than the sword they came from, as broken pieces read; its outline turned in the plane of the screen, in
+    // units, across along the screen's x as the sword was drawn.
+    const rot = p.pts.map(([ax, az]): [number, number] => [(ax * c - az * s) * 0.7, (ax * s + az * c) * 0.7]);
+    // Stopped whole at the ground, its middle held up by its lowest corner, rather than its corners pressed flat.
+    const low = Math.min(...rot.map(([, rz]) => rz));
+    const cz = Math.max(k.ground(cx, cy) + th - low, tipZ + p.at + vz * t - 70 * t * t);
+    const at = (rx: number, rz: number, dx = 0, dz = 0): P3 => ({ x: cx + (rx + dx) * perUnit * wx.x, y: cy + (rx + dx) * perUnit * wx.y, z: cz + rz + dz });
+    out.push({ pts: rot.map(([rx, rz]) => at(rx, rz, th * 0.6, -th)), fill: dry(deep, dim, ink) });
+    faces.push({ pts: rot.map(([rx, rz]) => at(rx, rz)), fill: dry(p.fill, dim, deep) });
   }
-  k.shapes({ x: b.x, y: b.y, z: b.z }, out, { alpha: alpha * (1 - smooth(seg(v, 0.6, 1))), bias: 4 });
+  k.shapes({ x: b.x, y: b.y, z: b.z }, [...out, ...faces], { alpha: alpha * lateFade(1 - v, 0.15), bias: 4 });
 }
 
 /* Oath */
@@ -1730,6 +1915,14 @@ const OATH_IMPACT = 1.1;
 /* Due Reward */
 const REWARD_IMPACT = 1.4;
 const REWARD_RANKS = 4;
+/**
+ * Where Due Reward's seal is while it is cast: five units out before the priest at the height the cupped hands had, and
+ * `rise` (0..1) of the way up from there to well over the head.
+ */
+function rewardSeal(k: FxScene, rise: number): P3 {
+  const z = (k.state.rewardZ ?? k.caster.tall * 0.5) + 3;
+  return k.local(k.caster, 0, 5 + 2 * rise, lerp(z, k.caster.tall + 6, rise));
+}
 
 export const JUSTICE: Record<string, SpellVisual> = {
   /*
@@ -1747,13 +1940,13 @@ export const JUSTICE: Record<string, SpellVisual> = {
         const g = smooth(seg(t, 0.34, 0.5));
         if (g <= 0 || t >= MARK_T.release) return;
         // Beside the hand on its outer side, never between the hand and the face.
-        const o = k.local(k.caster, 0, 0, 0), out = k.local(k.caster, 3.6 * k.side, 1.6, 0);
+        const o = k.local(k.caster, 0, 0, 0), out = k.local(k.caster, 5.4 * k.side, 2.4, 0);
         const h = k.hand(1);
-        const at = { x: h.x + out.x - o.x, y: h.y + out.y - o.y, z: h.z + 1 };
+        const at = { x: h.x + out.x - o.x, y: h.y + out.y - o.y, z: h.z - 3 };
         lozenge(k, at, 2 + 3 * g, { alpha: g, spin: flipTurn(t * 6), glow: 0.9, bias: 3 });
         k.light(at, 1.5, 0.4 * g);
       },
-      release: (k) => k.burst(k.hand(1), 8, { kind: 'mote', size: 1.6, life: [0.2, 0.4], speed: [0.2, 0.6], up: [-2, 6], heading: k.toward(k.caster, k.target), cone: 0.7, gravity: 0 }),
+      release: (k) => k.burst(k.hand(1), 8, { ...MOTE(k), size: 1.6, life: [0.2, 0.4], speed: [0.2, 0.6], up: [-2, 6], heading: k.toward(k.caster, k.target), cone: 0.7, gravity: 0 }),
       travel: {
         secs: (tiles) => 0.08 + tiles * 0.055,
         draw: (k, u) => {
@@ -1764,7 +1957,7 @@ export const JUSTICE: Record<string, SpellVisual> = {
           k.light(head, 2, 0.5);
         },
       },
-      hit: (k) => k.burst(over(k, k.target, 6), 10, { kind: 'mote', size: 1.8, life: [0.3, 0.6], speed: [0.2, 0.5], up: [-4, 8], gravity: 0 }),
+      hit: (k) => k.burst(over(k, k.target, 6), 10, { ...MOTE(k), size: 1.8, life: [0.3, 0.6], speed: [0.2, 0.5], up: [-4, 8], gravity: 0 }),
       impact: {
         secs: MARK_IMPACT,
         draw: (k, u) => {
@@ -1793,8 +1986,10 @@ export const JUSTICE: Record<string, SpellVisual> = {
    * Retribution (on oneself or a friend, 60 s, 20% of every blow dealt back).
    * Four mirror plates are gathered in the crossed arms and flung out; they
    * slam into place round whoever it is on, square to the land and never in
-   * front of them, and every three seconds turn a quarter and stop, one
-   * catching the light, with a minute's tally of twelve ticks at their feet.
+   * front of them, the near pair out wider and the far pair closer and
+   * higher, so the four stand on a ring; every three seconds one catches the
+   * light, and every six they snap half round the body and stop, with a
+   * minute's tally of twelve ticks at their feet.
    */
   justice_retribution: {
     palette: PALETTE,
@@ -1820,7 +2015,9 @@ export const JUSTICE: Record<string, SpellVisual> = {
         },
       },
       hit: (k) => {
-        k.burst(k.at(k.target, 0.55), 18, { kind: 'spark', size: 1.8, colour: [k.pal.core, STEEL], life: [0.2, 0.4], speed: [0.6, 1.4], up: [-6, 10], gravity: 10, drag: 0.05 });
+        // Thrown out from the body, away from whoever cast it (or round it, on oneself), not bunched on the chest.
+        const far = Math.hypot(k.target.x - k.caster.x, k.target.y - k.caster.y) > 0.3;
+        k.burst(k.at(k.target, 0.55), 10, { kind: 'spark', size: 1.8, colour: [k.pal.core, STEEL], life: [0.2, 0.4], speed: [0.8, 1.5], up: [-6, 10], gravity: 10, drag: 0.05, ...(far ? { heading: k.toward(k.caster, k.target), cone: 1.2 } : {}) });
       },
       impact: {
         secs: 0.7,
@@ -1830,7 +2027,7 @@ export const JUSTICE: Record<string, SpellVisual> = {
           const out = easeBack(seg(u, 0, 0.35));
           plates(k, b, lerp(5, 11, out), 0.55, 0, 1, lerp(4, 6.5, out) - 0.5 * seg(u, 0.35, 1), u < 0.35 ? -1 : 0);
           const f = flashOf(seg(u, 0.3, 0.5));
-          for (let i = 0; i < 4 && u < 0.5; i++) k.flare(plateAt(k, b, 11, b.z + b.tall * 0.55, 0, i), 7 * f, f);
+          for (let i = 0; i < 4 && u < 0.5; i++) k.flare(plateAt(k, b, 11, b.z + b.tall * 0.55, 0, i), 4 * f, f);
           k.light(b, 2.5, 0.6 * (1 - u));
         },
       },
@@ -1874,7 +2071,7 @@ export const JUSTICE: Record<string, SpellVisual> = {
         },
       },
       hit: (k) => {
-        k.burst(k.on(k.spot.x, k.spot.y, 1), 18, { kind: 'mote', size: 1.8, life: [0.5, 0.9], speed: [0.1, 0.5], up: [-14, -4], gravity: 0, jitter: 0.3 });
+        k.burst(k.on(k.spot.x, k.spot.y, 1), 18, { ...MOTE(k), size: 1.8, life: [0.5, 0.9], speed: [0.1, 0.5], up: [-14, -4], gravity: 0, jitter: 0.3 });
         k.burst(k.on(k.spot.x, k.spot.y, 0.5), 10, { kind: 'dust', colour: '#8a7d68', size: 3, life: [0.4, 0.8], speed: [0.3, 0.8], up: [1, 5], gravity: 2 });
       },
       impact: {
@@ -1890,9 +2087,9 @@ export const JUSTICE: Record<string, SpellVisual> = {
             const fade = (1 - v * v) * (i ? 0.55 : 0.95);
             // The first sounding broad and bright, a band of light under its rule, so it reads at play size.
             if (!i) k.ring(s, rr, { band: 0.08, alpha: 0.7 * fade, glow: 0.8, n: Math.max(24, k.facets(rr)) });
-            tally(k, s, rr, 24, 24, { alpha: fade, tick: i ? 0.22 + 0.1 * (1 - v) : 0.35, turn: i * 0.13, band: i ? 1 : 2 });
+            tally(k, s, rr, 24, 24, { alpha: fade, tick: i ? 0.22 + 0.1 * (1 - v) : 0.35, turn: i * 0.13, band: i ? 1 : 2, dry: v });
           }
-          k.light(s, 3 + ASSAY_R * 0.5 * seg(u, 0.1, 0.6), 0.7 * (1 - 0.6 * u));
+          k.light(s, 2 + seg(u, 0.1, 0.6), 0.7 * (1 - 0.6 * u));
         },
       },
       linger: {
@@ -1909,11 +2106,11 @@ export const JUSTICE: Record<string, SpellVisual> = {
           plumb(k, s, lift, a * smooth(age / 0.15) * lerp(1, 0.7, smooth(seg(age, ASSAY_IMPACT * 0.6, ASSAY_IMPACT + 1))), swing);
           // Its square drawn on as the bob lands, then let down slowly to the quiet mark that stays.
           const quiet = smooth(seg(age, ASSAY_IMPACT * 0.6, ASSAY_IMPACT + 2));
-          square(k, s, 0.5, { band: lerp(0.07, 0.045, quiet), alpha: a * smooth(seg(age, 0.19, 0.48)) * lerp(0.95, 0.4, quiet), glow: lerp(1, 0.6, quiet), draw: seg(age, 0.19, 0.72) });
+          square(k, s, 0.5, { band: lerp(0.07, 0.045, quiet), alpha: lateFade(left, 0.5) * lerp(0.95, 0.85, quiet), glow: lerp(1, 0.6, quiet), draw: seg(age, 0.19, 0.72), dry: 0.45 * quiet });
           // Every ten seconds a faint sounding goes out to the reach again: the seams are still marked.
           const v = (((age - ASSAY_IMPACT) % 10) - 7.4) / 2.6;
           if (age > ASSAY_IMPACT && v > 0 && v < 1) tally(k, s, 0.3 + (ASSAY_R - 0.3) * easeOut(v), 24, 24, { alpha: 0.3 * a * (1 - v * v), tick: 0.2 });
-          if (!k.fast && age > ASSAY_IMPACT) k.emit(k.on(s.x, s.y, 4), 1.2 * a, { kind: 'mote', size: 1.4, life: [0.8, 1.2], speed: [0.01, 0.04], up: [-6, -3], gravity: 0, jitter: 0.25 });
+          if (!k.fast && age > ASSAY_IMPACT) k.emit(k.on(s.x, s.y, 4), 1.2 * a, { ...MOTE(k), size: 1.4, life: [0.8, 1.2], speed: [0.01, 0.04], up: [-6, -3], gravity: 0, jitter: 0.25 });
           if (age > ASSAY_IMPACT) k.light(s, 1.2, 0.22 * a * smooth(seg(age, ASSAY_IMPACT, ASSAY_IMPACT + 1)));
         },
       },
@@ -1937,10 +2134,11 @@ export const JUSTICE: Record<string, SpellVisual> = {
         if (a <= 0) return;
         const tilt = 0.4 * clamp(weighing(t), -1, 1.3);
         scales(k, sentencePivot(k), SENTENCE_SIZE, tilt, { alpha: a, load: t < 0.56 ? 1 : 0, at: k.target, bias: 4 });
-        k.glow(mid3(k.hand(0), k.hand(1), 0.5), 5, 0.5 * a);
+        // A light in each palm, its own colour laid over the grass rather than added to it.
+        for (const s of [0, 1] as const) k.glow(k.hand(s), 3, 0.6 * a, k.pal.core, true);
         k.light(k.target, 2, 0.4 * a);
       },
-      release: (k) => k.burst(mid3(k.hand(0), k.hand(1), 0.5), 8, { kind: 'mote', size: 1.6, life: [0.2, 0.4], speed: [0.1, 0.3], up: [-10, -2], gravity: 0 }),
+      release: (k) => k.burst(mid3(k.hand(0), k.hand(1), 0.5), 8, { ...MOTE(k), size: 1.6, life: [0.2, 0.4], speed: [0.1, 0.3], up: [-10, -2], gravity: 0 }),
       travel: {
         secs: () => 0.2,
         draw: (k, u) => {
@@ -1995,8 +2193,8 @@ export const JUSTICE: Record<string, SpellVisual> = {
         if (g <= 0) return;
         // A cuff on each wrist, apart, and the two-link chain between them that the wrench snaps.
         // Each a little up its forearm from the wrist, so where the wrists cross the two cuffs stay two.
-        const w0 = k.joint(k.caster, 'wrist0', [0, 0, 1]), w1 = k.joint(k.caster, 'wrist1', [0, 0, 1]);
-        for (const w of [w0, w1]) hoop(k, { x: w.x, y: w.y, z: w.z - 0.5, tall: 1, wide: 1, facing: 0, kind: 'spot' }, 0.5, 0.9, { alpha: g, width: 1.4, colour: STEEL });
+        const w0 = k.joint(k.caster, 'wrist0', [0, 0, 2.2]), w1 = k.joint(k.caster, 'wrist1', [0, 0, 2.2]);
+        for (const side of [0, 1] as const) cuff(k, side, g);
         if (t < 0.5) chain(k, w0, w1, { alpha: g, sag: 0.6, link: 2.2, glow: 0, bias: 2 });
         if (once(k, 'snap', t >= 0.5)) k.burst(mid3(w0, w1, 0.5), 10, { kind: 'spark', size: 1.6, colour: [k.pal.core, STEEL], life: [0.15, 0.3], speed: [0.3, 0.8], up: [-4, 8], gravity: 30 });
       },
@@ -2009,7 +2207,8 @@ export const JUSTICE: Record<string, SpellVisual> = {
       },
       hit: (k) => {
         for (const s of stakes(k.target)) k.burst(k.on(s.x, s.y, 0.5), 5, { kind: 'dust', colour: '#8a7d68', size: 2.6, life: [0.3, 0.6], speed: [0.2, 0.5], up: [2, 6], gravity: 4 });
-        flatSparks(k, k.at(k.target, 0.5), 12, 0.9);
+        // Low, at its feet, where the stakes go in: not a spray over the creature.
+        flatSparks(k, k.at(k.target, 0.05), 8, 0.9);
       },
       impact: {
         secs: 0.5,
@@ -2050,9 +2249,9 @@ export const JUSTICE: Record<string, SpellVisual> = {
             if (!broke) chain(k, top, mid3(top, end, reach), { sag: 0.4 + strain + (low ? 1.4 : 0), alpha: reach, link: 4.4, sortAt: k.on(s.x, s.y), bias: far ? -4 : 2 });
             i++;
           }
-          if (!broke) hoop(k, b, 0.48, R, { alpha: 0.6 * reach, width: 1.8, colour: STEEL });
-          const s0 = all[0];
-          square(k, b, Math.abs(s0.x - b.x), { band: 0.05, alpha: 0.6 * up * fade, glow: 0.5, studs: false });
+          // The hoop the chains hold, its front half faint so it does not band across the creature; the stakes mark the
+          // square's corners, so no square is drawn.
+          if (!broke) hoop(k, b, 0.48, R, { alpha: 0.6 * reach, width: 1.8, colour: STEEL, front: 0.35 / 0.6 });
           tally(k, b, footR(b), BIND_TICKS, (BIND_TICKS * left) / Math.max(0.1, BIND_LASTS), { alpha: 0.75 * up * fade });
           k.light(b, 2, 0.35 * fade);
         },
@@ -2063,10 +2262,12 @@ export const JUSTICE: Record<string, SpellVisual> = {
   /*
    * Equity (on a friend: both end at the average of your healths). The priest
    * stands as a balance, arms out, tipping; over the two of them a beam hangs,
-   * square to the screen as a sign is, a pan hung from each end over each of
-   * them, tipping with the body. At the release it comes level, light runs
-   * along it both ways, and the two pans come down over the two of them to the
-   * ground as two squares the same size.
+   * square to the screen as a sign is and never shorter than a body's width
+   * either side of its pivot, a pan hung from each end on a cord just over each
+   * of their heads, tipping with the body. At the release it comes level, light
+   * runs along it both ways, and each pan itself comes down round its own body
+   * to the feet and lies there as a square, the two the same size, held a
+   * moment and dried away.
    */
   justice_equity: {
     palette: PALETTE,
@@ -2078,37 +2279,45 @@ export const JUSTICE: Record<string, SpellVisual> = {
         if (a > 0) equityBeam(k, 0.3 * equityTip(t), a, 1);
       },
       release: (k) => {
-        k.burst(equityPivot(k), 12, { kind: 'mote', size: 1.8, life: [0.3, 0.6], speed: [0.2, 0.5], up: [-4, 8], gravity: 0 });
+        k.burst(equityPivot(k), 12, { ...MOTE(k), size: 1.8, life: [0.3, 0.6], speed: [0.2, 0.5], up: [-4, 8], gravity: 0 });
       },
       hit: (k) => {
-        for (const b of [k.caster, k.target]) k.burst(k.at(b, 0.5), 10, { kind: 'mote', size: 1.8, life: [0.4, 0.8], speed: [0.1, 0.3], up: [4, 12], gravity: 0, jitter: 0.1 });
+        for (const b of [k.caster, k.target]) k.burst(k.at(b, 0.5), 10, { ...MOTE(k), size: 1.8, life: [0.4, 0.8], speed: [0.1, 0.3], up: [4, 12], gravity: 0, jitter: 0.1 });
       },
       impact: {
-        secs: 1.3,
+        secs: EQUITY_IMPACT,
         draw: (k, u) => {
-          const a = 1 - smooth(seg(u, 0.5, 0.8));
-          // The pans hang on till the light has met, then come down over the two of them.
-          const down = smooth(seg(u, 0.42, 0.78));
-          equityBeam(k, 0, a, 1 - down);
+          const secs = u * EQUITY_IMPACT;
+          const a = 1 - smooth(seg(secs, 0.6, 0.95));
+          // The pans hang on till the light has met; then each pan itself comes down round its own body, from where it
+          // hung to the feet, opening out into a ring as it goes, and lies there as a square -- the two the same size.
+          const down = smooth(seg(secs, 0.55, 1.0));
+          equityBeam(k, 0, a, down > 0 ? 0 : 1);
           const piv = equityPivot(k);
-          const flow = seg(u, 0, 0.4);
+          const flow = seg(secs, 0, 0.5);
           if (flow > 0 && flow < 1) {
             // Light along it both ways: from each end to the middle and on to the other end.
             const l = equityEnd(k, k.caster), r = equityEnd(k, k.target);
             k.orb(mid3(l, r, smooth(flow)), 2.2, { alpha: 1 - flow * 0.4, glow: 0.8 });
             k.orb(mid3(r, l, smooth(flow)), 2.2, { alpha: 1 - flow * 0.4, glow: 0.8 });
           }
-          k.flare(piv, 9 * flashOf(seg(u, 0.18, 0.5)), flashOf(seg(u, 0.18, 0.5)), k.pal.core, 0);
+          const f = flashOf(seg(secs, 0.24, 0.65));
+          k.flare(piv, 9 * f, f, k.pal.core, 0);
           for (const b of [k.caster, k.target]) {
             const r = Math.max(7, b.wide * 2);
-            // Each pan a ring now, coming down round its body from over the head to the feet, where it lies as a square.
-            if (down > 0 && down < 1) hoop(k, b, lerp(1.05, 0.02, down), r, { alpha: 1, width: 1.8 });
-            if (u > 0.74) {
-              const v = seg(u, 0.74, 1);
-              square(k, b, r / 40 + 0.04 * v, { band: 0.06, alpha: 0.9 * (1 - v * v), glow: 0.8, studs: false });
+            if (down > 0 && down < 1) {
+              const pan = equityPan(k, b, equityEnd(k, b));
+              const at = { ...b, x: lerp(pan.at.x, b.x, smooth(seg(down, 0, 0.6))), y: lerp(pan.at.y, b.y, smooth(seg(down, 0, 0.6))) };
+              hoop(k, at, lerp(pan.share, 0.02, down), lerp(Math.max(3.4, b.wide * 0.8), r, smooth(seg(down, 0, 0.5))), { alpha: 1, width: 1.8 });
+            }
+            // Laid at the feet, held a while, then dried down to the deep tone and let go.
+            const lie = secs - 1.0;
+            if (lie >= 0) {
+              const v = seg(lie, 0.4, EQUITY_IMPACT - 1.0);
+              square(k, b, r / 40 + 0.03 * smooth(seg(lie, 0, 0.2)), { band: 0.09, alpha: lateFade(EQUITY_IMPACT - secs, 0.15), glow: 0.8, studs: false, dry: v });
             }
           }
-          k.light(piv, 3, 0.6 * (1 - u));
+          k.light(piv, 2, 0.6 * (1 - u));
         },
       },
     },
@@ -2131,7 +2340,7 @@ export const JUSTICE: Record<string, SpellVisual> = {
         const b = k.target;
         const close = smooth(seg(t, 0.16, 0.6));
         if (t >= VERDICT_T.release) return;
-        square(k, b, lerp(1, footR(b) + 0.1, close), { band: 0.06, alpha: 0.85 * smooth(seg(t, 0.12, 0.3)), glow: 0.6, draw: seg(t, 0.12, 0.36) });
+        square(k, b, lerp(1, footR(b) + 0.1, close), { band: 0.06, alpha: 0.9, glow: 0.6, draw: seg(t, 0.12, 0.36) });
         const form = smooth(seg(t, 0.26, 0.46));
         if (form > 0) {
           const v = verdictSwing(k);
@@ -2146,7 +2355,7 @@ export const JUSTICE: Record<string, SpellVisual> = {
         const b = k.target;
         const v = verdictSwing(k);
         // Thrown out along the cut, the way the blade went through.
-        const way = groundWay(k, b, -Math.sin(v.end), Math.cos(v.end));
+        const way = groundWay(k, b, -Math.sin(v.through), Math.cos(v.through));
         k.burst(k.at(b, 0.1), 24, { kind: 'spark', size: 2, colour: [k.pal.core, k.pal.main, STEEL], life: [0.2, 0.45], speed: [0.8, 2], up: [2, 12], gravity: 50, drag: 0.05, heading: way, cone: 0.5 });
         k.burst(k.at(b, 0.5), 8, { kind: 'shard', colour: [STEEL, k.pal.main], size: 1.8, life: [0.3, 0.6], speed: [0.4, 1], up: [8, 20], gravity: 60, drag: 0.3, heading: way, cone: 0.9 });
         k.burst(k.at(b, 0.05), 8, { kind: 'dust', colour: '#8a7d68', size: 3, life: [0.4, 0.8], speed: [0.3, 0.8], up: [1, 5], gravity: 2 });
@@ -2160,11 +2369,12 @@ export const JUSTICE: Record<string, SpellVisual> = {
           // A beat at the end of the cut, the blade still through it; then it goes, its arc eaten from the tail first.
           const over = v.end + v.s * 0.06 * Math.sin(Math.min(1, secs / 0.16) * Math.PI);
           const tail = lerp(v.end - (v.end - v.start) * 0.55, v.end, smooth(secs / 0.22));
-          swungSword(k, b, v.x, v.y, over, VERDICT_LEN, { alpha: 1 - smooth(seg(secs, 0.18, 0.42)), from: tail, trail: 1 - smooth(seg(secs, 0.1, 0.3)), clear: k.caster });
+          // Gone by a quarter second, before it can read as laid there.
+          swungSword(k, b, v.x, v.y, over, VERDICT_LEN, { alpha: 1 - smooth(seg(secs, 0.1, 0.25)), from: tail, trail: 1 - smooth(seg(secs, 0.06, 0.24)), clear: k.caster });
           verdictCut(k, easeOut(seg(secs, 0, 0.1)), smooth(seg(secs, 0.25, 1)), 1 - smooth(seg(u, 0.7, 1)));
-          square(k, b, footR(b) + 0.1, { band: 0.06, alpha: 0.85 * (1 - smooth(seg(u, 0.2, 0.6))), glow: 0.6 });
+          square(k, b, footR(b) + 0.1, { band: 0.06, alpha: 0.9 * lateFade(0.6 - u, 0.12), glow: 0.6, dry: seg(u, 0.2, 0.5) });
           const f = flashOf(seg(u, 0, 0.3));
-          k.flare(k.at(b, 0.5), 9 * f, 0.8 * f, k.pal.core, v.end);
+          k.flare(k.at(b, 0.5), 9 * f, 0.8 * f, k.pal.core, v.through);
           k.light(b, 2.5, 0.8 * (1 - u));
         },
       },
@@ -2175,9 +2385,10 @@ export const JUSTICE: Record<string, SpellVisual> = {
    * Summons (on an enemy, 20 s, it hunts only you). The priest holds out an
    * open hand; a chain is thrown from it and its collar shuts round the
    * creature's neck; the hand shuts and hauls, the chain snaps taut and a
-   * pulse runs down it to the priest. For the twenty seconds after, a solid
-   * arrowhead over the creature points at the priest wherever they go, a
-   * thread of beads runs from it to them, and four ticks go out at its feet.
+   * pulse runs down it to the priest. For the twenty seconds after, a needle
+   * over the creature -- a drawn-out lozenge with two chevrons behind it --
+   * points at the priest wherever they go, a thread of beads, three to a tile,
+   * runs from it to them, and four ticks go out at its feet.
    */
   justice_summons: {
     palette: PALETTE,
@@ -2221,7 +2432,10 @@ export const JUSTICE: Record<string, SpellVisual> = {
       },
       linger: {
         draw: (k, age, left) => {
-          const a = smooth((age - 0.5) / 0.4) * smooth(left / 0.8);
+          // Whole from the first frame it shows, growing in rather than thinning in over the grass, and let go by alpha
+          // only at the very end.
+          if (age < 0.5) return;
+          const a = lateFade(left, 0.3), grow = lerp(0.4, 1, easeBack(clamp((age - 0.5) / 0.3)));
           if (a <= 0.01) return;
           const b = k.target;
           const head = over(k, b, 5);
@@ -2232,16 +2446,16 @@ export const JUSTICE: Record<string, SpellVisual> = {
           const ang = Math.round(Math.atan2(raw[1], raw[0]) / (Math.PI / 4)) * (Math.PI / 4);
           const dir: Pt = [Math.cos(ang), Math.sin(ang)];
           const nod = easeOut((age * 1.2) % 1) * (1 - ((age * 1.2) % 1));
-          chevron(k, head, 9, { alpha: 0.95 * a, dir, glow: 0.7, dx: dir[0] * nod * 4 * k.zoom, dy: dir[1] * nod * 4 * k.zoom, solid: true });
+          chevron(k, head, 8 * grow, { alpha: a, dir, glow: 0.7, dx: dir[0] * nod * 4 * k.zoom, dy: dir[1] * nod * 4 * k.zoom, solid: true });
           const n = ticksFor(lastsOf('justice_summons'));
-          tally(k, b, footR(b), n, (n * left) / Math.max(1, lastsOf('justice_summons')), { alpha: 0.6 * a });
+          tally(k, b, footR(b), n, (n * left) / Math.max(1, lastsOf('justice_summons')), { alpha: 0.8 * a, grow: clamp((age - 0.5) / 0.4) });
           k.light(head, 1.2, 0.22 * a);
           // The thread it follows: beads running from it to you, near enough to be worth drawing, every other one a
           // lozenge with a light in it.
           const far = Math.hypot(me.x - b.x, me.y - b.y);
           if (far > 0.4 && far < 14) {
             const from = collarAt(k, b);
-            const dots = Math.max(3, Math.min(10, Math.round(far * 1.4)));
+            const dots = Math.max(6, Math.min(16, Math.round(far * 3)));
             const xs: Array<[number, number, boolean]> = [];
             const step = (age * 1.4) % 1;
             for (let i = 0; i < dots; i++) {
@@ -2249,12 +2463,12 @@ export const JUSTICE: Record<string, SpellVisual> = {
               const p = mid3(from, me, u);
               const big = i % 2 === 0;
               xs.push([k.sx(p), k.sy(p), big]);
-              if (big) k.glow(p, 4, 0.35 * a * Math.sin(Math.PI * u));
+              if (i % 4 === 0) k.glow(p, 4, 0.35 * a * Math.sin(Math.PI * u));
             }
             const { main, core, ink } = k.pal;
             const r0 = Math.max(1.6, 1.8 * k.zoom);
             k.worldDraw(from.y > me.y ? from : me, (g) => {
-              g.globalAlpha = 0.75 * a;
+              g.globalAlpha = a;
               for (const [x, y, big] of xs) {
                 const r = big ? r0 * 1.25 : r0 * 0.7;
                 poly(g, [[x, y - r], [x + r * 0.7, y], [x, y + r], [x - r * 0.7, y]], big ? core : main, ink, Math.max(0.6, 0.5 * k.zoom));
@@ -2268,7 +2482,8 @@ export const JUSTICE: Record<string, SpellVisual> = {
 
   /*
    * Temper (on a thing carried, 30 minutes, it takes no wear). The priest
-   * holds it up out past the shoulder with the left palm laid along it, the
+   * holds it out from the belly, leant away from the body to whichever side
+   * keeps it clear of the head as the viewer sees it, the left palm laid along it, the
    * head bowed in a vigil: a band of light climbs it from the fist to its end,
    * dripping sparks like a quench; then the face lifts, a line of light goes
    * the length of it and a seal turns over it. For the half hour after, a
@@ -2292,8 +2507,13 @@ export const JUSTICE: Record<string, SpellVisual> = {
       },
       release: (k) => {
         const at = temperAt(k, 1);
+        if (temperBare(k)) {
+          // Nothing held: the quench thrown out level from the joined hands, low, never up into the face.
+          k.burst(at, 12, { kind: 'spark', size: 1.5, colour: [k.pal.core, k.pal.main], life: [0.15, 0.35], speed: [0.4, 0.9], up: [-8, 2], gravity: 40, over: true });
+          return;
+        }
         k.burst(at, 18, { kind: 'spark', size: 1.6, life: [0.2, 0.45], speed: [0.3, 0.9], up: [0, 16], gravity: 40 });
-        k.burst(at, 10, { kind: 'mote', size: 1.8, life: [0.4, 0.8], speed: [0.05, 0.2], up: [6, 14], gravity: 0, jitter: 0.06 });
+        k.burst(at, 10, { ...MOTE(k), size: 1.8, life: [0.4, 0.8], speed: [0.05, 0.2], up: [6, 14], gravity: 0, jitter: 0.06 });
       },
       impact: {
         secs: 0.6,
@@ -2301,7 +2521,9 @@ export const JUSTICE: Record<string, SpellVisual> = {
           const f = flashOf(u, 0.15);
           const a = temperAt(k, 0), b = temperAt(k, 1);
           k.beam(a, b, { width: 2.4, alpha: f, glow: 1.2 });
-          lozenge(k, { ...b, z: b.z + 4 }, 4, { alpha: flashOf(u, 0.2), spin: flipTurn(u * 3), glow: 0.8 });
+          // The seal over the end of what is kept; over the head when it is the bare hands, so it never sits on the face.
+          const seal = temperBare(k) ? over(k, k.caster, 4) : { ...b, z: b.z + 4 };
+          lozenge(k, seal, 4 * lerp(0.4, 1, easeBack(clamp(u / 0.2))), { alpha: lateFade((1 - u) * 0.6, 0.15), spin: flipTurn(u * 3), glow: 0.8 });
           k.light(a, 2, 0.6 * (1 - u));
         },
       },
@@ -2331,7 +2553,7 @@ export const JUSTICE: Record<string, SpellVisual> = {
     cast: { timing: JUDGMENT_T, pose: judgmentPose },
     fx: {
       release: (k) => {
-        for (const s of [0, 1] as const) k.burst(k.hand(s), 6, { kind: 'mote', size: 1.8, life: [0.2, 0.4], speed: [0.2, 0.6], up: [-12, -2], gravity: 0 });
+        for (const s of [0, 1] as const) k.burst(k.hand(s), 6, { ...MOTE(k), size: 1.8, life: [0.2, 0.4], speed: [0.2, 0.6], up: [-12, -2], gravity: 0 });
       },
       charge: (k, t) => {
         const n = judgmentSwords(k);
@@ -2344,7 +2566,7 @@ export const JUSTICE: Record<string, SpellVisual> = {
           const at = judgmentAt(k, i, n, on);
           sword(k, k.on(at.x, at.y, 56 + 6 * hashOf(k.seed + 3, i) + Math.sin(k.now * 2 + i) * 0.8), JUDGMENT_SWORD, { show: form, alpha: Math.min(1, form * 1.5), glow: 0.9, clear: k.caster });
         }
-        k.light(k.spot, JUDGMENT_R * 0.6, 0.5 * seg(t, 0.2, 0.58));
+        k.light(k.spot, 2, 0.5 * seg(t, 0.2, 0.58));
       },
       impact: {
         secs: JUDGMENT_IMPACT,
@@ -2373,8 +2595,8 @@ export const JUSTICE: Record<string, SpellVisual> = {
             // A square knocked out where a creature is struck; on bare ground only the sparks and the dust.
             if (body && i < 3 && after > 0) squareOut(k, at, clamp(after / 0.5), 0.36, 0.85);
           }
-          tally(k, k.spot, JUDGMENT_R, 24, 24, { alpha: 0.85 * (1 - smooth(seg(u, 0.5, 1))), tick: 0.3, band: 1.6 });
-          k.light(k.spot, JUDGMENT_R * 0.7, 0.8 * (1 - smooth(seg(u, 0.3, 1))));
+          tally(k, k.spot, JUDGMENT_R, 24, 24, { alpha: 0.85 * lateFade(1 - u, 0.15), tick: 0.3, band: 1.6, dry: smooth(seg(u, 0.4, 0.9)) });
+          k.light(k.spot, 2, 0.8 * (1 - smooth(seg(u, 0.3, 1))));
         },
       },
       // Each creature it came down on carries the seal of a judged thing -- Mark of Judgment's, smaller -- and its tally,
@@ -2384,14 +2606,14 @@ export const JUSTICE: Record<string, SpellVisual> = {
         draw: (k, age, left) => {
           const lasts = lastsOf('justice_judgment');
           let i = 0, lit = 0;
-          for (const b of judged(k)) {
+          for (const b of judged(k).slice(0, JUDGED_MOST)) {
             // Each seal comes as its sword goes up, so the two never stand over it together.
             const t0 = judgmentFall(i++) + 0.14 + 1.05;
             const a = smooth((age - t0) / 0.3) * smooth(left / 0.8);
             if (!b || a <= 0.01) continue;
             const p = over(k, b, 3 + 0.5 * Math.sin(age * 1.6 + i));
             lozenge(k, p, 4.4, { alpha: 0.9 * a, spin: flipTurn(age / 2.5 + i * 0.3), glow: lerp(0.5, 1, k.night) });
-            tally(k, b, footR(b), JUDGMENT_TICKS, (JUDGMENT_TICKS * left) / Math.max(1, lasts), { alpha: 0.55 * a, ring: false });
+            tally(k, b, footR(b), JUDGMENT_TICKS, (JUDGMENT_TICKS * left) / Math.max(1, lasts), { alpha: 0.7 * a, band: 0.6 });
             // Once the falling light is gone, a small light over the first of them, so the judged show after dark.
             if (age > JUDGMENT_IMPACT && !lit++) k.light(p, 1.2, 0.22 * a);
           }
@@ -2416,12 +2638,12 @@ export const JUSTICE: Record<string, SpellVisual> = {
     cast: { timing: TRUCE_T, pose: trucePose },
     fx: {
       release: (k) => {
-        for (const s of [0, 1] as const) k.burst(k.hand(s), 5, { kind: 'mote', size: 1.6, life: [0.4, 0.7], speed: [0.05, 0.2], up: [-6, 0], gravity: 0 });
+        for (const s of [0, 1] as const) k.burst(k.hand(s), 5, { ...MOTE(k), size: 1.6, life: [0.4, 0.7], speed: [0.05, 0.2], up: [-6, 0], gravity: 0 });
       },
       charge: (k, t) => {
         if (t >= TRUCE_T.release) return;
         pales(k, 0, seg(t, 0.12, 0.6), 1);
-        k.light(k.spot, 3, 0.4 * seg(t, 0.2, 0.5));
+        k.light(k.spot, 2, 0.4 * seg(t, 0.2, 0.5));
       },
       travel: {
         secs: () => 0.55,
@@ -2429,19 +2651,20 @@ export const JUSTICE: Record<string, SpellVisual> = {
           pales(k, 0, 1, 1);
           const at = trucePlant(k);
           sword(k, k.on(at.x, at.y, lerp(40, -3, easeOut(u))), TRUCE_SWORD, { alpha: smooth(u * 4), sheath: true, clear: k.caster });
-          k.light(k.spot, 3, 0.6);
+          k.light(k.spot, 2, 0.6);
         },
       },
       hit: (k) => {
         const at = trucePlant(k);
-        k.burst(k.on(at.x, at.y, 1), 30, { kind: 'mote', size: 1.8, life: [0.6, 1.2], speed: [0.4, TRUCE_R * 0.25], up: [4, 12], gravity: 0, drag: 0.3 });
+        k.burst(k.on(at.x, at.y, 1), 30, { ...MOTE(k), size: 1.8, life: [0.6, 1.2], speed: [0.4, TRUCE_R * 0.25], up: [4, 12], gravity: 0, drag: 0.3 });
       },
       impact: {
         secs: 1.4,
         draw: (k, u) => {
           const v = easeOut(seg(u, 0, 0.8));
-          k.ring(k.spot, 0.3 + (TRUCE_R - 0.3) * v, { band: 0.12 * (1 - v) + 0.03, alpha: 0.8 * (1 - v * v), glow: 0.6 });
-          k.light(k.spot, TRUCE_R * 0.8, 0.6 * (1 - u));
+          // Dried toward the deep tone as it goes out, not thinned into the grass.
+          k.ring(k.spot, 0.3 + (TRUCE_R - 0.3) * v, { band: 0.12 * (1 - v) + 0.03, alpha: 0.85 * lateFade(1 - v, 0.2), glow: 0.6, main: dry(k.pal.main, v, k.pal.deep), core: dry(k.pal.core, v, k.pal.main) });
+          k.light(k.spot, 2.5, 0.6 * (1 - u));
         },
       },
       linger: {
@@ -2457,7 +2680,7 @@ export const JUSTICE: Record<string, SpellVisual> = {
           const at = trucePlant(k);
           sword(k, k.on(at.x, at.y, -3 + 20 * easeIn(lift)), TRUCE_SWORD, { alpha: end, sheath: true, clear: k.caster });
           k.light(k.on(at.x, at.y), 1.6, 0.35 * end);
-          if (!k.fast) k.emit(k.on(k.spot.x, k.spot.y, 1), 3 * end, { kind: 'mote', size: 1.5, life: [1, 1.8], speed: [0.02, 0.08], up: [4, 9], gravity: 0, jitter: TRUCE_R * 0.6 });
+          if (!k.fast) k.emit(k.on(k.spot.x, k.spot.y, 1), 3 * end, { ...MOTE(k), size: 1.5, life: [1, 1.8], speed: [0.02, 0.08], up: [4, 9], gravity: 0, jitter: TRUCE_R * 0.6 });
         },
       },
     },
@@ -2491,24 +2714,27 @@ export const JUSTICE: Record<string, SpellVisual> = {
           const sink = smooth(seg(u, 0.75, 1));
           headstone(k, grave, 1 - sink, 1 - smooth(seg(u, 0.88, 1)));
           const b = k.target;
-          const pack = k.local(b, 0, -2.5, b.tall * 0.62);
+          // The pack on the back, low enough that nothing comes in over the head.
+          const pack = k.local(b, 0, -3.5, b.tall * 0.55);
           const secs = u * RESTITUTION_IMPACT;
           for (let i = 0; i < RESTITUTION_GOODS; i++) {
             const t0 = 0.05 + i * 0.13, v = (secs - t0) / 0.5;
             if (once(k, `in${i}`, v >= 1)) {
-              k.burst(pack, 4, { kind: 'mote', size: 1.6, life: [0.2, 0.4], speed: [0.1, 0.3], up: [2, 8], gravity: 0 });
+              k.burst(pack, 4, { ...MOTE(k), size: 1.6, life: [0.2, 0.4], speed: [0.1, 0.3], up: [2, 8], gravity: 0 });
               k.state.glint = secs;
             }
             if (v <= 0 || v >= 1) continue;
             // Each thing its own: every third a long bundle, a tool or a blade; the rest boxes and flat cases. Each up
             // out of the grave on an arc of its own height.
             const from = k.on(grave.x, grave.y, 6);
-            const p = arcAt(from, pack, easeOut(v) * 0.4 + v * 0.6, 5 + 5 * hashOf(k.seed + 7, i));
-            const al = Math.min(1, v * 5);
-            const spin = flipTurn(v * 2 + i);
-            if (i % 3 === 0) box(k, p, 2.2, { spin, alpha: al, long: 2.4, tall: 0.6 });
-            else if (i % 3 === 1) box(k, p, 2.6, { spin, alpha: al });
-            else box(k, p, 3, { spin, alpha: al, tall: 0.35 });
+            const p = arcAt(from, pack, easeOut(v) * 0.4 + v * 0.6, 3 + 3 * hashOf(k.seed + 7, i));
+            // Whole from the first, grown up out of the grave rather than thinned in over the grass; over the last of the
+            // way sorted behind the body, so each goes in at the back and never across the chest.
+            const g = lerp(0.4, 1, smooth(clamp(v * 5)));
+            const spin = flipTurn(v * 2 + i), bias = v > 0.8 ? -2 : 2;
+            if (i % 3 === 0) box(k, p, 2.2 * g, { spin, long: 2.4, tall: 0.6, bias });
+            else if (i % 3 === 1) box(k, p, 2.6 * g, { spin, bias });
+            else box(k, p, 3 * g, { spin, tall: 0.35, bias });
           }
           const since = secs - (k.state.glint ?? -9);
           k.flare(pack, 5 * flashOf(clamp(since / 0.3)), flashOf(clamp(since / 0.3)), k.pal.core, Math.PI / 4);
@@ -2540,13 +2766,13 @@ export const JUSTICE: Record<string, SpellVisual> = {
         const b = k.target;
         const form = smooth(seg(t, 0.14, 0.5));
         const close = smooth(seg(t, 0.1, 0.62));
-        square(k, b, lerp(1.5, footR(b) + 0.2, close), { band: 0.08, alpha: 0.95 * smooth(seg(t, 0.08, 0.2)), glow: 0.9, draw: seg(t, 0.08, 0.3) });
-        square(k, b, lerp(1.0, footR(b) + 0.06, close), { band: 0.035, alpha: 0.6 * smooth(seg(t, 0.2, 0.32)), glow: 0, studs: false });
+        square(k, b, lerp(1.5, footR(b) + 0.2, close), { band: 0.08, alpha: 0.95, glow: 0.9, draw: seg(t, 0.08, 0.3) });
+        square(k, b, lerp(1.0, footR(b) + 0.06, close), { band: 0.035, alpha: 0.9, glow: 0, studs: false, draw: seg(t, 0.2, 0.34), dry: 0.4 });
         if (form > 0) {
           const hang = b.tall + 36 + 4 * (1 - form);
           sword(k, { x: b.x, y: b.y, z: b.z + hang }, EXECUTION_LEN, { show: form, alpha: Math.min(1, form * 1.4), glow: 0.6 + 0.6 * form, clear: k.caster });
-          k.emit({ x: b.x, y: b.y, z: b.z + hang + EXECUTION_LEN * 0.3 }, 30 * form, { kind: 'mote', size: 1.8, life: [0.4, 0.7], speed: [0.3, 0.6], up: [-4, 4], gravity: 0, drag: 0.02, jitter: 0.5, jitterZ: 12 });
-          k.light(b, 3.5, 0.7 * form);
+          k.emit({ x: b.x, y: b.y, z: b.z + hang + EXECUTION_LEN * 0.3 }, 30 * form, { ...MOTE(k), size: 1.8, life: [0.4, 0.7], speed: [0.3, 0.6], up: [-4, 4], gravity: 0, drag: 0.02, jitter: 0.5, jitterZ: 12 });
+          k.light(b, 2, 0.7 * form);
         }
         k.glow(mid3(k.hand(0), k.hand(1), 0.5), 6, 0.7 * bump(t, 0.3, 0.55, 0.64));
       },
@@ -2559,7 +2785,7 @@ export const JUSTICE: Record<string, SpellVisual> = {
           k.beam({ x: b.x, y: b.y, z: z + EXECUTION_LEN * 0.95 }, { x: b.x, y: b.y, z: z + EXECUTION_LEN * 0.95 + 40 * u }, { width: 2.2, alpha: 0.6, glow: 0.5 });
           square(k, b, footR(b) + 0.2, { band: 0.08, alpha: 0.95, glow: 0.9 });
           // The inner square held where the charge left it until the blow lands.
-          square(k, b, footR(b) + 0.06, { band: 0.035, alpha: 0.6, glow: 0, studs: false });
+          square(k, b, footR(b) + 0.06, { band: 0.035, alpha: 0.9, glow: 0, studs: false, dry: 0.4 });
         },
       },
       hit: (k) => {
@@ -2580,17 +2806,17 @@ export const JUSTICE: Record<string, SpellVisual> = {
           if (once(k, 'shatter', shatter)) {
             // The dust of it: a few small chips and motes going up, under the great pieces.
             k.burst({ x: b.x, y: b.y, z: tipZ + EXECUTION_LEN * 0.8 }, 16, { kind: 'shard', colour: [k.pal.core, STEEL, k.pal.main], size: 1.6, life: [0.3, 0.6], speed: [0.3, 0.9], up: [0, 12], gravity: 40, drag: 0.3, spin: 3, ink: false });
-            k.burst(k.at(b, 1.5), 16, { kind: 'mote', size: 2, life: [0.5, 1], speed: [0.2, 0.6], up: [4, 18], gravity: 0, jitterZ: 16 });
+            k.burst(k.at(b, 1.5), 16, { ...MOTE(k), size: 2, life: [0.5, 1], speed: [0.2, 0.6], up: [4, 18], gravity: 0, jitterZ: 16 });
           }
           if (!shatter) sword(k, { x: b.x, y: b.y, z: tipZ }, EXECUTION_LEN, { through: b, glow: 1 - 0.5 * u, clear: k.caster });
           else brokenSword(k, b, tipZ, (secs - 1.0) / 0.5, 1);
           cracks(k, b, 1.6, 8, { grow: easeOut(seg(u, 0, 0.08)), alpha: 1 - smooth(seg(u, 0.55, 1)) });
           squareOut(k, b, seg(u, 0, 0.45), 1.3);
           squareOut(k, b, seg(u, 0.1, 0.6), 0.8, 0.7);
-          square(k, b, footR(b) + 0.2, { band: 0.08, alpha: 0.95 * (1 - smooth(seg(u, 0.5, 0.8))), glow: 0.9 });
+          square(k, b, footR(b) + 0.2, { band: 0.08, alpha: 0.95 * lateFade(0.8 - u, 0.1), glow: 0.9, dry: seg(u, 0.45, 0.75) });
           const f = flashOf(seg(u, 0, 0.3));
           k.flare(k.at(b, 0.6), 24 * f, f, k.pal.core, Math.PI / 4);
-          k.light(b, 5, 1 - 0.8 * u);
+          k.light(b, 2, 1 - 0.8 * u);
         },
       },
     },
@@ -2622,7 +2848,7 @@ export const JUSTICE: Record<string, SpellVisual> = {
         },
       },
       hit: (k) => {
-        for (const b of [k.caster, k.target]) k.burst(k.chest(b), 8, { kind: 'mote', size: 1.8, life: [0.3, 0.6], speed: [0.1, 0.4], up: [0, 10], gravity: 0 });
+        for (const b of [k.caster, k.target]) k.burst(k.chest(b), 8, { ...MOTE(k), size: 1.8, life: [0.3, 0.6], speed: [0.1, 0.4], up: [0, 10], gravity: 0 });
       },
       impact: {
         secs: OATH_IMPACT,
@@ -2630,21 +2856,24 @@ export const JUSTICE: Record<string, SpellVisual> = {
           const a = k.chest(), b = k.chest(k.target);
           braid(k, a, b, 3 * (1 - 0.6 * smooth(u)), k.now * 8 * (1 - u), { alpha: 1 - smooth(seg(u, 0.6, 1)) });
           const mid = mid3(a, b, 0.5);
-          sworn(k, { ...mid, z: mid.z + 4 + 4 * smooth(u) }, 5, flashOf(u, 0.15), snapTurn(u * 2));
+          // Whole from its first frame, grown in rather than thinned in over the grass, and let go only at the very end.
+          sworn(k, { ...mid, z: mid.z + 4 + 4 * smooth(u) }, 5.4 * lerp(0.4, 1, easeBack(clamp(u / 0.15))), lateFade((1 - u) * OATH_IMPACT, 0.25), snapTurn(u * 2));
           for (const p of [a, b]) k.flare(p, 6 * flashOf(seg(u, 0, 0.4)), flashOf(seg(u, 0, 0.4)), k.pal.core, Math.PI / 4);
           k.light(mid, 2.5, 0.5 * (1 - u));
         },
       },
       linger: {
         draw: (k, age, left) => {
-          const a = smooth((age - OATH_IMPACT * 0.7) / 0.5) * smooth(left / 1.5);
+          // Each pair grows in over its head as the knot goes, whole from its first frame, and goes by alpha only at the end.
+          if (age < OATH_IMPACT * 0.75) return;
+          const a = lateFade(left, 0.4), grow = lerp(0.4, 1, easeBack(clamp((age - OATH_IMPACT * 0.75) / 0.3)));
           if (a <= 0.01) return;
           // Every five seconds a pulse along the cord between them, and both their seals brighten with it: the burden shared.
           const v = (age % 5) / 0.8;
           const pulse = v < 1 ? Math.sin(Math.PI * v) : 0;
           for (const b of [k.caster, k.target]) {
             const p = over(k, b, 5);
-            sworn(k, p, 4.4, (0.75 + 0.25 * pulse) * a, snapTurn(age / 4));
+            sworn(k, p, 5.4 * grow, a, snapTurn(age / 4));
             if (pulse > 0.02) k.glow(p, 9, 0.5 * pulse * a);
           }
           const p = k.chest(), q = k.chest(k.target);
@@ -2670,22 +2899,25 @@ export const JUSTICE: Record<string, SpellVisual> = {
     fx: {
       charge: (k, t) => {
         if (t >= REWARD_T.release) return;
-        const g = smooth(seg(t, 0.32, 0.56));
+        const g = smooth(seg(t, 0.3, 0.46));
         if (g <= 0) return;
-        const p = mid3(k.hand(0), k.hand(1), 0.5);
-        lozenge(k, { ...p, z: p.z + 3 }, 3 + 2 * g, { alpha: g, spin: flipTurn(t * 4), glow: 1 });
+        // Formed out before the cupped hands at their height, and held there while the hands rise past it to the
+        // shoulders -- so it never comes up to the face -- then lifted away over the head as the arms open.
+        if (t <= 0.36 || k.state.rewardZ === undefined) k.state.rewardZ = mid3(k.hand(0), k.hand(1), 0.5).z - k.caster.z;
+        const p = rewardSeal(k, smooth(seg(t, 0.5, REWARD_T.release)));
+        lozenge(k, p, 1.5 + 3.5 * g, { spin: flipTurn(t * 4), glow: 1 });
         k.light(p, 1.6, 0.4 * g);
       },
       travel: {
         secs: (tiles) => (tiles < 0.3 ? 0 : 0.2 + tiles * 0.05),
         draw: (k, u) => {
-          const from = k.head(), to = over(k, k.target, 8);
+          const from = rewardSeal(k, 1), to = over(k, k.target, 8);
           const p = arcAt(from, to, smooth(u), 6 + k.dist * 2);
           lozenge(k, p, 4.6, { spin: flipTurn(u * 4), glow: 1 });
           k.light(p, 1.6, 0.4);
         },
       },
-      hit: (k) => k.burst(over(k, k.target, 8), 12, { kind: 'mote', size: 1.8, life: [0.4, 0.7], speed: [0.1, 0.4], up: [-6, 8], gravity: 0 }),
+      hit: (k) => k.burst(over(k, k.target, 8), 12, { ...MOTE(k), size: 1.8, life: [0.4, 0.7], speed: [0.1, 0.4], up: [-6, 8], gravity: 0 }),
       impact: {
         secs: REWARD_IMPACT,
         draw: (k, u) => {
@@ -2697,12 +2929,13 @@ export const JUSTICE: Record<string, SpellVisual> = {
             // Up from the shoulders to a stack over the head, the first ending highest: never across the face.
             const top = b.tall + 4 + (REWARD_RANKS - 1 - i) * 3.4;
             const z = lerp(b.tall * 0.95, top, easeOut(v));
-            chevron(k, { x: b.x, y: b.y, z: b.z + z }, 6 - i * 0.4, { alpha: Math.min(1, v * 4) * (1 - smooth(seg(u, 0.75, 1))), glow: 0.6 });
+            // Grown in whole rather than thinned in, and let go by alpha only at the very end.
+            chevron(k, { x: b.x, y: b.y, z: b.z + z }, (6 - i * 0.4) * lerp(0.4, 1, easeOut(clamp(v * 4))), { alpha: lateFade((1 - u) * REWARD_IMPACT, 0.25), glow: 0.6 });
           }
-          lozenge(k, over(k, b, 8), 4.6 * (1 - smooth(seg(u, 0.1, 0.4))), { alpha: 1 - seg(u, 0.1, 0.4), glow: 1 });
+          lozenge(k, over(k, b, 8), 4.6 * (1 - smooth(seg(u, 0.1, 0.4))), { glow: 1 });
           const n = 12;
-          tally(k, b, footR(b) + 0.05, n, n * easeOut(seg(u, 0.1, 0.7)), { alpha: 0.8 * (1 - smooth(seg(u, 0.75, 1))) });
-          k.light(b, 2.5, 0.6 * (1 - u));
+          tally(k, b, footR(b) + 0.05, n, n * easeOut(seg(u, 0.1, 0.7)), { alpha: lateFade((1 - u) * REWARD_IMPACT, 0.25) });
+          k.light(b, 2, 0.6 * (1 - u));
         },
       },
       linger: {
@@ -2711,7 +2944,7 @@ export const JUSTICE: Record<string, SpellVisual> = {
           // Every four seconds a small rank rises over the head and fades: the half hour of gain, quietly.
           const v = ((age - REWARD_IMPACT) % 4) / 1.6;
           if (v >= 1) return;
-          chevron(k, over(k, k.target, 3 + 5 * easeOut(v)), 3.2, { alpha: 0.6 * Math.sin(Math.PI * v), glow: lerp(0.5, 0.9, k.night) });
+          chevron(k, over(k, k.target, 3 + 5 * easeOut(v)), 3.2 * lerp(0.4, 1, easeOut(clamp(v * 4))), { alpha: lateFade((1 - v) * 1.6, 0.4), glow: lerp(0.5, 0.9, k.night) });
         },
       },
     },
@@ -2731,25 +2964,49 @@ function equityY(k: FxScene): number {
   const top = Math.min(k.sy(over(k, k.caster, 0)), k.sy(over(k, k.target, 0)));
   return top - k.hpx(EQUITY_DROP + 9);
 }
-/** How far Equity's pans hang under its beam, in height units. */
+/** How far Equity's pans hang under its beam over the higher head, in height units; the other pan hangs on to its own head. */
 const EQUITY_DROP = 5;
+/** Half the shortest beam Equity hangs, in height units: seen with one of the two behind the other, it still has its length. */
+const EQUITY_HALF = 11;
 /** Where Equity's beam pivots: over the middle of the two of them on the ground, at the beam's height on the screen. */
 function equityPivot(k: FxScene): P3 {
   const a = k.caster, b = k.target;
   return atScreenY(k, (a.x + b.x) / 2, (a.y + b.y) / 2, equityY(k) - k.hpx(1));
 }
 /**
- * One end of Equity's beam: straight over a body, at the beam's height on the screen whatever the turn of the view --
- * so level looks level from every side -- and tipped up or down the screen by `tilt`.
+ * One end of Equity's beam, the caster's or the friend's: at the beam's height on the screen whatever the turn of the
+ * view -- so level looks level from every side -- tipped up or down by `tilt`, and across the screen over its own body,
+ * but never nearer the middle than `EQUITY_HALF`: where one stands behind the other the ends go out to either side
+ * (the caster's to the left), so the beam always has its length and the two pans hang apart.
  */
 function equityEnd(k: FxScene, b: Body, tilt = 0): P3 {
-  const s = b === k.caster ? -1 : 1;
-  return atScreenY(k, b.x, b.y, equityY(k) + s * tilt * k.hpx(22));
+  const mine = b === k.caster;
+  const a = k.caster, c = k.target;
+  const m = { x: (a.x + c.x) / 2, y: (a.y + c.y) / 2 };
+  const dx = k.sx(c) - k.sx(a);
+  const side = (mine ? -1 : 1) * (Math.abs(dx) < 1 ? 1 : Math.sign(dx));
+  const across = side * Math.max(Math.abs(dx) / 2, k.hpx(EQUITY_HALF));
+  // Along the ground the way that goes across the screen, as far as it takes to get there.
+  const gw = groundWay(k, m, 1, 0), z = k.ground(m.x, m.y);
+  const o = { x: m.x, y: m.y, z };
+  const perTile = Math.abs(k.sx({ x: m.x + gw.x, y: m.y + gw.y, z }) - k.sx(o)) || 1;
+  const s = ((k.sx(a) + k.sx(c)) / 2 + across - k.sx(o)) / perTile;
+  return atScreenY(k, m.x + gw.x * s, m.y + gw.y * s, equityY(k) + (mine ? -1 : 1) * tilt * k.hpx(22));
+}
+/** Where a pan of Equity's hangs on the screen when the beam is level: its rim a little over its own body's head. */
+const equityPanY = (k: FxScene, b: Body): number => k.sy(over(k, b, 3));
+/**
+ * Where a pan of Equity's is in the world (`end` the beam's end over it), and how far up its body's height that is:
+ * where it starts from when it comes down round the body.
+ */
+function equityPan(k: FxScene, b: Body, end: P3): { at: P3; share: number } {
+  const at = atScreenY(k, end.x, end.y, equityPanY(k, b));
+  return { at, share: (at.z - b.z) / Math.max(1, b.tall) };
 }
 /**
  * Equity's beam, tipped `tilt`: a lozenge at its pivot on a rod from above, and from each end three cords to a pan hung
- * over each of the two (`pans`, 0..1, how much of the pans shows): everything over their heads, so nothing crosses
- * either body.
+ * just over its own body's head (`pans`, 0..1, how much of the pans shows): everything over their heads, so nothing
+ * crosses either body, and neither pan left hanging far over the nearer of the two.
  */
 function equityBeam(k: FxScene, tilt: number, alpha: number, pans: number): void {
   if (alpha <= 0.01) return;
@@ -2764,29 +3021,39 @@ function equityBeam(k: FxScene, tilt: number, alpha: number, pans: number): void
   [k.caster, k.target].forEach((b, i) => {
     const e = ends[i];
     const ex = k.sx(e), ey = k.sy(e);
-    const drop = k.hpx(EQUITY_DROP), pw = k.hpx(Math.max(3.4, b.wide * 0.8)), ph = pw * 0.3;
-    const py = ey + drop;
+    const pw = k.hpx(Math.max(3.4, b.wide * 0.8)), ph = pw * 0.3;
+    // On cords as long as it takes to hang just over its own head, the tip of the beam carried down with it.
+    const py = Math.max(ey + k.hpx(3), equityPanY(k, b) + Math.min(k.hpx(1.5), ey - equityY(k)));
     k.worldDraw({ x: b.x, y: b.y, z: b.z }, (g) => {
       g.globalAlpha = clamp(alpha * pans);
       g.lineJoin = 'miter';
       g.lineWidth = Math.max(0.8, iw * 0.9);
       g.strokeStyle = main;
+      // One cord down from the end to a ring a little over the pan, and three from the ring to its rim, as a pan is hung:
+      // a long drop reads as a cord and not as a funnel.
+      const ry = Math.max(ey, py - k.hpx(5));
       g.beginPath();
+      g.moveTo(ex, ey);
+      g.lineTo(ex, ry);
       for (const dx of [-pw * 0.9, pw * 0.1, pw * 0.9]) {
-        g.moveTo(ex, ey);
+        g.moveTo(ex, ry);
         g.lineTo(ex + dx, py);
       }
       g.stroke();
+      if (ry > ey + 1) poly(g, [[ex, ry - iw * 1.6], [ex - iw * 1.2, ry], [ex, ry + iw * 1.6], [ex + iw * 1.2, ry]], core, ink, iw * 0.7);
       poly(g, [[ex - pw, py], [ex + pw, py], [ex + pw * 0.6, py + ph], [ex - pw * 0.6, py + ph]], main, ink, iw);
       poly(g, [[ex - pw, py], [ex + pw, py], [ex + pw * 0.85, py + ph * 0.4], [ex - pw * 0.85, py + ph * 0.4]], core, null);
     }, 2);
   });
 }
 
+/** Whether Temper is cast with nothing in the hand: the grip and the tip are then the same fist. */
+function temperBare(k: FxScene): boolean {
+  const grip = k.joint(k.caster, 'grip'), tip = k.joint(k.caster, 'tip');
+  return Math.hypot((tip.x - grip.x) * 40, (tip.y - grip.y) * 40, tip.z - grip.z) < 1.5;
+}
 /** Along the thing Temper is cast on, nought at the fist and one at its far end, wherever it is carried; between the hands when nothing is held. */
 function temperAt(k: FxScene, u: number): P3 {
-  const grip = k.joint(k.caster, 'grip'), tip = k.joint(k.caster, 'tip');
-  // With nothing held the two are the same fist.
-  if (Math.hypot((tip.x - grip.x) * 40, (tip.y - grip.y) * 40, tip.z - grip.z) < 1.5) return mid3(k.hand(1), k.hand(0), u * 0.5);
-  return mid3(grip, tip, u);
+  if (temperBare(k)) return mid3(k.hand(1), k.hand(0), u * 0.5);
+  return mid3(k.joint(k.caster, 'grip'), k.joint(k.caster, 'tip'), u);
 }
