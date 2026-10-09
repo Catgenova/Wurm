@@ -2634,9 +2634,14 @@ const RUN_LEG: Key[] = [
  * knee itself, with the shin hanging under it, puts the boot up the screen.
  * Driven up by fifty-five degrees more to no more than eighty, the boot rose
  * three and a half pixels at the smallest size, and in a mail skirt, which
- * hides the thigh, that read as a jog on the spot; now about five.
+ * hides the thigh, that read as a jog on the spot; now about five. The shin
+ * is let down only as the thigh comes forward, from the fifth number of
+ * degrees to the sixth: let down off the toe too, the leg behind was a post
+ * as the one in front reached straight for the ground, and for a frame or
+ * two both legs were straight together. Off the toe it folds as it does from
+ * the side, and from in front the boot comes up behind the knee.
  */
-const RUN_FRONT = [30, 0.7, 70, 90];
+const RUN_FRONT = [30, 0.7, 70, 90, -5, 25];
 /**
  * One stride in each four, walking or running, done a little differently,
  * so that a body going a long way does not read as one stride drawn over and
@@ -2691,6 +2696,16 @@ const RUN_DROP: Key[] = [
   { at: 0.6, v: [0.12] },
   { at: 0.8, v: [-0.08] },
 ];
+/**
+ * Seen from in front or behind at a run, the hips let down by as much as this
+ * many units more, deepest this far into a step: from the side the rise and
+ * fall reads in the legs, but square on the body stayed level on the screen
+ * and the run read as a jog on the spot. Let down and not lifted, so a foot on
+ * the ground still reaches it; and eased in and out over the whole step
+ * rather than put on the landing, which (as a deeper `RUN_DROP`) jolted the
+ * hips a quarter of a unit in a frame onto the foot.
+ */
+const RUN_BOB = [0.14, 0.35];
 
 /**
  * Walking into running, `g` between them: the two strides keyed above mixed,
@@ -2740,7 +2755,9 @@ function walk(r: Rig, phi: number, g: number, fr: Frame, facing = 2): void {
   const pace = (heel0 + (TOE[1] - HEEL[1]) - ankleY(off) - sole(TOE, off[2])[0]) / down;
   // The body carried on a curve rather than stood on whichever foot is lowest, which jolts: how far the hips are let down, here.
   const H0 = A + B - HEEL[2], heavy = 1 + vary(5);
-  let H = H0 - heavy * L(loop(WALK_DROP, step)[0], loop(RUN_DROP, step)[0]);
+  // How square on to the viewer, in front or behind, the body is seen, at a run (see `RUN_FRONT`, `RUN_BOB`).
+  const front = g * Math.max(0, Math.min(1, (Math.abs(Math.cos(facing * 45 * DEG)) - 0.5) / 0.5));
+  let H = H0 - heavy * L(loop(WALK_DROP, step)[0], loop(RUN_DROP, step)[0]) - front * RUN_BOB[0] * (0.5 + 0.5 * Math.cos(TAU * (step - RUN_BOB[1])));
   // Where a foot on the ground has its ankle, from the hip, with the hips `h` up: the heel it rolls over on the track while the
   // toe is up, the toe once the heel has lifted.
   // The hips dropped on one side (see below) put that hip lower, and with the leg turned out from them the sole's outer edge too.
@@ -2803,8 +2820,6 @@ function walk(r: Rig, phi: number, g: number, fr: Frame, facing = 2): void {
    */
   const pelvisXf = joint(ROOT, [r.at[0], r.at[1], HIP * T], ...r.pelvis);
   const ground = HIP * T - 0.1 - H;
-  // How square on to the viewer, in front or behind, the body is seen, at a run (see `RUN_FRONT`).
-  const front = g * Math.max(0, Math.min(1, (Math.abs(Math.cos(facing * 45 * DEG)) - 0.5) / 0.5));
   r.plant = [0, 0];
   for (let k = 0; k < 2; k++) {
     const { u, q, on } = legs[k];
@@ -2818,7 +2833,7 @@ function walk(r: Rig, phi: number, g: number, fr: Frame, facing = 2): void {
     const hip = place(pelvisXf, [s * fr.hi, 0, -0.1]);
     const wide = front * (1 - on) * Math.sin(Math.PI * Math.max(0, Math.min(1, (u - down) / (1 - down))));
     const thigh = q[0] + Math.min(Math.max(0, RUN_FRONT[3] - q[0]), RUN_FRONT[2] * front * (1 - on) * Math.sin(Math.PI * Math.max(0, Math.min(1, (u - 0.45) / 0.52))));
-    const knee = q[1] + (thigh - q[0]) - front * (1 - on) * Math.max(0, q[1] - q[0] - RUN_FRONT[0]);
+    const knee = q[1] + (thigh - q[0]) - front * (1 - on) * ramp(thigh, RUN_FRONT[4], RUN_FRONT[5]) * Math.max(0, q[1] - q[0] - RUN_FRONT[0]);
     /*
      * Taken up from where the toe left the ground, and eased back onto the keyed swing by the next heel strike. The track the foot
      * goes back along on the ground is the ground's, and the hips' turn carries the hip forward and back over it; the keyed leg in
@@ -2866,11 +2881,13 @@ function walk(r: Rig, phi: number, g: number, fr: Frame, facing = 2): void {
      * thigh and in across the body: bent less, in armour at the size the
      * island is played at the arms were two tubes against the body.
      */
-    // Walking, back as far as forward and a little out from the side, the elbow kept a little bent: back by less, from behind in
-    // armour the hand never came out past the hip, and the arms read as hanging still. And coming forward in across the belt, and
-    // at a run the fist across toward the breastbone: from in front in mail the arms otherwise kept inside the body's outline.
+    // Walking, back further than forward and out from the side as it goes, the elbow kept a little bent: back by less, and out by a
+    // third as much, from in front and behind in plate and scale the hand never came out past the hip's outline (a woman's, in
+    // none of 64 moments; now in a third of them) and the arms read as two tubes beside the body. And coming forward in across the
+    // belt, and at a run the fist across toward the bottom of the breastbone: from in front in mail the arms otherwise kept inside
+    // the body's outline; swung up as far as a walking arm, the forearm lay level across the chest and read as a hand on the heart.
     const back = Math.max(0, -swing);
-    r.arm[k] = [L(3, 4) + reach * (swing > 0 ? L(27, 30) : L(30, 34)) * swing, L(6, 9) + vary(6) - L(16, 12) * fore + L(6, 0) * back, L(3, 16) + L(4, 14) * fore];
+    r.arm[k] = [L(3, 4) + reach * (swing > 0 ? L(27, 23) : L(34, 34)) * swing, L(6, 9) + vary(6) - L(16, 12) * fore + L(20, 0) * back, L(3, 16) + L(4, 14) * fore];
     r.elbow[k] = WALK_ELBOW[0] + vary(3) + L(8, 0) * back + WALK_ELBOW[1] * Math.max(0, follow) + g * g * (84 - WALK_ELBOW[0] + 24 * follow - WALK_ELBOW[1] * Math.max(0, follow));
     r.shrug[k] = L(0.14, 0.24) * fore;
     // The hand hanging loose trails the swing walking; curling closed with the gait into a fist at a run, it goes with the forearm,
@@ -5078,6 +5095,8 @@ interface Foot {
   /** How far it is held up off where a blend carries it, for being carried along the ground: see `footed`. */
   raise: number;
   step?: { since: number; from: V3; yaw: number; lift: number; time: number };
+  /** Put down, by a step or out of a stride, since the body last walked: such a foot is let stand a little further out of place. */
+  placed?: boolean;
 }
 
 /** How far a foot on the ground may be from where the pose wants it, along the ground and turned, while things are changing and once they have settled, before it steps there. */
@@ -5085,6 +5104,13 @@ const STEP_OFF = 0.55, STEP_TURNED = 18;
 const SETTLED_OFF = 0.22, SETTLED_TURNED = 7;
 /** How far a foot kept on the ground may be turned against the leg before it pivots on its ball, in degrees, and how fast it pivots then, in degrees a second. */
 const PIVOT_FROM = 40, PIVOT_RATE = 600;
+/**
+ * Walking, in degrees: how far a foot is put down turned toward where the body is turning; how far behind that one on the
+ * ground may be turned before it steps round when the other is down; and before it pivots on its ball when the other is in
+ * the air -- the leg turning under the hips until then. And how far, in units, the hips may come down to reach a foot left
+ * behind by a turn before it steps whether the other is down or not: see `footed`.
+ */
+const TURN_AHEAD = 60, TWIST_STEP = 20, PIVOT_WALKING = 90, KEPT_SINK = 0.5;
 /** Where the ball of the foot is, from the ankle, along the ground: what a foot pivots on. */
 const BALL = 1.15;
 
@@ -5128,8 +5154,20 @@ function footed(h: Held, rig: Rig, walking: Rig | undefined, goal: Rig | undefin
    * between the two lines above, this took their `else` for its own inner `if`, and a stop from a run went by how low each
    * foot was rather than by the stride's own planting: a foot the stride had in the air stayed up most of half a second.)
    */
+  // Setting off, the first moments both feet are kept down (see below): less of that the faster, since a run's stride has both
+  // feet in the air from its first frame.
+  const holding = !!walking && starting && now - h.since < START_HOLD * (1 - h.gait);
   if (walking && starting) {
     for (let k = 0; k < 2; k++) if (!ground[k].planted) want[k] = { ...want[k], at: wb[`ankle${k}`].t, yaw: yawOf(wb[`ankle${k}`]) };
+    /*
+     * And for the first `START_HOLD` seconds of a walk both feet are kept down where they stand while the hips go over onto the
+     * one the walk has planted (see `settle`), so the weight is seen to shift before the first foot lifts: lifted in the first
+     * frame, the foot went up as the hips began to move, and the start had no shift in it at all.
+     */
+    if (holding && h.feet) for (let k = 0; k < 2; k++) {
+      const f = h.feet[k];
+      if (!ground[k].planted && f.down && !f.step) want[k] = { ...want[k], at: [f.at[0], f.at[1], f.want[2]], yaw: f.yaw, down: true };
+    }
   }
   if (!h.feet) {
     h.feet = want.map((w, k) => ({ at: w.at, yaw: w.yaw, want: w.at, down: w.down, ground: ground[k].at, planted: ground[k].planted, raise: 0 }));
@@ -5157,16 +5195,35 @@ function footed(h: Held, rig: Rig, walking: Rig | undefined, goal: Rig | undefin
    * again, and again, up to a second of shuffling and four or five units of
    * stepping a foot. Now each foot steps once, to where it will stand.
    */
-  const lead = Math.max(-90, Math.min(90, togo)) * DEG, lc = Math.cos(-lead), ls = Math.sin(-lead);
+  /*
+   * Walking, a foot is put down where the walk has it, but turned toward where the body is turning by as much as `TURN_AHEAD`,
+   * and one on the ground is stepped round once it is `TWIST_STEP` behind that: put down square to the body as it was and kept
+   * there, it was pivoted flat on the ground fifty degrees and more through a half turn.
+   */
+  const most = moving ? TURN_AHEAD : 90, lead = Math.max(-most, Math.min(most, togo)) * DEG, lc = Math.cos(-lead), ls = Math.sin(-lead);
   const gb = goal && goal !== rig && !goal.sit && goal.sink <= 0 ? skeleton(fr, goal) : undefined;
   const aim = want.map((w, k) => {
     const at = gb ? gb[`ankle${k}`].t : w.at, yaw = gb ? yawOf(gb[`ankle${k}`]) : w.yaw;
-    return { at: [at[0] * lc - at[1] * ls, at[0] * ls + at[1] * lc, w.at[2]] as V3, yaw: yaw - lead / DEG };
+    return { at: (moving ? w.at : [at[0] * lc - at[1] * ls, at[0] * ls + at[1] * lc, w.at[2]]) as V3, yaw: yaw - lead / DEG };
   });
+  /*
+   * How far foot `k` is turned against the leg beyond `by` degrees either way, counting as square to the leg anything between
+   * that and the way it is put down for the turn still to come: a foot stepped round ahead of the body is not turned back to
+   * the body on its ball (standing, a foot put down a quarter turn ahead was then pivoted back forty degrees, its heel sliding a
+   * unit across the ground, and the body came round to where it had been put down after all).
+   */
+  const twisted = (k: number, by: number): number => {
+    const t = wrapDeg(feet[k].yaw - want[k].yaw), a = wrapDeg(aim[k].yaw - want[k].yaw);
+    return Math.min(0, t - Math.min(0, a) + by) + Math.max(0, t - Math.max(0, a) - by);
+  };
+  const pose = b.pelvis.t[2] - HIP * fr.tall, turning = Math.abs(togo) > 1 || Math.abs(turned) > 0.01;
   for (let k = 0; k < 2; k++) {
     const f = feet[k], w = want[k];
-    // How far a foot on the ground is from where the walk had it there, last time.
-    const kept = Math.hypot(f.at[0] - f.ground[0], f.at[1] - f.ground[1]);
+    if (moving) f.placed = false;
+    // How far a foot on the ground is from where the walk had it there, last time -- the walk as drawn, turned with the head and
+    // shoulders going round ahead of the hips (`turnedAhead`): the walk on its own has the hips square, and in a turn a foot just
+    // put down was half a unit from its foot at once, and stepped again.
+    const kept = Math.hypot(f.at[0] - f.want[0], f.at[1] - f.want[1]);
     // Fixed on the ground: round with the turn, and back with the ground going by if it is on it.
     const q = round(f.at);
     const g = went[k] ?? [gx, gy];
@@ -5194,8 +5251,11 @@ function footed(h: Held, rig: Rig, walking: Rig | undefined, goal: Rig | undefin
         }
       }
       f.yaw = s.yaw + wrapDeg(to.yaw - s.yaw) * e;
-      if (t >= 1) f.step = undefined;
-    } else if (f.down && (moving && f.planted ? kept > 0.5 : Math.hypot(f.at[0] - w.at[0], f.at[1] - w.at[1]) > (moving ? 0.9 : 0.3)) && (!w.down || (moving && feet[1 - k].down))) {
+      if (t >= 1) {
+        f.step = undefined;
+        f.placed = !moving;
+      }
+    } else if (f.down && ((moving && f.planted ? kept > 0.5 : Math.hypot(f.at[0] - w.at[0], f.at[1] - w.at[1]) > (moving ? 0.9 : 0.3)) || (moving && w.down && twisted(k, TWIST_STEP))) && (!w.down || (moving && ((feet[1 - k].down && !feet[1 - k].step && want[1 - k].down) || (turning && hipsFor(rig, fr, k, f.at, 4) < pose - KEPT_SINK)))) && !holding) {
       /*
        * Lifted by the pose from somewhere else than the pose has it, or,
        * walking, kept so far from where the walk has it that the leg would
@@ -5207,6 +5267,9 @@ function footed(h: Held, rig: Rig, walking: Rig | undefined, goal: Rig | undefin
        * off the toe, and a foot just put down in its place stepped again.
        */
       const off = Math.hypot(f.at[0] - w.at[0], f.at[1] - w.at[1]);
+      // (And walking, one left so far behind by a turn that the hips would have to come down more than `KEPT_SINK` to reach it
+      // goes even with the other foot still in the air: kept until that one came down, the body sank onto its heels, four and
+      // six units, through a walking half turn.)
       f.step = { since: now - dt, from: f.at, yaw: f.yaw, lift: Math.min(0.9, 0.35 + 0.1 * off), time: 0.12 + 0.03 * Math.min(4, off) };
       const e = ease(dt / f.step.time);
       f.at = [f.at[0] + (w.at[0] - f.at[0]) * e, f.at[1] + (w.at[1] - f.at[1]) * e, f.at[2] + f.step.lift * Math.sin((Math.PI * dt) / f.step.time)];
@@ -5234,24 +5297,29 @@ function footed(h: Held, rig: Rig, walking: Rig | undefined, goal: Rig | undefin
       const raised = f.raise;
       f.raise += ((changing ? Math.min(0.6, 0.035 * speed) : 0) - f.raise) * Math.min(1, dt * 20);
       f.at = [to[0] + (f.at[0] - was[0]) * u, to[1] + (f.at[1] - was[1]) * u, to[2] + (f.at[2] - raised - was[2]) * u + f.raise];
-      f.yaw = w.yaw + wrapDeg(f.yaw - w.yaw) * u;
-    } else if (moving && !f.down && Math.hypot(f.at[0] - w.at[0], f.at[1] - w.at[1]) > 0.3) {
-      // Walking, a foot not yet back where the walk has it is not put down short of it.
+      const yaw = moving ? aim[k].yaw : w.yaw;
+      f.yaw = yaw + wrapDeg(f.yaw - yaw) * u;
+    } else if (moving && !f.down && Math.hypot(f.at[0] - round(f.want)[0], f.at[1] - round(f.want)[1]) > 0.3) {
+      // Walking, a foot not yet back where the walk has it is not put down short of it. Where the walk had it last time, not now:
+      // the ground goes by under a walking body about three tenths of a unit a frame, so the foot was always that far from where
+      // the walk put it down, and turning a little further -- a walking turn held the foot in the air half a second, and the other
+      // pivoted flat on the ground through a hundred degrees and more for want of it.
       w.down = false;
       const was = round(f.want), u = 1 - Math.min(1, dt * 20);
       f.at = [w.at[0] + (f.at[0] - was[0]) * u, w.at[1] + (f.at[1] - was[1]) * u, w.at[2] + (f.at[2] - was[2]) * u + (1 - u) * 0.25];
-      f.yaw = w.yaw + wrapDeg(f.yaw - w.yaw) * u;
+      f.yaw = aim[k].yaw + wrapDeg(f.yaw - aim[k].yaw) * u;
     } else {
       // On the ground: kept there, at the height and the roll the pose has it, and turned on its ball if it is twisted too far; and
       // just put down, put down where the pose puts it, less whatever it was still out of place by in the air.
       if (!f.down) {
         const was = round(f.want);
         f.at = [w.at[0] + f.at[0] - was[0], w.at[1] + f.at[1] - was[1], w.at[2]];
+        f.placed = !moving;
       }
       f.at[2] = w.at[2];
-      const twist = wrapDeg(f.yaw - w.yaw);
-      if (Math.abs(twist) > PIVOT_FROM) {
-        const by = -Math.sign(twist) * Math.min(Math.abs(twist) - PIVOT_FROM, PIVOT_RATE * dt);
+      const twist = twisted(k, moving ? PIVOT_WALKING : PIVOT_FROM);
+      if (twist) {
+        const by = -Math.sign(twist) * Math.min(Math.abs(twist), PIVOT_RATE * dt);
         const a0 = f.yaw * DEG, a1 = (f.yaw + by) * DEG;
         const ball: Pt = [f.at[0] - Math.sin(a0) * BALL, f.at[1] + Math.cos(a0) * BALL];
         f.at = [ball[0] + Math.sin(a1) * BALL, ball[1] - Math.cos(a1) * BALL, f.at[2]];
@@ -5264,7 +5332,15 @@ function footed(h: Held, rig: Rig, walking: Rig | undefined, goal: Rig | undefin
   if (!moving && !feet[0].step && !feet[1].step) {
     const settled = !changing && Math.abs(turned) < 1e-3;
     const off = [0, 1].map((k) => Math.hypot(feet[k].at[0] - aim[k].at[0], feet[k].at[1] - aim[k].at[1]));
-    const far = [0, 1].map((k) => want[k].down && (settled ? off[k] > SETTLED_OFF || Math.abs(wrapDeg(feet[k].yaw - aim[k].yaw)) > SETTLED_TURNED : off[k] > STEP_OFF || Math.abs(wrapDeg(feet[k].yaw - aim[k].yaw)) > STEP_TURNED));
+    /*
+     * Once settled, one already put down since the body last walked is let stand twice as far out of place: coming down out of a
+     * stride into a stop, a foot a quarter of a unit from where it stands was lifted again a quarter of a second after it had
+     * come down, a shuffle that no one standing still makes.
+     */
+    const far = [0, 1].map((k) => {
+      const m = feet[k].placed ? 2 : 1;
+      return want[k].down && (settled ? off[k] > SETTLED_OFF * m || Math.abs(wrapDeg(feet[k].yaw - aim[k].yaw)) > SETTLED_TURNED * m : off[k] > STEP_OFF || Math.abs(wrapDeg(feet[k].yaw - aim[k].yaw)) > STEP_TURNED);
+    });
     const k = far[0] && far[1] ? (off[0] >= off[1] ? 0 : 1) : far[0] ? 0 : far[1] ? 1 : -1;
     if (k >= 0 && want[1 - k].down) {
       const f = feet[k];
@@ -5294,7 +5370,6 @@ function footed(h: Held, rig: Rig, walking: Rig | undefined, goal: Rig | undefin
    * cannot reach a foot kept behind it, and held up off the ground where
    * the pose has both feet in the air.
    */
-  const pose = b.pelvis.t[2] - HIP * fr.tall;
   const r: Rig = { ...rig, at: [rig.at[0], rig.at[1], pose], leg: [[...rig.leg[0]], [...rig.leg[1]]], knee: [rig.knee[0], rig.knee[1]], hover: undefined, plant: undefined };
   for (let k = 0; k < 2; k++) {
     r.leg[k][2] += (k ? 1 : -1) * wrapDeg(feet[k].yaw - want[k].yaw);
@@ -5331,6 +5406,9 @@ function footed(h: Held, rig: Rig, walking: Rig | undefined, goal: Rig | undefin
  * at most: see `footed`.
  */
 const HIPS_RISE = 10, HIPS_FREE = 1.5, HIPS_MOST = 3.5;
+
+/** Seconds both feet stay down when setting off, while the weight goes over onto the first stance foot: see `footed`. */
+const START_HOLD = 0.08;
 
 /** The sole's corners in the ankle's frame: what is stood on. */
 const SOLE: V3[] = [[-0.37, -0.58, -0.75], [0.37, -0.58, -0.75], [0.35, 1.72, -0.75], [-0.35, 1.72, -0.75]];
@@ -7878,8 +7956,11 @@ const WEAPONS: Record<string, () => Weapon> = {
     // through the stride -- see `CARRY_STEADY` -- it needs less, and sits nearer the shoulder). From in front, across the top of the
     // shoulder from a fist at the breastbone, the haft some thirty degrees off upright on the screen and the head out past the
     // shoulder: stood up at the shoulder's edge from a fist under the armpit, it was under twenty, and read as held up beside the
-    // helm like a torch rather than resting there. Three-quarters on, lying a little further back.
-    stage: { 0: [0.88, -20, 0, 0.3, 0.2], 1: [1.2, -30, 0, 0.6], 2: [1.15, -45, 0, 1.2], 3: [1.6, -44, 0], 4: [0.7, -16, 0], 5: [1.6, -44, 0], 6: [1.15, -45, 0, 1.2], 7: [1.2, -30, 0, 0.6] },
+    // helm like a torch rather than resting there. That fist at the breastbone brought the haft in to the jaw, a tangent to it on the
+    // screen with no air between, so it sits further out toward the carrying shoulder (`aside`), which keeps the haft eight tenths
+    // of a unit or more off the head's outline from in front in every build, helmed or bare, and still across the shoulder's top.
+    // Three-quarters on, lying a little further back.
+    stage: { 0: [0.88, -20, 0, 0.3, 0.8], 1: [1.2, -30, 0, 0.6], 2: [1.15, -45, 0, 1.2], 3: [1.6, -44, 0], 4: [0.7, -16, 0], 5: [1.6, -44, 0], 6: [1.15, -45, 0, 1.2], 7: [1.2, -30, 0, 0.6] },
     grip: shaft([[-4.1, 0.19], [-0.7, 0.18], [0.6, 0.175]], 'grip', 5),
     head: join(
       shaft([[0.6, 0.175], [5.9, 0.16]], 'wood', 5),
@@ -7906,7 +7987,7 @@ const WEAPONS: Record<string, () => Weapon> = {
     // Slung head up, as a hammer is carried: head down on the back it is a spade, and at the hip a satchel.
     carry: 'shoulder', stow: 'back', headUp: true, from: -4.3, to: 5.9, fist: -3.4, reach: 2.8, tilt: 40, out: 64, spin: 90, slant: 36,
     // Staged as the battle axe is.
-    stage: { 0: [0.75, -20, 0, 0.4, 0.3], 1: [1.2, -30, 0, 0.8], 2: [1, -45, 0, 1.2], 3: [1.6, -44, 0], 4: [0.7, -16, 0], 5: [1.6, -44, 0], 6: [1, -45, 0, 1.2], 7: [1.2, -30, 0, 0.8] },
+    stage: { 0: [0.75, -20, 0, 0.4, 0.6], 1: [1.2, -30, 0, 0.8], 2: [1, -45, 0, 1.2], 3: [1.6, -44, 0], 4: [0.7, -16, 0], 5: [1.6, -44, 0], 6: [1, -45, 0, 1.2], 7: [1.2, -30, 0, 0.8] },
     grip: shaft([[-4.2, 0.19], [-0.8, 0.18], [0.6, 0.175]], 'grip', 5),
     head: join(
       shaft([[0.6, 0.175], [4.9, 0.17]], 'wood', 5),
