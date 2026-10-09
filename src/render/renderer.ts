@@ -40,7 +40,7 @@ import { DYE_BY_ID } from '../game/dyestuffs';
 import { hash2 } from '../world/noise';
 import { bareRock, DAMP_SAND, dustiness, FLAT, growth, oreWash, PAVED, ROCK_VARIANTS, SLAB_VARIANTS, STREWN, TileType, TILE_DEFS, COVERED, bushSpecies, slabVariant, trailGround, stonesBed, treeSpecies, treeVariant } from '../world/tiles';
 import { HALF_H, HALF_W, HEIGHT_SCALE, UNITS_PER_TILE } from './iso';
-import { HUNT_REACH, inFightReach, isFightJob, WIND_UP } from '../game/fight';
+import { beastReach, HUNT_REACH, inFightReach, isFightJob, WIND_UP } from '../game/fight';
 import { depthOf, type View } from './view';
 import { FALLS, roofModel, type Fall, type RoofGable, type RoofModel, type RoofPt } from './roofshape';
 import { COVER_PPT, covering } from './roofing';
@@ -183,6 +183,7 @@ import { hingeKey, hingeOf, isDrawbridge, landingOf } from '../game/gates';
 import { bridgeDone, type Bridge } from '../game/bridges';
 import { SmallLife, type Mote } from './life';
 import { personBody, SpellStage, type Aim, type Who } from './spells/stage';
+import { creatureWide } from './spells/kit';
 import { spellInfo } from './spells/info';
 import type { Body as SpellBody, WorldRec as SpellRec } from './spells/kit';
 import type { CastAt } from '../game/events';
@@ -1293,7 +1294,7 @@ export class Renderer {
     // A spell cast, yours or anybody's in sight: drawn from whoever cast it at whatever it was cast at.
     game.events.on('cast', (c) => {
       const by: Who = c.by === null ? { kind: 'player' } : { kind: 'peer', id: c.by };
-      this.spells.play(c.spell, by, this.spellAim(c.at), { mine: c.by === null, companion: c.companion, from: c.from });
+      this.spells.play(c.spell, by, this.spellAim(c.at), { mine: c.by === null, companion: c.companion, from: c.from, targetFrom: c.targetFrom });
     });
     game.events.on('reset', () => {
       this.spells.clear();
@@ -2893,7 +2894,7 @@ export class Renderer {
     this.roomTiles = this.myRoom();
     this.shades.clear();
     // The spells first: what they light is among what is burning.
-    this.spells.update({ eye: this.camera, now: performance.now() / 1000, dt, fast: this.fast });
+    this.spells.update({ eye: this.camera, now: performance.now() / 1000, dt, fast: this.fast, night: this.game.darkness() });
     this.game.spellLights = this.spells.lights;
     // What is burning, for glass to glow with at night, and last frame's glow gone.
     this.lightsNow = this.game.darkness() > 0.02 ? this.game.lights() : [];
@@ -4361,7 +4362,7 @@ export class Renderer {
       const p = game.player;
       const z = this.footOn(p.x, p.y, Math.max(0, p.level)) + Math.max(0, p.visualLevel) * WALL_HEIGHT;
       return personBody(p.x, p.y, z, this.playerFacing, 'player', {
-        phase: p.moving ? p.walkPhase : this.time * 6, moving: p.moving, gait: 0, facing: this.playerFacing, swimming: p.swimming, working: false,
+        id: 'player', phase: p.moving ? p.walkPhase : this.time * 6, moving: p.moving, gait: 0, facing: this.playerFacing, swimming: p.swimming, working: false,
         look: p.look, gear: gearFrom(wornWire((slot) => game.worn(slot))),
       });
     }
@@ -4371,7 +4372,7 @@ export class Renderer {
       const [x, y] = game.roster.drawnAt(peer);
       const z = this.footOn(x, y, peer.level) + peer.level * WALL_HEIGHT;
       return personBody(x, y, z, peer.facing, 'peer', {
-        phase: peer.moving ? peer.walkPhase : this.time * 6, moving: peer.moving, facing: peer.facing, swimming: peer.swimming, working: !!peer.working,
+        id: 'o' + peer.id, phase: peer.moving ? peer.walkPhase : this.time * 6, moving: peer.moving, facing: peer.facing, swimming: peer.swimming, working: !!peer.working,
         look: peer.look, gear: peer.gear,
       });
     }
@@ -4381,8 +4382,9 @@ export class Renderer {
     const big = ageDef(cr, game.time).scale * rarityOf(cr).size;
     const tall = Math.max(22 * rarityOf(cr).size, (wildermonTop(def.id) ?? 0) * big) / HEIGHT_SCALE;
     return {
-      x: cr.x, y: cr.y, z: game.laidOver(Math.floor(cr.x), Math.floor(cr.y)) ?? this.footAt(cr.x, cr.y), tall, wide: 5 * rarityOf(cr).size,
-      facing: this.beastFacing.get(cr.id) ?? 0, kind: 'creature',
+      x: cr.x, y: cr.y, z: game.laidOver(Math.floor(cr.x), Math.floor(cr.y)) ?? this.footAt(cr.x, cr.y), tall, wide: creatureWide(def.id) * rarityOf(cr).size,
+      facing: this.beastFacing.get(cr.id) ?? 0, kind: 'creature', species: def.id, reach: beastReach(def),
+      tame: cr.mode !== 'wild', companion: cr.mode === 'active', hostile: cr.enemy !== null,
       // What is on it that the payload says: a burn or a bleed still running, a trap holding it.
       burning: (cr.burnUntil ?? 0) > game.time, bleeding: cr.bleedRate > 0 && cr.bleedUntil > game.time, held: cr.trapped != null,
     };
@@ -4536,6 +4538,7 @@ export class Renderer {
             emote: player.emote,
             emoteT: emoteAt(player.emote, player.emoteAt, performance.now() / 1000) ?? undefined,
             cast: this.spells.poseOf(PLAYER_CASTS),
+            veil: this.spells.veilOf(PLAYER_CASTS),
           }),
         );
         if (ent.clip) ctx.restore();
@@ -4577,6 +4580,7 @@ export class Renderer {
             emote: peer.emote,
             emoteT: emoteAt(peer.emote, peer.emoteAt, performance.now() / 1000) ?? undefined,
             cast: this.spells.poseOf({ kind: 'peer', id: peer.id }),
+            veil: this.spells.veilOf({ kind: 'peer', id: peer.id }),
           }),
         );
         if (ent.clip) ctx.restore();
@@ -4639,7 +4643,9 @@ export class Renderer {
         const hit = this.flashOf(cr.attackedAt);
         // Drawing back for a heavy blow: its reach on the ground under it, filling as the blow comes (`WIND_UP`).
         if (cr.windup > 0) this.drawWindupReach(ctx, ent.sx, ent.sy, zoom, cr.windup);
-        this.paint(ctx, zoom, hit > 0 ? 'flash' : hovering ? 'hover' : 'none', hit * 0.92, ent.sx, ent.sy, (g, px, py) =>
+        // Drawn back toward where it stood while a spell that moved it carries it over (`cast.pull`).
+        const [csx, csy] = this.spellShift({ kind: 'creature', id: cr.id });
+        this.paint(ctx, zoom, hit > 0 ? 'flash' : hovering ? 'hover' : 'none', hit * 0.92, ent.sx + csx, ent.sy + csy, (g, px, py) =>
           drawCreature(g, px, py, zoom, {
             species: def.id,
             facing: turned,

@@ -90,6 +90,18 @@ mark, a few motes — not a light show for half an hour.
   heal on somebody else reaches out (`onSelf(c)` in poses.ts). Always set by the stage; typed optional only so a cue
   you build yourself (`{ ...c, timing }`) still compiles.
 - `c.held`: how far through a held pose (below) it is, 0..1 (`heldFor(c)`); 0 with no hold.
+- `c.aim`: where the target stands from the caster, in the body's frame and **height units** (a tile is 40, a person
+  ~18 tall), measured from where the caster stands: `ahead` (to its middle, along the way the body faces), `aside`
+  (to the right of that line), `near` (ahead to its near side: `ahead` less its half-width), `head`, `chest`, `top`
+  (how high its head, its chest and its top are over the caster's feet — a wolf's head is knee-high, an ogre's well
+  over yours), and `close` (how far the stage carries the body in for the blow, `cast.close` below; 0 without).
+  Undefined for a cast on oneself. A spot on the ground gives the ground's height for all three heights.
+- `c.moved`: tiles the island moved the caster for this cast (a Lunge's stride); 0 when it did not — a Lunge already
+  in reach has nothing to run, so play the thrust without the run.
+- `c.companion`: `{ ahead, aside }` (height units) to the caster's companion, for a pose that reaches to it or turns
+  to it (Lick Wounds stroking the beast, not the air); undefined with none.
+- `c.lefty`: the cast is being played left-handed (`cast.mirror`, below); `c.facing` is then the mirrored facing.
+- `c.look`: the caster's look, for `stepIn` / `reachHand` to solve for the caster's own build.
 
 Write it at full strength through the whole cast; the framework blends in over the first `blendIn` (0.12) and out
 over the last `blendOut` (0.25) of the cast (set `blend: false` to own the whole curve). While the caster walks,
@@ -108,10 +120,56 @@ there to where it is over `cast.move` (`from`..`to` of the way through the pose;
 without a `move` such a cast still travels over that much, so the body never jumps. `k.from` is that start point on
 the ground (null for a cast made standing), and `k.caster` is wherever the body has got to this frame.
 
+**A shouldered weapon, swung from the hand it is in: `cast.mirror: true`.** The figure carries a maul or a battle
+axe over the *left* shoulder at facings 3, 6 and 7 (over the right it would be behind the head), and over the right
+at the rest. A blow written right-handed then needs the weapon in the other hand, and setting `r.carried = 1` moved
+it there in one frame (15–19 units) at the start and the end of the cast. With `mirror: true`, a cast made while the
+weapon is on the left shoulder is **played left-handed**: write the pose right-handed as always; the framework
+mirrors the pose under it, lays yours over that, and mirrors the two back — joints, hands' shapes, `reach` goals
+(swapped, x negated), the kneeling knee, and the hand the weapon is in. Nothing changes hands, ever, and the swing is
+on the side the figure keeps in view. `c.lefty` tells the pose, `k.lefty` / `k.side` (−1 / 1) tell the effects:
+multiply anything put to one side by `k.side` (`k.local(b, k.side * 4, …)`, a slash's `tilt`) and ask for
+`k.hand(k.lefty ? 0 : 1)` — or draw cuts with `k.trail`, which follows the real weapon either way. Only shouldered
+weapons are mirrored (a sword or a spear is always in the right fist). While a cast is on, the figure no longer
+starts carrying the weapon over to the other shoulder (it did, when the cast turned the body: the weapon floated on
+the swap's way through the blow and changed hands half way); it goes over once the cast is done. Proved by a
+per-frame probe over every cast × battle axe and maul × facings 0–7: with `mirror` no first or last frame moves any
+bone or the weapon's head more than 0.67 units (berserker was 15–16 at facings 3, 6, 7).
+
+**Melee distance, and closing in: `cast.close`.** The island lets a blow be struck from as far as the weapon reaches
+(`melee_reach`: 2.2 tiles for a sword, an axe or bare hands; a spear 3.2) and a creature comes to 1.1 tiles to strike
+(`HUNT_REACH`); a Lunge lands 0.4 inside the reach (1.8). A tile is 40 units and a standing blow reaches about 6
+units plus the weapon (17 for an axe), so no blow can be seen to land standing. `cast.close: true` (or a
+`CastClose` `{ from, to, back, reach, most }`) has the stage carry the drawn body toward the target over the wind-up
+(`from`..`to`, 0 to the release) by exactly what the blow is short of its near side (`reach` = 6 + the weapon's
+length, at most `most` = 2 tiles), and back over the recovery (`back`, the follow-through, to the end). The island
+has not moved the body; it is drawn there and put back. `k.caster` is where it is drawn, so every effect follows; the
+renderer draws it there (`shiftOf`). Not while it walks. `c.aim.close` says how far it will be carried.
+
+**Stepping in: `stepIn(r, t, c, { hit, from?, back?, by?, reach?, most?, lead? })`** (poses.ts), called last in a
+pose: the body carried `by` units ahead over `from`..`hit` (the lead foot — the left — lifted and put down further on,
+the back foot kept where it stood, both legs solved to their feet, the hips let down), and back over `back`..1.
+`by` defaults to what is missing: `c.aim.near - c.aim.close - reach` (reach 16), at most `most` (12 units). With
+`cast.close` the stage does the long way and `stepIn` the last stride. Returns how far the body is carried now.
+
+**Arms flung wide: `armOut(k, forward, out)`** (poses.ts) — the arm raised `forward` degrees from hanging (90 level
+ahead, 180 straight up) and opened `out` degrees away from the body, **always away**, at any height:
+`r.arm[0] = armOut(0, 140, 60); r.arm[1] = armOut(1, 140, 60)` is a V flung up and wide. Use it (or `armToward`)
+instead of `[140, 60, -10]`, which crosses the arms over the head (the flip below, kept for the poses written with it).
+
+**The target moved by the spell: `cast.pull: true`** (or `{ from, to }`). For a Hook the island drags the creature in
+before the cast is drawn. The cast event now carries where it stood (your own casts: `targetFrom`), and the stage
+draws it — the creature itself, and `k.target` — carried from there to where the island put it over `from`..`to`
+(0 to the release), so it is hooked and comes, rather than being there already.
+
+**The companion moved by the spell: `cast.companion: true`** (or `{ from, to, beside }`): a Pounce's leap is drawn
+from where the beast stood to where the island put it; a Guard Me that puts it on your own spot draws it a step off
+to your left instead of inside you (`beside`, the default).
+
 `poses.ts` gives keyframes: `euler(t, [[t0, [a,b,c]], [t1, [...]], ...])`, `one(t, [[t0, v], ...])`, `track`,
 and `beats(c)` → `{ top, let, through, back }` fractions keyed to `release`. The stand-ins (`strike`, `thrust`,
 `shot`, `throw`, `bolt`, `curse`, `buff`, `ally`, `nova`, `ground`, `command`, `pray`) are worked examples;
-`withPose(strike, (r, t, c) => { ... })` starts from one and changes what differs.
+`withPose(strike, (r, t, c) => { ... })` starts from one and changes what differs; `stepIn` and `armOut` above.
 
 ### Weapons, hands, face, kneeling: the opt-in Rig fields
 
@@ -127,7 +185,9 @@ keep it in the right.
 | `wieldStaff` | a spear/javelin taken by the arms: along the right forearm, point past the knuckles; with `both`, along the line from the right fist **through the left** | `r.wieldStaff = 1; r.both = 1;` then put the two fists on the line you want (arm angles, or `reach`): a thrust levels it, hands low and the right behind grounds the butt (a brace), `haft` spins it (a whirl) |
 | `wieldBow` | the bow taken by the left fist: stave along the fist (the hand's y), its back out past the knuckles, so the bow arm aims it | `r.wieldBow = 1; r.reach = [{ at: bowHand, haft: [0, 0, 1] }, ...]` — `haft` stands the stave upright; lean `haft` for a cant (`[-sin a, 0, cos a]`), back for a lofted shot; or turn `hand[0]` |
 | `draw` | the string pulled from straight to the right hand's fingers (0..1), bent at the nock | `r.draw = one(t, [[0.1, 0], [b.top, 1], [b.let, 1], [b.let + 0.01, 0]])` |
-| `nocked` | an arrow on the string, nock at the string, shaft over the bow hand (length from the bow) | `r.nocked = t < b.let` |
+| `nocked` | an arrow on the string, nock at the string, shaft over the bow hand (length from the bow); `2` two arrows, the second nocked beside the first and fanned up the stave | `r.nocked = t < b.let`, `r.nocked = t < b.let ? 2 : false` |
+| `arrowHand` | an arrow in the free right hand (a bow in the left): through the fist as a haft is held, a fifth of the way up from its nock, turned by `haft` | `r.arrowHand = t > 0.1 && t < 0.3` (fetched from the quiver, carried to the string) |
+| `stow` | what is in the hands put away for the cast (0..1, put away past 0.5), blended in and out with the cast: a knife sheathed to dress a wound, a maul slung to lay both hands on somebody | `r.stow = 1` — bring the hand to the hip first (`reach`) for it to be seen going |
 | `thrown` | the right hand emptied: the weapon is not drawn at all, nothing is slung on the back, the shield stays on the arm (unlike `stowed`) | `r.thrown = t > b.let` |
 | `both` | the other hand on the haft (0..1), closed on it: for a fist or shouldered weapon the hand is **solved onto the haft** `bothAt` from the first fist (default: down the grip toward the pommel/butt, or up the haft of an axe/maul held by its end); for `wieldStaff`, see above | `r.both = 1` (and `r.bothAt = -1.2` to choose the spot, units along the weapon, + toward the head) |
 | `haft` | degrees the weapon is turned in the fist toward the line of the forearm, past the knuckles — what a bent wrist would do, without bending it | maul/axe (shouldered) at the blow: `r.haft = 75`; blade with `wield`: `r.haft = 150` is a **reverse grip**, point down out of the bottom of the fist; spear with `wieldStaff`: `-90` is square across the fist, `0` along the forearm |
@@ -151,7 +211,7 @@ Exports from `../figure` for poses and effects:
 - `reachHand(r, k, at, { pole, haft, w, look })` — the same solve as `reach`, done now inside your pose.
 - `armToward(k, dir, bend?)` — the `arm[k]` that points the upper arm along `dir` in the chest's frame.
 
-**The arm "out" flip.** `arm[k]` is a pitch forward, then a roll out, then a yaw, each about the chest's axes. Past 90°
+**The arm "out" flip** (use `armOut`, above). `arm[k]` is a pitch forward, then a roll out, then a yaw, each about the chest's axes. Past 90°
 forward the arm is above the shoulder, and rolling it "out" about the forward axis carries the hand back across the
 body — `[130, 35, 0]` crosses the arms over the head. This is kept (the stand-ins rely on it); to raise an arm
 ahead and out, point it: `r.arm[1] = armToward(1, [0.55, 0.5, 0.67])`, or place the hand with `reach`.
@@ -166,18 +226,35 @@ caster stood before a move the island made, or null), `k.dist` (tiles), `k.hand(
 `k.at(body, share)`, `k.local(body, right, ahead, up)`, `k.facingDir(body)`, `k.toward(a, b)`, `k.on(x, y, lift)`.
 Hands and head follow the actual posed figure, frame by frame.
 
-Who is in reach: `k.bodiesWithin(r, c = k.spot, kinds?)` → every person and creature standing within `r` tiles of `c`
+Who is in reach: `k.enemiesWithin(r, c = k.spot)` — the creatures anybody may harm (wild ones; not a companion, not a
+beast on a deed or in a pen, yours or anybody's): **what an area harm strikes** (a ricochet, a fan of blades, a
+judgment). `k.bodiesWithin(r, c = k.spot, kinds?)` → every person and creature standing within `r` tiles of `c`
 (the caster among them when inside), each a `Body` whose `kind` ('player' | 'peer' | 'creature') and `who` tell them
 apart — lay a skin on every ally a ward covers, a mark on every creature a judgment hits:
 `for (const b of k.bodiesWithin(k.fx.reach, k.caster, ['player', 'peer'])) k.shell(b, ...)`. Asked of the world once a
 frame for the same numbers; the island does not say who a spell actually reached, so this is who is there.
+
+A creature body also carries `species` (for `k.muzzle`), `reach` (how near it strikes from, in tiles: 1.1, or 6 for
+a thrower — a reach advantage is measured from it), `tame`, `companion`, `hostile` (hunting or fighting somebody), and
+`wide` is now its kind's own width (`creatureWide`: from its model, five for the ulva; an ogre is broader).
+`k.muzzle(b)` is a creature's head, where its jaws are, from its own model (a person's head; up its height for a kind
+with no model).
 
 What is on a creature, where the island's payload says: `k.target.burning` (a Kindler's burn running — Combust),
 `k.target.bleeding` (a knife's bleed running), `k.target.held` (a trap holding it). People carry none of these, and no
 other mark is in the payload.
 
 Time and randomness: `k.now`, `k.dt`, `k.rand()` (fresh each frame — crackle), `k.seed` + `hashOf(seed, i)`
-(stable per cast), `k.state` (your per-cast scratch numbers), `k.fast`, `k.mine` (your own cast), `k.zoom`.
+(stable per cast), `k.state` (your per-cast scratch numbers), `k.fast`, `k.mine` (your own cast), `k.zoom`,
+`k.night` (0 by day to 1 at the dead of night: choose ink by day and a light tone at night), `k.released` (seconds
+since the release, −1 before) and `k.castLeft` (seconds of the pose left). **`charge` is called to the end of the pose,
+not only to the release** (unchanged; groups rely on it for follow-throughs): a warning that must go at the release
+fades by `k.released`, one that lasts the pose fades out over its end by `k.castLeft` rather than vanishing in a frame.
+`k.aim` (as `c.aim`), `k.lefty` / `k.side` (above), `k.timing`.
+
+`k.once(name, () => point)`: a point kept for the rest of the cast from the first frame it is asked for — the tip at
+the hit, so a lance or a line tied to the weapon stays put while the pose recovers instead of kinking and swinging at
+the sky with the live tip.
 
 Shapes (sizes in **pixels at zoom 1**, scaled by zoom; distances on the ground in tiles):
 
@@ -190,19 +267,22 @@ Shapes (sizes in **pixels at zoom 1**, scaled by zoom; distances on the ground i
 | world | `ribbon(points, {width, taper})`, `beam(a, b)` | ribbon/trail through 3D points |
 | world | `bolt(a, b, {jag, kinks, fork})` | jagged lightning, re-struck every frame |
 | world | `slash(body, {u, from, to, tilt, reach})` | crescent cut by the blade, `u` 0..1 progress |
-| world | `shell(body, {size, turn})` | faceted egg round a body, back half behind it, rim in front (three fills and a stroke, however many sides) |
+| world | `trail(body, {secs, inner, outer, key, edge})` | **the band the real weapon swept** over the last `secs` (0.12) of the cast, from `inner` to `outer` of the way from the fist to the point (0.4..1): the posed figure sampled every 1/60 s of the cast whatever the frame rate (so at 15 fps a blow is a smooth band, not planks), each sample posed once and kept, the head the pose already drawn; tapered to the edge at its tail (eaten, not faded), `main` with a `core` edge, inked. Mirrored casts, reverse grips, any weapon: it is where the weapon was |
+| world | `aura(body, {size, width, flow, waver})` | a halo the shape of the body, hugging it (band behind, two side edges in front, wavering upward): the body's own power — a siphon, a shroud, undying — and not a skin laid on it, which is `shell` |
+| world | `shell(body, {size, turn, back, lit, rim, tall})` | faceted egg round a body, back half behind it, rim in front (three fills and a stroke, however many sides). It is the Warder's skin language: to read as anything else, `lit: false` (no lit facets), `back: 0` (no back fill: a rim only), `rim` (its width), `tall` (squash or stretch), or use `aura` |
 | world | `pillar(c, {r, h})` | column of light from the ground |
 | world | `shards(c, {n, r, h, grow})` | crystals out of the ground |
 | world | `mark(p, {r, points, turn})` | small turning rune over a head |
-| world | `polyline(points, {closed, width})` | thin inked line through 3D points (1.2 px), sorted at its nearest point; no glow unless `glow` |
+| world | `polyline(points, {closed, width, around})` | thin inked line through 3D points (1.2 px), sorted at its nearest point; no glow unless `glow`. `around: body` cuts it where it passes the body and sorts the far runs behind it and the near runs in front (a chain round a creature, a braid between two people); `ribbon` takes `around` too, its taper kept whole; `k.aroundBody(b, pts)` gives the runs for your own |
 | world | `string(a, b, {sag, n})` | a `polyline` from a to b sagging `sag` height units at the middle (negative bows up): bowstring, tether, leash |
 | world | `shapes(at, pieces, look)` | many small polygons as ONE sorted record at `at`: `pieces` = `{ pts: P3[], fill?, ink?, width?, alpha?, closed? }[]` (fill/ink `false` for none), drawn in order |
 | ground | `groundPath(points, {closed, width, lift, segs})` | lines on the ground following the land, inked; `segs: [[a, b], ...]` for many separate stretches in one record |
 | ground | `groundShape(x, y, r, layers)` | your own shapes on the ground, as cheap as the kit's: `layers` = `GroundLayer[]` (below) |
-| glow | `glow(p, r, alpha, colour)`, `flare(p, r, alpha)` | additive, over the night |
+| glow | `glow(p, r, alpha, colour, over?)`, `flare(p, r, alpha, colour?, turn?, light?, over?)` | additive, over the night. `flare`'s `light` is its glow's colour (as `Look.light`). **`over: true` lays it over in its own colour instead of adding it**: gold, brass and blood added over grass go lime/olive; laid over they stay gold |
 | light | `light(p, radiusTiles, strength, colour)` | cuts the night like a fire (max 8 at once) |
 | screen | `flash(alpha)` | tint the screen; own casts only, never on fast, capped 0.3 — use for the top tier only |
-| particles | `burst(p, n, opts)`, `emit(p, perSecond, opts)` | `kind`: spark, ember, mote (light, glow pass); smoke, dust, shard, drop (things, depth-sorted) |
+| particles | `burst(p, n, opts)`, `emit(p, perSecond, opts)` | `kind`: spark, ember, mote (light, glow pass); smoke, dust, shard, drop, **mist** (things, depth-sorted; mist is a soft round puff with no edge — a breath, a vapour, a healing haze — where smoke is a hard hexagon). `over: true` draws a light kind laid over rather than added (warm sparks that must stay their colour); `ink: false` leaves a shard's dark edge off (small or bright chips) |
+| body | `veil(body, {colour, tint, fade})` | a person's own body tinted `tint` of the way to `colour` (the palette's deep) and drawn `fade` of the way to nothing, this frame: a shroud, a stealth, a body gone to smoke. Call it every frame it is wanted, from any part (a linger too); the strongest a body is given wins |
 
 Every shape takes a `Look`: `main`, `deep`, `core`, `ink` (palette overrides), `alpha`, `glow` (0 = none), `light`
 (the glow's colour over the palette's `light`: a green heal glow off a gold Warder ring), `width`, `bias` (pixels
@@ -224,7 +304,9 @@ k.groundShape(c.x, c.y, r + 0.5, [
 ```
 
 (`width` is in pixels as drawn, zoom included; points are flat x, y pairs in tiles; each piece is put on the land where
-it is, so a shape follows the hills.) A raw `k.groundDraw(x, y, r, g => ...)` still works as it always did, but it is
+it is, so a shape follows the hills.) A layer's `glow: 0..1` (and `light`, its colour) lays it again in the glow pass,
+lines three times as wide: **a night rim**, so a ground mark that says the mechanic still reads after dark. (Glow goes
+over everything, bodies standing in front included, so keep it to rims and ticks, faint by day: `glow: k.night`.) A raw `k.groundDraw(x, y, r, g => ...)` still works as it always did, but it is
 the dear way: it is drawn whole into a layer and copied out a line at a time under a clip, and a clip costs by its box.
 Give it a last argument `keep(x, y, reach)` — true when it draws anything within `reach` tiles of (x, y) — and only the
 ground it says yes to is cut for it (saying yes too often costs a little; saying no where it draws cuts it off).
@@ -237,6 +319,26 @@ Depth: ground shapes are cut a line of the ground at a time, so hills in front h
 World shapes sort with bodies, trees and walls by the ground point under them (a bolt over a head sorts with the
 body under it); `shell` puts its back behind its body and its rim in front; a `ribbon`/`bolt` sorts at its nearer
 end. Glow, light-kind particles and flashes go over everything, after the night.
+
+### Going without going muddy
+
+Fading a colour by its alpha over the ground mixes it with the grass: red half gone is olive, gold is khaki. Let a
+pool or a stain **dry** — `dry(hex, u, to?)` steps it toward its own dark shade, keeping its hue (as '#rrggbb', usable
+anywhere) — and let it go by alpha only at the very end, `lateFade(left, 0.2)`. Let a cut or a trail be **eaten from
+its tail**: `eatTail(points, u)` is the line with its first `u` gone, opaque to the last (`trail` does this itself).
+
+### Night
+
+Ground marks drawn in ink and deep tones vanish at night: give them a night rim (`glow` on a ground layer,
+`glow: k.night`) or choose a light tone by `k.night`. Keep a cast's lights small and warm: about 1.4 tiles and a warm
+white (`'#fff1d6'`) light the ground under a spell; 2.5–3 tiles in a saturated palette colour wash the screen olive.
+The stage now holds each cast to **two lights a frame** (eight on the screen); more are refused and the preview says so.
+
+### Fast graphics
+
+On fast graphics the kit's shapes draw **no glow of their own** (`k.glowOf(look)` is 0: the glow is the second copy of
+everything and the first thing to go); `k.glow`, `k.flare` and `k.light` still draw. Big rings keep a few more facets
+per tile out, so they stay round.
 
 ## Palettes (in each file's `PALETTE`; tweak your own)
 
@@ -281,12 +383,26 @@ Preview sheet (bundles your worktree fresh each run):
     node /home/user/Wurm/node_modules/.cache/anim/spell.mjs --root <your worktree> --spell kindler_scorch \
       --facing 1 --frames 10 --zoom 4 --target creature --out <png>
 
-`--target creature|player|tile|self` (default: the spell's own first kind), `--dist` tiles, `--facing 0..7`,
+`--target creature|player|tile|self` (default: the spell's own first kind), `--dist` tiles along the ground (default:
+**where the island has it** — a blow or a thrust at the weapon's own reach, 2.2 tiles for a sword or an axe and 3.2
+for a spear; a Lunge 0.4 inside that after a stride from as far back as its own reach; a spell on somebody inside its
+own `reach`; `--dist reach` and `--dist hunt` (1.1, where a creature comes in to strike) name the two that matter),
+`--facing 0..7`, `--walk <gait>` (the caster walking on the spot through the cast, 0 a walk and 1 a run: the legs the
+walk's, the cast over the arms), `--crowd N` (N more creatures about the target, or about the caster for a spell on
+oneself), `--target-weapon <id>` (what a person target holds), `--pet-at heel|near|far`, `--pet-to target|caster`,
+`--pet-snap <secs>` (where the companion stands and where the island puts it; by default as the spell has it: in
+reach of the enemy for Sic, Drag Down, Disembowel, leaping for Pounce, onto you for Guard Me),
 `--night 1` (with its light), `--fast 1`, `--secs` (cover more of the linger), `--weapon`/`--offhand`, `--cols`,
 `--species`, `--companion <species>|1|0` (a companion by the caster; on by default for a Beastmaster's spells only),
-`--from <tiles>` (the caster stood that far back before the island moved them: a Lunge), `--state
-burning|bleeding|held` (on the target creature), `--list 1` (every id by group). Frames run left to right then down;
-each is labelled with time and phase (cast / release / after). The top of every picture is trimmed to the tallest
+`--from <tiles>` (the caster stood that far back before the island moved them: a Lunge; **negative for a leap away**
+from the target, a Parting Throw's default), `--state
+burning|bleeding|held` (on the target creature; bleeding by default for a Disembowel), `--list 1` (every id by group).
+Frames run left to right then down; each is labelled with time and phase (cast / release / after), the facing the
+caster is drawn at (turned to the companion for `face: 'companion'`, as the game turns somebody standing), and
+`! …` when a cast went over its budget that frame (shapes over 15, lights over 2) or tinted the screen (`FLASH`:
+keep that to the top tier). A long hold is squeezed to a second of the frames, so the wind-up and the letting go
+still get theirs. The frame reaches a tile past the target, and room over the top for a tall effect. A cell too big
+for a canvas (a big area at zoom 6) is put on more columns, or refused with a message saying so. The top of every picture is trimmed to the tallest
 thing drawn in any of them, so a tall effect over a big creature is not cut off. The tool deletes its own
 `/tmp/spell-*` bundle when done (and any other over an hour old). Write images under the scratchpad
 `anim/<your-name>/`.
