@@ -16,14 +16,12 @@
  * `FX_OF` for a pose or a timing) and the fight's own constants, so the
  * ground mark is where the rule is.
  *
- * The figure's limit (render/figure.ts): a spear is carried upright in the
- * right fist (`carry: 'staff'`), set off the hips, and only a fist weapon
- * follows the forearm (`wield`). The casts are drawn with that spear
- * standing in the fist -- the thrusts drive the fist along the line of the
- * blow and the lance of light leaves it; the rally lifts the standing spear
- * overhead as a standard; the brace lowers it to plant the butt -- and the
- * spear's head is found from the fist the way the figure stands it
- * (`spearTip`).
+ * The spear is in the hands (`Rig.wieldStaff`): a two-handed blow puts both
+ * fists on the line it goes (`onHaft`) and the shaft lies along it, so a
+ * thrust levels the spear, a sweep swings it low, a brace grounds its butt
+ * and a whirl turns it in the fist (`haft`); the lances of light run on from
+ * its real point (`figureJoint` 'tip'), and the stances on oneself are held
+ * as long as they last (`cast.hold`).
  */
 import { WEAPON_BY_ID } from '../../game/gear';
 import { HUNT_REACH, reachOf } from '../../game/fight';
