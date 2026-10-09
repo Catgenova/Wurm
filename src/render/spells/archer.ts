@@ -1005,7 +1005,7 @@ export const ARCHER: Record<string, SpellVisual> = {
           crosshair(k, at, lerp(7, 2, snap), { alpha: 1 - seg(u, 0.25, 0.6), size: 3 + snap });
           // A glint, not a blaze: the creature and the gold-fletched arrow stay in sight.
           k.flare(at, 7 * (1 - u), flashOf(u, 0.06), PALETTE.core, Math.PI / 4);
-          k.light(at, 1.2, 0.5 * (1 - u), WARM);
+          k.light(at, 1, 0.45 * (1 - u), WARM);
         },
       },
     },
@@ -1245,7 +1245,7 @@ export const ARCHER: Record<string, SpellVisual> = {
           // A hard glint, up in a frame and going at once, smaller than the creature so it is seen to take it.
           k.flare(at, 9 * (1 - u), flashOf(u, 0.04 / 0.6), PALETTE.core, 0.3);
           k.ring(k.target, 0.1 + 0.26 * easeOut(u), { band: 0.06 * (1 - u) + 0.015, alpha: 0.85 * (1 - u), main: GOLD, deep: GOLD_DEEP, glow: 0.5 });
-          k.light(at, 1.2, 0.6 * (1 - u), WARM);
+          k.light(at, 1, 0.5 * (1 - u), WARM);
         },
       },
     },
@@ -1412,7 +1412,7 @@ export const ARCHER: Record<string, SpellVisual> = {
             k.groundPath(feet, { closed: true, width: 1.1, alpha: 0.7 * (1 - snap) * smooth((age - fall - 0.08) / 0.2), main: GOLD, ink: GOLD_DEEP, glow: 0.2 + 0.7 * k.night, light: WARM });
           }
           // A little warm light under it while it is held, so the stakes and the tethers read at night.
-          k.light(b, 1.1, 0.4 * gone * k.night, WARM);
+          k.light(b, 1, 0.32 * gone * k.night, WARM);
         },
       },
     },
@@ -1600,7 +1600,7 @@ export const ARCHER: Record<string, SpellVisual> = {
           k.flare(at, 18 * (1 - u), flashOf(u, 0.05), PALETTE.core, Math.PI / 4);
           k.flare(along(at, d, 6), 10 * (1 - u), flashOf(u, 0.08), GOLD, 0, GOLD, true);
           k.ring(k.target, 0.12 + 0.3 * easeOut(u), { band: 0.05, alpha: 0.9 * (1 - u), main: GOLD, deep: GOLD_DEEP, glow: 0.3 + 0.5 * k.night, light: WARM });
-          k.light(at, 1.4, 0.7 * (1 - u), WARM);
+          k.light(at, 1.2, 0.55 * (1 - u), WARM);
         },
       },
     },
@@ -1643,7 +1643,7 @@ export const ARCHER: Record<string, SpellVisual> = {
             k.beam(near, far, { width: 1.6 * fade + 0.4, alpha: 0.9 * fade, main: GOLD, core: PALETTE.core, ink: GOLD_DEEP, glow: 0.5, light: WARM });
             crosshairChevron(k, far, [f.x, f.y, 0], 3.5, fade);
           }
-          k.light(k.caster, 1.2, 0.5 * (1 - u), WARM);
+          k.light(k.caster, 1, 0.45 * (1 - u), WARM);
         },
       },
       linger: {
