@@ -684,33 +684,17 @@ function leaves(k: FxScene, at: P3, n: number, o: { heading?: { x: number; y: nu
 function countdown(k: FxScene, b: Body, r: number, ticks: number, gone: number, alpha: number): void {
   if (alpha <= 0.01) return;
   const z = k.zoom;
-  const lit: number[] = [], dim: number[] = [];
+  // Each tick a short stroke out from the ring, laid on the land as one shape of the kit's: the ones left in gold over ink, the spent faint.
+  const lit: number[][] = [], dim: number[][] = [];
   for (let i = 0; i < ticks; i++) {
-    const an = -Math.PI / 2 + (i / ticks) * TAU;
-    const into = i >= gone ? lit : dim;
-    for (const rr of [r * 0.86, r]) {
-      const x = b.x + Math.cos(an) * rr, y = b.y + Math.sin(an) * rr;
-      into.push(k.eye.worldToScreenX(x, y), k.eye.worldToScreenY(x, y, k.ground(x, y) + 0.2));
-    }
+    const an = -Math.PI / 2 + (i / ticks) * TAU, c = Math.cos(an), sn = Math.sin(an);
+    (i >= gone ? lit : dim).push([b.x + c * r * 0.86, b.y + sn * r * 0.86, b.x + c * r, b.y + sn * r]);
   }
-  k.groundDraw(b.x, b.y, r + 0.3, (g) => {
-    g.lineCap = 'round';
-    const marks = (pts: number[], colour: string, w: number, a: number): void => {
-      g.globalAlpha = clamp(a);
-      g.strokeStyle = colour;
-      g.lineWidth = w;
-      g.beginPath();
-      for (let i = 0; i < pts.length; i += 4) {
-        g.moveTo(pts[i], pts[i + 1]);
-        g.lineTo(pts[i + 2], pts[i + 3]);
-      }
-      g.stroke();
-    };
-    marks(lit, PALETTE.ink, 2.6 * z, alpha * 0.7);
-    marks(lit, GOLD, 1.5 * z, alpha);
-    marks(dim, PALETTE.deep, 1.2 * z, alpha * 0.35);
-    g.lineCap = 'butt';
-  });
+  k.groundShape(b.x, b.y, r + 0.3, [
+    { kind: 'stroke', colour: PALETTE.ink, alpha: clamp(alpha * 0.7), width: 2.6 * z, paths: lit, cap: 'round', lift: 0.2 },
+    { kind: 'stroke', colour: GOLD, alpha: clamp(alpha), width: 1.5 * z, paths: lit, cap: 'round', lift: 0.2 },
+    { kind: 'stroke', colour: PALETTE.deep, alpha: clamp(alpha * 0.35), width: 1.2 * z, paths: dim, cap: 'round', lift: 0.2 },
+  ]);
 }
 
 /* ---- the spells --------------------------------------------------------------------------- */
