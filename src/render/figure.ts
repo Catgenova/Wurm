@@ -1650,15 +1650,19 @@ function legTube(rs: number[][], n: number, mat: Mat | ((band: number, j: number
   const m = (band: number, j: number): Mat => (typeof mat === 'function' ? mat(band, j) : mat);
   const half = (from: number, to: number, foot: boolean, shin: boolean): Mesh => {
     const t = rings(rs.slice(from, to + 1), n, (band, j) => m(band + from, j), { top: false, bottom: foot });
-    const z0 = rs[from][0];
+    const z0 = rs[from][0], below = rs[Math.max(0, knee - 2)][0];
     return {
       ...t,
-      f: t.f.map((f) => (f.i.every((i) => t.v[i][2] === z0) && foot ? { ...f, seam: true } : f.i.some((i) => t.v[i][2] === 0) ? { ...f, soft: true, crease: shin && f.i.every((i) => t.v[i][1] < 0) } : f)),
+      f: t.f.map((f) => (f.i.every((i) => t.v[i][2] === z0) && foot ? { ...f, seam: true } : f.i.some((i) => t.v[i][2] === 0) ? { ...f, soft: true, ...(f.i.every((i) => t.v[i][1] < 0) ? { crease: shin, seam: true } : {}) }
+        : shin && f.i.every((i) => t.v[i][2] >= below && t.v[i][1] < 0) ? { ...f, crease: true } : f)),
     };
   };
   // `shut`: the foot of the shin closed, the lid a seam (`Face.seam`), for a leg that comes down to the foot -- kicked up behind at a
   // run, the open end of it was turned to the viewer, a ring with nothing in it.
-  // The shin's facets at the back of the knee are its crease (`Face.crease`).
+  // The shin's facets at the back of the knee are its crease (`Face.crease`), and the band under them as well: the calf swelling
+  // out under the crease caught the light, and seen from behind the brightest stripe on the leg was just under the back of the knee.
+  // The facets either side of the fold at the back are seams (`Face.seam`): folded nearly edge on, their edges were inked as short
+  // ticks across the bend.
   return { thigh: half(knee, rs.length - 1, false, false), shin: half(0, knee, shut, true) };
 }
 
@@ -5057,7 +5061,9 @@ function kneeBend(b: Bones, k: number): number {
 function kneeBent(v: readonly V3[], bend: number, onShin: boolean, most = KNEE_POINT_MOST): V3[] {
   const th = Math.max(0, Math.min(150, bend)) * DEG, th0 = bend * DEG;
   const half = Math.cos(th / 2), bent = Math.sin(th / 2);
-  const point = Math.min(most, KNEE_POINT * (1 / Math.cos(th / 4) - 1)), square = KNEE_SQUARE * bent * bent;
+  // A plate knee (`most` under a leg's own) squared half as much: a poleyn is a dome, and its front corners brought in to the ridge
+  // made a prow of it at the top of a run.
+  const point = Math.min(most, KNEE_POINT * (1 / Math.cos(th / 4) - 1)), square = KNEE_SQUARE * bent * bent * (most < KNEE_POINT_MOST ? 0.5 : 1);
   const fold = KNEE_FOLD * (1 - half), wide = KNEE_WIDE * bent;
   return v.map(([x, y, z]) => {
     // How far round with the shin: none above the span, all of it below, a half at the knee.
@@ -5177,7 +5183,7 @@ function turnedAbout(p: V3, n: V3, a: number): V3 {
 /**
  * How far round with the arm what is carried whole on top of it goes -- a
  * shoulder cap, a pauldron -- for the arm turned `a` from where it hangs: half
- * of it up to `CAP_EASY`, and a quarter of the rest. It was carried bodily
+ * of it up to `CAP_EASY`, and more of the rest. It was carried bodily
  * with the arm, stiff as it is, and an arm raised to wave stood the cap on
  * its edge beside the head, its lames fanned up past the ear like a stack of
  * discs, and a pauldron on the arm raised to strike swung its dome into the
@@ -5187,34 +5193,45 @@ function turnedAbout(p: V3, n: V3, a: number): V3 {
  */
 const CAP_EASY = 40;
 /**
- * And past `CAP_HIGH`, all of the rest of the raise, and the lag left behind by then closed by `CAP_FOLLOW` of the way by the time
- * the arm is overhead (`CAP_HIGH` and a right angle more), turned about the top outside of the shoulder (`CAP_PIVOT` in the arm's
- * frame, out and up) rather than the joint: so a cap on an arm raised overhead rides up with the deltoid round the root of the arm,
- * the arm coming out of it as out of a sleeve. Kept to a quarter of the raise and a little more, about a point inside its own dome,
- * a pauldron on an arm raised to wave or strike was left turned a right angle back from the arm, stood on its side down the front
- * of the chest like a crate with its top corner in the chin, and from behind its whole face was turned to the viewer.
+ * And no further than `CAP_MOST` however high the arm goes, coming up to it smoothly; turned about the top outside of the shoulder
+ * (`CAP_PIVOT`, out and up from the joint as the arm hangs), a point fixed to the trunk, not to the arm. Carried round with the arm
+ * most of the way about a point that far up the arm's own frame, a plate pauldron on an arm raised to strike was taken up past the
+ * neck and stood on end beside the face, its lames a stack of stripes from the collar to the eye; a plate pauldron tips, but stays
+ * on the top of the shoulder, and the arm comes up out from under its rim. Before that, kept to a quarter of the raise about a
+ * point inside its own dome, it was left a right angle back from the arm down the front of the chest like a crate: held on the
+ * top of the shoulder, it is over the joint whichever way the arm goes up.
  */
-const CAP_HIGH = 60;
-const CAP_FOLLOW = 0.8;
+const CAP_MOST = 65;
+const CAP_FOLD = 0.5;
 const CAP_PIVOT: V3 = [0.4, 0, 0.9];
 const capTurn = (a: number): number => {
-  const easy = CAP_EASY * DEG, high = CAP_HIGH * DEG;
-  if (a < easy) return a * 0.5;
-  const at = easy * 0.5 + (Math.min(a, high) - easy) * 0.25;
-  if (a <= high) return at;
-  const lag = high - at;
-  return a - lag * (1 - CAP_FOLLOW * Math.min(1, (a - high) / (Math.PI / 2)));
+  const easy = CAP_EASY * DEG, most = CAP_MOST * DEG, room = most - easy * 0.5;
+  return a < easy ? a * 0.5 : most - room * Math.exp((easy - a) * 0.7 / room);
 };
 function heldOnShoulder(v: readonly V3[], r: Rig, k: number): V3[] {
   const { n, angle } = shoulderTurn(r, k);
   if (angle < 0.01) return [...v];
-  const back = angle - capTurn(angle);
-  // About the joint while the arm is low, and from `CAP_EASY` on more and more about the top outside of the shoulder.
-  const w = ramp(angle / DEG, CAP_EASY, CAP_HIGH + 30), s = k ? 1 : -1;
+  // Where the arm points, in its frame as it hangs: the cap goes round toward that, by `capTurn` of the way, and does not twist
+  // with the arm about its own length. Turned with the twist, an arm turned in to raise a hammer took the outward swell of the
+  // cap round to the front of the shoulder, and it hung on the chest under the arm.
+  const to = turnedAbout([0, 0, 1], n, -angle), swing = Math.acos(Math.max(-1, Math.min(1, to[2])));
+  const m: V3 = Math.hypot(to[0], to[1]) > 1e-6 ? unit([-to[1], to[0], 0]) : [1, 0, 0];
+  // About the joint while the arm is low, and from `CAP_EASY` on more and more about the top outside of the shoulder: the cap
+  // turned about that point where it is with the arm at rest, and all of it then turned by all of `angle` into the arm's frame.
+  const w = ramp(swing / DEG, CAP_EASY, CAP_EASY + 50), s = k ? 1 : -1;
   const o: V3 = [s * CAP_PIVOT[0] * w, CAP_PIVOT[1] * w, CAP_PIVOT[2] * w];
+  // The lames under the dome slid up under it as the arm goes up, by as much as `CAP_FOLD` of their height when it is
+  // overhead, as a pauldron's lames ride on their rivets: held whole and tipped only as the dome is, an arm raised forward to
+  // strike left the lames hanging where the arm had been, down the front of the chest. And no corner of it lifted higher than the
+  // top of it as it hangs, but for a quarter of the rise: tipped up and out, the inner edge of a pauldron came up past the collar
+  // to the jaw.
+  let top = -Infinity, foot = Infinity;
+  for (const p of v) { top = Math.max(top, p[2]); foot = Math.min(foot, p[2]); }
+  const tip = capTurn(swing), fold = top - 0.45 * (top - foot), keep = 1 - CAP_FOLD * ramp(swing / DEG, CAP_EASY, CAP_EASY + 80);
   return v.map((p) => {
-    const q = turnedAbout([p[0] - o[0], p[1] - o[1], p[2] - o[2]], n, back);
-    return [q[0] + o[0], q[1] + o[1], q[2] + o[2]];
+    const q = turnedAbout([p[0] - o[0], p[1] - o[1], (p[2] < fold ? fold + (p[2] - fold) * keep : p[2]) - o[2]], m, tip);
+    const z = q[2] + o[2];
+    return turnedAbout([q[0] + o[0], q[1] + o[1], z > top ? top + (z - top) * 0.25 : z], n, angle);
   });
 }
 
@@ -5693,8 +5710,8 @@ interface GearBit {
    */
   over: Covers[];
   convex?: boolean;
-  /** Bends with the legs below the hips, as a skirt does. */
-  skirt?: boolean;
+  /** Bends with the legs below the hips, as a skirt does; `'mail'` hangs as mail does (`MAIL_HANG`). */
+  skirt?: boolean | 'mail';
   /**
    * Made straight in the knee's terms and bent with it (`kneeBent`): on the
    * hip, it is put at the knee, and on the knee, it is there already.
@@ -5715,6 +5732,8 @@ interface GearBit {
   whole?: boolean;
   /** Solids that hide what of it is behind them (see `Part.hide`): a helm's nasal, out of sight round the far side of the skull. */
   hide?: Array<{ c: V3; r: V3 }>;
+  /** Left off while this piece is worn as well, which takes its place: a hauberk's short sleeve over a sleeve of mail. */
+  unless?: string;
 }
 
 interface GearModel {
@@ -5902,9 +5921,13 @@ const undercut = (m: Mesh): Mesh => seamed(m, (p) => Math.hypot(p[0], p[1]) < 0.
  * two lames each flaring a plate's thickness at its foot over the one below, stepping in under the next, and the dome. All of it
  * tipped down toward the neck by `PAULDRON_SLOPE` of how far across it is, as a pauldron runs down off the top of the shoulder onto
  * the trapezius: level, and as wide round as the head, its top stood at the height of the chin, and seen three-quarters on, with
- * the camera looking down, the far one rose beside the jaw to the mouth.
+ * the camera looking down, the far one rose beside the jaw to the mouth. Its dome low and flat over the top of the rerebrace, and
+ * `PAULDRON_DEEP` as deep front to back as it is wide, as a pauldron is: seen three-quarters on from above, the top of the far one
+ * is its back edge, and domed high and as deep as wide, that edge was still level with the mouth. Tipped more steeply, the outer
+ * edge rose instead.
  */
-const PAULDRON_SLOPE = 0.24;
+const PAULDRON_SLOPE = 0.12;
+const PAULDRON_DEEP = 0.8;
 function pauldron(): Mesh {
   const lames = [[-1.5, 1.1, 1.08, 0.24], [-0.62, 1.26, 1.24, 0.27]], lip = 0.1, count = 2;
   const rs: number[][] = underRings(-1.5);
@@ -5912,11 +5935,11 @@ function pauldron(): Mesh {
     const lo = profileAt(lames, k / count), hi = profileAt(lames, (k + 1) / count);
     rs.push([lo[0], lo[1] + lip, lo[2] + lip, lo[3], lo[4]], [hi[0] - 0.002, hi[1], hi[2], hi[3], hi[4]]);
   }
-  rs.push([-0.62, 1.36, 1.32, 0.29], [0.02, 1.3, 1.27, 0.26], [0.4, 0.94, 0.9, 0.14], [0.58, 0.42, 0.4, 0.06]);
+  rs.push([-0.62, 1.36, 1.32, 0.29], [-0.3, 1.3, 1.27, 0.26], [0, 0.94, 0.9, 0.14], [0.16, 0.42, 0.4, 0.06]);
   // The underside dark; the lames and the step under each, and the dome's foot, the metal; the dome over it lit.
   const dome = 2 * count + 1;
   const m = undercut(rings(rs, 6, (band) => (band <= 0 ? 'metalDark' : band > dome ? 'metalLit' : 'metal')));
-  return { ...m, v: m.v.map(([x, y, z]): V3 => [x, y, z + PAULDRON_SLOPE * x]) };
+  return { ...m, v: m.v.map(([x, y, z]): V3 => [x, y * PAULDRON_DEEP, z + PAULDRON_SLOPE * x]) };
 }
 
 /**
@@ -6520,11 +6543,13 @@ const MODELS: Record<string, (b: Build, fit: number) => GearModel> = {
         // Hanging in a bell to the middle of the thigh, split up the front and the back from the hem to a little under the fork, so
         // each half goes with its leg -- split to the waist, at a run the slits stood open to the belt -- with a
         // band of bright rings round the hem: of its own metal, as brass it was a band of the gold that says fantastic, on every hauberk.
-        { bone: 'pelvis', over: ['skirt', 'thigh', 'pelvis'], bias: 0.16, skirt: true, mesh: worn(splitSkirt(skirt, -1.4, SLIT, 4, 'mail'), 'mail') },
-        { bone: 'pelvis', over: ['skirt', 'thigh', 'pelvis'], bias: 0.18, skirt: true, mesh: join(...SLIT.map(([a, c]) => facetArcs(profileHem(skirt, 0.05, 0.26), 8, a, c, 'metalLit'))) },
+        { bone: 'pelvis', over: ['skirt', 'thigh', 'pelvis'], bias: 0.16, skirt: 'mail', mesh: worn(splitSkirt(skirt, -1.4, SLIT, 4, 'mail'), 'mail') },
+        { bone: 'pelvis', over: ['skirt', 'thigh', 'pelvis'], bias: 0.18, skirt: 'mail', mesh: join(...SLIT.map(([a, c]) => facetArcs(profileHem(skirt, 0.05, 0.26), 8, a, c, 'metalLit'))) },
         { bone: 'pelvis', over: ['belt', 'skirt', 'abdomen', 'pelvis'], bias: 0.02, convex: true, mesh: beltRing(b, g + 0.02, 'belt') },
-        // And short sleeves of it to halfway down the upper arm.
-        { bone: 'arm', side: 'both', over: ['upper'], bias: 0.02, convex: true, mesh: worn(upperShell(b, 1.2, -1.45, 'mail'), 'mail') },
+        // And short sleeves of it to halfway down the upper arm, but for over a sleeve of mail, which is the hauberk's own sleeve
+        // carried on down the arm: worn over it, its open foot stood off the sleeve under it and was a row of teeth along the top
+        // of a raised arm.
+        { bone: 'arm', side: 'both', over: ['upper'], bias: 0.02, convex: true, unless: 'chain_sleeves', mesh: worn(upperShell(b, 1.2, -1.45, 'mail'), 'mail') },
       ],
       hides: ['skirt', 'belt', 'chest', 'abdomen'],
     };
@@ -6738,10 +6763,11 @@ const MODELS: Record<string, (b: Build, fit: number) => GearModel> = {
   plate_legs: (b) => {
     // The greave and the knee as one, and the cuisses over the thigh in lames, from up under the fauld so no gap shows between them.
     const g = 1.1, top = THIGH * b.fr.tall;
-    // The poleyn, a cup over the front of the knee, raised out of the leg's own ring there -- the ring at the knee carried forward
-    // and out -- and polished: a cup of its own standing off the knee was what the knee was drawn as when it was stacked tubes,
+    // The poleyn, a cup over the front of the knee, raised out of the leg's own ring there -- the ring at the knee widened
+    // -- and polished: a cup of its own standing off the knee was what the knee was drawn as when it was stacked tubes,
     // and seen edge on, with the leg kicked up behind at a run, it was a dark needle out of the fold.
-    const rs = legRings(b, g, -2.7).filter((r) => r[0] <= KNEE_SPAN).map((r) => (r[0] === 0 ? [0, r[1] + 0.07, r[2] + 0.05, 0, 0.03] : r));
+    // Widened there rather than carried forward: carried forward, the ring's front was the corner of the bend, a prow at a run.
+    const rs = legRings(b, g, -2.7).filter((r) => r[0] <= KNEE_SPAN).map((r) => (r[0] === 0 ? [0, r[1] + 0.1, r[2] + 0.06] : r));
     const tube = legTube(rs, 6, overBoot('metal'), true), cop = kneePad(rs, 0.5, 0.7, 'metalLit');
     const cuisse = shingled([legAt(b, g, KNEE_SPAN), legAt(b, g, top - 0.9), [top + 0.25, 1.1 * b.fr.hi * g, 1.12 * g]], 3, 0.1, 'metal');
     return {
@@ -6788,7 +6814,9 @@ const MODELS: Record<string, (b: Build, fit: number) => GearModel> = {
       // The shoe's top close round the leg, a hair proud of it and not inked: a twentieth out and outlined, seen from behind it was
       // the lid of a grey box over the heel.
       { bone: 'knee', side: 'both', over: ['shin'], bias: 0.02, convex: true, front: SHAFT, mesh: softAt(soled(rings([[-3.1, 0.66, 0.7], [-2.5, 0.68, 0.72]], 6, 'clothDark', { top: false })), -2.5) },
-      { bone: 'ankle', side: 'both', over: ['foot'], bias: 0.02, mesh: recoloured(widened(swelled(footMesh(), 1, 0.8), 1.12), { boot: 'clothDark' }) },
+      // Soled in hide, as every boot is in its own dark: in the body's sole, near black turned from the light, the heel of every boot
+      // lifting off the ground was a black tick at play size.
+      { bone: 'ankle', side: 'both', over: ['foot'], bias: 0.02, mesh: recoloured(widened(swelled(footMesh(), 1, 0.8), 1.12), { boot: 'clothDark', sole: 'leatherDark' }) },
     ],
     hides: ['boot', 'foot'],
   }),
@@ -6807,7 +6835,7 @@ const MODELS: Record<string, (b: Build, fit: number) => GearModel> = {
         { bone: 'knee', side: 'both', over: ['shin'], bias: 0.02, convex: true, front: SHAFT, mesh: soled(shaft) },
         // The foot in the shaft's own dark hide: in the lighter, the boot of a leg trailing behind was a pale chevron under a dark one
         // seen from in front.
-        { bone: 'ankle', side: 'both', over: ['foot'], bias: 0.02, mesh: recoloured(swelled(footMesh(), 1.04), { boot: 'leatherDark' }) },
+        { bone: 'ankle', side: 'both', over: ['foot'], bias: 0.02, mesh: recoloured(swelled(footMesh(), 1.04), { boot: 'leatherDark', sole: 'leatherDark' }) },
       ],
       hides: ['boot', 'foot'],
     };
@@ -6816,7 +6844,7 @@ const MODELS: Record<string, (b: Build, fit: number) => GearModel> = {
     layer: 3,
     bits: [
       { bone: 'knee', side: 'both', over: ['shin'], bias: 0.02, convex: true, front: SHAFT, mesh: worn(soled(rings([[-3.1, 0.68, 0.72], [-1.2, 0.9, 0.94]], 6, 'mail', { top: false })), 'mail') },
-      { bone: 'ankle', side: 'both', over: ['foot'], bias: 0.02, mesh: worn(recoloured(swelled(footMesh(), 1.05), { boot: 'mail' }), 'mail') },
+      { bone: 'ankle', side: 'both', over: ['foot'], bias: 0.02, mesh: worn(recoloured(swelled(footMesh(), 1.05), { boot: 'mail', sole: 'leatherDark' }), 'mail') },
       // Strapped at the ankle over the mail.
       { bone: 'knee', side: 'both', over: ['shin'], bias: 0.03, convex: true, front: SHAFT, mesh: rings([[-2.92, 0.73, 0.77], [-2.72, 0.74, 0.78]], 6, 'leatherDark', { top: false, bottom: false }) },
     ],
@@ -6828,7 +6856,7 @@ const MODELS: Record<string, (b: Build, fit: number) => GearModel> = {
       // The shaft up to the calf, its top the greave's own round there (`legAt`) and not inked: a hair outside it, it was a step
       // across the calf, a line round the leg where the greave and the sabaton are one surface of plate.
       { bone: 'knee', side: 'both', over: ['shin'], bias: 0.02, convex: true, front: SHAFT, mesh: softAt(soled(rings([[-3.18, 0.7, 0.74], [-3.0, 0.72, 0.76], legAt(b, 1.1, -1.3)], 6, (band) => (band === 0 ? 'metalLit' : 'metal'), { top: false })), -1.3) },
-      { bone: 'ankle', side: 'both', over: ['foot'], bias: 0.02, mesh: worn(recoloured(swelled(footMesh(), 1.08), { boot: 'metal' }), 'lames') },
+      { bone: 'ankle', side: 'both', over: ['foot'], bias: 0.02, mesh: worn(recoloured(swelled(footMesh(), 1.08), { boot: 'metal', sole: 'metalDark' }), 'lames') },
     ],
     hides: ['boot', 'foot'],
   }),
@@ -6839,7 +6867,7 @@ const MODELS: Record<string, (b: Build, fit: number) => GearModel> = {
       // The top of the shaft flared into a crown of points.
       { bone: 'knee', side: 'both', over: ['shin'], bias: 0.03, convex: true, front: SHAFT, mesh: teeth([-1.12, 0.9, 0.94], 7, -0.38, 0.1, 'scaleDark') },
       // And the foot scaled, its toe capped in the dark scale.
-      { bone: 'ankle', side: 'both', over: ['foot'], bias: 0.02, mesh: recoloured(swelled(footMesh(), 1.05), { boot: 'scaleDark', cuff: 'scale' }) },
+      { bone: 'ankle', side: 'both', over: ['foot'], bias: 0.02, mesh: recoloured(swelled(footMesh(), 1.05), { boot: 'scaleDark', cuff: 'scale', sole: 'scaleDark' }) },
     ],
     hides: ['boot', 'foot'],
   }),
@@ -7045,6 +7073,12 @@ const SKIRT_TURNS = 1.4;
 const SKIRT_CLEAR = 1.2;
 /** Where a body sat down sits, in the hips' frame: the underside of the thighs. */
 const SEAT = -1.15;
+/**
+ * How far forward, in degrees, a thigh may be raised and still go under the skirt (`Part.under`): past it, sat down, the thigh lies
+ * along the lap in front of what hangs from the hips, and drawn under it the tunic's front hung over the lap as a flap between the
+ * knees. No stride or hop raises a thigh so far.
+ */
+const THIGH_UNDER = 70;
 /** How much of a thigh's swing the cloth in front of it goes with at a run, at most: all of it, and the front of a coat flew up level. */
 const SKIRT_RUN = 0.6;
 /** How much of the hips' roll from side to side the hem is let hang back from: it hangs, and does not tip with them like a plate. */
@@ -7055,7 +7089,16 @@ const SKIRT_HANG = 0.8;
  * fork, the edges of the slit pale blades at the outline with the thigh showing up between them.
  */
 const SKIRT_SLIT: [number, number] = [0.08, 0.34];
-function bentWith(v: V3[], r: Rig, fr: Frame): V3[] {
+/**
+ * Mail, which is heavy and has no body of its own: it swings out at a stride `MAIL_FLARE` of the hem's width rather than a cloth
+ * skirt's 0.14, its back flies out behind `MAIL_FLY` as far, and where no thigh pushes it out it hangs in toward the line between the
+ * legs by `MAIL_HANG` of its fore-and-aft round at the hem at a full stride. Swung as cloth is, a hauberk at a run was a stiff
+ * lampshade carried tilted on the legs, its banded hem one flat ring.
+ */
+const MAIL_FLARE = 0.06;
+const MAIL_FLY = 0.5;
+const MAIL_HANG = 0.16;
+function bentWith(v: V3[], r: Rig, fr: Frame, mail = false): V3[] {
   // How far apart the legs are, fore and aft: the hem swings out wider the longer the stride, as a skirt does at a run.
   const stride = Math.min(1, 1.2 * Math.abs(Math.sin(r.leg[0][0] * DEG) - Math.sin(r.leg[1][0] * DEG)));
   // How far toward a run, and nought standing: the hem flies out only at a run.
@@ -7066,13 +7109,13 @@ function bentWith(v: V3[], r: Rig, fr: Frame): V3[] {
   return v.map((p0) => {
     const down = Math.max(0, Math.min(1, (hip - p0[2]) / SKIRT_TURNS));
     if (!down) return [...p0] as V3;
-    const swing = 1 + 0.14 * stride * down;
+    const swing = 1 + (mail ? MAIL_FLARE : 0.14) * stride * down;
     let x = p0[0] * swing;
     let y = p0[1] * swing, z = p0[2] - hip;
     // How far round to the front of the body it is, from straight behind to straight ahead, and to the right, from the left.
     const l = Math.hypot(p0[0] / (1.25 * fr.hi), p0[1]) || 1;
     const ahead = p0[1] / l, across = p0[0] / (1.25 * fr.hi) / l;
-    let turn = 0, seat = 0;
+    let turn = 0, seat = 0, pushed = 0;
     const slit = ramp(Math.abs(across), SKIRT_SLIT[0], SKIRT_SLIT[1]);
     for (let k = 0; k < 2; k++) {
       const s = k ? 1 : -1, a = r.leg[k][0] * DEG;
@@ -7088,6 +7131,15 @@ function bentWith(v: V3[], r: Rig, fr: Frame): V3[] {
       turn += Math.sign(a) * Math.min(Math.abs(a) * most, clear) * over * toward * down;
       // And a thigh raised far enough to sit on sits on what is behind it and beside it.
       seat = Math.max(seat, over * (1 - toward) * ramp(a / DEG, 45, 85));
+      pushed = Math.max(pushed, over * toward * ramp(Math.abs(a) / DEG, 5, 30));
+    }
+    // Mail hangs where no thigh pushes it out: drawn in toward the line between the legs at the hem, and down a little, so the hem
+    // falls in folds between the thighs rather than standing out round them all alike as the rim of a cone.
+    if (mail) {
+      const hang = MAIL_HANG * down * down * (1 - pushed) * stride;
+      y *= 1 - hang;
+      x *= 1 - 0.4 * hang;
+      z -= 2 * hang;
     }
     const c = Math.cos(turn), sn = Math.sin(turn);
     [y, z] = [c * y - sn * z, sn * y + c * z];
@@ -7110,8 +7162,9 @@ function bentWith(v: V3[], r: Rig, fr: Frame): V3[] {
     // from the one in front of it.
     if (run > 0 && y < 0.2) {
       const t = Math.min(1, (0.2 - y) / 1.6) * ramp(Math.abs(ahead), 0.2, 0.6);
-      y -= 0.45 * run * stride * down * t;
-      z += 0.6 * run * stride * down * t;
+      const fly = mail ? MAIL_FLY : 1;
+      y -= 0.45 * run * stride * down * t * fly;
+      z += 0.6 * run * stride * down * t * fly;
     }
     return [x * gather, y * gather, z];
   });
@@ -8412,6 +8465,7 @@ function dress(parts: Part[], named: Map<string, Part[]>, kit: Kit, r: Rig, b: B
     const P = shaftIn(gearPalette(pal, piece, STEP[DRESSED[si]] ?? 0), DRESSED[si] === 'legs' ? shaft : undefined);
     const rare = piece.rare || undefined;
     model.bits.forEach((bit, seq) => {
+      if (bit.unless && worn.some(([, p]) => p.id === bit.unless)) return;
       const sides = bit.side === 'both' ? [0, 1] : bit.side === undefined ? [-1] : [bit.side];
       for (const k of sides) {
         const bone = b[k < 0 ? bit.bone : `${bit.bone}${k}`];
@@ -8419,11 +8473,11 @@ function dress(parts: Part[], named: Map<string, Part[]>, kit: Kit, r: Rig, b: B
         // A bit carried whole is on a frame of its own, the bone's own frame being what is bent.
         const xf = bit.bend && bit.bone === 'hip' ? joint(bone, [0, 0, -THIGH * fr.tall])
           : bit.at || bit.turn || bit.whole ? joint(bone, bit.at ?? [0, 0, 0], ...(bit.turn ?? [0, 0, 0])) : bone;
-        const v = bit.skirt ? bentWith(m.v, r, fr) : bit.bend ? kneeBent(m.v, kneeBend(b, k), bit.bone === 'knee', bit.point)
+        const v = bit.skirt ? bentWith(m.v, r, fr, bit.skirt === 'mail') : bit.bend ? kneeBent(m.v, kneeBend(b, k), bit.bone === 'knee', bit.point)
           : bit.whole && bit.bone === 'arm' ? heldOnShoulder(m.v, r, k) : undefined;
         const part: Part = { mesh: m, xf, bias: bit.bias ?? 0.02, pal: P, rare, seed: si + 1, convex: bit.convex, front: bit.front, v, hide: bit.hide };
         // What is worn on a thigh goes under the tunic's skirt as the thigh does, where the skirt is still to be seen.
-        if (bit.bone === 'hip' && !bit.skirt) part.under = (named.get('skirt') ?? []).filter((p) => !hidden.has(p));
+        if (bit.bone === 'hip' && !bit.skirt && r.leg[k][0] < THIGH_UNDER) part.under = (named.get('skirt') ?? []).filter((p) => !hidden.has(p));
         out.push(part);
         put.push({ part, on: regionsOf(bit.over[0], k)[0], over: bit.over.flatMap((c) => regionsOf(c, k)), layer: bit.layer ?? model.layer, order, seq });
       }
@@ -8866,7 +8920,7 @@ function partsOf(kit: Kit, r: Rig, b: Bones, gear?: GearLook, pal?: Palette, fac
     parts.push(
       // Under the tunic's skirt, never over it: the top of the thigh is up inside the skirt, and a thigh swung toward the viewer had
       // its middle nearer than the skirt's and was drawn over it, its top a sliver of trouser up the skirt from the fork.
-      name(`thigh${k}`, ((thigh) => ({ mesh: thigh, xf: joint(b[`hip${k}`], [0, 0, -THIGH * kit.fr.tall]), v: kneeBent(thigh.v, bend, false), bias: 0, convex: true, under: skirt }))(k ? kit.thigh : mirrored(kit.thigh))),
+      name(`thigh${k}`, ((thigh) => ({ mesh: thigh, xf: joint(b[`hip${k}`], [0, 0, -THIGH * kit.fr.tall]), v: kneeBent(thigh.v, bend, false), bias: 0, convex: true, under: r.leg[k][0] < THIGH_UNDER ? skirt : undefined }))(k ? kit.thigh : mirrored(kit.thigh))),
       shin,
       // The boot round the shin, over it unless its foot is turned well away from the viewer, when the shin is the nearer.
       boot,
