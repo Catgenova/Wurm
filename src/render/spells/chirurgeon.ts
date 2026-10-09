@@ -25,7 +25,7 @@
 import type { Body, FxScene, P3, SpellPalette } from './kit';
 import type { CastPose, SpellVisual } from './index';
 import { arcAt, bump, clamp, easeOut, flashOf, glowPicture, hashOf, lerp, mid3, mixColour, seg, smooth, TAU } from './kit';
-import { euler, one } from './poses';
+import { euler, one, onSelf } from './poses';
 import { HALF_W } from '../iso';
 
 /** Clean mint for what mends, and a blood red for what bleeds. */
@@ -284,65 +284,43 @@ function tally(k: FxScene, c: { x: number; y: number }, r: number, n: number, li
   if (a <= 0.01 || n < 1 || r <= 0.05) return;
   const band = o.band ?? Math.max(0.04, r * 0.11);
   const span = TAU / n, gap = Math.min(span * 0.3, 0.12);
-  const sub = Math.max(2, Math.min(k.fast ? 4 : 8, Math.round(span * r * 5)));
+  const sub = Math.max(2, Math.min(k.fast ? 3 : 5, Math.round(span * r * 4)));
   const turn = (o.turn ?? 0) - Math.PI / 2;
   const whole = Math.floor(lit), part = lit - whole;
-  // Three paths, however many segments: the lit ones, the spent ones and the one going out. It is drawn again for
-  // every line of the ground it lies across, so it has to be a few fills, not a fill a segment.
-  const on = new Path2D(), off = new Path2D(), going = new Path2D();
-  const mids: number[] = [];
-  const h = k.ground(c.x, c.y) + 0.15;
+  // Each segment a polygon on the island in tiles, in one of three layers -- lit, going out, spent -- so the whole
+  // tally is a handful of shapes the stage lays along the tiles, however many seconds it counts.
+  const on: number[][] = [], off: number[][] = [], going: number[][] = [];
+  const mids: P3[] = [];
   for (let i = 0; i < n; i++) {
-    const into = i < whole ? on : i === whole ? going : off;
     const a0 = turn + i * span + gap / 2, a1 = turn + (i + 1) * span - gap / 2;
+    const pts: number[] = [];
     for (let j = 0; j <= sub; j++) {
-      const an = lerp(a0, a1, j / sub), px = c.x + Math.cos(an) * r, py = c.y + Math.sin(an) * r;
-      const X = k.eye.worldToScreenX(px, py), Y = k.eye.worldToScreenY(px, py, h);
-      if (j) into.lineTo(X, Y);
-      else into.moveTo(X, Y);
+      const an = lerp(a0, a1, j / sub);
+      pts.push(c.x + Math.cos(an) * r, c.y + Math.sin(an) * r);
     }
     for (let j = sub; j >= 0; j--) {
-      const an = lerp(a0, a1, j / sub), px = c.x + Math.cos(an) * (r - band), py = c.y + Math.sin(an) * (r - band);
-      into.lineTo(k.eye.worldToScreenX(px, py), k.eye.worldToScreenY(px, py, h));
+      const an = lerp(a0, a1, j / sub);
+      pts.push(c.x + Math.cos(an) * (r - band), c.y + Math.sin(an) * (r - band));
     }
-    into.closePath();
-    if (i <= whole) {
-      const am = (a0 + a1) / 2, mx = c.x + Math.cos(am) * r, my = c.y + Math.sin(am) * r;
-      mids.push(k.eye.worldToScreenX(mx, my), k.eye.worldToScreenY(mx, my, h), i < whole ? 1 : part);
+    (i < whole ? on : i === whole ? going : off).push(pts);
+    if (i <= whole && !k.fast) {
+      const am = (a0 + a1) / 2;
+      mids.push(k.on(c.x + Math.cos(am) * (r - band / 2), c.y + Math.sin(am) * (r - band / 2), 0.3));
     }
   }
   const main = o.main ?? PALETTE.main, deep = o.deep ?? PALETTE.deep, ink = o.ink ?? PALETTE.ink;
   const inkW = Math.max(0.7, 0.6 * k.zoom);
-  k.groundDraw(c.x, c.y, r + 0.3, (g) => {
-    g.lineJoin = 'miter';
-    g.lineWidth = inkW;
-    g.strokeStyle = ink;
-    g.globalAlpha = clamp(a * 0.28);
-    g.fillStyle = deep;
-    g.fill(off);
-    g.globalAlpha = clamp(a * 0.35);
-    g.stroke(off);
-    g.globalAlpha = clamp(a * (0.28 + 0.72 * part));
-    g.fillStyle = part > 0.5 ? main : deep;
-    g.fill(going);
-    g.stroke(going);
-    g.globalAlpha = clamp(a);
-    g.fillStyle = main;
-    g.fill(on);
-    g.stroke(on);
-  });
-  // At night: the lit segments glow a little, so the count still reads in the dark -- a few of them, not every one.
-  const pic = glowPicture(o.light ?? PALETTE.light);
-  if (pic && !k.fast && mids.length) {
-    const R = Math.max(5, band * HALF_W * k.zoom * 2.4);
-    const step = Math.max(1, Math.ceil(mids.length / 3 / 6)) * 3;
-    k.glowDraw((g) => {
-      for (let i = 0; i < mids.length; i += step) {
-        g.globalAlpha = clamp(a * 0.35 * mids[i + 2]);
-        g.drawImage(pic, mids[i] - R, mids[i + 1] - R, 2 * R, 2 * R);
-      }
-    });
-  }
+  k.groundShape(c.x, c.y, r + 0.3, [
+    { kind: 'fill', colour: deep, alpha: clamp(a * 0.28), paths: off, lift: 0.15 },
+    { kind: 'stroke', colour: ink, alpha: clamp(a * 0.35), paths: off, lift: 0.15, width: inkW, closed: true, join: 'miter' },
+    { kind: 'fill', colour: part > 0.5 ? main : deep, alpha: clamp(a * (0.28 + 0.72 * part)), paths: going, lift: 0.15 },
+    { kind: 'stroke', colour: ink, alpha: clamp(a * (0.35 + 0.65 * part)), paths: going, lift: 0.15, width: inkW, closed: true, join: 'miter' },
+    { kind: 'fill', colour: main, alpha: clamp(a), paths: on, lift: 0.15 },
+    { kind: 'stroke', colour: ink, alpha: clamp(a), paths: on, lift: 0.15, width: inkW, closed: true, join: 'miter' },
+  ]);
+  // At night the lit segments glow a little, so the count still reads in the dark: a few of them, not every one.
+  const step = Math.max(1, Math.ceil(mids.length / 6));
+  for (let i = 0; i < mids.length; i += step) k.glow(mids[i], band * HALF_W * 2.4, a * 0.35 * (i === whole ? part : 1), o.light ?? PALETTE.light);
 }
 
 /** A thread of linen from one point to another, with a glint at the needle end: a stitch being sent. */
@@ -394,8 +372,36 @@ function woundAt(k: FxScene, b: Body, i: number): { at: P3; ang: number } {
   return { at, ang };
 }
 
+/** A wound along the caster's own left forearm, the one a self-stitch is worked over. */
+function forearmWound(k: FxScene): { at: P3; ang: number } {
+  const e = k.joint(k.caster, 'elbow0'), h = k.hand(0);
+  return { at: mid3(e, h, 0.55), ang: Math.atan2(k.sy(h) - k.sy(e), k.sx(h) - k.sx(e)) };
+}
+
+/** The most bodies an area spell marks one by one; past it the rest go unmarked rather than the frame slow. */
+const MOST_MARKED = 8;
+
+/**
+ * Everybody of these kinds an area spell round the caster covers, the caster
+ * left out (their own part is drawn already), the nearest first, with the
+ * share of the radius each stands at: what a ring going out reaches in turn.
+ */
+function covered(k: FxScene, r: number, kinds: ReadonlyArray<Body['kind']>): Array<{ b: Body; d: number }> {
+  const out: Array<{ b: Body; d: number }> = [];
+  for (const b of k.bodiesWithin(r, k.caster, kinds)) {
+    const d = Math.hypot(b.x - k.caster.x, b.y - k.caster.y);
+    if (d < 0.05) continue;
+    out.push({ b, d: d / r });
+  }
+  out.sort((p, q) => p.d - q.d);
+  return out.slice(0, MOST_MARKED);
+}
+
+/** When a front eased out over `[0, until]` of an impact (`easeOut`) reaches a share `d` of its radius. */
+const reachedAt = (d: number, until: number): number => until * (1 - Math.cbrt(Math.max(0, 1 - d)));
+
 /** Whether a spell went on its caster, rather than somebody else. */
-const onSelf = (k: FxScene): boolean => k.target === k.caster;
+const castOnSelf = (k: FxScene): boolean => k.target === k.caster;
 
 /** How far out a tally goes round somebody: just clear of their feet, a little more for something broad. */
 const tallyR = (b: Body): number => 0.22 + b.wide * 0.03;
@@ -427,6 +433,19 @@ const dressingPose: CastPose = (r, t, c) => {
   r.knee[0] = one(t, [[0, 4], [0.36, 8], [0.52, 22], [1, 5]]);
   r.leg[1] = euler(t, [[0, [0, 2, 0]], [0.52, [-12, 2, 0]], [1, [-1, 2, 0]]]);
   r.knee[1] = one(t, [[0, 4], [0.36, 10], [0.52, 8], [1, 4]]);
+  // The roll held in a cupped left hand; the right hand flat as it sends the strip.
+  r.shape = [{ cup: bump(t, 0.1, 0.22, 0.6) }, freeHand(c) ? { flat: bump(t, 0.38, 0.5, 0.86) } : undefined];
+  if (onSelf(c)) {
+    // On oneself the strip is not sent but wound on: the right hand carried round the waist and back again, the eyes
+    // on it, and no step.
+    r.arm[1] = euler(t, [[0, [12, 10, 0]], [0.24, [40, -8, 34]], [0.33, [44, -8, 34]], [0.42, [30, 46, -6]], [0.54, [38, -22, 52]], [0.68, [30, 26, -8]], [1, [14, 10, 0]]]);
+    r.elbow[1] = one(t, [[0, 16], [0.24, 96], [0.33, 98], [0.42, 50], [0.54, 112], [0.68, 64], [1, 20]]);
+    r.hand[1] = [0, 0, 0];
+    r.chest = euler(t, [[0, [0, 0, 0]], [0.3, [-6, 0, 0]], [0.42, [-6, 0, -12]], [0.54, [-10, 0, 14]], [0.7, [-6, 0, -6]], [1, [0, 0, 0]]]);
+    r.head = euler(t, [[0, [0, 0, 0]], [0.24, [-18, 0, 0]], [0.72, [-18, 0, 0]], [1, [0, 0, 0]]]);
+    r.leg = [[2, 2, 0], [0, 2, 0]];
+    r.knee = [one(t, [[0, 4], [0.4, 10], [1, 4]]), one(t, [[0, 4], [0.4, 10], [1, 4]])];
+  }
 };
 
 /**
@@ -451,6 +470,15 @@ const stitchPose: CastPose = (r, t, c) => {
   r.spine = euler(t, [[0, [0, 0, 0]], [0.16, [-4, 0, 0]], [0.55, [-2, 0, 0]], [1, [0, 0, 0]]]);
   r.knee = [one(t, [[0, 4], [0.2, 10], [0.6, 10], [1, 4]]), one(t, [[0, 4], [0.2, 10], [0.6, 8], [1, 4]])];
   r.leg[0] = euler(t, [[0, [2, 2, 0]], [0.2, [10, 3, 0]], [0.7, [10, 3, 0]], [1, [2, 2, 0]]]);
+  // The left hand flat and turned palm up under the wound; the right pinched on the needle, the forefinger along it.
+  r.shape = [{ flat: seg(t, 0.06, 0.16) * (1 - seg(t, 0.75, 0.9)) }, freeHand(c) ? { point: 0.5, cup: 0.5 } : undefined];
+  r.hand[0] = euler(t, [[0, [0, 0, 0]], [0.16, [0, 80, -20]], [0.7, [0, 80, -20]], [1, [0, 0, 0]]]);
+  if (onSelf(c)) {
+    // Stitching oneself: the left forearm brought up across the chest, and the needle worked over it.
+    r.arm[0] = euler(t, [[0, [12, 10, 0]], [0.16, [56, -16, 40]], [0.7, [56, -16, 40]], [1, [12, 10, 0]]]);
+    r.elbow[0] = one(t, [[0, 16], [0.16, 96], [0.7, 96], [1, 18]]);
+    r.head = euler(t, [[0, [0, 0, 0]], [0.16, [-22, 0, 6]], [0.5, [-20, 0, 6]], [0.62, [-8, 0, -6]], [1, [0, 0, 0]]]);
+  }
 };
 
 /**
@@ -474,6 +502,8 @@ const leechPose: CastPose = (r, t) => {
   r.leg[1] = euler(t, [[0, [0, 2, 0]], [0.32, [6, 2, 0]], [0.44, [-18, 2, 0]], [1, [-2, 2, 0]]]);
   r.knee[1] = one(t, [[0, 4], [0.32, 20], [0.44, 10], [1, 5]]);
   r.wield = 1;
+  // The empty left hand clawed as it pulls in what the cut gives back.
+  r.shape = [{ claw: bump(t, 0.48, 0.62, 0.92) }, undefined];
 };
 
 /**
@@ -496,6 +526,19 @@ const regeneratePose: CastPose = (r, t, c) => {
     r.leg[k] = euler(t, [[0, [2, 2, 0]], [0.38, [k ? 6 : 22, 4, 0]], [0.56, [k ? -6 : 10, 3, 0]], [1, [2, 2, 0]]]);
     r.knee[k] = one(t, [[0, 4], [0.38, k ? 34 : 40], [0.56, 4], [1, 4]]);
   }
+  // A seed held in the cupped hand on the way down, the hand flat and open as it lets it go.
+  const cupped = seg(t, 0.12, 0.3) * (1 - seg(t, 0.5, 0.56)), let_ = seg(t, 0.5, 0.56) * (1 - seg(t, 0.8, 0.95));
+  r.shape = [{ flat: bump(t, 0.2, 0.4, 0.85) }, freeHand(c) ? { cup: cupped, flat: let_ } : undefined];
+  if (onSelf(c)) {
+    // On oneself: both hands cupped low before the belly as the knees give, then lifted to the breast and opened.
+    for (let k2 = 0; k2 < 2; k2++) {
+      r.arm[k2] = euler(t, [[0, [12, 10, 0]], [0.36, [30, -8, 30]], [0.45, [30, -8, 30]], [0.58, [58, 4, 20]], [0.76, [56, 6, 18]], [1, [12, 10, 0]]]);
+      r.elbow[k2] = one(t, [[0, 16], [0.36, 70], [0.45, 72], [0.58, 112], [0.76, 108], [1, 18]]);
+      r.hand[k2] = euler(t, [[0, [0, 0, 0]], [0.45, [0, 0, 0]], [0.58, [0, k2 ? -70 : 70, 0]], [0.8, [0, k2 ? -60 : 60, 0]], [1, [0, 0, 0]]]);
+    }
+    r.shape = [{ cup: cupped, flat: let_ }, freeHand(c) ? { cup: cupped, flat: let_ } : undefined];
+    r.open = [t > 0.2 && t < 0.88, freeHand(c) && t > 0.2 && t < 0.88];
+  }
 };
 
 /**
@@ -517,6 +560,8 @@ const toxinPose: CastPose = (r, t) => {
   r.knee[0] = one(t, [[0, 4], [0.44, 12], [0.52, 24], [1, 5]]);
   r.leg[1] = euler(t, [[0, [0, 2, 0]], [0.44, [6, 2, 0]], [0.52, [-12, 2, 0]], [1, [-1, 2, 0]]]);
   r.knee[1] = one(t, [[0, 4], [0.44, 20], [0.52, 10], [1, 4]]);
+  // The left fingers pinched on the stopper as it is drawn, then spread as the vial goes.
+  r.shape = [{ cup: bump(t, 0.24, 0.32, 0.44), point: bump(t, 0.24, 0.32, 0.44) * 0.5, flat: bump(t, 0.46, 0.55, 0.86) }, undefined];
 };
 
 /**
@@ -539,7 +584,13 @@ const handsPose: CastPose = (r, t) => {
   r.chest = euler(t, [[0, [0, 0, 0]], [0.12, [-6, 0, 0]], [0.44, [-6, 0, 0]], [0.56, [6, 0, 0]], [0.8, [5, 0, 0]], [1, [0, 0, 0]]]);
   r.spine = euler(t, [[0, [0, 0, 0]], [0.44, [-2, 0, 0]], [0.56, [3, 0, 0]], [1, [0, 0, 0]]]);
   r.knee = [one(t, [[0, 4], [0.44, 8], [0.56, 2], [1, 4]]), one(t, [[0, 4], [0.44, 8], [0.56, 2], [1, 4]])];
+  // Cupped as they scrub, flat and spread as they come up clean.
+  const clean = seg(t, 0.46, 0.54) * (1 - seg(t, 0.84, 0.95));
+  r.shape = [{ cup: bump(t, 0.1, 0.2, 0.46), flat: clean }, { cup: bump(t, 0.1, 0.2, 0.46), flat: clean }];
 };
+
+/** How far ahead of the feet, in height units, a Healing Circle's palms go down: where the pose puts them and the ring starts. */
+const PALMS_AHEAD = 4.8;
 
 /**
  * Healing Circle: a step in and down onto the knees' bend, the body bowed
@@ -553,13 +604,15 @@ const circlePose: CastPose = (r, t) => {
     r.hand[k] = euler(t, [[0, [0, 0, 0]], [0.3, [-60, 0, 0]], [0.5, [-70, 0, 0]], [0.62, [0, 0, 0]], [1, [0, 0, 0]]]);
     r.open[k] = t > 0.14 && t < 0.92;
   }
-  r.spine = euler(t, [[0, [0, 0, 0]], [0.32, [-38, 0, 0]], [0.5, [-40, 0, 0]], [0.62, [4, 0, 0]], [0.8, [3, 0, 0]], [1, [0, 0, 0]]]);
+  r.spine = euler(t, [[0, [0, 0, 0]], [0.32, [-12, 0, 0]], [0.5, [-14, 0, 0]], [0.62, [4, 0, 0]], [0.8, [3, 0, 0]], [1, [0, 0, 0]]]);
   r.chest = euler(t, [[0, [0, 0, 0]], [0.32, [-14, 0, 0]], [0.5, [-14, 0, 0]], [0.62, [10, 0, 0]], [1, [0, 0, 0]]]);
   r.head = euler(t, [[0, [0, 0, 0]], [0.32, [6, 0, 0]], [0.5, [4, 0, 0]], [0.62, [12, 0, 0]], [1, [0, 0, 0]]]);
-  r.leg[0] = euler(t, [[0, [2, 2, 0]], [0.32, [64, 6, 0]], [0.5, [64, 6, 0]], [0.62, [14, 4, 0]], [1, [2, 2, 0]]]);
-  r.knee[0] = one(t, [[0, 4], [0.32, 92], [0.5, 92], [0.62, 12], [1, 4]]);
-  r.leg[1] = euler(t, [[0, [0, 2, 0]], [0.32, [14, 6, 0]], [0.5, [14, 6, 0]], [0.62, [-8, 3, 0]], [1, [0, 2, 0]]]);
-  r.knee[1] = one(t, [[0, 4], [0.32, 96], [0.5, 96], [0.62, 8], [1, 4]]);
+  // Down onto the right knee with both palms flat on the ground ahead, the back bowed as far as gets them there; up again
+  // with the ring.
+  r.kneel = one(t, [[0, 0], [0.3, 1], [0.5, 1], [0.64, 0]]);
+  const press = one(t, [[0.14, 0], [0.32, 1], [0.5, 1], [0.6, 0]]);
+  r.reach = [{ at: [-1.5, PALMS_AHEAD, 0.5], w: press, stoop: true }, { at: [1.5, PALMS_AHEAD, 0.5], w: press, stoop: true }];
+  r.shape = [{ flat: seg(t, 0.14, 0.3) * (1 - seg(t, 0.85, 0.95)) }, { flat: seg(t, 0.14, 0.3) * (1 - seg(t, 0.85, 0.95)) }];
 };
 
 /**
@@ -583,6 +636,9 @@ const massPose: CastPose = (r, t) => {
   r.leg[0] = euler(t, [[0, [2, 2, 0]], [0.38, [-4, 8, -10]], [0.52, [8, 10, 18]], [0.8, [6, 6, 8]], [1, [2, 2, 0]]]);
   r.leg[1] = euler(t, [[0, [0, 2, 0]], [0.38, [8, 8, -16]], [0.52, [-6, 10, 14]], [0.8, [-2, 6, 6]], [1, [0, 2, 0]]]);
   r.knee = [one(t, [[0, 4], [0.38, 22], [0.52, 14], [1, 4]]), one(t, [[0, 4], [0.38, 26], [0.52, 12], [1, 4]])];
+  // The strips held in the fists through the wind-up, the hands flung open as they go.
+  const go = seg(t, 0.46, 0.52) * (1 - seg(t, 0.85, 0.95));
+  r.shape = [{ cup: 1 - go, flat: go }, { cup: 1 - go, flat: go }];
 };
 
 /**
@@ -605,6 +661,9 @@ const plaguePose: CastPose = (r, t) => {
   r.chest = euler(t, [[0, [0, 0, 0]], [0.3, [-10, 0, 0]], [0.48, [-12, 0, 0]], [0.58, [-4, 0, 0]], [1, [0, 0, 0]]]);
   r.head = euler(t, [[0, [0, 0, 0]], [0.3, [-16, 0, 0]], [0.48, [-18, 0, 0]], [0.58, [10, 0, 0]], [0.82, [6, 0, 0]], [1, [0, 0, 0]]]);
   r.head[0] -= 8 * cough;
+  // The fingers clawed, and the mouth open on the cough and on what is let go.
+  r.shape = [{ claw: seg(t, 0.2, 0.32) * (1 - seg(t, 0.85, 0.95)) }, { claw: seg(t, 0.2, 0.32) * (1 - seg(t, 0.85, 0.95)) }];
+  r.mouth = Math.max(0, one(t, [[0, 0], [0.3, 0.25], [0.5, 0.3], [0.56, 0.9], [0.72, 0.4], [0.9, 0]]) + 0.25 * Math.max(0, cough));
 };
 
 /**
@@ -623,18 +682,28 @@ const surgeryPose: CastPose = (r, t, c) => {
     r.hand[k] = euler(t, [[0, [0, 0, 0]], [0.5, [10, 0, 0]], [0.56, [-30, 0, s * -50]], [0.76, [-20, 0, s * -40]], [1, [0, 0, 0]]]);
   }
   r.open = [t > 0.5 && t < 0.88, freeHand(c) && t > 0.5 && t < 0.88];
-  // The kneel: the right foot forward and flat, the left knee down and its toes tucked under.
-  r.leg[1] = euler(t, [[0, [0, 2, 0]], [0.18, [72, 6, 0]], [0.76, [72, 6, 0]], [0.9, [10, 3, 0]], [1, [0, 2, 0]]]);
-  r.knee[1] = one(t, [[0, 4], [0.18, 88], [0.76, 88], [0.9, 12], [1, 4]]);
-  r.leg[0] = euler(t, [[0, [2, 2, 0]], [0.18, [-12, 4, 0]], [0.76, [-12, 4, 0]], [0.9, [-2, 2, 0]], [1, [2, 2, 0]]]);
-  r.knee[0] = one(t, [[0, 4], [0.18, 98], [0.76, 98], [0.9, 10], [1, 4]]);
-  const down = bump(t, 0.08, 0.2, 0.86) > 0.6;
-  r.flat = [!down, true];
-  r.foot = [one(t, [[0, 0], [0.18, 60], [0.76, 60], [0.9, 0]]), 0];
+  // Down on the left knee, the right foot flat ahead, toes tucked under behind.
+  r.kneel = one(t, [[0, 0], [0.16, 1], [0.78, 1], [0.92, 0]]);
+  r.kneelLeft = true;
   r.spine = euler(t, [[0, [0, 0, 0]], [0.18, [-16, 0, 0]], [0.5, [-18, 0, 0]], [0.56, [-4, 0, 0]], [0.76, [-6, 0, 0]], [1, [0, 0, 0]]]);
   r.chest = euler(t, [[0, [0, 0, 0]], [0.18, [-8, 0, 0]], [0.5, [-8, 0, 0]], [0.56, [2, 0, 0]], [1, [0, 0, 0]]]);
   r.head = euler(t, [[0, [0, 0, 0]], [0.18, [-16, 0, 0]], [0.5, [-14, 0, 0]], [0.56, [-2, 0, 0]], [1, [0, 0, 0]]]);
   r.chest[2] += 5 * work;
+  // Pinched on needles while they work, opened flat as they lift.
+  const open = seg(t, 0.5, 0.56) * (1 - seg(t, 0.86, 0.95));
+  const pinch = seg(t, 0.14, 0.22) * (1 - open);
+  r.shape = [{ point: 0.5 * pinch, cup: 0.5 * pinch, flat: open }, freeHand(c) ? { point: 0.5 * pinch, cup: 0.5 * pinch, flat: open } : undefined];
+  if (onSelf(c)) {
+    // On oneself: the work done low on one's own front thigh, and the hands brought in to the breast, not lifted out.
+    for (let k2 = 0; k2 < 2; k2++) {
+      const s2 = k2 ? 1 : -1;
+      r.arm[k2] = euler(t, [[0, [12, 10, 0]], [0.18, [34, 4, 14]], [0.5, [36, 4, 14]], [0.56, [52, -8, 30]], [0.76, [50, -8, 30]], [1, [12, 10, 0]]]);
+      r.arm[k2][0] += 7 * work * s2;
+      r.elbow[k2] = one(t, [[0, 16], [0.18, 70], [0.5, 72], [0.56, 112], [0.76, 110], [1, 18]]) + 12 * work * s2;
+      r.hand[k2] = [0, 0, 0];
+    }
+    r.head = euler(t, [[0, [0, 0, 0]], [0.18, [-24, 0, 0]], [0.5, [-22, 0, 0]], [0.56, [-10, 0, 0]], [1, [0, 0, 0]]]);
+  }
 };
 
 /**
@@ -655,6 +724,9 @@ const restorePose: CastPose = (r, t) => {
   r.spine = euler(t, [[0, [0, 0, 0]], [0.3, [-6, 0, 0]], [0.5, [-6, 0, 0]], [0.6, [5, 0, 0]], [1, [0, 0, 0]]]);
   r.knee = [one(t, [[0, 4], [0.3, 22], [0.5, 24], [0.6, 2], [1, 4]]), one(t, [[0, 4], [0.3, 22], [0.5, 24], [0.6, 2], [1, 4]])];
   r.leg = [euler(t, [[0, [2, 2, 0]], [0.3, [10, 2, 0]], [0.5, [10, 2, 0]], [0.6, [0, 3, 0]], [1, [2, 2, 0]]]), euler(t, [[0, [2, 2, 0]], [0.3, [10, 2, 0]], [0.5, [10, 2, 0]], [0.6, [0, 3, 0]], [1, [2, 2, 0]]])];
+  // Flat open hands as the arms open.
+  const opened = seg(t, 0.5, 0.58) * (1 - seg(t, 0.86, 0.95));
+  r.shape = [{ flat: opened, cup: 0.4 * bump(t, 0.1, 0.3, 0.52) }, { flat: opened, cup: 0.4 * bump(t, 0.1, 0.3, 0.52) }];
 };
 
 /**
@@ -663,7 +735,7 @@ const restorePose: CastPose = (r, t) => {
  * both open palms at the one being saved, with a long step and a lean in,
  * held while it lands.
  */
-const miraclePose: CastPose = (r, t) => {
+const miraclePose: CastPose = (r, t, c) => {
   for (let k = 0; k < 2; k++) {
     const s = k ? 1 : -1;
     r.arm[k] = euler(t, [[0, [12, 10, 0]], [0.3, [168, -4, 14]], [0.46, [172, -6, 16]], [0.56, [92, 6, 4]], [0.8, [88, 8, 4]], [1, [12, 10, 0]]]);
@@ -680,6 +752,19 @@ const miraclePose: CastPose = (r, t) => {
   r.knee[1] = one(t, [[0, 4], [0.46, 0], [0.56, 12], [1, 4]]);
   // Up on the toes at the top.
   r.foot = [-14 * bump(t, 0.15, 0.32, 0.52), -14 * bump(t, 0.15, 0.32, 0.52)];
+  r.shape = [{ flat: seg(t, 0.1, 0.25) * (1 - seg(t, 0.86, 0.95)) }, { flat: seg(t, 0.1, 0.25) * (1 - seg(t, 0.86, 0.95)) }];
+  if (onSelf(c)) {
+    // On oneself the light is brought down into one's own breast: no lunge, the palms laid flat on the chest, the head bowed.
+    for (let k2 = 0; k2 < 2; k2++) {
+      r.arm[k2] = euler(t, [[0, [12, 10, 0]], [0.3, [168, -4, 14]], [0.46, [172, -6, 16]], [0.56, [50, -12, 34]], [0.8, [48, -12, 32]], [1, [12, 10, 0]]]);
+      r.elbow[k2] = one(t, [[0, 16], [0.3, 34], [0.46, 30], [0.56, 120], [0.8, 118], [1, 18]]);
+      r.hand[k2] = [0, 0, 0];
+    }
+    r.spine = euler(t, [[0, [0, 0, 0]], [0.3, [8, 0, 0]], [0.46, [10, 0, 0]], [0.56, [-6, 0, 0]], [0.8, [-5, 0, 0]], [1, [0, 0, 0]]]);
+    r.head = euler(t, [[0, [0, 0, 0]], [0.3, [22, 0, 0]], [0.46, [24, 0, 0]], [0.56, [-18, 0, 0]], [0.8, [-16, 0, 0]], [1, [0, 0, 0]]]);
+    r.leg = [[2, 2, 0], [0, 2, 0]];
+    r.knee = [one(t, [[0, 4], [0.56, 16], [1, 4]]), one(t, [[0, 4], [0.56, 16], [1, 4]])];
+  }
 };
 
 /* ---- the spells ------------------------------------------------------------------------------ */
@@ -768,12 +853,13 @@ export const CHIRURGEON: Record<string, SpellVisual> = {
       } },
       hit: (k) => k.burst(k.heart(k.target), 5, { kind: 'spark', size: 1.4, life: [0.15, 0.3], speed: [0.3, 0.8], up: [0, 10], gravity: 20, colour: [BLOOD, PALETTE.core] }),
       impact: { secs: 1.1, draw: (k, u) => {
-        const b = k.target, w = woundAt(k, b, 0);
+        // On somebody else the wound is on their breast; on oneself it is on the left forearm the cast holds up, along it.
+        const b = k.target, w = castOnSelf(k) ? forearmWound(k) : woundAt(k, b, 0);
         const sew = seg(u, 0, 0.55);
         const fade = 1 - seg(u, 0.8, 1);
-        suture(k, b, w.at, { len: 14, ang: w.ang, close: k.fx.close ?? 0.3, u: easeOut(sew), gash: fade * (1 - 0.3 * seg(u, 0.5, 0.8)), alpha: fade, needle: (1 - seg(u, 0.5, 0.6)) * (u < 0.6 ? 1 : 0), bob: u * 40 });
+        suture(k, b, w.at, { len: castOnSelf(k) ? 9 : 14, ang: w.ang, close: k.fx.close ?? 0.3, u: easeOut(sew), gash: fade * (1 - 0.3 * seg(u, 0.5, 0.8)), alpha: fade, needle: (1 - seg(u, 0.5, 0.6)) * (u < 0.6 ? 1 : 0), bob: u * 40 });
         // The thread from the caster's hand still to the needle at work, until it is cut and the knot flashes.
-        if (u < 0.6 && !onSelf(k)) thread(k, k.hand(1), w.at, { alpha: 1 - seg(u, 0.45, 0.6), lift: 1 });
+        if (u < 0.6 && !castOnSelf(k)) thread(k, k.hand(1), w.at, { alpha: 1 - seg(u, 0.45, 0.6), lift: 1 });
         if (u > 0.55 && u < 0.7) k.flare(w.at, 5, 1 - seg(u, 0.55, 0.7), PALETTE.core);
       } },
     },
@@ -790,8 +876,7 @@ export const CHIRURGEON: Record<string, SpellVisual> = {
         if (u > 0 && u < 1 && k.target !== k.caster) {
           const b = k.target;
           k.slash(b, { u, from: 1.25, to: -1.25, tilt: Math.PI / 2 - 0.3, reach: b.wide * 1.6 + 2, up: b.tall * 0.55, width: 3.4, length: 1.6,
-            main: BLOOD, core: BLOOD_CORE, ink: BLOOD_INK, alpha: 1 - seg(t, 0.47, 0.53), glow: 0, bias: 6 });
-          k.glow(k.heart(b), 8, 0.5 * (1 - seg(t, 0.47, 0.53)), BLOOD_LIGHT);
+            main: BLOOD, core: BLOOD_CORE, ink: BLOOD_INK, alpha: 1 - seg(t, 0.47, 0.53), glow: 0.6, light: BLOOD_LIGHT, bias: 6 });
         }
       },
       hit: (k) => {
@@ -815,8 +900,7 @@ export const CHIRURGEON: Record<string, SpellVisual> = {
           pts.push(at);
           const mint = smooth(seg(p, 0.45, 0.85));
           const r = (i === 0 ? 2.1 : 1.1 + 0.7 * hashOf(k.seed + 1, i)) * (1 - 0.35 * mint);
-          k.orb(at, r, { main: mixColour(BLOOD, PALETTE.main, mint), deep: mint > 0.5 ? PALETTE.deep : BLOOD_DEEP, core: mint > 0.5 ? PALETTE.core : BLOOD_CORE, ink: mint > 0.5 ? PALETTE.ink : BLOOD_INK, glow: 0.4 * mint, sides: 6, turn: i });
-          if (mint < 0.5) k.glow(at, r * 2.6, 0.35 * (1 - mint), BLOOD_LIGHT);
+          k.orb(at, r, { main: mixColour(BLOOD, PALETTE.main, mint), deep: mint > 0.5 ? PALETTE.deep : BLOOD_DEEP, core: mint > 0.5 ? PALETTE.core : BLOOD_CORE, ink: mint > 0.5 ? PALETTE.ink : BLOOD_INK, glow: 0.4, light: mint > 0.5 ? PALETTE.light : BLOOD_LIGHT, sides: 6, turn: i });
         }
         if (pts.length >= 2) k.ribbon(pts.reverse(), { width: 0.9, taper: 'both', alpha: 0.45, main: BLOOD, core: BLOOD_CORE, ink: BLOOD_INK, glow: 0, edge: false });
         // The wound on the creature, a red line that fades.
@@ -885,8 +969,7 @@ export const CHIRURGEON: Record<string, SpellVisual> = {
         // The vial in the hand from when it leaves the belt; a wisp off it once it is unstoppered.
         const held = seg(t, 0.12, 0.18) * (t < 0.5 ? 1 : 0);
         if (held > 0) {
-          k.orb(k.hand(1), 1.9, { main: BLOOD, deep: BLOOD_DEEP, core: BLOOD_CORE, ink: BLOOD_INK, alpha: held, sides: 6, glow: 0, turn: 0.5 });
-          k.glow(k.hand(1), 5, 0.4 * held, BLOOD_LIGHT);
+          k.orb(k.hand(1), 1.9, { main: BLOOD, deep: BLOOD_DEEP, core: BLOOD_CORE, ink: BLOOD_INK, alpha: held, sides: 6, glow: 0.5, light: BLOOD_LIGHT, turn: 0.5 });
         }
         if (t > 0.34 && t < 0.5) k.emit(k.hand(1), 18, { kind: 'smoke', colour: [...MIASMA], size: 1.6, life: [0.4, 0.7], speed: [0.02, 0.06], up: [6, 12], gravity: -4, bias: 4 });
         if (t > 0.34 && !k.state.pop) {
@@ -898,8 +981,7 @@ export const CHIRURGEON: Record<string, SpellVisual> = {
         // Tumbling end over end on a high arc, a thin smoke after it.
         const from = k.hand(1), to = k.heart(k.target);
         const at = arcAt(from, to, u, 5 + k.dist * 3.5);
-        k.orb(at, 2.2, { main: BLOOD, deep: BLOOD_DEEP, core: BLOOD_CORE, ink: BLOOD_INK, sides: 6, turn: k.now * 16, glow: 0 });
-        k.glow(at, 7, 0.55, BLOOD_LIGHT);
+        k.orb(at, 2.2, { main: BLOOD, deep: BLOOD_DEEP, core: BLOOD_CORE, ink: BLOOD_INK, sides: 6, turn: k.now * 16, glow: 0.7, light: BLOOD_LIGHT });
         k.emit(at, 30, { kind: 'smoke', colour: [...MIASMA], size: 1.4, life: [0.3, 0.5], speed: [0.01, 0.04], up: [2, 6], gravity: -2 });
       } },
       hit: (k) => {
@@ -979,7 +1061,7 @@ export const CHIRURGEON: Record<string, SpellVisual> = {
       charge: (k, t) => {
         // Light pooling under the palms as they go down, and a small cross drawn on the ground there.
         const g = smooth(seg(t, 0.22, 0.48));
-        const at = k.local(k.caster, 0, 7, 0);
+        const at = k.local(k.caster, 0, PALMS_AHEAD, 0);
         if (g > 0) {
           k.disc(at, 0.12 + 0.18 * g, { alpha: 0.5 * g, n: 8 });
           k.glow(k.on(at.x, at.y, 1), 8 + 6 * g, 0.6 * g);
@@ -987,19 +1069,18 @@ export const CHIRURGEON: Record<string, SpellVisual> = {
         }
       },
       hit: (k) => {
-        const at = k.local(k.caster, 0, 7, 0);
+        const at = k.local(k.caster, 0, PALMS_AHEAD, 0);
         k.burst(k.on(at.x, at.y, 1), 24, { kind: 'mote', size: 2, life: [0.4, 0.8], speed: [0.6, 1.4], up: [4, 12], gravity: 0, drag: 0.2 });
         k.flash(0.06);
       },
       impact: { secs: 1.6, draw: (k, u) => {
         const R = k.fx.reach || 4;
-        const at = k.local(k.caster, 0, 7, 0);
+        const at = k.local(k.caster, 0, PALMS_AHEAD, 0);
         const c = { x: lerp(at.x, k.caster.x, smooth(seg(u, 0, 0.3))), y: lerp(at.y, k.caster.y, smooth(seg(u, 0, 0.3))) };
         // The ring goes out from the palms to the edge of who it heals, and stands there a moment.
         const r = R * easeOut(seg(u, 0, 0.42));
         const hold = 1 - seg(u, 0.7, 1);
         k.ring(c, Math.max(0.1, r), { band: 0.12 + 0.12 * (1 - seg(u, 0, 0.42)), alpha: hold, glow: 1.2, turn: u * 0.4 });
-        k.disc(c, r, { alpha: 0.07 * hold });
         // Just inside the edge, a running stitch: the circle sewn shut round whoever is in it.
         if (r > 0.6) k.ring(c, r - 0.28, { band: 0.06, alpha: 0.8 * hold, dash: 2, n: Math.max(16, Math.round(r * 12)), main: PALETTE.core, deep: PALETTE.main, glow: 0, turn: u * 0.4 });
         crossOnGround(k, c, Math.min(r * 0.9, R * 0.3), { alpha: 0.6 * hold * seg(u, 0.1, 0.4), turn: 0 });
@@ -1015,6 +1096,13 @@ export const CHIRURGEON: Record<string, SpellVisual> = {
           }
         }
         cross(k, k.at(k.caster, 1.05 + 0.2 * seg(u, 0.3, 1)), 4.2, { alpha: flashOf(seg(u, 0.25, 1), 0.15), turn: u * 3 });
+        // Everybody else the ring passes is mended as it reaches them: a flash of light round them, and the cross off their head.
+        for (const { b, d } of covered(k, R, ['player', 'peer'])) {
+          const v = seg(u, reachedAt(d, 0.42), reachedAt(d, 0.42) + 0.5);
+          if (v <= 0 || v >= 1) continue;
+          k.shell(b, { alpha: 0.45 * flashOf(v, 0.12), size: 0.95, glow: 0.5 });
+          cross(k, k.at(b, 1.05 + 0.2 * v), 3.4, { alpha: flashOf(v, 0.15), turn: v * 3 + d });
+        }
         k.light(c, R + 1, 0.7 * hold);
       } },
     },
@@ -1073,6 +1161,11 @@ export const CHIRURGEON: Record<string, SpellVisual> = {
           k.ring(c, R, { band: 0.22, alpha: 0.85 * band * fade, glow: 1, turn: 0.2 });
           k.ring(c, R - 0.04, { band: 0.12, alpha: band * fade, main: LINEN, deep: LINEN_DEEP, ink: LINEN_INK, glow: 0, dash: 2, n: strips * 6, turn: swirl });
         }
+        // Everybody else within it dressed as the strips land, the nearer first.
+        for (const { b, d } of covered(k, R, ['player', 'peer']).slice(0, 5)) {
+          const on = seg(u, 0.25 + 0.2 * d, 0.55 + 0.2 * d);
+          if (on > 0) wrap(k, b, { lo: 0.42, hi: 0.58, turns: 1.6, u: easeOut(on), from: seg(u, 0.8, 1), spin: swirl + d * 3 });
+        }
         // And on the caster, a dressing of their own.
         wrap(k, c, { lo: 0.42, hi: 0.58, turns: 1.6, u: easeOut(seg(u, 0.1, 0.45)), from: seg(u, 0.75, 1), spin: swirl });
         k.light(c, R + 0.5, 0.6 * fade);
@@ -1114,16 +1207,30 @@ export const CHIRURGEON: Record<string, SpellVisual> = {
           }
         }
         k.light(k.caster, R, 0.4 * (1 - u), BLOOD_LIGHT);
+        // Every creature the front reaches: a red glint at its heart as it is caught.
+        for (const { b, d } of covered(k, R, ['creature'])) {
+          const v = seg(u, reachedAt(d, 0.5), reachedAt(d, 0.5) + 0.35);
+          if (v > 0 && v < 1) glint(k, k.heart(b), 6, flashOf(v, 0.1));
+        }
       } },
       linger: { draw: (k, age, left) => {
         const R = k.fx.reach || 4, secs = secsOf(k, 10);
+        // Every creature in it bleeds a second at a time: a drop off it and a red glint each second, a mark over it.
+        const tick = Math.floor(age);
+        const struck = covered(k, R, ['creature']);
+        const fresh = tick !== k.state.tick;
+        k.state.tick = tick;
+        for (const { b } of struck) {
+          if (fresh) k.burst(k.at(b, 0.5), 2, { kind: 'drop', colour: [BLOOD, BLOOD_DEEP], size: 2, life: [0.4, 0.6], speed: [0.02, 0.1], up: [-2, 4], gravity: 60, jitter: b.wide / 80, bias: 4 });
+          glint(k, k.heart(b), 3, smooth(age / 0.6) * smooth(left / 1) * flashOf(age % 1, 0.1) * 0.7);
+        }
         const a = smooth(age / 0.6) * smooth(left / 1);
         // The edge of the sickness kept as the seconds of the bleed, and a low miasma creeping inside it. No stain over
-        // the whole of it: four tiles of ground redrawn line by line for ten seconds costs more than it says.
+        // the whole of it: the most of its cost for ten seconds, and the tally already marks the edge.
         tally(k, k.caster, R, Math.round(secs), left, { alpha: 0.55 * a, band: 0.12, main: BLOOD, deep: BLOOD_DEEP, ink: BLOOD_INK, light: BLOOD_LIGHT, turn: age * 0.05 });
         if (!k.fast || k.rand() < 0.5) {
           const an = k.rand() * TAU, rr = R * Math.sqrt(k.rand());
-          k.emit(k.on(k.caster.x + Math.cos(an) * rr, k.caster.y + Math.sin(an) * rr, 1), 14 * a, { kind: 'smoke', colour: [...MIASMA], size: 2.6, life: [1, 1.6], speed: [0.02, 0.08], up: [1, 3], gravity: -1 });
+          k.emit(k.on(k.caster.x + Math.cos(an) * rr, k.caster.y + Math.sin(an) * rr, 1), 8 * a, { kind: 'smoke', colour: [...MIASMA], size: 3.4, sizeEnd: 9, life: [1.4, 2.2], speed: [0.02, 0.08], up: [1, 3], gravity: -1 });
         }
       } },
     },
@@ -1283,26 +1390,12 @@ function crossOnGround(k: FxScene, c: { x: number; y: number }, r: number, o: { 
   const th = Math.atan2(-yx, yy) + (o.turn ?? 0);
   const ct = Math.cos(th), st = Math.sin(th);
   const pts: number[] = [];
-  for (const [u, v] of shape) {
-    const x = c.x + (u * ct - v * st) * r, y = c.y + (u * st + v * ct) * r;
-    pts.push(k.eye.worldToScreenX(x, y), k.eye.worldToScreenY(x, y, k.ground(x, y) + 0.12));
-  }
+  for (const [u, v] of shape) pts.push(c.x + (u * ct - v * st) * r, c.y + (u * st + v * ct) * r);
   const inkW = Math.max(0.8, 0.8 * k.zoom);
-  k.groundDraw(c.x, c.y, r + 0.3, (g) => {
-    g.globalAlpha = clamp(a * 0.3);
-    g.beginPath();
-    for (let i = 0; i < pts.length; i += 2) (i ? g.lineTo(pts[i], pts[i + 1]) : g.moveTo(pts[i], pts[i + 1]));
-    g.closePath();
-    g.fillStyle = PALETTE.main;
-    g.fill();
-    g.globalAlpha = clamp(a);
-    g.lineJoin = 'miter';
-    g.lineWidth = inkW * 2.2;
-    g.strokeStyle = PALETTE.core;
-    g.stroke();
-    g.lineWidth = inkW;
-    g.strokeStyle = PALETTE.ink;
-    g.stroke();
-  });
+  k.groundShape(c.x, c.y, r + 0.3, [
+    { kind: 'fill', colour: PALETTE.main, alpha: clamp(a * 0.3), paths: [pts], lift: 0.12 },
+    { kind: 'stroke', colour: PALETTE.core, alpha: clamp(a), paths: [pts], lift: 0.12, width: inkW * 2.2, closed: true, join: 'miter' },
+    { kind: 'stroke', colour: PALETTE.ink, alpha: clamp(a), paths: [pts], lift: 0.12, width: inkW, closed: true, join: 'miter' },
+  ]);
   k.glow(k.on(c.x, c.y, 0.5), r * HALF_W * 0.9, a * 0.4);
 }
