@@ -177,11 +177,17 @@ begin
   ${CLEAR}
   update player set combat_class = 'berserker', blessings = '{}'::jsonb, equipped = jsonb_build_object('weapon', v_maul)
    where world_id = w.world_id and uid = w.uid;
-  ${SPAWN('a', MONSTER, 'v_px + 1.5', 'v_py')}
-  ${SPAWN('b', ANIMAL, 'v_px', 'v_py + 1.5')}
-  ${SPAWN('e', MONSTER, `v_px + ${fx('berserker_earthshaker', 'reach')} + 2`, 'v_py')}
-  ${IDS('SHAKE:IDS', 'a, b, e')}
-  ${CAST('SHAKE', 'berserker_earthshaker', ON_ME)}
+  -- Each blow is a roll; tried until one lands, the three put down afresh each time.
+  for i in 1 .. 12 loop
+    ${CLEAR}
+    delete from said where k in ('SHAKE', 'SHAKE:IDS');
+    ${SPAWN('a', MONSTER, 'v_px + 1.5', 'v_py')}
+    ${SPAWN('b', ANIMAL, 'v_px', 'v_py + 1.5')}
+    ${SPAWN('e', MONSTER, `v_px + ${fx('berserker_earthshaker', 'reach')} + 2`, 'v_py')}
+    ${IDS('SHAKE:IDS', 'a, b, e')}
+    ${CAST('SHAKE', 'berserker_earthshaker', ON_ME)}
+    exit when r ? 'held';
+  end loop;
   ${HURT('SHAKE:HURT', 'a, b, e')}
   insert into said select 'SHAKE:HELD', string_agg(cr.id || ':' || class_held(w.world_id, cr.id)::text, ',' order by cr.id)
     from creature cr where cr.world_id = w.world_id and cr.id in (a, b, e);
@@ -391,8 +397,18 @@ check('the telling ends with the cast', island('AFTER') === '-', island('AFTER')
   {
     const [a, b, e] = ids('SHAKE:IDS');
     const r = fx('berserker_earthshaker', 'reach');
-    agree('an Earthshaker', wire(guessTold('berserker_earthshaker', me, null, [me, beast(a, MONSTER, 1.5, 0), beast(b, ANIMAL, 0, 1.5), beast(e, MONSTER, r + 2, 0)])),
-      told('SHAKE'), true);
+    // Whether the blow lands on each is a roll the browser cannot make: it
+    // draws everything in reach, so it agrees when the island's landings are
+    // among those, each held for the same seconds.
+    const guess = wire(guessTold('berserker_earthshaker', me, null, [me, beast(a, MONSTER, 1.5, 0), beast(b, ANIMAL, 0, 1.5), beast(e, MONSTER, r + 2, 0)]));
+    const t = told('SHAKE');
+    const hold = fx('berserker_earthshaker', 'hold');
+    check('the browser works out what the island said of an Earthshaker, the blows that missed aside',
+      !!guess && same([...guess.hit].sort(), [a, b].sort()) && same([...guess.held].sort(), [a, b].sort())
+        && guess.secs.every((s) => s !== null && near(s, hold))
+        && (t.hit ?? []).length > 0 && (t.hit ?? []).every((id) => (guess.hit as ReadonlyArray<unknown>).includes(id))
+        && same([...(t.held ?? [])].sort(), [...(t.hit ?? [])].sort()),
+      `${JSON.stringify(guess)} / ${brief(t)}`);
   }
   {
     const [a, b] = ids('CRACK:IDS');
