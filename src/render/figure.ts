@@ -5606,7 +5606,7 @@ const CAP_EASY = 40;
  * top of the shoulder, it is over the joint whichever way the arm goes up.
  */
 const CAP_MOST = 65;
-const CAP_FOLD = 0.7;
+const CAP_FOLD = 0.85;
 const CAP_PIVOT: V3 = [0.4, 0, 0.9];
 const capTurn = (a: number): number => {
   const easy = CAP_EASY * DEG, most = CAP_MOST * DEG, room = most - easy * 0.5;
