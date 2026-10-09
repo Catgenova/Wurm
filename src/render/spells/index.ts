@@ -81,7 +81,8 @@
  * and `held`; `cast.mirror` (a shouldered weapon swung left-handed from the
  * left shoulder, rather than changed into the right hand in a frame),
  * `cast.close` (the body carried in to what it strikes for the blow, the
- * island's blows being struck from up to 2.2 tiles), `cast.pull` and
+ * island's blows being struck from up to 2.2 tiles, the legs running in and
+ * bounding back past the cast's end; `when` a weapon, `steps` off), `cast.pull` and
  * `cast.companion` (a target or a companion the island moved, carried from
  * where it stood); the cue's `aim` (where the target stands and how tall it
  * is), `moved`, `companion`, `lefty`, `look`.
@@ -104,6 +105,7 @@
  */
 import { castPosesBy, figureShoulder, mirrorRig, weaponCarry, type FigurePose, type HandGoal, type Rig, type V3 } from '../figure';
 import type { FxScene, SpellPalette } from './kit';
+import { travelLegs } from './poses';
 import type { CastKind, SpellGroup, SpellInfo } from './info';
 import { BLADE } from './blade';
 import { BERSERKER } from './berserker';
@@ -179,6 +181,12 @@ export interface PoseCue {
    * right), for a pose that reaches to it or turns to it (a wound licked, a command pointed); nothing with none.
    */
   companion?: { ahead: number; aside: number };
+  /**
+   * The stage carrying the body in for the blow or back after it (`cast.close`), as the framework's footwork steps it
+   * (`CastTravel`): for a pose that keys something to it -- a lean, the free arm pumping -- rather than working out the
+   * stage's curve again. Nothing while it is not carried; past the cast's end, too, while it bounds back.
+   */
+  travel?: CastTravel;
 }
 
 /**
@@ -213,6 +221,39 @@ export interface CastClose {
   back?: number;
   reach?: number;
   most?: number;
+  /**
+   * Seconds the trip back runs on past the end of the cast, the body bounding back to where the island has it: by
+   * default 0.4 to 0.6 by how far it has to go (0.25 s and 0.15 s a tile). Nought puts it back by the cast's end, as
+   * it was before.
+   */
+  after?: number;
+  /**
+   * The footwork the stage gives the legs while it carries the body (`CastTravel`): running steps in, bounds back.
+   * `true` (the default) both ways, `'in'` or `'back'` one way only, `false` neither -- for a pose that steps the
+   * way itself.
+   */
+  steps?: boolean | 'in' | 'back';
+  /**
+   * Whether it closes at all, by what is in the caster's hand (a weapon id, or nothing): a Hit and Run is a blow
+   * with a knife, closed in for, and a throw with a javelin, struck from where the caster stands. Asked every frame
+   * up to the blow, and kept from then on.
+   */
+  when?: (weapon: string | undefined) => boolean;
+}
+
+/**
+ * The stage carrying the body for a cast (`cast.close`), as the legs are told it: the way it goes in the body's own
+ * frame (`dir`, x to its right and y ahead, a unit step), how far the whole way is (`by`, height units) and how much
+ * of it is done (`at`), whether it runs (in) or bounds (back), how much of the legs the steps have (`w`), and where
+ * the ground under the body has got to in the body's frame (`ground`), so a foot on it stays put.
+ */
+export interface CastTravel {
+  dir: [number, number];
+  by: number;
+  at: number;
+  gait: 'run' | 'bound';
+  w: number;
+  ground: [number, number];
 }
 
 /** A cast's pose: write `r` as the body is `t` (nought to one) of the way through the cast. */
@@ -282,6 +323,8 @@ export interface CastNow {
   aim?: CastAim;
   moved?: number;
   companion?: { ahead: number; aside: number };
+  /** The stage carrying the body in or back (`cast.close`), for the legs to step it; past the cast's end too, while it bounds back. */
+  travel?: CastTravel;
 }
 
 export interface SpellVisual {
@@ -388,9 +431,13 @@ export function castOver(r: Rig, p: FigurePose): void {
     timing: v.cast.timing, facing: lefty ? (8 - p.facing) % 8 : p.facing, moving: p.moving || p.swimming || !!p.driving, carry,
     at: cast.at ?? 'creature', held: cast.held ?? 0, lefty, aim, look: p.look, moved: cast.moved ?? 0,
     companion: cast.companion && (lefty ? { ...cast.companion, aside: -cast.companion.aside } : cast.companion),
+    travel: cast.travel && (lefty ? { ...cast.travel, dir: [-cast.travel.dir[0], cast.travel.dir[1]], ground: [-cast.travel.ground[0], cast.travel.ground[1]] } : cast.travel),
   });
   if (lefty) flip(r);
-  if (!base) return;
+  if (!base) {
+    if (cast.travel) travelLegs(r, cast.travel, p.look);
+    return;
+  }
   const w = castWeight(t, v.cast.timing);
   const mixed = mixDeep(base as unknown as Deep, r as unknown as Deep, w) as unknown as Rig;
   // Which shoulder a weapon is on, its spin and a swap under way are switches, as in the figure's own blend: half way between
@@ -400,6 +447,7 @@ export function castOver(r: Rig, p: FigurePose): void {
   // Arrows on the string are counted, not a share: one or two, as a switch is (from none, at once).
   mixed.nocked = w < 0.5 && base.nocked !== undefined ? base.nocked : r.nocked;
   Object.assign(r, mixed);
+  if (cast.travel) travelLegs(r, cast.travel, p.look);
 }
 
 castPosesBy(castOver);
