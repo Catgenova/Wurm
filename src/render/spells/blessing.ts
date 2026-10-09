@@ -20,11 +20,11 @@
  * This file is this group's alone; anything its spells share is written here,
  * not in the kit.
  */
-import type { Euler, Rig } from '../figure';
+import type { Euler, HandShape, Rig } from '../figure';
 import type { SpellVisual } from './index';
 import { spellInfo } from './info';
 import { TAU, arcAt, bump, channelsOf, clamp, easeBack, easeOut, flashOf, hashOf, lerp, mid3, seg, smooth, type FxScene, type P3, type SpellPalette } from './kit';
-import { euler, one, type Key } from './poses';
+import { euler, heldFor, one, onSelf as castOnSelf, type Key } from './poses';
 
 /** Dawn: gold and white. */
 export const PALETTE: SpellPalette = {
@@ -319,33 +319,21 @@ function shaft(k: FxScene, foot: P3, h: number, w: number, a: number, colour = k
   });
 }
 
-/** Rays laid on the ground out from a spot, from `r0` to `r1` tiles: sunlight across the land. Added to the ground's own colour, as light on it. */
+/** Rays laid on the ground out from a spot, from `r0` to `r1` tiles: sunlight across the land, long and short by turns. */
 function groundRays(k: FxScene, c: P3, r0: number, r1: number, n: number, o: { alpha?: number; turn?: number; spread?: number; colour?: string } = {}): void {
   const a = o.alpha ?? 1;
   if (a <= 0.01 || r1 <= r0 + 0.05) return;
   const turn = o.turn ?? 0, w = o.spread ?? 0.07;
-  const eye = k.eye;
-  const path = new Path2D();
-  const at = (an: number, r: number): [number, number] => {
-    const x = c.x + Math.cos(an) * r, y = c.y + Math.sin(an) * r;
-    return [eye.worldToScreenX(x, y), eye.worldToScreenY(x, y, k.ground(x, y) + 0.12)];
-  };
+  const paths: number[][] = [];
   for (let i = 0; i < n; i++) {
     const an = turn + (i / n) * TAU, len = i % 2 ? lerp(r0, r1, 0.62) : r1;
-    const [lx, ly] = at(an - w, r0), [tx, ty] = at(an, len), [rx, ry] = at(an + w, r0);
-    path.moveTo(lx, ly);
-    path.lineTo(tx, ty);
-    path.lineTo(rx, ry);
-    path.closePath();
+    paths.push([
+      c.x + Math.cos(an - w) * r0, c.y + Math.sin(an - w) * r0,
+      c.x + Math.cos(an) * len, c.y + Math.sin(an) * len,
+      c.x + Math.cos(an + w) * r0, c.y + Math.sin(an + w) * r0,
+    ]);
   }
-  const col = o.colour ?? k.pal.deep;
-  k.groundDraw(c.x, c.y, r1 + 0.5, (g) => {
-    g.globalAlpha = clamp(a);
-    g.globalCompositeOperation = 'lighter';
-    g.fillStyle = col;
-    g.fill(path);
-    g.globalCompositeOperation = 'source-over';
-  });
+  k.groundShape(c.x, c.y, r1 + 0.2, [{ kind: 'fill', colour: o.colour ?? k.pal.main, alpha: clamp(a * 0.8), paths, lift: 0.12 }]);
 }
 
 /** Out of a wound: drops of blood lifted out of it that turn to gold as they rise. What every heal that stops bleeding shows. */
@@ -595,21 +583,15 @@ function both(r: Rig, t: number, arm: readonly Key[], elbow: ReadonlyArray<reado
   r.elbow[0] = r.elbow[1] = one(t, elbow);
 }
 
-/**
- * Down on one knee, `w` of the way: the left foot planted ahead with its
- * thigh level, the right knee put down under the hip. The body is stood on
- * its lowest sole, so it goes down as the legs fold.
- */
-function kneel(r: Rig, w: number): void {
-  if (w <= 0) return;
-  const l0 = r.leg[0], l1 = r.leg[1];
-  r.leg[0] = [lerp(l0[0], 84, w), lerp(l0[1], 6, w), lerp(l0[2], 4, w)];
-  r.knee[0] = lerp(r.knee[0], 92, w);
-  r.leg[1] = [lerp(l1[0], -10, w), lerp(l1[1], 4, w), lerp(l1[2], 0, w)];
-  r.knee[1] = lerp(r.knee[1], 104, w);
-  r.flat[1] = w < 0.5;
-  r.foot[1] = lerp(r.foot[1], -30, w);
+/** Both hands one shape, each share scaled by `w`: a hand opens into it and closes out of it with the weight. */
+function shaped(r: Rig, s: HandShape, w = 1, left = true, right = true): void {
+  const by: HandShape = {};
+  for (const [name, v] of Object.entries(s) as Array<[keyof HandShape, number]>) by[name] = v * w;
+  r.shape = [left ? by : r.shape?.[0], right ? by : r.shape?.[1]];
 }
+
+/** The middle of the chest, before the breastbone, in the body's own frame (`Rig.reach`): where a hand is laid on one's own heart. */
+const OWN_HEART: [number, number, number] = [-0.35, 1.45, 8.7];
 
 /** Feet a little apart and the knees easy, giving by `dip` degrees: a body standing to pray, not stiff. */
 function stance(r: Rig, t: number, dip: ReadonlyArray<readonly [number, number]>, step: ReadonlyArray<readonly [number, number]> = [[0, 0]]): void {
@@ -619,6 +601,9 @@ function stance(r: Rig, t: number, dip: ReadonlyArray<readonly [number, number]>
   r.knee[0] = 4 + d + s * 0.6;
   r.knee[1] = 4 + d;
 }
+
+/** Seconds Radiance's sun is held up over the head after it is let go. */
+const RADIANCE_HOLD = 4;
 
 /* ---- the record ---------------------------------------------------------------------- */
 
@@ -632,13 +617,20 @@ export const BLESSING: Record<string, SpellVisual> = {
     palette: PALETTE,
     cast: {
       timing: { secs: 1.1, release: 0.5 },
-      pose: (r, t) => {
+      pose: (r, t, c) => {
         r.arm[0] = euler(t, [[0, REST], [0.22, ON_HEART], [0.8, ON_HEART], [1, REST]]);
         r.elbow[0] = one(t, [[0, 16], [0.22, ON_HEART_BEND], [0.8, ON_HEART_BEND - 4], [1, 16]]);
         r.arm[1] = euler(t, [[0, REST], [0.22, [60, 14, -10]], [0.38, [88, 10, -6]], [0.5, [58, 8, -4]], [0.68, [54, 8, -2]], [1, REST]]);
         r.elbow[1] = one(t, [[0, 16], [0.22, 44], [0.38, 24], [0.5, 12], [0.68, 16], [1, 16]]);
         r.hand[1] = euler(t, [[0, [0, 0, 0]], [0.38, [-8, 0, 0]], [0.5, [-34, 0, 0]], [0.68, [-26, 0, 0]], [1, [0, 0, 0]]]);
         r.open = [t > 0.05, t > 0.05];
+        shaped(r, { flat: 1 }, one(t, [[0, 0], [0.15, 1], [0.85, 1], [1, 0]]));
+        if (castOnSelf(c)) {
+          // On oneself the right hand is laid over the left on the heart, then smoothed down the breastbone.
+          const w = one(t, [[0, 0], [0.2, 1], [0.8, 1], [1, 0]]);
+          const down = smooth(seg(t, 0.4, 0.62));
+          r.reach = [undefined, { at: [OWN_HEART[0] + 0.3, OWN_HEART[1] + 0.25, OWN_HEART[2] - 1.6 * down], w }];
+        }
         r.spine = euler(t, [[0, [0, 0, 0]], [0.38, [2, 0, 0]], [0.5, [-8, 0, 0]], [0.7, [-6, 0, 0]], [1, [0, 0, 0]]]);
         r.chest = euler(t, [[0, [0, 0, 0]], [0.38, [2, 0, 6]], [0.5, [-4, 0, -2]], [1, [0, 0, 0]]]);
         r.head = euler(t, [[0, [0, 0, 0]], [0.22, [-14, 6, 0]], [0.38, [-6, 4, 0]], [0.5, [-14, 6, 0]], [0.75, [-12, 6, 0]], [1, [0, 0, 0]]]);
@@ -697,7 +689,7 @@ export const BLESSING: Record<string, SpellVisual> = {
     palette: PALETTE,
     cast: {
       timing: { secs: 1.0, release: 0.55 },
-      pose: (r, t) => {
+      pose: (r, t, c) => {
         r.arm[0] = euler(t, [[0, REST], [0.2, PALMS], [0.3, PALMS], [0.45, ON_HEART], [0.82, ON_HEART], [1, REST]]);
         r.elbow[0] = one(t, [[0, 16], [0.2, PALMS_BEND], [0.45, ON_HEART_BEND], [0.82, ON_HEART_BEND], [1, 16]]);
         // The blessing hand: up beside the face, palm out, round the circle it draws, and set forward.
@@ -705,6 +697,9 @@ export const BLESSING: Record<string, SpellVisual> = {
         r.elbow[1] = one(t, [[0, 16], [0.2, PALMS_BEND], [0.3, PALMS_BEND], [0.38, 74], [0.46, 52], [0.56, 14], [0.78, 18], [1, 16]]);
         r.hand[1] = euler(t, [[0, [0, 0, 0]], [0.38, [40, 0, 0]], [0.56, [50, 0, 0]], [0.8, [36, 0, 0]], [1, [0, 0, 0]]]);
         r.open = [t > 0.05, t > 0.05];
+        shaped(r, { flat: 1 }, one(t, [[0, 0], [0.15, 1], [0.85, 1], [1, 0]]));
+        // On oneself the plate is set on one's own chest, the raised palm brought down flat on it.
+        if (castOnSelf(c)) r.reach = [undefined, { at: [0.25, 1.5, 8.8], w: one(t, [[0.5, 0], [0.6, 1], [0.82, 1], [0.95, 0]]) }];
         r.head = euler(t, [[0, [0, 0, 0]], [0.2, [-14, 0, 0]], [0.3, [-16, 0, 0]], [0.44, [4, 0, 0]], [0.56, [-4, 0, 0]], [1, [0, 0, 0]]]);
         r.chest = euler(t, [[0, [0, 0, 0]], [0.3, [-4, 0, 0]], [0.44, [6, 0, 10]], [0.56, [-4, 0, -4]], [1, [0, 0, 0]]]);
         r.spine = euler(t, [[0, [0, 0, 0]], [0.44, [3, 0, 0]], [0.56, [-6, 0, 0]], [1, [0, 0, 0]]]);
@@ -789,6 +784,8 @@ export const BLESSING: Record<string, SpellVisual> = {
         r.arm[0] = euler(t, [[0, REST], [0.28, [40, 8, 16]], [0.78, [40, 8, 16]], [1, REST]]);
         r.elbow[0] = one(t, [[0, 16], [0.28, 46], [0.78, 46], [1, 16]]);
         r.open = [t > 0.05, t > 0.05];
+        const w = one(t, [[0, 0], [0.2, 1], [0.85, 1], [1, 0]]);
+        r.shape = [{ cup: 0.6 * w }, { flat: w }];
       },
     },
     fx: {
@@ -845,13 +842,21 @@ export const BLESSING: Record<string, SpellVisual> = {
     palette: PALETTE,
     cast: {
       timing: { secs: 1.5, release: 0.6 },
-      pose: (r, t) => {
-        both(r, t, [[0, REST], [0.24, [84, 10, 8]], [0.36, [88, 8, 8]], [0.5, [128, 18, 4]], [0.6, [150, 22, 0]], [0.68, [15, 140, 0]], [0.82, [18, 136, 0]], [1, REST]],
-          [[0, 16], [0.24, 16], [0.36, 22], [0.5, 70], [0.6, 84], [0.68, 16], [0.82, 18], [1, 16]]);
+      pose: (r, t, c) => {
+        if (castOnSelf(c)) {
+          // Out of one's own middle: the hands start at the belly and haul up past the face.
+          both(r, t, [[0, REST], [0.24, [30, -8, 34]], [0.36, [34, -8, 34]], [0.5, [110, 10, 10]], [0.6, [150, 22, 0]], [0.68, [15, 140, 0]], [0.82, [18, 136, 0]], [1, REST]],
+            [[0, 16], [0.24, 96], [0.36, 100], [0.5, 84], [0.6, 84], [0.68, 16], [0.82, 18], [1, 16]]);
+        } else {
+          both(r, t, [[0, REST], [0.24, [84, 10, 8]], [0.36, [88, 8, 8]], [0.5, [128, 18, 4]], [0.6, [150, 22, 0]], [0.68, [15, 140, 0]], [0.82, [18, 136, 0]], [1, REST]],
+            [[0, 16], [0.24, 16], [0.36, 22], [0.5, 70], [0.6, 84], [0.68, 16], [0.82, 18], [1, 16]]);
+        }
         r.hand[0] = r.hand[1] = euler(t, [[0, [0, 0, 0]], [0.24, [30, 0, 0]], [0.36, [40, 0, 0]], [0.6, [-20, 0, 0]], [0.7, [20, 0, 0]], [1, [0, 0, 0]]]);
         // Open over them, closed on what they draw out, flung open as it is let go.
         const open = t < 0.4 || t > 0.6;
         r.open = [open, open];
+        const claw = one(t, [[0.3, 0], [0.38, 1], [0.58, 1], [0.63, 0]]), w = one(t, [[0, 0], [0.15, 1], [0.85, 1], [1, 0]]);
+        r.shape = [{ claw, flat: (1 - claw) * w }, { claw, flat: (1 - claw) * w }];
         r.spine = euler(t, [[0, [0, 0, 0]], [0.24, [-8, 0, 0]], [0.36, [-10, 0, 0]], [0.6, [10, 0, 0]], [0.7, [8, 0, 0]], [1, [0, 0, 0]]]);
         r.chest = euler(t, [[0, [0, 0, 0]], [0.36, [-6, 0, 0]], [0.6, [8, 0, 0]], [1, [0, 0, 0]]]);
         r.head = euler(t, [[0, [0, 0, 0]], [0.24, [-10, 0, 0]], [0.5, [6, 0, 0]], [0.62, [18, 0, 0]], [0.82, [14, 0, 0]], [1, [0, 0, 0]]]);
@@ -925,6 +930,7 @@ export const BLESSING: Record<string, SpellVisual> = {
           [[0, 16], [0.25, 26], [0.55, 18], [0.88, 16], [1, 16]]);
         r.hand[0] = r.hand[1] = euler(t, [[0, [0, 0, 0]], [0.25, [18, 0, 0]], [0.55, [26, 0, 0]], [0.88, [22, 0, 0]], [1, [0, 0, 0]]]);
         r.open = [t > 0.05, t > 0.05];
+        shaped(r, { flat: 1 }, one(t, [[0, 0], [0.2, 1], [0.9, 1], [1, 0]]));
         r.head = euler(t, [[0, [0, 0, 0]], [0.25, [-6, 10, 0]], [0.6, [-12, 12, 0]], [0.88, [-10, 10, 0]], [1, [0, 0, 0]]]);
         r.chest = euler(t, [[0, [0, 0, 0]], [0.25, [4, 0, 0]], [0.6, [-4, 2, 0]], [1, [0, 0, 0]]]);
         r.spine = euler(t, [[0, [0, 0, 0]], [0.6, [-4, 0, 0]], [1, [0, 0, 0]]]);
@@ -996,7 +1002,7 @@ export const BLESSING: Record<string, SpellVisual> = {
     palette: PALETTE,
     cast: {
       timing: { secs: 1.8, release: 0.6 },
-      pose: (r, t) => {
+      pose: (r, t, c) => {
         both(r, t, [[0, REST], [0.2, [36, -12, 26]], [0.34, [40, -12, 26]], [0.52, [138, -8, 22]], [0.6, [150, -8, 20]], [0.78, [148, -8, 20]], [1, REST]],
           [[0, 16], [0.2, 72], [0.34, 74], [0.52, 60], [0.6, 50], [0.78, 52], [1, 16]]);
         r.open = [false, false];
@@ -1005,7 +1011,11 @@ export const BLESSING: Record<string, SpellVisual> = {
         r.chest = euler(t, [[0, [0, 0, 0]], [0.36, [-6, 0, 0]], [0.6, [8, 0, 0]], [1, [0, 0, 0]]]);
         r.spine = euler(t, [[0, [0, 0, 0]], [0.36, [-4, 0, 0]], [0.6, [5, 0, 0]], [1, [0, 0, 0]]]);
         stance(r, t, [[0, 0], [0.36, 8], [0.56, 0], [1, 0]]);
-        r.wield = one(t, [[0, 0], [0.2, 1], [0.85, 1], [1, 0]]);
+        const w = one(t, [[0, 0], [0.2, 1], [0.85, 1], [1, 0]]);
+        r.wield = w;
+        // Both hands on it: the left closed on the haft below the right. With nothing in the hands, cupped as though it were.
+        if (c.carry) r.both = w;
+        else shaped(r, { cup: 1 }, w);
       },
     },
     fx: {
@@ -1052,11 +1062,19 @@ export const BLESSING: Record<string, SpellVisual> = {
     palette: PALETTE,
     cast: {
       timing: { secs: 1.4, release: 0.55 },
-      pose: (r, t) => {
-        both(r, t, [[0, REST], [0.22, [34, -10, 22]], [0.42, [70, -16, 30]], [0.55, [96, 2, 12]], [0.72, [90, 6, 8]], [1, REST]],
-          [[0, 16], [0.22, 34], [0.42, 100], [0.55, 24], [0.72, 22], [1, 16]]);
+      pose: (r, t, c) => {
+        if (castOnSelf(c)) {
+          // Lifted over one's own head and tipped, poured down over oneself.
+          both(r, t, [[0, REST], [0.22, [34, -10, 22]], [0.42, [70, -16, 30]], [0.55, [150, -6, 14]], [0.72, [146, -4, 12]], [1, REST]],
+            [[0, 16], [0.22, 34], [0.42, 100], [0.55, 70], [0.72, 66], [1, 16]]);
+        } else {
+          both(r, t, [[0, REST], [0.22, [34, -10, 22]], [0.42, [70, -16, 30]], [0.55, [96, 2, 12]], [0.72, [90, 6, 8]], [1, REST]],
+            [[0, 16], [0.22, 34], [0.42, 100], [0.55, 24], [0.72, 22], [1, 16]]);
+        }
         r.hand[0] = r.hand[1] = euler(t, [[0, [0, 0, 0]], [0.22, [-30, 0, 0]], [0.42, [-40, 0, 0]], [0.55, [30, 0, 0]], [0.72, [36, 0, 0]], [1, [0, 0, 0]]]);
         r.open = [t > 0.05, t > 0.05];
+        const cup = one(t, [[0.1, 0], [0.2, 1], [0.5, 1], [0.56, 0]]), flat = one(t, [[0.5, 0], [0.56, 1], [0.85, 1], [1, 0]]);
+        r.shape = [{ cup, flat }, { cup, flat }];
         r.spine = euler(t, [[0, [0, 0, 0]], [0.22, [-26, 0, 0]], [0.42, [-2, 0, 0]], [0.55, [-10, 0, 0]], [0.72, [-8, 0, 0]], [1, [0, 0, 0]]]);
         r.head = euler(t, [[0, [0, 0, 0]], [0.22, [-8, 0, 0]], [0.42, [-14, 0, 0]], [0.55, [0, 0, 0]], [1, [0, 0, 0]]]);
         stance(r, t, [[0, 0], [0.22, 34], [0.42, 8], [0.55, 12], [0.75, 8], [1, 0]], [[0, 0], [0.42, 0], [0.55, 14], [0.8, 12], [1, 0]]);
@@ -1130,13 +1148,23 @@ export const BLESSING: Record<string, SpellVisual> = {
     palette: PALETTE,
     cast: {
       timing: { secs: 1.2, release: 0.5 },
-      pose: (r, t) => {
+      pose: (r, t, c) => {
         r.arm[1] = euler(t, [[0, REST], [0.18, [120, 22, -4]], [0.34, [170, 12, 0]], [0.4, [172, 10, 0]], [0.5, [74, 4, 0]], [0.64, [68, 6, 0]], [1, REST]]);
         r.elbow[1] = one(t, [[0, 16], [0.18, 40], [0.34, 6], [0.4, 6], [0.5, 4], [0.64, 10], [1, 16]]);
         r.hand[1] = euler(t, [[0, [0, 0, 0]], [0.4, [-10, 0, 0]], [0.5, [-30, 0, 0]], [0.7, [-20, 0, 0]], [1, [0, 0, 0]]]);
         r.arm[0] = euler(t, [[0, REST], [0.2, ON_HEART], [0.8, ON_HEART], [1, REST]]);
         r.elbow[0] = one(t, [[0, 16], [0.2, ON_HEART_BEND], [0.8, ON_HEART_BEND], [1, 16]]);
         r.open = [t > 0.05, t > 0.05];
+        if (castOnSelf(c)) {
+          // On oneself the blessed hand comes down closed, the weapon in it stood up before the face to take the light.
+          r.elbow[1] = one(t, [[0, 16], [0.18, 40], [0.34, 6], [0.4, 6], [0.5, 96], [0.64, 100], [1, 16]]);
+          r.arm[1] = euler(t, [[0, REST], [0.18, [120, 22, -4]], [0.34, [170, 12, 0]], [0.4, [172, 10, 0]], [0.5, [52, -4, 14]], [0.64, [50, -4, 14]], [1, REST]]);
+          r.wield = one(t, [[0.42, 0], [0.5, 1], [0.8, 1], [0.95, 0]]);
+          r.haft = one(t, [[0.42, 0], [0.5, 80], [0.8, 80], [0.95, 0]]);
+          r.shape = [{ flat: one(t, [[0, 0], [0.2, 1], [0.8, 1], [1, 0]]) }, { cup: one(t, [[0.1, 0], [0.2, 1], [0.4, 1], [0.46, 0]]) }];
+        } else {
+          r.shape = [{ flat: one(t, [[0, 0], [0.2, 1], [0.8, 1], [1, 0]]) }, { cup: one(t, [[0.1, 0], [0.2, 1], [0.4, 1], [0.46, 0]]), two: one(t, [[0.42, 0], [0.48, 1], [0.75, 1], [0.9, 0]]) }];
+        }
         r.shrug[1] = one(t, [[0, 0], [0.34, 0.8], [0.45, 0.8], [0.55, 0], [1, 0]]);
         r.head = euler(t, [[0, [0, 0, 0]], [0.34, [22, 0, -4]], [0.42, [20, 0, -4]], [0.52, [-12, 0, 0]], [0.7, [-10, 0, 0]], [1, [0, 0, 0]]]);
         r.chest = euler(t, [[0, [0, 0, 0]], [0.34, [8, 0, -8]], [0.5, [-6, 0, 6]], [0.7, [-4, 0, 4]], [1, [0, 0, 0]]]);
@@ -1216,13 +1244,14 @@ export const BLESSING: Record<string, SpellVisual> = {
     cast: {
       timing: { secs: 1.6, release: 0.55 },
       pose: (r, t) => {
-        kneel(r, one(t, [[0, 0], [0.3, 1], [0.82, 1], [1, 0]]));
+        r.kneel = one(t, [[0, 0], [0.3, 1], [0.82, 1], [1, 0]]);
         r.arm[1] = euler(t, [[0, REST], [0.3, [38, 12, -20]], [0.45, [44, 10, -24]], [0.55, [52, 8, -24]], [0.8, [48, 8, -22]], [1, REST]]);
         r.elbow[1] = one(t, [[0, 16], [0.3, 20], [0.55, 10], [0.8, 12], [1, 16]]);
         r.hand[1] = euler(t, [[0, [0, 0, 0]], [0.3, [-10, 0, -70]], [0.55, [-20, 0, -80]], [0.8, [-14, 0, -70]], [1, [0, 0, 0]]]);
         r.arm[0] = euler(t, [[0, REST], [0.3, [56, 10, 14]], [0.82, [56, 10, 14]], [1, REST]]);
         r.elbow[0] = one(t, [[0, 16], [0.3, 40], [0.82, 40], [1, 16]]);
         r.open = [t > 0.05, t > 0.05];
+        r.shape = [{ cup: 0.5 * one(t, [[0, 0], [0.3, 1], [0.82, 1], [1, 0]]) }, { flat: one(t, [[0, 0], [0.25, 1], [0.85, 1], [1, 0]]) }];
         r.spine = euler(t, [[0, [0, 0, 0]], [0.3, [-8, 0, 0]], [0.55, [-12, 0, 0]], [0.82, [-10, 0, 0]], [1, [0, 0, 0]]]);
         r.head = euler(t, [[0, [0, 0, 0]], [0.3, [-4, 12, 0]], [0.55, [0, 14, 0]], [0.82, [-2, 12, 0]], [1, [0, 0, 0]]]);
       },
@@ -1296,6 +1325,7 @@ export const BLESSING: Record<string, SpellVisual> = {
           [[0, 16], [0.18, 20], [0.42, 14], [0.56, 6], [0.78, 10], [1, 16]]);
         r.hand[0] = r.hand[1] = euler(t, [[0, [0, 0, 0]], [0.42, [-30, 0, 0]], [0.56, [20, 0, 0]], [0.8, [16, 0, 0]], [1, [0, 0, 0]]]);
         r.open = [t > 0.05, t > 0.05];
+        shaped(r, { flat: 1 }, one(t, [[0, 0], [0.15, 1], [0.88, 1], [1, 0]]));
         r.shrug = [one(t, [[0, 0], [0.42, 0.8], [0.56, 0], [1, 0]]), one(t, [[0, 0], [0.42, 0.8], [0.56, 0], [1, 0]])];
         r.head = euler(t, [[0, [0, 0, 0]], [0.18, [6, 0, 0]], [0.42, [26, 0, 0]], [0.47, [26, 0, 0]], [0.58, [-14, 0, 0]], [0.8, [-10, 0, 0]], [1, [0, 0, 0]]]);
         r.chest = euler(t, [[0, [0, 0, 0]], [0.42, [12, 0, 0]], [0.58, [-8, 0, 0]], [0.8, [-6, 0, 0]], [1, [0, 0, 0]]]);
@@ -1346,6 +1376,21 @@ export const BLESSING: Record<string, SpellVisual> = {
             k.emit(k.on(c.x + Math.cos(an) * rr, c.y + Math.sin(an) * rr, 2), 30, { kind: 'mote', size: 1.8, life: [0.6, 1.0], speed: [0, 0.03], up: [10, 18], gravity: 0 });
           }
           k.light(c, R * (0.4 + 0.6 * out), 0.85 * (1 - u * u));
+          // Everybody it reaches, and every wildermon there, mended as the rain gets to them: nearer ones first.
+          let n = 0;
+          for (const b of k.bodiesWithin(R, c)) {
+            if (n >= COVERED_MAX) break;
+            const v = seg(u, 0.18 + 0.3 * (Math.hypot(b.x - c.x, b.y - c.y) / R), 0.95);
+            const key = `m${n++}`;
+            if (v <= 0) continue;
+            const heart = k.heart(b);
+            if (!k.state[key]) {
+              k.state[key] = 1;
+              mend(k, heart, k.fast ? 3 : 5);
+            }
+            const r = lerp(0.16, 0.05, smooth(v * 1.6));
+            hoop(k, { x: b.x, y: b.y, z: heart.z - 0.8 }, r, r * 0.92, 1.4, { alpha: 0.9 * bump(v, 0, 0.1, 0.6), turn: v * 2, n: 10, glow: 0.5 });
+          }
         },
       },
     },
@@ -1366,6 +1411,8 @@ export const BLESSING: Record<string, SpellVisual> = {
           [[0, 16], [0.3, CROSSED_BEND], [0.4, CROSSED_BEND + 6], [0.5, 10], [0.56, 14], [0.8, 16], [1, 16]]);
         r.open = [t > 0.42, t > 0.42];
         r.hand[0] = r.hand[1] = euler(t, [[0, [0, 0, 0]], [0.5, [-40, 0, 0]], [0.8, [-36, 0, 0]], [1, [0, 0, 0]]]);
+        // Fists on the shoulders while the light is kept between the arms, then flung open flat.
+        shaped(r, { flat: 1 }, one(t, [[0.42, 0], [0.5, 1], [0.85, 1], [1, 0]]));
         r.head = euler(t, [[0, [0, 0, 0]], [0.3, [-18, 0, 0]], [0.4, [-20, 0, 0]], [0.52, [10, 0, 0]], [0.8, [8, 0, 0]], [1, [0, 0, 0]]]);
         r.chest = euler(t, [[0, [0, 0, 0]], [0.4, [-8, 0, 0]], [0.52, [10, 0, 0]], [0.8, [8, 0, 0]], [1, [0, 0, 0]]]);
         r.spine = euler(t, [[0, [0, 0, 0]], [0.4, [-10, 0, 0]], [0.52, [3, 0, 0]], [1, [0, 0, 0]]]);
@@ -1461,6 +1508,7 @@ export const BLESSING: Record<string, SpellVisual> = {
         r.elbow[0] = one(t, [[0, 16], [0.3, ON_HEART_BEND], [0.6, ON_HEART_BEND], [0.8, 10], [1, 16]]);
         r.open = [t > 0.05, t > 0.58];
         r.hand[1] = euler(t, [[0, [0, 0, 0]], [0.52, [-20, 0, 0]], [0.8, [20, 0, 0]], [1, [0, 0, 0]]]);
+        r.shape = [{ flat: one(t, [[0, 0], [0.2, 1], [0.88, 1], [1, 0]]) }, { flat: one(t, [[0.56, 0], [0.64, 1], [0.88, 1], [1, 0]]) }];
         r.shrug[1] = one(t, [[0, 0], [0.32, 0.8], [0.45, 0.6], [0.52, 0], [1, 0]]);
         r.head = euler(t, [[0, [0, 0, 0]], [0.32, [14, 0, -4]], [0.52, [-18, 0, 0]], [0.62, [-16, 0, 0]], [0.82, [-6, 0, 0]], [1, [0, 0, 0]]]);
         r.spine = euler(t, [[0, [0, 0, 0]], [0.32, [4, 0, 0]], [0.52, [-16, 0, 0]], [0.62, [-14, 0, 0]], [0.82, [-4, 0, 0]], [1, [0, 0, 0]]]);
@@ -1495,6 +1543,7 @@ export const BLESSING: Record<string, SpellVisual> = {
         },
       },
       linger: {
+        on: 'spot',
         draw: (k, age, left) => {
           const R = reachOf('blessing_sanctuary', 4);
           const lasts = lastsOf('blessing_sanctuary', 30);
@@ -1502,6 +1551,12 @@ export const BLESSING: Record<string, SpellVisual> = {
           const a = smooth(seg(age, 1.0, 1.3)) * smooth(left / 1);
           const ring = smooth(left / 1);
           k.ring(c, R, { band: 0.13, alpha: 0.75 * ring, turn: age * 0.05, glow: 0.5, n: 36 });
+          // Everybody within it kept: a band of gold at their feet, slowly turning, for as long as they stand inside.
+          let n = 0;
+          for (const b of k.bodiesWithin(R, c, ['player', 'peer'])) {
+            if (n++ >= COVERED_MAX) break;
+            k.ring(b, 0.2, { band: 0.04, alpha: 0.6 * a, turn: age * 0.6, dash: 4, glow: 0.4 });
+          }
           // The posts burn down with the seconds it holds.
           sanctuaryPosts(k, R, 0.3 + 0.7 * clamp(left / lasts), a, age);
           k.light(c, R * 0.85, 0.35 * ring);
@@ -1521,11 +1576,12 @@ export const BLESSING: Record<string, SpellVisual> = {
     cast: {
       timing: { secs: 2.2, release: 0.6 },
       pose: (r, t) => {
-        kneel(r, one(t, [[0, 0], [0.22, 1], [0.48, 1], [0.6, 0.15], [0.8, 0], [1, 0]]));
+        r.kneel = one(t, [[0, 0], [0.22, 1], [0.48, 1], [0.58, 0], [1, 0]]);
         both(r, t, [[0, REST], [0.22, [70, -12, 45]], [0.48, [74, -12, 45]], [0.6, [10, 155, 0]], [0.8, [12, 152, 0]], [1, REST]],
           [[0, 16], [0.22, 135], [0.48, 137], [0.6, 6], [0.8, 8], [1, 16]]);
         r.hand[0] = r.hand[1] = euler(t, [[0, [0, 0, 0]], [0.6, [-20, 0, 0]], [1, [0, 0, 0]]]);
         r.open = [t > 0.05, t > 0.05];
+        shaped(r, { flat: 1 }, one(t, [[0, 0], [0.15, 1], [0.88, 1], [1, 0]]));
         r.shrug = [one(t, [[0, 0], [0.5, 0], [0.6, 1], [0.8, 1], [1, 0]]), one(t, [[0, 0], [0.5, 0], [0.6, 1], [0.8, 1], [1, 0]])];
         r.head = euler(t, [[0, [0, 0, 0]], [0.22, [-20, 0, 0]], [0.48, [-24, 0, 0]], [0.62, [24, 0, 0]], [0.8, [20, 0, 0]], [1, [0, 0, 0]]]);
         r.neck = euler(t, [[0, [0, 0, 0]], [0.22, [-8, 0, 0]], [0.48, [-8, 0, 0]], [0.62, [8, 0, 0]], [1, [0, 0, 0]]]);
@@ -1600,9 +1656,15 @@ export const BLESSING: Record<string, SpellVisual> = {
     palette: PALETTE,
     cast: {
       timing: { secs: 2.0, release: 0.55 },
-      pose: (r, t) => {
+      // The sun held up a while after it is let go, the arms giving a little with each beat of it, then let down.
+      hold: { at: 0.7, secs: RADIANCE_HOLD },
+      pose: (r, t, c) => {
         both(r, t, [[0, REST], [0.2, [30, -6, 20]], [0.36, [98, -2, 16]], [0.55, [176, 6, 0]], [0.84, [174, 8, 0]], [1, REST]],
           [[0, 16], [0.2, 46], [0.36, 40], [0.55, 6], [0.84, 8], [1, 16]]);
+        const beat = heldFor(c) > 0 ? 1 - smooth(((heldFor(c) * RADIANCE_HOLD) % 1) / 0.45) : 0;
+        r.elbow[0] += 10 * beat;
+        r.elbow[1] += 10 * beat;
+        r.shape = [{ cup: one(t, [[0.05, 0], [0.18, 1], [0.86, 1], [1, 0]]) }, { cup: one(t, [[0.05, 0], [0.18, 1], [0.86, 1], [1, 0]]) }];
         r.hand[0] = r.hand[1] = euler(t, [[0, [0, 0, 0]], [0.2, [-36, 0, 0]], [0.55, [-50, 0, 0]], [0.84, [-46, 0, 0]], [1, [0, 0, 0]]]);
         r.open = [t > 0.05, t > 0.05];
         const up = one(t, [[0, 0], [0.4, 0.4], [0.55, 1], [0.84, 1], [1, 0]]);
@@ -1621,11 +1683,20 @@ export const BLESSING: Record<string, SpellVisual> = {
         const R = reachOf('blessing_radiance', 8);
         const g = smooth(seg(t, 0.2, 0.55));
         const at = k.on(k.spot.x, k.spot.y, lerp(1, RADIANCE_SUN, g));
-        sun(k, at, 1.5 + 8.5 * g, k.now * 0.3, smooth(seg(t, 0.15, 0.25)));
-        rays(k, at, 6 + 26 * g, { n: 12, alpha: 0.6 * g, turn: -k.now * 0.4 + 0.26, inner: 0.5 });
-        k.ring(k.spot, R, { band: 0.1, alpha: 0.5 * g, dash: 8, turn: -k.now * 0.08, glow: 0.3 });
-        k.light(k.spot, 2 + 4 * g, 0.6 * g);
-        k.glow(mid3(k.hand(0), k.hand(1), 0.5), 6, 0.6 * bump(t, 0.1, 0.4, 0.6));
+        // Up to the release this is the sun rising; after it the linger has the sun, and this only the hands holding it up.
+        const up = 1 - seg(t, 0.55, 0.57);
+        sun(k, at, 1.5 + 8.5 * g, k.now * 0.3, smooth(seg(t, 0.15, 0.25)) * up);
+        rays(k, at, 6 + 26 * g, { n: 12, alpha: 0.6 * g * up, turn: -k.now * 0.4 + 0.26, inner: 0.5 });
+        k.ring(k.spot, R, { band: 0.1, alpha: 0.5 * g * up, dash: 8, turn: -k.now * 0.08, glow: 0.3 });
+        k.light(k.spot, 2 + 4 * g, 0.6 * g * up);
+        const hands = mid3(k.hand(0), k.hand(1), 0.5);
+        k.glow(hands, 6, 0.6 * bump(t, 0.1, 0.4, 0.6));
+        // Held up: the cupped hands still lit, and a thin line of light from them to the sun they keep there.
+        const keep = seg(t, 0.58, 0.68) * (1 - seg(t, 0.72, 0.8));
+        if (keep > 0.01) {
+          k.glow(hands, 5, 0.55 * keep);
+          k.beam(hands, k.on(k.spot.x, k.spot.y, RADIANCE_SUN), { width: 1, alpha: 0.3 * keep, glow: 0.3 });
+        }
       },
       release: (k) => {
         k.flash(0.2);
@@ -1646,6 +1717,7 @@ export const BLESSING: Record<string, SpellVisual> = {
         },
       },
       linger: {
+        on: 'spot',
         draw: (k, age, left) => {
           const R = reachOf('blessing_radiance', 8);
           const c = k.spot;
@@ -1661,6 +1733,17 @@ export const BLESSING: Record<string, SpellVisual> = {
           groundRays(k, c, 0.6, R, 12, { alpha: (0.2 + 0.16 * beat) * fade * (1 - set * 0.6), turn: age * 0.04, spread: 0.1 });
           k.ring(c, R, { band: 0.12, alpha: (0.45 + 0.2 * beat) * fade, dash: 8, turn: age * 0.06, glow: 0.4, n: 36 });
           k.light(c, R * 0.9, (0.5 + 0.15 * beat) * fade * (1 - set * 0.5));
+          // Each beat burns every creature within it: a glare on it and sparks struck off it, once a second.
+          const second = Math.floor(age);
+          const struck = second > (k.state.beat ?? -1) && fade > 0.2;
+          if (struck) k.state.beat = second;
+          let n = 0;
+          for (const b of k.bodiesWithin(R, c, ['creature'])) {
+            if (n++ >= COVERED_MAX) break;
+            const p = k.at(b, 0.6);
+            k.flare(p, 6 * beat * fade, 0.9, k.pal.core, age);
+            if (struck) k.burst(p, k.fast ? 3 : 6, { kind: 'spark', size: 1.5, life: [0.2, 0.4], speed: [0.3, 0.8], up: [6, 16], gravity: 30, drag: 0.1 });
+          }
           if (!k.fast) {
             const an = k.rand() * TAU, rr = R * Math.sqrt(k.rand());
             k.emit(k.on(c.x + Math.cos(an) * rr, c.y + Math.sin(an) * rr, 24), 8, { kind: 'mote', size: 1.8, life: [0.6, 0.8], speed: [0, 0.02], up: [-34, -28], gravity: 0 });
@@ -1681,13 +1764,17 @@ export const BLESSING: Record<string, SpellVisual> = {
     cast: {
       timing: { secs: 2.4, release: 0.6 },
       pose: (r, t) => {
-        kneel(r, one(t, [[0, 0], [0.22, 1], [0.66, 1], [0.86, 0.2], [1, 0]]));
+        r.kneel = one(t, [[0, 0], [0.22, 1], [0.66, 1], [0.84, 0], [1, 0]]);
+        // Both palms flat on the ground before the knee, bowed down to it as far as it takes.
+        const press = one(t, [[0.08, 0], [0.24, 1], [0.6, 1], [0.7, 0]]);
+        r.reach = [{ at: [-0.85, 4.2, 0.7], stoop: true, w: press }, { at: [0.85, 4.2, 0.7], stoop: true, w: press }];
         both(r, t, [[0, REST], [0.22, [34, 12, 4]], [0.32, [30, 12, 4]], [0.55, [28, 12, 4]], [0.62, [32, 12, 4]], [0.82, [20, 125, 0]], [0.9, [18, 128, 0]], [1, REST]],
           [[0, 16], [0.22, 10], [0.55, 14], [0.62, 10], [0.82, 14], [1, 16]]);
         r.hand[0] = r.hand[1] = euler(t, [[0, [0, 0, 0]], [0.22, [40, 0, 0]], [0.6, [50, 0, 0]], [0.82, [-30, 0, 0]], [1, [0, 0, 0]]]);
         r.open = [t > 0.05, t > 0.05];
-        r.spine = euler(t, [[0, [0, 0, 0]], [0.22, [-42, 0, 0]], [0.55, [-44, 0, 0]], [0.6, [-48, 0, 0]], [0.82, [4, 0, 0]], [1, [0, 0, 0]]]);
-        r.chest = euler(t, [[0, [0, 0, 0]], [0.22, [-15, 0, 0]], [0.6, [-16, 0, 0]], [0.82, [8, 0, 0]], [1, [0, 0, 0]]]);
+        shaped(r, { flat: 1 }, one(t, [[0, 0], [0.18, 1], [0.9, 1], [1, 0]]));
+        r.spine = euler(t, [[0, [0, 0, 0]], [0.22, [-16, 0, 0]], [0.6, [-18, 0, 0]], [0.82, [4, 0, 0]], [1, [0, 0, 0]]]);
+        r.chest = euler(t, [[0, [0, 0, 0]], [0.22, [-8, 0, 0]], [0.6, [-8, 0, 0]], [0.82, [8, 0, 0]], [1, [0, 0, 0]]]);
         r.head = euler(t, [[0, [0, 0, 0]], [0.22, [18, 0, 0]], [0.6, [22, 0, 0]], [0.82, [18, 0, 0]], [1, [0, 0, 0]]]);
       },
     },
@@ -1766,11 +1853,8 @@ function steadyAt(k: FxScene): P3 {
 
 /**
  * A gleam run along what is in somebody's right hand, `u` nought to one from
- * the fist out to its end, or a glint at the fist when the hand is empty. For
- * a thing set down, a glint where it stands. The run goes on out of the fist
- * the way the forearm points, as long again as the forearm: where a blade
- * held in a swing lies (`wield`), and near enough where one carried at the
- * hip hangs, which the figure does not say.
+ * the fist to its point, wherever the carry or the cast has it; a glint at
+ * the fist when the hand is empty. For a thing set down, a glint where it stands.
  */
 function gleam(k: FxScene, u: number, a: number, b = k.caster): void {
   if (a <= 0.01 || u <= 0 || u >= 1) return;
@@ -1778,13 +1862,8 @@ function gleam(k: FxScene, u: number, a: number, b = k.caster): void {
     k.flare(k.on(k.spot.x, k.spot.y, 3), 6 * bump(u, 0, 0.3, 1), a, k.pal.core, u * 2);
     return;
   }
-  const h = k.hand(1, b);
   const armed = !!b.figure?.gear?.weapon;
-  let p = h;
-  if (armed) {
-    const el = k.joint(b, 'elbow1', [0, 0, 0], 0.6), s = smooth(u);
-    p = { x: h.x + (h.x - el.x) * s, y: h.y + (h.y - el.y) * s, z: h.z + (h.z - el.z) * s };
-  }
+  const p = armed ? mid3(k.joint(b, 'grip'), k.joint(b, 'tip'), smooth(u)) : k.hand(1, b);
   k.flare(p, (armed ? 6 : 5) * bump(u, 0, 0.25, 1), a, k.pal.core, u * 3);
 }
 
@@ -1792,36 +1871,26 @@ function gleam(k: FxScene, u: number, a: number, b = k.caster): void {
 function renewalPips(k: FxScene, b: P3, count: number, done: number, since: number, a: number): void {
   if (a <= 0.01) return;
   const r = 0.2;
-  const eye = k.eye;
-  const lit = new Path2D(), spent = new Path2D();
+  const lit: number[][] = [], spent: number[][] = [];
   for (let i = 0; i < count; i++) {
-    const an = -Math.PI / 2 + (i / count) * TAU;
-    const x = b.x + Math.cos(an) * r, y = b.y + Math.sin(an) * r;
-    const sx = eye.worldToScreenX(x, y), sy = eye.worldToScreenY(x, y, k.ground(x, y) + 0.15);
-    // The next to fall swells as its time comes.
-    const s = k.px(i === done ? 1.6 + 0.8 * smooth(since / 3) : 1.6);
-    const into = i < done ? spent : lit;
-    into.moveTo(sx, sy - s);
-    into.lineTo(sx + s * 1.3, sy);
-    into.lineTo(sx, sy + s);
-    into.lineTo(sx - s * 1.3, sy);
-    into.closePath();
+    const an = -Math.PI / 2 + (i / count) * TAU, cs = Math.cos(an), sn = Math.sin(an);
+    const x = b.x + cs * r, y = b.y + sn * r;
+    // A diamond laid along the ring; the next to fall swells as its time comes.
+    const s = i === done ? 1 + 0.5 * smooth(since / 3) : 1;
+    const along = 0.045 * s, across = 0.028 * s;
+    (i < done ? spent : lit).push([x - sn * along, y + cs * along, x + cs * across, y + sn * across, x + sn * along, y - cs * along, x - cs * across, y - sn * across]);
   }
   const { core, deep, ink } = k.pal;
-  const inkW = Math.max(0.7, 0.6 * k.zoom);
-  k.groundDraw(b.x, b.y, r + 0.3, (g) => {
-    g.lineWidth = inkW;
-    g.strokeStyle = ink;
-    g.globalAlpha = clamp(a * 0.4);
-    g.fillStyle = deep;
-    g.fill(spent);
-    g.globalAlpha = clamp(a);
-    g.fillStyle = core;
-    g.fill(lit);
-    g.stroke(lit);
-  });
+  k.groundShape(b.x, b.y, r + 0.1, [
+    { kind: 'fill', colour: deep, alpha: clamp(a * 0.4), paths: spent, lift: 0.15 },
+    { kind: 'fill', colour: core, alpha: clamp(a), paths: lit, lift: 0.15 },
+    { kind: 'stroke', colour: ink, alpha: clamp(a), width: Math.max(0.7, 0.6 * k.zoom), paths: lit, closed: true, join: 'miter', lift: 0.16 },
+  ]);
   k.ring(b, r + 0.06, { band: 0.03, alpha: 0.4 * a, glow: 0.3 });
 }
+
+/** At most this many bodies in an area are drawn as blessed by it, nearest first: a crowd keeps the frame's budget. */
+const COVERED_MAX = 8;
 
 /** How far out Shield of Dawn's dome stands from the middle of whoever is in it, in tiles. */
 const shieldR = (b: { wide: number }): number => Math.max(0.16, b.wide * 0.045);
