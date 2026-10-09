@@ -55,6 +55,9 @@ const STEAM = '#f2ece2';
 const STEAM_SHADE = '#cfc6b8';
 const SCALD = { main: '#ffe6b8', deep: '#e0a060', core: '#ffffff', ink: '#6a3a14' };
 const DIRT = '#7d6a55';
+/** The light a big fire throws on the ground round it: a warm white, which the night takes as firelight (a wide light in
+ * the fire's own orange washes the grass olive). */
+const WARM = '#fff1d6';
 
 /* ---- a tongue of flame ---------------------------------------------------------------- */
 
@@ -693,7 +696,7 @@ function fireball(k: FxScene, head: P3, prev: P3, r: number, tail: number, rock 
 function kindle(k: FxScene, at: P3, u: number, size = 1.8): void {
   const a = bump(u, 0, 0.35, 1);
   if (a <= 0.01) return;
-  k.orb(at, size * (0.6 + 0.4 * a), { ...GEM, alpha: a, turn: k.now * 5, glow: 0.8, light: GEM.main, bias: 3 });
+  k.orb(at, size * (0.6 + 0.4 * a), { ...GEM, alpha: a, turn: k.now * 5, glow: 0.8, light: GEM.main, bias: 1 });
   k.flare(at, size * 3.5 * a, a * 0.8, GEM.core, k.now * 2);
 }
 
@@ -763,7 +766,7 @@ function drawIn(k: FxScene, c: P3, r: number, n: number, perSecond: number, turn
 /** A tongue of flame at a hand, fed from the palm: what most of the casts hold before they let go. */
 function handFlame(k: FxScene, at: P3, h: number, w: number, heat: number, alpha = 1): void {
   if (h <= 0.3 || alpha <= 0.01) return;
-  flameGroup(k, at, [upright(k, at, h, w, heat, 0.1 * Math.sin(k.now * 6), sway(k.now, 3))], alpha, 6);
+  flameGroup(k, at, [upright(k, at, h, w, heat, 0.1 * Math.sin(k.now * 6), sway(k.now, 3))], alpha, 1);
   k.glow({ ...at, z: at.z + h * 0.4 }, 4 + h * 0.9, 0.55 * alpha);
 }
 
@@ -781,6 +784,14 @@ const cast = (pose: CastPose): CastPose => (r, t, c) => {
   r.loose = [false, false];
   pose(r, t, c);
 };
+/**
+ * A cast that wants both hands clasped, or a finger for writing in the air: whatever is held is put away for it
+ * (`Rig.stow`), so a sword does not swing up with clasped fists or spin with a writing finger.
+ */
+const free = (pose: CastPose): CastPose => cast((r, t, c) => {
+  r.stow = 1;
+  pose(r, t, c);
+});
 
 /** A hand's shape keyed over the cast: each of its shares eased from one key to the next, nought where a key leaves it out. */
 function shapeAt(t: number, keys: ReadonlyArray<readonly [number, HandShape]>): HandShape {
@@ -1075,7 +1086,7 @@ const stokePose: CastPose = cast((r, t, c) => {
  * waist and out, its bottom bar, its left side back up, so it is a glass from the second stroke -- then pressed into
  * the raised left forearm, where it stays.
  */
-const firebrandPose: CastPose = cast((r, t, c) => {
+const firebrandPose: CastPose = free((r, t, c) => {
   const b = beats(c);
   const [w0, w1] = BRAND_WRITE;
   // The right arm goes round the glass's corners as the hand is put on them (`brandPoint`): the arm's own keys.
@@ -1171,7 +1182,7 @@ const PYRE_HOLD = 0.76;
  * in front of the knee as the body drops onto it -- upright through the trunk, the fists driven into the ground;
  * held there while it burns, then a push off the front knee and up.
  */
-const pyrePose: CastPose = cast((r, t, c) => {
+const pyrePose: CastPose = free((r, t, c) => {
   const b = beats(c);
   const clasp = b.top * 0.3, hold = PYRE_HOLD, push = lerp(hold, 1, 0.4);
   for (let k = 0; k < 2; k++) {
@@ -1212,7 +1223,7 @@ const BRAND_WRITE = [0.12, 0.44] as const;
  * side in to the narrow waist and out again, its bottom bar, its left side back up -- a glass from the second stroke,
  * where the other order (bar, diagonal, bar) read as a Z until the last.
  */
-const BRAND_CORNERS: ReadonlyArray<readonly [number, number]> = [[-1, 1], [1, 1], [0.16, 0], [1, -1], [-1, -1], [-0.16, 0], [-1, 1]];
+const BRAND_CORNERS: ReadonlyArray<readonly [number, number]> = [[-1, 1], [1, 1], [0.3, 0], [1, -1], [-1, -1], [-0.3, 0], [-1, 1]];
 const BRAND_SEGS = BRAND_CORNERS.length - 1;
 
 /**
@@ -1673,7 +1684,7 @@ export const KINDLER: Record<string, SpellVisual> = {
         // A bead of scalding liquid wobbling in the palm, steaming.
         const g = smooth(seg(t, 0.1, 0.42)) * (1 - seg(t, 0.47, 0.5));
         if (g > 0.01) {
-          k.orb({ ...hand, z: hand.z + 1 }, 2.4 * g * (1 + 0.12 * Math.sin(k.now * 20)), { ...SCALD, glow: 0.6, bias: 5, turn: k.now * 2 });
+          k.orb({ ...hand, z: hand.z + 1 }, 2.4 * g * (1 + 0.12 * Math.sin(k.now * 20)), { ...SCALD, glow: 0.6, bias: 1, turn: k.now * 2 });
           k.emit({ ...hand, z: hand.z + 2 }, 14 * g, { kind: 'mist', colour: [STEAM, STEAM_SHADE], size: 1.6, sizeEnd: 3, life: [0.4, 0.7], speed: [0.02, 0.1], up: [8, 14], gravity: -6, jitter: 0.04 });
         }
       },
@@ -1702,7 +1713,7 @@ export const KINDLER: Record<string, SpellVisual> = {
           // It breaks over the creature: a crown of liquid thrown up off it and falling back, and the ground wet under it.
           scaldCrown(k, k.target, u);
           scaldPatch(k, k.target, smooth(u * 3), 1);
-          k.light(k.target, 1.4, 0.4 * (1 - u), '#fff1d6');
+          k.light(k.target, 1.4, 0.4 * (1 - u), WARM);
         },
       },
       linger: {
@@ -1744,7 +1755,7 @@ export const KINDLER: Record<string, SpellVisual> = {
         // Heat pressed between the palms: a white point, swelling, sparks spat off it.
         const g = smooth(seg(t, 0.1, 0.36));
         if (g > 0.01 && t < 0.4) {
-          k.orb(mid, 1.2 + 2.2 * g, { main: PALETTE.accent, deep: PALETTE.main, core: '#ffffff', alpha: g, bias: 6, turn: k.now * 9 });
+          k.orb(mid, 1.2 + 2.2 * g, { main: PALETTE.accent, deep: PALETTE.main, core: '#ffffff', alpha: g, bias: 1, turn: k.now * 9 });
           k.light(mid, 1.5 + g, 0.5 * g);
           k.emit(mid, 30 * g, { kind: 'spark', colour: [PALETTE.core, GOLD], size: 1.2, life: [0.1, 0.22], speed: [0.4, 1], up: [-6, 10], gravity: 0, drag: 0.2 });
         }
@@ -1795,7 +1806,7 @@ export const KINDLER: Record<string, SpellVisual> = {
           flameGroup(k, near, flames, 1 - seg(u, 0.8, 1), 4);
           k.flare(to, 10 * (1 - u), 0.8 * flashOf(u, 0.08), '#ffffff');
           k.glow(mid3(from, to, 0.5), 18 * (1 - die), 0.7 * (1 - die));
-          k.light(mid3(from, to, 0.6), 3.5, 1 - u);
+          k.light(mid3(from, to, 0.6), 2, 1 - u, WARM);
           k.scorch(k.target, 0.4, { alpha: 0.3 * smooth(u * 4) * (1 - seg(u, 0.7, 1)) });
         },
       },
@@ -1821,7 +1832,7 @@ export const KINDLER: Record<string, SpellVisual> = {
         const heat = 0.25 + 0.3 * Math.floor(breaths) + 0.35 * pulse;
         const a = smooth(seg(t, 0.08, 0.2)) * (1 - seg(t, STOKE_LET + 0.02, STOKE_LET + 0.06));
         if (a > 0.01) {
-          k.orb(lift, 2.2 + 0.4 * heat, { ...COAL, core: heat > 0.7 ? PALETTE.core : COAL.core, alpha: a, glow: 0.4 + heat, bias: 6, turn: k.now });
+          k.orb(lift, 2.2 + 0.4 * heat, { ...COAL, core: heat > 0.7 ? PALETTE.core : COAL.core, alpha: a, glow: 0.4 + heat, bias: 1, turn: k.now });
           k.glow(lift, 6 + 8 * heat, 0.4 + 0.5 * heat * a);
           k.light(lift, 1.2 + 1.5 * heat, (0.3 + 0.5 * heat) * a);
           // The breath fans it: sparks blown off it as each one lands.
@@ -1856,8 +1867,8 @@ export const KINDLER: Record<string, SpellVisual> = {
           const at = k.hand(1);
           const coal = { ...at, z: at.z + 0.6 };
           const beat = 0.5 + 0.5 * Math.sin((age / 3) * TAU - Math.PI / 2);
-          k.orb(coal, 1.5, { ...COAL, core: PALETTE.accent, alpha: a, glow: 0.6 * gutter, bias: 6, turn: age * 0.7 });
-          handFlame(k, { ...coal, z: coal.z + 0.6 }, (1.4 + 2 * beat) * gutter, 1, 1 + 0.5 * beat, a);
+          k.orb(coal, 1.5, { ...COAL, core: PALETTE.accent, alpha: a, glow: 0.6 * gutter, bias: 1, turn: age * 0.7 });
+          handFlame(k, { ...coal, z: coal.z + 0.6 }, (0.9 + 1.5 * beat) * gutter, 0.9, 1 + 0.5 * beat, a);
           if (!k.fast) k.emit(coal, (0.8 + 2 * beat) * a, { kind: 'ember', size: 1.1, life: [0.4, 0.8], speed: [0.02, 0.06], up: [6, 12], gravity: -2, over: true });
           k.light(coal, 1, (0.16 + 0.12 * beat) * a * gutter);
         },
@@ -1995,7 +2006,7 @@ export const KINDLER: Record<string, SpellVisual> = {
           const rise = easeOut(seg(u, 0, 0.25)) * (1 - smooth(seg(u, 0.4, 1)));
           flameRing(k, b, R * (1 - 0.3 * u), { h: (b.tall * 0.9 + 3) * rise, w: 2, n: 10, front: 0.45, heat: cooling(u * 0.8), arcs: 4, alpha: 1 - seg(u, 0.85, 1) });
           cracks(k, b, R * 1.5, 6, 1, 0.95 * (1 - smooth(u)), 91);
-          k.light(b, 2.6, 0.9 * (1 - u * 0.6));
+          k.light(b, 2, 0.9 * (1 - u * 0.6), WARM);
         },
       },
       linger: {
@@ -2034,7 +2045,7 @@ export const KINDLER: Record<string, SpellVisual> = {
           // Its fire drawn in on itself: embers pulled in from round it, a rim of heat tightening round it (a rim only:
           // filled, orange over grass went olive).
           drawIn(k, k.at(b, 0.3), 0.9, k.fast ? 3 : 6, 10 * grip, k.now * 2, 0.35, 6);
-          k.shell(b, { size: 1.5 - 0.6 * grip, alpha: 0.6 * grip, turn: k.now * 3, back: 0, lit: false, rim: 1.6, ink: PALETTE.accent, glow: 0 });
+          k.shell(b, { size: 1.5 - 0.6 * grip, alpha: 0.9 * grip, turn: k.now * 3, back: 0, lit: false, rim: 1.4, ink: PALETTE.main, glow: 0 });
           k.glow(heart, 6 + 10 * grip, 0.7 * grip, PALETTE.accent);
           k.light(b, 1.6, 0.6 * grip);
         }
@@ -2073,10 +2084,10 @@ export const KINDLER: Record<string, SpellVisual> = {
             const out = easeOut(v);
             k.shell(b, { size: 0.95 + 0.4 * out, alpha: 0.95 * (1 - smooth(v)), back: 0, lit: false, rim: 2.6 * (1 - 0.6 * v), ink: '#ffffff', glow: 0 });
             k.shell(b, { size: 1.05 + 0.6 * out, alpha: 0.8 * (1 - smooth(v)), back: 0, lit: false, rim: 1.6, ink: PALETTE.accent, glow: 0 });
-            k.glow(at, 10 * (1 - 0.5 * v), 0.6 * (1 - v), PALETTE.core);
-            starburst(k, at, k.fast ? 5 : 7, 9 * (0.4 + 0.6 * out), 1.5, cooling(v), 0.7 * (1 - smooth(v)), k.seed);
+            k.glow(at, 9 * (1 - 0.5 * v), 0.4 * (1 - v), PALETTE.core);
+            starburst(k, at, k.fast ? 5 : 7, 8 * (0.4 + 0.6 * out), 1.3, cooling(v), 0.5 * (1 - smooth(v)), k.seed);
           }
-          k.light(b, 2.4, u < 0.14 ? 0.5 + 3 * u : 1 - u);
+          k.light(b, 2.4, u < 0.14 ? 0.5 + 3 * u : 1 - u, WARM);
           // What is left: a thin column of smoke going up off it, not a flame on it.
           if (u > 0.35) k.emit(k.at(b, 0.7), 14 * (1 - u), { kind: 'smoke', colour: [SMOKE, ASH], size: 2.4, life: [0.8, 1.3], speed: [0.02, 0.08], up: [12, 18], gravity: -2 });
         },
@@ -2120,15 +2131,19 @@ export const KINDLER: Record<string, SpellVisual> = {
             st[s1] += d;
           }
           st[last] = ang;
-          const from = Math.min(st[s0], st[s1]), span = Math.min(TAU, Math.abs(st[s1] - st[s0]));
+          // The two hands start half a turn apart: by the release each has run at least its half, so the ring is whole
+          // when the impact stands it up, however little the body could turn (on the move, the hips stay the walk's).
+          const close = smooth(seg(t, 0.36, AURA_LET)), dir = st[s1] >= st[s0] ? 1 : -1;
+          const end = st[s0] + dir * Math.max(Math.abs(st[s1] - st[s0]), close * Math.PI * 1.08);
+          const from = Math.min(st[s0], end), span = Math.min(TAU, Math.abs(end - st[s0]));
           laid += span / TAU;
           if (span < 0.05) continue;
           fireWall(k, k.caster, R, { h: AURA_H * 0.6, from, span, heat: 1.4, arcs: 3, front: 0.75, glow: 0.6 });
           emberBed(k, k.caster, R, 0.9, { from, span });
-          // Fire running off the ground at the end being laid, under the hand.
-          k.emit(k.on(k.caster.x + Math.cos(st[s1]) * R, k.caster.y + Math.sin(st[s1]) * R, 1), 40, { kind: 'ember', size: 1.4, life: [0.2, 0.5], speed: [0.1, 0.4], up: [8, 20], gravity: 10, over: true });
+          // Fire running off the ground at the end being laid.
+          k.emit(k.on(k.caster.x + Math.cos(end) * R, k.caster.y + Math.sin(end) * R, 1), 40, { kind: 'ember', size: 1.4, life: [0.2, 0.5], speed: [0.1, 0.4], up: [8, 20], gravity: 10, over: true });
         }
-        k.light(k.caster, R + 0.5, 0.5 * Math.min(1, laid));
+        k.light(k.caster, R + 0.5, 0.5 * Math.min(1, laid), WARM);
       },
       hit: (k) => {
         const R = k.fx.reach ?? 2;
@@ -2146,7 +2161,7 @@ export const KINDLER: Record<string, SpellVisual> = {
           const h = u < 0.2 ? lerp(AURA_H * 0.6, AURA_H * 2.2, easeOut(u / 0.2)) : lerp(AURA_H * 2.2, AURA_H, smooth((u - 0.2) / 0.8));
           fireWall(k, k.caster, R, { h, heat: lerp(1.6, 1, smooth(u)), turn: k.now * AURA_TURN, front: 0.75, crest: k.now * AURA_TURN * 4 * smooth(u) });
           emberBed(k, k.caster, R, 0.9);
-          k.light(k.caster, R + 0.8, lerp(0.9, 0.5, smooth(u)));
+          k.light(k.caster, R + 0.5, lerp(0.9, 0.5, smooth(u)), WARM);
         },
       },
       linger: {
@@ -2170,7 +2185,7 @@ export const KINDLER: Record<string, SpellVisual> = {
             }
           }
           k.emit(k.at(k.caster, 0.05), 10 * a, { kind: 'ember', size: 1.3, life: [0.5, 1], speed: [0.05, 0.2], up: [10, 20], gravity: -2, jitter: R * 0.9, over: true });
-          k.light(k.caster, R + 0.8, 0.5 * a);
+          k.light(k.caster, R + 0.5, 0.5 * a, WARM);
         },
       },
     },
@@ -2212,7 +2227,7 @@ export const KINDLER: Record<string, SpellVisual> = {
           const second = Math.max(0, u - 0.04);
           if (second > 0.02) fireball(k, arcAt(from, to, second, lift), arcAt(from, to, Math.max(0, second - 0.06), lift), 3.2, 3);
           fireball(k, head, back, 6.5, 5);
-          k.light(head, 3.2, 0.85);
+          k.light(head, 2.2, 0.85, WARM);
           k.emit(head, 50, { kind: 'ember', colour: [GOLD, PALETTE.main], size: 1.8, life: [0.25, 0.5], speed: [0.05, 0.3], up: [-4, 8], gravity: 4, jitter: 0.06, over: true });
           k.emit(back, 30, { kind: 'smoke', colour: [SMOKE, ASH], size: 2.8, sizeEnd: 7, life: [0.5, 0.9], speed: [0.02, 0.1], up: [2, 8], gravity: -3, jitter: 0.05 });
         },
@@ -2252,7 +2267,7 @@ export const KINDLER: Record<string, SpellVisual> = {
           // The splash along the ground: low fire thrown out flat from its feet in a ring.
           fireWall(k, b, 0.15 + 0.5 * easeOut(u), { h: 6 * (1 - smooth(seg(u, 0, 0.65))), lean: 0.9, heat: cooling(u), arcs: 4, front: 0.6, spacing: 0.1, glow: 0.6 });
           k.flare(k.heart(b), 12 * (1 - u), 0.8 * flashOf(u, 0.06), '#ffffff');
-          k.light(b, 3.5, 1 - 0.6 * u);
+          k.light(b, 2.2, 1 - 0.6 * u, WARM);
         },
       },
       linger: {
@@ -2291,7 +2306,7 @@ export const KINDLER: Record<string, SpellVisual> = {
         const s = smooth(seg(t, 0.15, 0.45)) * live;
         k.flare(star, 4 + 10 * s, s, PALETTE.core, k.now);
         k.glow(star, 10 + 14 * s, 0.6 * s);
-        k.light(k.spot, W, 0.35 * s);
+        k.light(k.spot, 2.4, 0.35 * s, WARM);
       },
       travel: {
         secs: () => 0.6,
@@ -2303,7 +2318,7 @@ export const KINDLER: Record<string, SpellVisual> = {
           const head = mid3(star, to, v), back = mid3(star, to, Math.max(0, v - 0.1));
           fireball(k, head, back, 8, 5.5, true);
           k.light(head, 3, 0.9);
-          k.light(k.spot, W + 0.5, 0.35 + 0.5 * u);
+          k.light(k.spot, 2.4, 0.35 + 0.5 * u, WARM);
           k.emit(back, 40, { kind: 'smoke', colour: [SMOKE, ASH], size: 3, sizeEnd: 7, life: [0.5, 1], speed: [0.02, 0.1], up: [0, 4], gravity: -2, jitter: 0.1, jitterZ: 3 });
           k.emit(head, 50, { kind: 'ember', size: 1.8, life: [0.2, 0.45], speed: [0.1, 0.4], up: [0, 10], gravity: 10, jitter: 0.05, over: true });
           // The ground under it brightening as it comes.
@@ -2341,7 +2356,7 @@ export const KINDLER: Record<string, SpellVisual> = {
           k.scorch(c, 0.95, { alpha: 0.55 * smooth(u * 4) });
           rocks(k, c, 0.95, easeOut(seg(u, 0.05, 0.3)), 1.6 - u);
           k.ring(c, W, { band: 0.08, alpha: 0.8 * (1 - u), glow: 0.6, main: PALETTE.deep, deep: PALETTE.ink });
-          k.light(c, W + 1.5, 1 - 0.4 * u);
+          k.light(c, W + 0.5, 1 - 0.4 * u, WARM);
           // Every other creature within it, struck as the wave of fire reaches it.
           const near = marked(k, 'm', c, W * 2);
           for (const [i, b] of near) {
@@ -2371,7 +2386,7 @@ export const KINDLER: Record<string, SpellVisual> = {
           flameRing(k, c, 0.55, { h: 5 * a * (1 - 0.6 * cool), w: 1.6, n: 7, heat: 0.9, arcs: 2, alpha: a, glow: 0.6 });
           k.emit(k.on(c.x, c.y, 2), 10 * a, { kind: 'smoke', colour: [SMOKE, ASH], size: 3, sizeEnd: 7, life: [1, 1.8], speed: [0.02, 0.1], up: [8, 14], gravity: -3, jitter: 0.6 });
           k.emit(k.on(c.x, c.y, 1), 8 * a * (1 - cool), { kind: 'ember', size: 1.4, life: [0.5, 1], speed: [0.05, 0.2], up: [8, 18], gravity: 0, jitter: 0.8, over: true });
-          k.light(c, 1.6, 0.5 * a * (1 - 0.5 * cool), '#fff1d6');
+          k.light(c, 1.6, 0.5 * a * (1 - 0.5 * cool), WARM);
         },
       },
     },
@@ -2403,7 +2418,7 @@ export const KINDLER: Record<string, SpellVisual> = {
         // caster shows inside it.
         if (g > 0.05 && t < 0.58) flameRing(k, c, 0.55, { h: (2 + 4 * g) * (1 - seg(t, 0.54, 0.58)), w: 1.3, n: 10, heat: 1 + 0.6 * g, arcs: 3, turn: -k.now * 5, crest: -k.now * 9, front: 0.6, glow: 0.7 });
         k.glow(k.chest(), 8 + 14 * g, 0.6 * g);
-        k.light(c, 2 + 2 * g, (0.4 + 0.4 * g) * (1 - seg(k.released, 0, 0.2)));
+        k.light(c, 2 + 2 * g, (0.4 + 0.4 * g) * (1 - seg(k.released, 0, 0.2)), WARM);
       },
       hit: (k) => {
         const R = k.fx.reach ?? 6;
@@ -2426,7 +2441,7 @@ export const KINDLER: Record<string, SpellVisual> = {
           k.disc(c, r, { main: '#2a1a12', alpha: 0.3 * (1 - seg(u, 0.7, 1)) });
           emberBed(k, c, r, 1 - seg(u, 0.75, 1), { width: 4 });
           fireWall(k, c, r, { h: (22 - 10 * wave) * (1 - seg(u, 0.7, 1)), heat: cooling(wave * 0.7), lean: 0.35, turn: k.seed, front: 0.8, spacing: 0.2, arcs: 6 });
-          k.light(c, R * 0.6, 1 - 0.4 * u, '#fff1d6');
+          k.light(c, R * 0.6, 1 - 0.4 * u, WARM);
           // Each creature it caught takes fire as the wall reaches it (its burn is the linger's).
           for (const [, b] of marked(k, 'f', c, R * 2)) {
             const at = reachedAt(Math.hypot(b.x - c.x, b.y - c.y), 0.5, R) * 0.7, v = seg(u, at, at + 0.35);
@@ -2487,7 +2502,7 @@ export const KINDLER: Record<string, SpellVisual> = {
           emberBed(k, c, R, 0.6 * a, { hot: 0.5 * (1 - age / total) });
           k.emit(k.on(c.x, c.y, 1), 18 * a, { kind: 'ember', size: 1.4, life: [0.6, 1.2], speed: [0.05, 0.2], up: [10, 20], gravity: -2, jitter: R * 0.8, over: true });
           k.emit(k.on(c.x, c.y, 2), 6 * a, { kind: 'smoke', colour: [SMOKE, ASH], size: 3, sizeEnd: 7, life: [1, 1.8], speed: [0.02, 0.1], up: [8, 14], gravity: -3, jitter: R * 0.7 });
-          k.light(c, R * 0.55, (0.45 * ((total - age) / total) + 0.1) * a, '#fff1d6');
+          k.light(c, R * 0.55, (0.45 * ((total - age) / total) + 0.1) * a, WARM);
         },
       },
     },
@@ -2509,7 +2524,7 @@ export const KINDLER: Record<string, SpellVisual> = {
         // The coal comes out of the fist with the pinch and is held as the arm swings back.
         const a = smooth(seg(t, 0.16, 0.24)) * (1 - seg(t, 0.49, 0.5));
         if (a > 0.01) {
-          k.orb(pinch, 1.7 * a, { ...COAL, glow: 0.8, bias: 6, turn: k.now * 2 });
+          k.orb(pinch, 1.7 * a, { ...COAL, glow: 0.8, bias: 1, turn: k.now * 2 });
           k.light(pinch, 1.2, 0.35 * a);
           k.emit(pinch, 8 * a, { kind: 'ember', size: 1, life: [0.2, 0.4], speed: [0.02, 0.08], up: [4, 10], gravity: 0 });
         }
@@ -2617,7 +2632,7 @@ export const KINDLER: Record<string, SpellVisual> = {
           flameLight(k, lit, 1 - seg(u, 0.85, 1));
           // The round burnt, all of it at once and out to exactly its edge.
           pyreGround(k, c, R, smooth(u * 5));
-          k.light(c, 2.5, 1 - 0.5 * u, '#fff1d6');
+          k.light(c, 2.5, 1 - 0.5 * u, WARM);
           // And every creature in it alight with the ground, in the same instant.
           for (const [i, b] of marked(k, 'p', c, R * 2)) alight(k, b, 12 * up * (1 - down), heat, 1, i);
         },
@@ -2634,7 +2649,7 @@ export const KINDLER: Record<string, SpellVisual> = {
           pyreGround(k, c, R, a);
           k.emit(k.on(c.x, c.y, 1), 14 * a, { kind: 'smoke', colour: [SMOKE, ASH], size: 2.5, sizeEnd: 6, life: [0.8, 1.4], speed: [0.02, 0.08], up: [8, 14], gravity: -3, jitter: R * 0.8 });
           k.emit(k.on(c.x, c.y, 0.5), 14 * a, { kind: 'ember', size: 1.3, life: [0.4, 0.9], speed: [0.02, 0.1], up: [6, 14], gravity: 0, jitter: R * 0.8, over: true });
-          k.light(c, 2, 0.3 * a, '#fff1d6');
+          k.light(c, 2, 0.3 * a, WARM);
         },
       },
     },
