@@ -8444,6 +8444,8 @@ const SWAP_BEND = 35;
 const SWAP_POLE: [V3, V3] = [[0.75, -0.25, -0.62], [0.3, -1, 0]];
 /** Over which of the swap the left elbow goes from down to back as its hand comes to be the further up the haft, and the right's the other way about, mirrored: see `shoulder`. */
 const SWAP_UPPER: [number, number] = [0.56, 0.66];
+/** How high off the ground a blade's point is kept, swung down between the hands: see `shoulder`. */
+const SWAP_POINT = 3;
 /** How much later in the swap a sword's second hand takes hold, and how much sooner it lets go: see `shoulder`. */
 const SWAP_LATE = 0.16;
 /** How much of the swap a hand takes to take hold of a haft, or to let go of it and hang free again: see `shoulder`. */
@@ -8514,7 +8516,9 @@ function shoulder(r: Rig, fr: Frame, w: Weapon, side: number, facing: number): v
   const [cg, cd] = along(u);
   const g = place(chest, cg);
   let d = unit(mv(chest.m, cd));
-  const low = g[2] + HIP * T - 0.6;
+  // Never lower than a little off the ground; and a blade's point, which hangs further from the hands than a head does, never
+  // below the shin (`SWAP_POINT`): at the ground in front of the feet, a long sword's point read from in front as through them.
+  const low = g[2] + HIP * T - (w.headUp ? 0.6 : SWAP_POINT);
   if (d[2] * far < -low) {
     const flat = Math.hypot(d[0], d[1]) || 1, z = -low / far;
     d = [(d[0] / flat) * Math.sqrt(1 - z * z), (d[1] / flat) * Math.sqrt(1 - z * z), z];
