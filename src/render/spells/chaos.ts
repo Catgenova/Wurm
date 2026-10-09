@@ -429,6 +429,45 @@ function pool(k: FxScene, c: { x: number; y: number }, r: number, colour: string
 }
 
 /**
+ * Plague's blight: the ground it sickens broken out in sores rather than
+ * painted over -- `n` ragged blotches of rot strewn through `r` tiles, each a
+ * bruised patch with a bilious heart, the most of them near the middle, and
+ * a ragged band of rot round the edge. `grow` spreads it from the middle
+ * out. Small pieces, each in a tile or two, so the ground pass cuts them for
+ * next to nothing where one great disc is cut against every tile it covers.
+ */
+function blight(k: FxScene, c: { x: number; y: number }, r: number, grow: number, alpha: number, n = 16): void {
+  if (alpha <= 0.01 || grow <= 0.01) return;
+  const bruise: number[][] = [], heart: number[][] = [], segs: number[] = [];
+  for (let i = 0; i < n; i++) {
+    const d = r * 0.92 * Math.sqrt(hashOf(k.seed + 61, i));
+    const v = clamp((grow * r - d) / (r * 0.25));
+    if (v <= 0) continue;
+    const an = hashOf(k.seed + 67, i) * TAU, x = c.x + Math.cos(an) * d, y = c.y + Math.sin(an) * d;
+    const size = (0.22 + 0.3 * hashOf(k.seed + 71, i)) * (1 - 0.35 * d / r) * easeOut(v);
+    const outer: number[] = [], inner: number[] = [];
+    for (let j = 0; j < 7; j++) {
+      const a = (j / 7) * TAU + i;
+      const rr = size * (0.65 + 0.35 * hashOf(k.seed + 73 + i, j));
+      outer.push(x + Math.cos(a) * rr, y + Math.sin(a) * rr * 0.9);
+      inner.push(x + Math.cos(a) * rr * 0.45 + size * 0.08, y + Math.sin(a) * rr * 0.4 - size * 0.06);
+    }
+    bruise.push(outer);
+    heart.push(inner);
+    segs.push(x, y, x, y);
+  }
+  const A = clamp(alpha);
+  if (bruise.length) {
+    k.groundShape(c.x, c.y, r + 0.5, [
+      { kind: 'fill', colour: ROT_DEEP, alpha: A * 0.75, paths: bruise, lift: 0.08 },
+      { kind: 'fill', colour: ROT, alpha: A * 0.55, paths: heart, lift: 0.09 },
+    ], (x, y, reach) => nearSegments(segs, x, y, reach + 0.6));
+  }
+  // The edge of what it sickens: a ragged band of rot, spreading out with it.
+  k.ring(c, r * easeOut(grow), { band: Math.max(0.12, r * 0.04), alpha: A * 0.85, main: ROT, deep: ROT_DEEP, turn: 0.3, glow: 0.2 });
+}
+
+/**
  * Fright's mark over a frightened head: three short pale strokes fanned out
  * from a point under them, tapered and inked, shaking -- the jolt a body
  * gives when it is startled, which is a shape somebody reads without thinking.
@@ -1309,16 +1348,14 @@ export const CHAOS: Record<string, SpellVisual> = {
       // It spreads: a ragged pool of rot running out to the edge of what it sickens, the edge marked.
       impact: { secs: 1.2, draw: (k, u) => {
         const R = radiusOf(PLAGUE), e = easeOut(u * 1.3);
-        pool(k, k.spot, R * e, ROT_DEEP, 0.55, 0, { share: 0.8, colour: ROT, alpha: 0.3, salt: 7 });
-        k.ring(k.spot, R * e, { band: 0.12, alpha: 0.9, main: ROT, deep: ROT_DEEP, dash: 0, glow: 0.3 });
+        blight(k, k.spot, R, e, 1);
         k.light(k.spot, R, 0.5 * (1 - u * 0.5), '#7dff6a');
       } },
       // Festering for its seconds: the pool bubbling, a green haze crawling over it, the edge and the time it has left.
       linger: { on: 'spot', draw: (k, age, left) => {
         const R = radiusOf(PLAGUE), a = fadeOf(age, left, 0.3, 1.5);
-        pool(k, k.spot, R, ROT_DEEP, 0.4 * a, 0, { share: 0.8, colour: ROT, alpha: 0.18 * a, salt: 7 });
-        k.ring(k.spot, R, { band: 0.05, alpha: 0.3 * a, main: ROT, deep: ROT_DEEP, dash: 5, turn: age * 0.05, glow: 0 });
-        timeArc(k, k.spot, R, left / lastsOf(PLAGUE), { alpha: 0.8 * a, band: 0.1, main: ROT });
+        blight(k, k.spot, R, 1, 0.8 * a);
+        timeArc(k, k.spot, R - Math.max(0.12, R * 0.04) - 0.04, left / lastsOf(PLAGUE), { alpha: 0.8 * a, band: 0.1, main: ROT });
         k.emit(k.on(k.spot.x, k.spot.y, 2), 8 * a, { kind: 'smoke', colour: [ROT, ROT_DEEP], size: 3.4, life: [1, 1.8], speed: [0.02, 0.1], up: [2, 6], gravity: -1, jitter: R * 0.6 });
         // Every creature standing in it sick: a green pall over it, and on the beat its blood let.
         const beat = ticked(k, age, 'beat') && left > 0.5;
