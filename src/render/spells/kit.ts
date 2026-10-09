@@ -56,7 +56,7 @@ import { figureJoint, figureJoints, viewOf, weaponSpan, type FigurePose, type V3
 import { HALF_H, HALF_W, HEIGHT_SCALE, UNITS_PER_TILE } from '../iso';
 import type { View } from '../view';
 import { wildermonHead, wildermonTop } from '../wildermon';
-import type { CastAim } from './index';
+import type { CastAim, CastTravel } from './index';
 
 /* ---- numbers ------------------------------------------------------------------ */
 
@@ -305,16 +305,24 @@ export function creatureWide(species: string): number {
 
 /* ---- the pools ---------------------------------------------------------------- */
 
+/** The longest a side of a circle's facet is drawn, in pixels, before it is cut finer (`FxScene.finer`); and the most times over. */
+const FACET_PX = 24, FINER_MOST = 8;
+
 /** The most particles alive at once, over every spell on the screen; a third of it on fast graphics. */
 export const MOST_PARTICLES = 1200;
 /** The most lights spells may hold up at once. */
 export const MOST_LIGHTS = 8;
 
-/** Kinds of particle, by how they are drawn. The first three are light, added in the glow pass; the rest are things, sorted in the world. */
-export type ParticleKind = 'spark' | 'ember' | 'mote' | 'smoke' | 'dust' | 'shard' | 'drop' | 'mist';
-const KIND_NO: Record<ParticleKind, number> = { spark: 0, ember: 1, mote: 2, smoke: 3, dust: 4, shard: 5, drop: 6, mist: 7 };
+/**
+ * Kinds of particle, by how they are drawn. Spark, ember, mote and heal are light, added in the glow pass; the rest
+ * are things, sorted in the world. A `mote` is a small round glint that says nothing in particular; a `heal` is the
+ * white cross that says health given back, and only a heal should use it (a mote cast by a spell whose numbers are a
+ * heal, `fx.heal`, is drawn as one).
+ */
+export type ParticleKind = 'spark' | 'ember' | 'mote' | 'smoke' | 'dust' | 'shard' | 'drop' | 'mist' | 'heal';
+const KIND_NO: Record<ParticleKind, number> = { spark: 0, ember: 1, mote: 2, smoke: 3, dust: 4, shard: 5, drop: 6, mist: 7, heal: 8 };
 /** Whether a kind is light (glow pass) rather than a thing (world pass). */
-export const isLightKind = (k: number): boolean => k <= 2;
+export const isLightKind = (k: number): boolean => k <= 2 || k === 8;
 
 /**
  * What a burst of particles is: how many, which way and how fast, how long
@@ -461,6 +469,24 @@ export class Particles {
     this.n = 0;
     this.free.length = 0;
   }
+}
+
+/**
+ * The colour a light lays over what it falls on at night (`SpellStage.glowPass`): its own hue, saturated, so it goes
+ * over the grass as a colour rather than added to it as a brightness. The night takes the cold off a light's circle,
+ * which uncovers the grass as green as it is by day, and a warm white added to that is mostly the green brought up --
+ * the olive pool a 1.4-tile `#fff1d6` made. Laid as a colour, warm reads warm; a white or a grey light lays grey, which
+ * takes the green out of what it uncovers rather than leaving it.
+ */
+export function lightTint(cast: string): string {
+  const [r, g, b] = cast.split(',').map((v) => Number(v) / 255);
+  const hi = Math.max(r, g, b), lo = Math.min(r, g, b), c = hi - lo;
+  const h = c <= 0 ? 0 : hi === r ? ((g - b) / c + 6) % 6 : hi === g ? (b - r) / c + 2 : (r - g) / c + 4;
+  // Its hue at 55% lightness, saturated to 85% for any colour with a little of one (a warm white has about a sixth), grey for none.
+  const S = 0.85 * clamp((hi > 0 ? c / hi : 0) * 6), L = 0.55, C = (1 - Math.abs(2 * L - 1)) * S, X = C * (1 - Math.abs((h % 2) - 1)), m = L - C / 2;
+  const [r1, g1, b1] = h < 1 ? [C, X, 0] : h < 2 ? [X, C, 0] : h < 3 ? [0, C, X] : h < 4 ? [0, X, C] : h < 5 ? [X, 0, C] : [C, 0, X];
+  const hex = (v: number): string => Math.round((v + m) * 255).toString(16).padStart(2, '0');
+  return `#${hex(r1)}${hex(g1)}${hex(b1)}`;
 }
 
 /* ---- glow pictures ------------------------------------------------------------- */
@@ -635,6 +661,12 @@ export interface VeilRec {
   tint: number;
   fade: number;
 }
+/** A creature tinted this frame (`FxScene.tint`): who, the colour, and how far to it. */
+export interface TintRec {
+  who: Who;
+  colour: string;
+  share: number;
+}
 
 export class FxFrame {
   ground: GroundRec[] = [];
@@ -644,8 +676,11 @@ export class FxFrame {
   lights: LightRec[] = [];
   /** Bodies veiled this frame (`FxScene.veil`), for whoever draws them. */
   veils: VeilRec[] = [];
+  /** Creatures tinted this frame (`FxScene.tint`). */
+  tints: TintRec[] = [];
   reset(): void {
     this.veils.length = 0;
+    this.tints.length = 0;
     this.ground.length = 0;
     this.world.length = 0;
     this.glow.length = 0;
@@ -760,6 +795,8 @@ export class FxScene {
   side = 1;
   /** Where the target stands from the caster, as the pose is told it (`CastAim`); nothing for a cast on oneself. */
   aim: CastAim | null = null;
+  /** The stage carrying the caster in for the blow or back after it (`cast.close`, `CastTravel`), nothing while it is not: for a run's streaks and dust keyed to the real thing. */
+  travel: CastTravel | null = null;
   /** The cast's timing (its seconds and its release), for what samples the pose through it (`trail`). */
   timing: { secs: number; release: number } | null = null;
   /**
@@ -772,6 +809,10 @@ export class FxScene {
   castLeft = 0;
   /** Lights this cast may still put down this frame (`light`): two a cast, eight on the screen. */
   lightsLeft = 2;
+  /** The spell gives health back (its numbers have a `heal`): its motes are the heal's cross (`ParticleKind`). */
+  healing = false;
+  /** Shapes recorded inside `together` this frame past the first of each lot, which the budget does not count again. */
+  grouped = 0;
 
   eye!: Eye;
   out!: FxFrame;
@@ -969,6 +1010,30 @@ export class FxScene {
     const tint = clamp(o.tint ?? 0), fade = clamp(o.fade ?? 0);
     if (tint <= 0.004 && fade <= 0.004) return;
     this.out.veils.push({ who: b.who, colour: o.colour ?? this.pal.deep, tint, fade });
+  }
+
+  /**
+   * A creature (or a person) tinted for this frame, on itself rather than round it: `share` (nought to one) of the way to
+   * `colour` (the palette's deep) over the whole of its body as drawn -- sick, marked, frozen, burnt. Call it every
+   * frame it is wanted, from any part (a linger too); the strongest a body is given wins. A person's is their `veil`'s
+   * tint. A body the stage does not know by who (a spot) is passed over.
+   */
+  tint(b: Body = this.target, o: { colour?: string; share?: number } = {}): void {
+    const share = clamp(o.share ?? 0.4);
+    if (share <= 0.004 || !b.who) return;
+    if (b.figure) return this.veil(b, { colour: o.colour, tint: share });
+    this.out.tints.push({ who: b.who, colour: o.colour ?? this.pal.deep, share });
+  }
+
+  /**
+   * Draw many things as one shape in the budget (SPELLS.md: about fifteen shapes a frame): everything `draw` records
+   * counts once. For the same thing drawn on every body an area reached -- a burn on each of sixteen creatures a
+   * Firestorm caught -- which is one effect, each still sorted with its own body.
+   */
+  together(draw: () => void): void {
+    const at = this.out.world.length + this.out.ground.length;
+    draw();
+    this.grouped += Math.max(0, this.out.world.length + this.out.ground.length - at - 1);
   }
 
   /**
@@ -1270,6 +1335,23 @@ export class FxScene {
     // On fast graphics fewer, but a big ring still round: a few more for every tile out.
     return Math.max(6, Math.min(this.fast ? Math.min(most, 18 + Math.round(rTiles * 3)) : most, n));
   }
+  /**
+   * How many times over to cut each of `n` facets round a circle `rTiles` across for it to look round on the screen:
+   * a facet's side no longer than `FACET_PX` pixels, so a ring or a shock wave looked at close (zoom three or four)
+   * is not a polygon, while at the sizes the island is played at the count is the old one. Once on fast graphics.
+   */
+  finer(rTiles: number, n: number): number {
+    if (this.fast || n <= 0) return 1;
+    return Math.max(1, Math.min(FINER_MOST, Math.ceil((TAU * rTiles * HALF_W * this.zoom) / (FACET_PX * n))));
+  }
+  /**
+   * Facets for a circle of your own `rTiles` across that looks round at this zoom (`facets` cut finer as `finer` says,
+   * `most` as for `facets`): for a ring, a tick ring or a measure drawn with `groundShape`.
+   */
+  roundFacets(rTiles: number, most = 48): number {
+    const n = this.facets(rTiles, most);
+    return n * this.finer(rTiles, n);
+  }
 
   /**
    * Something laid on the ground as shapes on the island rather than strokes
@@ -1303,7 +1385,9 @@ export class FxScene {
     const band = Math.min(r, o.band ?? 0.18);
     const a = o.alpha ?? 1;
     if (a <= 0.01) return;
-    const n = o.n ?? this.facets(r);
+    // Each facet cut finer as the ring is drawn larger on the screen (`finer`), so close up it stays round; dashes and the
+    // glow along it go by the facets as they were.
+    const n0 = o.n ?? this.facets(r), sub = o.n ? 1 : this.finer(r, n0), n = n0 * sub;
     const main = o.main ?? this.pal.main, deep = o.deep ?? this.pal.deep, ink = o.ink ?? this.pal.ink;
     const turn = o.turn ?? 0;
     const outer: number[] = [], inner: number[] = [];
@@ -1317,7 +1401,7 @@ export class FxScene {
     const lit: number[][] = [], shade: number[][] = [];
     for (let i = 0; i < n; i++) {
       const j = (i + 1) % n;
-      if (dash && i % dash === dash - 1) continue;
+      if (dash && Math.floor(i / sub) % dash === dash - 1) continue;
       const into = outer[2 * i + 1] + outer[2 * j + 1] > inner[2 * i + 1] + inner[2 * j + 1] ? lit : shade;
       into.push([wo[2 * i], wo[2 * i + 1], wo[2 * j], wo[2 * j + 1], wi[2 * j], wi[2 * j + 1], wi[2 * i], wi[2 * i + 1]]);
     }
@@ -1356,7 +1440,7 @@ export class FxScene {
   disc(c: { x: number; y: number }, r: number, o: Look & { n?: number; turn?: number } = {}): void {
     const a = o.alpha ?? 0.5;
     if (r <= 0.02 || a <= 0.01) return;
-    const n = o.n ?? this.facets(r, 32);
+    const n0 = o.n ?? this.facets(r, 32), n = o.n ? n0 : n0 * this.finer(r, n0);
     this.groundShape(c.x, c.y, r + 0.5, [
       { kind: 'fill', colour: o.main ?? this.pal.main, alpha: clamp(a), paths: [this.circle(c.x, c.y, r, n, o.turn ?? 0)], lift: 0.1 },
     ]);
@@ -1542,8 +1626,12 @@ export class FxScene {
     if (gl > 0) this.glow(p, r * 3.2, a * gl * 0.8, o.light);
   }
 
-  /** A ribbon through points in the world, `width` pixels at zoom one at its widest, tapering to nothing at the first point: a trail, a slash, a wisp. */
-  ribbon(pts: readonly P3[], o: Look & { taper?: 'start' | 'both' | 'none'; edge?: boolean; around?: Body; sortAt?: P3; span?: readonly [number, number] } = {}): void {
+  /**
+   * A ribbon through points in the world, `width` pixels at zoom one at its widest, tapering to nothing at the first
+   * point (`taper` 'start', the default), the last ('end': a beam from an eye, a thrust running out to its point),
+   * both, or neither: a trail, a slash, a wisp.
+   */
+  ribbon(pts: readonly P3[], o: Look & { taper?: 'start' | 'end' | 'both' | 'none'; edge?: boolean; around?: Body; sortAt?: P3; span?: readonly [number, number] } = {}): void {
     const n = pts.length;
     const a = o.alpha ?? 1;
     if (n < 2 || a <= 0.01) return;
@@ -1570,7 +1658,7 @@ export class FxScene {
       dx /= l;
       dy /= l;
       const u = o.span ? lerp(o.span[0], o.span[1], i / (n - 1)) : i / (n - 1);
-      const w = (W / 2) * (taper === 'none' ? 1 : taper === 'both' ? Math.sin(Math.PI * u) : u);
+      const w = (W / 2) * (taper === 'none' ? 1 : taper === 'both' ? Math.sin(Math.PI * u) : taper === 'end' ? 1 - u : u);
       left.push(xs[i] - dy * w, ys[i] + dx * w);
       right.push(xs[i] + dy * w, ys[i] - dx * w);
     }
@@ -2070,7 +2158,8 @@ export class FxScene {
 
   private spawn(p: P3, count: number, o: BurstOpts): void {
     const ps = this.parts;
-    const kind = KIND_NO[o.kind ?? 'spark'];
+    // A mote off a heal is the heal's cross, as it always was there (`ParticleKind`).
+    const kind = o.kind === 'mote' && this.healing ? KIND_NO.heal : KIND_NO[o.kind ?? 'spark'];
     const colours = o.colour === undefined ? [this.pal.core, this.pal.main] : typeof o.colour === 'string' ? [o.colour] : o.colour;
     const fade = o.fade !== undefined ? ps.colourOf(o.fade) : 65535;
     const [l0, l1] = o.life ?? [0.4, 0.9];
@@ -2150,7 +2239,23 @@ export function drawParticle(g: CanvasRenderingContext2D, ps: Particles, i: numb
     return;
   }
   if (k === 2) {
-    // A mote: a glint that comes and goes.
+    // A mote: a small round glint that comes and goes, a hexagon -- a speck of light, which says nothing of what it is.
+    const tw = Math.max(0, Math.sin(u * Math.PI));
+    g.globalAlpha = tw;
+    g.fillStyle = colour;
+    const s = Math.max(0.6, size) * 0.7;
+    g.beginPath();
+    for (let j = 0; j < 6; j++) {
+      const an = (j / 6) * TAU;
+      if (j === 0) g.moveTo(x + Math.cos(an) * s, y + Math.sin(an) * s);
+      else g.lineTo(x + Math.cos(an) * s, y + Math.sin(an) * s);
+    }
+    g.closePath();
+    g.fill();
+    return;
+  }
+  if (k === 8) {
+    // A heal: the cross, a glint that comes and goes -- health given back, and nothing else.
     const tw = Math.max(0, Math.sin(u * Math.PI));
     g.globalAlpha = tw;
     g.fillStyle = colour;
