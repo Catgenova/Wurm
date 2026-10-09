@@ -25,6 +25,11 @@ export interface LightSource {
   /** How strong that colour is at its middle at full dark; a fire's is a sixth of its strength. */
   castAlpha?: number;
   /**
+   * A spell's light: at night it falls off smoothly from its middle (`lightFall`) and cuts the dark and adds its cast
+   * less the wider it is (`lightHole`), where a lamp's falls off straight at its full strength.
+   */
+  soft?: boolean;
+  /**
    * The storey it burns on: up a storey for a light carried upstairs, `CELLAR_LEVEL` for one down in a cellar;
    * absent is the ground floor, where everything set down stands.
    */

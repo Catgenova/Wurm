@@ -335,8 +335,9 @@ its tail**: `eatTail(points, u)` is the line with its first `u` gone, opaque to 
 Ground marks drawn in ink and deep tones vanish at night: give them a night rim (`glow` on a ground layer,
 `glow: k.night`) or choose a light tone by `k.night`. Keep a cast's lights small and warm: about 1.4 tiles and a warm
 white (`'#fff1d6'`) light the ground under a spell. At night the stage now also lays each spell light's own hue over
-the circle it lights (see "New API"), so a warm light reads warm on grass and a blue one blue, rather than the grass's
-own green uncovered; keep the radius small all the same.
+the ground it lights (see "New API"), so a warm light reads warm on grass and a blue one blue, rather than the grass's
+own green uncovered. A light wider than 2 tiles is weakened for its size (below), so a wide one is a glow, not a sheet;
+keep the radius to what the light falls on all the same.
 The stage now holds each cast to **two lights a frame** (eight on the screen); more are refused and the preview says so.
 
 ### Fast graphics
@@ -390,10 +391,19 @@ is still 12; reach is unchanged.
 it shrinks while the feet are off the ground. Not on the move (the walk's legs).
 
 **Night lights read as their own colour.** At night the stage lays each spell light's hue (`lightTint`: its own hue at
-85% saturation, grey for a white) over the circle it lights, as a colour (`'color'` blend) at up to 0.75 at its middle
-(1.2 × strength × night). The night takes the cold wash off a light's circle, uncovering the grass as green as by day,
-and adds the light's colour; a warm white added to green grass was green (the olive pools). Now a `'#fff1d6'` light at
-0.5 is amber on night grass, Pikeman's blue aim light blue. Nothing changes by day, or for lights that are not spells'.
+85% saturation, grey for a white) over the ground it lights, as a colour (`'color'` blend: the ground's own lightness,
+so its texture and lines still show) at up to 0.75 at its middle (1.2 × strength × night). The night takes the cold wash
+off a light's circle, uncovering the grass as green as by day, and adds the light's colour; a warm white added to green
+grass was green (the olive pools). Now a `'#fff1d6'` light at 0.5 is amber on night grass, Pikeman's blue aim light
+blue. Nothing changes by day, or for lights that are not spells'.
+- **On the ground only.** The hue is laid a line at a time with the ground (`SpellStage.groundLine`), under the spells'
+  own ground marks and everything standing. A body in a light is lit by the night cut back and the light's cast added,
+  warmer and brighter, in its own colours, not recoloured.
+- **Falling off.** The hue, how far the night is cut back and the cast added all fall from the middle as (1 − t²)²
+  (`lightFall`): flat at the heart, about half at halfway, a fifth at three quarters, nothing at the edge.
+- **Weakened for size.** Up to 2 tiles (`LIGHT_FULL`) a light is as strong as asked. Past that the hue at its middle is
+  × (2 / r)^0.7 (`lightHue`: 62% at 4 tiles, 42% at 7) and the night cut back and cast added × (2 / r)^0.8 (`lightHole`:
+  57% at 4, 37% at 7), so `k.light(b, R + 1, 0.8)` over a 6-tile area is a glow over it, not a disc of its colour.
 
 **Rings round close up.** `k.ring` and `k.disc` cut each facet finer as the ring gets bigger on the screen (`k.finer`:
 a side no longer than 24 px, up to 8 times), so at zoom 3–4 a shock wave is round; at play zoom the counts are as

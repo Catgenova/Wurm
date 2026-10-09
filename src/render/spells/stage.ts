@@ -24,7 +24,7 @@ import { HALF_H, HALF_W, HEIGHT_SCALE, TILE_W, UNITS_PER_TILE } from '../iso';
 import { depthOf, type View } from '../view';
 import { castLefty, lingerSecs, visualOf, type CastAim, type CastClose, type CastNow, type CastTarget, type CastTravel, type SpellVisual } from './index';
 import { spellInfo, type SpellInfo } from './info';
-import { clamp, drawParticle, FxFrame, FxScene, isLightKind, lightTint, MOST_PARTICLES, paintGroundLayer, Particles, rngOf, seg, smooth, type Body, type Eye, type GroundLayer, type P3, type Who, type WorldRec } from './kit';
+import { clamp, drawParticle, fallGradient, FxFrame, FxScene, isLightKind, lightHole, lightHue, lightTint, MOST_PARTICLES, paintGroundLayer, Particles, rngOf, seg, smooth, type Body, type Eye, type GroundLayer, type LightRec, type P3, type Who, type WorldRec } from './kit';
 
 export type { Who };
 /** What a spell was cast at: somebody, a spot on the ground, or the caster themselves. */
@@ -73,10 +73,17 @@ const BACK_BASE = 0.25, BACK_TILE = 0.15, BACK_LEAST = 0.4, BACK_MOST = 0.6;
 /** Nearer its master than this, in tiles, a companion is drawn beside them rather than in them (`cast.companion`). */
 const BESIDE = 0.35;
 /**
- * How far over to a light's own colour what it falls on is laid at its middle, at night, for each of its strength
- * (`lightColour`), and at the most: a light of half strength (a cast's impact) lays a little over half its colour.
+ * How far over to a light's own colour the ground it falls on is laid at its middle, at night, for each of its strength
+ * (`lightHueAt`), and at the most, for a light of up to `LIGHT_FULL` tiles: a light of half strength (a cast's impact)
+ * lays a little over half its colour. A wider one lays less (`lightHue`).
  */
 const LIGHT_COLOUR = 1.2, LIGHT_COLOUR_MOST = 0.75;
+/**
+ * About how much of the ground the night's wash covers at the dead of night (`skyWash`: the island's 0.68, the
+ * preview's 0.62). The colour is laid on the ground under the wash, so it is laid that much stronger where the wash
+ * still covers it, to come out through it as strong as it would laid over the wash.
+ */
+const NIGHT_WASH = 0.65;
 /** Shapes a cast may record in a frame (SPELLS.md's budget), past which the preview says so. */
 const SHAPES_MOST = 15;
 
@@ -249,6 +256,13 @@ export class SpellStage {
   private runLayers: RunLayer[] = [];
   /** Joints asked for this frame, by body and bone. */
   private joints = new Map<string, P3>();
+  /**
+   * The spells' lights' colour on the ground at night (`layLight`), made once a frame: for each line, each light's
+   * share of its tiles and the light's gradient, to fill it with as a colour under what stands there (`groundLine`).
+   */
+  private lightLines = new Map<number, Array<{ path: Path2D; fill: CanvasGradient }>>();
+  /** The tiles a light falls on, by line: each tile's corners on the screen, left, top, right and bottom. */
+  private lightTiles = new Map<number, number[][]>();
 
   constructor(private readonly where: Where) {
     this.k.parts = this.parts;
@@ -734,6 +748,7 @@ export class SpellStage {
     }
     this.lines.clear();
     this.groundItems.clear();
+    this.lightLines.clear();
     const eye = this.eye;
     if (!eye) return;
     const line = (x: number, y: number): number => Math.max(dLo, Math.min(dHi, depthOf(view, Math.floor(x), Math.floor(y))));
@@ -753,10 +768,11 @@ export class SpellStage {
       const x = ps.x[i], y = ps.y[i];
       put({ x, y, sx: eye.worldToScreenX(x, y), sy: eye.worldToScreenY(x, y, this.where.ground(x, y)) + ps.bias[i], draw: null, p: i });
     }
-    const ground = this.out.ground;
-    if (!ground.length) return;
     const W = ctx.canvas.width, H = ctx.canvas.height;
     const m = ctx.getTransform();
+    this.layLight(ctx, view, dLo, dHi, W, H);
+    const ground = this.out.ground;
+    if (!ground.length) return;
     // In the order they were recorded, so what was laid over what still is on every line: the shapes before the first
     // drawn record and after the last cut along the tiles, and everything from the first drawn record to the last drawn
     // into one layer together -- a shape among them too, to keep its place over one and under the next.
@@ -917,6 +933,100 @@ export class SpellStage {
       }
       items.push({ layer: null, path: null, run, pieces, recs });
     }
+  }
+
+  /**
+   * The spells' lights' colour on the ground, at night: each light's hue (`lightTint`) as a gradient falling off from its
+   * middle as the light does (`lightFall`), and each line's share of the tiles it lights, for `groundLine` to fill with
+   * it as a colour (`'color'`: the ground's own lightness, the light's hue) before anything stands on the line. On the
+   * ground only: a body standing in a light is lit by the night's hole and the light's cast added (`Game.lights`),
+   * warmer and brighter, but keeps its own colours.
+   */
+  private layLight(g: CanvasRenderingContext2D, view: View, dLo: number, dHi: number, W: number, H: number): void {
+    const eye = this.eye;
+    if (!eye || this.night <= 0.02 || !this.out.lights.length) return;
+    const tiles = this.lightTiles;
+    const hw = HALF_W * eye.zoom, hh = HALF_H * eye.zoom, h = (x: number, y: number): number => this.where.ground(x, y);
+    const sx = (x: number, y: number): number => eye.worldToScreenX(x, y), sy = (x: number, y: number): number => eye.worldToScreenY(x, y, h(x, y));
+    // The screen's own pixels, for what is off it.
+    const m = g.getTransform(), sc = Math.hypot(m.a, m.b);
+    const wash = NIGHT_WASH * this.night;
+    for (const l of this.out.lights) {
+      const a = this.lightHueAt(l);
+      if (a <= 0.01) continue;
+      const lx = sx(l.x, l.y), ly = sy(l.x, l.y), r = l.radius * hw;
+      // As far out as it lays as much as 3% of its colour, where the wash is still all over it: (1 - t²)² = 0.03 (1 - wash) / a.
+      const rp = r * Math.sqrt(1 - Math.sqrt(Math.min(1, (0.03 * (1 - wash)) / a)));
+      const cx = m.a * lx + m.c * ly + m.e, cy = m.b * lx + m.d * ly + m.f;
+      if (cx + rp * sc < 0 || cy + rp * sc < 0 || cx - rp * sc > W || cy - rp * sc > H) continue;
+      tiles.clear();
+      const reach = Math.ceil(l.radius * Math.SQRT2) + 1;
+      for (let x = Math.floor(l.x) - reach; x <= Math.floor(l.x) + reach; x++) {
+        for (let y = Math.floor(l.y) - reach; y <= Math.floor(l.y) + reach; y++) {
+          // A tile is in it where its diamond comes within `rp` of the light's middle.
+          const u = Math.abs(sx(x + 0.5, y + 0.5) - lx), v = Math.abs(sy(x + 0.5, y + 0.5) - ly);
+          if (u > rp + hw || v > rp + hh || (u / hw + v / hh > 1 && (u * hh + v * hw - hw * hh) / Math.hypot(hw, hh) > rp)) continue;
+          const d = depthOf(view, x, y);
+          if (d < dLo || d > dHi) continue;
+          // Its corners on the screen, sorted into left, top, right and bottom, as many as the ground drew it with.
+          const cs = [sx(x, y), sy(x, y), sx(x + 1, y), sy(x + 1, y), sx(x + 1, y + 1), sy(x + 1, y + 1), sx(x, y + 1), sy(x, y + 1)];
+          let L = 0, T = 0, R = 0, B = 0;
+          for (let c = 1; c < 4; c++) {
+            if (cs[2 * c] < cs[2 * L]) L = c;
+            if (cs[2 * c] > cs[2 * R]) R = c;
+            if (cs[2 * c + 1] < cs[2 * T + 1]) T = c;
+            if (cs[2 * c + 1] > cs[2 * B + 1]) B = c;
+          }
+          let list = tiles.get(d);
+          if (!list) tiles.set(d, (list = []));
+          list.push([cs[2 * L], cs[2 * L + 1], cs[2 * T], cs[2 * T + 1], cs[2 * R], cs[2 * R + 1], cs[2 * B], cs[2 * B + 1]]);
+        }
+      }
+      if (!tiles.size) continue;
+      const fill = this.lightFill(g, l, lx, ly, r, a);
+      // Each line's tiles along it as one piece, its outline the tiles' own, or a few where it is broken.
+      for (const [d, list] of tiles) {
+        list.sort((p, q) => p[0] - q[0]);
+        const path = new Path2D();
+        let start = 0;
+        for (let i = 1; i <= list.length; i++) {
+          if (i < list.length && Math.abs(list[i][0] - list[i - 1][4]) < hw * 0.5) continue;
+          path.moveTo(list[start][0], list[start][1]);
+          for (let k = start; k < i; k++) {
+            const q = list[k];
+            path.lineTo(q[2], q[3]);
+            path.lineTo(q[4], q[5]);
+          }
+          for (let k = i - 1; k >= start; k--) {
+            const q = list[k];
+            path.lineTo(q[4], q[5]);
+            path.lineTo(q[6], q[7]);
+            path.lineTo(q[0], q[1]);
+          }
+          path.closePath();
+          start = i;
+        }
+        let on = this.lightLines.get(d);
+        if (!on) this.lightLines.set(d, (on = []));
+        on.push({ path, fill });
+      }
+    }
+  }
+
+  /** How far over to its colour a light lays the ground at its middle, now: its strength, how dark it is and its size. */
+  private lightHueAt(l: LightRec): number {
+    return Math.min(LIGHT_COLOUR_MOST, LIGHT_COLOUR * l.strength * this.night) * lightHue(l.radius);
+  }
+
+  /**
+   * A light's colour as a gradient, a circle as the night's hole for it is (`Game.lights`) at `x`, `y` and `r` pixels,
+   * falling off as it does: laid a little stronger where the wash is still over it (`NIGHT_WASH`), so it comes out
+   * through the wash as it went in.
+   */
+  private lightFill(g: CanvasRenderingContext2D, l: LightRec, x: number, y: number, r: number, a: number): CanvasGradient {
+    const tint = lightTint(l.cast), hole = l.strength * lightHole(l.radius), wash = NIGHT_WASH * this.night;
+    const [cr, cg, cb] = [1, 3, 5].map((i) => parseInt(tint.slice(i, i + 2), 16));
+    return fallGradient(g, x, y, r, (f) => `rgba(${cr},${cg},${cb},${Math.min(1, (a * f) / (1 - wash * (1 - hole * f))).toFixed(3)})`);
   }
 
   /** What of the run's layer was drawn on this frame, in its own pixels, worked out by `clipRun`. */
@@ -1097,6 +1207,18 @@ export class SpellStage {
 
   /** What lies on the ground of line `d`: after the line's ground, before anything stands on it. */
   groundLine(ctx: CanvasRenderingContext2D, d: number): void {
+    // The lights' colour first, on the line's ground alone, under the spells' own marks: each light's share of the line
+    // filled with its gradient.
+    const lit = this.lightLines.get(d);
+    if (lit) {
+      ctx.save();
+      ctx.globalCompositeOperation = 'color';
+      for (const p of lit) {
+        ctx.fillStyle = p.fill;
+        ctx.fill(p.path);
+      }
+      ctx.restore();
+    }
     const items = this.groundItems.get(d);
     if (!items) return;
     for (const it of items) {
@@ -1144,9 +1266,8 @@ export class SpellStage {
   /** Light, over everything and over the night. */
   glowPass(ctx: CanvasRenderingContext2D): void {
     const ps = this.parts;
-    if (!this.out.glow.length && !ps.n && !(this.night > 0.02 && this.out.lights.length)) return;
+    if (!this.out.glow.length && !ps.n) return;
     ctx.save();
-    this.lightColour(ctx);
     ctx.globalCompositeOperation = 'lighter';
     for (const draw of this.out.glow) {
       draw(ctx);
@@ -1165,33 +1286,6 @@ export class SpellStage {
     ctx.restore();
   }
 
-  /**
-   * The colour of each spell's light laid over what it falls on, at night: its hue, as a colour (`lightTint`), to as
-   * much of the way as it is dark and strong, over the circle it lights. The night takes the cold off a light's circle and
-   * adds its colour to what is under it (`Game.lights`): on grass, a warm white added is the grass's own green brought up,
-   * an olive pool. Laid as a colour over that, it is the light's own.
-   */
-  private lightColour(ctx: CanvasRenderingContext2D): void {
-    const eye = this.eye;
-    if (!eye || this.night <= 0.02 || !this.out.lights.length) return;
-    ctx.globalCompositeOperation = 'color';
-    for (const l of this.out.lights) {
-      const tint = lightTint(l.cast), a = Math.min(LIGHT_COLOUR_MOST, LIGHT_COLOUR * l.strength * this.night);
-      if (a <= 0.01) continue;
-      const x = eye.worldToScreenX(l.x, l.y), y = eye.worldToScreenY(l.x, l.y, this.where.ground(l.x, l.y)), r = l.radius * HALF_W * eye.zoom;
-      const [cr, cg, cb] = [1, 3, 5].map((i) => parseInt(tint.slice(i, i + 2), 16));
-      const grad = ctx.createRadialGradient(x, y, 0, x, y, r);
-      grad.addColorStop(0, `rgba(${cr},${cg},${cb},${a.toFixed(3)})`);
-      grad.addColorStop(0.55, `rgba(${cr},${cg},${cb},${(a * 0.55).toFixed(3)})`);
-      grad.addColorStop(1, `rgba(${cr},${cg},${cb},0)`);
-      ctx.fillStyle = grad;
-      ctx.beginPath();
-      ctx.arc(x, y, r, 0, Math.PI * 2);
-      ctx.fill();
-    }
-    ctx.globalCompositeOperation = 'source-over';
-  }
-
   /** The screen, last: a flash for your own great casts. */
   screenPass(ctx: CanvasRenderingContext2D, w: number, h: number): void {
     if (!this.out.screen.length) return;
@@ -1201,6 +1295,22 @@ export class SpellStage {
   }
 
   /* ---- for the preview ------------------------------------------------------------------- */
+
+  /** The lights' colour on the ground at night, whole and uncut (`layLight`): for a picture to lay before its own ground marks and figures. */
+  drawGroundLight(ctx: CanvasRenderingContext2D): void {
+    if (!this.eye || this.night <= 0.02 || !this.out.lights.length) return;
+    const eye = this.eye;
+    ctx.save();
+    ctx.globalCompositeOperation = 'color';
+    for (const l of this.out.lights) {
+      const a = this.lightHueAt(l);
+      if (a <= 0.01) continue;
+      const x = eye.worldToScreenX(l.x, l.y), y = eye.worldToScreenY(l.x, l.y, this.where.ground(l.x, l.y)), r = l.radius * HALF_W * eye.zoom;
+      ctx.fillStyle = this.lightFill(ctx, l, x, y, r, a);
+      ctx.fillRect(x - r, y - r, 2 * r, 2 * r);
+    }
+    ctx.restore();
+  }
 
   /** Everything on the ground at once, uncut: for a picture with nothing standing in front of it. */
   drawGroundAll(ctx: CanvasRenderingContext2D): void {
