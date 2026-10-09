@@ -1,0 +1,167 @@
+# A copy of the live island every night, kept for five days, in this
+# repository rather than on Supabase.
+#
+# Each night's copy is the three files Supabase's backup guide restores from
+# — the roles, the schema and the data — compressed, encrypted and committed
+# to the `backups` branch under the day's date. That branch is rewritten
+# every night to a single commit holding the newest five days, so a day that
+# falls off is not kept in its history either.
+#
+# The repository is public, so nothing goes up readable: every copy is
+# encrypted (gpg, AES-256) with the database password, SUPABASE_DB_PASSWORD
+# in the AI environment. Whoever can open a copy can already read the live
+# database with the same password, so it hands nobody anything new. If that
+# password is ever changed, the copies taken before are still opened with the
+# old one.
+#
+# To restore, see the README on the `backups` branch.
+name: Backup
+
+on:
+  schedule:
+    # 03:17 UTC, between the busy hours; off the hour, when every scheduled
+    # job on GitHub starts at once and some start late.
+    - cron: '17 3 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: backup
+  cancel-in-progress: false
+
+jobs:
+  backup:
+    name: Copy the live island to the backups branch
+    runs-on: ubuntu-latest
+    environment: AI
+    timeout-minutes: 90
+    env:
+      KEEP_DAYS: 5
+      # GitHub refuses any file over 100 MB, so a copy goes up in pieces.
+      PIECE: 95m
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: supabase
+      - uses: supabase/setup-cli@v1
+        id: cli
+        continue-on-error: true
+        with:
+          version: latest
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+      - name: Get the CLI another way if that did not work
+        if: steps.cli.outcome != 'success'
+        run: |
+          echo "::warning::supabase/setup-cli failed; installing from npm instead."
+          npm i -g supabase
+          supabase --version
+
+      - name: Dump, compress and encrypt
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+          PROJECT_REF: ${{ vars.SUPABASE_PROJECT_REF || 'glebtboagnafcgwjjvfy' }}
+        run: |
+          set -euo pipefail
+          if [ -z "$SUPABASE_ACCESS_TOKEN" ] || [ -z "$SUPABASE_DB_PASSWORD" ]; then
+            echo "::error::Set SUPABASE_ACCESS_TOKEN and SUPABASE_DB_PASSWORD in the 'AI' environment."
+            exit 1
+          fi
+          supabase link --project-ref "$PROJECT_REF"
+          mkdir -p "$RUNNER_TEMP/dump"
+          cd "$RUNNER_TEMP/dump"
+          supabase db dump --linked --role-only -f roles.sql
+          supabase db dump --linked -f schema.sql
+          supabase db dump --linked --data-only --use-copy -f data.sql
+          ls -l
+          # The data is the island: a dump without it is no backup.
+          if [ ! -s data.sql ]; then
+            echo "::error::The data dump came back empty."
+            exit 1
+          fi
+
+          day=$(date -u +%F)
+          echo "DAY=$day" >> "$GITHUB_ENV"
+          mkdir -p "$RUNNER_TEMP/out/$day"
+          tar -cf - roles.sql schema.sql data.sql \
+            | zstd -T0 -12 -q \
+            | gpg --batch --yes --quiet --pinentry-mode loopback \
+                  --passphrase-fd 3 --symmetric --cipher-algo AES256 \
+                  --compress-algo none -o - 3<<<"$SUPABASE_DB_PASSWORD" \
+            | split -b "$PIECE" -d -a 3 - "$RUNNER_TEMP/out/$day/island.tar.zst.gpg."
+          (cd "$RUNNER_TEMP/out/$day" && sha256sum island.tar.zst.gpg.* > SHA256SUMS)
+          du -sh "$RUNNER_TEMP/out/$day"
+          ls -l "$RUNNER_TEMP/out/$day"
+
+          # Proof the copy opens: put the pieces back together, decrypt and
+          # list what is inside, before anything older is let go.
+          cat "$RUNNER_TEMP/out/$day"/island.tar.zst.gpg.* \
+            | gpg --batch --quiet --pinentry-mode loopback --passphrase-fd 3 -d 3<<<"$SUPABASE_DB_PASSWORD" \
+            | zstd -d -q \
+            | tar -tvf -
+          rm -rf "$RUNNER_TEMP/dump"
+
+      - name: Keep the newest five days on the backups branch
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          store="$RUNNER_TEMP/store"
+          git init -q "$store"
+          cd "$store"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git config http.postBuffer 524288000
+          git remote add origin "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+          if git ls-remote --exit-code --heads origin backups >/dev/null; then
+            git fetch -q --depth=1 origin backups
+            git checkout -q FETCH_HEAD
+          fi
+
+          rm -rf "$DAY"
+          mv "$RUNNER_TEMP/out/$DAY" "$DAY"
+          # Every dated folder but the newest KEEP_DAYS goes.
+          ls -d 20[0-9][0-9]-[0-9][0-9]-[0-9][0-9] 2>/dev/null | sort -r | tail -n +"$((KEEP_DAYS + 1))" | xargs -r rm -rf
+          echo "Kept:"; ls -d 20[0-9][0-9]-[0-9][0-9]-[0-9][0-9]
+
+          cat > README.md <<'EOF'
+          # Nightly copies of the live island
+
+          One folder a day, the newest five kept, written by `.github/workflows/backup.yml`
+          on `main`. This branch is rewritten every night to a single commit, so an older
+          copy is not in its history.
+
+          Each folder holds one encrypted archive in pieces (`island.tar.zst.gpg.000`, `.001`,
+          ...) and their checksums. Inside are `roles.sql`, `schema.sql` and `data.sql`, as
+          `supabase db dump` writes them.
+
+          ## Opening a copy
+
+          The password is the database password (`SUPABASE_DB_PASSWORD`) as it was on the night
+          the copy was taken.
+
+              cd 2026-10-09                       # the day wanted
+              sha256sum -c SHA256SUMS
+              cat island.tar.zst.gpg.* | gpg -d | zstd -d | tar -xf -
+
+          ## Restoring it into a project
+
+          Into an empty project, with its connection string in `$DB_URL`:
+
+              psql --single-transaction --variable ON_ERROR_STOP=1 \
+                   --file roles.sql --file schema.sql \
+                   --command 'SET session_replication_role = replica' \
+                   --file data.sql --dbname "$DB_URL"
+
+          `session_replication_role = replica` keeps triggers from firing while the rows go
+          back in.
+          EOF
+
+          git checkout -q --orphan fresh
+          git add -A
+          git commit -q -m "Nightly copies of the live island, newest $DAY"
+          git push -q -f origin fresh:backups
+          echo "Pushed $(ls -d 20[0-9][0-9]-[0-9][0-9]-[0-9][0-9] | wc -l) days to the backups branch."
