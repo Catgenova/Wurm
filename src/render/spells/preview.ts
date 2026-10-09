@@ -15,7 +15,7 @@ import { WEAPON_BY_ID } from '../../game/gear';
 import { DEFAULT_LOOK } from '../../game/look';
 import { drawFigure, FIGURE_TOP, type FigurePose, type GearLook } from '../figure';
 import { HALF_H, HALF_W, HEIGHT_SCALE } from '../iso';
-import { drawCreature } from '../sprites';
+import { castShade, drawCreature } from '../sprites';
 import { wildermonTop } from '../wildermon';
 import { lingerSecs, visualOf } from './index';
 import { spellInfo } from './info';
@@ -71,14 +71,31 @@ export interface SheetOpts {
   from?: number;
   /** What the island says is on the target creature: a burn running, a bleed, a trap holding it (`Body.burning` ...). */
   state?: 'burning' | 'bleeding' | 'held';
+  /**
+   * Tiles further out along the way the caster faces the target stood before the cast, for a spell the island drags it
+   * in with (`cast.pull`: a Hook): passed as the cast's `targetFrom`, so the creature is drawn hauled in. By default as the
+   * spell's own numbers have it (`fx.reach`, `fx.pull`, `fx.least`) for a spell with `cast.pull`, and none otherwise.
+   */
+  pull?: number;
+  /** This many people standing about the target (or about the caster, for a spell on oneself), for ally spells on everybody in reach. */
+  peers?: number;
+  /**
+   * Tiles of ground round the caster the frame takes in at least, its sides trimmed back to what was drawn: so a stance's
+   * ring or hedge round the caster is not cut off. Four for a spell on oneself by default, none otherwise.
+   */
+  room?: number;
 }
+
+/** What went over budget in the last sheet drawn, frame by frame (`spellSheet`), for the tool to print. */
+export const sheetWarnings: string[] = [];
 
 /** The companion's creature id, beside the target's one. */
 const PET_ID = 2;
 /** Pixels at zoom one left over the tallest body for what is drawn over it, trimmed back to what was: a sword of 64 units stood over a creature. */
 const TOP_ROOM = 260;
-/** The first of the crowd's creature ids (`crowd`). */
+/** The first of the crowd's creature ids (`crowd`), and of the people standing about (`peers`). */
 const CROWD_ID = 10;
+const PEER_ID = 40;
 /** The most a canvas may be, a side and in all. */
 const SIDE_MOST = 32000;
 const AREA_MOST = 250_000_000;
@@ -113,15 +130,25 @@ function meleeReachOf(weapon: string | undefined): number {
  * Parting Throw) starts that far nearer (a negative `from`); a spell on somebody else inside its own reach; the rest
  * at a middling throw.
  */
-function distFor(spell: string, weapon: string | undefined): { dist: number; from?: number } {
+function distFor(spell: string, weapon: string | undefined): { dist: number; from?: number; pull?: number } {
   const info = spellInfo(spell);
   const fx = info?.fx ?? {}, reach = meleeReachOf(weapon);
   if (fx.leap) return { dist: Math.min(4, reach + fx.leap), from: -fx.leap };
+  // Dragged in (a Hook): it stood as far out as the spell reaches, and is pulled in by its own pull, no nearer than its least.
+  if (visualOf(spell)?.cast.pull && fx.pull) {
+    const was = Math.min(4, fx.reach ?? reach), dist = Math.max(fx.least ?? 1, was - fx.pull);
+    return { dist, pull: Math.max(0, was - dist) };
+  }
   switch (info?.kind) {
     case 'strike': case 'thrust':
       // A stride to it: the island puts the body a pace inside its reach of it, from where it stood.
       if (fx.reach && fx.reach > reach) return { dist: reach - 0.4, from: Math.min(fx.reach, 4) - (reach - 0.4) };
       return { dist: reach };
+    case 'throw':
+      // A throwing trade's spell made with something that is not thrown -- a knife's Hit and Run -- is a blow, struck from
+      // as far as it reaches.
+      if (weapon && !WEAPON_BY_ID.get(weapon)?.thrown) return { dist: reach };
+      return { dist: Math.min(4, fx.reach ?? 4) };
     case 'buff': case 'nova': case 'pray': return { dist: 0 };
     case 'ally': return { dist: Math.max(1, Math.min(2.5, (fx.reach ?? 3) * 0.8)) };
     case 'ground': return { dist: 3 };
@@ -152,6 +179,7 @@ export function spellSheet(o: SheetOpts): HTMLCanvasElement {
   const deflt = distFor(o.spell, weaponId);
   const dist = want === 'self' ? 0 : o.dist === 'reach' ? meleeReachOf(weaponId) : o.dist === 'hunt' ? HUNT_REACH : o.dist ?? Math.max(1, deflt.dist);
   const fromBack = o.from ?? (o.dist === undefined && want !== 'self' ? deflt.from : undefined);
+  const pullBack = o.pull ?? (o.dist === undefined && want !== 'self' ? deflt.pull : undefined);
   const state = o.state ?? STATE_FOR[o.spell];
   const species = o.species ?? 'ulva';
   const look = { ...DEFAULT_LOOK, shirt: 'madder', trousers: 'unbleached' };
@@ -200,6 +228,14 @@ export function spellSheet(o: SheetOpts): HTMLCanvasElement {
     const a = 0.6 + (i * 2 * Math.PI) / Math.max(3, o.crowd ?? 0), d = ring * (0.75 + 0.25 * ((i * 7) % 3) / 2);
     crowd.push({ x: ox + Math.cos(a) * d, y: oy + Math.sin(a) * d, f: (i * 3 + 1) % 8 });
   }
+  // And people standing about, in reach of it, half a turn round from the crowd so the two do not stand in each other.
+  const peers: Array<{ x: number; y: number; f: number; pose: FigurePose }> = [];
+  const shirts = ['woad', 'weld', 'unbleached', 'madder'];
+  for (let i = 0; i < (o.peers ?? 0); i++) {
+    const a = 0.6 + Math.PI / Math.max(3, o.peers ?? 0) + (i * 2 * Math.PI) / Math.max(3, o.peers ?? 0), d = ring * (0.8 + 0.2 * ((i * 5) % 3) / 2);
+    const f = (i * 3 + 2) % 8;
+    peers.push({ x: ox + Math.cos(a) * d, y: oy + Math.sin(a) * d, f, pose: { phase: 0, moving: false, facing: f, swimming: false, working: false, look: { ...DEFAULT_LOOK, gender: i % 2 ? 'man' : 'woman', shirt: shirts[i % 4] }, gear: { weapon: { id: 'sword', material: 'iron' } } } });
+  }
   const sp = SPECIES[species] ?? Object.values(SPECIES)[0];
   const spTall = Math.max(22, wildermonTop(sp.id) ?? 0) / HEIGHT_SCALE;
   const pet = petSpecies ? SPECIES[petSpecies] ?? sp : null;
@@ -209,6 +245,10 @@ export function spellSheet(o: SheetOpts): HTMLCanvasElement {
   const beast = (kind: typeof sp, tall: number): Pick<Body, 'species' | 'wide' | 'reach'> => ({ species: kind.id, wide: creatureWide(kind.id) * tall / (Math.max(22, wildermonTop(kind.id) ?? 0) / HEIGHT_SCALE), reach: beastReach(kind) });
   const bodyOf = (w: Who): Body | null => {
     if (w.kind === 'player') return personBody(cx, cy, 0, cf, 'player', casterPose());
+    if (w.kind === 'peer' && w.id >= PEER_ID) {
+      const q = peers[w.id - PEER_ID];
+      return q ? personBody(q.x, q.y, 0, q.f, 'peer', q.pose) : null;
+    }
     if (w.kind === 'peer') return personBody(tx, ty, 0, tFacing, 'peer', targetPose);
     if (w.id === PET_ID) return pet ? { x: px, y: py, z: 0, tall: petTall, facing, kind: 'creature', ...beast(pet, petTall), tame: true, companion: true } : null;
     if (w.id >= CROWD_ID) {
@@ -222,6 +262,7 @@ export function spellSheet(o: SheetOpts): HTMLCanvasElement {
   if (want === 'creature') everyone.push({ kind: 'creature', id: 1 });
   if (pet) everyone.push({ kind: 'creature', id: PET_ID });
   crowd.forEach((_, i) => everyone.push({ kind: 'creature', id: CROWD_ID + i }));
+  peers.forEach((_, i) => everyone.push({ kind: 'peer', id: PEER_ID + i }));
   const stage = new SpellStage({
     body: bodyOf,
     ground: () => 0,
@@ -260,7 +301,12 @@ export function spellSheet(o: SheetOpts): HTMLCanvasElement {
   const spread = info?.radius ? info.radius * 1.1 : 0;
   // A tile past the target as well: what stands beyond it (a grave over a friend, a sword planted behind) is in the frame.
   const past = want === 'self' ? { x: cx, y: cy } : { x: tx + fx, y: ty + fy };
-  const spots = [{ x: cx, y: cy }, { x: tx, y: ty }, past, ...(pet ? [pet0, pet1] : []), ...(from ? [from] : []), ...crowd];
+  // Where a dragged creature stood (`pull`), along the way the caster faces past where the island put it.
+  const targetFrom = pullBack && want !== 'self' && want !== 'tile' ? { x: tx + fx * pullBack, y: ty + fy * pullBack } : undefined;
+  // Room round the caster for a stance's ring or hedge, trimmed back to what was drawn at the end.
+  const room = o.room ?? (want === 'self' ? 4 : 0);
+  const roomed = room > 0 ? [{ x: cx - room, y: cy - room }, { x: cx + room, y: cy + room }, { x: cx - room, y: cy + room }, { x: cx + room, y: cy - room }] : [];
+  const spots = [{ x: cx, y: cy }, { x: tx, y: ty }, past, ...(pet ? [pet0, pet1] : []), ...(from ? [from] : []), ...(targetFrom ? [targetFrom] : []), ...crowd, ...peers, ...roomed];
   const xs = spots.map((q) => sx(q.x, q.y));
   const ys = spots.map((q) => sy(q.x, q.y));
   const tallest = Math.max(FIGURE_TOP, (want === 'creature' ? spTall : 0) * HEIGHT_SCALE, petTall * HEIGHT_SCALE);
@@ -280,7 +326,9 @@ export function spellSheet(o: SheetOpts): HTMLCanvasElement {
   const sheet = document.createElement('canvas');
   sheet.width = W * cols;
   sheet.height = H * rows;
-  const g = sheet.getContext('2d') as CanvasRenderingContext2D;
+  // `g` is the sheet's, but for a moment while a tinted creature is drawn alone (`tinted`).
+  let g = sheet.getContext('2d') as CanvasRenderingContext2D;
+  let scratch: HTMLCanvasElement | null = null;
   cam.setViewport(W, H);
   // The camera on the middle of the cell's ground.
   const midX = (minX + maxX) / 2, midY = (minY + maxY) / 2;
@@ -316,7 +364,8 @@ export function spellSheet(o: SheetOpts): HTMLCanvasElement {
   let now = 0;
   const night01 = o.night ? 1 : 0;
   stage.update({ eye: cam, now, dt, fast: !!o.fast, night: night01 });
-  stage.play(o.spell, by, at, { mine: true, now: 0, companion: pet ? PET_ID : undefined, from });
+  stage.play(o.spell, by, at, { mine: true, now: 0, companion: pet ? PET_ID : undefined, from, targetFrom });
+  sheetWarnings.length = 0;
   const night = document.createElement('canvas');
   night.width = W;
   night.height = H;
@@ -363,19 +412,49 @@ export function spellSheet(o: SheetOpts): HTMLCanvasElement {
     };
     const pose = stage.poseOf(by);
     items.push({ sy: casterAt.sy, draw: () => {
-      shadow(casterAt.sx, casterAt.sy, 8);
+      // Under the feet as the cast has them, as the island draws it (`castShade`).
+      const sh = castShade({ ...casterPose(), cast: pose });
+      shadow(casterAt.sx + sh[0] * zoom, casterAt.sy + sh[1] * zoom, 8 * (1 - 0.2 * sh[2]));
       drawFigure(g, casterAt.sx, casterAt.sy, zoom, { ...casterPose(), cast: pose, veil: stage.veilOf(by) }, { ink: 1.4 });
     } });
     if (want === 'player') items.push({ sy: targetAt.sy, draw: () => {
       shadow(targetAt.sx, targetAt.sy, 8);
       drawFigure(g, targetAt.sx, targetAt.sy, zoom, { ...targetPose, veil: stage.veilOf({ kind: 'peer', id: 1 }) }, { ink: 1.4 });
     } });
-    if (want === 'creature') items.push({ sy: targetAt.sy, draw: () => {
+    // A creature tinted by a spell on it (`FxScene.tint`), as the island paints it: drawn alone, its own colour laid over it.
+    const tinted = (tint: { colour: string; share: number } | undefined, draw: () => void): void => {
+      if (!tint) return draw();
+      const pad = scratch ?? (scratch = document.createElement('canvas'));
+      pad.width = W;
+      pad.height = H;
+      const pg = pad.getContext('2d') as CanvasRenderingContext2D;
+      const was = g;
+      g = pg;
+      draw();
+      g = was;
+      g.drawImage(pad, 0, 0);
+      pg.globalCompositeOperation = 'source-atop';
+      pg.fillStyle = tint.colour;
+      pg.fillRect(0, 0, W, H);
+      g.globalAlpha = tint.share;
+      g.drawImage(pad, 0, 0);
+      g.globalAlpha = 1;
+    };
+    const tTint = stage.tintOf({ kind: 'creature', id: 1 });
+    if (want === 'creature') items.push({ sy: targetAt.sy, draw: () => tinted(tTint, () => {
       drawCreature(g, targetAt.sx, targetAt.sy, zoom, { species: sp.id, facing: tFacing, phase: 0, moving: false, gait: 0, colors: sp.variants[0], health: 1, fleece: 1 });
-    } });
-    for (const q of crowd) {
+    }) });
+    for (const [i, q] of crowd.entries()) {
       const qx = cam.worldToScreenX(q.x, q.y), qy = cam.worldToScreenY(q.x, q.y, 0);
-      items.push({ sy: qy, draw: () => drawCreature(g, qx, qy, zoom, { species: sp.id, facing: q.f, phase: 0, moving: false, gait: 0, colors: sp.variants[0], health: 1, fleece: 1 }) });
+      const tint = stage.tintOf({ kind: 'creature', id: CROWD_ID + i });
+      items.push({ sy: qy, draw: () => tinted(tint, () => drawCreature(g, qx, qy, zoom, { species: sp.id, facing: q.f, phase: 0, moving: false, gait: 0, colors: sp.variants[0], health: 1, fleece: 1 })) });
+    }
+    for (const [i, q] of peers.entries()) {
+      const qx = cam.worldToScreenX(q.x, q.y), qy = cam.worldToScreenY(q.x, q.y, 0);
+      items.push({ sy: qy, draw: () => {
+        shadow(qx, qy, 8);
+        drawFigure(g, qx, qy, zoom, { ...q.pose, veil: stage.veilOf({ kind: 'peer', id: PEER_ID + i }) }, { ink: 1.4 });
+      } });
     }
     if (pet) items.push({ sy: petPos.sy, draw: () => {
       drawCreature(g, petPos.sx, petPos.sy, zoom, { species: pet.id, facing, phase: 0, moving: false, gait: 0, colors: pet.variants[0], health: 1, fleece: 1 });
@@ -416,6 +495,7 @@ export function spellSheet(o: SheetOpts): HTMLCanvasElement {
     const castEnd = timing.secs + held;
     const part = now < timing.secs * timing.release ? 'cast' : now < castEnd ? 'release' : 'after';
     labels.push(`${o.spell}  t=${now.toFixed(2)}s  ${part}  f${cf}  ${want}${warn.length ? '  ! ' + warn.join(', ') : ''}`);
+    if (warn.length) sheetWarnings.push(`t=${now.toFixed(2)}s  ${warn.join(', ')}`);
     g.restore();
   }
 
@@ -452,23 +532,53 @@ export function spellSheet(o: SheetOpts): HTMLCanvasElement {
   }
   const lab = o.label !== false ? Math.max(15, 5 * zoom) : 0;
   const cut = Math.max(0, top - Math.round(lab + 6 * zoom));
-  const H2 = H - cut;
+  // With room round the caster, the sides and the bottom trimmed back the same way, to what any picture drew past the bare
+  // ground: never narrower than a label wants.
+  let x0 = 0, x1 = W, bottom = H;
+  if (room > 0) {
+    let lo = W, hi = 0, low = 0;
+    for (let f = 0; f < frames; f++) {
+      const cell = g.getImageData((f % cols) * W, Math.floor(f / cols) * H, W, H).data;
+      for (let y = 0; y < H; y++) {
+        for (let x = 0; x < W; x++) {
+          const i = (y * W + x) * 4;
+          if (Math.abs(cell[i] - plain[i]) + Math.abs(cell[i + 1] - plain[i + 1]) + Math.abs(cell[i + 2] - plain[i + 2]) > 12) {
+            lo = Math.min(lo, x);
+            hi = Math.max(hi, x);
+            low = Math.max(low, y);
+          }
+        }
+      }
+    }
+    if (low > cut) bottom = Math.min(H, low + Math.round(12 * zoom));
+    const margin = Math.round(12 * zoom), least = Math.min(W, Math.round(Math.max(110 * zoom, 64 * Math.max(11, Math.round(4 * zoom)) * 0.62)));
+    if (hi > lo) {
+      x0 = Math.max(0, lo - margin);
+      x1 = Math.min(W, hi + margin);
+      if (x1 - x0 < least) {
+        const mid = (x0 + x1) / 2;
+        x0 = Math.max(0, Math.round(mid - least / 2));
+        x1 = Math.min(W, x0 + least);
+      }
+    }
+  }
+  const W2 = x1 - x0, H2 = bottom - cut;
   const out = document.createElement('canvas');
-  out.width = W * cols;
+  out.width = W2 * cols;
   out.height = H2 * rows;
   const og = out.getContext('2d') as CanvasRenderingContext2D;
   for (let f = 0; f < frames; f++) {
-    const ox = (f % cols) * W, oy = Math.floor(f / cols) * H, oy2 = Math.floor(f / cols) * H2;
-    og.drawImage(sheet, ox, oy + cut, W, H2, ox, oy2, W, H2);
+    const ox = (f % cols) * W, oy = Math.floor(f / cols) * H, oy2 = Math.floor(f / cols) * H2, ox2 = (f % cols) * W2;
+    og.drawImage(sheet, ox + x0, oy + cut, W2, H2, ox2, oy2, W2, H2);
     if (o.label !== false) {
       og.font = `${Math.max(11, Math.round(4 * zoom))}px monospace`;
       og.fillStyle = 'rgba(0,0,0,0.55)';
-      og.fillRect(ox, oy2, W, lab);
+      og.fillRect(ox2, oy2, W2, lab);
       og.fillStyle = '#efe8d4';
-      og.fillText(labels[f], ox + 4, oy2 + Math.max(12, 4 * zoom));
+      og.fillText(labels[f], ox2 + 4, oy2 + Math.max(12, 4 * zoom));
     }
     og.strokeStyle = 'rgba(0,0,0,0.6)';
-    og.strokeRect(ox + 0.5, oy2 + 0.5, W - 1, H2 - 1);
+    og.strokeRect(ox2 + 0.5, oy2 + 0.5, W2 - 1, H2 - 1);
   }
   return out;
 }

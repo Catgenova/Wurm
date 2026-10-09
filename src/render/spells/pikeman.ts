@@ -16,24 +16,30 @@
  * `FX_OF` for a pose or a timing) and the fight's own constants, so the
  * ground mark is where the rule is.
  *
- * The spear is in the hands (`Rig.wieldStaff`): a two-handed blow puts both
- * fists on the line it goes (`onHaft`) and the shaft lies along it, so a
- * thrust levels the spear, a sweep swings it low, a brace grounds its butt
- * and a whirl turns it in the fist (`haft`); the lances of light run on from
- * its real point (`figureJoint` 'tip'), and the stances on oneself are held
- * as long as they last (`cast.hold`).
+ * The spear is in the hands (`Rig.wieldStaff`): the right fist where the
+ * pose wants it, the shaft run from it at the target (`onSpear`, aimed by the
+ * cue's `aim`, so the lance of light goes on along the shaft's own line) and
+ * the left fist on the shaft, the elbows kept down. A thrust levels the
+ * spear, a sweep swings it low, a brace grounds its butt and a whirl turns it
+ * end over end in both hands. The lances run on from its real point
+ * (`figureJoint` 'tip'); once a blow is in, the point is kept where it was
+ * (`k.once`) and the lance held there a fifth of a second from the hit
+ * before it is drawn back into the spear (shortened, at full strength: bronze
+ * thinned over grass is olive), so the blow is seen to land and the light
+ * never pivots on a spear that is moving. The stances on oneself are held as
+ * long as they last (`cast.hold`).
  */
 import { WEAPON_BY_ID } from '../../game/gear';
 import { HUNT_REACH, reachOf } from '../../game/fight';
-import { type Rig, type V3 } from '../figure';
+import { armToward, weaponSpan, type Rig, type V3 } from '../figure';
 import { UNITS_PER_TILE } from '../iso';
-import type { CastPose, SpellVisual } from './index';
+import type { CastPose, PoseCue, SpellVisual } from './index';
 import { spellInfo } from './info';
 import {
-  bump, clamp, easeBack, easeOut, flashOf, glowPicture, hashOf, lerp, mid3, seg, smooth, TAU,
-  type FxScene, type GroundLayer, type P3, type SpellPalette,
+  bump, clamp, dry, easeBack, easeOut, flashOf, glowPicture, hashOf, lateFade, lerp, mid3, seg, smooth, TAU,
+  type Body, type FxScene, type GroundLayer, type P3, type SpellPalette,
 } from './kit';
-import { euler, heldFor, one, track } from './poses';
+import { armOut, euler, heldFor, one, track } from './poses';
 
 /** Bronze and ochre, with a sky-blue edge: the line held. */
 export const PALETTE: SpellPalette = {
@@ -51,6 +57,9 @@ export const PALETTE: SpellPalette = {
 const FX_OF = (id: string): Readonly<Record<string, number>> => spellInfo(id)?.fx ?? {};
 /** The spear's reach, in tiles: what a Pikeman's weapon reaches when nothing better is known of it. */
 const SPEAR_REACH = reachOf(WEAPON_BY_ID.get('spear') ?? { range: 2 });
+
+/** A spear's length, butt to point, height units: what a whirl or a shove of it is as long as. */
+const SPEAR_LONG = ((s) => (s ? s.to - s.from : 18.8))(weaponSpan('spear'));
 
 /** How far the caster's own weapon reaches, as the fight reckons it: a spear's when it is not a weapon the fight knows. */
 function reachHeld(k: FxScene): number {
@@ -91,6 +100,18 @@ interface LanceLook {
   head?: number;
   /** A billhook's barb off the head, curled back toward the shaft. */
   hook?: boolean;
+  /** Telescoped: this many sky-blue joints down the shaft, each where a length of it shot on from the last (Overreach). */
+  rings?: number;
+  /** White-hot: a thin shaft of the palest light, no bronze in it (Vital Thrust). */
+  hot?: boolean;
+  /** Two shafts side by side, each with its head (Twin Thrust). */
+  pair?: boolean;
+  /** The head in sky-blue rather than bronze. */
+  blue?: boolean;
+  /** Both edges of the head whetted sky-blue, not only the lit one: a long head (Reach Advantage). */
+  edged?: boolean;
+  /** No stripe down the shaft and no whetted edge: one of many standing at once (`cheval`). */
+  plain?: boolean;
   /** Where it sorts among bodies; a little out from the butt when not given. */
   sortAt?: P3;
   glow?: number;
@@ -105,7 +126,8 @@ interface LanceLook {
  * tones lit from up and left, inked, its lit edge whetted sky-blue. It sorts
  * a little out from its butt, so it is in front of a caster facing the viewer
  * and behind one facing away, and a target nearer the viewer than the caster
- * stands over the point that has gone into it.
+ * stands over the point that has gone into it. Each blow has its own variant
+ * of it (`LanceLook`), so no two thrusts throw the same light.
  */
 function lance(k: FxScene, butt: P3, tip: P3, o: LanceLook = {}): void {
   const a = clamp(o.alpha ?? 1);
@@ -121,7 +143,7 @@ function lance(k: FxScene, butt: P3, tip: P3, o: LanceLook = {}): void {
   // The lit side of the head: whichever of its two halves faces up and left.
   const s = -0.6 * nx - 0.8 * ny >= 0 ? 1 : -1;
   const H = Math.min(len * 0.7, (o.head ?? 9) * z);
-  const W = H * 0.3;
+  const W = H * (o.edged ? 0.22 : 0.3);
   const w = Math.max(0.7, ((o.width ?? 2.2) * z) / 2);
   const bx = x1 - dx * H, by = y1 - dy * H;
   const shx = x1 - dx * H * 0.4, shy = y1 - dy * H * 0.4;
@@ -129,38 +151,60 @@ function lance(k: FxScene, butt: P3, tip: P3, o: LanceLook = {}): void {
   const inkW = Math.max(0.8, 0.7 * z);
   const tiles = Math.hypot(tip.x - butt.x, tip.y - butt.y);
   const sortAt = o.sortAt ?? along(butt, tip, tiles > 0.01 ? clamp(0.3 / tiles) : 0);
-  const draw = (g: CanvasRenderingContext2D): void => {
-    g.globalAlpha = a;
-    g.lineJoin = 'miter';
+  const shaft = o.hot ? pal.core : pal.main, stripe = o.hot ? '#ffffff' : pal.core;
+  const lit = o.hot ? '#ffffff' : o.blue ? pal.core : pal.core, shade = o.blue ? pal.accent : o.hot ? pal.core : pal.main;
+  const rings = o.rings ?? 0;
+  // Two shafts a little apart across the line, or the one on it.
+  const offs = o.pair ? [-1.9 * w - 0.6 * z, 1.9 * w + 0.6 * z] : [0];
+  const one1 = (g: CanvasRenderingContext2D, ox: number, oy: number): void => {
+    const X0 = x0 + ox, Y0 = y0 + oy, X1 = x1 + ox, Y1 = y1 + oy, BX = bx + ox, BY = by + oy, SX = shx + ox, SY = shy + oy;
     // The shaft, half as thick at the butt.
     g.beginPath();
-    g.moveTo(x0 + nx * w * 0.5, y0 + ny * w * 0.5);
-    g.lineTo(bx + nx * w, by + ny * w);
-    g.lineTo(bx - nx * w, by - ny * w);
-    g.lineTo(x0 - nx * w * 0.5, y0 - ny * w * 0.5);
+    g.moveTo(X0 + nx * w * 0.5, Y0 + ny * w * 0.5);
+    g.lineTo(BX + nx * w, BY + ny * w);
+    g.lineTo(BX - nx * w, BY - ny * w);
+    g.lineTo(X0 - nx * w * 0.5, Y0 - ny * w * 0.5);
     g.closePath();
-    g.fillStyle = pal.main;
+    g.fillStyle = shaft;
     g.fill();
     g.lineWidth = inkW;
     g.strokeStyle = pal.ink;
     g.stroke();
-    g.beginPath();
-    g.moveTo(x0 + nx * s * w * 0.15, y0 + ny * s * w * 0.15);
-    g.lineTo(bx + nx * s * w * 0.35, by + ny * s * w * 0.35);
-    g.lineWidth = Math.max(0.6, w * 0.6);
-    g.strokeStyle = pal.core;
-    g.stroke();
+    if (!o.plain) {
+      g.beginPath();
+      g.moveTo(X0 + nx * s * w * 0.15, Y0 + ny * s * w * 0.15);
+      g.lineTo(BX + nx * s * w * 0.35, BY + ny * s * w * 0.35);
+      g.lineWidth = Math.max(0.6, w * 0.6);
+      g.strokeStyle = stripe;
+      g.stroke();
+    }
+    // Telescoped joints: a sky-blue collar where each length shot out of the one behind it.
+    for (let i = 1; i <= rings; i++) {
+      const u = i / (rings + 1);
+      const cx = lerp(X0, BX, u), cy = lerp(Y0, BY, u), ww = w * (0.75 + 0.5 * u) * 1.7, hl = 1.1 * z;
+      g.beginPath();
+      g.moveTo(cx + nx * ww - dx * hl, cy + ny * ww - dy * hl);
+      g.lineTo(cx + nx * ww + dx * hl, cy + ny * ww + dy * hl);
+      g.lineTo(cx - nx * ww + dx * hl, cy - ny * ww + dy * hl);
+      g.lineTo(cx - nx * ww - dx * hl, cy - ny * ww - dy * hl);
+      g.closePath();
+      g.fillStyle = pal.accent;
+      g.fill();
+      g.lineWidth = inkW;
+      g.strokeStyle = pal.ink;
+      g.stroke();
+    }
     // A billhook's barb: out from the foot of the head on the shaded side and curled back toward the hands.
     if (o.hook) {
-      const hx = bx - nx * s * W * 0.2, hy = by - ny * s * W * 0.2;
+      const hx = BX - nx * s * W * 0.2, hy = BY - ny * s * W * 0.2;
       g.beginPath();
-      g.moveTo(hx + dx * H * 0.18, hy + dy * H * 0.18);
-      g.lineTo(hx + dx * H * 0.05 - nx * s * W * 1.9, hy + dy * H * 0.05 - ny * s * W * 1.9);
-      g.lineTo(hx - dx * H * 0.45 - nx * s * W * 1.5, hy - dy * H * 0.45 - ny * s * W * 1.5);
-      g.lineTo(hx - dx * H * 0.08 - nx * s * W * 0.95, hy - dy * H * 0.08 - ny * s * W * 0.95);
+      g.moveTo(hx + dx * H * 0.2, hy + dy * H * 0.2);
+      g.lineTo(hx + dx * H * 0.06 - nx * s * W * 2.6, hy + dy * H * 0.06 - ny * s * W * 2.6);
+      g.lineTo(hx - dx * H * 0.6 - nx * s * W * 2.1, hy - dy * H * 0.6 - ny * s * W * 2.1);
+      g.lineTo(hx - dx * H * 0.1 - nx * s * W * 1.3, hy - dy * H * 0.1 - ny * s * W * 1.3);
       g.lineTo(hx - dx * H * 0.12, hy - dy * H * 0.12);
       g.closePath();
-      g.fillStyle = pal.deep;
+      g.fillStyle = pal.main;
       g.fill();
       g.strokeStyle = pal.ink;
       g.lineWidth = inkW;
@@ -168,50 +212,59 @@ function lance(k: FxScene, butt: P3, tip: P3, o: LanceLook = {}): void {
     }
     // The socket, a band of sky-blue where the head is set on.
     g.beginPath();
-    g.moveTo(bx + nx * w * 1.35, by + ny * w * 1.35);
-    g.lineTo(bx + nx * w * 1.35 - dx * H * 0.2, by + ny * w * 1.35 - dy * H * 0.2);
-    g.lineTo(bx - nx * w * 1.35 - dx * H * 0.2, by - ny * w * 1.35 - dy * H * 0.2);
-    g.lineTo(bx - nx * w * 1.35, by - ny * w * 1.35);
+    g.moveTo(BX + nx * w * 1.35, BY + ny * w * 1.35);
+    g.lineTo(BX + nx * w * 1.35 - dx * H * 0.2, BY + ny * w * 1.35 - dy * H * 0.2);
+    g.lineTo(BX - nx * w * 1.35 - dx * H * 0.2, BY - ny * w * 1.35 - dy * H * 0.2);
+    g.lineTo(BX - nx * w * 1.35, BY - ny * w * 1.35);
     g.closePath();
-    g.fillStyle = pal.accent;
+    g.fillStyle = o.hot ? pal.core : pal.accent;
     g.fill();
     g.strokeStyle = pal.ink;
     g.lineWidth = inkW;
     g.stroke();
-    // The leaf: its lit half pale, its shaded half bronze, a midrib between.
+    // The leaf: its lit half pale, its shaded half in tone, a midrib between.
     const half = (side: number, fill: string): void => {
       g.beginPath();
-      g.moveTo(bx, by);
-      g.lineTo(shx + nx * side * W, shy + ny * side * W);
-      g.lineTo(x1, y1);
+      g.moveTo(BX, BY);
+      g.lineTo(SX + nx * side * W, SY + ny * side * W);
+      g.lineTo(X1, Y1);
       g.closePath();
       g.fillStyle = fill;
       g.fill();
     };
-    half(s, pal.core);
-    half(-s, pal.main);
+    half(s, lit);
+    half(-s, shade);
     g.beginPath();
-    g.moveTo(bx, by);
-    g.lineTo(shx + nx * W, shy + ny * W);
-    g.lineTo(x1, y1);
-    g.lineTo(shx - nx * W, shy - ny * W);
+    g.moveTo(BX, BY);
+    g.lineTo(SX + nx * W, SY + ny * W);
+    g.lineTo(X1, Y1);
+    g.lineTo(SX - nx * W, SY - ny * W);
     g.closePath();
     g.strokeStyle = pal.ink;
     g.lineWidth = inkW;
     g.stroke();
-    g.beginPath();
-    g.moveTo(shx + nx * s * W * 0.82, shy + ny * s * W * 0.82);
-    g.lineTo(x1 - dx * z * 0.6, y1 - dy * z * 0.6);
-    g.strokeStyle = pal.accent;
-    g.lineWidth = Math.max(0.7, 0.8 * z);
-    g.stroke();
+    if (!o.plain) {
+      for (const side of o.edged ? [s, -s] : [s]) {
+        g.beginPath();
+        g.moveTo(SX + nx * side * W * 0.82, SY + ny * side * W * 0.82);
+        g.lineTo(X1 - dx * z * 0.6, Y1 - dy * z * 0.6);
+        g.strokeStyle = pal.accent;
+        g.lineWidth = Math.max(0.7, (o.edged ? 1.1 : 0.8) * z);
+        g.stroke();
+      }
+    }
+  };
+  const draw = (g: CanvasRenderingContext2D): void => {
+    g.globalAlpha = a;
+    g.lineJoin = 'miter';
+    for (const off of offs) one1(g, nx * off, ny * off);
     g.lineJoin = 'round';
   };
   if (o.into) o.into.push(draw);
   else k.worldDraw(sortAt, draw, o.bias ?? 0);
   const gl = o.glow ?? 1;
   if (gl > 0) {
-    const pic = glowPicture(pal.light);
+    const pic = glowPicture(o.blue ? pal.accent : pal.light);
     if (pic) {
       const R = Math.max(6, H * 1.1);
       const r2 = Math.max(4, w * 4);
@@ -232,33 +285,44 @@ function lance(k: FxScene, butt: P3, tip: P3, o: LanceLook = {}): void {
  * Flat shapes laid on the ground round `c` (within `r` tiles), each a list of
  * points over the land in tiles: one fill, an ink edge, and, for each, its
  * edge nearest the light picked out in `lit`. One record however many, laid
- * as the kit lays its own marks (`groundShape`), cut along the tiles.
+ * as the kit lays its own marks (`groundShape`), cut along the tiles. `glow`
+ * lays the edges again over the night (a night rim), in `light`.
  */
-function groundShapes(k: FxScene, c: V2, r: number, shapes: ReadonlyArray<ReadonlyArray<V2>>, o: { fill?: string; ink?: string; lit?: string; alpha?: number }): void {
+function groundShapes(k: FxScene, c: V2, r: number, shapes: ReadonlyArray<ReadonlyArray<V2>>, o: { fill?: string; ink?: string | false; lit?: string; litN?: number; alpha?: number; glow?: number; light?: string }): void {
   const a = clamp(o.alpha ?? 1);
   if (a <= 0.01 || !shapes.length) return;
   const paths = shapes.map((sh) => sh.flatMap((p) => [p.x, p.y]));
   const z = k.zoom;
+  const glow = o.glow ?? 0;
   const layers: GroundLayer[] = [
     { kind: 'fill', colour: o.fill ?? k.pal.main, alpha: a, paths, lift: 0.15 },
-    { kind: 'stroke', colour: o.ink ?? k.pal.ink, alpha: a, paths, lift: 0.15, width: Math.max(0.8, 0.7 * z), closed: true, join: 'miter' },
   ];
-  // The far edge of each, the one the light falls across first: its first side.
-  if (o.lit) layers.push({ kind: 'stroke', colour: o.lit, alpha: a, paths: paths.map((q) => q.slice(0, 4)), lift: 0.15, width: Math.max(0.8, 0.9 * z) });
+  if (o.ink !== false) layers.push({ kind: 'stroke', colour: o.ink ?? k.pal.ink, alpha: a, paths, lift: 0.15, width: Math.max(0.8, 0.7 * z), closed: true, join: 'miter' });
+  // The far edge of each, the one the light falls across first: its first side (its first `litN` points: an arc's whole outer edge).
+  const litN = 2 * (o.litN ?? 2);
+  if (o.lit) layers.push({ kind: 'stroke', colour: o.lit, alpha: a, paths: paths.map((q) => q.slice(0, litN)), lift: 0.15, width: Math.max(0.8, 0.9 * z), glow: glow > 0.01 ? glow : undefined, light: o.light });
+  else if (glow > 0.01) layers.push({ kind: 'stroke', colour: o.fill ?? k.pal.main, alpha: a, paths, lift: 0.15, width: Math.max(0.6, 0.5 * z), closed: true, glow, light: o.light });
   k.groundShape(c.x, c.y, r + 0.5, layers);
 }
 
-/** A bar on the ground across the way `d` at `c`: `half` tiles either side of the line, `thick` tiles deep, `u` of it drawn from the middle out. */
-function barAcross(c: V2, d: V2, half: number, thick: number, u = 1): V2[] {
-  const r = rightOf(d);
-  const h = half * clamp(u);
-  const t = thick / 2;
-  return [
-    { x: c.x + d.x * t - r.x * h, y: c.y + d.y * t - r.y * h },
-    { x: c.x + d.x * t + r.x * h, y: c.y + d.y * t + r.y * h },
-    { x: c.x - d.x * t + r.x * h, y: c.y - d.y * t + r.y * h },
-    { x: c.x - d.x * t - r.x * h, y: c.y - d.y * t - r.y * h },
-  ];
+/**
+ * A band on the ground along a circle round `c` of radius `r`, `half` radians
+ * either side of the way `d` from it, `thick` tiles deep (half in, half out),
+ * `u` of it drawn from the middle out: its outer edge first (`n` + 1 points),
+ * then its inner edge back. A mark laid across a line as part of a circle
+ * foreshortens into a curve from every side and never stands up as a plank
+ * the way a straight bar across the line does from side on.
+ */
+function arcBand(c: V2, d: V2, r: number, half: number, thick: number, u = 1, n = 8): V2[] {
+  const a0 = Math.atan2(d.y, d.x), h = half * clamp(u);
+  const pts: V2[] = [];
+  for (const [rr, from, to] of [[r + thick / 2, -h, h], [r - thick / 2, h, -h]] as const) {
+    for (let i = 0; i <= n; i++) {
+      const an = a0 + lerp(from, to, i / n);
+      pts.push({ x: c.x + Math.cos(an) * rr, y: c.y + Math.sin(an) * rr });
+    }
+  }
+  return pts;
 }
 
 /** A leaf-shaped point lying on the ground at `c`, its tip `len` tiles out along `d`: a pike's head laid flat. */
@@ -361,6 +425,8 @@ function pierce(k: FxScene, at: P3, d: V2, scale = 1): void {
 const P = -1;
 /** How far a leg reaches down from the hip, thigh forward `thigh` degrees and the knee bent `knee`, in shares of the two bones (each one). */
 const legDown = (thigh: number, knee: number): number => Math.cos((thigh * Math.PI) / 180) + Math.cos(((thigh - knee) * Math.PI) / 180);
+/** How far back a straight rear leg slants (degrees) to reach as far down as a front leg with its thigh forward `thigh` and its knee bent `knee`. */
+const straightBack = (thigh: number, knee: number): number => (Math.acos(clamp(legDown(thigh, knee) / 2)) * 180) / Math.PI;
 /**
  * The legs of a pike stance through the cast, by keys of [t, how far the left
  * foot goes forward, its knee, how far the right goes back, its knee]: the
@@ -384,135 +450,206 @@ function stance(r: Rig, t: number, keys: ReadonlyArray<readonly [number, number,
   r.knee[1] = one(t, rear);
 }
 
-/** A key for `onHaft`: at `t`, the right fist and the left, in the body's frame from the middle of its feet (x right, y ahead, z up). */
-type HaftKey = readonly [number, V3, V3];
+/* Ways and places in the body's frame (x right, y ahead, z up, height units from the middle of the feet). */
+const DEG = Math.PI / 180;
+const add3 = (a: V3, b: V3): V3 => [a[0] + b[0], a[1] + b[1], a[2] + b[2]];
+const sub3 = (a: V3, b: V3): V3 => [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
+const mul3 = (a: V3, s: number): V3 => [a[0] * s, a[1] * s, a[2] * s];
+const unit3 = (a: V3): V3 => mul3(a, 1 / (Math.hypot(a[0], a[1], a[2]) || 1));
+/** `v` turned `deg` about the upright the way a positive yaw turns the chest: its front toward the body's left. */
+const yawed = (v: V3, deg: number): V3 => {
+  const c = Math.cos(deg * DEG), s = Math.sin(deg * DEG);
+  return [v[0] * c - v[1] * s, v[0] * s + v[1] * c, v[2]];
+};
+/** A way `d` tipped `up` degrees further up (down when less than nought) and turned `yaw` degrees to the left. */
+const tipped = (d: V3, up: number, yaw = 0): V3 => {
+  const h = Math.hypot(d[0], d[1]) || 1, p = Math.atan2(d[2], h) + up * DEG;
+  const flat = yawed([d[0] / h, d[1] / h, 0], yaw);
+  return [flat[0] * Math.cos(p), flat[1] * Math.cos(p), Math.sin(p)];
+};
+
 /**
- * The spear taken in both hands through the cast (`Rig.wieldStaff` and
- * `both`): each fist put where the keys have it, closed along the line from
- * the right through the left, which is the line the shaft lies on -- its
- * point out past the left fist. `both` below one lets the left hand off it.
+ * Where a blow goes: the target's heart (`up` units over it), as the stage
+ * tells the pose where it stands -- so a thrust is aimed at what it was cast
+ * at, off to one side as well (the body only turns to the nearest of eight
+ * ways), and the lance of light runs on from the point along the shaft's own
+ * line rather than bending off it. Straight ahead at a man's chest without.
  */
-function onHaft(r: Rig, t: number, keys: readonly HaftKey[], both = 1, w = 1): void {
+const aimAt = (c: PoseCue, up = 0): V3 => (c.aim ? [c.aim.aside, Math.max(24, c.aim.ahead), c.aim.chest + up] : [0, 120, 9 + up]);
+/** The way from `from` to where the blow goes. */
+const aimFrom = (c: PoseCue, from: V3, up = 0): V3 => unit3(sub3(aimAt(c, up), from));
+
+/** Elbows down and out of the way of the shaft -- the right behind the hip, the left under the shaft -- and never up across the face. */
+const POLE: [V3, V3] = [[-0.5, -0.1, -1], [0.6, -0.5, -1]];
+
+/** A key for `onSpear`: at `t`, the right fist, the way the shaft points from it, and how far on the left fist is (nought: not on it). */
+type SpearKey = readonly [number, V3, V3, number];
+/**
+ * The spear taken in the hands through the cast (`Rig.wieldStaff`): the right
+ * fist where the keys have it, the shaft run from it the way they say (the
+ * fist turned so, `haft` square across it), and the left fist on the shaft
+ * `sep` units on toward the point, closed on it (`both`) -- the elbows kept
+ * down (`POLE`), so a two-handed thrust is held at the hip and the waist, not
+ * up at the chin.
+ */
+function onSpear(r: Rig, t: number, keys: readonly SpearKey[], poles: [V3, V3] = POLE, stoop = false): void {
   const R = track(t, keys.map(([a, rr]) => [a, rr] as const)) as V3;
-  const L = track(t, keys.map(([a, , l]) => [a, l] as const)) as V3;
-  const along: V3 = [L[0] - R[0], L[1] - R[1], L[2] - R[2]];
+  const d = unit3(track(t, keys.map(([a, , dd]) => [a, dd] as const)) as V3);
+  const sep = one(t, keys.map(([a, , , s]) => [a, s] as const));
+  const both = clamp(sep / 1.2);
   r.wieldStaff = 1;
+  r.haft = -90;
   r.both = both;
-  r.reach = [both > 0.01 ? { at: L, haft: along, w: both * w } : undefined, w > 0.01 ? { at: R, haft: along, w } : undefined];
+  r.reach = [both > 0.01 ? { at: add3(R, mul3(d, Math.max(1.2, sep))), haft: d, w: both, pole: poles[0], stoop } : undefined, { at: R, haft: d, pole: poles[1], stoop }];
 }
 
-/**
- * The two fists on a shaft pointing straight ahead: the right `y` ahead of the
- * feet and `z` up, the left a little over two forearms on and `dip` lower, both
- * kept in by the middle of the body where each arm reaches them easily -- so
- * the line through them, which the shaft lies on, runs where the blow goes.
- */
-const level = (y: number, z: number, dip = 0.3): [V3, V3] => [[0.1, y, z], [-0.1, y + 2.6, z - dip]];
-/** Where the hands hold the spear at the ready: level ahead at the hip. */
-const READY = level(0.2, 8.6, 0);
+/** Both hands on a shaft from the right fist `R` to the left fist `L`: a `SpearKey` for a shaft held crosswise rather than at something. */
+const across = (t: number, R: V3, L: V3): SpearKey => [t, R, unit3(sub3(L, R)), Math.hypot(L[0] - R[0], L[1] - R[1], L[2] - R[2])];
 
-/** Warning Thrust: the spear in the right fist alone, drawn back to the hip; a jab checked half way and held, the left palm up and out at it, the leading foot stamped down with it. */
-const WARN_T = { secs: 0.95, release: 0.42 };
-const warnPose: CastPose = (r, t) => {
-  const top = 0.32, at = WARN_T.release, hold = 0.66;
-  // One-handed, along the forearm: where the forearm points, the spear points.
-  r.wieldStaff = 1;
-  r.arm[1] = euler(t, [[0, [20, 12, 0]], [top, [-16, 16, 4]], [at, [66, 6, 4]], [hold, [64, 6, 4]], [1, [22, 12, 0]]]);
-  r.elbow[1] = one(t, [[0, 40], [top, 100], [at, 20], [hold, 22], [1, 40]]);
-  // The left hand up and open, palm out at it: back.
-  r.arm[0] = euler(t, [[0, [20, 10, 0]], [top, [48, 10, 18]], [at, [76, 6, 10]], [hold, [74, 6, 10]], [1, [22, 10, 0]]]);
-  r.elbow[0] = one(t, [[0, 30], [top, 60], [at, 22], [hold, 24], [1, 30]]);
-  r.hand[0] = euler(t, [[0, [0, 0, 0]], [top, [-30, 0, 0]], [at, [-76, 0, 0]], [hold, [-74, 0, 0]], [1, [0, 0, 0]]]);
-  r.open[0] = t > 0.2 && t < 0.86;
-  r.shape = [{ flat: bump(t, 0.2, at, 0.86) }, undefined];
+/** The rest a cast comes from and goes back to: the right fist by the hip, the shaft upright beside the body as it is carried. */
+const REST_FIST: V3 = [2.0, 0.6, 7.6];
+const REST_UP: V3 = [0.12, 0.2, 1];
+const rested = (t: number): SpearKey => [t, REST_FIST, REST_UP, 0];
+
+/** Warning Thrust: the spear in the right fist alone, drawn back and cocked; a jab checked half way and held, the left palm held out flat at it, the leading foot stamped down with it. */
+const WARN_T = { secs: 1.1, release: 0.4 };
+/** How long the check is held, as a share of the cast: the "no further". */
+const WARN_HOLD = 0.78;
+const warnPose: CastPose = (r, t, c) => {
+  const top = 0.28, at = WARN_T.release, hold = WARN_HOLD;
+  const aim = aimAt(c);
+  const jab: V3 = [1.0, 3.4, 10.2];
+  // Drawn back along the side, the point cocked up and out over the line it will go: across the picture from every side.
+  onSpear(r, t, [
+    rested(0.04), [top, [2.1, -2.4, 9.0], tipped(aimFrom(c, [2.1, -2.4, 9]), 42, 4), 0],
+    [at, jab, aimFrom(c, jab), 0], [hold, [1.0, 3.2, 10.1], aimFrom(c, jab), 0], [0.94, [1.9, 0.8, 8.2], tipped(aim, 50), 0], rested(1),
+  ]);
+  // The left hand held out to the side and a little forward at the height of the chest, palm flat at it: back -- out
+  // beside the body and below the jaw from every side, never over the face.
+  const ward = armToward(0, [-0.85, 0.5, -0.45]);
+  r.arm[0] = euler(t, [[0, [20, 10, 0]], [top, [30, 14, 10]], [at, ward], [hold, ward], [1, [20, 10, 0]]]);
+  r.elbow[0] = one(t, [[0, 30], [top, 50], [at, 20], [hold, 22], [1, 30]]);
+  r.hand[0] = euler(t, [[0, [0, 0, 0]], [top, [-20, 0, 0]], [at, [-80, 0, -10]], [hold, [-78, 0, -10]], [1, [0, 0, 0]]]);
+  r.open[0] = t > 0.2 && t < 0.92;
+  r.shape = [{ flat: bump(t, 0.2, at, 0.92) }, undefined];
   // The stamp: the left foot up as the fist comes back, down hard on the jab.
-  stance(r, t, [[0, 2, 4, 0, P], [top * 0.9, 34, 72, 6, 14], [at, 20, 10, 12, P], [hold, 20, 12, 12, P], [1, 4, 4, 2, P]]);
+  stance(r, t, [[0, 2, 4, 0, P], [top * 0.9, 34, 72, 6, 14], [at, 22, 12, 14, P], [hold, 22, 14, 14, P], [1, 4, 4, 2, P]]);
   r.spine = euler(t, [[0, [0, 0, 0]], [top, [4, 0, -4]], [at, [-8, 0, 2]], [hold, [-7, 0, 2]], [1, [0, 0, 0]]]);
   r.chest = euler(t, [[0, [0, 0, 0]], [top, [2, 0, -18]], [at, [-4, 0, 8]], [hold, [-4, 0, 8]], [1, [0, 0, 0]]]);
   r.head = euler(t, [[0, [0, 0, 0]], [top, [0, 0, 12]], [at, [-6, 0, -4]], [hold, [-8, 0, -4]], [1, [0, 0, 0]]]);
   r.mouth = one(t, [[0, 0], [at - 0.02, 0], [at + 0.02, 0.5], [hold, 0.2], [1, 0]]);
 };
 
-/** Overreach: coiled back on the rear leg, then the longest lunge there is -- the spear slid out to its butt in the one fist, the other arm flung back -- held there, and slow to come back. */
-const OVER_T = { secs: 1.25, release: 0.34, blendOut: 0.34 };
-const overPose: CastPose = (r, t) => {
-  const top = 0.27, at = OVER_T.release, hold = 0.7;
-  r.wieldStaff = 1;
+/** Overreach: coiled back on the rear leg, then the longest lunge there is -- the spear slid out to its butt in the one fist, level at the heart, the other arm flung back -- held there, and slow to come back. */
+const OVER_T = { secs: 1.35, release: 0.32, blendOut: 0.3 };
+const OVER_HOLD = 0.82;
+const overPose: CastPose = (r, t, c) => {
+  const top = 0.26, at = OVER_T.release, hold = OVER_HOLD;
+  const coil: V3 = [2.2, -2.8, 9.4], out: V3 = [0.9, 8.0, 9.8];
+  // The arm run out as far as it goes, the shaft level along the line to the heart: the lance goes on straight from its point.
+  onSpear(r, t, [
+    rested(0.04), [top, coil, tipped(aimFrom(c, coil), 40, 4), 0], [at, out, aimFrom(c, out), 0], [hold, out, aimFrom(c, out), 0],
+    [0.92, [1.8, 1.0, 8.6], tipped(aimAt(c), 30), 0], rested(1),
+  ]);
   // Slid through the fist as it goes, so the fist ends at the butt: every unit of the shaft out in front.
-  r.slide = one(t, [[0, 0], [top, 0], [at, 3.8], [hold, 3.8], [0.9, 1], [1, 0]]);
-  r.arm[1] = euler(t, [[0, [20, 12, 0]], [top, [-22, 16, 6]], [at, [118, 2, 0]], [hold, [116, 2, 0]], [0.84, [60, 8, 0]], [1, [22, 12, 0]]]);
-  r.elbow[1] = one(t, [[0, 40], [top, 104], [at, 0], [hold, 2], [0.84, 30], [1, 40]]);
-  r.hand[1] = euler(t, [[0, [0, 0, 0]], [at, [-12, 0, 0]], [hold, [-12, 0, 0]], [1, [0, 0, 0]]]);
-  r.arm[0] = euler(t, [[0, [20, 10, 0]], [top, [52, 14, 14]], [at, [-48, 34, 0]], [hold, [-44, 34, 0]], [0.84, [0, 20, 0]], [1, [20, 10, 0]]]);
+  r.slide = one(t, [[0, 0], [top, 0], [at, 3.8], [hold, 3.8], [0.92, 1], [1, 0]]);
+  r.arm[0] = euler(t, [[0, [20, 10, 0]], [top, [52, 14, 14]], [at, [-48, 34, 0]], [hold, [-44, 34, 0]], [0.9, [0, 20, 0]], [1, [20, 10, 0]]]);
   r.elbow[0] = one(t, [[0, 30], [top, 50], [at, 8], [hold, 10], [1, 30]]);
-  r.open[0] = t > at - 0.04 && t < 0.8;
-  r.shape = [{ flat: bump(t, at - 0.04, at, 0.8) }, undefined];
-  stance(r, t, [[0, 2, 4, 0, P], [top, 16, 50, 20, P], [at, 62, 80, 40, P], [hold, 60, 78, 40, P], [0.84, 26, 34, 14, P], [1, 4, 4, 2, P]]);
-  r.spine = euler(t, [[0, [0, 0, 0]], [top, [8, 0, -6]], [at, [-26, 0, 6]], [hold, [-24, 0, 6]], [0.84, [-8, 0, 2]], [1, [0, 0, 0]]]);
+  r.open[0] = t > at - 0.04 && t < 0.86;
+  r.shape = [{ flat: bump(t, at - 0.04, at, 0.86) }, undefined];
+  // A long low lunge: the front thigh well up and its knee bent over the foot, the rear leg locked straight behind
+  // and slanted back just so far that both soles are on the ground.
+  const rearAt = straightBack(50, 60);
+  stance(r, t, [[0, 2, 4, 0, P], [top, 14, 44, 18, P], [at, 50, 60, rearAt, 0], [hold, 49, 60, rearAt - 0.5, 0], [0.92, 20, 24, 12, P], [1, 4, 4, 2, P]]);
+  r.spine = euler(t, [[0, [0, 0, 0]], [top, [8, 0, -6]], [at, [-24, 0, 6]], [hold, [-22, 0, 6]], [0.92, [-6, 0, 2]], [1, [0, 0, 0]]]);
   r.chest = euler(t, [[0, [0, 0, 0]], [top, [4, 0, -26]], [at, [-8, 0, 18]], [hold, [-8, 0, 18]], [1, [0, 0, 0]]]);
   // The eyes kept on it all the way down the lunge.
-  r.head = euler(t, [[0, [0, 0, 0]], [top, [-2, 0, 20]], [at, [20, 0, -12]], [hold, [18, 0, -12]], [1, [0, 0, 0]]]);
+  r.head = euler(t, [[0, [0, 0, 0]], [top, [-2, 0, 20]], [at, [16, 0, -12]], [hold, [14, 0, -12]], [1, [0, 0, 0]]]);
 };
 
-/** Sweep the Legs: down into a crouch, the spear in both hands swung round low and flat from the right across the front to the left, the point at the shins. */
-const SWEEP_T = { secs: 1.05, release: 0.46 };
-const sweepPose: CastPose = (r, t) => {
-  const top = 0.34, at = SWEEP_T.release, thru = 0.62;
-  onHaft(r, t, [
-    [0.1, READY[0], READY[1]], [top, [-0.4, 0.8, 7.4], [2.2, 1.8, 6.4]], [at, [0.2, 1.6, 6.8], [0.0, 4.2, 5.0]],
-    [thru, [1.0, 2.0, 6.8], [-1.4, 3.6, 5.2]], [0.86, READY[0], READY[1]], [1, READY[0], READY[1]],
-  ]);
-  stance(r, t, [[0, 2, 4, 0, P], [top, 40, 84, 10, P], [at, 46, 96, 12, P], [thru, 44, 92, 12, P], [1, 4, 4, 2, P]], 14);
-  r.spine = euler(t, [[0, [0, 0, 0]], [top, [-18, 0, -8]], [at, [-24, 0, 8]], [thru, [-22, 0, 12]], [1, [0, 0, 0]]]);
-  r.chest = euler(t, [[0, [0, 0, 0]], [top, [-6, 4, -40]], [at, [-10, -4, 22]], [thru, [-8, -6, 38]], [1, [0, 0, 0]]]);
-  r.head = euler(t, [[0, [0, 0, 0]], [top, [-4, 0, 30]], [at, [6, 0, -16]], [thru, [6, 0, -30]], [1, [0, 0, 0]]]);
+/**
+ * Sweep the Legs: down into a deep crouch, the trunk wound round to the right
+ * with the spear low in both hands, then swung round flat from the right
+ * across the front to the left -- the hands carried round by the turn of the
+ * trunk, the point skimming at the height of a shin.
+ */
+const SWEEP_T = { secs: 1.1, release: 0.46 };
+/** When the swing passes through the line and when it is through, as shares of the cast. */
+const SWEEP_SWING = [0.36, 0.62] as const;
+/** How far round the trunk is turned at `t`, degrees (positive to the left): wound to the right, swung through to the left. */
+const sweepTurn = (t: number): number => one(t, [[0.06, 0], [0.3, -60], [SWEEP_SWING[0], -56], [SWEEP_T.release, 0], [SWEEP_SWING[1], 52], [0.84, 40], [1, 0]]);
+const sweepPose: CastPose = (r, t, c) => {
+  const top = 0.3, at = SWEEP_T.release, thru = SWEEP_SWING[1];
+  const Y = sweepTurn(t);
+  // Low and level in front of the trunk, the left fist forward and lower: the point at a shin's height out ahead.
+  // The point cocked up behind on the wind-up, flat at the shins through the line, rising a little on the follow-through.
+  const pitch0 = one(t, [[0.06, 10], [top, 46], [SWEEP_SWING[0], 20], [at, -4], [thru, -6], [1, 0]]);
+  // The right fist carried out wide to the right through the line, so the shaft crosses the picture from every side.
+  const R = yawed([one(t, [[top, 0.8], [at, 1.6], [thru, 1.3], [1, 0.8]]), one(t, [[top, 0.8], [at, 1.2], [1, 0.8]]), 5.0], Y);
+  const d = tipped(yawed([-0.12, 1, 0], Y), pitch0);
+  const low = one(t, [[0.04, 0], [top, 1], [thru, 1], [0.92, 0]]);
+  const up = tipped(aimAt(c), 30);
+  onSpear(r, t, [[0, add3(mul3(REST_FIST, 1 - low), mul3(R, low)), unit3(add3(mul3(up, 1 - low), mul3(d, low))), 3.2 * Math.min(1, low * 2)]], POLE, t > 0.2 && t < 0.8);
+  stance(r, t, [[0, 2, 4, 0, P], [top, 40, 74, 16, P], [at, 46, 80, 18, P], [thru, 44, 78, 18, P], [0.86, 30, 50, 12, P], [1, 4, 4, 2, P]], 14);
+  const pitch = one(t, [[0, 0], [top, -30], [at, -26], [thru, -24], [0.86, -14], [1, 0]]);
+  r.spine = [pitch, 0, Y * 0.45];
+  r.chest = [pitch * 0.3, one(t, [[0, 0], [top, 6], [at, 0], [thru, -6], [1, 0]]), Y * 0.55];
+  // The eyes on the shins it goes for, whatever the trunk does.
+  r.head = [one(t, [[0, 0], [top, 4], [thru, 6], [1, 0]]), 0, -Y * 0.8];
+  r.mouth = one(t, [[0, 0], [at - 0.04, 0], [at, 0.5], [thru, 0.2], [0.8, 0]]);
 };
 
 /**
  * Vital Thrust: settled and still, the left hand pointing the way with one
- * finger and the spear held back at the hip in the right, a long aim; then
- * the left hand takes the shaft and both drive it, short and very fast, and
- * snap it back.
+ * finger and the spear carried high on the right under the arm, its point
+ * level at the heart, a long aim; then the left hand takes the shaft and both
+ * drive it, short and very fast, and snap it back.
  */
-const VITAL_T = { secs: 1.2, release: 0.64 };
-const vitalPose: CastPose = (r, t) => {
-  const set = 0.2, top = 0.56, at = VITAL_T.release, thru = 0.74;
-  // Both hands on it only for the drive.
-  const drive = one(t, [[0, 0], [top, 0], [at - 0.02, 1], [thru, 1], [0.9, 0], [1, 0]]);
-  r.arm[1] = euler(t, [[0, [20, 12, 0]], [set, [-14, 16, 4]], [top, [-20, 18, 6]], [1, [20, 12, 0]]]);
-  r.elbow[1] = one(t, [[0, 40], [set, 98], [top, 102], [1, 40]]);
-  r.arm[0] = euler(t, [[0, [20, 10, 0]], [set, [84, 4, -6]], [top, [86, 4, -6]], [1, [20, 10, 0]]]);
-  r.elbow[0] = one(t, [[0, 30], [set, 6], [top, 4], [1, 30]]);
+const VITAL_T = { secs: 1.25, release: 0.62, blendOut: 0.1 };
+/** Where the drive is held to, as a share of the cast: long enough for the lance to be seen in the heart (`drawnBack`). */
+const VITAL_HOLD = 0.9;
+/** The left elbow at the drive: well out to the side and down, so the forearm runs out along the shaft and never up across the face. */
+const VITAL_POLE: [V3, V3] = [[-1, -0.2, -1], POLE[1]];
+const vitalPose: CastPose = (r, t, c) => {
+  const set = 0.2, top = 0.54, at = VITAL_T.release, thru = VITAL_HOLD;
+  const ribs: V3 = [1.9, 0.4, 9.2], drive: V3 = [0.6, 1.2, 8.0];
+  onSpear(r, t, [
+    rested(0.04), [set, ribs, aimFrom(c, ribs), 0], [top, [1.9, 0.0, 9.2], aimFrom(c, [1.9, 0, 9.2]), 0],
+    [at - 0.03, [1.4, 0.8, 7.8], aimFrom(c, drive), 3.4], [at, drive, aimFrom(c, drive), 3.4], [thru, drive, aimFrom(c, drive), 3.4],
+    [0.96, [1.8, 0.8, 8.4], tipped(aimAt(c), 30), 0], rested(1),
+  ], VITAL_POLE);
+  // Pointing the way with the left arm while it aims; from the top on the hand is the shaft's (`onSpear`), the arm let go.
+  r.arm[0] = euler(t, [[0, [20, 10, 0]], [set, [84, 4, -6]], [top, [86, 4, -6]], [at, [20, 10, 0]], [1, [20, 10, 0]]]);
+  r.elbow[0] = one(t, [[0, 30], [set, 6], [top, 4], [at, 30], [1, 30]]);
   r.shape = [{ point: bump(t, 0.1, set, top + 0.02) }, undefined];
-  onHaft(r, t, [[top, ...level(0.0, 8.6)], [at, ...level(3.4, 9.0, 0.5)], [thru, ...level(3.2, 9.0, 0.5)], [1, ...READY]], drive, drive);
-  r.wieldStaff = 1;
-  r.slide = one(t, [[0, 0], [top, 0], [at, 1.6], [thru, 1.6], [1, 0]]);
-  stance(r, t, [[0, 2, 4, 0, P], [set, 22, 40, 12, P], [top, 22, 44, 14, P], [at, 32, 52, 22, P], [thru, 32, 50, 22, P], [1, 4, 4, 2, P]]);
-  r.spine = euler(t, [[0, [0, 0, 0]], [set, [-6, 0, -4]], [top, [-6, 0, -5]], [at, [-16, 0, 4]], [thru, [-15, 0, 4]], [1, [0, 0, 0]]]);
-  r.chest = euler(t, [[0, [0, 0, 0]], [set, [0, 0, -24]], [top, [0, 0, -28]], [at, [-6, 0, 10]], [thru, [-6, 0, 10]], [1, [0, 0, 0]]]);
+  r.slide = one(t, [[0, 0], [top, 0], [at, 2.6], [thru, 2.6], [0.96, 0], [1, 0]]);
+  stance(r, t, [[0, 2, 4, 0, P], [set, 22, 40, 12, P], [top, 22, 44, 14, P], [at, 34, 56, 22, P], [thru, 33, 54, 22, P], [1, 4, 4, 2, P]]);
+  r.spine = euler(t, [[0, [0, 0, 0]], [set, [-6, 0, -4]], [top, [-6, 0, -5]], [at, [-22, 0, -4]], [thru, [-22, 0, -4]], [1, [0, 0, 0]]]);
+  r.chest = euler(t, [[0, [0, 0, 0]], [set, [0, 0, -24]], [top, [0, 0, -28]], [at, [-6, 0, -14]], [thru, [-6, 0, -14]], [1, [0, 0, 0]]]);
   // Sighting down the left arm: the head turned on to the line while the chest is turned off it, and low.
-  r.head = euler(t, [[0, [0, 0, 0]], [set, [-8, 0, 22]], [top, [-10, 0, 26]], [at, [-4, 0, -8]], [thru, [-4, 0, -8]], [1, [0, 0, 0]]]);
+  r.head = euler(t, [[0, [0, 0, 0]], [set, [-8, 0, 22]], [top, [-10, 0, 26]], [at, [-4, 0, 14]], [thru, [-4, 0, 14]], [1, [0, 0, 0]]]);
 };
 
-/** Hook: a thrust out in both hands, a beat while the barb takes, then a haul back to the hips leaning back on the rear leg, the point lifting as it comes. */
+/** Hook: a thrust out in both hands, a beat while the barb takes, then a haul back to the hips leaning back on the rear leg, the point kept on what it has hold of as it comes. */
 const HOOK_T = { secs: 1.4, release: 0.28 };
 /** When the haul starts and ends, as shares of the cast. */
-const HAUL = [0.46, 0.6] as const;
+const HAUL = [0.46, 0.62] as const;
 /** Seconds from the catch to a little after the haul: how long the hook's impact plays. */
-const HOOK_AFTER = (0.82 - HOOK_T.release) * HOOK_T.secs + 0.5;
-const hookPose: CastPose = (r, t) => {
-  const top = 0.2, at = HOOK_T.release, [h0, h1] = HAUL;
-  onHaft(r, t, [
-    [0.08, ...READY], [top, ...level(-0.6, 9.0, 0)], [at, ...level(3.0, 9.6, 0.4)], [h0, ...level(2.8, 9.6, 0.4)],
-    [h1, [0.6, -1.8, 8.0], [0.2, 0.6, 9.6]], [0.76, [0.6, -1.7, 8.0], [0.2, 0.7, 9.6]], [1, ...READY],
+const HOOK_AFTER = (0.84 - HOOK_T.release) * HOOK_T.secs + 0.4;
+const hookPose: CastPose = (r, t, c) => {
+  const top = 0.18, at = HOOK_T.release, [h0, h1] = HAUL;
+  const back: V3 = [1.4, -2.2, 7.6], out: V3 = [0.8, 1.2, 9.0], hauled: V3 = [1.2, -2.0, 7.2];
+  onSpear(r, t, [
+    rested(0.04), [top, back, tipped(aimFrom(c, back), 12, -10), 3.0], [at, out, aimFrom(c, out), 3.2], [h0, [0.8, 1.0, 9.0], aimFrom(c, out), 3.2],
+    [h1, hauled, aimFrom(c, hauled), 3.0], [0.8, hauled, aimFrom(c, hauled), 3.0], [0.94, [1.6, 0.6, 8.0], tipped(aimAt(c), 30), 1.0], rested(1),
   ]);
-  r.slide = one(t, [[0, 0], [top, 0], [at, 1.5], [h0, 1.5], [h1, 0], [1, 0]]);
-  stance(r, t, [[0, 2, 4, 0, P], [top, -2, 12, 4, P], [at, 28, 34, 16, P], [h0, 28, 36, 16, P], [h1, 40, 4, 20, P], [0.76, 40, 6, 20, P], [1, 4, 4, 2, P]]);
+  r.slide = one(t, [[0, 0], [top, 0], [at, 2.2], [h0, 2.2], [h1, 0], [1, 0]]);
+  stance(r, t, [[0, 2, 4, 0, P], [top, -2, 12, 4, P], [at, 28, 34, 16, P], [h0, 28, 36, 16, P], [h1, 40, 4, 20, P], [0.8, 40, 6, 20, P], [1, 4, 4, 2, P]]);
   // The haul is the back: leaning out over the rear leg, turned as the hands come in.
-  r.spine = euler(t, [[0, [0, 0, 0]], [top, [4, 0, -4]], [at, [-12, 0, 4]], [h0, [-10, 0, 4]], [h1, [18, 0, -6]], [0.76, [16, 0, -6]], [1, [0, 0, 0]]]);
-  r.chest = euler(t, [[0, [0, 0, 0]], [top, [2, 0, -16]], [at, [-4, 0, 8]], [h0, [-4, 0, 8]], [h1, [6, 0, -18]], [0.76, [6, 0, -16]], [1, [0, 0, 0]]]);
-  r.head = euler(t, [[0, [0, 0, 0]], [top, [0, 0, 12]], [at, [-6, 0, -6]], [h1, [-10, 0, 16]], [0.76, [-10, 0, 14]], [1, [0, 0, 0]]]);
-  r.mouth = one(t, [[0, 0], [h0, 0], [h0 + 0.06, 0.6], [h1, 0.3], [0.76, 0], [1, 0]]);
+  r.spine = euler(t, [[0, [0, 0, 0]], [top, [4, 0, -4]], [at, [-12, 0, 4]], [h0, [-10, 0, 4]], [h1, [18, 0, -6]], [0.8, [16, 0, -6]], [1, [0, 0, 0]]]);
+  r.chest = euler(t, [[0, [0, 0, 0]], [top, [2, 0, -16]], [at, [-4, 0, 8]], [h0, [-4, 0, 8]], [h1, [6, 0, -18]], [0.8, [6, 0, -16]], [1, [0, 0, 0]]]);
+  r.head = euler(t, [[0, [0, 0, 0]], [top, [0, 0, 12]], [at, [-6, 0, -6]], [h1, [-10, 0, 16]], [0.8, [-10, 0, 14]], [1, [0, 0, 0]]]);
+  r.mouth = one(t, [[0, 0], [h0, 0], [h0 + 0.06, 0.6], [h1, 0.3], [0.8, 0], [1, 0]]);
 };
 
 /** Rally the Line: the spear lifted high overhead as a standard and the left fist pumped, the head back in a shout; then the butt brought down hard by the foot and the left arm swept out to call them in. */
@@ -521,7 +658,7 @@ const rallyPose: CastPose = (r, t) => {
   const up = 0.3, top = 0.44, at = RALLY_T.release, thru = 0.7;
   r.arm[1] = euler(t, [[0, [20, 12, 0]], [up, [148, 16, -6]], [top, [168, 12, -6]], [at, [14, 22, 0]], [thru, [14, 22, 0]], [1, [20, 12, 0]]]);
   r.elbow[1] = one(t, [[0, 40], [up, 14], [top, 8], [at, 30], [1, 40]]);
-  r.arm[0] = euler(t, [[0, [20, 10, 0]], [up, [70, 24, 10]], [top, [104, 22, 10]], [at, [72, 70, 0]], [thru, [70, 72, 0]], [1, [20, 10, 0]]]);
+  r.arm[0] = euler(t, [[0, [20, 10, 0]], [up, [70, 24, 10]], [top, [104, 22, 10]], [at, armOut(0, 74, 62)], [thru, armOut(0, 72, 64)], [1, [20, 10, 0]]]);
   r.elbow[0] = one(t, [[0, 30], [up, 110], [top, 104], [at, 10], [thru, 12], [1, 30]]);
   r.open[0] = t > at - 0.02 && t < 0.9;
   r.shape = [{ flat: bump(t, at - 0.02, at + 0.04, 0.9) }, undefined];
@@ -536,125 +673,182 @@ const rallyPose: CastPose = (r, t) => {
   r.mouth = one(t, [[0, 0], [up, 0.4], [top, 1], [at, 0.8], [thru, 0.2], [1, 0]]);
 };
 
-/** Twin Thrust: drawn back once, then two quick jabs in both hands -- the first high, a half recoil, the second low with a deeper step. */
-const TWIN_T = { secs: 1.15, release: 0.3 };
+/**
+ * Twin Thrust: drawn back once, then two quick jabs in both hands -- the
+ * first high into the chest off the leading foot; a recoil; the second low
+ * into the belly with the rear foot stepped right through and the trunk
+ * turned square behind it.
+ */
+const TWIN_T = { secs: 1.2, release: 0.3 };
 /** When each jab lands, as shares of the cast. */
-const JABS = [TWIN_T.release, 0.56] as const;
-const twinPose: CastPose = (r, t) => {
-  const top = 0.22, [j1, j2] = JABS;
-  onHaft(r, t, [
-    [0.08, ...READY], [top, ...level(-0.6, 9.4, 0)], [j1, ...level(2.8, 10.0, 0.2)], [j1 + 0.06, ...level(2.7, 10.0, 0.2)],
-    [0.44, ...level(0.0, 9.0)], [j2, ...level(3.2, 8.0, 1.0)], [j2 + 0.1, ...level(3.1, 8.0, 1.0)], [1, ...READY],
-  ]);
-  stance(r, t, [[0, 2, 4, 0, P], [top, 4, 16, 6, P], [j1, 22, 26, 12, P], [0.44, 22, 24, 12, P], [j2, 36, 46, 20, P], [j2 + 0.1, 34, 44, 20, P], [1, 4, 4, 2, P]]);
-  r.spine = euler(t, [[0, [0, 0, 0]], [top, [4, 0, -4]], [j1, [-10, 0, 4]], [0.44, [-6, 0, -2]], [j2, [-20, 0, 4]], [j2 + 0.1, [-18, 0, 4]], [1, [0, 0, 0]]]);
-  r.chest = euler(t, [[0, [0, 0, 0]], [top, [2, 0, -16]], [j1, [-4, 0, 8]], [0.44, [0, 0, -10]], [j2, [-6, 0, 10]], [1, [0, 0, 0]]]);
-  r.head = euler(t, [[0, [0, 0, 0]], [top, [0, 0, 12]], [j1, [-2, 0, -6]], [0.44, [-4, 0, 8]], [j2, [-12, 0, -8]], [1, [0, 0, 0]]]);
+const JABS = [TWIN_T.release, 0.62] as const;
+/** How far over the heart (and under it) each jab goes in, height units. */
+const TWIN_HIGH = 2.5, TWIN_LOW = -2.5;
+/** How long each jab is held in, as a share of the cast: long enough to be seen in the creature. */
+const TWIN_SIT = 0.12;
+const twinPose: CastPose = (r, t, c) => {
+  const top = 0.2, [j1, j2] = JABS, rec = 0.46;
+  const h1 = j1 + TWIN_SIT, h2 = j2 + TWIN_SIT;
+  const hi: V3 = [1.4, 1.2, 8.6], lo: V3 = [0.6, 1.4, 7.8], drawn: V3 = [1.4, -2.2, 8.6], mid: V3 = [1.2, -0.8, 8.4];
+  onSpear(r, t, [
+    rested(0.04), [top, drawn, tipped(aimFrom(c, drawn, TWIN_HIGH), 10, -8), 3.0], [j1, hi, aimFrom(c, hi, TWIN_HIGH), 3.2], [h1, hi, aimFrom(c, hi, TWIN_HIGH), 3.2],
+    [rec, mid, tipped(aimFrom(c, mid, TWIN_LOW), 6), 3.0], [j2, lo, aimFrom(c, lo, TWIN_LOW), 3.2], [h2, lo, aimFrom(c, lo, TWIN_LOW), 3.2],
+    [0.92, [1.6, 0.6, 8.0], tipped(aimAt(c), 30), 1.0], rested(1),
+  ], VITAL_POLE);
+  // Run out through the lead hand on each jab: a pike is thrust through the hands as much as by them.
+  r.slide = one(t, [[0, 0], [top, 0], [j1, 2.2], [h1, 2.2], [rec, 0.4], [j2, 2.6], [h2, 2.6], [0.92, 0], [1, 0]]);
+  // The first jab off the leading left foot, the thigh driven well up; then the rear right foot brought right through
+  // for the second, the body going on with it.
+  r.leg[0] = euler(t, [[0, [2, 4, 0]], [top, [4, 4, 0]], [j1, [34, 4, 0]], [h1, [33, 4, 0]], [rec, [20, 4, 0]], [j2, [-24, 4, 0]], [h2, [-22, 4, 0]], [1, [2, 4, 0]]]);
+  r.knee[0] = one(t, [[0, 4], [top, 18], [j1, 40], [h1, 40], [rec, 26], [j2, 14], [h2, 14], [1, 4]]);
+  r.leg[1] = euler(t, [[0, [0, 4, -6]], [top, [-6, 4, -6]], [j1, [-16, 4, -6]], [h1, [-16, 4, -6]], [rec, [-8, 4, -6]], [j2, [38, 4, 0]], [h2, [36, 4, 0]], [1, [0, 4, 0]]]);
+  r.knee[1] = one(t, [[0, 4], [top, 12], [j1, 10], [h1, 10], [rec, 18], [j2, 46], [h2, 44], [1, 4]]);
+  r.at = [r.at[0], r.at[1] + one(t, [[top, 0], [j1, 1.4], [h1, 1.4], [rec, 0.6], [j2, 3.2], [h2, 3.2], [1, 0]]), r.at[2]];
+  // Leant hard into each jab, the left shoulder led in (the chest turned off to the right) so the left arm runs out
+  // along the shaft below the face.
+  r.spine = euler(t, [[0, [0, 0, 0]], [top, [4, 0, -4]], [j1, [-22, 0, -4]], [h1, [-21, 0, -4]], [rec, [-4, 0, -2]], [j2, [-22, 0, 10]], [h2, [-20, 0, 10]], [1, [0, 0, 0]]]);
+  r.chest = euler(t, [[0, [0, 0, 0]], [top, [2, 0, -16]], [j1, [-6, 0, -14]], [h1, [-6, 0, -14]], [rec, [0, 0, -12]], [j2, [-6, 0, 26]], [h2, [-6, 0, 24]], [1, [0, 0, 0]]]);
+  r.head = euler(t, [[0, [0, 0, 0]], [top, [0, 0, 12]], [j1, [-4, 0, 14]], [h1, [-4, 0, 14]], [rec, [-4, 0, 10]], [j2, [6, 0, -24]], [h2, [6, 0, -22]], [1, [0, 0, 0]]]);
+  r.mouth = one(t, [[0, 0], [j1 - 0.02, 0], [j1, 0.4], [rec, 0], [j2, 0.6], [h2, 0.2], [1, 0]]);
 };
 
 /** Reach Advantage: the long guard -- the weight kept back on a bent rear leg, the front leg straight and light, the spear run out through both hands as far as the arms go while the body stays away; then a short push of the point. */
-const REACH_T = { secs: 1.05, release: 0.5 };
-const reachPose: CastPose = (r, t) => {
-  const set = 0.22, top = 0.42, at = REACH_T.release, thru = 0.7;
-  onHaft(r, t, [
-    [0.08, ...READY], [set, ...level(2.0, 10.4, 0.2)], [top, ...level(1.8, 10.4, 0.2)],
-    [at, ...level(3.4, 10.4, 0.4)], [thru, ...level(3.3, 10.4, 0.4)], [1, ...READY],
-  ]);
+const REACH_T = { secs: 1.1, release: 0.5, blendOut: 0.1 };
+/** Where the push is held to, as a share of the cast: long enough for the lance to be seen in it (`drawnBack`). */
+const REACH_HOLD = 0.86;
+const reachPose: CastPose = (r, t, c) => {
+  const set = 0.22, top = 0.42, at = REACH_T.release, thru = REACH_HOLD;
+  // Low at the hip, the body sunk on the long front leg: the hands below the chest and the left out along the shaft.
+  const guard: V3 = [1.1, -0.6, 7.0], push: V3 = [1.0, 0.3, 7.2];
+  onSpear(r, t, [
+    rested(0.04), [set, guard, aimFrom(c, guard), 3.0], [top, [1.1, -0.8, 7.0], aimFrom(c, guard), 3.0],
+    [at, push, aimFrom(c, push), 2.8], [thru, push, aimFrom(c, push), 2.8], [0.95, [1.6, 0.6, 8.0], tipped(aimAt(c), 30), 1.0], rested(1),
+  ], VITAL_POLE);
   // Held near the butt: all the length of it out in front.
   r.slide = one(t, [[0, 0], [set, 3.4], [thru, 3.4], [1, 0]]);
-  stance(r, t, [[0, 2, 4, 0, P], [set, 40, 2, 14, P], [top, 40, 2, 14, P], [at, 42, 4, 14, P], [thru, 42, 4, 14, P], [1, 4, 4, 2, P]]);
-  // Upright, even leaning off it: the reach is the arms', not the body's.
-  r.spine = euler(t, [[0, [0, 0, 0]], [set, [10, 0, -4]], [top, [11, 0, -4]], [at, [6, 0, 2]], [thru, [6, 0, 2]], [1, [0, 0, 0]]]);
-  r.chest = euler(t, [[0, [0, 0, 0]], [set, [0, 0, -10]], [top, [0, 0, -12]], [at, [-2, 0, 4]], [thru, [-2, 0, 4]], [1, [0, 0, 0]]]);
-  r.head = euler(t, [[0, [0, 0, 0]], [set, [-6, 0, 10]], [top, [-6, 0, 12]], [at, [-8, 0, -4]], [1, [0, 0, 0]]]);
+  // The front leg run long and straight out ahead, light on its heel; the weight sat back on the bent rear leg.
+  stance(r, t, [[0, 2, 4, 0, P], [set, 50, 0, 14, P], [top, 50, 0, 14, P], [at, 50, 2, 14, P], [thru, 50, 2, 14, P], [1, 4, 4, 2, P]]);
+  // Leant back off it: the reach is the arms' and the shaft's, the body kept away.
+  r.spine = euler(t, [[0, [0, 0, 0]], [set, [18, 0, -4]], [top, [18, 0, -4]], [at, [12, 0, 2]], [thru, [12, 0, 2]], [1, [0, 0, 0]]]);
+  r.chest = euler(t, [[0, [0, 0, 0]], [set, [0, 0, -14]], [top, [0, 0, -16]], [at, [-2, 0, -10]], [thru, [-2, 0, -10]], [1, [0, 0, 0]]]);
+  r.head = euler(t, [[0, [0, 0, 0]], [set, [-14, 0, 10]], [top, [-14, 0, 12]], [at, [-14, 0, -4]], [thru, [-13, 0, -4]], [1, [0, 0, 0]]]);
 };
 
-/** Skewer: both hands drawn back by the right hip and the knees down, then a drive with a step right through, the shaft run out through the hands and the body behind it, held long. */
-const SKEWER_T = { secs: 1.25, release: 0.44 };
-const skewerPose: CastPose = (r, t) => {
-  const top = 0.36, at = SKEWER_T.release, thru = 0.58, hold = 0.74;
-  onHaft(r, t, [
-    [0.1, ...READY], [top, [1.2, -1.6, 7.8], [1.0, 1.0, 7.8]], [at, ...level(3.2, 9.0, 0.4)],
-    [thru, ...level(4.0, 9.0, 0.4)], [hold, ...level(3.9, 9.0, 0.4)], [1, ...READY],
+/** Skewer: both hands drawn back high by the right shoulder, the point cocked, the knees down; then a drive with a step right through, the shaft run out through the hands and the body behind it, held long. */
+const SKEWER_T = { secs: 1.3, release: 0.42 };
+/** Where the drive is held to, as a share of the cast. */
+const SKEWER_HOLD = 0.76;
+const skewerPose: CastPose = (r, t, c) => {
+  const top = 0.34, at = SKEWER_T.release, thru = 0.56, hold = SKEWER_HOLD;
+  const cock: V3 = [1.8, -1.6, 9.8], drive: V3 = [0.6, 1.4, 9.0], far: V3 = [0.5, 2.2, 8.8];
+  onSpear(r, t, [
+    rested(0.04), [top, cock, tipped(aimFrom(c, cock), 16, -22), 3.0], [at, drive, aimFrom(c, drive), 3.2],
+    [thru, far, aimFrom(c, far), 3.2], [hold, far, aimFrom(c, far), 3.2], [0.92, [1.6, 0.6, 8.0], tipped(aimAt(c), 30), 1.0], rested(1),
   ]);
-  r.slide = one(t, [[0, 0], [top, 0], [at, 2], [hold, 2], [1, 0]]);
+  r.slide = one(t, [[0, 0], [top, 0], [at, 2.6], [hold, 2.6], [0.92, 0], [1, 0]]);
   stance(r, t, [[0, 2, 4, 0, P], [top, 6, 32, 10, P], [at, 46, 54, 30, P], [thru, 50, 58, 32, P], [hold, 48, 56, 32, P], [1, 4, 4, 2, P]]);
   r.spine = euler(t, [[0, [0, 0, 0]], [top, [-6, 0, -6]], [at, [-24, 0, 4]], [thru, [-30, 0, 4]], [hold, [-28, 0, 4]], [1, [0, 0, 0]]]);
-  r.chest = euler(t, [[0, [0, 0, 0]], [top, [-2, 0, -24]], [at, [-6, 0, 6]], [thru, [-6, 0, 8]], [1, [0, 0, 0]]]);
+  r.chest = euler(t, [[0, [0, 0, 0]], [top, [-2, 0, -24]], [at, [-6, 0, 6]], [thru, [-6, 0, 8]], [hold, [-6, 0, 8]], [1, [0, 0, 0]]]);
   r.head = euler(t, [[0, [0, 0, 0]], [top, [-6, 0, 18]], [at, [12, 0, -4]], [thru, [16, 0, -6]], [hold, [14, 0, -6]], [1, [0, 0, 0]]]);
   r.mouth = one(t, [[0, 0], [top, 0], [at, 0.6], [thru, 0.3], [hold, 0], [1, 0]]);
 };
 
-/** Keep Away: the spear taken crosswise in both hands, drawn in to the chest, and shoved straight out from it with a step -- a bar thrust into whatever is there. */
+/** Keep Away: the spear taken slantwise across the front in both hands, drawn in to the chest, and shoved straight out from it with a step -- a bar thrust into whatever is there. */
 const KEEP_T = { secs: 1.0, release: 0.48 };
 const keepPose: CastPose = (r, t) => {
-  const top = 0.34, at = KEEP_T.release, thru = 0.64;
-  onHaft(r, t, [
-    [0.08, ...READY], [top, [1.8, 1.0, 10.4], [-1.8, 1.0, 10.6]], [at, [1.7, 3.6, 10.8], [-1.9, 3.6, 11.0]],
-    [thru, [1.7, 3.5, 10.8], [-1.9, 3.5, 11.0]], [0.88, ...READY], [1, ...READY],
+  const top = 0.34, at = KEEP_T.release, thru = 0.66;
+  // Held across and level, its left end twenty-two degrees or so ahead of square: from every side a long diagonal (never
+  // more than fifty degrees off the level on the screen), the fists at the belly, not the chin. Shoved straight out.
+  onSpear(r, t, [
+    rested(0.04), across(top, [2.2, 1.6, 8.6], [-2.0, 3.3, 9.0]), across(at, [2.2, 4.2, 8.4], [-2.0, 5.9, 8.5]),
+    across(thru, [2.2, 4.1, 8.4], [-2.0, 5.8, 8.5]), [0.9, [1.6, 0.6, 8.0], REST_UP, 1.0], rested(1),
   ]);
   // Slid back through the right fist, so the shaft lies across the body about its middle.
-  r.slide = one(t, [[0, 0], [0.2, -3], [0.72, -3], [0.9, 0]]);
-  stance(r, t, [[0, 2, 4, 0, P], [top, 2, 14, 10, P], [at, 30, 30, 14, P], [thru, 30, 30, 14, P], [1, 4, 4, 2, P]], 8);
-  r.spine = euler(t, [[0, [0, 0, 0]], [top, [6, 0, 0]], [at, [-12, 0, 0]], [thru, [-11, 0, 0]], [1, [0, 0, 0]]]);
+  r.slide = one(t, [[0, 0], [0.2, -3], [0.74, -3], [0.92, 0]]);
+  // A shove step: the leading foot driven out and the body carried on after it, the trunk thrown in behind the shaft.
+  stance(r, t, [[0, 2, 4, 0, P], [top, 6, 20, 10, P], [at, 40, 40, 16, P], [thru, 40, 40, 16, P], [1, 4, 4, 2, P]], 8);
+  r.at = [r.at[0], r.at[1] + one(t, [[top, -0.6], [at, 2.0], [thru, 2.0], [1, 0]]), r.at[2]];
+  r.spine = euler(t, [[0, [0, 0, 0]], [top, [8, 0, 0]], [at, [-16, 0, 0]], [thru, [-15, 0, 0]], [1, [0, 0, 0]]]);
   r.chest = euler(t, [[0, [0, 0, 0]], [top, [4, 0, 0]], [at, [-4, 0, 0]], [1, [0, 0, 0]]]);
   r.head = euler(t, [[0, [0, 0, 0]], [top, [4, 0, 0]], [at, [-4, 0, 0]], [1, [0, 0, 0]]]);
   r.mouth = one(t, [[0, 0], [at - 0.02, 0], [at + 0.02, 0.6], [thru, 0.1], [1, 0]]);
 };
 
-/** Fend Off: the spear spun in the right fist before the body, twice round and quickening, then caught in both hands across the body, point high, on bent knees: held so as long as it lasts. */
-const FEND_T = { secs: 1.0, release: 0.5 };
+/**
+ * Fend Off: the spear whirled end over end in both hands before the body,
+ * a turn and a half and quickening, then caught across the body, point high
+ * to the left, on bent knees: held so as long as it lasts.
+ */
+const FEND_T = { secs: 1.1, release: 0.56 };
 /** When the whirl goes round, as shares of the cast. */
-const FEND_SPIN = [0.08, 0.44] as const;
+const FEND_SPIN = [0.06, 0.52] as const;
 /** Where the set is held, as a share of the cast. */
-const FEND_HOLD = 0.62;
-/** Where the right fist is while it whirls the spear, in the body's frame. */
-const WHIRL_AT: V3 = [0.6, 2.4, 10.4];
+const FEND_HOLD = 0.66;
+/** The whirl's middle, in the body's frame, and the plane it turns in (across the body and a little ahead, and up). */
+const WHIRL_AT: V3 = [0.2, 5.0, 9.4];
+const WHIRL_X: V3 = yawed([1, 0, 0], -20), WHIRL_Z: V3 = [0, 0, 1];
+/** How far the hands are either side of the whirl's middle, and how far the spear is slid back so it turns about its own middle. */
+const WHIRL_HAND = 1.5, WHIRL_SLIDE = -3.5;
+/** The guard it is caught in: the right fist low, the shaft across the body point high to the left, the left fist out ahead at the shoulder -- clear of the face. */
+const FEND_GUARD: V3 = [1.6, 3.0, 7.4], FEND_ACROSS: V3 = unit3([-0.85, 0.35, 0.45]);
+/** How far round the whirl is at cast-time `t`, radians, from the shaft lying across with its point to the left; it comes round to the guard's slant. */
+const whirlOf = (t: number): number => {
+  const w = seg(t, FEND_SPIN[0], FEND_SPIN[1]);
+  // Quickening, and slowing only at the very end as the hands catch it.
+  const e = w < 0.85 ? (w / 0.85) ** 1.6 * 0.9 : 0.9 + 0.1 * easeOut((w - 0.85) / 0.15);
+  return Math.PI + (Math.PI * 3.75) * e;
+};
+/** The way the shaft points (butt to point) at whirl angle `a`, in the body's frame. */
+const whirlWay = (a: number): V3 => add3(mul3(WHIRL_X, Math.cos(a)), mul3(WHIRL_Z, Math.sin(a)));
 const fendPose: CastPose = (r, t, c) => {
   const [s0, s1] = FEND_SPIN, at = FEND_T.release;
-  const caught = one(t, [[0, 0], [s1, 0], [at, 1], [0.9, 1], [1, 0]]);
-  const port: [V3, V3] = [[2.0, 2.2, 8.0], [-1.2, 2.6, 10.6]];
-  onHaft(r, t, [[s0, WHIRL_AT, [WHIRL_AT[0] - 1.4, WHIRL_AT[1] + 0.2, WHIRL_AT[2] + 1]], [s1, WHIRL_AT, port[1]], [at, port[0], port[1]], [1, port[0], port[1]]], caught);
-  // Turned in the fist: square across it, then round with the whirl.
-  r.haft = (-90 + (whirlOf(t) * 180) / Math.PI) * (1 - caught);
-  r.arm[0] = euler(t, [[0, [20, 10, 0]], [s1, [30, 10, 10]], [1, [30, 10, 10]]]);
-  r.elbow[0] = one(t, [[0, 30], [s1, 60], [1, 60]]);
+  const e = whirlWay(whirlOf(t));
+  const caught = one(t, [[0, 0], [s1, 0], [at, 1], [0.94, 1], [1, 0]]);
+  const R = add3(mul3(sub3(WHIRL_AT, mul3(e, WHIRL_HAND)), 1 - caught), mul3(FEND_GUARD, caught));
+  const d = unit3(add3(mul3(e, 1 - caught), mul3(FEND_ACROSS, caught)));
+  const into = one(t, [[0, 0], [s0, 1], [1, 1]]);
+  onSpear(r, t, [[0, add3(mul3(REST_FIST, 1 - into), mul3(R, into)), unit3(add3(mul3(REST_UP, 1 - into), mul3(d, into))), 2 * WHIRL_HAND * (1 - caught) + 3.4 * caught]]);
+  r.slide = WHIRL_SLIDE * into * (1 - caught);
   const breathe = Math.sin(heldFor(c) * TAU * 4);
-  stance(r, t, [[0, 2, 4, 0, P], [s1, 10, 20, 6, P], [at, 24, 46, 14, P], [1, 24, 46, 14, P]], 14);
-  r.spine = euler(t, [[0, [0, 0, 0]], [s1, [2, 0, 0]], [at, [-8, 0, 0]], [1, [-7, 0, 0]]]);
+  stance(r, t, [[0, 2, 4, 0, P], [s1, 12, 24, 8, P], [at, 34, 75, 16, P], [1, 34, 75, 16, P]], 14);
+  r.spine = euler(t, [[0, [0, 0, 0]], [s1, [2, 0, 0]], [at, [-10, 0, 0]], [1, [-9, 0, 0]]]);
   r.spine[0] += 1.2 * breathe;
-  r.chest = euler(t, [[0, [0, 0, 0]], [s1, [0, 0, -6]], [at, [-2, 0, 8]], [1, [-2, 0, 8]]]);
-  r.head = euler(t, [[0, [0, 0, 0]], [at, [-4, 0, -4]], [1, [-4, 0, -4]]]);
+  r.chest = euler(t, [[0, [0, 0, 0]], [s1, [0, 0, 0]], [at, [-2, 0, 0]], [1, [-2, 0, 0]]]);
+  r.head = euler(t, [[0, [0, 0, 0]], [at, [-6, 0, 0]], [1, [-6, 0, 0]]]);
 };
 
 /**
- * Brace for the Charge: down on the right knee, the butt grounded by the
- * right foot and the shaft run out through both fists at the height of a
- * charging chest, the point well past the leading knee; held there as long
- * as it lasts, breathing.
+ * Brace for the Charge: down on the right knee, the butt grounded behind the
+ * rear foot and the shaft run out low through both fists, rising at the
+ * height of a charging chest, the point well past the leading knee; held
+ * there as long as it lasts, breathing.
  */
 const BRACE_T = { secs: 1.3, release: 0.54, blendOut: 0.2 };
 /** Where the pose is held, as a share of the cast: set, after the stamp. */
 const BRACE_HOLD = 0.66;
 /** The brace's shaft: the way it points from the butt, and where the butt is grounded, in the body's frame. */
-const BRACE_UP: V3 = [0, 0.88, 0.47];
-const BRACE_BUTT: V3 = [1.1, -2.2, 0.3];
+const BRACE_UP: V3 = unit3([0, 0.87, 0.5]);
+const BRACE_BUTT: V3 = [1.1, -3.0, 0.3];
 /** A point `d` units up the braced shaft from its butt. */
-const braceAt = (d: number): V3 => [BRACE_BUTT[0] + BRACE_UP[0] * d, BRACE_BUTT[1] + BRACE_UP[1] * d, BRACE_BUTT[2] + BRACE_UP[2] * d];
+const braceAt = (d: number): V3 => add3(BRACE_BUTT, mul3(BRACE_UP, d));
+/** How far up the shaft from its butt the right fist closes on it, braced: high enough up it for a kneeling arm to reach. */
+const BRACE_GRIP = 5;
+/** How far the butt is behind the fist as a spear is carried, before any slide. */
+const BUTT_TO_FIST = -(weaponSpan('spear')?.from ?? -4.4);
 const bracePose: CastPose = (r, t, c) => {
   const top = 0.4, at = BRACE_T.release;
-  // The fists 6.4 and 10.4 up the shaft from its butt: the shaft slid back through the right fist two units to ground it.
-  const set: [V3, V3] = [braceAt(6.4), braceAt(10.4)];
-  onHaft(r, t, [[0.08, ...READY], [top, ...level(1.4, 6.6, -1.2)], [at, ...set], [1, ...set]]);
-  r.slide = one(t, [[0, 0], [top, -1], [at, -2], [1, -2]]);
+  const low: V3 = [1.4, 1.2, 6.4];
+  onSpear(r, t, [rested(0.04), [top, low, tipped(aimAt(c), -4), 3.4], [at, braceAt(BRACE_GRIP), BRACE_UP, 3.0], [1, braceAt(BRACE_GRIP), BRACE_UP, 3.0]], POLE, t > top);
+  // Slid back through the fists until the butt is on the ground behind the rear foot.
+  r.slide = one(t, [[0, 0], [top, 0], [at, BUTT_TO_FIST - BRACE_GRIP], [1, BUTT_TO_FIST - BRACE_GRIP]]);
   r.kneel = one(t, [[0, 0], [top, 1], [1, 1]]);
   // A breath in the hold: the shoulders rising and settling, slowly.
   const breathe = Math.sin(heldFor(c) * TAU * 3);
-  r.spine = euler(t, [[0, [0, 0, 0]], [top, [-14, 0, 0]], [at, [-18, 0, 4]], [1, [-16, 0, 4]]]);
+  r.spine = euler(t, [[0, [0, 0, 0]], [top, [-14, 0, 0]], [at, [-20, 0, 4]], [1, [-18, 0, 4]]]);
   r.spine[0] += 1.5 * breathe;
-  r.chest = euler(t, [[0, [0, 0, 0]], [top, [-2, 0, -8]], [at, [-2, 0, 6]], [1, [-2, 0, 6]]]);
+  r.chest = euler(t, [[0, [0, 0, 0]], [top, [-2, 0, -8]], [at, [-4, 0, 6]], [1, [-4, 0, 6]]]);
   // Looking out over the point, not down at it.
-  r.head = euler(t, [[0, [0, 0, 0]], [top, [10, 0, 0]], [at, [16, 0, -6]], [1, [14, 0, -6]]]);
+  r.head = euler(t, [[0, [0, 0, 0]], [top, [10, 0, 0]], [at, [18, 0, -6]], [1, [16, 0, -6]]]);
   r.mouth = one(t, [[0, 0], [top, 0], [at, 0.45], [at + 0.08, 0], [1, 0]]);
 };
 
@@ -662,80 +856,120 @@ const bracePose: CastPose = (r, t, c) => {
 
 /** Where a lance leaves from: the point of the spear, which the light runs on from along the line of the blow. */
 const point = (k: FxScene): P3 => spearTip(k);
+/**
+ * The spear's point where it was when the blow landed, kept for the rest of
+ * the cast (`k.once`): a lance held in what it struck stays on the line it
+ * went in on, rather than pivoting on the live point as the body recovers.
+ */
+const struck = (k: FxScene, name = 'tip'): P3 => k.once(name, () => point(k));
+
+/** The least a lance is seen standing in what it struck, seconds from the hit, before it is drawn back. */
+const SIT = 0.2;
+/** The blow has landed: when (`k.released` at the hit, kept for `drawnBack`), and where the point was (`struck`). */
+const landed = (k: FxScene): P3 => {
+  if (k.state.hit === undefined) k.state.hit = Math.max(0, k.released);
+  return struck(k);
+};
 
 /**
- * A lance that has struck held in the target for `stay` of `u`, then drawn
- * back into the spear's point and gone by `end` of it -- before the body
- * that drove it has let the spear go back.
+ * How far a struck lance has been drawn back, nought to one, keyed to the hit:
+ * held while the pose holds its blow (`hold`, a share of the cast), and drawn
+ * back over `over` seconds ending as the pose lets the blow go -- but never
+ * before it has stood `SIT` seconds in what it struck, so a short travel and a
+ * quick recovery cannot take the blow away before it is seen to land.
  */
-function heldLance(k: FxScene, u: number, stay: number, to: P3, o: LanceLook = {}, end = 1): void {
-  const back = smooth(seg(u, stay, end));
+const drawnBack = (k: FxScene, T: { secs: number; release: number }, hold: number, over = 0.14): number => {
+  const start = Math.max((hold - T.release) * T.secs - over, (k.state.hit ?? 0) + SIT);
+  return smooth(seg(k.released, start, start + over));
+};
+
+/**
+ * A lance that has struck: from where the point was at the hit to `to`, drawn
+ * back into the spear by `back` -- shortened from its head back toward the
+ * point at full strength, as a cut is eaten from its tail, so the bronze keeps
+ * its hue over grass -- and let go by alpha only in the last fifth.
+ */
+function heldLance(k: FxScene, to: P3, back: number, o: LanceLook = {}, name = 'tip'): void {
   if (back >= 1) return;
-  const from = point(k);
-  lance(k, from, along(from, to, 1 - back * 0.85), { ...o, alpha: (o.alpha ?? 1) * (1 - back) });
+  const from = struck(k, name);
+  lance(k, from, along(from, to, 1 - back), { ...o, alpha: (o.alpha ?? 1) * lateFade(1 - back) });
+}
+
+/**
+ * A light on the ground under a blow, warm white, small: smaller and fainter
+ * at night, when the stage lays day-lit grass bare under it and adds its
+ * colour over -- a wide, strong one is a disc of olive in the dark.
+ */
+function warmLight(k: FxScene, p: { x: number; y: number }, r: number, strength: number): void {
+  k.light(p, r * (1 - 0.4 * k.night), strength * (1 - 0.5 * k.night), '#fff6ea');
 }
 
 /** A glint and a light at the moment a blow lands. */
 function landGlint(k: FxScene, at: P3, u: number, size: number): void {
   const f = flashOf(u, 0.08);
   k.flare(at, size * (1 - 0.5 * u), f, k.pal.core, 0.4);
-  k.light(at, 1.6, 0.5 * (1 - u));
+  warmLight(k, at, 1.2, 0.5 * (1 - u));
 }
+
+/** Dust, the colour of the ground a spear is stamped or dragged on. */
+const DUST = ['#8f7f62', '#a8957a'];
+/** Turned earth: a furrow's floor. */
+const EARTH = '#6b5236';
 
 /* ---- the spells ------------------------------------------------------------------------- */
 
 export const PIKEMAN: Record<string, SpellVisual> = {
   /*
    * Warning Thrust: the jab stops short of the creature, a point of light
-   * checked in the air a pace off it with a clang, and a line is scored across
-   * the ground between them; over the creature, for its seconds, a spear's
-   * point turned down over a bar -- warned off.
+   * checked in the air over a line it scores in the ground between them (an
+   * arc of a circle round the creature, so it lies flat from every side), held
+   * there with a clang; over the creature, for the seconds it is warned off, a
+   * spear's point turned down over a bar that drains as the warning runs out.
    */
   pikeman_warning_thrust: {
     palette: PALETTE,
     cast: { timing: WARN_T, pose: warnPose },
     fx: {
-      charge: (k, t) => k.glow(point(k), 5, 0.6 * bump(t, 0.2, WARN_T.release, WARN_T.release + 0.05)),
+      charge: (k, t) => k.glow(point(k), 5, 0.6 * bump(t, 0.16, WARN_T.release, WARN_T.release + 0.05)),
       travel: {
         secs: (tiles) => 0.06 + tiles * 0.03,
         draw: (k, u) => {
-          const from = point(k), stop = warnStop(k);
+          const from = point(k), stop = warnStop(k, from);
           lance(k, from, along(from, stop, easeOut(u)), { width: 2 });
         },
       },
       hit: (k) => {
-        const stop = warnStop(k);
+        const stop = k.once('stop', () => warnStop(k, landed(k)));
+        warnLine(k);
         // Thrown back off nothing: the clang of a blow stopped.
         const back = k.toward(k.target, k.caster);
         k.burst(stop, 14, { kind: 'spark', colour: [k.pal.core, k.pal.accent], size: 1.8, life: [0.15, 0.35], speed: [0.8, 2], up: [-6, 14], heading: back, cone: 2.2, gravity: 50, drag: 0.08 });
         // The stamp of the leading foot.
-        k.burst(k.joint(k.caster, 'ankle0', [0, 0, 0], 0.02), 8, { kind: 'dust', colour: '#8f7f62', size: 3, life: [0.35, 0.6], speed: [0.2, 0.5], up: [2, 6], gravity: 4, drag: 0.1, jitter: 0.06 });
+        k.burst(k.joint(k.caster, 'ankle0', [0, 0, 0], 0.02), 7, { kind: 'dust', colour: DUST[0], size: 2.3, life: [0.35, 0.6], speed: [0.2, 0.5], up: [2, 6], gravity: 4, drag: 0.1, jitter: 0.06 });
       },
       impact: {
-        secs: 0.8,
+        secs: 0.6,
         draw: (k, u) => {
-          const stop = warnStop(k);
-          heldLance(k, u, 0.26, stop, { width: 2 }, 0.5);
-          k.flare(stop, 9 * (1 - u), flashOf(u, 0.06), k.pal.core, 0.8);
-          k.light(stop, 1.4, 0.45 * (1 - u));
+          const stop = k.once('stop', () => warnStop(k, struck(k)));
+          // Held checked in the air, trembling, as long as the jab is held; drawn back before the arm comes in.
+          const back = drawnBack(k, WARN_T, WARN_HOLD);
+          const shake = 0.35 * Math.sin(k.now * 70) * (1 - smooth(u * 3));
+          heldLance(k, { ...stop, z: stop.z + shake }, back, { width: 2 });
+          k.flare(stop, 10 * (1 - u), flashOf(u, 0.06), k.pal.core, 0.8);
+          warmLight(k, stop, 1.2, 0.45 * (1 - u));
         },
       },
       linger: {
         draw: (k, age, left) => {
-          const d = lineOf(k);
-          // The line in the sand: scored across the way from the middle out, then left to fade.
-          const scored = smooth(seg(age, 0, 0.22));
-          const lineA = (1 - smooth(seg(age, 1.6, 3))) * smooth(left / 0.6);
-          if (lineA > 0.01) {
-            const st = warnLine(k, d);
-            groundShapes(k, st, 1, [barAcross(st, d, 0.24, 0.032, scored), barAcross({ x: st.x - d.x * 0.07, y: st.y - d.y * 0.07 }, d, 0.13, 0.018, scored)],
-              { fill: k.pal.main, lit: k.pal.core, alpha: 0.95 * lineA });
-            // Lying on the ground it is under the night; a little light along it keeps it there in the dark.
-            k.glow(k.on(st.x, st.y, 0.5), 12, 0.3 * lineA * scored);
-          }
+          const secs = k.fx.secs ?? 30;
+          // The line in the sand: scored from the middle out, then, once the creature has seen it, smoothed over from its
+          // ends in to the middle -- at full strength, not faded (a furrow thinned over grass is olive).
+          const scored = smooth(seg(age, 0, 0.25)) * (1 - smooth(seg(age, 2.4, 4)));
+          const lineA = smooth(left / 0.6);
+          if (scored > 0.02 && lineA > 0.01) sandLine(k, scored, lineA, age);
           const a = smooth(age / 0.35) * smooth(left / 1);
-          const strong = 1 - 0.45 * smooth(seg(age, 2.5, 4));
-          warnSign(k, k.at(k.target, 1.12 + 0.02 * Math.sin(age * 2.2)), a * strong, age);
+          const strong = 1 - 0.35 * smooth(seg(age, 2.5, 4));
+          warnSign(k, k.at(k.target, 1.12 + 0.02 * Math.sin(age * 2.2)), a * strong, age, clamp(left / secs));
           if (!k.fast && age < 3) k.emit(k.at(k.target, 1.1), 3, { kind: 'mote', colour: k.pal.accent, size: 1.4, life: [0.5, 0.9], speed: [0.02, 0.06], up: [2, 6], gravity: 0, jitter: 0.08 });
         },
       },
@@ -743,10 +977,11 @@ export const PIKEMAN: Record<string, SpellVisual> = {
   },
 
   /*
-   * Overreach: the lunge throws a lance far past where the spear stops -- a
-   * sky-blue mark on the ground at the end of the caster's reach, and the
-   * light run on beyond it to the enemy -- and it is slow coming back: the
-   * lance draws back to the fist over the second the next swing is put back.
+   * Overreach: the lunge throws a telescoped lance far past where the spear
+   * stops -- a sky-blue mark on the ground at the end of the caster's reach,
+   * and the light shot on beyond it in three lengths to the enemy -- and it is
+   * slow coming back: a sky-blue ring round the fist empties over the second
+   * the next swing is put back.
    */
   pikeman_overreach: {
     palette: PALETTE,
@@ -763,47 +998,54 @@ export const PIKEMAN: Record<string, SpellVisual> = {
           // Telescoped out in three steps rather than slid: each joint of it shoots on from the last.
           const step = Math.min(2.999, u * 3);
           const reach = (Math.floor(step) + easeOut(step - Math.floor(step))) / 3;
-          lance(k, from, along(from, to, reach), { width: 2.4, head: 11 });
+          lance(k, from, along(from, to, reach), { width: 2.4, head: 11, rings: Math.floor(step) });
           overReachMark(k, 1);
           if (!k.fast) k.emit(along(from, to, reach), 50, { kind: 'mote', colour: k.pal.accent, size: 1.4, life: [0.15, 0.3], speed: [0.02, 0.1], up: [-2, 2], gravity: 0 });
         },
       },
       hit: (k) => {
+        landed(k);
         pierce(k, k.heart(k.target), lineOf(k), 1.1);
       },
       impact: {
-        // The lance comes back over the second the next swing is put back by.
+        // To the end of the second the next swing is put back by.
         secs: 0.2 + (FX_OF('pikeman_overreach').wind ?? 1),
         draw: (k, u) => {
           const wind = k.fx.wind ?? 1;
-          const total = 0.2 + wind;
-          const age = u * total;
+          const age = u * (0.2 + wind);
           const to = k.heart(k.target);
-          // Drawn back into the point as the arm stays out; then the slow second before the next swing is the mark going.
-          const back = smooth(seg(age, 0.12, 0.4));
-          const from = point(k);
-          lance(k, from, along(from, to, 1 - back * 0.92), { width: 2.4, head: 11, alpha: 1 - back });
+          heldLance(k, to, drawnBack(k, OVER_T, OVER_HOLD, 0.2), { width: 2.4, head: 11, rings: 2 });
           landGlint(k, to, clamp(age / 0.45), 11);
-          overReachMark(k, 1 - smooth(seg(age, 0.3, total)));
+          overReachMark(k, 1 - smooth(seg(age, 0.3, wind)));
+          // What it costs: the arm's next swing, a ring round the fist emptying over that second.
+          windRing(k, 1 - clamp(age / wind), smooth(age / 0.12) * (1 - smooth(seg(age, wind, wind + 0.2))));
         },
       },
     },
   },
 
   /*
-   * Sweep the Legs: a low flat arc of bronze across the creature's shins,
-   * dust kicked out of its feet; then for its seconds a hobble of two rings
-   * round its feet, turning at the pace it is cut to, and the dust of
-   * dragged feet.
+   * Sweep the Legs: the real spear swept round low and flat, its swept band
+   * drawn off it, and a low arc of bronze carried across the creature's shins
+   * with it from the caster's right to their left, dust kicked out of its
+   * feet; then for its seconds a hobble on it -- a cuff round its fore feet
+   * and one round its hind feet, joined under it by a short chain -- and the
+   * scuffs and dust of dragged feet behind it as it goes.
    */
   pikeman_sweep_the_legs: {
     palette: PALETTE,
     cast: { timing: SWEEP_T, pose: sweepPose },
     fx: {
       charge: (k, t) => {
-        const u = seg(t, 0.36, SWEEP_T.release + 0.06);
-        if (u > 0 && u < 1) sweepArc(k, u, 1);
-        else if (t >= SWEEP_T.release + 0.06) sweepArc(k, 1, 1 - seg(t, SWEEP_T.release + 0.06, SWEEP_T.release + 0.14));
+        const [s0, s1] = SWEEP_SWING;
+        // The band the shaft sweeps, off the real spear, through the swing.
+        // Only once it is down and flat: the cut down from the wind-up is no part of the sweep.
+        const on = bump(t, SWEEP_T.release - 0.06, SWEEP_T.release, s1 + 0.02);
+        if (on > 0.01) k.trail(k.caster, { secs: 0.12, inner: 0.62, outer: 1, alpha: 0.85 * on, glow: 0.4 });
+        // Carried across the shins from the right to the left, passing the middle as the spear passes the line.
+        const u = seg(t, s0 + 0.02, SWEEP_T.release + 0.1);
+        const fade = 1 - seg(t, SWEEP_T.release + 0.1, SWEEP_T.release + 0.2);
+        if (u > 0 && fade > 0) sweepArc(k, Math.min(1, u), fade);
       },
       hit: (k) => {
         const d = lineOf(k);
@@ -811,29 +1053,26 @@ export const PIKEMAN: Record<string, SpellVisual> = {
         const feet = k.at(k.target, 0.12);
         // Thrown the way the sweep goes, right to left.
         k.burst(feet, 22, { kind: 'spark', colour: [k.pal.core, k.pal.light], size: 1.8, life: [0.15, 0.35], speed: [1.2, 2.6], up: [0, 10], heading: { x: -across.x, y: -across.y }, cone: 1.1, gravity: 60, drag: 0.08 });
-        k.burst(k.at(k.target, 0.02), 14, { kind: 'dust', colour: ['#8f7f62', '#a8957a'], size: 3.4, life: [0.45, 0.8], speed: [0.3, 0.8], up: [2, 8], heading: { x: -across.x, y: -across.y }, cone: 2.4, gravity: 4, drag: 0.12 });
+        k.burst(k.at(k.target, 0.02), 14, { kind: 'dust', colour: DUST, size: 3.4, life: [0.45, 0.8], speed: [0.3, 0.8], up: [2, 8], heading: { x: -across.x, y: -across.y }, cone: 2.4, gravity: 4, drag: 0.12 });
       },
       impact: {
         secs: 0.6,
         draw: (k, u) => {
           landGlint(k, k.at(k.target, 0.15), u, 9);
-          // The hobble snapped shut round the feet.
-          const R = footRing(k.target);
-          k.ring(k.target, R * (1.8 - 0.8 * easeBack(u * 1.6)), { band: 0.07, alpha: 0.9 * (1 - 0.3 * u), main: k.pal.accent, glow: 0.6 });
+          // The hobble snapped shut round the feet: the cuffs come in from wide and close.
+          hobble(k, 0, smooth(u / 0.5), 1 + 0.8 * (1 - easeBack(clamp(u * 1.6))));
         },
       },
       linger: {
         draw: (k, age, left) => {
           const a = smooth(age / 0.3) * smooth(left / 0.8);
-          const R = footRing(k.target);
-          // Turning at the pace it is cut to.
-          const pace = k.fx.pace ?? 0.5;
-          // A chain round the feet: bronze links and sky-blue links between them, going round at the pace it is cut to.
-          const turn = age * pace * 1.2;
-          k.ring(k.target, R, { band: 0.045, alpha: 0.85 * a, main: k.pal.main, deep: k.pal.deep, dash: 2, n: 16, turn, glow: 0 });
-          k.glow(k.at(k.target, 0.04), 9 + R * 30, 0.3 * a);
-          k.ring(k.target, R - 0.008, { band: 0.028, alpha: 0.85 * a, main: k.pal.accent, deep: k.pal.accent, dash: 2, n: 16, turn: turn + TAU / 16, glow: 0 });
-          if (!k.fast) k.emit(k.at(k.target, 0.02), 2.5 * a, { kind: 'dust', colour: '#8f7f62', size: 2.4, life: [0.5, 0.9], speed: [0.05, 0.15], up: [1, 3], gravity: 2, jitter: R * 0.6 });
+          hobble(k, age, a, 1);
+          // Dragged feet: dust kicked up behind it as it goes, the more the further it has gone this frame.
+          const s = k.state, t = k.target;
+          const moved = s.hx === undefined ? 0 : Math.hypot(t.x - s.hx, t.y - s.hy);
+          s.hx = t.x;
+          s.hy = t.y;
+          if (!k.fast) k.emit(k.at(t, 0.02), (1.5 + Math.min(30, moved / Math.max(0.001, k.dt) * 12)) * a, { kind: 'dust', colour: DUST[0], size: 2.4, life: [0.5, 0.9], speed: [0.05, 0.15], up: [1, 3], gravity: 2, jitter: footRing(t) * 0.6 });
         },
       },
     },
@@ -841,9 +1080,10 @@ export const PIKEMAN: Record<string, SpellVisual> = {
 
   /*
    * Vital Thrust: a long aim -- a fine sky-blue sight line from the leading
-   * hand and four points closing on the creature's heart -- then the lance
-   * there in an instant and a hard eight-pointed glint where it went in, the
-   * four points thrown off it: a blow found the soft place.
+   * hand and four points closing on the creature's heart -- then a thin
+   * white-hot lance there in an instant, unlit until it is in, and a hard
+   * eight-pointed glint where it went, the four points thrown off it: a blow
+   * found the soft place.
    */
   pikeman_vital_thrust: {
     palette: PALETTE,
@@ -856,32 +1096,35 @@ export const PIKEMAN: Record<string, SpellVisual> = {
         if (aim > 0 && gone < 1) {
           const heart = k.heart(k.target);
           sightLine(k, k.hand(0), heart, aim * (1 - gone));
-          reticle(k, heart, lerp(11, 3.4, aim), aim * (1 - gone), t * 3, 0);
+          reticle(k, heart, lerp(18, 5, aim), aim * (1 - gone), t * 3, 0);
+          // A cool glimmer on the mark by day; at night it would only wash the creature.
+          k.light(heart, 1.1, 0.2 * aim * (1 - gone) * (1 - k.night), k.pal.accent);
         }
       },
       travel: {
         secs: (tiles) => 0.02 + tiles * 0.02,
         draw: (k, u) => {
           const from = point(k), to = k.heart(k.target);
-          lance(k, from, along(from, to, u), { width: 1.8, head: 11 });
+          lance(k, from, along(from, to, u), { width: 1.3, head: 12, hot: true, glow: 0.7 * k.night });
         },
       },
       hit: (k) => {
+        landed(k);
         const at = k.heart(k.target), d = lineOf(k);
         pierce(k, at, d, 1.2);
-        k.burst(at, 10, { kind: 'shard', colour: [k.pal.accent, k.pal.core], size: 2, life: [0.35, 0.6], speed: [0.6, 1.4], up: [4, 16], heading: d, cone: 2.6, gravity: 40, drag: 0.2 });
+        k.burst(at, 10, { kind: 'shard', colour: [k.pal.accent, k.pal.core], size: 2, life: [0.35, 0.6], speed: [0.6, 1.4], up: [4, 16], heading: d, cone: 2.6, gravity: 40, drag: 0.2, ink: false });
       },
       impact: {
         secs: 0.6,
         draw: (k, u) => {
           const at = k.heart(k.target);
-          heldLance(k, u, 0.15, at, { width: 1.8, head: 11 }, 0.45);
+          heldLance(k, at, drawnBack(k, VITAL_T, VITAL_HOLD), { width: 1.3, head: 12, hot: true, glow: 0.6 });
           const f = flashOf(u, 0.05);
-          k.flare(at, 12 * (1 - 0.4 * u), f, k.pal.core, 0);
-          k.flare(at, 8 * (1 - 0.4 * u), f, k.pal.accent, Math.PI / 4);
+          k.flare(at, 13 * (1 - 0.4 * u), f, k.pal.core, 0);
+          k.flare(at, 9 * (1 - 0.4 * u), f, k.pal.accent, Math.PI / 4);
           // The four points thrown off the heart.
-          reticle(k, at, 3.4 + 16 * easeOut(u), 1 - u, 0, u * 2);
-          k.light(at, 1.6, 0.55 * (1 - u));
+          reticle(k, at, 5 + 18 * easeOut(u), 1 - u, 0, u * 2);
+          warmLight(k, at, 1.2, 0.55 * (1 - u));
         },
       },
     },
@@ -889,13 +1132,14 @@ export const PIKEMAN: Record<string, SpellVisual> = {
 
   /*
    * Hook: a lance with a billhook's barb shot out to the enemy and caught in
-   * it; on the haul a furrow is ploughed over the ground from where it stood
-   * toward the caster, the length it is dragged and stopping where it must,
-   * dust thrown up along it; the barb lets go with a snap.
+   * it; on the haul it comes (`cast.pull`), a furrow ploughed over the ground
+   * from where it stood toward the caster, the length it is dragged and
+   * stopping where it must, dust thrown up along it; the barb lets go with a
+   * snap.
    */
   pikeman_hook: {
     palette: PALETTE,
-    cast: { timing: HOOK_T, pose: hookPose },
+    cast: { timing: HOOK_T, pose: hookPose, pull: { from: HAUL[0], to: HAUL[1] } },
     fx: {
       charge: (k, t) => k.glow(point(k), 5, 0.6 * bump(t, 0.12, HOOK_T.release, HOOK_T.release + 0.04)),
       travel: {
@@ -906,6 +1150,7 @@ export const PIKEMAN: Record<string, SpellVisual> = {
         },
       },
       hit: (k) => {
+        // Where it stood when the barb took: the island drags it from here, and the stage draws it coming.
         const s = k.state;
         s.x0 = k.target.x;
         s.y0 = k.target.y;
@@ -917,21 +1162,20 @@ export const PIKEMAN: Record<string, SpellVisual> = {
         // From the catch to a little after the haul.
         secs: HOOK_AFTER,
         draw: (k, u) => {
-          const secs = HOOK_AFTER;
-          const age = u * secs;
+          const age = u * HOOK_AFTER;
           const h0 = (HAUL[0] - HOOK_T.release) * HOOK_T.secs, h1 = (HAUL[1] - HOOK_T.release) * HOOK_T.secs;
-          const haul = smooth(seg(age, h0, h1));
-          const free = seg(age, h1 + 0.04, h1 + 0.2);
+          const haul = smooth(seg(k.released, h0, h1));
+          const free = seg(k.released, h1 + 0.04, h1 + 0.2);
+          // Taut from the point, which the haul keeps on what it has hold of; a tremble in it before the haul; let go after.
           const to = k.heart(k.target), from = point(k);
-          // Taut before the haul, a tremble in it; let go after.
           if (free < 1) {
-            const shake = age < h1 ? 0.4 * Math.sin(k.now * 60) * (1 - haul) : 0;
-            lance(k, from, { x: to.x, y: to.y, z: to.z + shake }, { width: 1.8, head: 12, hook: true, alpha: 1 - free });
+            const shake = k.released < h0 ? 0.4 * Math.sin(k.now * 60) : 0;
+            lance(k, from, { x: to.x, y: to.y, z: to.z + shake }, { width: 1.8, head: 12, hook: true, alpha: 1 - free, glow: 1 + 0.6 * bump(k.released, h0 - 0.1, h0, h1) });
           }
-          if (age < 0.3) landGlint(k, to, age / 0.3, 8);
-          hookFurrow(k, haul, 1 - smooth(seg(age, h1 + 0.2, secs)));
-          if (haul > 0 && haul < 1) k.emit(k.at(k.target, 0.04), 60, { kind: 'dust', colour: ['#8f7f62', '#a8957a'], size: 3, life: [0.35, 0.7], speed: [0.1, 0.4], up: [2, 6], gravity: 4, drag: 0.1, jitter: 0.12 });
-          if (age >= h1 + 0.04 && !k.state.snap) {
+          if (age < 0.3) landGlint(k, to, age / 0.3, 6);
+          hookFurrow(k, haul, smooth(seg(age, (0.84 - HOOK_T.release) * HOOK_T.secs, HOOK_AFTER)), haul > 0 && haul < 1);
+          if (haul > 0 && haul < 1) k.emit(k.at(k.target, 0.04), 60, { kind: 'dust', colour: DUST, size: 3, life: [0.35, 0.7], speed: [0.1, 0.4], up: [2, 6], gravity: 4, drag: 0.1, jitter: 0.12 });
+          if (k.released >= h1 + 0.04 && !k.state.snap) {
             k.state.snap = 1;
             k.burst(to, 10, { kind: 'spark', colour: [k.pal.core, k.pal.accent], size: 1.6, life: [0.12, 0.3], speed: [0.6, 1.4], up: [0, 10], gravity: 50 });
           }
@@ -942,9 +1186,10 @@ export const PIKEMAN: Record<string, SpellVisual> = {
 
   /*
    * Rally the Line: a pennon unfurls on the spear as it is lifted high, and
-   * when the butt comes down a wave runs out over the ground to the five
-   * tiles it reaches, upturned chevrons of breath rising off the ground
-   * behind it as it passes: stamina, given back.
+   * when the butt comes down a thin wave runs out over the ground to the five
+   * tiles it reaches, a row of pike-heads riding its edge; as it passes each
+   * person in it -- the caster too -- a stack of chevrons and a bar filling
+   * over their head: stamina, given back.
    */
   pikeman_rally_the_line: {
     palette: PALETTE,
@@ -961,34 +1206,40 @@ export const PIKEMAN: Record<string, SpellVisual> = {
       },
       hit: (k) => {
         const feet = k.at(k.caster, 0.02);
-        k.burst(feet, 16, { kind: 'dust', colour: ['#8f7f62', '#a8957a'], size: 3.6, life: [0.45, 0.8], speed: [0.5, 1.1], up: [1, 5], gravity: 3, drag: 0.1 });
+        k.burst(feet, 14, { kind: 'dust', colour: DUST, size: 2.6, life: [0.45, 0.8], speed: [0.5, 1.1], up: [1, 5], gravity: 3, drag: 0.1 });
         k.burst(k.at(k.caster, 0.1), 24, { kind: 'spark', colour: [k.pal.core, k.pal.light], size: 2, life: [0.25, 0.5], speed: [1.2, 2.6], up: [2, 14], gravity: 40, drag: 0.06 });
-        k.flash(0.04);
       },
       impact: {
-        secs: 1.4,
+        secs: 1.8,
         draw: (k, u) => {
+          const secs = 1.8, age = u * secs;
           const R = spellInfo('pikeman_rally_the_line')?.radius || (k.fx.reach ?? 5);
-          const out = easeOut(seg(u, 0, 0.55));
-          const fade = 1 - smooth(seg(u, 0.45, 1));
-          // The wave: a broad band running out to the edge and holding there as it thins.
+          // Out to the edge in the first second, held there as it thins.
+          const out = easeOut(seg(age, 0, 1));
+          const fade = 1 - smooth(seg(age, 1, secs));
+          // Gone by thinning to nothing at full strength, not by alpha: thinned gold over grass goes olive.
+          const thin = 1 - smooth(seg(age, 1, secs - 0.1)), last = lateFade(secs - age, 0.15);
           const r = 0.3 + (R - 0.3) * out;
-          k.ring(k.caster, r, { band: Math.min(r * 0.3, 0.1 + 0.22 * (1 - out)), alpha: 0.95 * fade, turn: u * 0.4, glow: 0.35 });
-          if (u > 0.08) k.ring(k.caster, Math.max(0.2, r - 0.6 * out), { band: 0.05, alpha: 0.5 * fade, main: k.pal.accent, glow: 0, turn: -u * 0.4 });
+          k.ring(k.caster, r, { band: Math.max(0.012, 0.12 * (1 - 0.5 * out) * thin), alpha: 0.95 * last, turn: u * 0.4, glow: 0.3 + 0.6 * k.night });
           // The edge marked as it is reached: the five tiles it gives breath to.
-          if (out > 0.92) k.ring(k.caster, R, { band: 0.06, alpha: 0.7 * fade, dash: 4, main: k.pal.accent, glow: 0.4 });
-          rallyChevrons(k, R, r, u, fade);
-          k.light(k.caster, r + 1, 0.6 * fade);
-          if (u < 0.08) k.flare(k.at(k.caster, 0.08), 12, flashOf(u / 0.08), k.pal.core, 0.3);
+          if (out > 0.92) k.ring(k.caster, R, { band: Math.max(0.01, 0.06 * thin), alpha: 0.85 * last, dash: 4, main: k.pal.accent, glow: 0.4 * k.night });
+          rallyHeads(k, r, fade * (1 - smooth(seg(out, 0.9, 1))));
+          rallyChevrons(k, R, r, age, fade);
+          // Everybody it passes over, as it passes: the caster at once, the rest as the wave gets to them.
+          for (const b of k.bodiesWithin(R, k.caster, ['player', 'peer'])) given(k, b, age - waveAt(Math.hypot(b.x - k.caster.x, b.y - k.caster.y), R));
+          warmLight(k, k.caster, Math.min(1.6, r + 0.4), 0.5 * fade);
+          if (age < 0.12) k.flare(k.at(k.caster, 0.08), 12, flashOf(age / 0.12), k.pal.core, 0.3);
         },
       },
     },
   },
 
   /*
-   * Twin Thrust: two lances, one after the other -- the first high into the
-   * chest, the second low into the belly a beat later -- each with its own
-   * smaller glint and spray: two lighter blows, not one heavy one.
+   * Twin Thrust: two blows, one after the other, each a pair of thin lances
+   * side by side -- the first high into the chest off the leading foot, the
+   * second low into the belly a beat later with the rear foot stepped through
+   * and its heads in sky-blue -- each with its own smaller glint and spray:
+   * two lighter blows, not one heavy one.
    */
   pikeman_twin_thrust: {
     palette: PALETTE,
@@ -997,9 +1248,9 @@ export const PIKEMAN: Record<string, SpellVisual> = {
       charge: (k, t) => {
         const [j1, j2] = JABS;
         k.glow(point(k), 4, 0.5 * bump(t, 0.1, j1, j1 + 0.04));
-        // Each jab: out in a few hundredths, held a moment, drawn back.
-        jab(k, t, j1, twinAim(k, 0));
-        jab(k, t, j2, twinAim(k, 1));
+        // Each jab: out in a few hundredths, held while the pose holds it, drawn back before it lets go.
+        jab(k, t, j1, j1 + TWIN_SIT, twinAim(k, 0), 'tip1', { width: 1.3, head: 8, pair: true });
+        jab(k, t, j2, j2 + TWIN_SIT, twinAim(k, 1), 'tip2', { width: 1.1, head: 8, pair: true, blue: true });
         if (t >= j2 && !k.state.second) {
           k.state.second = 1;
           pierce(k, twinAim(k, 1), lineOf(k), 0.7);
@@ -1014,9 +1265,12 @@ export const PIKEMAN: Record<string, SpellVisual> = {
 
   /*
    * Reach Advantage: the creature's own reach laid round it on the ground as
-   * a dark dashed ring while the guard is set; struck from outside it, the
-   * ring breaks and the blow lands with the large glint of the larger blow,
-   * struck from within it, the ring stays dull and the glint is a plain one.
+   * a dark dashed ring while the guard is set, a tick on the line where the
+   * caster stands against it; a long-headed lance with both edges whetted
+   * sky-blue goes in. Struck from outside that reach, the ring breaks -- its
+   * dashes thrown off, a gap where the blow came through -- and the glint is
+   * the large two-tone one of the larger blow; struck from within it, the ring
+   * stays whole, goes red and closes in, and the glint is a plain one.
    */
   pikeman_reach_advantage: {
     palette: PALETTE,
@@ -1030,31 +1284,38 @@ export const PIKEMAN: Record<string, SpellVisual> = {
         secs: (tiles) => 0.04 + tiles * 0.04,
         draw: (k, u) => {
           const from = point(k), to = k.heart(k.target);
-          lance(k, from, along(from, to, easeOut(u)), { width: 2.2, head: 10 });
+          lance(k, from, along(from, to, easeOut(u)), { width: 2.2, head: 16, edged: true });
           theirReach(k, 1, 0);
         },
       },
-      hit: (k) => pierce(k, k.heart(k.target), lineOf(k), outReach(k) ? 1.5 : 0.9),
+      hit: (k) => {
+        landed(k);
+        const at = k.heart(k.target);
+        pierce(k, at, lineOf(k), outReach(k) ? 1.5 : 0.8);
+        if (outReach(k)) k.burst(at, 10, { kind: 'shard', colour: [k.pal.accent, k.pal.core], size: 2.2, life: [0.3, 0.55], speed: [0.8, 1.6], up: [2, 14], heading: lineOf(k), cone: 1.4, gravity: 40, drag: 0.15, ink: false });
+      },
       impact: {
-        secs: 0.75,
+        secs: 0.8,
         draw: (k, u) => {
           const at = k.heart(k.target);
           const big = outReach(k);
           const m = big ? (k.fx.more ?? 1.5) : (k.fx.whole ?? 1);
-          heldLance(k, u, 0.12, at, { width: 2.2, head: 10 }, 0.4);
+          heldLance(k, at, drawnBack(k, REACH_T, REACH_HOLD), { width: 2.2, head: 16, edged: true, blue: big && u < 0.25, glow: big ? 1.4 : 0.6 });
           landGlint(k, at, u, 8 * m);
           if (big) k.flare(at, 7 * m * (1 - u), flashOf(u, 0.06), k.pal.accent, Math.PI / 4);
-          theirReach(k, 1 - smooth(seg(u, 0.3, 1)), u);
+          // Kept at full strength (red and blue going olive over grass by alpha) and let go only at the very end.
+          theirReach(k, lateFade(1 - u, 0.3), u);
         },
       },
     },
   },
 
   /*
-   * Skewer: the lance driven in and on out of the far side, two tiles past
-   * it; laid on the ground behind the creature, the corridor the thrust goes
-   * down -- as long and as wide as the rule has it -- lit for a moment, where
-   * anything else standing takes the lesser blow.
+   * Skewer: a thick lance driven in and on out of the far side, two tiles
+   * past it; laid on the ground behind the creature, the corridor the thrust
+   * goes down -- as long and as wide as the rule has it -- a light running
+   * down it as it is laid, and a spark off anything else standing in it, which
+   * takes the lesser blow.
    */
   pikeman_skewer: {
     palette: PALETTE,
@@ -1065,50 +1326,60 @@ export const PIKEMAN: Record<string, SpellVisual> = {
         secs: (tiles) => 0.04 + tiles * 0.04,
         draw: (k, u) => {
           const from = point(k), to = k.heart(k.target);
-          lance(k, from, along(from, to, u), { width: 2.4, head: 11 });
+          lance(k, from, along(from, to, u), { width: 3.2, head: 12 });
         },
       },
-      hit: (k) => pierce(k, k.heart(k.target), lineOf(k), 1),
+      hit: (k) => {
+        landed(k);
+        pierce(k, k.heart(k.target), lineOf(k), 1);
+      },
       impact: {
-        secs: 1.0,
+        secs: 1.1,
         draw: (k, u) => {
-          const d = lineOf(k);
+          const d = k.once('way', () => ({ ...lineOf(k), z: 0 }));
           const behind = k.fx.behind ?? 2;
+          const t = k.once('at', () => k.target);
           const at = k.heart(k.target);
-          const far = off(k, k.target, d, behind, 0, at.z - k.ground(k.target.x, k.target.y) - 2);
-          // On through it, out the far side, then drawn back.
-          const on = easeOut(seg(u, 0, 0.16));
-          const back = smooth(seg(u, 0.22, 0.42));
-          const from = point(k);
-          const tip = along(at, far, on);
-          lance(k, from, along(from, tip, 1 - back * 0.9), { width: 2.4, head: 11, alpha: 1 - back });
+          const far = off(k, t, d, behind, 0, at.z - k.ground(t.x, t.y) - 2);
+          // On through it, out the far side; held; drawn back before the drive is let go.
+          const on = easeOut(seg(u, 0, 0.14));
+          const from = struck(k);
+          const back = drawnBack(k, SKEWER_T, SKEWER_HOLD, 0.2);
+          if (back < 1) lance(k, from, along(from, along(at, far, on), 1 - back), { width: 3.2, head: 12, alpha: lateFade(1 - back) });
           if (on >= 1 && !k.state.out) {
             k.state.out = 1;
             k.burst(far, 18, { kind: 'spark', colour: [k.pal.core, k.pal.light], size: 1.8, life: [0.2, 0.4], speed: [1, 2.2], up: [-2, 12], heading: d, cone: 1, gravity: 50, drag: 0.08 });
           }
-          skewerLane(k, d, behind, seg(u, 0.04, 0.2), (1 - smooth(seg(u, 0.35, 1))));
+          const laid = seg(u, 0.04, 0.24);
+          // Taken up again from the creature's end once it has been seen, at full strength, and let go only at the last.
+          skewerLane(k, t, d, behind, laid, lateFade(1 - u, 0.12), smooth(seg(u, 0.5, 0.97)));
+          // A light run down the lane as it is laid, so it shows in the dark.
+          if (laid > 0 && laid < 1) warmLight(k, off(k, t, d, behind * easeOut(laid)), 1.1, 0.45 * (1 - laid));
           landGlint(k, at, u, 10);
+          // Anything else standing in it takes the lesser blow, as the thrust gets to it.
+          skewered(k, t, d, behind, behind * easeOut(laid));
         },
       },
     },
   },
 
   /*
-   * Keep Away: a flat sweep of light round the front at the chest, and from
-   * the feet a ring of arrowheads driven out the one tile a blow will push;
-   * for its seconds a sky-blue pennon on the spear and three faint arrowheads
-   * round the feet pointing out.
+   * Keep Away: the shaft held across in both hands thrown off them as a bar
+   * of light, its own length and slant, shoved straight out the one tile a
+   * blow will push, and from the feet a ring of
+   * arrowheads driven out as far; for its seconds a square sky-blue guidon on
+   * the spear and arrowheads round the feet pulsing outward.
    */
   pikeman_keep_away: {
     palette: PALETTE,
     cast: { timing: KEEP_T, pose: keepPose },
     fx: {
       charge: (k, t) => {
-        const u = seg(t, KEEP_T.release - 0.04, 0.74);
-        if (u > 0 && u < 1) shoveWave(k, u);
+        const u = seg(t, KEEP_T.release, 0.8);
+        if (u > 0 && u < 1) shoveBar(k, u);
       },
       hit: (k) => {
-        k.burst(k.at(k.caster, 0.04), 12, { kind: 'dust', colour: '#8f7f62', size: 3, life: [0.35, 0.6], speed: [0.8, 1.4], up: [1, 4], gravity: 3, drag: 0.1 });
+        k.burst(k.at(k.caster, 0.04), 12, { kind: 'dust', colour: DUST[0], size: 3, life: [0.35, 0.6], speed: [0.8, 1.4], up: [1, 4], gravity: 3, drag: 0.1 });
       },
       impact: {
         secs: 0.7,
@@ -1116,8 +1387,8 @@ export const PIKEMAN: Record<string, SpellVisual> = {
           // Out by exactly the tile a blow will push.
           const push = k.fx.push ?? 1;
           const r = 0.22 + push * easeOut(u);
-          pushRing(k, r, 8, 0.1, 0.95 * (1 - smooth(seg(u, 0.5, 1))), 0);
-          k.light(k.caster, 1.8, 0.4 * (1 - u));
+          pushRing(k, r, 8, 0.14, 0.95 * (1 - smooth(seg(u, 0.5, 1))), 0);
+          warmLight(k, k.caster, 1.3, 0.4 * (1 - u));
         },
       },
       linger: {
@@ -1125,20 +1396,23 @@ export const PIKEMAN: Record<string, SpellVisual> = {
         draw: (k, age, left) => {
           const a = smooth(age / 0.4) * smooth(left / 0.8);
           const tip = spearTip(k);
-          pennon(k, tip, k.caster, { size: 9, alpha: 0.9 * a, phase: k.now * 7, main: k.pal.accent, stripe: k.pal.core });
+          // Put up once the spear is back upright in the hand, not while it is still across the face.
+          guidon(k, tip, k.caster, 0.95 * a * smooth(seg(age, 0.4, 0.75)), k.now * 6);
           k.glow(tip, 4, 0.35 * a, k.pal.accent);
-          pushRing(k, 0.26, 3, 0.07, 0.5 * a * (0.75 + 0.25 * Math.sin(age * 3)), age * 0.6);
+          // Pulsing outward, slowly: what a blow does to what it lands on.
+          const pulse = (age * 0.7) % 1;
+          pushRing(k, 0.4 + 0.1 * easeOut(pulse), 6, 0.14, 0.75 * a * (1 - 0.5 * pulse), 0.3);
         },
       },
     },
   },
 
   /*
-   * Fend Off: the whirl of the spear leaves a wheel of light; when it is set a
-   * ring of leaf points springs out flat on the ground at the reach a
-   * creature strikes from, points outward, and for its seconds it stays, a
-   * thin wave going out from it now and then the two tiles a creature is
-   * thrown back.
+   * Fend Off: the spear whirled end over end before the body leaves a disc of
+   * light -- arcs cut by its two ends; when it is caught a ring of leaf points
+   * springs out flat on the ground at the reach a creature strikes from, points
+   * outward, and for its seconds it stays, a thin wave going out from it now
+   * and then the two tiles a creature is thrown back.
    */
   pikeman_fend_off: {
     palette: PALETTE,
@@ -1152,28 +1426,30 @@ export const PIKEMAN: Record<string, SpellVisual> = {
         secs: 0.55,
         draw: (k, u) => {
           fendRing(k, HUNT_REACH * (0.3 + 0.7 * easeBack(u)), 1, u);
-          k.light(k.caster, HUNT_REACH + 1, 0.45 * (1 - u));
+          warmLight(k, k.caster, HUNT_REACH + 0.2, 0.45 * (1 - u));
         },
       },
       linger: {
         on: 'caster',
         draw: (k, age, left) => {
           const a = smooth(age / 0.3) * smooth(left / 0.8);
-          if (age > 0.55) fendRing(k, HUNT_REACH, 0.55 * a, 1);
+          // At full strength while it lasts (gold thinned over grass goes olive), let go only over its last moment.
+          if (age > 0.55) fendRing(k, HUNT_REACH, smooth(left / 0.4), 1);
           // Every so often a thin wave out the push's length, the way a creature is thrown.
           const push = k.fx.push ?? 2;
           const w = ((age + 0.4) % 1.6) / 1.6;
-          k.ring(k.caster, HUNT_REACH + push * easeOut(w), { band: 0.04, alpha: 0.35 * a * (1 - w), main: k.pal.accent, glow: 0, n: 24 });
+          k.ring(k.caster, HUNT_REACH + push * easeOut(w), { band: Math.max(0.008, 0.045 * (1 - w)), alpha: 0.75 * a * lateFade(1 - w, 0.15), main: k.pal.accent, glow: 0.4 * k.night, n: 24 });
         },
       },
     },
   },
 
   /*
-   * Brace for the Charge: the butt planted with a spurt of dust, and a hedge
-   * of pikes of light rising round the caster at the edge of their reach,
-   * leant outward over a ring scored on the ground -- where a charge is
-   * stopped -- standing for its seconds and sinking back at the end.
+   * Brace for the Charge: the butt planted behind the rear foot with a spurt
+   * of dust, and a hedge of pikes of light rising round the caster at the edge
+   * of their reach, leant outward over a ring scored on the ground -- where a
+   * charge is stopped -- a faint line run out along the braced spear to it;
+   * standing for its seconds and sinking back at the end.
    */
   pikeman_brace_for_the_charge: {
     palette: PALETTE,
@@ -1184,13 +1460,13 @@ export const PIKEMAN: Record<string, SpellVisual> = {
         // Where the butt has gone into the ground.
         const butt = spearButt(k);
         const foot = k.on(butt.x, butt.y, 0.5);
-        k.burst(foot, 12, { kind: 'dust', colour: ['#8f7f62', '#a8957a'], size: 3, life: [0.35, 0.6], speed: [0.3, 0.7], up: [2, 6], gravity: 4, drag: 0.12 });
+        k.burst(foot, 12, { kind: 'dust', colour: DUST, size: 3, life: [0.35, 0.6], speed: [0.3, 0.7], up: [2, 6], gravity: 4, drag: 0.12 });
         k.burst(foot, 10, { kind: 'spark', colour: [k.pal.core, k.pal.light], size: 1.6, life: [0.15, 0.3], speed: [0.6, 1.2], up: [4, 12], gravity: 50 });
       },
       impact: {
         secs: 0.6,
         draw: (k, u) => {
-          k.light(k.caster, reachHeld(k) + 1, 0.45 * (1 - u));
+          warmLight(k, k.caster, 1.3, 0.45 * (1 - u));
         },
       },
       linger: {
@@ -1207,29 +1483,95 @@ export const PIKEMAN: Record<string, SpellVisual> = {
 
 /* ---- the spells' own pieces ------------------------------------------------------------ */
 
-/** Where a warning jab is stopped: a pace short of the creature, never behind the fist. */
-function warnStop(k: FxScene): P3 {
-  const from = point(k), to = k.heart(k.target);
-  const d = Math.max(0.01, k.dist);
-  return along(from, to, clamp((d - 0.42) / d, 0.25, 0.9));
+/** How far out a ring round a creature's feet goes, in tiles. */
+const footRing = (b: { wide: number }): number => Math.max(0.16, (b.wide / 40) * 1.9);
+
+/**
+ * Where the line in the sand is scored, in tiles out from the caster: short of
+ * the creature's near side, so it lies between them and never under the body.
+ */
+function warnLineAt(k: FxScene): number {
+  const near = k.dist - footRing(k.target);
+  return Math.max(Math.min(0.5, near * 0.6), near - 0.4);
 }
-/** Where the line in the sand is scored: under the stopped point, across the way. */
-function warnLine(k: FxScene, d: V2): V2 {
-  const at = Math.max(0.3, k.dist - 0.5);
-  return { x: k.caster.x + d.x * at, y: k.caster.y + d.y * at };
+/** Where a warning jab is checked: in the air a hand short of the line, on the way from `from` to the heart. */
+function warnStop(k: FxScene, from: P3): P3 {
+  const d = lineOf(k), to = k.heart(k.target);
+  const tipAt = (from.x - k.caster.x) * d.x + (from.y - k.caster.y) * d.y;
+  const want = warnLineAt(k) - 0.06;
+  return along(from, to, clamp((want - tipAt) / Math.max(0.05, k.dist - tipAt), 0.12, 0.95));
+}
+/** Where the line was scored and which way it lies, kept from the hit: a line in the ground does not follow the caster about. */
+function warnLine(k: FxScene): { c: V2; d: V2 } {
+  const d = k.once('lineD', () => ({ ...lineOf(k), z: 0 }));
+  const c = k.once('lineC', () => {
+    const at = warnLineAt(k);
+    return k.on(k.caster.x + d.x * at, k.caster.y + d.y * at);
+  });
+  return { c, d };
+}
+/**
+ * The line in the sand: a furrow of turned earth scored as a short arc of a
+ * circle round the creature, bowed toward the caster, from the middle out,
+ * with a line of light lying in it and its lit lip; dust thrown off the two
+ * ends while it is being cut. An arc lies flat from every side.
+ */
+function sandLine(k: FxScene, scored: number, a: number, age: number): void {
+  const { c } = warnLine(k);
+  // The circle round the creature where it was warned, through the line's middle.
+  const o = k.once('lineO', () => ({ x: k.target.x, y: k.target.y, z: 0 }));
+  const rr = Math.max(0.3, Math.hypot(c.x - o.x, c.y - o.y));
+  const back = { x: (c.x - o.x) / rr, y: (c.y - o.y) / rr };
+  // Well round the creature -- sixty degrees either side, or 0.6 tiles if it is far out -- so the curve of the ground
+  // shows from every side and it never stands up as a bracket.
+  const half = Math.min(1.05, 0.6 / rr);
+  groundShapes(k, c, rr * half + 0.5, [arcBand(o, back, rr, half * 1.04, 0.065, scored)], { fill: EARTH, ink: k.pal.ink, alpha: 0.9 * a });
+  groundShapes(k, c, rr * half + 0.5, [arcBand(o, back, rr - 0.003, half * 0.94, 0.026, scored)],
+    { fill: k.pal.main, lit: k.pal.core, litN: 9, alpha: 0.95 * a, glow: 0.25 + 0.75 * k.night });
+  if (scored < 1 && age < 0.3 && !k.fast) {
+    const h = half * scored, a0 = Math.atan2(back.y, back.x);
+    for (const s of [-1, 1]) k.emit(k.on(o.x + Math.cos(a0 + h * s) * rr, o.y + Math.sin(a0 + h * s) * rr, 0.5), 40, { kind: 'dust', colour: DUST, size: 2.2, life: [0.25, 0.5], speed: [0.1, 0.3], up: [2, 5], gravity: 4, drag: 0.1 });
+  }
+  if (age < 0.6) k.glow(k.on(c.x, c.y, 0.5), 10, 0.4 * (1 - age / 0.6) * a);
 }
 
-/** A spear's point turned down over a bar, in sky-blue: warned off. `p` where it hangs. */
-function warnSign(k: FxScene, p: P3, a: number, age: number): void {
+/**
+ * A spear's point turned down over a bar, in sky-blue, at `p`: warned off.
+ * Under it a gauge that drains as the warning runs out (`left`, nought to one
+ * of its seconds), so how long it holds can be read off it.
+ */
+function warnSign(k: FxScene, p: P3, a: number, age: number, left: number): void {
   if (a <= 0.01) return;
   const x = k.sx(p), y = k.sy(p), z = k.zoom;
-  const L = 7 * z, W = 2.4 * z;
+  const L = 9 * z, W = 3 * z;
   const pal = k.pal;
   // Turning a little about its upright, so it reads as a thing in the air.
-  const sq = 0.7 + 0.3 * Math.cos(age * 1.4);
+  const sq = 0.75 + 0.25 * Math.cos(age * 1.4);
+  const inkW = Math.max(0.8, 0.7 * z);
   k.worldDraw(p, (g) => {
     g.globalAlpha = clamp(a);
     g.lineJoin = 'miter';
+    // A stub of the shaft above it, so it reads as a spear's point turned down and not a gem.
+    const sw = Math.max(1.2, 1.5 * z);
+    g.lineCap = 'butt';
+    g.beginPath();
+    g.moveTo(x, y - L * 0.55);
+    g.lineTo(x, y - L * 1.25);
+    g.lineWidth = sw + 2 * inkW;
+    g.strokeStyle = pal.ink;
+    g.stroke();
+    g.lineWidth = sw;
+    g.strokeStyle = pal.main;
+    g.stroke();
+    // Its socket.
+    g.beginPath();
+    g.rect(x - W * 0.45, y - L * 0.72, W * 0.9, L * 0.14);
+    g.fillStyle = pal.accent;
+    g.fill();
+    g.lineWidth = inkW;
+    g.strokeStyle = pal.ink;
+    g.stroke();
+    g.lineCap = 'round';
     // The point, down.
     g.beginPath();
     g.moveTo(x, y - L * 0.6);
@@ -1251,19 +1593,33 @@ function warnSign(k: FxScene, p: P3, a: number, age: number): void {
     g.lineTo(x, y + L * 0.4);
     g.lineTo(x + W * sq, y - L * 0.05);
     g.closePath();
-    g.lineWidth = Math.max(0.8, 0.7 * z);
+    g.lineWidth = inkW;
     g.strokeStyle = pal.ink;
     g.stroke();
-    // The bar it stops on.
-    const by = y + L * 0.55;
+    // The bar it stops on: the warning's seconds, draining from the right.
+    const bw = L * 1.3, bh = Math.max(1.6, 1.7 * z), bx = x - bw / 2, by = y + L * 0.55;
     g.beginPath();
-    g.rect(x - L * 0.55 * sq, by, L * 1.1 * sq, Math.max(1.2, 1.3 * z));
-    g.fillStyle = pal.accent;
+    g.rect(bx, by, bw, bh);
+    g.fillStyle = pal.ink;
     g.fill();
+    if (left > 0.005) {
+      g.beginPath();
+      g.rect(bx, by, bw * left, bh);
+      g.fillStyle = pal.accent;
+      g.fill();
+      g.beginPath();
+      g.rect(bx, by, bw * left, bh * 0.4);
+      g.fillStyle = pal.core;
+      g.fill();
+    }
+    g.beginPath();
+    g.rect(bx, by, bw, bh);
+    g.lineWidth = inkW;
+    g.strokeStyle = pal.ink;
     g.stroke();
     g.lineJoin = 'round';
   }, 4);
-  k.glow(p, 9, 0.45 * a, pal.accent);
+  k.glow(p, 10, 0.45 * a, pal.accent);
 }
 
 /** Overreach's mark of where the caster's own reach ends, on the ground across the way: only when the enemy is past it. */
@@ -1271,36 +1627,147 @@ function overReachMark(k: FxScene, a: number): void {
   const reach = reachHeld(k);
   if (a <= 0.01 || k.dist <= reach + 0.05) return;
   const d = lineOf(k);
-  const c = { x: k.caster.x + d.x * reach, y: k.caster.y + d.y * reach };
-  // A bar where the spear stops, and an arrowhead past it pointing on: the blow goes further.
-  groundShapes(k, c, 0.8, [barAcross(c, d, 0.17, 0.028, a), chevronFlat({ x: c.x + d.x * 0.14, y: c.y + d.y * 0.14 }, d, 0.1 * a)],
-    { fill: k.pal.accent, lit: k.pal.core, alpha: 0.9 * a });
-  k.glow(k.on(c.x, c.y, 1), 8, 0.4 * a, k.pal.accent);
+  const o = k.once('reachO', () => ({ x: k.caster.x, y: k.caster.y, z: 0 }));
+  const c = { x: o.x + d.x * reach, y: o.y + d.y * reach };
+  // A long stretch of the circle the spear reaches to round the caster, dashed, drawn out from the line as it is set --
+  // a range ring, so it lies flat from every side -- and an arrowhead past it pointing on: the blow goes further.
+  const span = 0.55, n = 7, dashes: V2[][] = [];
+  for (let i = 0; i < n; i++) {
+    const mid = ((i + 0.5) / n - 0.5) * 2 * span;
+    if (Math.abs(mid) > span * a + 0.02) continue;
+    const at = Math.atan2(d.y, d.x) + mid;
+    dashes.push(arcBand(o, { x: Math.cos(at), y: Math.sin(at) }, reach, (span / n) * 0.62, 0.045, 1, 3));
+  }
+  groundShapes(k, c, reach * span + 0.6, dashes, { fill: k.pal.accent, lit: k.pal.core, litN: 4, alpha: 0.95 * Math.min(1, a * 2), glow: 0.3 + 0.7 * k.night, light: k.pal.accent });
+  groundShapes(k, c, 0.8, [chevronFlat({ x: c.x + d.x * 0.2, y: c.y + d.y * 0.2 }, d, 0.18 * a)],
+    { fill: k.pal.accent, lit: k.pal.core, alpha: 0.9 * a, glow: 0.3 + 0.7 * k.night, light: k.pal.accent });
+  k.glow(k.on(c.x, c.y, 1), 9, 0.4 * a, k.pal.accent);
 }
 
-/** Sweep the Legs's arc: a ribbon at the shins swept across the creature from the caster's right to their left, `u` of the way. */
+/**
+ * Overreach's cost, on the caster: a sky-blue ring round the right fist, `left`
+ * of it still there, emptying round the clock over the second the next swing
+ * is put back -- inked, so it reads by day.
+ */
+function windRing(k: FxScene, left: number, a: number): void {
+  if (a <= 0.01 || left <= 0.005) return;
+  const p = k.hand(1), x = k.sx(p), y = k.sy(p), z = k.zoom, R = 5 * z;
+  const pal = k.pal;
+  const a0 = -Math.PI / 2, a1 = a0 + TAU * left;
+  k.worldDraw(p, (g) => {
+    g.globalAlpha = clamp(a);
+    g.lineCap = 'butt';
+    g.beginPath();
+    g.arc(x, y, R, a0, a1);
+    g.lineWidth = Math.max(2, 2.2 * z);
+    g.strokeStyle = pal.ink;
+    g.stroke();
+    g.beginPath();
+    g.arc(x, y, R, a0, a1);
+    g.lineWidth = Math.max(1.1, 1.2 * z);
+    g.strokeStyle = pal.accent;
+    g.stroke();
+    // The hand of the clock, where the second has got to.
+    g.beginPath();
+    g.moveTo(x + Math.cos(a1) * (R - 2 * z), y + Math.sin(a1) * (R - 2 * z));
+    g.lineTo(x + Math.cos(a1) * (R + 2 * z), y + Math.sin(a1) * (R + 2 * z));
+    g.lineWidth = Math.max(1, 1.2 * z);
+    g.strokeStyle = pal.core;
+    g.stroke();
+  }, 6);
+  k.glow(p, 8, 0.3 * a, pal.accent);
+}
+
+/**
+ * Sweep the Legs's arc at the creature's shins: centred on it, a chord as wide
+ * as it stands and a little more, bowed only a little toward the caster so it
+ * runs through the legs, its head carried from the caster's right to their
+ * left (`u` of the way) as the real spear's swept band (`k.trail`) comes round.
+ */
 function sweepArc(k: FxScene, u: number, alpha: number): void {
   if (alpha <= 0.01) return;
-  const d = lineOf(k), across = rightOf(d);
-  const dist = Math.max(0.5, k.dist);
-  // Wide enough to go right across a creature, whatever it is: half a tile either side of it.
-  const half = Math.min(1.1, 0.55 / dist + 0.25);
-  const head = lerp(half, -half, u);
-  const tail = Math.min(half, head + 0.75);
-  if (tail - head < 0.05) return;
+  const d = lineOf(k), across = rightOf(d), t = k.target;
+  const half = footRing(t) + 0.3, bow = 0.08, lift = 2.2;
+  const at = (s: number): P3 => {
+    const v = s / half;
+    return k.on(t.x + across.x * s - d.x * bow * (1 - v * v), t.y + across.y * s - d.y * bow * (1 - v * v), lift);
+  };
+  const head = lerp(half * 1.15, -half * 1.15, easeOut(u));
+  const tail = Math.min(half * 1.15, head + half * 1.4);
+  if (tail - head < 0.03) return;
   const pts: P3[] = [];
   const n = k.fast ? 6 : 10;
-  for (let i = 0; i <= n; i++) {
-    const a = lerp(tail, head, i / n);
-    // Positive is to the caster's right of the line, so it comes in from the right and goes out to the left.
-    pts.push(off(k, k.caster, { x: d.x * Math.cos(a) + across.x * Math.sin(a), y: d.y * Math.cos(a) + across.y * Math.sin(a) }, dist, 0, 2.6));
+  for (let i = 0; i <= n; i++) pts.push(at(lerp(tail, head, i / n)));
+  k.ribbon(pts, { width: 3, taper: 'start', alpha, glow: 0.6, around: t });
+  // Its scuff on the ground under it, so it reads as low and flat from every side, not as a stroke in the air.
+  const scuff = pts.map((p) => ({ x: p.x, y: p.y }));
+  k.groundPath(scuff, { width: 3, alpha: 0.6 * alpha, main: EARTH, glow: 0 });
+  const h = pts[pts.length - 1];
+  if (u < 1) {
+    if (!k.fast) k.emit(k.on(h.x, h.y, 0.3), 40, { kind: 'dust', colour: DUST[0], size: 2.2, life: [0.2, 0.4], speed: [0.05, 0.2], up: [1, 4], gravity: 2 });
   }
-  k.ribbon(pts, { width: 5, taper: 'start', alpha });
-  if (!k.fast) k.emit(pts[pts.length - 1], 40, { kind: 'dust', colour: '#8f7f62', size: 2.2, life: [0.2, 0.4], speed: [0.05, 0.2], up: [1, 4], gravity: 2 });
 }
 
-/** How far out a ring round a creature's feet goes, in tiles. */
-const footRing = (b: { wide: number }): number => Math.max(0.16, (b.wide / 40) * 1.9);
+/**
+ * Sweep the Legs's hobble on a creature: a bronze cuff round its fore feet and
+ * one round its hind feet, joined under its belly by one short chain of links
+ * -- legs that cannot stride, at the pace the rule cuts it to -- and, as it
+ * goes, the scuffs of dragged feet left behind it, worn away from the far end.
+ * `wide` throws the cuffs out from where they close on the legs.
+ */
+function hobble(k: FxScene, age: number, a: number, wide: number): void {
+  if (a <= 0.01) return;
+  const t = k.target, s = k.state;
+  // Along the creature's own length, the way it is turned: its fore feet ahead, its hind feet behind.
+  const d = k.facingDir(t), r = rightOf(d);
+  const reach = footRing(t) * 0.6 * wide;
+  const fore = { x: t.x + d.x * reach, y: t.y + d.y * reach }, hind = { x: t.x - d.x * reach, y: t.y - d.y * reach };
+  // The cuffs: two small hoops on the ground about each pair of feet.
+  const cuff = Math.max(0.075, footRing(t) * 0.36);
+  for (const c of [fore, hind]) k.ring(c, cuff, { band: 0.038, alpha: a, main: k.pal.main, deep: k.pal.deep, n: 10, glow: 0.5 * k.night });
+  // The chain: links in a row from cuff to cuff, every other one turned across, inked, with a night rim.
+  const links: V2[][] = [];
+  const n = 5;
+  for (let i = 0; i < n; i++) {
+    const u = (i + 0.5) / n;
+    const c = { x: lerp(fore.x, hind.x, u), y: lerp(fore.y, hind.y, u) };
+    const along = i % 2 ? r : d, l = i % 2 ? 0.02 : (reach / n) * 1.25, w = i % 2 ? 0.012 : 0.022;
+    const across = rightOf(along);
+    links.push([
+      { x: c.x + along.x * l, y: c.y + along.y * l }, { x: c.x + across.x * w, y: c.y + across.y * w },
+      { x: c.x - along.x * l, y: c.y - along.y * l }, { x: c.x - across.x * w, y: c.y - across.y * w },
+    ]);
+  }
+  groundShapes(k, t, reach + 0.3, links, { fill: k.pal.light, ink: k.pal.ink, alpha: a, glow: 0.6 * k.night, light: k.pal.light });
+  k.glow(k.at(t, 0.04), 9 + reach * 30, (0.12 + 0.2 * k.night) * a);
+  // Dragged feet: a pair of short scuffs each time it has gone a little way, kept a second and worn down from the far end.
+  if (s.lx === undefined) {
+    s.lx = t.x;
+    s.ly = t.y;
+  }
+  const mx = t.x - s.lx, my = t.y - s.ly, gone = Math.hypot(mx, my);
+  if (gone > 0.16) {
+    const i = (s.ns = ((s.ns ?? -1) + 1) % 6);
+    s[`sx${i}`] = s.lx;
+    s[`sy${i}`] = s.ly;
+    s[`su${i}`] = mx / gone;
+    s[`sv${i}`] = my / gone;
+    s[`st${i}`] = age;
+    s.lx = t.x;
+    s.ly = t.y;
+  }
+  const segs: Array<readonly [V2, V2]> = [];
+  for (let i = 0; i < 6; i++) {
+    const at = s[`st${i}`];
+    if (at === undefined || age - at > 1.2 || age < at) continue;
+    const left = 1 - (age - at) / 1.2, x = s[`sx${i}`], y = s[`sy${i}`], u = s[`su${i}`], v = s[`sv${i}`];
+    for (const side of [-1, 1]) {
+      const ox = x - v * 0.07 * side, oy = y + u * 0.07 * side;
+      segs.push([{ x: ox, y: oy }, { x: ox + u * 0.14 * left, y: oy + v * 0.14 * left }]);
+    }
+  }
+  if (segs.length) k.groundPath([], { segs, width: 2.2, main: EARTH, alpha: 0.9 * a, glow: 0 });
+}
 
 /** A fine dashed sight line from the leading hand to the heart, drawn on toward it. */
 function sightLine(k: FxScene, from: P3, to: P3, a: number): void {
@@ -1321,11 +1788,11 @@ function sightLine(k: FxScene, from: P3, to: P3, a: number): void {
   });
 }
 
-/** Four small leaf points round `at`, `r` pixels out, pointing in at it: where the vital blow goes. `spin` turns them, `fly` throws them off. */
+/** Four leaf points round `at`, `r` pixels out, pointing in at it: where the vital blow goes. `spin` turns them, `fly` throws them off. */
 function reticle(k: FxScene, at: P3, r: number, a: number, spin: number, fly: number): void {
   if (a <= 0.01) return;
   const x = k.sx(at), y = k.sy(at), z = k.zoom, R = r * z;
-  const L = 4.2 * z, W = 1.5 * z;
+  const L = 8 * z, W = 2.6 * z;
   const pal = k.pal;
   k.worldDraw(k.target, (g) => {
     g.globalAlpha = clamp(a);
@@ -1336,7 +1803,7 @@ function reticle(k: FxScene, at: P3, r: number, a: number, spin: number, fly: nu
       const tx = x + c * R, ty = y + s * R;
       const ox = x + c * (R + L), oy = y + s * (R + L);
       const px = -s * W, py = c * W;
-      const mx = (tx + ox) / 2, my = (ty + oy) / 2;
+      const mx = (tx * 0.6 + ox * 0.4), my = (ty * 0.6 + oy * 0.4);
       g.beginPath();
       g.moveTo(tx, ty);
       g.lineTo(mx + px, my + py);
@@ -1345,22 +1812,29 @@ function reticle(k: FxScene, at: P3, r: number, a: number, spin: number, fly: nu
       g.closePath();
       g.fillStyle = i < 2 ? pal.core : pal.accent;
       g.fill();
-      g.lineWidth = Math.max(0.7, 0.6 * z);
+      g.lineWidth = Math.max(0.8, 0.7 * z);
       g.strokeStyle = pal.ink;
       g.stroke();
     }
     g.lineJoin = 'round';
   }, 10);
-  k.glow(at, r + 4, 0.35 * a, pal.accent);
+  k.glow(at, r + 5, 0.35 * a, pal.accent);
 }
 
-/** Hook's furrow: from where the enemy stood toward the caster, the length it is dragged, `u` of it ploughed. */
-function hookFurrow(k: FxScene, u: number, a: number): void {
+/**
+ * Hook's furrow: from where the enemy stood toward the caster, the length it
+ * is dragged, `u` of it ploughed; turned earth with a pale lit lip either
+ * side, and while it is being ploughed (`live`) a light at its head, so it is
+ * seen being made in the dark.
+ */
+function hookFurrow(k: FxScene, u: number, gone: number, live: boolean): void {
   const s = k.state;
-  if (u <= 0 || a <= 0.01 || s.x0 === undefined) return;
+  if (u <= 0 || gone >= 1 || s.x0 === undefined) return;
+  // Smoothed over from where it began toward the caster at full strength (turned earth thinned over grass is olive).
+  const a = lateFade(1 - gone, 0.15);
   const pull = k.fx.pull ?? 2, least = k.fx.least ?? 1;
-  const from = { x: s.x0, y: s.y0 };
-  const d = k.toward(from, k.caster);
+  const start = { x: s.x0, y: s.y0 };
+  const d = k.toward(start, k.caster);
   // No nearer than it may come, and never further than it is.
   const dragged = Math.max(0, Math.min(pull, (s.d0 ?? 0) - least));
   if (dragged <= 0.02) return;
@@ -1368,37 +1842,67 @@ function hookFurrow(k: FxScene, u: number, a: number): void {
   // moved, and the furrow is where it went.
   const len = Math.max(dragged * u, Math.min(dragged, Math.hypot(k.target.x - s.x0, k.target.y - s.y0)));
   const r = rightOf(d);
-  const w0 = 0.07, w1 = 0.025;
+  // What is left of it: from `gone` of the way along to its head.
+  const from = { x: start.x + d.x * len * gone, y: start.y + d.y * len * gone };
+  const left = len * (1 - gone);
+  const w0 = lerp(0.09, 0.035, gone), w1 = 0.035;
   const pts: V2[] = [
     { x: from.x + r.x * w0, y: from.y + r.y * w0 },
-    { x: from.x + d.x * len + r.x * w1, y: from.y + d.y * len + r.y * w1 },
-    { x: from.x + d.x * (len + 0.1), y: from.y + d.y * (len + 0.1) },
-    { x: from.x + d.x * len - r.x * w1, y: from.y + d.y * len - r.y * w1 },
+    { x: from.x + d.x * left + r.x * w1, y: from.y + d.y * left + r.y * w1 },
+    { x: from.x + d.x * (left + 0.1), y: from.y + d.y * (left + 0.1) },
+    { x: from.x + d.x * left - r.x * w1, y: from.y + d.y * left - r.y * w1 },
     { x: from.x - r.x * w0, y: from.y - r.y * w0 },
   ];
-  const c = { x: from.x + d.x * len * 0.5, y: from.y + d.y * len * 0.5 };
-  groundShapes(k, c, len * 0.5 + 0.4, [pts], { fill: '#6b5236', ink: k.pal.deep, alpha: 0.7 * a });
-  // The lip of turned earth either side, lit.
-  groundShapes(k, c, len * 0.5 + 0.4, [
-    [pts[0], { x: pts[1].x + r.x * 0.02, y: pts[1].y + r.y * 0.02 }, pts[1]],
-    [pts[4], { x: pts[3].x - r.x * 0.02, y: pts[3].y - r.y * 0.02 }, pts[3]],
-  ], { fill: k.pal.main, alpha: 0.6 * a });
+  const c = { x: from.x + d.x * left * 0.5, y: from.y + d.y * left * 0.5 };
+  groundShapes(k, c, left * 0.5 + 0.4, [pts], { fill: EARTH, ink: k.pal.ink, alpha: 0.85 * a });
+  // The lip of turned earth either side, lit pale, with a night rim.
+  const lip = (s1: number): V2[] => [
+    { x: from.x + r.x * (w0 + 0.035) * s1, y: from.y + r.y * (w0 + 0.035) * s1 },
+    { x: from.x + d.x * left + r.x * (w1 + 0.03) * s1, y: from.y + d.y * left + r.y * (w1 + 0.03) * s1 },
+    { x: from.x + d.x * left + r.x * w1 * s1, y: from.y + d.y * left + r.y * w1 * s1 },
+    { x: from.x + r.x * w0 * s1, y: from.y + r.y * w0 * s1 },
+  ];
+  groundShapes(k, c, left * 0.5 + 0.4, [lip(1), lip(-1)], { fill: dry(k.pal.light, 0.15), ink: k.pal.deep, alpha: 0.9 * a, glow: 0.2 + 0.6 * k.night });
+  if (live) warmLight(k, k.on(from.x + d.x * left, from.y + d.y * left), 1.1, 0.5);
 }
 
-/** Rally's breath given back: upturned chevrons rising off the ground the wave has passed over. */
-function rallyChevrons(k: FxScene, R: number, reached: number, u: number, fade: number): void {
+/** When Rally's wave, run out over its first second (`easeOut`), gets `d` tiles from the caster: seconds after the stamp. */
+const waveAt = (d: number, R: number): number => 1 - Math.cbrt(1 - clamp((d - 0.3) / Math.max(0.01, R - 0.3)));
+
+/** Rally's wave edge: small upright pike-heads riding round it, the group's own point, `r` tiles out. */
+function rallyHeads(k: FxScene, r: number, a: number): void {
+  if (a <= 0.01 || r < 0.5) return;
+  const c = k.caster, n = k.fast ? 8 : 12, z = k.zoom;
+  const pal = k.pal;
+  // Two records, the far half behind the caster and the near half in front, each sorted with what stands there.
+  for (const nearSide of [false, true]) {
+    const pieces: Array<{ pts: P3[]; fill?: string | false; ink?: string | false; alpha?: number }> = [];
+    for (let i = 0; i < n; i++) {
+      const an = (i / n) * TAU + 0.2;
+      const x = c.x + Math.cos(an) * r, y = c.y + Math.sin(an) * r;
+      // Nearer the viewer is further down the screen: x + y larger.
+      if ((x + y > c.x + c.y) !== nearSide) continue;
+      const b = k.on(x, y, 0), h = 9 * (1 + 0.15 * Math.sin(i * 1.7)), w = 1.4 / 40;
+      const tx = -Math.sin(an) * w, ty = Math.cos(an) * w;
+      pieces.push({ pts: [{ x: b.x, y: b.y, z: b.z + h }, { x: b.x + tx, y: b.y + ty, z: b.z + h * 0.45 }, { x: b.x, y: b.y, z: b.z }, { x: b.x - tx, y: b.y - ty, z: b.z + h * 0.45 }], fill: i % 2 ? pal.core : pal.main, ink: pal.ink, alpha: a });
+    }
+    if (pieces.length) k.shapes(nearSide ? k.on(c.x + r * 0.7, c.y + r * 0.7) : k.on(c.x - r * 0.7, c.y - r * 0.7), pieces, { width: Math.max(0.7, 0.6 * z) });
+  }
+}
+
+/** Rally's breath given back off the empty ground: a few double chevrons rising in a ring where the wave has just passed. */
+function rallyChevrons(k: FxScene, R: number, reached: number, age: number, fade: number): void {
   if (fade <= 0.01) return;
-  const n = k.fast ? 8 : 16;
+  const n = k.fast ? 5 : 8;
   const pts: number[] = [];
   for (let i = 0; i < n; i++) {
-    const an = hashOf(k.seed, i) * TAU;
-    const rr = R * Math.sqrt(0.05 + 0.95 * hashOf(k.seed + 1, i));
+    const an = (i / n) * TAU + hashOf(k.seed, i) * 0.5;
+    const rr = R * (0.45 + 0.4 * hashOf(k.seed + 1, i));
     if (rr > reached) continue;
     // Each rises from when the wave went over it.
-    const born = (rr / R) * 0.55;
-    const v = clamp((u - born) / 0.45);
+    const v = clamp((age - waveAt(rr, R)) / 0.7);
     if (v <= 0 || v >= 1) continue;
-    const p = k.on(k.caster.x + Math.cos(an) * rr, k.caster.y + Math.sin(an) * rr, 4 + 18 * v);
+    const p = k.on(k.caster.x + Math.cos(an) * rr, k.caster.y + Math.sin(an) * rr, 4 + 16 * v);
     pts.push(k.sx(p), k.sy(p), Math.sin(Math.PI * v));
   }
   if (!pts.length) return;
@@ -1407,105 +1911,219 @@ function rallyChevrons(k: FxScene, R: number, reached: number, u: number, fade: 
     g.lineWidth = Math.max(1.2, 1.8 * z);
     g.lineJoin = 'miter';
     for (let i = 0; i < pts.length; i += 3) {
-      const x = pts[i], y = pts[i + 1], s = 4.6 * z;
+      const x = pts[i], y = pts[i + 1], s = 7 * z;
       g.globalAlpha = clamp(pts[i + 2] * fade);
-      g.strokeStyle = i % 2 ? core : accent;
-      g.beginPath();
-      g.moveTo(x - s, y + s * 0.6);
-      g.lineTo(x, y - s * 0.3);
-      g.lineTo(x + s, y + s * 0.6);
-      g.stroke();
+      for (const [dy, col] of [[0, accent], [s * 0.55, core]] as const) {
+        g.strokeStyle = col;
+        g.beginPath();
+        g.moveTo(x - s, y + dy + s * 0.5);
+        g.lineTo(x, y + dy - s * 0.2);
+        g.lineTo(x + s, y + dy + s * 0.5);
+        g.stroke();
+      }
     }
     g.lineJoin = 'round';
   });
 }
 
-/** Twin Thrust's two marks on the creature: the first high in the chest, the second low and a little to one side. */
-function twinAim(k: FxScene, which: number): P3 {
-  if (!which) return k.at(k.target, 0.62);
-  const d = lineOf(k);
-  const r = rightOf(d);
-  const p = k.at(k.target, 0.34);
-  return { x: p.x + r.x * 0.08, y: p.y + r.y * 0.08, z: p.z };
-}
-/** One jab of Twin Thrust at cast-time `t`, landing at `at` of the cast on `to`: out, held, back. */
-function jab(k: FxScene, t: number, at: number, to: P3): void {
-  const out = seg(t, at - 0.035, at);
-  const back = seg(t, at + 0.06, at + 0.14);
-  if (out <= 0 || back >= 1) return;
-  const from = point(k);
-  lance(k, from, along(from, to, easeOut(out) * (1 - 0.85 * back)), { width: 1.7, head: 8, alpha: 1 - back });
+/**
+ * Stamina given back to somebody the rally reached, `since` seconds after the
+ * wave got to them: three chevrons stacked over the head rising, and a short
+ * bar filling under them by the share of a full bar it gives -- inked, so it
+ * reads by day -- over about a second.
+ */
+function given(k: FxScene, b: Body, since: number): void {
+  if (since < 0 || since > 1.1) return;
+  const a = smooth(since / 0.12) * (1 - smooth(seg(since, 0.8, 1.1)));
+  const p = k.at(b, 1.08), z = k.zoom;
+  // Lifted clear of a spear or a pennon held up over the head.
+  const x = k.sx(p), y = k.sy(p) - 6 * z - 4 * z * easeOut(clamp(since / 0.6));
+  const share = k.fx.stamina ?? 0.2;
+  const pal = k.pal;
+  const fill = easeOut(clamp((since - 0.1) / 0.4));
+  k.worldDraw(p, (g) => {
+    g.globalAlpha = clamp(a);
+    g.lineJoin = 'miter';
+    const s = 5.5 * z;
+    for (let i = 0; i < 3; i++) {
+      const cy = y - i * 4.4 * z - 3.4 * z;
+      g.beginPath();
+      g.moveTo(x - s, cy + s * 0.55);
+      g.lineTo(x, cy - s * 0.2);
+      g.lineTo(x + s, cy + s * 0.55);
+      g.lineWidth = Math.max(2, 3 * z);
+      g.strokeStyle = pal.ink;
+      g.stroke();
+      g.lineWidth = Math.max(1.1, 1.6 * z);
+      g.strokeStyle = i === 1 ? pal.accent : pal.core;
+      g.stroke();
+    }
+    // The bar: a full bar's width, filled by the share it gives back.
+    const bw = 16 * z, bh = Math.max(1.6, 1.8 * z), bx = x - bw / 2, by = y + 2 * z;
+    g.fillStyle = pal.ink;
+    g.fillRect(bx, by, bw, bh);
+    g.fillStyle = '#c9d86a';
+    g.fillRect(bx, by, bw * share * fill, bh);
+    g.lineWidth = Math.max(0.8, 0.7 * z);
+    g.strokeStyle = pal.ink;
+    g.strokeRect(bx, by, bw, bh);
+    g.lineJoin = 'round';
+  }, 6);
+  k.glow(p, 8, 0.4 * a);
 }
 
+/** Twin Thrust's two marks on the creature: the first high in the chest, the second low and a little to one side. */
+function twinAim(k: FxScene, which: number): P3 {
+  const h = k.heart(k.target);
+  if (!which) return { ...h, z: h.z + TWIN_HIGH };
+  const d = lineOf(k);
+  const r = rightOf(d);
+  return { x: h.x + r.x * 0.06, y: h.y + r.y * 0.06, z: h.z + TWIN_LOW };
+}
+/** One jab of Twin Thrust at cast-time `t`, landing at `at` of the cast on `to` and held to `hold`: out, held, drawn back before the pose lets it go. */
+function jab(k: FxScene, t: number, at: number, hold: number, to: P3, name: string, o: LanceLook): void {
+  const out = seg(t, at - 0.035, at);
+  const back = smooth(seg(t, hold - 0.06, hold));
+  if (out <= 0 || back >= 1) return;
+  // Out from the live point; from where the point was when it went in, once it has. Drawn back into the spear
+  // shortening, at full strength (its hue kept over grass), and let go by alpha only at the very last.
+  const from = t >= at ? k.once(name, () => point(k)) : point(k);
+  lance(k, from, along(from, to, easeOut(out) * (1 - back)), { ...o, alpha: lateFade(1 - back) });
+}
+
+/** The creature's own reach, in tiles: how near it strikes from (a thrower from far off), as the island has it. */
+const theirReach0 = (k: FxScene): number => k.target.reach ?? HUNT_REACH;
 /** Whether a Reach Advantage was struck from outside the creature's own reach. */
-const outReach = (k: FxScene): boolean => k.dist > HUNT_REACH;
-/** The creature's own reach laid round it: dark and dashed while it is set, broken outward once struck from outside it. */
+const outReach = (k: FxScene): boolean => k.dist > theirReach0(k) + 1e-6;
+/** The red-brown of a reach the caster stands inside. */
+const INSIDE = '#9a4a2a';
+/**
+ * The creature's own reach laid round it as a dashed ring, and a tick across
+ * the line at the caster's feet saying which side of it they stand: struck
+ * (`broke` from nought) from outside, the dashes thrown outward and turning
+ * as they go, a gap where the blow came through; from inside, the ring kept
+ * whole, red-brown, closing in on the caster a little.
+ */
 function theirReach(k: FxScene, a: number, broke: number): void {
   if (a <= 0.01) return;
   const big = outReach(k);
-  const R = HUNT_REACH + (big ? 0.5 * easeOut(broke) : 0);
-  k.ring(k.target, R, {
-    band: 0.07, dash: 3, n: 30, turn: broke * 0.3, alpha: a * (big ? 0.85 : 0.45),
-    main: big && broke > 0 ? k.pal.accent : k.pal.deep, deep: k.pal.ink, glow: big ? 0.4 : 0,
-  });
-  // Where the caster stands against it: a mark under the caster's feet, bright when it is outside.
-  k.ring(k.caster, 0.32, { band: 0.05, alpha: a * (big ? 0.8 : 0.35), main: big ? k.pal.accent : k.pal.deep, glow: big ? 0.4 : 0, n: 12 });
-}
-
-/** Skewer's lane: the ground behind the creature the thrust goes down, `behind` tiles long and as wide as the rule, `u` of it laid. */
-function skewerLane(k: FxScene, d: V2, behind: number, u: number, a: number): void {
-  if (u <= 0 || a <= 0.01) return;
-  const half = k.fx.width ?? 0.5;
-  const r = rightOf(d);
-  const t = k.target;
-  const len = behind * easeOut(u);
-  const quad: V2[] = [
-    { x: t.x - r.x * half, y: t.y - r.y * half },
-    { x: t.x + r.x * half, y: t.y + r.y * half },
-    { x: t.x + d.x * len + r.x * half, y: t.y + d.y * len + r.y * half },
-    { x: t.x + d.x * len - r.x * half, y: t.y + d.y * len - r.y * half },
-  ];
-  const c = { x: t.x + d.x * len * 0.5, y: t.y + d.y * len * 0.5 };
-  groundShapes(k, c, behind * 0.5 + half + 0.3, [quad], { fill: k.pal.main, ink: k.pal.deep, alpha: 0.13 * a });
-  // Its two edges and a run of arrowheads down the middle, the way the thrust goes.
-  groundShapes(k, c, behind * 0.5 + half + 0.3, [
-    barAlong(t, d, len, half), barAlong(t, d, len, -half),
-    ...[0.3, 0.6, 0.9].filter((f) => f * behind <= len).map((f) => chevronFlat({ x: t.x + d.x * f * behind, y: t.y + d.y * f * behind }, d, 0.1)),
-  ], { fill: k.pal.accent, lit: k.pal.core, alpha: 0.9 * a });
-}
-/** A thin bar along the way `d` from `p`, `len` tiles, `side` tiles to the right of it. */
-function barAlong(p: V2, d: V2, len: number, side: number): V2[] {
-  const r = rightOf(d);
-  const w = 0.014;
-  return [
-    { x: p.x + r.x * (side + w), y: p.y + r.y * (side + w) },
-    { x: p.x + d.x * len + r.x * (side + w), y: p.y + d.y * len + r.y * (side + w) },
-    { x: p.x + d.x * len + r.x * (side - w), y: p.y + d.y * len + r.y * (side - w) },
-    { x: p.x + r.x * (side - w), y: p.y + r.y * (side - w) },
-  ];
+  const t = k.target, R0 = theirReach0(k);
+  const R = big ? R0 : R0 - 0.1 * easeOut(clamp(broke * 3));
+  // Dashes of one length however big the ring: a thrower's six tiles is a long way round.
+  const n = Math.round(clamp(R * 24, 20, k.fast ? 40 : 64));
+  const toC = Math.atan2(k.caster.y - t.y, k.caster.x - t.x);
+  const dashes: V2[][] = [];
+  const spread = big ? easeOut(clamp(broke * 1.6)) : 0;
+  // Broken, the thrown dashes are gone by half way through the blow's moment: shrunk to nothing, not faded.
+  const shrink = big ? 1 - smooth(seg(broke, 0.25, 0.55)) : 1;
+  if (shrink <= 0.02) return;
+  for (let i = 0; i < n; i++) {
+    const an = (i / n) * TAU + broke * 0.2;
+    // The gap where the blow came through.
+    if (spread > 0 && Math.abs(Math.atan2(Math.sin(an - toC), Math.cos(an - toC))) < 0.12 + 0.3 * spread) continue;
+    const rr = R + 0.15 * spread * (0.6 + 0.8 * hashOf(k.seed, i));
+    const tw = (hashOf(k.seed + 3, i) - 0.5) * 1.2 * spread;
+    const half = Math.min((Math.PI / n) * 0.55, 0.07 / R) * (1 - 0.4 * spread) * shrink;
+    const p = (r: number, q: number): V2 => ({ x: t.x + Math.cos(q) * r, y: t.y + Math.sin(q) * r });
+    const w = 0.035 * (0.5 + 0.5 * shrink);
+    dashes.push([p(rr + w, an - half + tw * 0.1), p(rr + w, an + half + tw * 0.1), p(rr - w, an + half - tw * 0.1), p(rr - w, an - half - tw * 0.1)]);
+  }
+  const col = big ? (broke > 0 ? k.pal.accent : k.pal.deep) : broke > 0 ? INSIDE : k.pal.deep;
+  groundShapes(k, t, R + 0.3, dashes, { fill: col, ink: k.pal.ink, lit: big && broke > 0 ? k.pal.core : undefined, alpha: a, glow: (big ? 0.4 : 0.15) * (0.4 + 0.6 * k.night), light: big ? k.pal.accent : INSIDE });
 }
 
 /**
- * Keep Away's shove: a wall of light in front of the body, from the shins to
- * the chest and as wide as the shaft is long, driven straight out the one
- * tile a blow will push and thinning as it goes.
+ * Skewer's lane: the ground behind the creature the thrust goes down,
+ * `behind` tiles long and as wide as the rule either side of the line, `u` of
+ * it laid; the far half darker, sky-blue edges, arrowheads down the middle.
  */
-function shoveWave(k: FxScene, u: number): void {
+function skewerLane(k: FxScene, t: V2, d: V2, behind: number, u: number, a: number, eaten = 0): void {
+  if (u <= 0 || a <= 0.01 || eaten >= 1) return;
+  const half = k.fx.width ?? 0.5;
+  const r = rightOf(d);
+  const len = behind * easeOut(u), s0 = behind * eaten;
+  if (len - s0 < 0.03) return;
+  const quad = (q0: number, q1: number): V2[] => [
+    { x: t.x + d.x * q0 - r.x * half, y: t.y + d.y * q0 - r.y * half },
+    { x: t.x + d.x * q0 + r.x * half, y: t.y + d.y * q0 + r.y * half },
+    { x: t.x + d.x * q1 + r.x * half, y: t.y + d.y * q1 + r.y * half },
+    { x: t.x + d.x * q1 - r.x * half, y: t.y + d.y * q1 - r.y * half },
+  ];
+  const c = { x: t.x + d.x * len * 0.5, y: t.y + d.y * len * 0.5 };
+  const R = behind * 0.5 + half + 0.3;
+  // A cool wash of the sky-blue the edges are drawn in: gold or bronze thinned over grass goes khaki.
+  const mid = behind * 0.5;
+  if (s0 < Math.min(len, mid)) groundShapes(k, c, R, [quad(s0, Math.min(len, mid))], { fill: k.pal.accent, ink: false, alpha: 0.2 * a });
+  if (len > mid) groundShapes(k, c, R, [quad(Math.max(s0, mid), len)], { fill: dry(k.pal.accent, 0.35), ink: false, alpha: 0.26 * a });
+  // Its two edges and a run of arrowheads down the middle, the way the thrust goes.
+  groundShapes(k, c, R, [
+    barAlong(t, d, s0, len, half), barAlong(t, d, s0, len, -half),
+    ...[0.3, 0.6, 0.9].filter((f) => f * behind <= len && f * behind >= s0).map((f) => chevronFlat({ x: t.x + d.x * f * behind, y: t.y + d.y * f * behind }, d, 0.18)),
+  ], { fill: k.pal.accent, lit: k.pal.core, alpha: 0.9 * a, glow: 0.25 + 0.6 * k.night, light: k.pal.accent });
+}
+/** A bar along the way `d` from `p`, from `s0` tiles to `s1`, `side` tiles to the right of it. */
+function barAlong(p: V2, d: V2, s0: number, s1: number, side: number): V2[] {
+  const r = rightOf(d);
+  const w = 0.03;
+  return [
+    { x: p.x + d.x * s0 + r.x * (side + w), y: p.y + d.y * s0 + r.y * (side + w) },
+    { x: p.x + d.x * s1 + r.x * (side + w), y: p.y + d.y * s1 + r.y * (side + w) },
+    { x: p.x + d.x * s1 + r.x * (side - w), y: p.y + d.y * s1 + r.y * (side - w) },
+    { x: p.x + d.x * s0 + r.x * (side - w), y: p.y + d.y * s0 + r.y * (side - w) },
+  ];
+}
+/** Whatever else stands in Skewer's lane, struck as the thrust gets `got` tiles down it: a spark and a glint off each, once. */
+function skewered(k: FxScene, t: Body | P3, d: V2, behind: number, got: number): void {
+  const half = k.fx.width ?? 0.5;
+  const r = rightOf(d);
+  const all = k.enemiesWithin(behind + half + 0.5, { x: t.x + d.x * behind * 0.5, y: t.y + d.y * behind * 0.5 });
+  for (let i = 0; i < all.length && i < 6; i++) {
+    const b = all[i];
+    const ax = (b.x - t.x) * d.x + (b.y - t.y) * d.y, sd = Math.abs((b.x - t.x) * r.x + (b.y - t.y) * r.y);
+    if (ax <= 0.15 || ax > behind || sd > half || ax > got) continue;
+    const key = `sk${Math.round(b.x * 10)}_${Math.round(b.y * 10)}`;
+    if (!k.state[key]) {
+      k.state[key] = k.now;
+      pierce(k, k.heart(b), d, 0.5);
+    }
+    const age = k.now - k.state[key];
+    if (age < 0.35) k.flare(k.heart(b), 7 * (1 - age / 0.35), flashOf(age / 0.35, 0.1), k.pal.core, 0.4);
+  }
+}
+
+/**
+ * Keep Away's shove: the real shaft, as it lies across the hands at the
+ * release (kept, `k.once`), thrown straight out from them the one tile a blow
+ * will push -- a bar of light the spear's own length and slant, thinning to
+ * nothing as it goes at full strength -- and dust kicked off the ground under
+ * it.
+ */
+function shoveBar(k: FxScene, u: number): void {
   const push = k.fx.push ?? 1;
-  const d = k.facingDir(k.caster), r = rightOf(d);
-  const out = 0.25 + push * easeOut(u);
-  const a = 0.85 * (1 - smooth(seg(u, 0.4, 1)));
-  if (a <= 0.01) return;
-  const half = 0.2 + 0.1 * u;
-  const c = k.caster;
-  const g = k.ground(c.x + d.x * out, c.y + d.y * out);
-  const pt = (s2: number, z: number): P3 => ({ x: c.x + d.x * out + r.x * s2, y: c.y + d.y * out + r.y * s2, z: g + z });
-  const lo = 3, hi = c.tall * 0.62;
-  k.ribbon([pt(-half, hi), pt(0, hi + 0.6), pt(half, hi)], { width: 5 * (1 - 0.5 * u), alpha: a, glow: 0.5 });
-  k.ribbon([pt(-half, lo), pt(0, lo + 0.3), pt(half, lo)], { width: 3.5 * (1 - 0.5 * u), alpha: a * 0.8, glow: 0.3 });
-  k.shapes(pt(0, 0), [
-    { pts: [pt(-half, lo), pt(half, lo), pt(half, hi), pt(-half, hi)], fill: k.pal.core, ink: false, alpha: 0.18 * a },
-  ]);
+  const d = k.once('shoveD', () => ({ ...k.facingDir(k.caster), z: 0 }));
+  const b0 = k.once('shoveB', () => spearButt(k)), t0 = k.once('shoveT', () => spearTip(k));
+  const out = push * easeOut(u);
+  const th = 1.3 * (1 - u);
+  if (th < 0.08) return;
+  const a = lateFade(1 - u, 0.15);
+  // The shaft's line, carried out along the way the caster faces and a little longer each end as it goes.
+  const grow = 0.08 * u;
+  const at = (p: P3, q: P3, z: number): P3 => ({ x: p.x + (p.x - q.x) * grow + d.x * out, y: p.y + (p.y - q.y) * grow + d.y * out, z: p.z + z });
+  const lo0 = at(b0, t0, -th), lo1 = at(t0, b0, -th), hi0 = at(b0, t0, th), hi1 = at(t0, b0, th);
+  const mid = along(lo0, hi1, 0.5);
+  // Streaks from where the shaft was in the hands to where its light has got, eaten from the hands' end as it goes:
+  // the light is the spear's own, thrown off it.
+  const tail = out * (0.55 + 0.4 * u);
+  for (const f of [0.1, 0.9]) {
+    const p = along(b0, t0, f);
+    if (out - tail > 0.04) k.ribbon([{ x: p.x + d.x * tail, y: p.y + d.y * tail, z: p.z }, { x: p.x + d.x * out, y: p.y + d.y * out, z: p.z }], { width: 1.6, taper: 'start', alpha: a, main: k.pal.core, glow: 0 });
+  }
+  k.shapes(mid, [
+    { pts: [lo0, hi0, hi1, lo1], fill: k.pal.main, ink: k.pal.ink, alpha: a },
+    { pts: [hi0, hi1], fill: false, ink: k.pal.core, width: Math.max(1.2, 1.6 * k.zoom), alpha: a, closed: false },
+  ], { width: Math.max(0.8, 0.7 * k.zoom) });
+  k.glow(mid, 10, 0.2 * a);
+  if (!k.fast) k.emit(k.on(mid.x, mid.y, 0.3), 25 * a, { kind: 'dust', colour: DUST, size: 2.4, life: [0.25, 0.5], speed: [0.1, 0.4], up: [1, 4], heading: d, cone: 1.2, gravity: 3, drag: 0.1, jitter: 0.3 });
 }
 
 /** Arrowheads round the caster's feet at `r` tiles, `n` of them pointing out, `len` tiles long. */
@@ -1518,76 +2136,98 @@ function pushRing(k: FxScene, r: number, n: number, len: number, a: number, turn
     const d = { x: Math.cos(an), y: Math.sin(an) };
     shapes.push(chevronFlat({ x: c.x + d.x * r, y: c.y + d.y * r }, d, len));
   }
-  groundShapes(k, c, r + len, shapes, { fill: k.pal.accent, lit: k.pal.core, alpha: a });
-  k.glow(k.at(c, 0.02), 10 + r * 14, 0.25 * a, k.pal.accent);
+  groundShapes(k, c, r + len, shapes, { fill: k.pal.accent, lit: k.pal.core, alpha: a, glow: 0.6 * k.night, light: k.pal.accent });
+  k.glow(k.at(c, 0.02), 10 + r * 14, 0.2 * a, k.pal.accent);
 }
-
-/** How far round Fend Off's whirl has gone at cast-time `t`, in radians: twice round, quickening, as the fist goes round in the pose. */
-const whirlOf = (t: number): number => {
-  const w = seg(t, FEND_SPIN[0], FEND_SPIN[1]);
-  return TAU * 2 * w * w;
-};
 
 /**
- * Fend Off's whirl: the arcs the spear's two ends cut as it spins in the
- * fist, laid behind each of them -- the wheel a pike makes whirled before the
- * body to keep everything off it. The spear turns in the plane of the
- * forearm and the line across the fist (`Rig.haft`), so where each end was a
- * moment ago is where it is now turned back about the fist in that plane.
+ * Keep Away's guidon on the spear: a square flag of sky-blue with a white
+ * chevron on it pointing out, away from the body -- not Rally's swallow-tailed
+ * bronze pennon -- stirring a little. Sorted with `body`.
  */
-function fendWheel(k: FxScene, t: number): void {
-  const on = bump(t, FEND_SPIN[0], FEND_SPIN[0] + 0.08, FEND_T.release - 0.02);
-  if (on <= 0.01) return;
-  const b = k.caster;
-  const grip = k.joint(b, 'grip'), tip = spearTip(k), butt = spearButt(k);
-  const wrist = k.joint(b, 'wrist1'), elbow = k.joint(b, 'elbow1');
-  // In height units about the fist: the forearm's line, and each end.
-  const U = UNITS_PER_TILE;
-  const vec = (p: P3, o: P3): V3 => [(p.x - o.x) * U, (p.y - o.y) * U, p.z - o.z];
-  const f = norm(vec(wrist, elbow));
-  const h = whirlOf(t) - Math.PI / 2;
-  const sh = Math.sin(h);
-  if (Math.abs(sh) < 0.08) return;
-  const lag = 0.4 + 1.6 * seg(t, FEND_SPIN[0], FEND_SPIN[1]);
-  const n = k.fast ? 5 : 8;
-  for (const [end, width, alpha] of [[tip, 5, 0.85], [butt, 3, 0.5]] as const) {
-    const v = vec(end, grip);
-    const len = Math.hypot(v[0], v[1], v[2]);
-    if (len < 1) continue;
-    // The end as cos(h) along the forearm and sin(h) across the fist: the across, found from where it is now.
-    const along = dot(v, f) / len;
-    const g = norm([v[0] / len - f[0] * along, v[1] / len - f[1] * along, v[2] / len - f[2] * along]).map((x) => x * Math.sign(sh));
-    const trail: P3[] = [];
-    for (let i = n; i >= 0; i--) {
-      const a = h - (i / n) * lag;
-      const c = Math.cos(a) * len, s2 = Math.sin(a) * len;
-      trail.push({ x: grip.x + (f[0] * c + g[0] * s2) / U, y: grip.y + (f[1] * c + g[1] * s2) / U, z: grip.z + f[2] * c + g[2] * s2 });
-    }
-    k.ribbon(trail, { width, taper: 'start', alpha: alpha * on, glow: 0.6 });
-  }
+function guidon(k: FxScene, top: P3, body: P3, a: number, phase: number): void {
+  if (a <= 0.01) return;
+  const z = k.zoom;
+  const x = k.sx(top), y = k.sy(top) + 1.4 * z;
+  // Flown off the body's right, where the spear is carried: the same side all the while, whatever the spear does.
+  const fly = Math.sign(k.sx(k.local(k.caster, 6, 0, 0)) - k.sx(k.caster)) || 1;
+  const L = 9 * z, h = 6.5 * z;
+  const w1 = Math.sin(phase) * h * 0.12, w2 = Math.sin(phase + 1.4) * h * 0.16;
+  const pal = k.pal;
+  k.worldDraw(body, (g) => {
+    g.globalAlpha = a;
+    g.lineJoin = 'miter';
+    const c = [[x, y], [x + fly * L, y + w2], [x + fly * L, y + h + w2], [x, y + h]] as const;
+    g.beginPath();
+    g.moveTo(c[0][0], c[0][1]);
+    for (let i = 1; i < 4; i++) g.lineTo(c[i][0], c[i][1]);
+    g.closePath();
+    g.fillStyle = pal.accent;
+    g.fill();
+    // The chevron, pointing out the way the flag flies: away.
+    g.beginPath();
+    g.moveTo(x + fly * L * 0.25, y + h * 0.15 + w1);
+    g.lineTo(x + fly * L * 0.72, y + h * 0.5 + w2 * 0.8);
+    g.lineTo(x + fly * L * 0.25, y + h * 0.85 + w1);
+    g.lineWidth = Math.max(1.2, 1.5 * z);
+    g.strokeStyle = '#ffffff';
+    g.stroke();
+    g.beginPath();
+    g.moveTo(c[0][0], c[0][1]);
+    for (let i = 1; i < 4; i++) g.lineTo(c[i][0], c[i][1]);
+    g.closePath();
+    g.lineWidth = Math.max(0.8, 0.7 * z);
+    g.strokeStyle = pal.ink;
+    g.stroke();
+    g.lineJoin = 'round';
+  }, 3);
 }
 
-const dot = (a: V3, b: V3): number => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
-const norm = (a: V3): V3 => {
-  const l = Math.hypot(a[0], a[1], a[2]) || 1;
-  return [a[0] / l, a[1] / l, a[2] / l];
-};
+/**
+ * Fend Off's whirl: a disc of motion cut by the spear turning end over end
+ * before the body -- two thin arcs behind its point and one behind its butt,
+ * up to three quarters round, all about the one middle the hands turn it on
+ * (`WHIRL_AT`), in the plane the pose turns it in.
+ */
+function fendWheel(k: FxScene, t: number): void {
+  const [s0, s1] = FEND_SPIN;
+  // Come in slowly, and only as fast as the arcs lengthen: while they are short they are two horns, not a disc.
+  const a = whirlOf(t), gone = a - whirlOf(s0);
+  const lag = Math.min(gone, Math.PI * 1.5);
+  const on = bump(t, s0, s0 + 0.1, s1 + 0.02) * smooth(lag / 2.2);
+  if (on <= 0.01 || lag < 0.2) return;
+  // The spear turns about its own middle: each end this far from it.
+  const rad = SPEAR_LONG / 2;
+  const n = k.fast ? 8 : 14;
+  const arc = (r: number, ahead: number, lagOf: number): P3[] => {
+    const pts: P3[] = [];
+    for (let i = n; i >= 0; i--) {
+      const q = ahead - (i / n) * lagOf;
+      const w = add3(WHIRL_AT, add3(mul3(WHIRL_X, Math.cos(q) * r), mul3(WHIRL_Z, Math.sin(q) * r)));
+      pts.push(k.local(k.caster, w[0], w[1], w[2]));
+    }
+    return pts;
+  };
+  k.ribbon(arc(rad, a, lag), { width: 3.4, taper: 'start', alpha: 0.9 * on, glow: 0.6 });
+  k.ribbon(arc(rad * 0.8, a, lag * 0.7), { width: 1.6, taper: 'start', alpha: 0.7 * on, main: k.pal.accent, glow: 0 });
+  k.ribbon(arc(rad, a + Math.PI, lag * 0.6), { width: 2, taper: 'start', alpha: 0.55 * on, glow: 0.3 });
+}
 
 /** Fend Off's ring at `r`: a band, and leaf points lying flat on it pointing outward. `grow` draws the points out. */
 function fendRing(k: FxScene, r: number, a: number, grow: number): void {
   if (a <= 0.01) return;
   const c = k.caster;
   const n = k.fast ? 6 : 8;
-  k.ring(c, r, { band: 0.06, alpha: 0.85 * a, main: k.pal.accent, glow: 0.5, n: 32 });
+  k.ring(c, r, { band: 0.06, alpha: 0.85 * a, main: k.pal.accent, glow: 0.6 * k.night, n: 32 });
   const shapes: V2[][] = [];
-  const len = 0.13 * clamp(grow * 1.6);
+  const len = 0.2 * clamp(grow * 1.6);
   if (len > 0.02) {
     for (let i = 0; i < n; i++) {
       const an = (i / n) * TAU + Math.PI / n;
       const d = { x: Math.cos(an), y: Math.sin(an) };
       shapes.push(leafFlat({ x: c.x + d.x * (r - 0.06), y: c.y + d.y * (r - 0.06) }, d, len));
     }
-    groundShapes(k, c, r + len, shapes, { fill: k.pal.main, lit: k.pal.core, alpha: a });
+    groundShapes(k, c, r + len, shapes, { fill: k.pal.main, lit: k.pal.core, alpha: a, glow: 0.5 * k.night });
   }
 }
 
@@ -1595,43 +2235,52 @@ function fendRing(k: FxScene, r: number, a: number, grow: number): void {
  * Brace's hedge: a ring scored on the ground round the caster at `R` tiles,
  * and on it a cheval-de-frise of pikes of light -- pairs crossed in an X,
  * leant out over the ring -- `rise` of their height up, each pair one record
- * so they sort with whatever stands by them.
+ * so they sort with whatever stands by them; and a faint line of light run out
+ * from the braced spear's own point along its way to the ring.
  */
 function hedge(k: FxScene, R: number, rise: number, a: number, age: number): void {
   if (a <= 0.01) return;
   const c = k.caster;
-  k.ring(c, R, { band: 0.1, alpha: 0.75 * a, n: 40, glow: 0.3 });
-  k.ring(c, R - 0.2, { band: 0.035, alpha: 0.55 * a, main: k.pal.accent, glow: 0, n: 40 });
+  k.ring(c, R, { band: 0.1, alpha: 0.95 * a, n: 40, glow: 0.5 * k.night });
+  if (rise < 0.98) k.ring(c, R - 0.2, { band: 0.035, alpha: 0.55 * a * (1 - rise), main: k.pal.accent, glow: 0, n: 40 });
   if (rise <= 0.02) return;
-  const n = k.fast ? 6 : 10;
+  const n = k.fast ? 6 : 8;
+  const lean = Math.sin(50 * DEG), len = 26;
   for (let i = 0; i < n; i++) {
     const an = (i / n) * TAU + hashOf(k.seed, i) * 0.1;
     const d = { x: Math.cos(an), y: Math.sin(an) };
     // Rising one after the next round the ring.
     const own = clamp(rise * 1.3 - hashOf(k.seed + 2, i) * 0.3);
-    if (own > 0.02) cheval(k, k.on(c.x + d.x * (R - 0.12), c.y + d.y * (R - 0.12), 0), d, 20 * own, a, age + i);
+    if (own > 0.02) cheval(k, k.on(c.x + d.x * (R - 0.12), c.y + d.y * (R - 0.12), 0), d, len * own, lean, a, age + i);
+  }
+  // The braced spear's own line, out to where it stops a charge.
+  const tip = spearTip(k), butt = spearButt(k);
+  const dx = tip.x - butt.x, dy = tip.y - butt.y, l = Math.hypot(dx, dy);
+  if (l > 0.01) {
+    const end = k.on(c.x + (dx / l) * R, c.y + (dy / l) * R, len * rise * 0.72);
+    // At full strength in the palest tone (a faint bronze over grass is olive), shortened as the hedge sinks.
+    k.polyline([tip, along(tip, end, rise)], { alpha: lateFade(rise, 0.3) * clamp(a * 1.4), main: k.pal.core, glow: 0.4 * k.night, width: 1.2 });
   }
 }
 
-/** Two pikes crossed in an X standing at `base`, leant out along `d` at about forty degrees, `len` height units long. */
-function cheval(k: FxScene, base: P3, d: V2, len: number, a: number, beat: number): void {
+/** Two pikes crossed in an X standing at `base`, leant out along `d` by `lean` (the sine of it), `len` height units long. */
+function cheval(k: FxScene, base: P3, d: V2, len: number, lean: number, a: number, beat: number): void {
   const r = rightOf(d);
-  const lean = 0.64;
   const draws: Array<(g: CanvasRenderingContext2D) => void> = [];
   for (const side of [-1, 1]) {
     // Their feet a little apart along the ring, their heads crossing over and apart the other way.
     const foot = { x: base.x + r.x * side * 0.07, y: base.y + r.y * side * 0.07, z: base.z };
     const out = len * lean, up = len * Math.sqrt(1 - lean * lean);
     const tip = {
-      x: foot.x + (d.x * out - r.x * side * len * 0.32) / UNITS_PER_TILE,
-      y: foot.y + (d.y * out - r.y * side * len * 0.32) / UNITS_PER_TILE,
+      x: foot.x + (d.x * out - r.x * side * len * 0.3) / UNITS_PER_TILE,
+      y: foot.y + (d.y * out - r.y * side * len * 0.3) / UNITS_PER_TILE,
       z: foot.z + up + 0.25 * Math.sin(k.now * 2.4 + beat + side),
     };
-    lance(k, foot, tip, { width: 2.6, head: 10, glow: 0, alpha: a, into: draws });
+    lance(k, foot, tip, { width: 2.6, head: 11, glow: 0, alpha: a, into: draws, plain: true });
   }
   k.worldDraw(base, (g) => {
     for (const draw of draws) draw(g);
   });
-  // One glow where the heads cross rather than one down each shaft: a hedge of ten of them stands for seconds.
-  k.glow({ x: base.x + (d.x * len * lean) / UNITS_PER_TILE, y: base.y + (d.y * len * lean) / UNITS_PER_TILE, z: base.z + len * 0.72 }, 11, 0.4 * a);
+  // One glow where the heads cross rather than one down each shaft: a hedge of them stands for seconds.
+  k.glow({ x: base.x + (d.x * len * lean) / UNITS_PER_TILE, y: base.y + (d.y * len * lean) / UNITS_PER_TILE, z: base.z + len * Math.sqrt(1 - lean * lean) * 0.9 }, 11, 0.4 * a);
 }

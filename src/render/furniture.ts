@@ -106,24 +106,48 @@ export const WHEELS: Partial<Record<string, { r: number; spokes: number; front?:
   wagon: { r: 5.4, spokes: 12, front: 5 / 4 },
 };
 /**
- * The picture of one is baked at a step of how far round they are (`wheelTrim`): `WHEEL_STEPS` to a spoke while the
- * spokes can be followed, and `WHEEL_BLURRED` to a turn once they go by too fast to be (`WHEEL_BLUR`), when only the
- * mark that comes round once a turn is seen to go round.
+ * The wheels are drawn at a step of how far round they are (`wheelTrim`): `WHEEL_STEPS` to a spoke, however fast they
+ * go. Going by too fast to be followed (`WHEEL_BLUR`) they were drawn at twelve steps a turn, which is a spoke a step on
+ * a wagon's twelve-spoked wheel, so its spokes stood still, and five sixths of one on a cart's ten, so hers crept
+ * backwards: the wagon wheel of a film, which the blur was there to put away. Now each spoke is smeared over the way it
+ * went in a frame instead (`WHEEL_SMEAR`), from the step it is at, which no step can stop or turn back.
  */
 export const WHEEL_STEPS = 5;
-export const WHEEL_BLURRED = 12;
 /**
  * Spokes going by in a drawn frame at which the spokes start to blur, and are a blur: a wheel drawn sharp going faster
  * than that stands still or turns backwards, as a wheel filmed does, which is why they were let turn at most four spokes
- * a second, and so crept round while the cart covered the ground at seven times that.
+ * a second, and so crept round while the cart covered the ground at seven times that. Each is come back down from a
+ * little under where it was gone up at (`WHEEL_UNBLUR`), so a pace on the line does not flicker from one to the other.
  */
 export const WHEEL_BLUR: [number, number] = [0.3, 0.55];
-/** A piece's wheels as its `trim`: how blurred (0 sharp, 1 half, 2 a blur) and which step of the way round they are. */
-export const wheelTrim = (blur: number, step: number): number => blur * 1000 + step;
+export const WHEEL_UNBLUR: [number, number] = [0.24, 0.45];
+/** The blur (0 sharp, 1 half, 2 a blur) for `by` spokes going by in a frame, from the one it was. */
+export function wheelBlur(by: number, was: number): number {
+  let b = Math.max(0, Math.min(2, was));
+  while (b < 2 && by >= WHEEL_BLUR[b]) b++;
+  while (b > 0 && by < WHEEL_UNBLUR[b - 1]) b--;
+  return b;
+}
+/**
+ * How far round each spoke is smeared at each blur, in spokes, and in how many strokes: half a spoke, about what one goes
+ * by in a frame at a half blur, the stroke where it is now the strongest so the smear trails behind it the way it turns;
+ * and a whole spoke going by faster than that, five strokes evenly faint, which no step of a fifth of a spoke can tell
+ * apart from the last, so only the strake is seen to go round.
+ */
+const WHEEL_SMEAR: Array<{ over: number; strokes: number[] }> = [
+  { over: 0, strokes: [1] },
+  { over: 0.45, strokes: [0.62, 0.34, 0.2] },
+  { over: 1, strokes: [0.16, 0.16, 0.16, 0.16, 0.16] },
+];
+/** A piece's wheels as its `trim`: how blurred, and which step of the way round they are when `turns` round. */
+export function wheelTrim(kind: string, turns: number, blur: number): number {
+  const steps = WHEELS[kind]!.spokes * WHEEL_STEPS;
+  return blur * 1000 + (((Math.floor(turns * steps) % steps) + steps) % steps);
+}
 function wheelsOf(kind: string, trim: number | undefined): { turn: number; front: number; blur: number } {
   const w = WHEELS[kind]!, t = trim ?? 0, blur = Math.floor(t / 1000);
-  const turn = (t % 1000) / (blur ? WHEEL_BLURRED : w.spokes * WHEEL_STEPS);
-  return { turn, front: (turn * (w.front ?? 1)) % 1, blur: blur / 2 };
+  const turn = (t % 1000) / (w.spokes * WHEEL_STEPS);
+  return { turn, front: (turn * (w.front ?? 1)) % 1, blur };
 }
 
 /* ---- colour --------------------------------------------------------------- */
@@ -197,7 +221,17 @@ interface Part {
   floor?: boolean;
   /** Room kept for what is drawn live over the bake (`drawFurnitureLive`): measured and clicked, never drawn or baked. */
   room?: boolean;
+  /** A wheel that turns, the how-manyth of the piece's: drawn on its own over the rest (`bake`), a stage at a time (`WheelStage`). */
+  wheel?: number;
+  staged?: (stage: WheelStage) => void;
 }
+
+/**
+ * A wheel drawn in the order it goes down: the back of the rim and the inside of the felloe, the spokes, the tread and
+ * the face of the rim, the strake on it, and the hub. Only the spokes and the strake go round, so only they are drawn
+ * afresh for each step of the way round (`wheelsFor`); the rest is drawn once and put down between them.
+ */
+type WheelStage = 'under' | 'turning' | 'face' | 'mark' | 'hub';
 
 /**
  * A face's own coordinates: `s` across it from its left as you look at it
@@ -237,6 +271,8 @@ class Scene {
   readonly toward: V3;
   /** The patches of floor it shades, when it says; otherwise its footprint, drawn in a little. */
   shadows?: Array<[number, number, number, number]>;
+  /** How many wheels have been put in so far. */
+  wheels = 0;
 
   /** `g` is set late when the piece is baked, since how big a canvas it needs is known only once it is built. */
   constructor(public g: CanvasRenderingContext2D, readonly v: PieceView, zoom: number) {
@@ -684,16 +720,27 @@ class Scene {
     const [cx, cy, cz] = c;
     const ax = axis === 'x' ? thick / 2 : r, ay = axis === 'y' ? thick / 2 : r;
     this.part(cx - ax, cx + ax, cy - ay, cy + ay, cz - r, cz + r, () => this.drawWheel(c, axis, r, thick, spokes, p, turn, blur, mark));
+    const part = this.parts[this.parts.length - 1];
+    part.wheel = this.wheels++;
+    part.staged = (stage) => this.drawWheel(c, axis, r, thick, spokes, p, turn, blur, mark, stage);
   }
 
   /**
-   * And `turn` of the way round, rolled forward: the top of it toward the piece's +x or +y. `blur` (0 to 1) is how far
-   * the spokes have gone to a blur, going by faster than a frame can show them: faded toward a soft disc of the wheel's
-   * wood between the hub and the felloe. With `mark`, one joint of the felloe has an iron strake over it, which comes
-   * round once a turn: going fast, it is what the eye follows round at the wheel's true speed.
+   * And `turn` of the way round, rolled forward: the top of it toward the piece's +x or +y. `blur` (0, 1 or 2) is how far
+   * the spokes have gone to a blur, going by faster than a frame can show them: smeared round the way they came
+   * (`WHEEL_SMEAR`), over a soft disc of the wheel's wood between the hub and the felloe. With `mark`, one joint of the
+   * felloe has an iron strake over it, which comes round once a turn: going fast, it is what the eye follows round at the
+   * wheel's true speed. `stage`, when it is given, is the one part of it drawn (`WheelStage`).
    */
-  drawWheel(c: V3, axis: 'x' | 'y', r: number, thick: number, spokes: number, p: Paint, turn = 0, blur = 0, mark = false): void {
+  drawWheel(c: V3, axis: 'x' | 'y', r: number, thick: number, spokes: number, p: Paint, turn = 0, blur = 0, mark = false, stage?: WheelStage): void {
     const g = this.g;
+    /*
+     * Round joins, whatever was drawn before: the tread's facets, stroked thin where the rim foreshortens, threw long mitre
+     * points with the canvas's own, a grey sliver off the top of a wagon's wheel across the bed, once the wheel's still parts
+     * were drawn on their own (`bakeRound`) and not after something that had left the joins round.
+     */
+    g.lineJoin = 'round';
+    const does = (s: WheelStage): boolean => !stage || stage === s;
     const [cx, cy, cz] = c;
     const n: [number, number] = axis === 'x' ? [1, 0] : [0, 1];
     const u: [number, number] = axis === 'x' ? [0, 1] : [1, 0];
@@ -704,78 +751,110 @@ class Scene {
     const ring = (rr: number, off: number): Pt[] => Array.from({ length: N }, (_, j) => at((j / N) * TAU, rr, off));
     const tread = { body: IRON.body, ink: IRON.ink };
     // The back of the rim, seen through the spokes.
-    const back = ring(r, far), backIn = ring(rin, far);
-    g.beginPath();
-    back.forEach(([x, y], j) => (j ? g.lineTo(x, y) : g.moveTo(x, y)));
-    g.closePath();
-    backIn.forEach(([x, y], j) => (j ? g.lineTo(x, y) : g.moveTo(x, y)));
-    g.closePath();
-    g.fillStyle = rgb(p.body, 0.62);
-    g.fill('evenodd');
-    // The inside of the felloe, where it faces up at you through the hole.
-    for (let j = 0; j < N; j++) {
-      const a0 = (j / N) * TAU, a1 = ((j + 1) / N) * TAU, am = (a0 + a1) / 2;
-      const nx = -u[0] * Math.cos(am), ny = -u[1] * Math.cos(am), nz = -Math.sin(am);
-      if (!this.faces(nx, ny, nz)) continue;
-      this.poly([at(a0, rin, far), at(a1, rin, far), at(a1, rin, near), at(a0, rin, near)]);
-      g.fillStyle = rgb(p.body, this.light(nx, ny, nz) * 0.8);
-      g.fill();
+    if (does('under')) {
+      const back = ring(r, far), backIn = ring(rin, far);
+      g.beginPath();
+      back.forEach(([x, y], j) => (j ? g.lineTo(x, y) : g.moveTo(x, y)));
+      g.closePath();
+      backIn.forEach(([x, y], j) => (j ? g.lineTo(x, y) : g.moveTo(x, y)));
+      g.closePath();
+      g.fillStyle = rgb(p.body, 0.62);
+      g.fill('evenodd');
+      // The inside of the felloe, where it faces up at you through the hole.
+      for (let j = 0; j < N; j++) {
+        const a0 = (j / N) * TAU, a1 = ((j + 1) / N) * TAU, am = (a0 + a1) / 2;
+        const nx = -u[0] * Math.cos(am), ny = -u[1] * Math.cos(am), nz = -Math.sin(am);
+        if (!this.faces(nx, ny, nz)) continue;
+        this.poly([at(a0, rin, far), at(a1, rin, far), at(a1, rin, near), at(a0, rin, near)]);
+        g.fillStyle = rgb(p.body, this.light(nx, ny, nz) * 0.8);
+        g.fill();
+      }
     }
     // Spokes from the hub to the felloe, in the middle of the wheel's thickness; going too fast to follow, a blur of them.
-    if (blur > 0) {
-      const disc = ring(rin, 0);
-      g.beginPath();
-      disc.forEach(([x, y], j) => (j ? g.lineTo(x, y) : g.moveTo(x, y)));
-      g.closePath();
-      g.fillStyle = rgb(p.body, 0.78, 0.5 * blur);
-      g.fill();
+    if (does('turning')) {
+      if (blur > 0) {
+        const disc = ring(rin, 0);
+        g.beginPath();
+        disc.forEach(([x, y], j) => (j ? g.lineTo(x, y) : g.moveTo(x, y)));
+        g.closePath();
+        g.fillStyle = rgb(p.body, 0.78, 0.25 * blur);
+        g.fill();
+      }
+      g.lineCap = 'round';
+      const smear = WHEEL_SMEAR[Math.max(0, Math.min(2, Math.round(blur)))];
+      const spokeW = Math.max(0.7, r * 0.11);
+      const spoke = (): void => {
+        g.strokeStyle = rgb(p.ink);
+        g.lineWidth = spokeW + this.ink * 1.4;
+        g.stroke();
+        g.strokeStyle = rgb(p.body, 0.92);
+        g.lineWidth = spokeW;
+        g.stroke();
+      };
+      smear.strokes.forEach((alpha, m) => {
+        g.globalAlpha = alpha;
+        // Where the spokes were earlier in the frame: further round against the way they turn.
+        const back = (m / smear.strokes.length) * smear.over;
+        /*
+         * Smeared, all of them in one path, inked and then filled: a stroke a spoke was most of what a wheel cost to draw.
+         * Sharp, each inked and filled in turn, so each is outlined over the one before it: in one path each spoke's fill
+         * covered its neighbours' ink by the hub, and close up they ran together into a light star there. A sharp wheel is
+         * drawn once a step into its cell (`wheelsFor`), not a frame, so it hardly costs.
+         */
+        const each = !smear.over;
+        g.beginPath();
+        for (let j = 0; j < spokes; j++) {
+          const a = ((j + back) / spokes - turn) * TAU + 0.3;
+          const A = at(a, r * 0.16, 0), B = at(a, rin, 0);
+          g.moveTo(A[0], A[1]);
+          g.lineTo(B[0], B[1]);
+          if (!each) continue;
+          spoke();
+          g.beginPath();
+        }
+        if (!each) spoke();
+      });
+      g.lineCap = 'butt';
+      g.globalAlpha = 1;
     }
-    g.globalAlpha = 1 - 0.8 * blur;
-    g.lineCap = 'round';
-    for (let j = 0; j < spokes; j++) {
-      const a = (j / spokes - turn) * TAU + 0.3;
-      const A = at(a, r * 0.16, 0), B = at(a, rin, 0);
-      this.line(A, B, rgb(p.ink), Math.max(0.7, r * 0.11) + this.ink * 1.4);
-      this.line(A, B, rgb(p.body, 0.92), Math.max(0.7, r * 0.11));
-    }
-    g.lineCap = 'butt';
-    g.globalAlpha = 1;
+    const k = this.light(n[0] * side, n[1] * side, 0);
     // The tread, where it is toward you.
-    for (let j = 0; j < N; j++) {
-      const a0 = (j / N) * TAU, a1 = ((j + 1) / N) * TAU, am = (a0 + a1) / 2;
-      const nx = u[0] * Math.cos(am), ny = u[1] * Math.cos(am), nz = Math.sin(am);
-      if (!this.faces(nx, ny, nz + 0.03)) continue;
-      const q = [at(a0, r, far), at(a1, r, far), at(a1, r, near), at(a0, r, near)];
-      this.poly(q);
-      g.fillStyle = rgb(tread.body, this.light(nx, ny, nz));
-      g.fill();
-      g.strokeStyle = rgb(tread.body, this.light(nx, ny, nz));
-      g.lineWidth = 0.5;
+    if (does('face')) {
+      for (let j = 0; j < N; j++) {
+        const a0 = (j / N) * TAU, a1 = ((j + 1) / N) * TAU, am = (a0 + a1) / 2;
+        const nx = u[0] * Math.cos(am), ny = u[1] * Math.cos(am), nz = Math.sin(am);
+        if (!this.faces(nx, ny, nz + 0.03)) continue;
+        const q = [at(a0, r, far), at(a1, r, far), at(a1, r, near), at(a0, r, near)];
+        this.poly(q);
+        g.fillStyle = rgb(tread.body, this.light(nx, ny, nz));
+        g.fill();
+        g.strokeStyle = rgb(tread.body, this.light(nx, ny, nz));
+        g.lineWidth = 0.5;
+        g.stroke();
+      }
+      // The face of the rim, with the tyre's edge round it, and the hub.
+      const front = ring(r, near), frontIn = ring(rin, near), tyre = ring(r * 0.93, near);
+      g.beginPath();
+      front.forEach(([x, y], j) => (j ? g.lineTo(x, y) : g.moveTo(x, y)));
+      g.closePath();
+      frontIn.forEach(([x, y], j) => (j ? g.lineTo(x, y) : g.moveTo(x, y)));
+      g.closePath();
+      g.fillStyle = rgb(p.body, k);
+      g.fill('evenodd');
+      g.beginPath();
+      front.forEach(([x, y], j) => (j ? g.lineTo(x, y) : g.moveTo(x, y)));
+      g.closePath();
+      tyre.forEach(([x, y], j) => (j ? g.lineTo(x, y) : g.moveTo(x, y)));
+      g.closePath();
+      g.fillStyle = rgb(tread.body, k * 1.05);
+      g.fill('evenodd');
+      g.strokeStyle = rgb(p.ink);
+      g.lineWidth = this.ink;
+      g.stroke();
+      this.poly(frontIn);
       g.stroke();
     }
-    // The face of the rim, with the tyre's edge round it, and the hub.
-    const front = ring(r, near), frontIn = ring(rin, near), tyre = ring(r * 0.93, near);
-    const k = this.light(n[0] * side, n[1] * side, 0);
-    g.beginPath();
-    front.forEach(([x, y], j) => (j ? g.lineTo(x, y) : g.moveTo(x, y)));
-    g.closePath();
-    frontIn.forEach(([x, y], j) => (j ? g.lineTo(x, y) : g.moveTo(x, y)));
-    g.closePath();
-    g.fillStyle = rgb(p.body, k);
-    g.fill('evenodd');
-    g.beginPath();
-    front.forEach(([x, y], j) => (j ? g.lineTo(x, y) : g.moveTo(x, y)));
-    g.closePath();
-    tyre.forEach(([x, y], j) => (j ? g.lineTo(x, y) : g.moveTo(x, y)));
-    g.closePath();
-    g.fillStyle = rgb(tread.body, k * 1.05);
-    g.fill('evenodd');
-    g.strokeStyle = rgb(p.ink);
-    g.lineWidth = this.ink;
-    g.stroke();
-    this.poly(frontIn);
-    g.stroke();
-    if (mark) {
+    if (mark && does('mark')) {
       // Over the joint between two spokes, the same way round as they go.
       const a0 = (0.5 / spokes - turn) * TAU + 0.3, span = (0.45 / spokes) * TAU;
       const strake: Pt[] = [];
@@ -783,6 +862,7 @@ class Scene {
       for (let j = 4; j >= 0; j--) strake.push(at(a0 - span / 2 + (span * j) / 4, rin * 0.97, near + side * 0.05));
       this.fillInk(strake, rgb(IRON.body, k * 0.62), IRON.ink);
     }
+    if (!does('hub')) return;
     const hub = ring(r * 0.2, near + side * 0.25);
     this.fillInk(hub, rgb(p.body, k * 1.02), p.ink);
     this.fillInk(ring(r * 0.08, near + side * 0.3), rgb(tread.body, 1.1), tread.ink);
@@ -4820,6 +4900,29 @@ interface Baked {
   layers?: HTMLCanvasElement[];
   /** And which stand-in each of `layers` comes after, in the order they are drawn. */
   order?: number[];
+  /**
+   * And whether anything of each sheet is over where the first of them, the helmsman, sits (`seeThrough`): he was let
+   * show through every sheet in front of him, at a millisecond or more a frame, whether or not any of it was near him.
+   */
+  over?: boolean[];
+  /**
+   * Baked round its wheels: which wheel comes after each sheet, in the order they are drawn; where each wheel goes on a
+   * sheet, in its pixels (left, top, width, height); and its wheels as they have been drawn, a picture for each blur
+   * holding every step of the way round of every wheel (`wheelsFor`).
+   */
+  rolled?: number[];
+  wheelAt?: Array<[number, number, number, number]>;
+  turned?: Map<number, { canvas: HTMLCanvasElement; drawn: boolean[] }>;
+  /**
+   * Baked round its wheels (`bakeRound`), where each sheet is on `canvas` and where it goes on the picture the piece would
+   * have been, in its pixels: across and down, wide and high, and across and down on the whole; and where on `canvas`
+   * what of each wheel does not go round starts, its three stages side by side.
+   */
+  sheets?: Array<[number, number, number, number, number, number]>;
+  stills?: Array<[number, number]>;
+  /** Pixels its wheels hold, counted in what is kept; and the zoom its ink was drawn for, which they are drawn for too. */
+  wheelArea?: number;
+  inkAt?: number;
 }
 
 /**
@@ -4850,7 +4953,7 @@ const BAKED_BUDGET = 16e6;
 const baked = new Map<string, Baked>();
 let bakedArea = 0;
 
-function bake(kind: string, lit: boolean, tint: Tint | undefined, trim: number | undefined, view: PieceView, material: string | undefined, frame: number, scale: number, zoom: number, crew?: Crew, manned = false): Baked {
+function bake(kind: string, lit: boolean, tint: Tint | undefined, trim: number | undefined, view: PieceView, material: string | undefined, frame: number, scale: number, zoom: number, crew?: Crew, manned = false, rolling = false): Baked {
   const sc = new Scene(null as unknown as CanvasRenderingContext2D, view, zoom);
   build(sc, kind, lit, tint, trim, material, frame, manned);
   let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
@@ -4868,6 +4971,7 @@ function bake(kind: string, lit: boolean, tint: Tint | undefined, trim: number |
   // Room for the ink round the edge, and for the light a fire throws past its flames.
   const pad = 3 + sc.ink * 2 + (lit ? 16 : 0);
   x0 = Math.floor(x0 - pad); y0 = Math.floor(y0 - pad); x1 = Math.ceil(x1 + pad); y1 = Math.ceil(y1 + pad);
+  if (rolling && !crew && sc.parts.some((p) => p.wheel !== undefined)) return bakeRound(sc, x0, y0, x1, y1, scale, zoom, bounds);
   const sheet = (): [HTMLCanvasElement, CanvasRenderingContext2D] => {
     const canvas = document.createElement('canvas');
     canvas.width = Math.max(1, Math.ceil((x1 - x0) * scale));
@@ -4886,23 +4990,217 @@ function bake(kind: string, lit: boolean, tint: Tint | undefined, trim: number |
     g.fill();
   }
   // Put in after the piece is measured, so that its layers are the size its one picture would have been.
-  let layers: HTMLCanvasElement[] | undefined, order: number[] | undefined;
+  let layers: HTMLCanvasElement[] | undefined, order: number[] | undefined, over: boolean[] | undefined;
   if (crew) {
     const sheets = crew.at.map(() => sheet());
     layers = sheets.map(([c]) => c);
     order = [];
     const o = order;
+    // Where on the screen a part's box is: left, top, right, bottom, `out` units round it.
+    const box = (p: Part, out: number): [number, number, number, number] => {
+      let a = Infinity, b = Infinity, c = -Infinity, d = -Infinity;
+      for (const x of [p.x0, p.x1]) for (const y of [p.y0, p.y1]) for (const z of [p.z0, p.z1]) {
+        const [px, py] = sc.P(x, y, z);
+        a = Math.min(a, px); c = Math.max(c, px); b = Math.min(b, py); d = Math.max(d, py);
+      }
+      return [a - out, b - out, c + out, d + out];
+    };
+    const drawn = sc.parts.slice();
     sc.standIns(crew.at, crew.tall, (i) => {
       sc.g = sheets[o.length][1];
       o.push(i);
     });
+    // Where the helmsman is, and room round him for the arm on the tiller, whatever he carries, and the soft edge.
+    const helm = box(sc.parts[drawn.length], HELM_ROOM);
+    over = [false];
+    for (const p of drawn) {
+      if (p.room) continue;
+      const was = p.draw, at = box(p, 0);
+      if (at[0] >= helm[2] || at[2] <= helm[0] || at[1] >= helm[3] || at[3] <= helm[1]) continue;
+      p.draw = () => {
+        over![o.length] = true;
+        was();
+      };
+    }
   }
   sc.flush();
-  return { canvas, ox: -x0 * scale, oy: -y0 * scale, scale, bounds, layers, order };
+  return { canvas, ox: -x0 * scale, oy: -y0 * scale, scale, bounds, layers, order, over };
 }
 
-/** The canvas pixels a baked piece holds, all its layers counted. */
-const areaOf = (b: Baked): number => b.canvas.width * b.canvas.height * (1 + (b.layers?.length ?? 0));
+/** How far round where the helmsman sits a part of a layer over him has to be to be let fade over him, in units. */
+const HELM_ROOM = 4;
+
+/*
+ * A piece with wheels that turn is baked without them: a sheet for what goes down behind the first wheel the sort lays
+ * down, one for what goes between that and the next, and so on, each only as big as what is on it, one over another on
+ * one picture; and under them what of each wheel does not go round (`WheelStage`). Each wheel is drawn on its own, a
+ * cell for each step of the way round it is at (`wheelsFor`), and put down between the two sheets either side of it. A
+ * cart going along was a whole cart baked afresh for every step of her wheels, three to six milliseconds a time, and a
+ * wagon up to twenty-five; now a step is a few small blits and her spokes, and the cart is baked once for the way she
+ * points.
+ */
+function bakeRound(sc: Scene, x0: number, y0: number, x1: number, y1: number, scale: number, zoom: number, bounds: [number, number, number, number]): Baked {
+  const W = Math.max(1, Math.ceil((x1 - x0) * scale)), H = Math.max(1, Math.ceil((y1 - y0) * scale));
+  // Where a box of the piece is on the whole picture, in its pixels, `out` units round it: left, top, right, bottom.
+  const boxOf = (xs: number[], ys: number[], zs: number[], out: number): [number, number, number, number] => {
+    let a = Infinity, b = Infinity, c = -Infinity, d = -Infinity;
+    for (const x of xs) for (const y of ys) for (const z of zs) {
+      const [px, py] = sc.P(x, y, z);
+      a = Math.min(a, px); c = Math.max(c, px); b = Math.min(b, py); d = Math.max(d, py);
+    }
+    return [Math.floor((a - x0 - out) * scale), Math.floor((b - y0 - out) * scale), Math.ceil((c - x0 + out) * scale), Math.ceil((d - y0 + out) * scale)];
+  };
+  // The order the parts go down in, found by laying them without drawing them.
+  const laid: Part[] = [], draws = new Map<Part, () => void>();
+  for (const p of sc.parts) {
+    draws.set(p, p.draw);
+    p.draw = () => laid.push(p);
+  }
+  sc.flush();
+  const groups: Part[][] = [[]], rolled: number[] = [], wheelAt: Array<[number, number, number, number]> = [], round: Part[] = [];
+  for (const p of laid) {
+    if (p.wheel === undefined) { groups[groups.length - 1].push(p); continue; }
+    rolled.push(p.wheel);
+    groups.push([]);
+    round.push(p);
+    // Room round it for the hub, which stands out past its face, and the ink.
+    const [l, t, r, b] = boxOf([p.x0, p.x1], [p.y0, p.y1], [p.z0, p.z1], 1.5);
+    wheelAt[p.wheel] = [l, t, r - l, b - t];
+  }
+  // Each sheet as big as what goes on it and the ink round that, inside the picture the piece would have been.
+  const out = 3 + sc.ink * 2;
+  const crops = groups.map((ps, i) => {
+    let [l, t, r, b] = [Infinity, Infinity, -Infinity, -Infinity];
+    const grow = (q: [number, number, number, number]): void => { l = Math.min(l, q[0]); t = Math.min(t, q[1]); r = Math.max(r, q[2]); b = Math.max(b, q[3]); };
+    for (const p of ps) if (!p.room) grow(boxOf([p.x0, p.x1], [p.y0, p.y1], [p.z0, p.z1], out));
+    if (!i) for (const [a, bb, c, d] of sc.shadows ?? []) grow(boxOf([a, bb], [c, d], [0], out));
+    l = Math.max(0, l); t = Math.max(0, t); r = Math.min(W, r); b = Math.min(H, b);
+    return r > l && b > t ? [l, t, r - l, b - t] : [0, 0, 0, 0];
+  });
+  // One over another, and under them each wheel's three stages side by side.
+  let down = 0;
+  const sheets = crops.map(([l, t, w, h]): [number, number, number, number, number, number] => {
+    const s: [number, number, number, number, number, number] = [0, down, w, h, l, t];
+    down += h;
+    return s;
+  });
+  const stills: Array<[number, number]> = [];
+  for (const p of round) {
+    stills[p.wheel!] = [0, down];
+    down += wheelAt[p.wheel!][3];
+  }
+  const canvas = document.createElement('canvas');
+  canvas.width = Math.max(1, ...crops.map((c) => c[2]), ...round.map((p) => 3 * wheelAt[p.wheel!][2]));
+  canvas.height = Math.max(1, down);
+  const g = canvas.getContext('2d');
+  if (!g) throw new Error('no 2d context');
+  sc.g = g;
+  // Somewhere on the picture, only there, drawn as it would be at `l`, `t` on the whole of it.
+  const onto = (x: number, y: number, w: number, h: number, l: number, t: number, draw: () => void): void => {
+    g.save();
+    g.beginPath();
+    g.rect(x, y, w, h);
+    g.clip();
+    g.setTransform(scale, 0, 0, scale, -x0 * scale - l + x, -y0 * scale - t + y);
+    draw();
+    g.restore();
+  };
+  sheets.forEach(([x, y, w, h, l, t], i) => {
+    if (!w) return;
+    onto(x, y, w, h, l, t, () => {
+      if (!i) {
+        for (const [a, b, c, d] of sc.shadows ?? []) {
+          sc.poly([sc.P(a, c, 0), sc.P(b, c, 0), sc.P(b, d, 0), sc.P(a, d, 0)]);
+          g.fillStyle = 'rgba(44, 74, 78, 0.17)';
+          g.fill();
+        }
+      } else {
+        // Left as the wheel before it would have left the one picture: its hub inked, with round joins, which what came
+        // after it was drawn with; drawn with the canvas's own, a yoke's corners came to points.
+        g.lineJoin = 'round';
+        g.lineWidth = sc.ink;
+      }
+      for (const p of groups[i]) draws.get(p)!();
+    });
+  });
+  for (const p of round) {
+    const [l, t, w, h] = wheelAt[p.wheel!], [x, y] = stills[p.wheel!];
+    (['under', 'face', 'hub'] as const).forEach((stage, col) => onto(x + col * w, y, w, h, l, t, () => p.staged?.(stage)));
+  }
+  return { canvas, ox: -x0 * scale, oy: -y0 * scale, scale, bounds, inkAt: zoom, rolled, wheelAt, sheets, stills };
+}
+
+/** The canvas pixels a baked piece holds, all its layers and wheels counted. */
+const areaOf = (b: Baked): number => b.canvas.width * b.canvas.height * (1 + (b.layers?.length ?? 0)) + (b.wheelArea ?? 0);
+
+/**
+ * A wheeled piece's wheels at `trim` (`wheelTrim`): the picture of them at that blur, and the cell of it for that step,
+ * across and down, in each wheel's own block of it (`wheelBlock`) and the size of the wheel. Each is drawn as it would
+ * have been at the place on the piece's sheet it was left out of (`bake`), so put down there it is pixel for pixel what
+ * the whole bake would have been. Every step of every wheel at a blur goes on one picture, for making a canvas costs
+ * more than drawing a wheel on it; and what of a wheel does not go round (`WheelStage`) is drawn once, under the piece's
+ * sheets (`stills`), and put down in each step under and over the spokes and the strake, which are all that is drawn
+ * afresh for a step.
+ */
+function wheelsFor(b: Baked, kind: string, tint: Tint | undefined, trim: number | undefined, view: PieceView, material: string | undefined): { canvas: HTMLCanvasElement; x: number; y: number } | null {
+  const at = b.wheelAt;
+  if (!at) return null;
+  const t = trim ?? 0, blur = Math.floor(t / 1000), step = t % 1000;
+  const cols = WHEELS[kind]!.spokes;
+  const x = step % cols, y = Math.floor(step / cols);
+  b.turned ??= new Map();
+  let set = b.turned.get(blur);
+  if (set?.drawn[step]) return { canvas: set.canvas, x, y };
+  const sc = new Scene(null as unknown as CanvasRenderingContext2D, view, b.inkAt ?? 1);
+  build(sc, kind, false, tint, t, material, 0);
+  const wheels = sc.parts.filter((p) => p.wheel !== undefined && at[p.wheel] && p.staged);
+  const put = (g: CanvasRenderingContext2D, box: [number, number, number, number], cx: number, cy: number): void =>
+    g.setTransform(b.scale, 0, 0, b.scale, b.ox - box[0] + cx, b.oy - box[1] + cy);
+  // A picture as wide as the widest wheel's row of `across` cells, and as high as `down` rows of every wheel.
+  const sheet = (across: number, down: number): [HTMLCanvasElement, CanvasRenderingContext2D] => {
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.max(1, ...at.map((box) => (box ? box[2] * across : 0)));
+    canvas.height = Math.max(1, wheelBlock(at, at.length) * down);
+    const g = canvas.getContext('2d');
+    if (!g) throw new Error('no 2d context');
+    b.wheelArea = (b.wheelArea ?? 0) + canvas.width * canvas.height;
+    bakedArea += canvas.width * canvas.height;
+    return [canvas, g];
+  };
+  if (!set) {
+    set = { canvas: sheet(cols, WHEEL_STEPS)[0], drawn: [] };
+    b.turned.set(blur, set);
+  }
+  letGo(b);
+  set.drawn[step] = true;
+  const canvas = set.canvas, g = canvas.getContext('2d');
+  if (!g) return null;
+  sc.g = g;
+  for (const p of wheels) {
+    const box = at[p.wheel!], [, , w, h] = box, top = wheelBlock(at, p.wheel!), cx = x * w, cy = top * WHEEL_STEPS + y * h;
+    const [sx, sy] = b.stills?.[p.wheel!] ?? [0, 0];
+    const lay = (col: number): void => {
+      g.setTransform(1, 0, 0, 1, 0, 0);
+      g.drawImage(b.canvas, sx + col * w, sy, w, h, cx, cy, w, h);
+    };
+    lay(0);
+    put(g, box, cx, cy);
+    p.staged!('turning');
+    lay(1);
+    put(g, box, cx, cy);
+    p.staged!('mark');
+    lay(2);
+  }
+  g.setTransform(1, 0, 0, 1, 0, 0);
+  return { canvas, x, y };
+}
+
+/** How far down wheel `i` starts on a picture of a piece's wheels with a row of cells, each the wheel's own height, for each of them; with `n` rows a wheel, `n` times that. */
+const wheelBlock = (at: Array<[number, number, number, number]>, i: number): number => {
+  let y = 0;
+  for (let j = 0; j < i; j++) if (at[j]) y += at[j][3];
+  return y;
+};
 
 /**
  * Draw one piece with its floor contact at (sx, sy), turned as `view` says
@@ -4913,13 +5211,25 @@ const areaOf = (b: Baked): number => b.canvas.width * b.canvas.height * (1 + (b.
  */
 export function drawFurniture(ctx: CanvasRenderingContext2D, sx: number, sy: number, zoom: number, kind: string, lit = false, tint?: Tint, trim?: number, view: PieceView = pieceView('s', 0), material?: string,
   crew?: Crew, layer: number | 'all' = 'all', live = true, seeHelm: Silhouette | null = null, manned = false): [number, number, number, number] {
-  const b = bakedFor(zoom, kind, lit, tint, trim, view, material, crew, manned);
+  const rolling = !crew && !!WHEELS[kind];
+  const b = bakedFor(zoom, kind, lit, tint, rolling ? undefined : trim, view, material, crew, manned, rolling);
   const k = zoom / b.scale;
   const sheets = [b.canvas, ...(b.layers ?? [])];
-  for (const [i, c] of sheets.entries()) {
+  if (b.rolled && b.wheelAt && b.sheets) {
+    // Each sheet of it where it goes, and after each the wheel that comes there.
+    const wheels = wheelsFor(b, kind, tint, trim, view, material);
+    for (let i = 0; i <= b.rolled.length; i++) {
+      const [x, y, sw, sh, sl, st] = b.sheets[i];
+      if (sw) ctx.drawImage(b.canvas, x, y, sw, sh, sx + (sl - b.ox) * k, sy + (st - b.oy) * k, sw * k, sh * k);
+      const w = b.rolled[i], box = b.wheelAt[w];
+      if (!wheels || !box) continue;
+      const [l, t, ww, wh] = box;
+      ctx.drawImage(wheels.canvas, wheels.x * ww, wheelBlock(b.wheelAt, w) * WHEEL_STEPS + wheels.y * wh, ww, wh, sx + (l - b.ox) * k, sy + (t - b.oy) * k, ww * k, wh * k);
+    }
+  } else for (const [i, c] of sheets.entries()) {
     if (layer !== 'all' && layer !== i) continue;
     const at: [number, number, number, number] = [sx - b.ox * k, sy - b.oy * k, b.canvas.width * k, b.canvas.height * k];
-    if (seeHelm && crew && i > 0) seeThrough(ctx, c, at, seeHelm);
+    if (seeHelm && crew && i > 0 && b.over?.[i]) seeThrough(ctx, c, at, seeHelm);
     else ctx.drawImage(c, ...at);
   }
   // And whatever on it moves, over the last of it, as it is this frame.
@@ -4929,7 +5239,7 @@ export function drawFurniture(ctx: CanvasRenderingContext2D, sx: number, sy: num
 }
 
 /** A picture of somebody as it was last put down: what it was put down on, and where, in that context's own units. */
-export interface Silhouette { ctx: CanvasRenderingContext2D; canvas: CanvasImageSource & { width: number; height: number }; x: number; y: number; w: number; h: number }
+export interface Silhouette { ctx: CanvasRenderingContext2D; canvas: CanvasImageSource & { width: number; height: number }; x: number; y: number; w: number; h: number; ver?: number }
 
 /**
  * A helmsman seen through what is in front of him. Sailing toward
@@ -4947,32 +5257,47 @@ export interface Silhouette { ctx: CanvasRenderingContext2D; canvas: CanvasImage
  * pixel or two round his edge, and nowhere else.
  */
 const HELM_SEEN = { most: 0.62, soft: 1.5 };
-let seePad: HTMLCanvasElement | null = null;
+/**
+ * And the layer as it was last let fade over each helmsman, kept till his picture is drawn again or he is somewhere else
+ * on it (`ver`, by a pixel of the layer's): a blurred cut-out of a layer was a millisecond or three, and was made afresh
+ * every frame for every manned boat on the screen, though his picture is drawn again only a score of times a second.
+ * Kept for each layer over him, not one: a ship with crew on deck as well as at the helm has more than one layer after
+ * his, and two of them over him put each other out every frame, so both were made afresh again. Each goes with its layer.
+ */
+type Seen = { pad: HTMLCanvasElement; ver?: number; x: number; y: number; w: number };
+const seen = new WeakMap<object, WeakMap<HTMLCanvasElement, Seen>>();
 function seeThrough(ctx: CanvasRenderingContext2D, c: HTMLCanvasElement, at: [number, number, number, number], helm: Silhouette): void {
   const [x, y, w, h] = at;
   // Drawn on another picture than this one -- a flash or a ring round him under the pointer -- it is nowhere here to see through.
   if (helm.ctx !== ctx) { ctx.drawImage(c, x, y, w, h); return; }
-  seePad ??= document.createElement('canvas');
-  if (seePad.width < c.width || seePad.height < c.height) {
-    seePad.width = Math.max(seePad.width, c.width);
-    seePad.height = Math.max(seePad.height, c.height);
+  const k = c.width / w, hx = (helm.x - x) * k, hy = (helm.y - y) * k;
+  let his = seen.get(helm.canvas);
+  if (!his) seen.set(helm.canvas, (his = new WeakMap()));
+  let kept = his.get(c);
+  if (!kept || helm.ver === undefined || kept.ver !== helm.ver || Math.abs(kept.x - hx) > 1 || Math.abs(kept.y - hy) > 1 || Math.abs(kept.w - helm.w * k) > 1) {
+    const pad = kept?.pad ?? document.createElement('canvas');
+    if (pad.width !== c.width || pad.height !== c.height) {
+      pad.width = c.width;
+      pad.height = c.height;
+    }
+    const g = pad.getContext('2d');
+    if (!g) { ctx.drawImage(c, x, y, w, h); return; }
+    g.setTransform(1, 0, 0, 1, 0, 0);
+    g.clearRect(0, 0, c.width, c.height);
+    g.globalCompositeOperation = 'source-over';
+    g.drawImage(c, 0, 0);
+    // His picture, in the layer's own pixels, taken out of it: softened at the edge, so there is no line round him.
+    g.globalCompositeOperation = 'destination-out';
+    g.globalAlpha = HELM_SEEN.most;
+    g.filter = `blur(${(HELM_SEEN.soft * k).toFixed(2)}px)`;
+    g.drawImage(helm.canvas, 0, 0, helm.canvas.width, helm.canvas.height, hx, hy, helm.w * k, helm.h * k);
+    g.filter = 'none';
+    g.globalAlpha = 1;
+    g.globalCompositeOperation = 'source-over';
+    kept = { pad, ver: helm.ver, x: hx, y: hy, w: helm.w * k };
+    his.set(c, kept);
   }
-  const g = seePad.getContext('2d');
-  if (!g) { ctx.drawImage(c, x, y, w, h); return; }
-  g.setTransform(1, 0, 0, 1, 0, 0);
-  g.clearRect(0, 0, c.width, c.height);
-  g.globalCompositeOperation = 'source-over';
-  g.drawImage(c, 0, 0);
-  // His picture, in the layer's own pixels, taken out of it: softened at the edge, so there is no line round him.
-  const k = c.width / w;
-  g.globalCompositeOperation = 'destination-out';
-  g.globalAlpha = HELM_SEEN.most;
-  g.filter = `blur(${(HELM_SEEN.soft * k).toFixed(2)}px)`;
-  g.drawImage(helm.canvas, 0, 0, helm.canvas.width, helm.canvas.height, (helm.x - x) * k, (helm.y - y) * k, helm.w * k, helm.h * k);
-  g.filter = 'none';
-  g.globalAlpha = 1;
-  g.globalCompositeOperation = 'source-over';
-  ctx.drawImage(seePad, 0, 0, c.width, c.height, x, y, w, h);
+  ctx.drawImage(kept.pad, 0, 0, c.width, c.height, x, y, w, h);
 }
 
 /*
@@ -5044,27 +5369,32 @@ export function crewOrder(zoom: number, kind: string, lit: boolean, tint: Tint |
 }
 
 /** A piece's bake for this zoom, turn and trim, from the ones kept or new. */
-function bakedFor(zoom: number, kind: string, lit: boolean, tint: Tint | undefined, trim: number | undefined, view: PieceView, material: string | undefined, crew?: Crew, manned = false): Baked {
+function bakedFor(zoom: number, kind: string, lit: boolean, tint: Tint | undefined, trim: number | undefined, view: PieceView, material: string | undefined, crew?: Crew, manned = false, rolling = false): Baked {
   const scale = BAKE_STEPS.find((s) => s >= zoom - 1e-3) ?? zoom;
   // The ink is a pixel wide on the screen until the zoom is under one, when it is held at a pixel and so is its own bake.
   const inkZoom = zoom < 0.95 ? Math.round(zoom * 20) / 20 : 1;
   const frame = lit ? Math.floor(performance.now() / 150) % 4 : 0;
   const set = trim === undefined || Number.isInteger(trim) ? trim : Math.round(trim * 20) / 20;
-  const aboard = (crew ? `|${crew.tall}:${crew.at.map((a) => a.join(',')).join(';')}` : '') + (manned ? '|manned' : '');
+  const aboard = (crew ? `|${crew.tall}:${crew.at.map((a) => a.join(',')).join(';')}` : '') + (manned ? '|manned' : '') + (rolling ? '|rolling' : '');
   const key = `${kind}|${material ?? ''}|${lit ? frame : '-'}|${tint?.colour ?? ''}|${set ?? ''}|${view.ux.toFixed(3)},${view.uy.toFixed(3)},${view.vx.toFixed(3)},${view.vy.toFixed(3)}|${scale}|${inkZoom}${aboard}`;
   let b = baked.get(key);
   if (b) {
     baked.delete(key);
     baked.set(key, b);
   } else {
-    b = bake(kind, lit, tint, set, view, material, frame, scale, inkZoom, crew, manned);
+    b = bake(kind, lit, tint, set, view, material, frame, scale, inkZoom, crew, manned, rolling);
     baked.set(key, b);
     bakedArea += areaOf(b);
-    for (const [k, old] of baked) {
-      if (bakedArea <= BAKED_BUDGET || old === b) break;
-      baked.delete(k);
-      bakedArea -= areaOf(old);
-    }
+    letGo(b);
   }
   return b;
+}
+
+/** Let go of the pieces drawn least lately, but never `b`, till what is kept is inside its budget. */
+function letGo(b: Baked): void {
+  for (const [k, old] of baked) {
+    if (bakedArea <= BAKED_BUDGET || old === b) break;
+    baked.delete(k);
+    bakedArea -= areaOf(old);
+  }
 }
