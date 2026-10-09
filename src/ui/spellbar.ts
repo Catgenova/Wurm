@@ -70,6 +70,13 @@ export function castAtOf(g: Game, aim: SpellAim): CastAt {
   }
 }
 
+/**
+ * Tiles the body has to have gone between asking for a spell and the island
+ * saying yes for the spell to be drawn as having moved it: more than a step
+ * walked while the answer came, less than the shortest stride a spell makes.
+ */
+const MOVED_BY_CAST = 0.6;
+
 /** "8% stamina" as the start of a sentence. */
 const capitalFirst = (t: string): string => (t ? t[0].toUpperCase() + t.slice(1) : t);
 
@@ -188,12 +195,18 @@ export class SpellBar {
   /** Call the spell in a slot at this; and once the island has taken it, draw it (`cast` event). */
   async castAt(i: number, aim: SpellAim): Promise<void> {
     const spell = this.book.said?.bar[i] ?? null;
+    // Where you stood, for a spell the island moves you with (a Lunge): drawn carried from here rather than jumping.
+    const p = this.game.player;
+    const from = { x: p.x, y: p.y };
     const why = await this.book.cast(i, aim);
     if (why) {
       this.game.logMsg(why, 'error');
       return;
     }
-    if (spell) this.game.events.emit('cast', { spell, by: null, at: castAtOf(this.game, aim) });
+    if (!spell) return;
+    const moved = Math.hypot(p.x - from.x, p.y - from.y) > MOVED_BY_CAST;
+    const pet = this.game.creatures.active();
+    this.game.events.emit('cast', { spell, by: null, at: castAtOf(this.game, aim), companion: pet?.id, from: moved ? from : undefined });
   }
 
   /** "Cast ..." for every spell on the bar that takes this, for the menu of whatever it is. */

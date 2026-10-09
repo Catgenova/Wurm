@@ -90,6 +90,15 @@ export function headingView(angle: number, rotation: number): PieceView {
   return { ux, uy, vx, vy };
 }
 
+/**
+ * The wheels of what is driven with reins, which turn as it goes: the
+ * radius of the big ones, and how many spokes each has. The picture of one
+ * is baked with them `trim` of the way from one spoke to the next, in
+ * `WHEEL_STEPS` steps, which is how far round they have rolled.
+ */
+export const WHEELS: Partial<Record<string, { r: number; spokes: number }>> = { large_cart: { r: 4.8, spokes: 10 }, wagon: { r: 5.4, spokes: 12 } };
+export const WHEEL_STEPS = 5;
+
 /* ---- colour --------------------------------------------------------------- */
 
 const hex = (h: string): RGB => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16)) as unknown as RGB;
@@ -644,13 +653,14 @@ class Scene {
    * 'x') or its y: the iron tyre round the tread, the felloe and the spokes
    * on whichever face is toward you, and the hub, `thick` across.
    */
-  wheel(c: V3, axis: 'x' | 'y', r: number, thick: number, spokes: number, p: Paint): void {
+  wheel(c: V3, axis: 'x' | 'y', r: number, thick: number, spokes: number, p: Paint, turn = 0): void {
     const [cx, cy, cz] = c;
     const ax = axis === 'x' ? thick / 2 : r, ay = axis === 'y' ? thick / 2 : r;
-    this.part(cx - ax, cx + ax, cy - ay, cy + ay, cz - r, cz + r, () => this.drawWheel(c, axis, r, thick, spokes, p));
+    this.part(cx - ax, cx + ax, cy - ay, cy + ay, cz - r, cz + r, () => this.drawWheel(c, axis, r, thick, spokes, p, turn));
   }
 
-  drawWheel(c: V3, axis: 'x' | 'y', r: number, thick: number, spokes: number, p: Paint): void {
+  /** And `turn` of the way from one spoke to the next, rolled forward: the top of it toward the piece's +x or +y. */
+  drawWheel(c: V3, axis: 'x' | 'y', r: number, thick: number, spokes: number, p: Paint, turn = 0): void {
     const g = this.g;
     const [cx, cy, cz] = c;
     const n: [number, number] = axis === 'x' ? [1, 0] : [0, 1];
@@ -682,7 +692,7 @@ class Scene {
     // Spokes from the hub to the felloe, in the middle of the wheel's thickness.
     g.lineCap = 'round';
     for (let j = 0; j < spokes; j++) {
-      const a = (j / spokes) * TAU + 0.3;
+      const a = ((j - turn) / spokes) * TAU + 0.3;
       const A = at(a, r * 0.16, 0), B = at(a, rin, 0);
       this.line(A, B, rgb(p.ink), Math.max(0.7, r * 0.11) + this.ink * 1.4);
       this.line(A, B, rgb(p.body, 0.92), Math.max(0.7, r * 0.11));
@@ -3944,12 +3954,12 @@ const MODELS: Record<string, Model> = {
     for (const s of [-1, 1]) sc.rod([L1 + 0.4, s * (W - 0.6), z0], [hw - 0.4, s * (W - 1.1), 2], 0.35, wood);
     sc.rod([hw - 0.5, -W + 0.9, 2.05], [hw - 0.5, W - 0.9, 2.05], 0.3, wood);
   },
-  large_cart: ({ sc, wood, hw, hd }) => {
+  large_cart: ({ sc, wood, hw, hd, trim }) => {
     const { L0, L1, W, floor, top, bench } = boxOf('large_cart', hw, hd), t = BOX_BOARD.large_cart;
-    const r = 4.8, ax = -2, wy = W + 1;
+    const { r, spokes } = WHEELS.large_cart!, ax = -2, wy = W + 1;
     sc.shadows = [[L0, L1, -W - 1.4, W + 1.4]];
     sc.rod([ax, -W + 0.4, r], [ax, W - 0.4, r], 0.45, IRON);
-    for (const s of [-1, 1]) sc.wheel([ax, s * wy, r], 'y', r, 0.9, 10, wood);
+    for (const s of [-1, 1]) sc.wheel([ax, s * wy, r], 'y', r, 0.9, spokes, wood, trim ?? 0);
     for (const s of [-1, 1]) sc.box(L0 + 1, L1 - 1, s * (W - 1.8) - 0.5, s * (W - 1.8) + 0.5, floor - 1.8, floor - 0.8, wood);
     sc.box(L0, L1, -W, W, floor - 0.8, floor, wood, { front: grain(sc, wood, 1), back: grain(sc, wood, 1) });
     const staked = (F: FaceAt, w: number, h: number): void => {
@@ -3974,13 +3984,13 @@ const MODELS: Record<string, Model> = {
       sc.g.lineCap = 'butt';
     });
   },
-  wagon: ({ sc, wood, hw, hd }) => {
+  wagon: ({ sc, wood, hw, hd, trim }) => {
     const { L0, L1, W, floor, top, bench } = boxOf('wagon', hw, hd), t = BOX_BOARD.wagon;
-    const wy = W + 1.2, rear = [-12, 5.4] as const, front = [6, 4.4] as const;
+    const wy = W + 1.2, rear = [-12, WHEELS.wagon!.r] as const, front = [6, 4.4] as const;
     sc.shadows = [[L0, L1, -W - 1.6, W + 1.6]];
     for (const [ax, r] of [rear, front]) {
       sc.rod([ax, -W + 0.4, r], [ax, W - 0.4, r], 0.5, IRON);
-      for (const s of [-1, 1]) sc.wheel([ax, s * wy, r], 'y', r, 1, 12, wood);
+      for (const s of [-1, 1]) sc.wheel([ax, s * wy, r], 'y', r, 1, WHEELS.wagon!.spokes, wood, trim ?? 0);
     }
     sc.box(L0 + 2, L1 - 2, -0.6, 0.6, 4.6, 5.8, wood);
     for (const s of [-1, 1]) sc.box(L0 + 1, L1 - 1, s * (W - 2.2) - 0.6, s * (W - 2.2) + 0.6, floor - 2, floor - 0.9, wood);
@@ -4939,17 +4949,35 @@ export function boatSway(t: number, under: number, lee: number, seed = 0): Sway 
 }
 /**
  * A boat's sway as a change to the picture of her, about her floor contact:
- * what is `dy` over it on the screen goes `c * dy` across and `(d - 1) * dy`
- * down, and the whole of her `up` pixels up. Everything in her picture is
- * mostly on her middle line, so how high a point is over the water is taken
- * from how high it is on the screen, and a heel leans it across her and a
- * pitch along her by that much: a shear, which costs nothing to draw with.
+ * a point `dx` across and `dy` down from it on the screen goes to
+ * `a * dx + c * dy` and `b * dx + d * dy`, and the whole of her `up` pixels
+ * up -- one turn of the canvas, which costs nothing to draw with.
+ *
+ * Where a point is on her is guessed from where it is on the screen. Along
+ * the screen, a point is taken to lie along her as far as a hull `long`
+ * times as long as she is wide most likely does, and the rest of how far up
+ * the screen it is, past where that place on the water is, is its height.
+ * A heel then leans what is high across her and lifts the one side and dips
+ * the other, and a pitch the same along her: she rolls.
+ *
+ * It was a lean alone, with all of how far up the screen a point was taken
+ * for its height. A lean cannot tip anything wide and low, so seen bow on
+ * her gunwales stayed level while the mast leant; and the stern, higher on
+ * the screen only for being farther off, slid sideways under the heel while
+ * the bow stayed put, which read as her turning a little, not rolling.
  */
-export function swayOnScreen(view: PieceView, s: Sway, zoom: number): { c: number; d: number; up: number } {
-  const th = s.heel * (Math.PI / 180), ph = s.pitch * (Math.PI / 180);
+export function swayOnScreen(view: PieceView, s: Sway, zoom: number, long = 2.5): { a: number; b: number; c: number; d: number; up: number } {
+  const th = s.heel * (Math.PI / 180), ph = s.pitch * (Math.PI / 180), H = HEIGHT_SCALE;
+  // How far along her and across her a step across the screen most likely is, and how far down the screen the water there is.
+  const la = long * long, D = view.ux * view.ux * la + view.vx * view.vx;
+  const pa = (view.ux * la) / D, pb = view.vx / D, g = pa * view.uy + pb * view.vy;
+  // What is high goes over across her by the heel and along her by the pitch; that is on the screen across and down.
+  const k1 = th * view.vx + ph * view.ux, k2 = th * view.vy + ph * view.uy;
   return {
-    c: -(th * view.vx + ph * view.ux) / HEIGHT_SCALE,
-    d: 1 - (th * view.vy + ph * view.uy) / HEIGHT_SCALE,
+    a: 1 + (k1 * g) / H,
+    b: (k2 * g) / H + H * (th * pb + ph * pa),
+    c: -k1 / H,
+    d: 1 - k2 / H,
     up: s.lift * HEIGHT_SCALE * zoom,
   };
 }

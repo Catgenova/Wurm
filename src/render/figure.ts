@@ -130,6 +130,14 @@ export interface Face {
    * they are, are a mitten.
    */
   fine?: number;
+  /**
+   * In a fold, the back of a knee: lit as though turned down from level by
+   * `CREASE_DOWN`, however it is turned, so it is in shadow. With the knee
+   * bent, the calf behind it faces up into the light, and seen from behind
+   * the back of the knee was the lightest thing on the leg where the crease
+   * should be its darkest.
+   */
+  crease?: boolean;
   /** Only while this way, in the mesh's own frame, is not toward the viewer: an eye seen side on, drawn only when the face is not. */
   unless?: V3;
   /** The point, in the mesh's own frame, whose being out of sight behind a solid hides this facet: one for all a curl's facets, so it goes or stays whole. */
@@ -1640,17 +1648,18 @@ function footMesh(): Mesh {
 function legTube(rs: number[][], n: number, mat: Mat | ((band: number, j: number) => Mat), shut = false): { thigh: Mesh; shin: Mesh } {
   const knee = rs.findIndex((r) => r[0] === 0);
   const m = (band: number, j: number): Mat => (typeof mat === 'function' ? mat(band, j) : mat);
-  const half = (from: number, to: number, foot: boolean): Mesh => {
+  const half = (from: number, to: number, foot: boolean, shin: boolean): Mesh => {
     const t = rings(rs.slice(from, to + 1), n, (band, j) => m(band + from, j), { top: false, bottom: foot });
     const z0 = rs[from][0];
     return {
       ...t,
-      f: t.f.map((f) => (f.i.every((i) => t.v[i][2] === z0) && foot ? { ...f, seam: true } : f.i.some((i) => t.v[i][2] === 0) ? { ...f, soft: true } : f)),
+      f: t.f.map((f) => (f.i.every((i) => t.v[i][2] === z0) && foot ? { ...f, seam: true } : f.i.some((i) => t.v[i][2] === 0) ? { ...f, soft: true, crease: shin && f.i.every((i) => t.v[i][1] < 0) } : f)),
     };
   };
   // `shut`: the foot of the shin closed, the lid a seam (`Face.seam`), for a leg that comes down to the foot -- kicked up behind at a
   // run, the open end of it was turned to the viewer, a ring with nothing in it.
-  return { thigh: half(knee, rs.length - 1, false), shin: half(0, knee, shut) };
+  // The shin's facets at the back of the knee are its crease (`Face.crease`).
+  return { thigh: half(knee, rs.length - 1, false, false), shin: half(0, knee, shut, true) };
 }
 
 /** A winding round a limb: every ring tipped across it, so the bands slant round it rather than going round it level. */
@@ -1662,6 +1671,39 @@ const wound = (m: Mesh, slant = 0.14): Mesh => ({ ...m, v: m.v.map(([x, y, z]): 
  * a skirt at either side.
  */
 const thighTop = (fr: Frame): number => 0.55 + 0.45 * fr.hi;
+
+/** The body's tunic skirt, bottom first, in the hips' frame: hem, the trim's top, over the hips, the waist. */
+const shirtSkirt = (fr: Frame): number[][] => [[-1.35, 1.92 * fr.hi, 1.55], [-1.08, 1.9 * fr.hi, 1.53], [0.2, 1.74 * fr.hi, 1.36], [1.25, 1.53 * fr.wa, 1.22]];
+/** How far out toward the tunic skirt's eight sides, of the way, the top of a thigh may come (`underHem`). */
+const HEM_ROOM = 0.84;
+/**
+ * The top of a thigh -- the body's own, or a legging's, made for the right leg in the knee's terms -- kept inside the tunic's skirt
+ * over it: every corner above the hem drawn in toward the middle of the hips to `HEM_ROOM` of the way out to the skirt's sides at its
+ * height, and no corner that is already inside moved. The thigh's top ring is as wide as the hips want it at the fork, and its
+ * outer corners stood outside the skirt, which narrows over the hips: seen from behind or three-quarters away, with the camera
+ * looking down, the outer side of the thigh's top was drawn up past the hem beside it as a thin spike of trouser to the belt.
+ */
+function underHem(m: Mesh, fr: Frame): Mesh {
+  const sk = shirtSkirt(fr), z0 = sk[0][0], z1 = sk[sk.length - 1][0];
+  // From the knee's terms to the hips': the thigh's frame is `THIGH` under the hip joint, which is a tenth under the hips'.
+  const lift = THIGH * fr.tall + 0.1, edge = Math.cos(Math.PI / 8);
+  return {
+    ...m,
+    v: m.v.map((p): V3 => {
+      const z = p[2] - lift;
+      if (z < z0) return p;
+      const [, R, D] = profileAt(sk, Math.min(1, (z - z0) / (z1 - z0)));
+      const x = fr.hi + p[0], u = x / R, w = p[1] / D;
+      // How far out toward the eight-sided skirt's sides, its corners being half a step round from straight across.
+      let out = 0;
+      for (let k = 0; k < 4; k++) out = Math.max(out, Math.abs(u * Math.cos((k * Math.PI) / 4) + w * Math.sin((k * Math.PI) / 4)));
+      out /= edge;
+      if (out <= HEM_ROOM) return p;
+      const q = HEM_ROOM / out;
+      return [x * q - fr.hi, p[1] * q, p[2]];
+    }),
+  };
+}
 
 function grownHair(h: HairKit): HairKit {
   return {
@@ -1919,7 +1961,7 @@ function kitOf(look: Look, lod: number): Kit {
     // leant into a run, a pale oval of trouser in the belt seen from behind.
     pelvis: rings([[-1, 1.36 * fr.hi, 1.12, 0, -0.05], [0.3, 1.55 * fr.hi, 1.2, 0, -0.05], [1.15, 1.45 * fr.wa, 1.14]], 8, 'trousers', { top: false }),
     // A band of the darker trim round the hem.
-    skirt: rings([[-1.35, 1.92 * fr.hi, 1.55], [-1.08, 1.9 * fr.hi, 1.53], [0.2, 1.74 * fr.hi, 1.36], [1.25, 1.53 * fr.wa, 1.22]], 8, (band) => (band === 0 ? 'trim' : 'tunic'), { top: false, bottom: false }),
+    skirt: rings(shirtSkirt(fr), 8, (band) => (band === 0 ? 'trim' : 'tunic'), { top: false, bottom: false }),
     belt: join(
       rings([[0.98, 1.6 * fr.wa, 1.28], [1.42, 1.6 * fr.wa, 1.28]], 8, 'belt', { top: false, bottom: false }),
       decals([plate([0, 1.31, 1.2], [0.22, 0, 0], [0, 0, 0.21], [0, 1, 0], 'buckle')]),
@@ -1968,7 +2010,8 @@ function kitOf(look: Look, lod: number): Kit {
     ),
     // From up inside the hips, so a thigh swung forward or back does not come out from under them, to the knee and down into the boot,
     // with the calf a little fuller behind under the knee.
-    ...legTube(bareLeg(fr), 6, 'trousers', true),
+    // Its top kept inside the tunic's skirt (`underHem`): made for the right leg, and mirrored for the left.
+    ...((t) => ({ thigh: underHem(t.thigh, fr), shin: t.shin }))(legTube(bareLeg(fr), 6, 'trousers', true)),
     // Bottom first, so the facets face out: made top first it was inside out, its far side drawn in its place and lit as the near
     // side would be from the other side, and a shin folded up behind at a run showed the inside of the shaft.
     boot: bodyBoot(fr),
@@ -2358,6 +2401,14 @@ const LOOKS: [number, number, number][] = [[0.4, 3, 1], [2.7, 17, -1], [5.0, 10,
 const LOOK_LEAST = -24;
 /** And how much of that the neck and the head take, the chest bowing the rest. */
 const LOOK_BOW = -16;
+/**
+ * Under a helm with a brim and a nasal the face is gone from in front at
+ * far less than that, so there the head and the chest each bow no further
+ * than this, and the hand is looked down at: bowed to it, the brim and
+ * nasal covered all of the face but a strip. Brought up higher to the
+ * eyes instead, the gauntlet was held in front of the face.
+ */
+const LOOK_BOW_HELM = -7;
 /** And when it blinks: as each look starts, and now and then besides, once twice in a row. */
 const BLINKS = [0.45, 2.75, 4.1, 5.05, 8.65, 10.15, 11.3, 11.62, 14.65];
 
@@ -2378,7 +2429,7 @@ const BLINKS = [0.45, 2.75, 4.1, 5.05, 8.65, 10.15, 11.3, 11.62, 14.65];
  * body and a spear's shaft across the face -- and none when both are full.
  * And the eyes go to where the hand is, wherever that is.
  */
-function idle(r: Rig, t: number, fr: Frame, busy: [boolean, boolean] = [false, false]): void {
+function idle(r: Rig, t: number, fr: Frame, busy: [boolean, boolean] = [false, false], helmed = false): void {
   const tt = ((t % 16) + 16) % 16;
   const turn = (period: number): number => (TAU * t) / period;
   // Breathing: the rate drifting a sixth either way over the loop, in quicker than out, deeper and shallower.
@@ -2459,8 +2510,8 @@ function idle(r: Rig, t: number, fr: Frame, busy: [boolean, boolean] = [false, f
     const look = Math.max(LOOK_LEAST, Math.atan2(d[2], Math.hypot(d[0], d[1])) / DEG), yaw = Math.atan2(-d[0], d[1]) / DEG;
     // The neck and the head bow no further than `LOOK_BOW` and the chest the rest: bowed the whole way, a helm's crown and nasal
     // filled the face from in front.
-    const nod = Math.max(LOOK_BOW, look);
-    r.chest[0] += (look - nod) * lk;
+    const nod = Math.max(helmed ? LOOK_BOW_HELM : LOOK_BOW, look);
+    r.chest[0] += Math.max(helmed ? LOOK_BOW_HELM : -90, look - nod) * lk;
     r.neck = [r.neck[0] * (1 - lk) + 0.35 * nod * lk, r.neck[1], r.neck[2] * (1 - lk) + 0.35 * yaw * lk];
     r.head = [r.head[0] * (1 - lk) + 0.65 * nod * lk, r.head[1], r.head[2] * (1 - lk) + 0.65 * yaw * lk];
   }
@@ -2875,17 +2926,40 @@ const CHISEL_TOP: V3 = [0, 0.95, GRIP];
 const BLOW: Key[] = [
   { at: 0.08, v: [1.8, 3.1, 3.2, 0.5, -0.6, -0.7, -0.95, 0.15, 0.35] },
   { at: 0.2, v: [1.8, 3.2, 2.8, 0.4, -0.6, -0.8, -1, 0.15, 0.12] },
-  { at: 0.34, v: [2.9, 1.4, 3.9, 0.9, -0.2, -0.4, -0.2, 0.6, 0.75] },
-  { at: 0.48, v: [3.0, -0.3, 5.7, 0.9, 0.3, 0.2, 0, -0.1, 1] },
-  { at: 0.6, v: [3.1, -0.6, 6.4, 0.85, 0.35, 0.45, -0.05, -0.65, 0.75] },
-  { at: 0.72, v: [3.2, -0.8, 6.6, 0.85, 0.3, 0.45, -0.05, -0.9, 0.42] },
-  { at: 0.86, v: [3.2, -0.85, 6.65, 0.85, 0.3, 0.45, -0.05, -0.92, 0.38] },
+  { at: 0.27, v: [3.0, 1.5, 2.5, 0.65, -0.4, -0.6, -0.6, -0.1, 0.8] },
+  { at: 0.34, v: [3.1, 1.2, 3.9, 0.9, -0.2, -0.4, -0.2, 0.6, 0.75] },
+  { at: 0.48, v: [3.1, -0.4, 5.7, 0.9, 0.3, 0.2, 0, -0.1, 1] },
+  { at: 0.6, v: [3.1, -0.6, 6.35, 0.85, 0.35, 0.45, -0.05, -0.65, 0.75] },
+  { at: 0.72, v: [3.2, -0.82, 6.5, 0.85, 0.3, 0.45, -0.05, -0.85, 0.5] },
+  { at: 0.86, v: [3.25, -1.0, 6.7, 0.85, 0.3, 0.45, -0.05, -0.97, 0.22] },
   { at: 0.92, v: [3.3, -0.5, 6.3, 0.8, 0.5, 0.1, 0.1, -0.7, 0.7] },
   { at: 0.955, v: [3.3, -0.2, 4.6, 0.8, -0.3, -0.5, 0.15, -0.15, 0.98] },
   { at: 0.98, v: [2.8, 1.2, 2.4, 0.5, -0.6, -0.7, -0.3, 0.5, 0.8] },
 ];
+/*
+ * At the top the arm was held dead still: the three keys there were within a
+ * quarter of a unit of one another, and a third of a second of every second
+ * the arm was frozen, a pause and then a hit. Now the cock loads through it --
+ * the wrist creeping back and up and the head of the mallet tipping further
+ * back over the shoulder -- until the blow comes down. And on the draw up the
+ * fist goes out from the work to the side first and rises beside the shoulder,
+ * out and back of it: brought forward at the height of the chest first, the
+ * mallet's head went up past the mouth and chin.
+ */
 /** How far into a blow, after it lands, work may change hands: see `settle`. */
 const WORK_SWAP = 0.12;
+/**
+ * Where the mallet is held up instead of cocked behind the ear while the hand
+ * it is in is the far one from where it is seen -- after a turn onto a
+ * facing that works the other way (see `lefty`), until the next blow lands
+ * and the hands change: out beside the chest, below the shoulder, in the hips'
+ * frame as `BLOW` has it. Cocked behind the ear with the far arm, the forearm
+ * lay across the brow and the mallet over the crown, a hand on the forehead,
+ * for up to half a second every time the body turned that way at work.
+ */
+const FAR_COCK = [3.4, 0.9, 2.5, 0.8, 0.1, -0.6];
+/** Which facings work is done left-handed at, for easing between them as the body turns (see `lefty`). */
+const LEFTY = [0, 0, 0, 1, 0, 0, 0, 1];
 
 /** Where the ankles stand at work: apart, the left forward under the work and the right back and turned out, braced for the blow. */
 function workFeet(fr: Frame): [V3, V3] {
@@ -2907,7 +2981,7 @@ function workFeet(fr: Frame): [V3, V3] {
  * thirty, it was a crown over a chest, and a cap or a helm hid the face. Seen from where the right hand's swing would come across
  * the face, it is done the other way about, left-handed (`left`, see `lefty`).
  */
-function work(r: Rig, w: number, fr: Frame, left: boolean): void {
+function work(r: Rig, w: number, fr: Frame, left: boolean, far = 0): void {
   const s = (((w / TAU) % 1) + 1) % 1;
   const T = fr.tall;
   r.tool = true;
@@ -2947,6 +3021,10 @@ function work(r: Rig, w: number, fr: Frame, left: boolean): void {
     wrist = [wrist[0] + top[0] - head[0], wrist[1] + top[1] - head[1], wrist[2] + top[2] + 0.5 * T - head[2]];
   }
   const k = loop([{ at: 0, v: [wrist[0] / T, wrist[1] / T, wrist[2] / T, 0.4, -0.6, -0.8, ...haft], hit: true }, ...BLOW], s);
+  // The far hand held up beside the shoulder rather than cocked behind the head, the elbow out and down, by as much as it is up
+  // and the far one.
+  const low = far * Math.min(1, Math.max(0, up));
+  for (let i = 0; i < 6; i++) k[i] += (FAR_COCK[i] - k[i]) * low;
   hold(r, fr, 1, [k[0] * T, k[1] * T, k[2] * T], [k[3], k[4], k[5]], [k[6], k[7], k[8]]);
   if (left) mirror(r);
 }
@@ -3223,17 +3301,51 @@ function drive(r: Rig, phi: number, moving: boolean, seat: Seat, fr: Frame): voi
  * either side of the beast with the heels down, and the body going with
  * the beast's stride.
  */
+/**
+ * A cart going along a track, at `phi` of the driver's clock: the team's nod,
+ * once to a stride of theirs; the rock of the wheels, two swings slower than
+ * that and never in step, so it is never the same twice running, the slower
+ * of them on its own (`roll`); a jolt from a rut now and then; and the
+ * bench's bump with each beat of the wheels, and the same a little later,
+ * which is when the shoulders feel it.
+ */
+function rutted(phi: number): { nod: number; rock: number; roll: number; jolt: number; bump: number; after: number } {
+  const roll = Math.sin(phi * 0.43 + 0.7);
+  return {
+    nod: Math.sin(phi * 0.5),
+    rock: 0.65 * roll + 0.35 * Math.sin(phi * 1.07 + 2.1),
+    roll,
+    jolt: Math.pow(Math.max(0, Math.sin(phi * 0.37) * Math.sin(phi * 0.83 + 1)), 3),
+    bump: Math.pow(Math.abs(Math.sin(phi * 0.5 + 0.6)), 1.5),
+    after: Math.pow(Math.abs(Math.sin(phi * 0.5 + 0.1)), 1.5),
+  };
+}
+/** How far a cart rolls on her springs with the slow swing of the rock, in degrees; her nose goes down with a rut's jolt; and lifts with each bump, in units. */
+const CART_ROLL = 1.3;
+const CART_PITCH = 1.2;
+const CART_LIFT = 0.1;
+/**
+ * A cart or a wagon on the move, under the driver at `phi` of their clock, as
+ * a boat's sway is (`boatSway` in `./furniture`): heeled to her right and
+ * pitched nose down, in degrees, and lifted, in units. She was still while
+ * her driver rocked and bumped on her, so the body gave against nothing that
+ * was seen to move. Whoever draws her draws her driver through the same
+ * sway, and the body's own rock is the rest of it (`reinsIn`).
+ */
+export function cartSway(phi: number, moving: boolean): { heel: number; pitch: number; lift: number } {
+  if (!moving) return { heel: 0, pitch: 0, lift: 0 };
+  const { roll, jolt, bump } = rutted(phi);
+  return { heel: CART_ROLL * roll, pitch: CART_PITCH * jolt, lift: CART_LIFT * bump };
+}
+
 function reinsIn(r: Rig, phi: number, moving: boolean, seat: Seat, fr: Frame): void {
   r.reins = true;
   const t = phi / 6;
-  // The team's nod, once to a stride of theirs; the rock of the wheels, slower and not in step with it; a jolt now and then.
-  const nod = moving ? Math.sin(phi * 0.5) : 0;
-  // Two swings that never fall into step, so the rock is never the same twice running, as a cart's on a track is not.
-  const rock = moving ? 0.65 * Math.sin(phi * 0.43 + 0.7) + 0.35 * Math.sin(phi * 1.07 + 2.1) : 0;
-  const jolt = moving ? Math.pow(Math.max(0, Math.sin(phi * 0.37) * Math.sin(phi * 0.83 + 1)), 3) : 0;
-  // The bench's bump with each beat of the wheels, and the same a little later, which is when the shoulders feel it.
-  const bump = moving ? Math.pow(Math.abs(Math.sin(phi * 0.5 + 0.6)), 1.5) : 0;
-  const after = moving ? Math.pow(Math.abs(Math.sin(phi * 0.5 + 0.1)), 1.5) : 0;
+  const ride = rutted(phi);
+  const nod = moving ? ride.nod : 0, rock = moving ? ride.rock : 0, jolt = moving ? ride.jolt : 0;
+  const bump = moving ? ride.bump : 0, after = moving ? ride.after : 0;
+  // What of the roll and the lift the cart takes under the body (`cartSway`), which the body is drawn through: not on a saddle.
+  const cart = moving && !seat.astride ? 1 : 0;
   const b = Math.sin((t * TAU) / 4.2);
   if (seat.astride) {
     r.leg = [[46, 26, -8], [46, 26, -8]];
@@ -3269,9 +3381,10 @@ function reinsIn(r: Rig, phi: number, moving: boolean, seat: Seat, fr: Frame): v
    * which gives under it and comes up again a beat later.
    */
   // Which way a rut throws the body: one side for a while and then the other.
-  const kick = moving ? 3 * jolt * Math.sign(Math.sin(phi * 0.19)) : 0;
-  if (moving && !seat.astride) r.lift = 0.25 * bump + 0.1 * jolt;
-  r.pelvis = [4, 2 * rock + 0.5 * kick, 0];
+  // The way it changes over is a quick turn rather than a switch, so a jolt that lands just then is not thrown both ways at once.
+  const kick = moving ? 3 * jolt * Math.tanh(4 * Math.sin(phi * 0.19)) : 0;
+  if (moving && !seat.astride) r.lift = (0.25 - CART_LIFT) * bump + 0.1 * jolt;
+  r.pelvis = [4, 2 * rock - cart * CART_ROLL * ride.roll + 0.5 * kick, 0];
   r.spine = [-9 + 3.8 * jolt + 4 * bump + 1.2 * b * (moving ? 0 : 1), 3.5 * rock + kick, 0];
   r.chest = [-2 + 2.2 * jolt + 1.4 * nod * 0.3 + 2.5 * after - 1.2 * bump, 1.5 * rock + 0.5 * kick, 0];
   // The head kept nearly level and looking ahead over the team; stopped, looking about.
@@ -3341,15 +3454,24 @@ const ROW_SPLASH = 0.24;
  * the stroke, as a share of it, and over the right by this much in the
  * middle of the drive, where the handles come in toward each other.
  */
-const ROW_LEAD = 0.025;
+const ROW_LEAD = 0.04;
 const ROW_OVER = 0.18;
+/**
+ * And the left blade squares and turns flat this much of a stroke after its own place in it. A lead of a fortieth of a
+ * stroke, a twentieth of a second, was two oars moving as one at the size the island is played at, and two blades turned
+ * at the same moment are a pair: the lead is four hundredths now, and the blades are not turned together.
+ */
+const ROW_FEATHER_LAG = 0.02;
+/** How far back in the stroke the head is following the back from, as a share of it, and how much of the difference it keeps. */
+const ROW_HEAD_LAG = 0.1;
+const ROW_HEAD_GIVE = 0.5;
 
 function row(r: Rig, phi: number, moving: boolean, seat: Seat, fr: Frame): void {
   const st = (((phi / ROW_STROKE) % 1) + 1) % 1;
   const still = (): number[] => [10, 0.02, 1, 4 + 1.5 * Math.sin(phi / 6 * TAU / 4.2)];
   const [, , , swing] = moving ? loop(STROKE, st) : still();
   // Where the back was a moment ago, which the head follows: it lags the swing a little, as a weight on the neck does.
-  const was = moving ? loop(STROKE, (st + 0.94) % 1)[3] : swing;
+  const was = moving ? loop(STROKE, (st + 1 - ROW_HEAD_LAG) % 1)[3] : swing;
   // The legs out along the boards to the stretcher, the knees down under the gunwales.
   r.leg = [[92, 12, -4], [92, 12, -4]];
   r.knee = [50, 50];
@@ -3357,8 +3479,8 @@ function row(r: Rig, phi: number, moving: boolean, seat: Seat, fr: Frame): void 
   r.pelvis = [6, 0, 0];
   r.spine = [swing * 0.55 - 4, 0, 0];
   r.chest = [swing * 0.45, 0, 0];
-  r.neck = [-swing * 0.45 + 2 - 0.3 * (swing - was), 0, 0];
-  r.head = [-swing * 0.35 + 2 - 0.15 * (swing - was), 0, moving ? 0 : 10 * Math.sin(phi / 6 * TAU / 13)];
+  r.neck = [-swing * 0.45 + 2 - ROW_HEAD_GIVE * (swing - was), 0, 0];
+  r.head = [-swing * 0.35 + 2 - 0.5 * ROW_HEAD_GIVE * (swing - was), 0, moving ? 0 : 10 * Math.sin(phi / 6 * TAU / 13)];
   const lock = seat.grip, inboard = Math.max(2, lock[0] - 1.05), out = inboard * OAR_OUT;
   r.oars = [];
   for (let k = 1; k >= 0; k--) {
@@ -3370,7 +3492,8 @@ function row(r: Rig, phi: number, moving: boolean, seat: Seat, fr: Frame): void 
      * oars were each other's mirror all through the stroke.
      */
     const sk = (st + (k ? 0 : ROW_LEAD)) % 1;
-    const [sweep, h0, feather] = moving ? loop(STROKE, sk) : still();
+    const [sweep, h0, square] = moving ? loop(STROKE, sk) : still();
+    const feather = moving && !k ? loop(STROKE, (sk + 1 - ROW_FEATHER_LAG) % 1)[2] : square;
     // How far through its life the splash of the blade going in is: from nought as it goes in to one as it has settled.
     const splash = moving ? ((sk - ROW_CATCH + 1) % 1) / ROW_SPLASH : 1;
     const over = k || !moving ? 0 : ROW_OVER * Math.pow(Math.max(0, Math.sin(Math.PI * (st - 0.18) / 0.42)), 2) * (st > 0.18 && st < 0.6 ? 1 : 0);
@@ -3500,17 +3623,20 @@ const WAVE_BEND = [86, 76, 66, 84, 86, 84, 66, 76];
  * body turns in the middle of a wave made with the staged one: the far arm
  * three-quarters on raised half way forward, which takes the hand out past
  * the side of the head rather than behind it; the near one side on raised
- * all but straight back, where the hand is behind the head on the screen and
- * clear of the face -- out to the side, it comes at the viewer and the hand
- * was over the face; and the far one three-quarters away straight out, past
- * the back of the head.
+ * straight ahead, a little lower and with the elbow opened, so the forearm
+ * leans out ahead of the face and the hand is clear of it -- out to the side,
+ * it comes at the viewer and the hand was over the face, and raised straight
+ * back, the hand sat on the back of the crown and the wave read as
+ * scratching the head; and the far one three-quarters away straight out,
+ * past the back of the head.
  */
-const WAVE_ROUND_OTHER = [20, 45, -80, 0, 20, 0, -80, 45];
-const WAVE_BEND_OTHER = [86, 80, 80, 84, 86, 84, 80, 80];
+const WAVE_ROUND_OTHER = [20, 45, 84, 0, 20, 0, 84, 45];
+const WAVE_RAISE_OTHER = [102, 98, 100, 102, 102, 102, 100, 98];
+const WAVE_BEND_OTHER = [86, 80, 62, 84, 86, 84, 62, 80];
 /** Each arm's tables, round the eight facings: the staged ones where it is the staged arm, the other ones where not. */
 const WAVE_BY_ARM = [0, 1].map((k) => {
   const pick = (main: number[], other: number[]): number[] => main.map((v, f) => (stagedArm(f) === k ? v : other[f]));
-  return { round: pick(WAVE_ROUND, WAVE_ROUND_OTHER), raise: WAVE_RAISE, bend: pick(WAVE_BEND, WAVE_BEND_OTHER) };
+  return { round: pick(WAVE_ROUND, WAVE_ROUND_OTHER), raise: pick(WAVE_RAISE, WAVE_RAISE_OTHER), bend: pick(WAVE_BEND, WAVE_BEND_OTHER) };
 });
 
 /**
@@ -3548,7 +3674,10 @@ function wave(r: Rig, t: number, facing: number, fr: Frame, k: number, busy: [bo
    */
   const x = ease(Math.max(0, Math.min(1, t / 0.24)));
   const raise = (1 + 2.2 * Math.pow(x - 1, 3) + 1.2 * Math.pow(x - 1, 2)) * (1 - step(t, 0.76, 0.96));
-  const lift = step(t, 0, 0.11) * (1 - step(t, 0.84, 1));
+  // The elbow bent from the first frames, and further than it is held up, so the forearm is folded up before the upper arm comes
+  // level (`early`): bent as the arm rose, side on it went up for a frame or two as one straight arm pointing ahead at the height
+  // of the shoulder, with the fist on the end of it.
+  const lift = step(t, 0, 0.05) * (1 - step(t, 0.84, 1));
   // Three swings of the forearm, in and out from upright, eased in and out of.
   const swings = step(t, 0.15, 0.25) * (1 - step(t, 0.72, 0.82));
   const ph = (TAU * 3 * (t - 0.2)) / 0.58;
@@ -3574,12 +3703,12 @@ function wave(r: Rig, t: number, facing: number, fr: Frame, k: number, busy: [bo
   // The forearm bent from the elbow toward forward as it hangs and toward straight up as it is raised; and kept toward up as it
   // comes down, so the hand comes down past the shoulder: bent toward forward, the arm side on lowered ahead of the body was one
   // straight line, the forearm on from the upper arm.
-  const up = t < 0.5 ? Math.min(lift, Math.max(0, Math.min(1, raise))) : lift;
+  const up = t < 0.5 ? Math.min(lift, Math.max(0, Math.min(1, 1.6 * raise))) : lift;
   const want: V3 = [0, 1 - up, up], wu = dot(want, u);
   const p = unit([want[0] - u[0] * wu, want[1] - u[1] * wu, want[2] - u[2] * wu]);
   // Coming down, the elbow folds further, the hand toward the shoulder, before it opens again at the side.
-  const fold = 30 * step(t, 0.74, 0.86);
-  const bend = (r.elbow[k] + (byFacing(table.bend, facing) + fold - (swing > 0 ? 24 : 16) * swing - r.elbow[k]) * lift) * DEG;
+  const fold = 30 * step(t, 0.74, 0.86), early = t < 0.5 ? 35 * Math.max(0, 1 - raise) : 0;
+  const bend = (r.elbow[k] + (byFacing(table.bend, facing) + fold + early - (swing > 0 ? 24 : 16) * swing - r.elbow[k]) * lift) * DEG;
   const fa: V3 = [u[0] * Math.cos(bend) + p[0] * Math.sin(bend), u[1] * Math.cos(bend) + p[1] * Math.sin(bend), u[2] * Math.cos(bend) + p[2] * Math.sin(bend)];
   const S: V3 = [s * 2.1 * fr.sh, -0.1, ARM_AT * T + r.shrug[k]];
   const a = UPPER * T, b = LOWER * T;
@@ -3602,20 +3731,27 @@ function wave(r: Rig, t: number, facing: number, fr: Frame, k: number, busy: [bo
 /**
  * The greeting with both hands full, a weapon and a shield, `t` of the way
  * through: the head turned to whoever is looking and a nod with a little bow
- * from the chest, the weapon hand brought up and forward a little and down
- * again with it. It was a wave with the shield arm, the hand behind the
+ * from the chest. It was a wave with the shield arm, the hand behind the
  * shield, which read as the shield raised -- and side on, over the face.
+ *
+ * The weapon hand stays down, the forearm only coming up a little with the
+ * bow: brought up and forward, it tipped a blade in the fist up to level
+ * (see `heldFrame`), pointed at whoever the body faced, which reads as a
+ * threat and not a greeting. And seen from behind, the head turns over the
+ * shoulder toward the viewer by up to `NOD_BACK` degrees, so the nod is
+ * made to them: kept facing away, it was the back of the head dipping,
+ * which reads as looking at the ground.
  */
+const NOD_BACK = 35;
 function nod(r: Rig, t: number, facing: number): void {
   const held = step(t, 0.05, 0.25) * (1 - step(t, 0.72, 0.95));
   const dip = Math.pow(Math.sin(Math.PI * step(t, 0.22, 0.62)), 2);
-  const view = viewOf(facing);
-  const to = view.T[1] > -0.2 ? Math.max(-20, Math.min(20, Math.atan2(-view.T[0], view.T[1]) / DEG)) : 0;
+  const view = viewOf(facing), way = Math.atan2(-view.T[0], view.T[1]) / DEG;
+  const to = view.T[1] > -0.2 ? Math.max(-20, Math.min(20, way)) : way >= 0 ? NOD_BACK : -NOD_BACK;
   r.chest = [r.chest[0] - 5 * dip, r.chest[1], r.chest[2] + 0.25 * to * held];
   r.neck = [r.neck[0] - 7 * dip, r.neck[1], r.neck[2] * (1 - held) + 0.25 * to * held];
   r.head = [r.head[0] + 2 * held - 16 * dip, r.head[1], r.head[2] * (1 - held) + 0.5 * to * held];
-  r.arm[1] = [r.arm[1][0] + 24 * held, r.arm[1][1], r.arm[1][2]];
-  r.elbow[1] += 34 * held;
+  r.elbow[1] += 12 * held;
 }
 
 /*
@@ -3668,6 +3804,8 @@ const HOP_TWIST = 7;
  * in at the shoulder there, which is what shows a bent elbow from in front. In degrees, at the top of the leap.
  */
 const HOP_RIGHT_BEND = 20, HOP_RIGHT_IN = 0.7, HOP_RIGHT_TURN = 12, HOP_TURN = 10;
+/** How much of that shape the right arm keeps on the ground, and how far both elbows bend further at the deepest of a crouch, in degrees. */
+const HOP_KEEP = 0.5, HOP_GIVE = 26;
 
 /** The hop's pose `t` of the way through, over whatever the body was doing standing: everything but how high it is off the ground. */
 function hopPose(r: Rig, t: number, fr: Frame, busy: [boolean, boolean]): void {
@@ -3730,9 +3868,11 @@ function hopPose(r: Rig, t: number, fr: Frame, busy: [boolean, boolean]): void {
   for (let k = 0; k < 2; k++) {
     const [p, a, e] = loop(HOP_ARMS, Math.max(0, Math.min(0.9999, t - (k ? HOP_RIGHT : 0))));
     const g = env * (k ? HOP_RIGHT_SIZE : 1) * (busy[k] ? HOP_HELD : 1);
-    const shape = k ? air : 0, out = a * (1 - (1 - HOP_RIGHT_IN) * shape);
+    // Something of the right arm's shape kept on the ground, and both elbows giving with the knees as a landing is taken: shaped
+    // only in the air, the arms came down at the landing into one straight A, the one the mirror of the other.
+    const shape = k ? Math.max(air, HOP_KEEP * env) : 0, out = a * (1 - (1 - HOP_RIGHT_IN) * shape);
     r.arm[k] = [r.arm[k][0] + (p - r.arm[k][0]) * g, Math.max(r.arm[k][1], r.arm[k][1] + (out - r.arm[k][1]) * g), r.arm[k][2] * (1 - g) + (HOP_TURN * air + HOP_RIGHT_TURN * shape) * g];
-    r.elbow[k] = r.elbow[k] + (e + HOP_RIGHT_BEND * shape - r.elbow[k]) * g;
+    r.elbow[k] = r.elbow[k] + (e + HOP_RIGHT_BEND * shape + HOP_GIVE * c - r.elbow[k]) * g;
   }
 }
 
@@ -3772,6 +3912,8 @@ function busyOf(p: FigurePose, facing: number, side = overLeft(facing) ? 0 : 1):
 interface Kept {
   wave?: number;
   side?: number;
+  /** And the shoulder it is on its way to, which is the one whose hand is full as far as an emote is concerned (see `settle`). */
+  bound?: number;
 }
 
 /**
@@ -3782,12 +3924,12 @@ interface Kept {
 function rigOf(p: FigurePose, fr: Frame, left = lefty(p.facing), kept: Kept = {}): Rig {
   const r = rest();
   const side = kept.side ?? (overLeft(p.facing) ? 0 : 1);
-  const busy = busyOf(p, p.facing, side);
+  const busy = busyOf(p, p.facing, kept.bound ?? side);
   if (p.swimming) swim(r, p.phase, p.moving, fr);
   else if (p.driving) drive(r, p.phase, p.moving, p.seat ?? BOX, fr);
   else if (p.moving) walk(r, p.phase + TAU * strideSeed(p.id), Math.max(0, Math.min(1, p.gait ?? 0)), fr, p.facing);
-  else if (p.working) work(r, p.phase, fr, left);
-  else idle(r, p.phase / 6, fr, busy);
+  else if (p.working) work(r, p.phase, fr, left, left ? 1 - byFacing(LEFTY, p.facing) : byFacing(LEFTY, p.facing));
+  else idle(r, p.phase / 6, fr, busy, /helm/.test(p.gear?.head?.id ?? ''));
   if (p.emote && !p.swimming && !p.driving) emote(r, p.emote, p.emoteT ?? 0, p.facing, fr, busy, kept.wave);
   // Put away for what wants both hands -- work, the water, the reins, a seat -- and not for an emote, which was a weapon and a
   // shield gone to the back in one frame and back again at the end: a wave is made with the hand that is free, and a hop with
@@ -4348,7 +4490,7 @@ const some = (a: number | undefined, b: number | undefined, n: (x: number, y: nu
  * forward and the body tips up along the surface behind them.
  */
 const WATER_BLEND = 0.6;
-function mixWater(a: Rig, b: Rig, t: number): Rig {
+function mixWater(a: Rig, b: Rig, t: number, fr: Frame): Rig {
   /*
    * Setting off, the arms went first too, and the stroke's arms are set
    * against a body lying along the surface: put on one still upright, "out
@@ -4359,9 +4501,46 @@ function mixWater(a: Rig, b: Rig, t: number): Rig {
    * the stroke only once it is lying along the water.
    */
   const off = (b.under ?? 0) > (a.under ?? 0);
-  const arms = mixRig(a, b, ease(off ? Math.max(0, (t - 0.3) / 0.7) : Math.min(1, t / 0.65)));
+  const wa = ease(off ? Math.max(0, (t - 0.3) / 0.7) : Math.min(1, t / 0.65));
+  const arms = mixRig(a, b, wa);
   const body = mixRig(a, b, ease(off ? Math.min(1, t / 0.6) : Math.max(0, (t - 0.25) / 0.75)));
-  return { ...body, arm: arms.arm, elbow: arms.elbow, hand: arms.hand, shrug: arms.shrug };
+  const r: Rig = { ...body, arm: arms.arm, elbow: arms.elbow, hand: arms.hand, shrug: arms.shrug };
+  /*
+   * But the arms' angles are the chest's, and the chest is part way between upright and lying along the water: tread's "down
+   * and out to the side" on a chest tipped flat is forward along the surface, so a forearm and an open hand came up through it
+   * for a sixth of a second, setting off, waving. Either order breaks somewhere. So the hands are not blended as angles at all
+   * but as where they are in the water -- across, ahead of the head, under the surface -- from where each pose has them, and
+   * kept a forearm's depth under it all the way; the arm is put to them on the body as it is, the elbow and the hand turned
+   * as the two poses turn them between, the fingers never up.
+   */
+  const A = skeleton(fr, a), B = skeleton(fr, b);
+  for (let k = 0; k < 2; k++) {
+    const p = inWater(A, a, k), q = inWater(B, b, k);
+    const at = mixV(p.at, q.at, wa), pole = mixV(p.pole, q.pole, wa), fingers = mixV(p.fingers, q.fingers, wa);
+    at[2] = Math.min(at[2], HANDS_UNDER);
+    fingers[2] = Math.min(fingers[2], 0);
+    swimHand(r, fr, k, at, pole);
+    aimHand(r, fr, k, fingers, mixV(p.back, q.back, wa));
+  }
+  return r;
+}
+/** How far under the surface a swimmer's wrists are kept going from swimming to treading water or back: a forearm's depth less a hand. */
+const HANDS_UNDER = -0.75;
+const mixV = (a: V3, b: V3, w: number): V3 => [a[0] + (b[0] - a[0]) * w, a[1] + (b[1] - a[1]) * w, a[2] + (b[2] - a[2]) * w];
+/**
+ * Where a swimmer's hand `k` is in the water, as `swimHand` takes it -- the wrist across from the middle, ahead of the head
+ * and up from the surface, the elbow's way out from the line of the arm -- and which way its fingers run and the back of it
+ * faces, as `aimHand` takes them.
+ */
+function inWater(b: Bones, r: Rig, k: number): { at: V3; pole: V3; fingers: V3; back: V3 } {
+  const s = k ? 1 : -1, w = b[`wrist${k}`], e = b[`elbow${k}`].t, sh = b[`arm${k}`].t, m = w.m;
+  const water = b.head.t[2] - (r.float ?? 0);
+  return {
+    at: [s * w.t[0], w.t[1] - b.head.t[1], w.t[2] - water],
+    pole: [s * (e[0] - (sh[0] + w.t[0]) / 2), e[1] - (sh[1] + w.t[1]) / 2, e[2] - (sh[2] + w.t[2]) / 2],
+    fingers: [-m[2], -m[5], -m[8]],
+    back: [s * m[0], s * m[3], s * m[6]],
+  };
 }
 
 interface Held {
@@ -4441,21 +4620,24 @@ function settle(id: string, p: FigurePose, rigAt: (facing: number, left: boolean
    * eighth in the middle of a wave changed the waving hand, which nobody does. Chosen again only if the body comes round more than
    * a quarter turn from where it started.
    */
+  const over = overLeft(h.goal) ? 0 : 1, bound = h.side > 0 && h.side < 1 ? over : h.side;
   if (p.emote !== 'wave') h.wave = undefined;
   else {
     let off = h.facing - (h.waveFrom ?? h.facing);
     off -= 8 * Math.round(off / 8);
     if (h.wave === undefined || Math.abs(off) > 2) {
-      h.wave = waveArm(h.facing, busyOf(p, h.facing, h.side));
+      h.wave = waveArm(h.facing, busyOf(p, h.facing, bound));
       h.waveFrom = h.facing;
     }
   }
   // Something heavy goes over to the other shoulder as the way it is turning to says, starting as the turn does, over `SWAP`
   // seconds -- but not during an emote, where the hand it would go into may be waving; put away, it is taken up again on whichever.
-  const over = overLeft(h.goal) ? 0 : 1;
+  // Caught half way by one, it goes on to where it was going, and the emote is made with the hand that will be free there: frozen
+  // there, the wave or the hop was made holding the maul out in front in both hands; and sent back to the shoulder it was nearer,
+  // it was carried through the wave on the shoulder staged for the other side, its head over the face.
   if (p.working || p.swimming || p.driving) h.side = over;
-  else if (!p.emote) h.side += Math.max(-dt / SWAP, Math.min(dt / SWAP, over - h.side));
-  const kept: Kept = { wave: h.wave, side: h.side };
+  else if (!p.emote || (h.side > 0 && h.side < 1)) h.side += Math.max(-dt / SWAP, Math.min(dt / SWAP, over - h.side));
+  const kept: Kept = { wave: h.wave, side: h.side, bound: p.emote ? bound : undefined };
   const what = doingAt(p, h.left, h.wave);
   if (what !== h.doing) {
     /*
@@ -4478,7 +4660,7 @@ function settle(id: string, p: FigurePose, rigAt: (facing: number, left: boolean
   const target = rigAt(h.facing, h.left, kept);
   const x = Math.min(1, Math.max(0, (now - h.since) / (h.water ? WATER_BLEND : BLEND * (stopping ? 1 + 0.8 * h.gait : 1))));
   const w = ease(x);
-  h.rig = x < 1 ? (h.water ? mixWater(h.from, target, x) : mixRig(h.from, target, w)) : target;
+  h.rig = x < 1 ? (h.water ? mixWater(h.from, target, x, frameOf(p.look ?? DEFAULT_LOOK)) : mixRig(h.from, target, w)) : target;
   if (w < 1 && stopping) {
     /*
      * Braking: the hips carried on forward over the leading foot and the
@@ -4517,7 +4699,10 @@ function settle(id: string, p: FigurePose, rigAt: (facing: number, left: boolean
   // is the ground going round to the left.
   let turned = h.facing - was;
   turned -= 8 * Math.round(turned / 8);
-  const changing = w < 1 || k < 1 || h.lead !== 0;
+  // And while something heavy is on its way between the shoulders: called settled once the turn was, a walk was put down from its
+  // stride's pictures -- made with it already on the far shoulder -- and the swap jumped to its end, and standing it was drawn a
+  // dozen times a second, which shows its last few tenths as one picture.
+  const changing = w < 1 || k < 1 || h.lead !== 0 || !!target.swapping;
   const walking = p.moving && !p.swimming && !p.driving;
   const { rig, busy } = footed(h, led, walking ? target : undefined, stopping && w < 1 ? target : undefined, frameOf(p.look ?? DEFAULT_LOOK), changing, -turned * 45, -togo * 45, now, dt, starting && w < 1);
   /*
@@ -4973,6 +5158,8 @@ const KNEE_SPAN = 0.62;
 const KNEE_POINT = 0.5;
 /** The most the front of the knee is pushed out, of its own round. */
 const KNEE_POINT_MOST = 0.15;
+/** The most the front of a plate leg's knee is pushed out, of its own round (see `GearBit.point`). */
+const KNEE_PLATE = 0.06;
 /** How far the front corners of the knee come out toward the ridge between them, bent square, of their own round. */
 const KNEE_SQUARE = 0.45;
 const KNEE_FOLD = 0.9;
@@ -5001,10 +5188,10 @@ function kneeBend(b: Bones, k: number): number {
  * place, so a thing on the thigh and a thing on the shin made to meet at the
  * knee meet there at every bend.
  */
-function kneeBent(v: readonly V3[], bend: number, onShin: boolean): V3[] {
+function kneeBent(v: readonly V3[], bend: number, onShin: boolean, most = KNEE_POINT_MOST): V3[] {
   const th = Math.max(0, Math.min(150, bend)) * DEG, th0 = bend * DEG;
   const half = Math.cos(th / 2), bent = Math.sin(th / 2);
-  const point = Math.min(KNEE_POINT_MOST, KNEE_POINT * (1 / Math.cos(th / 4) - 1)), square = KNEE_SQUARE * bent * bent;
+  const point = Math.min(most, KNEE_POINT * (1 / Math.cos(th / 4) - 1)), square = KNEE_SQUARE * bent * bent;
   const fold = KNEE_FOLD * (1 - half), wide = KNEE_WIDE * bent;
   return v.map(([x, y, z]) => {
     // How far round with the shin: none above the span, all of it below, a half at the knee.
@@ -5134,23 +5321,34 @@ function turnedAbout(p: V3, n: V3, a: number): V3 {
  */
 const CAP_EASY = 40;
 /**
- * And past `CAP_HIGH`, half of the turn again rather than a quarter, turned about the top of the shoulder (`CAP_TOP` up the arm's
- * frame) rather than the joint: kept within a quarter of an arm raised overhead, a pauldron stayed nearly level while the arm went to
- * upright, and from behind its whole face was turned to the viewer beside the head, a lid stood on the shoulder.
+ * And past `CAP_HIGH`, all of the rest of the raise, and the lag left behind by then closed by `CAP_FOLLOW` of the way by the time
+ * the arm is overhead (`CAP_HIGH` and a right angle more), turned about the top outside of the shoulder (`CAP_PIVOT` in the arm's
+ * frame, out and up) rather than the joint: so a cap on an arm raised overhead rides up with the deltoid round the root of the arm,
+ * the arm coming out of it as out of a sleeve. Kept to a quarter of the raise and a little more, about a point inside its own dome,
+ * a pauldron on an arm raised to wave or strike was left turned a right angle back from the arm, stood on its side down the front
+ * of the chest like a crate with its top corner in the chin, and from behind its whole face was turned to the viewer.
  */
-const CAP_HIGH = 70;
-const CAP_TOP = 0.9;
-const CAP_MORE = 0.15;
-const capTurn = (a: number): number => (a < CAP_EASY * DEG ? a * 0.5 : CAP_EASY * DEG * 0.5 + (a - CAP_EASY * DEG) * 0.25 + Math.max(0, a - CAP_HIGH * DEG) * CAP_MORE);
+const CAP_HIGH = 60;
+const CAP_FOLLOW = 0.8;
+const CAP_PIVOT: V3 = [0.4, 0, 0.9];
+const capTurn = (a: number): number => {
+  const easy = CAP_EASY * DEG, high = CAP_HIGH * DEG;
+  if (a < easy) return a * 0.5;
+  const at = easy * 0.5 + (Math.min(a, high) - easy) * 0.25;
+  if (a <= high) return at;
+  const lag = high - at;
+  return a - lag * (1 - CAP_FOLLOW * Math.min(1, (a - high) / (Math.PI / 2)));
+};
 function heldOnShoulder(v: readonly V3[], r: Rig, k: number): V3[] {
   const { n, angle } = shoulderTurn(r, k);
   if (angle < 0.01) return [...v];
   const back = angle - capTurn(angle);
-  // About the joint up to `CAP_HIGH`, and from there toward the top of the shoulder.
-  const top = CAP_TOP * ramp(angle / DEG, CAP_HIGH, CAP_HIGH + 40);
+  // About the joint while the arm is low, and from `CAP_EASY` on more and more about the top outside of the shoulder.
+  const w = ramp(angle / DEG, CAP_EASY, CAP_HIGH + 30), s = k ? 1 : -1;
+  const o: V3 = [s * CAP_PIVOT[0] * w, CAP_PIVOT[1] * w, CAP_PIVOT[2] * w];
   return v.map((p) => {
-    const q = turnedAbout([p[0], p[1], p[2] - top], n, back);
-    return [q[0], q[1], q[2] + top];
+    const q = turnedAbout([p[0] - o[0], p[1] - o[1], p[2] - o[2]], n, back);
+    return [q[0] + o[0], q[1] + o[1], q[2] + o[2]];
   });
 }
 
@@ -5205,7 +5403,9 @@ function paletteOf(p: FigurePose, look: Look): Palette {
     trousers: hex(p.trousers ?? trouserColour(look)),
     boot: [84, 62, 50],
     cuff: [150, 118, 86],
-    sole: [52, 40, 33],
+    // A shade under the boot, not black: near black, a foot peeling off the ground at a walk showed its sole as a black notch under
+    // the heel at the size the island is played at.
+    sole: [66, 50, 41],
     belt: [68, 48, 33],
     buckle: [214, 180, 98],
     // A shaved scalp is most of the way to the hair's colour; a shadow of beard on the jaw is most of the way to the skin's.
@@ -5334,8 +5534,11 @@ export interface Part {
    * of a crest out of sight when it is round the far side, and a beard when
    * it is round the far side of the jaw.
    */
-  hide?: Array<{ c: V3; r: V3 }>;
-  /** The frame those solids are in, when not the part's own: a lock of hair swings from the head, and is hidden by the skull. */
+  hide?: Array<{ c: V3; r: V3; in?: Xf }>;
+  /**
+   * The frame those solids are in, when not the part's own: a lock of hair swings from the head, and is hidden by the skull.
+   * A solid that says its own frame (`in`) is in that one: a tiller is hidden by the hips, the thighs and the arm.
+   */
   hideIn?: Xf;
   /**
    * A wildermon's piece (`./beasts`), lit its own way: from higher overhead
@@ -5631,6 +5834,8 @@ interface GearBit {
    * hip, it is put at the knee, and on the knee, it is there already.
    */
   bend?: boolean;
+  /** Bent so, the most the front of its knee is pushed out (`kneeBent`), where less than the body's own (`KNEE_POINT_MOST`). */
+  point?: number;
   /** How far out it is worn, where not as far as the rest of its piece. */
   layer?: number;
   /** Over what it covers only while this side of it is toward the viewer: see `Part.front`. */
@@ -5828,19 +6033,24 @@ const underRings = (z: number): number[][] => [[z + UNDER_LID, 0.5, 0.48]];
 const undercut = (m: Mesh): Mesh => seamed(m, (p) => Math.hypot(p[0], p[1]) < 0.9);
 /**
  * The plate pauldron, bottom first, one ring stack: its closed underside (`underRings`) out to the foot of the lower lame, the
- * two lames each flaring a plate's thickness at its foot over the one below, stepping in under the next, and the dome.
+ * two lames each flaring a plate's thickness at its foot over the one below, stepping in under the next, and the dome. All of it
+ * tipped down toward the neck by `PAULDRON_SLOPE` of how far across it is, as a pauldron runs down off the top of the shoulder onto
+ * the trapezius: level, and as wide round as the head, its top stood at the height of the chin, and seen three-quarters on, with
+ * the camera looking down, the far one rose beside the jaw to the mouth.
  */
+const PAULDRON_SLOPE = 0.24;
 function pauldron(): Mesh {
-  const lames = [[-1.3, 1.26, 1.22, 0.26], [-0.4, 1.44, 1.4, 0.3]], lip = 0.1, count = 2;
-  const rs: number[][] = underRings(-1.3);
+  const lames = [[-1.5, 1.1, 1.08, 0.24], [-0.62, 1.26, 1.24, 0.27]], lip = 0.1, count = 2;
+  const rs: number[][] = underRings(-1.5);
   for (let k = 0; k < count; k++) {
     const lo = profileAt(lames, k / count), hi = profileAt(lames, (k + 1) / count);
     rs.push([lo[0], lo[1] + lip, lo[2] + lip, lo[3], lo[4]], [hi[0] - 0.002, hi[1], hi[2], hi[3], hi[4]]);
   }
-  rs.push([-0.4, 1.54, 1.5, 0.32], [0.35, 1.48, 1.44, 0.28], [0.78, 1.06, 1.02, 0.14], [0.98, 0.46, 0.44, 0.05]);
+  rs.push([-0.62, 1.36, 1.32, 0.29], [0.02, 1.3, 1.27, 0.26], [0.4, 0.94, 0.9, 0.14], [0.58, 0.42, 0.4, 0.06]);
   // The underside dark; the lames and the step under each, and the dome's foot, the metal; the dome over it lit.
   const dome = 2 * count + 1;
-  return undercut(rings(rs, 6, (band) => (band <= 0 ? 'metalDark' : band > dome ? 'metalLit' : 'metal')));
+  const m = undercut(rings(rs, 6, (band) => (band <= 0 ? 'metalDark' : band > dome ? 'metalLit' : 'metal')));
+  return { ...m, v: m.v.map(([x, y, z]): V3 => [x, y, z + PAULDRON_SLOPE * x]) };
 }
 
 /**
@@ -6099,10 +6309,13 @@ const HEAD_OVER: Covers[] = ['head', 'ears', 'nose', 'beard', 'fall', 'tails', '
 
 /**
  * Where round the head a cheek plate runs at the jaw, the cheekbone and the rim, bottom first, for the right side and the left: broad
- * under the rim from behind the ear to beside the eye, and narrowing to the front as it goes down, toward the chin.
+ * under the rim from behind the ear to beside the eye, and narrowing as it goes down the cheek, its front edge kept back of the
+ * corner of the mouth, over no more than half of the depth of the face seen from the side. Brought round to within a third of a
+ * right angle of straight ahead at the jaw, seen side on it was a flat panel over the whole of the lower face, a visor and not a
+ * guard on the cheek.
  */
 function cheekPlates(): Array<[number[], number[]]> {
-  const right: Array<[number, number]> = [[16, 56], [-6, 52], [-14, 48]];
+  const right: Array<[number, number]> = [[6, 28], [-8, 34], [-16, 38]];
   return [
     [right.map(([a]) => a), right.map(([, c]) => c)],
     [right.map(([, c]) => 180 - c), right.map(([a]) => 180 - a)],
@@ -6193,10 +6406,11 @@ function splitSkirt(rs: number[][], fork: number, halves: Array<[number, number]
   const below = [...rs.filter((r) => r[0] < fork), at(fork)];
   const above = [at(fork), ...rs.filter((r) => r[0] > fork)];
   const m = (band: number, j: number): Mat => (typeof mat === 'function' ? mat(band, j) : mat);
-  return join(
+  // Not inked where the halves meet the whole at the fork: they meet there edge to edge, and inked it was a line round the skirt.
+  return softAt(join(
     ...halves.map(([a, c]) => facetArcs(below, 2 * n, a, c, m)),
     rings(above, 2 * n, (band, j) => m(band + below.length - 1, j), { top: false, bottom: false }),
-  );
+  ), at(fork)[0]);
 }
 
 /**
@@ -6204,6 +6418,8 @@ function splitSkirt(rs: number[][], fork: number, halves: Array<[number, number]
  * A degree either side: two, widened as the hem swings out at a run, was a strip of the thigh up the front of a hauberk.
  */
 const SLIT: Array<[number, number]> = [[-89, 89], [91, 269]];
+/** A leather jerkin's four panels, split a hair either side of straight ahead, behind and either side. */
+const JERKIN_PANELS: Array<[number, number]> = [[3, 87], [93, 177], [183, 267], [273, 357]];
 
 /**
  * Every piece, a model of its own, given the build of the body it is on, and
@@ -6320,7 +6536,7 @@ const MODELS: Record<string, (b: Build, fit: number) => GearModel> = {
         bone: 'head', over: HEAD_OVER, bias: 0.045, hide: [SKULL, JAW],
         mesh: grown(join(
           nasalOf(b.fr, rim.f),
-          ...cheeks.map(([lo, hi], i) => farCheek(arcs([skullRing(b.fr, 0.62, 0.44), skullRing(b.fr, 1.15, 0.4), skullRing(b.fr, rim.f - 0.1, 0.4)], 3, lo, hi, (band) => (band === 1 ? 'metalLit' : 'metal')), i)),
+          ...cheeks.map(([lo, hi], i) => farCheek(arcs([skullRing(b.fr, 0.76, 0.42), skullRing(b.fr, 1.2, 0.4), skullRing(b.fr, rim.f - 0.1, 0.4)], 3, lo, hi, (band) => (band === 1 ? 'metalLit' : 'metal')), i)),
         )),
       }],
       hides: ['top', 'tails'],
@@ -6407,9 +6623,12 @@ const MODELS: Record<string, (b: Build, fit: number) => GearModel> = {
         // stitching down each side of the lacing: what breaks up a coat of one hide.
         { bone: 'chest', over: ['chest'], bias: 0.03, mesh: baldricOf(b, g + 0.05) },
         { bone: 'spine', over: ['abdomen', 'skirt'], bias: 0.02, convex: true, mesh: waistShell(b, g, 'leather') },
-        // A stiff skirt in four panels, split at the front, the back and each side, flaring, and bound along the hem in pale rawhide.
-        { bone: 'pelvis', over: ['skirt', 'thigh', 'pelvis'], bias: 0.16, skirt: true, mesh: worn(join(...[[8, 82], [98, 172], [188, 262], [278, 352]].map(([a, c]) => arcs(skirt, 3, a, c, 'leather'))), 'studs') },
-        { bone: 'pelvis', over: ['skirt', 'thigh', 'pelvis'], bias: 0.17, skirt: true, mesh: join(...[[8, 82], [98, 172], [188, 262], [278, 352]].map(([a, c]) => arcs(profileHem(skirt, 0.05, 0.2), 3, a, c, 'lace'))) },
+        // A stiff skirt in four panels, split at the front, the back and each side from the hem to a little under the fork
+        // (`splitSkirt`), flaring, and bound along the hem in pale rawhide. Split to the belt, and a slit eight degrees either side of
+        // each seam, at a run the panels either side of a slit at the side went each their own way, the side panel a board standing
+        // off the hip and the back one a blade flown out behind it.
+        { bone: 'pelvis', over: ['skirt', 'thigh', 'pelvis'], bias: 0.16, skirt: true, mesh: worn(splitSkirt(skirt, -1.6, JERKIN_PANELS, 4, 'leather'), 'studs') },
+        { bone: 'pelvis', over: ['skirt', 'thigh', 'pelvis'], bias: 0.17, skirt: true, mesh: join(...JERKIN_PANELS.map(([a, c]) => facetArcs(profileHem(skirt, 0.05, 0.2), 8, a, c, 'lace'))) },
         { bone: 'pelvis', over: ['belt', 'skirt', 'abdomen', 'pelvis'], bias: 0.02, convex: true, mesh: join(beltRing(b, g + 0.01, 'belt', 0.9, 1.5), decals([plate([0, 1.32 * (g + 0.01) * Math.cos(Math.PI / 8) + 0.01, 1.2], [0.24, 0, 0], [0, 0, 0.22], [0, 1, 0], 'fitting')])) },
         // Stiff caps over the shoulders, their edge burnished pale: domed from a short wall rather than a tall one, which seen with
         // the arm toward the viewer was a box standing on the shoulder.
@@ -6532,7 +6751,9 @@ const MODELS: Record<string, (b: Build, fit: number) => GearModel> = {
       // Flaring out over the back of the hand at the wrist, its edge hanging in the ragged points rings do: what says mail in the
       // outline of an arm, where a sleeve of anything else is a tube.
       { bone: 'elbow', side: 'both', over: ['lower', 'hand'], bias: 0.03, convex: true, mesh: worn(rings([[-2.52, 0.8, 0.76], [-1.95, 0.64, 0.6]], 6, 'mail', { top: false, bottom: false }), 'mail') },
-      { bone: 'elbow', side: 'both', over: ['lower', 'hand'], bias: 0.032, convex: true, mesh: teeth([-2.5, 0.8, 0.76], 8, 0.24, 0.05, 'mail') },
+      // Its points short and lying close: twice as deep and standing off, with the arm raised they were a sawtooth of spikes out of
+      // the outline at the wrist.
+      { bone: 'elbow', side: 'both', over: ['lower', 'hand'], bias: 0.032, convex: true, mesh: teeth([-2.5, 0.8, 0.76], 8, 0.12, 0.015, 'mail') },
     ],
     glove: 'mail',
     hides: ['upper', 'lower'],
@@ -6604,7 +6825,7 @@ const MODELS: Record<string, (b: Build, fit: number) => GearModel> = {
     return {
       layer: 1,
       bits: [
-        { bone: 'hip', side: 'both', bend: true, over: ['thigh'], bias: 0.01, convex: true, mesh: worn(tube.thigh, 'quilt') },
+        { bone: 'hip', side: 'both', bend: true, over: ['thigh'], bias: 0.01, convex: true, mesh: worn(underHem(tube.thigh, b.fr), 'quilt') },
         { bone: 'knee', side: 'both', bend: true, over: ['shin', 'boot'], bias: 0.03, convex: true, mesh: worn(tube.shin, 'quilt') },
         // Wound from the shoe to below the knee in strips of the darker cloth, slanting round the leg as a winding does. Wound level,
         // every band's edge came to a point over the ridge down the shin, a stack of chevrons. Either end of the winding is not inked:
@@ -6625,7 +6846,7 @@ const MODELS: Record<string, (b: Build, fit: number) => GearModel> = {
     return {
       layer: 2,
       bits: [
-        { bone: 'hip', side: 'both', bend: true, over: ['thigh'], bias: 0.01, convex: true, mesh: join(tube.thigh, pad.thigh) },
+        { bone: 'hip', side: 'both', bend: true, over: ['thigh'], bias: 0.01, convex: true, mesh: join(underHem(tube.thigh, b.fr), pad.thigh) },
         { bone: 'knee', side: 'both', bend: true, over: ['shin', 'boot'], bias: 0.03, convex: true, mesh: join(tube.shin, pad.shin) },
       ],
       hides: ['thigh', 'shin'],
@@ -6637,7 +6858,7 @@ const MODELS: Record<string, (b: Build, fit: number) => GearModel> = {
     return {
       layer: 3,
       bits: [
-        { bone: 'hip', side: 'both', bend: true, over: ['thigh'], bias: 0.012, convex: true, mesh: worn(tube.thigh, 'mail') },
+        { bone: 'hip', side: 'both', bend: true, over: ['thigh'], bias: 0.012, convex: true, mesh: worn(underHem(tube.thigh, b.fr), 'mail') },
         { bone: 'knee', side: 'both', bend: true, over: ['shin', 'boot'], bias: 0.03, convex: true, mesh: worn(tube.shin, 'mail') },
         // A row of ragged points round the leg over the knee, where the mail of the thigh is laced over that of the shin.
         { bone: 'hip', side: 'both', bend: true, over: ['thigh', 'shin'], bias: 0.016, convex: true, mesh: teeth(legAt(b, 1.1, 0.5), 9, 0.26, 0.05, 'mail') },
@@ -6654,14 +6875,16 @@ const MODELS: Record<string, (b: Build, fit: number) => GearModel> = {
     // The poleyn, a cup over the front of the knee, raised out of the leg's own ring there -- the ring at the knee carried forward
     // and out -- and polished: a cup of its own standing off the knee was what the knee was drawn as when it was stacked tubes,
     // and seen edge on, with the leg kicked up behind at a run, it was a dark needle out of the fold.
-    const rs = legRings(b, g, -2.7).filter((r) => r[0] <= KNEE_SPAN).map((r) => (r[0] === 0 ? [0, r[1] + 0.05, r[2] + 0.06, 0, 0.1] : r));
+    const rs = legRings(b, g, -2.7).filter((r) => r[0] <= KNEE_SPAN).map((r) => (r[0] === 0 ? [0, r[1] + 0.07, r[2] + 0.05, 0, 0.03] : r));
     const tube = legTube(rs, 6, overBoot('metal'), true), cop = kneePad(rs, 0.5, 0.7, 'metalLit');
     const cuisse = shingled([legAt(b, g, KNEE_SPAN), legAt(b, g, top - 0.9), [top + 0.25, 1.1 * b.fr.hi * g, 1.12 * g]], 3, 0.1, 'metal');
     return {
       layer: 5,
       bits: [
-        { bone: 'hip', side: 'both', bend: true, over: ['thigh'], bias: 0.015, convex: true, mesh: join(tube.thigh, cop.thigh, worn(cuisse, 'lames')) },
-        { bone: 'knee', side: 'both', bend: true, over: ['shin', 'boot'], bias: 0.03, convex: true, mesh: join(tube.shin, cop.shin) },
+        // Its knee pushed out less than a leg's when bent hard (`KNEE_PLATE`): the poleyn is already carried out of the ring, and with
+        // the leg's own point on top of it, at the top of a run the knee came to a blunt prow.
+        { bone: 'hip', side: 'both', bend: true, point: KNEE_PLATE, over: ['thigh'], bias: 0.015, convex: true, mesh: join(underHem(tube.thigh, b.fr), cop.thigh, worn(underHem(cuisse, b.fr), 'lames')) },
+        { bone: 'knee', side: 'both', bend: true, point: KNEE_PLATE, over: ['shin', 'boot'], bias: 0.03, convex: true, mesh: join(tube.shin, cop.shin) },
       ],
       hides: ['thigh', 'shin'],
       dyes: { pelvis: { trousers: 'metal' } },
@@ -6675,7 +6898,7 @@ const MODELS: Record<string, (b: Build, fit: number) => GearModel> = {
     return {
       layer: 4,
       bits: [
-        { bone: 'hip', side: 'both', bend: true, over: ['thigh'], bias: 0.012, convex: true, mesh: join(worn(tube.thigh, 'scale'), pad.thigh) },
+        { bone: 'hip', side: 'both', bend: true, over: ['thigh'], bias: 0.012, convex: true, mesh: join(worn(underHem(tube.thigh, b.fr), 'scale'), pad.thigh) },
         { bone: 'knee', side: 'both', bend: true, over: ['shin', 'boot'], bias: 0.03, convex: true, mesh: join(worn(tube.shin, 'scale'), pad.shin) },
         { bone: 'hip', side: 'both', bend: true, over: ['thigh', 'shin'], bias: 0.04, convex: true, mesh: teeth(legAt(b, g, 0.62), 6, 0.34, 0.08, 'scaleDark') },
       ],
@@ -6696,7 +6919,9 @@ const MODELS: Record<string, (b: Build, fit: number) => GearModel> = {
       // As full as the leg it goes up into at its top, and not inked there, and only a little narrower at the ankle: it narrowed to
       // a peg standing in the shoe, and stood out of the leg at its top in a ring. Closed at its foot (see `legTube`).
       { bone: 'knee', side: 'both', over: ['shin'], bias: 0.01, convex: true, layer: 0, front: SHAFT, mesh: softAt(soled(rings([[-3.0, 0.64, 0.68], [-1.3, 0.73, 0.77]], 6, 'trousers', { top: false })), -1.3) },
-      { bone: 'knee', side: 'both', over: ['shin'], bias: 0.02, convex: true, front: SHAFT, mesh: soled(rings([[-3.1, 0.66, 0.7], [-2.5, 0.72, 0.76]], 6, 'clothDark', { top: false })) },
+      // The shoe's top close round the leg, a hair proud of it and not inked: a twentieth out and outlined, seen from behind it was
+      // the lid of a grey box over the heel.
+      { bone: 'knee', side: 'both', over: ['shin'], bias: 0.02, convex: true, front: SHAFT, mesh: softAt(soled(rings([[-3.1, 0.66, 0.7], [-2.5, 0.68, 0.72]], 6, 'clothDark', { top: false })), -2.5) },
       { bone: 'ankle', side: 'both', over: ['foot'], bias: 0.02, mesh: recoloured(widened(swelled(footMesh(), 1, 0.8), 1.12), { boot: 'clothDark' }) },
     ],
     hides: ['boot', 'foot'],
@@ -6714,7 +6939,9 @@ const MODELS: Record<string, (b: Build, fit: number) => GearModel> = {
       layer: 2,
       bits: [
         { bone: 'knee', side: 'both', over: ['shin'], bias: 0.02, convex: true, front: SHAFT, mesh: soled(shaft) },
-        { bone: 'ankle', side: 'both', over: ['foot'], bias: 0.02, mesh: recoloured(swelled(footMesh(), 1.04), { boot: 'leather' }) },
+        // The foot in the shaft's own dark hide: in the lighter, the boot of a leg trailing behind was a pale chevron under a dark one
+        // seen from in front.
+        { bone: 'ankle', side: 'both', over: ['foot'], bias: 0.02, mesh: recoloured(swelled(footMesh(), 1.04), { boot: 'leatherDark' }) },
       ],
       hides: ['boot', 'foot'],
     };
@@ -7013,8 +7240,10 @@ function bentWith(v: V3[], r: Rig, fr: Frame): V3[] {
     }
     // At a run the back of it flies out behind and up, the further the longer the stride, and falls back as the legs pass: side on,
     // a hem that tilts and swings with the legs rather than a cone carried down the road on them.
+    // Not at the sides, where the back meets the front: flown out there as well, the panel behind a slit at the side lifted away
+    // from the one in front of it.
     if (run > 0 && y < 0.2) {
-      const t = Math.min(1, (0.2 - y) / 1.6);
+      const t = Math.min(1, (0.2 - y) / 1.6) * ramp(Math.abs(ahead), 0.2, 0.6);
       y -= 0.45 * run * stride * down * t;
       z += 0.6 * run * stride * down * t;
     }
@@ -7612,35 +7841,70 @@ function onShoulder(r: Rig, fr: Frame, w: Weapon, k: number, facing: number): Xf
 const CARRY_STEADY = 0.6;
 
 /** Seconds to take something heavy from one shoulder to the other. */
-const SWAP = 0.6;
+const SWAP = 1;
 
 /*
  * Something heavy from one shoulder to the other, `side` of the way from the
  * left (nought) to the right (one), as [how far along, where the lower hand
  * is in the chest's frame, which way the haft runs from it]. Blended joint by
- * joint from the one carry to the other, the arm coming down lerped its
- * angles while the weapon rode the other hand, and the head of a maul went
- * through the back of the skull and an axe's haft down the face. Now it is
- * lifted off the shoulder and swung down and round in front, the head low
- * in front of the feet half way, as a sledge is let down and taken up again,
- * and up onto the other shoulder, the haft never higher than the chest
- * while it is in front.
+ * joint from the one carry to the other, the head of a maul went through the
+ * back of the skull; then it was swung about the fist from the shoulder to
+ * straight out in front in a twentieth of a second -- the head ten units
+ * while the hand went one -- held out level at arm's length by its butt,
+ * which nobody can hold a maul by, and swung back up the same way.
+ *
+ * Now it goes as a sledge does. Lifted off the shoulder by the haft, the
+ * lower hand coming forward and down while the haft keeps its slant, so the
+ * head comes up off the shoulder still behind the line of the head (see
+ * `SWAP_LIFT`), the other hand having reached across to take it further up;
+ * swung out past that shoulder and down, both hands on it, the head going
+ * down past the knee on its own side -- out to the side, clear of the face
+ * from wherever it is seen; hung from the hands at the waist, the head low
+ * in front of the feet; swung across under the hands to the other side, up
+ * past the knee and out past the other shoulder, and laid back on it. Taken at one pace along that way rather
+ * than by the side's own easing (see `shoulder`), so the head never goes
+ * faster than it does through the middle, about a unit in a sixtieth of a
+ * second -- through the first and last hundredths of the way it went five.
+ * Only the way off the left shoulder is given; the way onto the right is
+ * the same mirrored.
  */
-const SWAP_WAY: Array<[number, V3, V3]> = [
-  [0.22, [-1.3, 1.6, -0.2], [-0.6, 0.75, -0.25]],
-  [0.5, [-0.3, 1.7, -1.1], [0, 0.55, -0.83]],
-  [0.78, [1.3, 1.6, -0.2], [0.6, 0.75, -0.25]],
+const SWAP_HALF: Array<[number, V3, V3]> = [
+  [0.26, [-0.4, 1.2, -0.2], [-0.92, 0.36, 0.12]],
+  [0.4, [-0.5, 1.6, -0.15], [-0.6, 0.45, -0.66]],
+  [0.5, [0, 1.65, 0.1], [0, 0.5, -0.87]],
 ];
-/** How far up the haft from the lower hand the other takes hold, in units. */
-const SWAP_REACH = 1.2;
+const SWAP_WAY: Array<[number, V3, V3]> = [
+  ...SWAP_HALF,
+  ...SWAP_HALF.filter(([u]) => u < 0.5).reverse().map(([u, g, d]): [number, V3, V3] => [1 - u, [-g[0], g[1], g[2]], [-d[0], d[1], d[2]]]),
+];
+/**
+ * The lift off the shoulder, `SWAP_LIFT` of the way along: the lower hand
+ * forward and down from where it carries by `SWAP_LIFT_HAND`, out to its
+ * own side, and the haft only tipped by `SWAP_LIFT_TIP` toward upright and
+ * forward -- most of its slant kept, so the head rises off the shoulder and
+ * comes forward over it rather than swinging out from it.
+ */
+const SWAP_LIFT = 0.12;
+const SWAP_LIFT_HAND: V3 = [0.1, 0.9, -1.0];
+const SWAP_LIFT_TIP: V3 = [0.3, 0.2, 0.05];
+/** How much of the swap's time the weapon takes to get up to its pace at the start, and to come to rest at the end. */
+const SWAP_RAMP = 0.22;
+/**
+ * How far along the haft from the lower hand the other takes hold: half
+ * way to the head of a hafted weapon, so it is carried between two hands a
+ * forearm apart and not hung from one fist; and on a sword's grip, below
+ * the first, the blade being no place for a hand.
+ */
+const swapReach = (w: Weapon): number => (w.headUp ? 2.6 : -0.75);
 
 /**
  * Carrying `w` over the shoulders, `side` of the way from the left to the
  * right (see `Kept`): on one, as `onShoulder` has it; between, held in both
  * hands on the way of `SWAP_WAY`, the weapon's frame put in `r.swapping` and the
  * hands on it -- the one it came off the shoulder in at the butt, the other
- * taking hold further up as it comes round and sliding down to the butt as
- * it goes up, and the first letting go. Either way round, the same way.
+ * taking hold further up as it is stood up and sliding down to the butt as
+ * it goes up onto the other shoulder, and the first letting go. Either way
+ * round, the same way.
  */
 function shoulder(r: Rig, fr: Frame, w: Weapon, side: number, facing: number): void {
   if (side <= 0 || side >= 1) {
@@ -7657,22 +7921,48 @@ function shoulder(r: Rig, fr: Frame, w: Weapon, side: number, facing: number): v
     const into = (v: V3): V3 => [c[0] * v[0] + c[3] * v[1] + c[6] * v[2], c[1] * v[0] + c[4] * v[1] + c[7] * v[2], c[2] * v[0] + c[5] * v[1] + c[8] * v[2]];
     return { xf, g: into([g[0] - chest.t[0], g[1] - chest.t[1], g[2] - chest.t[2]]), d: into(d) };
   });
-  // Along the way, curved smoothly through its keys, and never so low that the far end goes into the ground.
-  const keys: Array<[number, V3, V3]> = [[0, ends[0].g, ends[0].d], ...SWAP_WAY, [1, ends[1].g, ends[1].d]];
-  // Eased off one shoulder and onto the other, but kept moving through the middle, where the hands change over.
-  const u = 0.5 * (side + ease(side));
-  let i = 0;
-  while (i < keys.length - 2 && keys[i + 1][0] < u) i++;
-  const x = (u - keys[i][0]) / (keys[i + 1][0] - keys[i][0]);
-  const at = (j: number, m: 1 | 2): V3 => keys[Math.max(0, Math.min(keys.length - 1, j))][m];
-  const curve = (m: 1 | 2): V3 => {
-    const a = at(i - 1, m), b = at(i, m), c = at(i + 1, m), d = at(i + 2, m);
-    const x2 = x * x, x3 = x2 * x;
-    return [0, 1, 2].map((n) => 0.5 * (2 * b[n] + (c[n] - a[n]) * x + (2 * a[n] - 5 * b[n] + 4 * c[n] - d[n]) * x2 + (3 * b[n] - a[n] - 3 * c[n] + d[n]) * x3)) as V3;
+  // Lifted off each shoulder: from where it carries there, out to that side.
+  const lift = (k: number): [number, V3, V3] => {
+    const s = k ? 1 : -1, { g, d } = ends[k], H = SWAP_LIFT_HAND, P = SWAP_LIFT_TIP;
+    return [k ? 1 - SWAP_LIFT : SWAP_LIFT, [g[0] + s * H[0], g[1] + H[1], g[2] + H[2]], unit([d[0] + s * P[0], d[1] + P[1], d[2] + P[2]])];
   };
-  const g = place(chest, curve(1));
-  let d = unit(mv(chest.m, curve(2)));
-  const far = (w.to ?? 0) - (w.fist ?? 0), low = g[2] + HIP * T - 0.6;
+  const keys: Array<[number, V3, V3]> = [[0, ends[0].g, ends[0].d], lift(0), ...SWAP_WAY, lift(1), [1, ends[1].g, ends[1].d]];
+  // Along the way at `x` of it, curved smoothly through its keys: the lower hand, and the haft's way, of unit length.
+  const along = (x: number): [V3, V3] => {
+    let i = 0;
+    while (i < keys.length - 2 && keys[i + 1][0] < x) i++;
+    const v = (x - keys[i][0]) / (keys[i + 1][0] - keys[i][0]), v2 = v * v, v3 = v2 * v;
+    const at = (j: number, m: 1 | 2): V3 => keys[Math.max(0, Math.min(keys.length - 1, j))][m];
+    const curve = (m: 1 | 2): V3 => {
+      const a = at(i - 1, m), b = at(i, m), c = at(i + 1, m), d = at(i + 2, m);
+      return [0, 1, 2].map((n) => 0.5 * (2 * b[n] + (c[n] - a[n]) * v + (2 * a[n] - 5 * b[n] + 4 * c[n] - d[n]) * v2 + (3 * b[n] - a[n] - 3 * c[n] + d[n]) * v3)) as V3;
+    };
+    return [curve(1), unit(curve(2))];
+  };
+  /*
+   * How far along the way it is: at one pace by the distance the head goes,
+   * and a little of the hand's, getting up to it over the first `SWAP_RAMP` of the
+   * time and coming to rest over the last. Eased by the side alone, the
+   * first and last tenths of the way, where the head swings furthest for
+   * the least of the hand, went by in four frames.
+   */
+  const far = (w.to ?? 0) - (w.fist ?? 0), N = 24, gone = [0];
+  let [pg, pd] = along(0);
+  for (let j = 1; j <= N; j++) {
+    const [g, d] = along(j / N);
+    gone.push(gone[j - 1] + 0.3 * Math.hypot(g[0] - pg[0], g[1] - pg[1], g[2] - pg[2]) + Math.hypot(g[0] + far * d[0] - pg[0] - far * pd[0], g[1] + far * d[1] - pg[1] - far * pd[1], g[2] + far * d[2] - pg[2] - far * pd[2]));
+    [pg, pd] = [g, d];
+  }
+  const A = SWAP_RAMP, top = 1 / (1 - A);
+  const paced = side < A ? (top * side * side) / (2 * A) : side > 1 - A ? 1 - (top * (1 - side) * (1 - side)) / (2 * A) : top * (side - A / 2);
+  const want = paced * gone[N];
+  let j = 0;
+  while (j < N - 1 && gone[j + 1] < want) j++;
+  const u = (j + Math.max(0, Math.min(1, (want - gone[j]) / (gone[j + 1] - gone[j] || 1)))) / N;
+  const [cg, cd] = along(u);
+  const g = place(chest, cg);
+  let d = unit(mv(chest.m, cd));
+  const low = g[2] + HIP * T - 0.6;
   if (d[2] * far < -low) {
     const flat = Math.hypot(d[0], d[1]) || 1, z = -low / far;
     d = [(d[0] / flat) * Math.sqrt(1 - z * z), (d[1] / flat) * Math.sqrt(1 - z * z), z];
@@ -7692,9 +7982,12 @@ function shoulder(r: Rig, fr: Frame, w: Weapon, side: number, facing: number): v
   const ax = unit([0, 1, 2].map((j) => x0[j] * Math.cos(twist) + y0[j] * Math.sin(twist)) as V3);
   const ay = cross(d, ax), o: V3 = [g[0] - d[0] * (w.fist ?? 0), g[1] - d[1] * (w.fist ?? 0), g[2] - d[2] * (w.fist ?? 0)];
   r.swapping = { m: [ax[0], ay[0], d[0], ax[1], ay[1], d[1], ax[2], ay[2], d[2]], t: o };
-  // The hands on it: the left at the butt until it lets go past the middle, the right taking hold up the haft as it comes round
-  // and sliding down to the butt as it goes up -- and the other way about going the other way.
-  const grip = [{ on: 1 - step(u, 0.5, 0.8), up: 0 }, { on: step(u, 0.2, 0.5), up: SWAP_REACH * (1 - step(u, 0.55, 0.92)) }];
+  // The hands on it: the right reaching across to take hold up the haft by the left shoulder before it is lifted off, the two
+  // changing over along the haft while it hangs, the right to the butt and the left up to where the right was, and the left
+  // letting go once it is down on the right shoulder -- and the other way about going the other way. Taken hold of over a fifth of
+  // the time, not of the way: a hand reaching across the chest in the first frames of the way went five units a frame.
+  const reach = swapReach(w), over = step(u, 0.42, 0.58);
+  const grip = [{ on: 1 - step(side, 0.8, 1), up: reach * over }, { on: step(side, 0, 0.2), up: reach * (1 - over) }];
   const free = copy();
   for (let k = 0; k < 2; k++) {
     if (grip[k].on <= 0) continue;
@@ -8303,9 +8596,11 @@ function dress(parts: Part[], named: Map<string, Part[]>, kit: Kit, r: Rig, b: B
         // A bit carried whole is on a frame of its own, the bone's own frame being what is bent.
         const xf = bit.bend && bit.bone === 'hip' ? joint(bone, [0, 0, -THIGH * fr.tall])
           : bit.at || bit.turn || bit.whole ? joint(bone, bit.at ?? [0, 0, 0], ...(bit.turn ?? [0, 0, 0])) : bone;
-        const v = bit.skirt ? bentWith(m.v, r, fr) : bit.bend ? kneeBent(m.v, kneeBend(b, k), bit.bone === 'knee')
+        const v = bit.skirt ? bentWith(m.v, r, fr) : bit.bend ? kneeBent(m.v, kneeBend(b, k), bit.bone === 'knee', bit.point)
           : bit.whole && bit.bone === 'arm' ? heldOnShoulder(m.v, r, k) : undefined;
         const part: Part = { mesh: m, xf, bias: bit.bias ?? 0.02, pal: P, rare, seed: si + 1, convex: bit.convex, front: bit.front, v, hide: bit.hide };
+        // What is worn on a thigh goes under the tunic's skirt as the thigh does, where the skirt is still to be seen.
+        if (bit.bone === 'hip' && !bit.skirt) part.under = (named.get('skirt') ?? []).filter((p) => !hidden.has(p));
         out.push(part);
         put.push({ part, on: regionsOf(bit.over[0], k)[0], over: bit.over.flatMap((c) => regionsOf(c, k)), layer: bit.layer ?? model.layer, order, seq });
       }
@@ -8522,6 +8817,10 @@ function wield(out: Part[], named: Map<string, Part[]>, r: Rig, b: Bones, gear: 
       const mid = place(xf, [0, 0, (arm.from + arm.to) / 2]), ch = b.chest.t;
       const whole = bit(c.whole, xf, 0.03, { after: on('chest', 'abdomen', 'upper0', 'upper1'), front: within(xf, unit([mid[0] - ch[0], mid[1] - ch[1], 0])) });
       for (const h of [...(named.get('hand0') ?? []), ...(named.get('hand1') ?? [])]) h.after = whole;
+      // And under the head and whatever is on it while its head is further off than the skull: lifted off the shoulder from behind
+      // it, it was put after the chest and so over the head, and a maul's head was drawn on the back of the crown.
+      const top = place(xf, [0, 0, arm.to - 1]), skull = place(b.head, SKULL.c), T = viewOf(facing).T;
+      if ((top[0] - skull[0]) * T[0] + (top[1] - skull[1]) * T[1] + (top[2] - skull[2]) * T[2] < 0) whole.under = on('head', 'ears', 'cap', 'top', 'fall', 'beard', 'nose', 'tails', 'neck');
     } else if (held && r.thrown && held.hand === 1) {
       // Thrown: out of the hand and on its way (the spell draws it in flight), with nothing put away in its place.
     } else if (held && arm.carry === 'shoulder') {
@@ -8743,7 +9042,9 @@ function partsOf(kit: Kit, r: Rig, b: Bones, gear?: GearLook, pal?: Palette, fac
     const foot = name(`foot${k}`, { mesh: kit.foot, xf: b[`ankle${k}`], bias: 0.02 });
     const boot = name(`boot${k}`, { mesh: kit.boot, xf: b[`knee${k}`], bias: 0.01, convex: true, after: shin, front: SHAFT, under: soleUp(b, k, facing) ? foot : undefined });
     parts.push(
-      name(`thigh${k}`, { mesh: kit.thigh, xf: joint(b[`hip${k}`], [0, 0, -THIGH * kit.fr.tall]), v: kneeBent(kit.thigh.v, bend, false), bias: 0, convex: true }),
+      // Under the tunic's skirt, never over it: the top of the thigh is up inside the skirt, and a thigh swung toward the viewer had
+      // its middle nearer than the skirt's and was drawn over it, its top a sliver of trouser up the skirt from the fork.
+      name(`thigh${k}`, ((thigh) => ({ mesh: thigh, xf: joint(b[`hip${k}`], [0, 0, -THIGH * kit.fr.tall]), v: kneeBent(thigh.v, bend, false), bias: 0, convex: true, under: skirt }))(k ? kit.thigh : mirrored(kit.thigh))),
       shin,
       // The boot round the shin, over it unless its foot is turned well away from the viewer, when the shin is the nearer.
       boot,
@@ -8795,6 +9096,12 @@ export function viewOf(facing: number): View {
   return { ex, ey, T, L, H: [T[0] / h, T[1] / h] };
 }
 
+/** How far down from level a crease is lit as turned, whichever way it is (`Face.crease`), in degrees. */
+const CREASE_DOWN = 30;
+const creased = (n: V3): V3 => {
+  const h = Math.hypot(n[0], n[1]) || 1, c = Math.cos(CREASE_DOWN * DEG) / h;
+  return [n[0] * c, n[1] * c, -Math.sin(CREASE_DOWN * DEG)];
+};
 /** Light on a facet turned along `n`: wrapped, so a face turned from the light is shaded rather than black. */
 function lightOn(n: V3, L: V3): number {
   const d = n[0] * L[0] + n[1] * L[1] + n[2] * L[2];
@@ -9551,7 +9858,7 @@ export function render(g: CanvasRenderingContext2D, parts: Part[], pal: Palette,
     const pv = (part.v ?? part.mesh.v).map((p) => place(part.xf, p));
     const s = pv.map((p): Pt => [p[0] * ex[0] + p[1] * ey[0], p[0] * ex[1] + p[1] * ey[1] - p[2] * HEIGHT_SCALE]);
     const vis: boolean[] = [], k: number[] = [], d: number[] = [], t: number[] = [];
-    const tests = (part.hide ?? []).map((solid) => behind(part.hideIn ?? part.xf, solid, T));
+    const tests = (part.hide ?? []).map((solid) => behind(solid.in ?? part.hideIn ?? part.xf, solid, T));
     const hidden = tests.length ? (p: V3): boolean => tests.some((t) => t(p)) : undefined;
     for (const face of part.mesh.f) {
       // Its normal the long way round (Newell's), and its middle, straight off the corners.
@@ -9571,7 +9878,7 @@ export function render(g: CanvasRenderingContext2D, parts: Part[], pal: Palette,
       const toward = u[0] * T[0] + u[1] * T[1] + u[2] * T[2];
       vis.push(l > 1e-9 && toward > 1e-4 && !(hidden && hidden(face.at ? place(part.xf, face.at) : c)) && !(off && off[0] * T[0] + off[1] * T[1] + off[2] * T[2] > 0.05));
       t.push(toward);
-      k.push(part.toon ? toonK(u, L) : lightOn(u, L));
+      k.push(part.toon ? toonK(u, L) : face.crease ? lightOn(creased(u), L) : lightOn(u, L));
       d.push(c[0] * T[0] + c[1] * T[1] + c[2] * T[2]);
       if (part.toon) { normals.push(u); areas.push(l); }
     }
@@ -9905,24 +10212,49 @@ function reins(g: CanvasRenderingContext2D, b: Bones, view: View, r: Rig, px: nu
 }
 
 /**
- * A tiller, from its pivot on the rudder's head to its end in the fist: a
- * rod as thick as the boat's own (`drawRod` in `./furniture`), of her wood.
- * Baked into the hull it stood still while the hand on it steered; drawn
- * with the body, it goes where the hand puts it.
+ * A tiller, from its pivot on the rudder's head to its end in the fist, of
+ * the boat's wood, drawn over the body wherever no part of the body is in
+ * front of it. Drawn whole under the body or whole over it, by which side of
+ * the chest its swung middle was, it went from behind the torso to across
+ * the forearm and back half a dozen times in ten seconds as it swung; drawn
+ * under, its end was behind the body with the fist holding nothing, and
+ * drawn over, it lay across the forearm and the belly. It passes beside the
+ * hip, under the forearm and into the fist, so neither was right. Now it is
+ * cut in lengths, and a length is left out wherever a part of the body --
+ * the hips, a thigh, the arm, the fist round its end -- is between it and
+ * the viewer, each part taken as the egg that fills its own box. So it goes
+ * behind the body and comes out of the fist from every side, and swinging
+ * cannot make it jump. Its section is wider than it is deep, as a tiller is
+ * cut, which on the screen is about as wide as it is tall.
  */
-function tillerRod(g: CanvasRenderingContext2D, view: View, ink: number, t: { pivot: V3; end: V3; wood?: string }): void {
-  const wood: RGB = t.wood ? [parseInt(t.wood.slice(1, 3), 16), parseInt(t.wood.slice(3, 5), 16), parseInt(t.wood.slice(5, 7), 16)] : OAR_WOOD;
-  const a = onScreen(view, t.pivot), z = onScreen(view, t.end);
-  g.lineCap = 'round';
-  for (const [colour, w] of [[css(inkOf(wood)), 0.8 + 2 * ink], [css(wood, 0.92), 0.8]] as Array<[string, number]>) {
-    g.strokeStyle = colour;
-    g.lineWidth = w;
-    g.beginPath();
-    g.moveTo(a[0], a[1]);
-    g.lineTo(z[0], z[1]);
-    g.stroke();
+const TILLER_SECTION: [number, number] = [0.32, 0.62];
+/** Lengths a tiller is cut in, for leaving out what is behind the body: about a fist's width each. */
+const TILLER_LENGTHS = 14;
+/** How much of the tiller's end is inside the fist round it, from the middle of the fist. */
+const TILLER_IN_FIST = 0.7;
+const tillerMeshes = new Map<number, Mesh>();
+function tillerPart(t: { pivot: V3; end: V3; wood?: string }, parts: Part[], pal: Palette): Part {
+  const d: V3 = [t.end[0] - t.pivot[0], t.end[1] - t.pivot[1], t.end[2] - t.pivot[2]];
+  const L = Math.round(Math.hypot(d[0], d[1], d[2]) * 20) / 20;
+  let m = tillerMeshes.get(L);
+  if (!m) {
+    m = rings(Array.from({ length: TILLER_LENGTHS + 1 }, (_, i) => [(i / TILLER_LENGTHS) * L, ...TILLER_SECTION]), 4, 'haft');
+    tillerMeshes.set(L, m);
   }
-  g.lineCap = 'butt';
+  const hide: Array<{ c: V3; r: V3; in: Xf }> = [];
+  for (const p of parts) {
+    const v = p.v ?? p.mesh.v;
+    let x0 = Infinity, y0 = Infinity, z0 = Infinity, x1 = -Infinity, y1 = -Infinity, z1 = -Infinity;
+    for (const [x, y, z] of v) {
+      if (x < x0) x0 = x; if (x > x1) x1 = x;
+      if (y < y0) y0 = y; if (y > y1) y1 = y;
+      if (z < z0) z0 = z; if (z > z1) z1 = z;
+    }
+    hide.push({ c: [(x0 + x1) / 2, (y0 + y1) / 2, (z0 + z1) / 2], r: [(x1 - x0) / 2 + 0.05, (y1 - y0) / 2 + 0.05, (z1 - z0) / 2 + 0.05], in: p.xf });
+  }
+  // And the end of it, inside the fist: the fist's own egg is narrow across the grip, and the end showed in it as a square of wood.
+  hide.push({ c: t.end, r: [TILLER_IN_FIST, TILLER_IN_FIST, TILLER_IN_FIST], in: ROOT });
+  return { mesh: m, xf: aimed(ROOT, t.pivot, d, [0, 0, 1]), bias: 0, convex: true, pal: { ...pal, haft: t.wood ? hex(t.wood) : OAR_WOOD }, hide };
 }
 
 /** An oar's blade: how long, and how wide, in the body's units. */
@@ -10186,7 +10518,12 @@ const RIPPLE_REACH = 22;
  * goes round it instead (`foam`).
  */
 const SLIVER = 0.45;
-function waterline(parts: Part[], up: boolean): Part[] {
+/**
+ * And for the shoulders and the top of the chest, more: side on, the round top of the near shoulder came up whole under
+ * the jaw, a ball of shirt in the foam round the neck, before the rest of it was let up.
+ */
+const SHOULDER_SLIVER = 0.55;
+function waterline(parts: Part[], up: boolean, shoulders?: Set<Xf>, pal?: Palette): Part[] {
   const made = new Map<Part, Part>();
   for (const part of parts) {
     const pv = (part.v ?? part.mesh.v).map((p) => place(part.xf, p));
@@ -10204,8 +10541,9 @@ function waterline(parts: Part[], up: boolean): Part[] {
      * out of the water at full width in one frame. Now what shows of it is cut off at a level raised over the water that comes
      * down to it as the part comes up, from `SLIVER` to twice that, so what shows grows from nothing to the whole of it.
      */
-    if (up && top <= SLIVER) continue;
-    const level = up && top < 2 * SLIVER ? 2 * SLIVER - top : 0;
+    const sliver = shoulders?.has(part.xf) ? SHOULDER_SLIVER : SLIVER;
+    if (up && top <= sliver) continue;
+    const level = up && top < 2 * sliver ? 2 * sliver - top : 0;
     const above = (i: number): boolean => pv[i][2] >= level;
     const v = pv.slice();
     const cuts = new Map<number, number>();
@@ -10242,8 +10580,14 @@ function waterline(parts: Part[], up: boolean): Part[] {
       faces.push({ ...rehomed(face, part.xf), i: idx, soft: true, pat: undefined });
     }
     if (!faces.length) continue;
+    /*
+     * And what shows is let down onto the water by as much as was cut off under it, so it comes up out of the water rather
+     * than standing over it: cut off at the raised level and left there, the top of a shoulder side on was a dome sat on the
+     * foam with a gap of water under it, a ball held under the jaw.
+     */
+    if (level > 0) for (let i = 0; i < v.length; i++) v[i] = [v[i][0], v[i][1], v[i][2] - level];
     made.set(part, {
-      ...part, mesh: mesh(v, faces), v: undefined, xf: ROOT, hideIn: part.hideIn ?? part.xf,
+      ...part, mesh: mesh(v, faces), v: undefined, xf: ROOT, pal: level > 0 && pal ? wetted(part.pal ?? pal, level / sliver) : part.pal, hideIn: part.hideIn ?? part.xf,
       front: part.front && mv(part.xf.m, part.front),
     });
   }
@@ -10254,6 +10598,24 @@ function waterline(parts: Part[], up: boolean): Part[] {
     return list.length ? list : undefined;
   };
   return [...made.values()].map((p) => (p.after || p.under ? { ...p, after: to(p.after), under: to(p.under) } : p));
+}
+
+/**
+ * A palette with the water over it, `wet` of the way through coming up out of it (one just breaking the surface, nought
+ * clear of it): what is only just up is still running with water, in the water's colour more than its own, and comes to
+ * its own as it rises. The top of a red shirt just up out of the water was the reddest thing in the picture, a ball of
+ * it side on. Kept for each palette in a few steps, so a swimmer does not make one a frame.
+ */
+const WET_MOST = 0.5;
+const WET_STEPS = 8;
+const wets = new WeakMap<Palette, Palette[]>();
+function wetted(P: Palette, wet: number): Palette {
+  const k = Math.max(0, Math.min(WET_STEPS, Math.round(wet * WET_STEPS)));
+  if (!k) return P;
+  let list = wets.get(P);
+  if (!list) { list = []; wets.set(P, list); }
+  const water = mixRGB(UNDERWATER, [255, 255, 255], 0.12);
+  return (list[k] ??= Object.fromEntries(Object.entries(P).map(([m, c]) => [m, mixRGB(c, water, (WET_MOST * k) / WET_STEPS)])) as Palette);
 }
 
 /** A facet with whatever it says in its mesh's own frame said in the body's, for a mesh whose corners are put there. */
@@ -10308,19 +10670,97 @@ function wakeOf(b: Bones, fr: Frame): Wake[] {
   return out;
 }
 
+/**
+ * A ring round each shoulder that is breaking the surface while the joint
+ * under it is still under, from what is on the shoulder -- the top of the
+ * arm, a sleeve's head, a pauldron -- and as big as what of it is up at the
+ * surface, opening from nothing as it comes up. A pauldron going under at
+ * the end of a breath was two flat caps of plate apart from the helmet with
+ * no ring round them, as if floating; and side on, the top of a shoulder
+ * treading water was a ball under the jaw inside the ring round the neck.
+ */
+const SHOULDER_DEEP = 0.3;
+/** How far down from its top the round of a shoulder's cap goes, which is what a ring goes round. */
+const SHOULDER_CAP = 0.9;
+function shouldersOut(parts: Part[], b: Bones, through: Wake[]): Wake[] {
+  const out: Wake[] = [];
+  const s0 = b.arm0.t, s1 = b.arm1.t, l = Math.hypot(s1[0] - s0[0], s1[1] - s0[1]) || 1;
+  const al: V3 = [(s1[0] - s0[0]) / l, (s1[1] - s0[1]) / l, 0];
+  for (let k = 0; k < 2; k++) {
+    const arm = b[`arm${k}`];
+    // Up through the water itself, the arm has its own ring where it goes through (`wakeOf`).
+    if (arm.t[2] >= 0) continue;
+    let top = -Infinity;
+    const on: V3[] = [];
+    for (const p of parts) {
+      if (p.xf !== arm) continue;
+      for (const v of p.v ?? p.mesh.v) {
+        const q = place(arm, v);
+        if (q[2] > top) top = q[2];
+        if (q[2] > -SHOULDER_DEEP) on.push(q);
+      }
+    }
+    if (top <= SHOULDER_SLIVER) continue;
+    // Round what is up at the surface of the cap: not the length of an arm lying out along it under the water, treading.
+    let a0 = Infinity, a1 = -Infinity, c0 = Infinity, c1 = -Infinity;
+    const from = Math.max(-SHOULDER_DEEP, Math.min(0, top - SHOULDER_CAP));
+    for (const q of on) {
+      if (q[2] < from) continue;
+      const u = q[0] * al[0] + q[1] * al[1], w = q[1] * al[0] - q[0] * al[1];
+      a0 = Math.min(a0, u); a1 = Math.max(a1, u);
+      c0 = Math.min(c0, w); c1 = Math.max(c1, w);
+    }
+    if (a0 > a1) continue;
+    // Opening from nothing as what is on the shoulder starts to show (`waterline`), and to its whole size as all of it does.
+    const g = Math.min(1, (top - SHOULDER_SLIVER) / SHOULDER_SLIVER), u = (a0 + a1) / 2, w = (c0 + c1) / 2;
+    const ring: Wake = { at: [u * al[0] - w * al[1], u * al[1] + w * al[0], 0], along: al, long: g * (0.15 + (a1 - a0) / 2), r: g * (0.15 + (c1 - c0) / 2) };
+    // Not where the ring round the chest coming up through the water, treading, already goes round it: there it was a lug on that ring.
+    const inside = through.some((o) => {
+      const d: V3 = [ring.at[0] - o.at[0], ring.at[1] - o.at[1], 0];
+      const x = (d[0] * o.along[0] + d[1] * o.along[1]) / (o.long + ring.long), y = (d[1] * o.along[0] - d[0] * o.along[1]) / (o.r + ring.long);
+      return x * x + y * y < 1;
+    });
+    if (!inside) out.push(ring);
+  }
+  return out;
+}
+
 /** The ring round one place the body goes through the water, `out` beyond it, as far round as `on` says: drawn as a path. */
 function wakeRing(g: CanvasRenderingContext2D, view: View, w: Wake, out: number, on: (o: V3) => boolean): void {
   const across: V3 = [-w.along[1], w.along[0], 0];
   const a = w.long + out, c = w.r + out;
   const N = 16;
+  const at = (th: number): V3 => [w.along[0] * a * Math.cos(th) + across[0] * c * Math.sin(th), w.along[1] * a * Math.cos(th) + across[1] * c * Math.sin(th), 0];
+  const to = (o: V3, move: boolean): void => {
+    const s = onScreen(view, [w.at[0] + o[0], w.at[1] + o[1], 0]);
+    if (move) g.moveTo(s[0], s[1]);
+    else g.lineTo(s[0], s[1]);
+  };
+  /*
+   * Where it stops or starts -- the near half meeting the far, or the edge going into another ring -- it stops or starts
+   * there, found between the two points either side of it: from one point to the next, the near and the far halves each
+   * left out the step between them, and a big ring was drawn with a gap at either side, and one wherever another met it.
+   */
+  const edge = (t0: number, t1: number, inAt0: boolean): V3 => {
+    for (let q = 0; q < 5; q++) {
+      const m = (t0 + t1) / 2;
+      if (on(at(m)) === inAt0) t0 = m;
+      else t1 = m;
+    }
+    return at(inAt0 ? t0 : t1);
+  };
   let pen = false;
   for (let i = 0; i <= N; i++) {
     const th = (i / N) * TAU;
-    const o: V3 = [w.along[0] * a * Math.cos(th) + across[0] * c * Math.sin(th), w.along[1] * a * Math.cos(th) + across[1] * c * Math.sin(th), 0];
-    if (!on(o)) { pen = false; continue; }
-    const s = onScreen(view, [w.at[0] + o[0], w.at[1] + o[1], 0]);
-    if (pen) g.lineTo(s[0], s[1]);
-    else g.moveTo(s[0], s[1]);
+    const o = at(th);
+    const was = (i - 1) / N * TAU;
+    if (!on(o)) {
+      if (pen) to(edge(was, th, true), false);
+      pen = false;
+      continue;
+    }
+    if (!pen && i > 0) to(edge(was, th, false), true);
+    to(o, !pen && i === 0);
     pen = true;
   }
 }
@@ -10497,7 +10937,7 @@ function drawLive(ctx: CanvasRenderingContext2D, sx: number, sy: number, zoom: n
   ctx.scale(zoom, zoom);
   const parts = partsOf(kit, r, b, pose.gear, pal, facing, gearLod(zoom));
   if (pose.swimming) {
-    const rings = wakeOf(b, kit.fr);
+    const through = wakeOf(b, kit.fr), rings = [...through, ...shouldersOut(parts, b, through)];
     underwater(ctx, waterline(parts, false), pal, view, ink, 1 / zoom, now);
     for (const set of ringSets(pose, now)) ripple(ctx, view, set, set.moving ? kickAt(kit.fr) : TREAD_AT, kit.fr);
     // The water's face where the body goes through it, under what of the body is over it: what is cut is open, and the water is in it.
@@ -10508,16 +10948,13 @@ function drawLive(ctx: CanvasRenderingContext2D, sx: number, sy: number, zoom: n
       ctx.fill();
     }
     foam(ctx, view, rings, false);
-    render(ctx, waterline(parts, true), pal, view, ink, 1 / zoom, now);
+    render(ctx, waterline(parts, true, new Set([b.chest, b.arm0, b.arm1]), pal), pal, view, ink, 1 / zoom, now);
     foam(ctx, view, rings, true);
   } else {
     // A far oar goes under the body, a near one over it.
     const T = view.T;
     const near = (o: { lock: V3 }): boolean => o.lock[0] * T[0] + o.lock[1] * T[1] > 0;
     for (const o of r.oars ?? []) if (!near(o)) oar(ctx, view, ink, o);
-    // The tiller under the body or over it by which side of the chest the middle of it is.
-    const tiller = r.tiller, over = !!tiller && dot(tiller.pivot, T) + dot(tiller.end, T) > 2 * dot(b.chest.t, T);
-    if (tiller && !over) tillerRod(ctx, view, ink, tiller);
     if (r.reins) reins(ctx, b, view, r, 1 / zoom, true);
     const sides = r.seat?.sides;
     if (sides) {
@@ -10535,7 +10972,8 @@ function drawLive(ctx: CanvasRenderingContext2D, sx: number, sy: number, zoom: n
     render(ctx, r.sit?.astride ? parts.map((p) => (p.hide ? p : { ...p, hide: [BARREL], hideIn: ROOT })) : parts, pal, view, ink, 1 / zoom, now);
     if (sides) ctx.restore();
     for (const o of r.oars ?? []) if (near(o)) oar(ctx, view, ink, o);
-    if (tiller && over) tillerRod(ctx, view, ink, tiller);
+    // The tiller over the body, but for what of it the body is in front of (`tillerPart`); over the rim, as it is.
+    if (r.tiller) render(ctx, [tillerPart(r.tiller, parts, pal)], pal, view, ink, 1 / zoom, now);
     if (r.reins) reins(ctx, b, view, r, 1 / zoom, false);
   }
   ctx.restore();

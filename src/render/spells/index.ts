@@ -66,9 +66,19 @@
  * numbers: `k.fx.reach`, `k.fx.secs` ...), `k.state` for anything a cast keeps
  * between frames, and every shape the kit has: `ring`, `disc`, `sigil`,
  * `scorch` on the ground; `orb`, `bolt`, `beam`, `ribbon`, `slash`, `shell`,
- * `pillar`, `shards`, `mark` in the world; `glow`, `flare` as light; `light`
- * for the night; `burst` and `emit` for particles; `flash` for the screen.
- * They are called afresh every frame and draw only that frame.
+ * `pillar`, `shards`, `mark`, `polyline`, `string`, `shapes` in the world
+ * (`groundPath` on the ground); `glow`, `flare` as light; `light` for the
+ * night; `burst` and `emit` for particles; `flash` for the screen. They are
+ * called afresh every frame and draw only that frame. `k.bodiesWithin(r)`
+ * finds who an area covers; `k.from` is where the island moved the caster
+ * from for this cast; `k.target.burning` (and `bleeding`, `held`) what the
+ * island says is on a creature.
+ *
+ * Opt-in, and nothing changes for a spell that does not ask: `cast.face`
+ * (turn to the companion, or not at all), `cast.hold` (hold the pose past the
+ * cast), `cast.move` (when a move the island made is travelled),
+ * `linger.on` (what a linger ends with), the cue's `at` (what it was cast at)
+ * and `held`.
  *
  * ## Seeing one
  *
@@ -83,7 +93,7 @@
  * whatever is under the cursor, with no island needed (`?alone` works), and
  * `wurm.spells` lists every id.
  *
- * SPELLS.md, beside the animation brief, is the long form of all of this for
+ * SPELLS.md, in this folder, is the long form of all of this for
  * whoever draws the spells: the palettes, the conventions, the budgets.
  */
 import { castPosesBy, weaponCarry, type FigurePose, type Rig } from '../figure';
@@ -117,9 +127,23 @@ export interface CastTiming {
   blendOut?: number;
 }
 
+/**
+ * What a cast went at, as its pose is told it: the caster themselves (a
+ * self-heal, a skin), another person, a creature, a patch of ground. A pose
+ * that reaches out at an ally can keep its hands in when it is on itself.
+ */
+export type CastTarget = 'self' | 'person' | 'creature' | 'spot';
+
 /** What a pose is told besides the time. */
 export interface PoseCue {
   timing: CastTiming;
+  /**
+   * What it was cast at. Always given by the stage; optional only so that a cue
+   * a pose builds for itself (`{ ...c, timing }`) still type-checks.
+   */
+  at?: CastTarget;
+  /** How far through a held pose (`cast.hold`) it is, nought to one: nought before and with no hold, one once it is let go. */
+  held?: number;
   /** Which of the eight ways the body is turned, as drawn: nought at the viewer, two to screen right. */
   facing: number;
   /** On the move: only the arms and the trunk will be kept. */
@@ -138,14 +162,54 @@ export interface SpellFx {
   travel?: { secs: (tiles: number) => number; draw: (k: FxScene, u: number) => void };
   hit?: (k: FxScene) => void;
   impact?: { secs: number; draw: (k: FxScene, u: number) => void };
-  /** `age` seconds since it landed and `left` to go; `secs` to last other than the spell's own `lasts`. */
-  linger?: { secs?: number; draw: (k: FxScene, age: number, left: number) => void };
+  /**
+   * `age` seconds since it landed and `left` to go; `secs` to last other than the spell's own `lasts`. `on` is what it
+   * lingers on, which is what ends it early by going: the target (the default: a creature killed, a person gone), the
+   * caster (a stance, a skin of one's own after a strike: it plays on when the creature struck dies), or the spot
+   * (an area on the ground, which only its seconds end).
+   */
+  linger?: { secs?: number; on?: 'target' | 'caster' | 'spot'; draw: (k: FxScene, age: number, left: number) => void };
+}
+
+/** How the caster is turned as a cast begins: to what it is cast at (the default), to the companion, or not at all. */
+export type CastFace = 'target' | 'companion' | 'none';
+
+/**
+ * Holding a pose past the cast: the pose stops at `at` of the way through (its
+ * own clock, nought to one) for `secs` seconds, or for as long as the spell
+ * lingers when `secs` is not given, and then plays on to its end. Walking off
+ * ends the hold at once. Everything keyed to the cast -- `charge`, the release
+ * when `at` comes before it, the blend out -- waits through the hold with it.
+ */
+export interface CastHold {
+  at: number;
+  secs?: number;
+}
+
+/**
+ * How the caster's body travels for a move the island made before the cast
+ * was drawn (a Lunge, a Parting Throw: the island has already put the body
+ * where it ends up): from where it stood to where it is, between `from` and
+ * `to` of the way through the cast (nought to the release when not given),
+ * eased smoothly. Without one, such a cast still travels over that much.
+ */
+export interface CastMove {
+  from?: number;
+  to?: number;
+}
+
+/** The cast laid on a figure (`FigurePose.cast`): its id and how far through, and what the pose is told besides. */
+export interface CastNow {
+  id: string;
+  t: number;
+  at?: CastTarget;
+  held?: number;
 }
 
 export interface SpellVisual {
   /** Whose colours. */
   palette: SpellPalette;
-  cast: { timing: CastTiming; pose: CastPose; blend?: boolean };
+  cast: { timing: CastTiming; pose: CastPose; blend?: boolean; face?: CastFace; hold?: CastHold; move?: CastMove };
   fx: SpellFx;
   /** A stand-in, until somebody draws it properly. */
   placeholder?: boolean;
@@ -191,16 +255,20 @@ export function castWeight(t: number, timing: CastTiming): number {
 
 /** Lay the cast in `p.cast` over the pose the body was going to be in. Registered with the figure below. */
 export function castOver(r: Rig, p: FigurePose): void {
-  const cast = p.cast;
+  const cast = p.cast as CastNow | undefined;
   const v = cast && SPELL_VISUALS.get(cast.id);
   if (!cast || !v) return;
   const t = Math.max(0, Math.min(1, cast.t));
   const base = v.cast.blend === false ? null : (copy(r as unknown as Deep) as unknown as Rig);
   const carry = p.gear?.weapon ? weaponCarry(p.gear.weapon.id)?.carry ?? null : null;
-  v.cast.pose(r, t, { timing: v.cast.timing, facing: p.facing, moving: p.moving || p.swimming || !!p.driving, carry });
+  v.cast.pose(r, t, { timing: v.cast.timing, facing: p.facing, moving: p.moving || p.swimming || !!p.driving, carry, at: cast.at ?? 'creature', held: cast.held ?? 0 });
   if (!base) return;
   const w = castWeight(t, v.cast.timing);
   const mixed = mixDeep(base as unknown as Deep, r as unknown as Deep, w) as unknown as Rig;
+  // Which shoulder a weapon is on, its spin and a swap under way are switches, as in the figure's own blend: half way between
+  // the shoulders is no shoulder at all, and a wrist looked up by it is not there.
+  const switched = w < 0.5 ? base : r;
+  mixed.carried = switched.carried; mixed.spin = switched.spin; mixed.swapping = switched.swapping;
   Object.assign(r, mixed);
 }
 

@@ -18,12 +18,12 @@
  * nearer the arm, so its wrist is cocked by `FIST_COCK` more to point the same
  * way. The left hand comes onto the haft for the two-handed blows.
  */
-import type { SpellVisual } from './index';
+import { castWeight, type SpellVisual } from './index';
 import { spellInfo } from './info';
-import { clamp, easeIn, easeOut, flashOf, glowPicture, hashOf, lerp, seg, smooth, TAU, type Body, type FxScene, type P3, type SpellPalette } from './kit';
+import { clamp, easeIn, easeOut, flashOf, glowPicture, hashOf, lerp, seg, smooth, TAU, type Body, type FxScene, type GroundLayer, type P3, type SpellPalette } from './kit';
 import { euler, one } from './poses';
 import type { PoseCue } from './index';
-import type { Rig } from '../figure';
+import { figureProportions, type Rig } from '../figure';
 import { KNIFE_BLEED_SECS } from '../../game/fight';
 
 /** Blood red going to ember orange: rage, and what it costs. */
@@ -53,10 +53,6 @@ const RAGE_FIRE = { main: '#e8562e', deep: '#a3241a', core: '#ffc070' };
 const DARK_FIRE = { main: '#a11a14', deep: '#3a0a0a', core: '#ff7a3a' };
 /** Adrenaline is quick rather than hot: the palette's amber and its near-white. */
 const QUICK = { main: '#ff9a3c', deep: '#b35a1c', core: '#fff1d6' };
-
-/** How much further a one-handed axe's wrist is cocked than a two-handed weapon's, for the same line of the head (see the top). */
-const FIST_COCK = 30;
-const cock = (c: PoseCue): number => (c.carry === 'fist' ? FIST_COCK : 0);
 
 /** A spell's own number, read once from the game's table. */
 const num = (id: string, key: string, or: number): number => spellInfo(id)?.fx[key] ?? or;
@@ -252,14 +248,13 @@ function cracks(k: FxScene, c: Ground, len: number, o: { n?: number; grow?: numb
   const h = (i: number, j: number): number => hashOf(salt + i * 17, j * 29 + 3);
   const base = o.dir ? Math.atan2(o.dir.y, o.dir.x) : h(0, 0) * TAU;
   const spread = o.spread ?? TAU;
-  const W = (o.width ?? 2.2) * k.zoom;
+  // Widths in tiles: `width` is pixels at zoom one, and a tile is about sixty of them along its side.
+  const W = (o.width ?? 2.2) / 60;
   const steps = k.fast ? 4 : 6;
-  // Each crack as screen points down its middle with its width at each: x, y, w.
+  // Each crack as places on the ground down its middle with its width at each: x, y, w.
   const lines: number[][] = [];
   const walk = (x: number, y: number, ang: number, full: number, w0: number, id: number, fork: boolean): void => {
-    const line: number[] = [];
-    const p0 = k.on(x, y, 0.12);
-    line.push(k.sx(p0), k.sy(p0), w0);
+    const line: number[] = [x, y, w0];
     const step = (full * grow) / steps;
     for (let s = 1; s <= steps; s++) {
       // The way it runs drifts a little; each corner kicks out to one side and the next to the other: a split, not a worm.
@@ -267,8 +262,7 @@ function cracks(k: FxScene, c: Ground, len: number, o: { n?: number; grow?: numb
       x += Math.cos(ang) * step;
       y += Math.sin(ang) * step;
       const kick = (s % 2 ? 1 : -1) * (0.2 + 0.4 * h(id, s + 20)) * step * (s < steps ? 1 : 0.3);
-      const p = k.on(x - Math.sin(ang) * kick, y + Math.cos(ang) * kick, 0.12);
-      line.push(k.sx(p), k.sy(p), w0 * (1 - s / steps));
+      line.push(x - Math.sin(ang) * kick, y + Math.cos(ang) * kick, w0 * (1 - s / steps));
       if (fork && s === 2 && grow > 0.35) walk(x, y, ang + (h(id, 9) < 0.5 ? -0.9 : 0.9), full * 0.4, w0 * 0.55, id + 50, false);
     }
     lines.push(line);
@@ -277,11 +271,9 @@ function cracks(k: FxScene, c: Ground, len: number, o: { n?: number; grow?: numb
     const ang = o.dir ? base + ((i + 0.5) / n - 0.5) * spread + (h(i, 1) - 0.5) * 0.3 : base + ((i + h(i, 1) * 0.6) / n) * TAU;
     walk(c.x, c.y, ang, len * (0.55 + 0.45 * h(i, 2)), W * (0.75 + 0.5 * grow), i, h(i, 3) > 0.35);
   }
-  const heat = clamp(o.heat ?? 0);
-  const ember = k.pal.accent;
-  // One crack as a closed tapering outline: down one side of its middle line and back up the other.
-  const poly = (g: CanvasRenderingContext2D, L: number[], wide: number): void => {
-    const m = L.length / 3;
+  // One crack as a closed tapering outline on the ground: down one side of its middle line and back up the other.
+  const outline = (L: number[], wide: number): number[] => {
+    const m = L.length / 3, out: number[] = [];
     for (let pass = 0; pass < 2; pass++) {
       for (let q = 0; q < m; q++) {
         const s = pass ? m - 1 - q : q;
@@ -291,38 +283,36 @@ function cracks(k: FxScene, c: Ground, len: number, o: { n?: number; grow?: numb
         dx /= l;
         dy /= l;
         const w = ((L[3 * s + 2] * wide) / 2) * (pass ? -1 : 1);
-        if (!pass && !q) g.moveTo(L[3 * s] - dy * w, L[3 * s + 1] + dx * w);
-        else g.lineTo(L[3 * s] - dy * w, L[3 * s + 1] + dx * w);
+        out.push(L[3 * s] - dy * w, L[3 * s + 1] + dx * w);
       }
     }
-    g.closePath();
+    return out;
   };
-  k.groundDraw(c.x, c.y, len + 0.6, (g) => {
-    g.globalAlpha = clamp(a * 0.95);
-    g.fillStyle = EARTH;
-    g.beginPath();
-    for (const L of lines) poly(g, L, 1);
-    g.fill();
-    if (heat > 0.02) {
-      g.globalAlpha = clamp(a * heat);
-      g.fillStyle = ember;
-      g.beginPath();
-      for (const L of lines) poly(g, L, 0.28);
-      g.fill();
-    }
-  });
+  const heat = clamp(o.heat ?? 0);
+  const layers: GroundLayer[] = [{ kind: 'fill', colour: EARTH, alpha: clamp(a * 0.95), paths: lines.map((L) => outline(L, 1)), lift: 0.12 }];
+  if (heat > 0.02) layers.push({ kind: 'fill', colour: k.pal.accent, alpha: clamp(a * heat), paths: lines.map((L) => outline(L, 0.3)), lift: 0.14 });
+  k.groundShape(c.x, c.y, len + 0.3, layers);
   if (heat > 0.05) {
-    const light = k.pal.light;
+    // The heat in them, over the night: a soft line down each, in screen pixels.
+    const light = k.pal.light, w = (o.width ?? 2.2) * k.zoom;
+    const scr = lines.map((L) => {
+      const s: number[] = [];
+      for (let i = 0; i < L.length - 3; i += 3) {
+        const p = k.on(L[i], L[i + 1], 0.12);
+        s.push(k.sx(p), k.sy(p));
+      }
+      return s;
+    });
     k.glowDraw((g) => {
       g.globalAlpha = clamp(a * heat * 0.14);
       g.strokeStyle = light;
       g.lineCap = 'round';
       g.lineJoin = 'round';
-      g.lineWidth = W * 1.0;
+      g.lineWidth = w;
       g.beginPath();
-      for (const L of lines) {
-        g.moveTo(L[0], L[1]);
-        for (let s = 3; s < L.length - 3; s += 3) g.lineTo(L[s], L[s + 1]);
+      for (const s of scr) {
+        g.moveTo(s[0], s[1]);
+        for (let i = 2; i < s.length; i += 2) g.lineTo(s[i], s[i + 1]);
       }
       g.stroke();
       g.lineCap = 'butt';
@@ -331,8 +321,9 @@ function cracks(k: FxScene, c: Ground, len: number, o: { n?: number; grow?: numb
 }
 
 /**
- * A ring of teeth on the ground round a point, pointing out: the rage's own
- * mark. Only `left` of the teeth (nought to one) are drawn, the last of them
+ * A ring of teeth on the ground round a point, `r` tiles out, the teeth
+ * pointing out: a shockwave of this trade, the reach of a whirl, a rage's
+ * seconds. `left` (nought to one) of the teeth are drawn, the last one
  * shrinking, so a ring that loses a tooth a second counts the seconds down.
  */
 function sawRing(k: FxScene, c: Ground, r: number, o: { teeth?: number; left?: number; alpha?: number; turn?: number; tooth?: number; wide?: number; main?: string; deep?: string; glow?: number } = {}): void {
@@ -342,11 +333,10 @@ function sawRing(k: FxScene, c: Ground, r: number, o: { teeth?: number; left?: n
   const show = clamp(o.left ?? 1) * teeth;
   const tl = o.tooth ?? Math.max(0.08, r * 0.28);
   const turn = o.turn ?? 0;
-  const cy = k.sy(k.on(c.x, c.y, 0.15));
+  const cy = k.sy(k.on(c.x, c.y, 0));
   const lit: number[][] = [], shade: number[][] = [];
   const pt = (ang: number, rr: number, out: number[]): void => {
-    const p = k.on(c.x + Math.cos(ang) * rr, c.y + Math.sin(ang) * rr, 0.15);
-    out.push(k.sx(p), k.sy(p));
+    out.push(c.x + Math.cos(ang) * rr, c.y + Math.sin(ang) * rr);
   };
   // However many teeth, none wider along the ring than `wide` tiles: a big ring is a saw, not a crown of flags.
   const sector = TAU / teeth;
@@ -364,30 +354,15 @@ function sawRing(k: FxScene, c: Ground, r: number, o: { teeth?: number; left?: n
     pt(lerp(am, a0 + (sector + span) / 2, part), r, q);
     pt(lerp(am, a1, part), r, q);
     pt(lerp(am, a1, part), r - band, q);
-    (q[7] > cy ? lit : shade).push(q);
+    // The near half of the ring lit, the far half in shade, as the kit's own rings are.
+    (k.sy(k.on(q[6], q[7], 0)) > cy ? lit : shade).push(q);
   }
-  const main = o.main ?? k.pal.main, deep = o.deep ?? k.pal.deep, ink = k.pal.ink;
-  const inkW = Math.max(0.8, 0.7 * k.zoom);
-  const fill = (g: CanvasRenderingContext2D, list: number[][], colour: string): void => {
-    g.fillStyle = colour;
-    g.beginPath();
-    for (const q of list) {
-      g.moveTo(q[0], q[1]);
-      for (let j = 2; j < q.length; j += 2) g.lineTo(q[j], q[j + 1]);
-      g.closePath();
-    }
-    g.fill();
-    g.stroke();
-  };
-  k.groundDraw(c.x, c.y, r + tl + 0.5, (g) => {
-    g.globalAlpha = clamp(a);
-    g.lineWidth = inkW;
-    g.strokeStyle = ink;
-    g.lineJoin = 'miter';
-    fill(g, shade, deep);
-    fill(g, lit, main);
-    g.lineJoin = 'round';
-  });
+  const ink = k.pal.ink, w = Math.max(0.8, 0.7 * k.zoom);
+  const layers: GroundLayer[] = [];
+  if (shade.length) layers.push({ kind: 'fill', colour: o.deep ?? k.pal.deep, alpha: clamp(a), paths: shade, lift: 0.15 });
+  if (lit.length) layers.push({ kind: 'fill', colour: o.main ?? k.pal.main, alpha: clamp(a), paths: lit, lift: 0.15 });
+  if (shade.length + lit.length) layers.push({ kind: 'stroke', colour: ink, alpha: clamp(a), width: w, paths: [...shade, ...lit], closed: true, join: 'miter', lift: 0.16 });
+  if (layers.length) k.groundShape(c.x, c.y, r + tl + 0.2, layers);
   const gl = o.glow ?? 0.6;
   if (gl > 0) k.glow(k.on(c.x, c.y, 1), (r + tl) * 40 * 0.9, a * gl * 0.3);
 }
@@ -396,41 +371,27 @@ function sawRing(k: FxScene, c: Ground, r: number, o: { teeth?: number; left?: n
 function arcs(k: FxScene, c: Ground, r: number, wide: number, spans: ReadonlyArray<readonly [number, number]>, o: { alpha?: number; main?: string; deep?: string; glow?: number } = {}): void {
   const a = o.alpha ?? 1;
   if (a <= 0.01 || r <= 0.03 || !spans.length) return;
-  const polys: number[][] = [];
-  const cy = k.sy(k.on(c.x, c.y, 0.15));
-  const near: boolean[] = [];
+  const near: number[][] = [], far: number[][] = [];
+  const cy = k.sy(k.on(c.x, c.y, 0));
   for (const [a0, a1] of spans) {
     const m = Math.max(2, Math.ceil(Math.abs(a1 - a0) / 0.2));
     const q: number[] = [];
     for (let i = 0; i <= m; i++) {
       const an = lerp(a0, a1, i / m);
-      const p = k.on(c.x + Math.cos(an) * r, c.y + Math.sin(an) * r, 0.15);
-      q.push(k.sx(p), k.sy(p));
+      q.push(c.x + Math.cos(an) * r, c.y + Math.sin(an) * r);
     }
     for (let i = m; i >= 0; i--) {
       const an = lerp(a0, a1, i / m);
-      const p = k.on(c.x + Math.cos(an) * (r - wide), c.y + Math.sin(an) * (r - wide), 0.15);
-      q.push(k.sx(p), k.sy(p));
+      q.push(c.x + Math.cos(an) * (r - wide), c.y + Math.sin(an) * (r - wide));
     }
-    polys.push(q);
-    near.push(q[2 * Math.floor(m / 2) + 1] > cy);
+    const mid = (a0 + a1) / 2;
+    (k.sy(k.on(c.x + Math.cos(mid) * r, c.y + Math.sin(mid) * r, 0)) > cy ? near : far).push(q);
   }
-  const main = o.main ?? k.pal.main, deep = o.deep ?? k.pal.deep, ink = k.pal.ink;
-  k.groundDraw(c.x, c.y, r + 0.5, (g) => {
-    g.globalAlpha = clamp(a);
-    g.lineWidth = Math.max(0.8, 0.7 * k.zoom);
-    g.strokeStyle = ink;
-    for (let i = 0; i < polys.length; i++) {
-      const q = polys[i];
-      g.beginPath();
-      g.moveTo(q[0], q[1]);
-      for (let j = 2; j < q.length; j += 2) g.lineTo(q[j], q[j + 1]);
-      g.closePath();
-      g.fillStyle = near[i] ? main : deep;
-      g.fill();
-      g.stroke();
-    }
-  });
+  const layers: GroundLayer[] = [];
+  if (far.length) layers.push({ kind: 'fill', colour: o.deep ?? k.pal.deep, alpha: clamp(a), paths: far, lift: 0.15 });
+  if (near.length) layers.push({ kind: 'fill', colour: o.main ?? k.pal.main, alpha: clamp(a), paths: near, lift: 0.15 });
+  layers.push({ kind: 'stroke', colour: k.pal.ink, alpha: clamp(a), width: Math.max(0.8, 0.7 * k.zoom), paths: [...far, ...near], closed: true, join: 'round', lift: 0.16 });
+  k.groundShape(c.x, c.y, r + 0.2, layers);
   const gl = o.glow ?? 0.5;
   if (gl > 0) k.glow(k.on(c.x, c.y, 1), r * 40 * 0.8, a * gl * 0.25);
 }
@@ -595,6 +556,12 @@ function mixHex(a: string, b: string, u: number): string {
   return `#${((1 << 24) | (ch(16) << 16) | (ch(8) << 8) | ch(0)).toString(16).slice(1)}`;
 }
 
+/** The enemies a blow round the caster reaches: every creature and other person within `r` tiles, the caster left out, at most six. */
+const struckBy = (k: FxScene, r: number): Body[] => k.bodiesWithin(r, k.caster, ['creature', 'peer']).slice(0, 6);
+
+/** The head of the weapon in the caster's hands, wherever the pose has put it: the edge of an axe, the face of a maul. */
+const axeHead = (k: FxScene): P3 => k.joint(k.caster, 'tip');
+
 /** Blood off a point: `n` drops flung along `dir` (all round without one), falling. */
 function blood(k: FxScene, at: P3, n: number, o: { dir?: Ground; cone?: number; speed?: [number, number]; up?: [number, number]; size?: number } = {}): void {
   k.burst(at, n, {
@@ -639,15 +606,54 @@ function haloRing(k: FxScene, at: P3, foot: P3, r: number, o: { alpha?: number; 
 
 /** A key in a pose: at `t`, these numbers. */
 type K3 = readonly [number, readonly [number, number, number]];
-type K1 = readonly [number, number];
 const e3 = (t: number, keys: readonly K3[]): [number, number, number] => euler(t, keys) as unknown as [number, number, number];
 /** A small shake about a pose while something strains or roars, in degrees. */
 const shake = (t: number, from: number, to: number, deg: number, hz = 38): number => (t > from && t < to ? Math.sin(t * hz) * deg * Math.sin((Math.PI * (t - from)) / (to - from)) : 0);
 
-/** Both hands on one haft: the left placed as the right is, a little inward and lower down it. */
-function twoHanded(r: Rig, t: number, right: readonly K3[], elbow: readonly K1[], inward = 14): void {
-  r.arm[0] = e3(t, right.map(([a, [f, o, i]]) => [a, [f - 6, o - inward, i + 18]] as const));
-  r.elbow[0] = one(t, elbow.map(([a, v]) => [a, v + 12] as const));
+/*
+ * A blow is written as where the weapon fist goes and which way the weapon's
+ * head points from it, and the figure's own reach puts the arm there (`Rig.reach`)
+ * and, for a weapon in both hands, the other fist on the haft (`Rig.both`): the
+ * head goes exactly where the swing says, whatever the weapon and however the
+ * trunk is bent.
+ *
+ * A key is [t, pitch, yaw, out, lagPitch, lagYaw]: the fist out from the
+ * swinging shoulder along `pitch` degrees up from straight down (90 ahead, 180
+ * straight up, past it behind the head) and `yaw` degrees round to the right,
+ * `out` of an arm's length; the head points along the same line turned by the
+ * two lags -- a head hanging back behind the fist in a wind-up lags, at the
+ * blow it is in line, and it leads through the follow-through.
+ */
+type Swing = readonly [t: number, pitch: number, yaw: number, out: number, lagPitch: number, lagYaw: number];
+const BUILD = figureProportions();
+/** Hips to the swinging shoulder, up the trunk; an arm's length to the middle of the fist. */
+const TRUNK = BUILD.spine + BUILD.chest + BUILD.shoulder[2];
+const ARM = BUILD.upper + BUILD.lower + BUILD.fist;
+const RAD = Math.PI / 180;
+const dirOf = (pitch: number, yaw: number): [number, number, number] => {
+  const p = pitch * RAD, y = yaw * RAD;
+  return [Math.sin(p) * Math.sin(y), Math.sin(p) * Math.cos(y), -Math.cos(p)];
+};
+/** The cue's weapon is held in both hands: a battle axe or a maul (shouldered), not a hatchet. */
+const twoHands = (c: PoseCue): boolean => c.carry === 'shoulder';
+
+function swing(r: Rig, t: number, c: PoseCue, keys: readonly Swing[], o: { both?: number; bothAt?: number } = {}): void {
+  const ch = (j: number): number => one(t, keys.map((k) => [k[0], k[j]] as const));
+  const pitch = ch(1), yaw = ch(2), out = ch(3);
+  // The swinging shoulder, from the hips as the trunk is leant and the knees let the hips down.
+  const lean = (r.spine[0] + r.chest[0]) * RAD;
+  const knee = ((r.knee[0] + r.knee[1]) / 2) * RAD;
+  const hips = BUILD.hips - (BUILD.thigh + BUILD.shin) * (1 - Math.cos(knee / 2)) * (1 - (r.kneel ?? 0)) + (r.lift ?? 0) * 0.5;
+  const sh: [number, number, number] = [BUILD.shoulder[0] * 0.55, -Math.sin(lean) * TRUNK, hips + Math.cos(lean) * TRUNK];
+  const d = dirOf(pitch, yaw);
+  const at: [number, number, number] = [sh[0] + d[0] * ARM * out, sh[1] + d[1] * ARM * out, sh[2] + d[2] * ARM * out];
+  r.reach = [r.reach?.[0], { at, haft: dirOf(pitch + ch(4), yaw + ch(5)) }];
+  r.carried = 1;
+  r.wield = 1;
+  if (twoHands(c)) {
+    r.both = o.both ?? 1;
+    if (o.bothAt !== undefined) r.bothAt = o.bothAt;
+  }
 }
 
 /* ---- the spells ------------------------------------------------------------------------------------------------- */
@@ -695,14 +701,7 @@ export const BERSERKER: Record<string, SpellVisual> = {
     cast: {
       timing: { secs: 0.85, release: 0.4 },
       pose: (r, t, c) => {
-        const h = cock(c);
-        r.arm[1] = e3(t, [[0, [24, 20, 0]], [0.3, [88, 0, -64]], [0.35, [90, 0, -66]], [0.4, [88, 0, -12]], [0.46, [84, 0, 30]], [0.6, [74, 0, 52]], [0.8, [40, 4, 30]], [1, [24, 14, 0]]]);
-        r.elbow[1] = one(t, [[0, 60], [0.3, 34], [0.35, 30], [0.4, 6], [0.6, 26], [1, 50]]);
-        r.hand[1] = e3(t, [[0, [0, 0, 0]], [0.3, [-70 + h, 0, 0]], [0.4, [-88 + h, 0, 0]], [0.6, [-84 + h, 0, 0]], [0.8, [-40 + h, 0, 0]], [1, [0, 0, 0]]]);
-        r.arm[0] = e3(t, [[0, [20, 12, 0]], [0.3, [70, 4, 30]], [0.4, [30, 40, 0]], [0.6, [10, 60, -10]], [1, [8, 12, 0]]]);
-        r.elbow[0] = one(t, [[0, 30], [0.3, 70], [0.4, 30], [0.6, 20], [1, 24]]);
-        r.open[0] = t > 0.38 && t < 0.75;
-        r.pelvis = e3(t, [[0, [0, 0, 0]], [0.3, [0, 0, -22]], [0.4, [0, 0, 6]], [0.6, [0, 0, 34]], [0.8, [0, 0, 18]], [1, [0, 0, 0]]]);
+        r.pelvis = e3(t, [[0, [0, 0, 0]], [0.3, [0, 0, -24]], [0.4, [0, 0, 6]], [0.6, [0, 0, 34]], [0.8, [0, 0, 18]], [1, [0, 0, 0]]]);
         r.spine = e3(t, [[0, [0, 0, 0]], [0.3, [4, -4, -18]], [0.4, [-10, 4, 6]], [0.6, [-14, 8, 24]], [0.8, [-4, 2, 8]], [1, [0, 0, 0]]]);
         r.chest = e3(t, [[0, [0, 0, 0]], [0.3, [4, -6, -30]], [0.4, [-6, 4, 8]], [0.6, [-6, 6, 34]], [1, [0, 0, 0]]]);
         r.head = e3(t, [[0, [0, 0, 0]], [0.3, [-4, 4, 40]], [0.4, [-4, 0, -10]], [0.6, [6, -8, -30]], [0.8, [0, 0, -8]], [1, [0, 0, 0]]]);
@@ -712,12 +711,20 @@ export const BERSERKER: Record<string, SpellVisual> = {
         r.leg[1] = e3(t, [[0, [0, 2, 0]], [0.3, [-12, 6, 0]], [0.45, [-18, 2, 0]], [0.58, [30, -14, 20]], [0.7, [16, -10, 14]], [1, [-2, 2, 0]]]);
         r.knee[1] = one(t, [[0, 4], [0.3, 22], [0.45, 16], [0.58, 46], [0.7, 18], [1, 5]]);
         r.at = e3(t, [[0, [0, 0, 0]], [0.3, [0, -1, 0]], [0.4, [0, 3, 0]], [0.62, [-2, 6, 0]], [1, [0, 0, 0]]]);
-        r.wield = 1;
+        r.mouth = one(t, [[0, 0], [0.32, 0.2], [0.4, 0.75], [0.6, 0.5], [0.85, 0]]);
+        // Flat round from far behind the right shoulder, the head dragging, through level, and on across to the left.
+        swing(r, t, c, [[0, 35, 20, 0.6, 115, 0], [0.3, 100, 118, 0.85, 0, 45], [0.35, 102, 122, 0.85, 0, 50], [0.4, 92, 6, 1, 0, -4], [0.5, 88, -55, 0.95, 0, -20], [0.62, 76, -95, 0.85, 0, -30], [0.8, 50, -40, 0.7, 50, 0], [1, 35, 20, 0.6, 115, 0]]);
+        if (!twoHands(c)) {
+          // A hatchet in one hand: the other flung out to balance the throw of the body.
+          r.arm[0] = e3(t, [[0, [20, 12, 0]], [0.3, [70, 4, 30]], [0.4, [30, 40, 0]], [0.6, [10, 60, -10]], [1, [8, 12, 0]]]);
+          r.elbow[0] = one(t, [[0, 30], [0.3, 70], [0.4, 30], [0.6, 20], [1, 24]]);
+          r.open[0] = t > 0.38 && t < 0.75;
+        }
       },
     },
     fx: {
       charge: (k, t) => {
-        k.glow(k.weaponAt(5), 5, 0.5 * seg(t, 0.12, 0.32));
+        k.glow(axeHead(k), 5, 0.5 * seg(t, 0.12, 0.32));
         const reach = cutReach(k, 16, 30);
         const u = seg(t, 0.32, 0.46);
         const fade = 1 - seg(t, 0.46, 0.62);
@@ -759,12 +766,16 @@ export const BERSERKER: Record<string, SpellVisual> = {
         r.spine = e3(t, [[0, [0, 0, 0]], [0.25, [-8, 0, 0]], [0.5, [6, 0, 0]], [1, [0, 0, 0]]]);
         r.neck = e3(t, [[0, [0, 0, 0]], [0.25, [-12, 0, 0]], [0.36, [-4, 14, 0]], [0.44, [-4, -14, 0]], [0.5, [6, 0, 0]], [1, [0, 0, 0]]]);
         r.head = e3(t, [[0, [0, 0, 0]], [0.25, [-14, 0, 0]], [0.36, [0, 10, 0]], [0.44, [0, -10, 0]], [0.5, [10, 0, 0]], [0.65, [6, 0, 0]], [1, [0, 0, 0]]]);
-        for (let s = 0; s < 2; s++) {
-          r.arm[s] = e3(t, [[0, [10, 10, 0]], [0.25, [26, -6, 26]], [0.45, [24, 22, 10]], [0.5, [-14, 26, 0]], [0.62, [-12, 24, 0]], [1, [8, 10, 0]]]);
-          r.elbow[s] = one(t, [[0, 30], [0.25, 96], [0.45, 60], [0.5, 34], [1, 24]]);
-        }
+        // Hunched with the left hand clamped over the wound; then both fists clenched as the chest goes out.
+        r.arm[0] = e3(t, [[0, [10, 10, 0]], [0.25, [34, -14, 34]], [0.42, [30, -8, 28]], [0.5, [-14, 26, 0]], [0.62, [-12, 24, 0]], [1, [8, 10, 0]]]);
+        r.elbow[0] = one(t, [[0, 30], [0.25, 112], [0.42, 100], [0.5, 34], [1, 24]]);
+        r.arm[1] = e3(t, [[0, [10, 10, 0]], [0.25, [20, 4, 10]], [0.45, [24, 22, 10]], [0.5, [-14, 26, 0]], [0.62, [-12, 24, 0]], [1, [8, 10, 0]]]);
+        r.elbow[1] = one(t, [[0, 30], [0.25, 70], [0.45, 60], [0.5, 34], [1, 24]]);
+        r.shape = [{ cup: one(t, [[0, 0], [0.2, 1], [0.44, 1], [0.5, 0]]), claw: one(t, [[0.44, 0], [0.5, 0.5], [0.7, 0.5], [0.9, 0]]) }, { claw: one(t, [[0.44, 0], [0.5, 0.5], [0.7, 0.5], [0.9, 0]]) }];
+        r.mouth = one(t, [[0, 0], [0.25, 0.25], [0.45, 0.15], [0.52, 0.55], [0.7, 0.3], [1, 0]]);
         r.knee = [one(t, [[0, 4], [0.25, 22], [0.5, 2], [1, 4]]), one(t, [[0, 4], [0.25, 22], [0.5, 2], [1, 4]])];
         r.leg = [e3(t, [[0, [2, 2, 0]], [0.25, [10, 6, 0]], [0.5, [0, 8, 0]], [1, [2, 2, 0]]]), e3(t, [[0, [2, 2, 0]], [0.25, [10, 6, 0]], [0.5, [0, 8, 0]], [1, [2, 2, 0]]])];
+        r.carried = 1;
       },
     },
     fx: {
@@ -813,26 +824,26 @@ export const BERSERKER: Record<string, SpellVisual> = {
     cast: {
       timing: { secs: 0.9, release: 0.38 },
       pose: (r, t, c) => {
-        const h = cock(c);
-        r.arm[1] = e3(t, [[0, [24, 16, 0]], [0.3, [160, 40, -24]], [0.38, [60, -4, 30]], [0.46, [58, -6, 32]], [0.58, [10, 24, -8]], [0.7, [16, 22, -4]], [1, [22, 14, 0]]]);
-        r.elbow[1] = one(t, [[0, 60], [0.3, 34], [0.38, 10], [0.46, 12], [0.58, 60], [0.7, 70], [1, 60]]);
-        r.hand[1] = e3(t, [[0, [0, 0, 0]], [0.3, [-60 + h, 0, 0]], [0.38, [-84 + h, 0, 10]], [0.46, [-84 + h, 0, 10]], [0.58, [-70 + h, 0, 0]], [0.7, [-40 + h, 0, 0]], [1, [0, 0, 0]]]);
-        r.arm[0] = e3(t, [[0, [20, 12, 0]], [0.3, [56, 4, 24]], [0.38, [18, 30, 0]], [0.58, [40, 20, 10]], [1, [8, 12, 0]]]);
-        r.elbow[0] = one(t, [[0, 30], [0.3, 96], [0.38, 30], [0.58, 70], [1, 24]]);
-        r.chest = e3(t, [[0, [0, 0, 0]], [0.3, [6, -6, -26]], [0.38, [-10, 6, 18]], [0.46, [-10, 6, 18]], [0.58, [4, 0, -10]], [1, [0, 0, 0]]]);
-        r.spine = e3(t, [[0, [0, 0, 0]], [0.3, [6, 0, -8]], [0.38, [-16, 0, 8]], [0.46, [-16, 0, 8]], [0.58, [6, 0, -4]], [1, [0, 0, 0]]]);
+        r.chest = e3(t, [[0, [0, 0, 0]], [0.3, [6, -6, -26]], [0.38, [-10, 6, 18]], [0.46, [-10, 6, 18]], [0.58, [4, 0, -16]], [1, [0, 0, 0]]]);
+        r.spine = e3(t, [[0, [0, 0, 0]], [0.3, [6, 0, -8]], [0.38, [-16, 0, 8]], [0.46, [-16, 0, 8]], [0.58, [4, 0, -8]], [1, [0, 0, 0]]]);
         r.head = e3(t, [[0, [0, 0, 0]], [0.3, [-4, 0, 18]], [0.38, [8, 0, -10]], [0.58, [-4, 0, 6]], [1, [0, 0, 0]]]);
         r.leg[0] = e3(t, [[0, [2, 2, 0]], [0.3, [8, 3, 0]], [0.38, [28, 4, 0]], [0.58, [20, 4, 0]], [1, [4, 2, 0]]]);
         r.knee[0] = one(t, [[0, 4], [0.38, 30], [0.58, 18], [1, 6]]);
         r.leg[1] = e3(t, [[0, [0, 2, 0]], [0.38, [-16, 2, 0]], [0.58, [-10, 2, 0]], [1, [-2, 2, 0]]]);
-        r.knee[1] = one(t, [[0, 4], [0.38, 16], [0.58, 20], [1, 5]]);
+        r.knee[1] = one(t, [[0, 4], [0.38, 16], [0.58, 22], [1, 5]]);
         r.at = e3(t, [[0, [0, 0, 0]], [0.38, [0, 3, 0]], [0.46, [0, 3, 0]], [0.6, [0, -1, 0]], [1, [0, 0, 0]]]);
-        r.wield = 1;
+        r.mouth = one(t, [[0, 0], [0.36, 0.3], [0.46, 0.4], [0.56, 0.8], [0.72, 0.2], [1, 0]]);
+        // Down across from high on the right, let bite, then wrenched back out toward the hip with the head still forward.
+        swing(r, t, c, [[0, 35, 20, 0.6, 115, 0], [0.3, 165, 38, 0.85, 65, 0], [0.38, 80, -10, 1, -5, 0], [0.46, 76, -12, 1, -5, 0], [0.58, 32, 28, 0.55, 55, -20], [0.72, 40, 28, 0.6, 70, -10], [1, 35, 20, 0.6, 115, 0]]);
+        if (!twoHands(c)) {
+          r.arm[0] = e3(t, [[0, [20, 12, 0]], [0.3, [56, 4, 24]], [0.38, [18, 30, 0]], [0.58, [40, 20, 10]], [1, [8, 12, 0]]]);
+          r.elbow[0] = one(t, [[0, 30], [0.3, 96], [0.38, 30], [0.58, 70], [1, 24]]);
+        }
       },
     },
     fx: {
       charge: (k, t) => {
-        k.glow(k.weaponAt(4), 4.5, 0.55 * seg(t, 0.1, 0.3));
+        k.glow(axeHead(k), 4.5, 0.55 * seg(t, 0.1, 0.3));
         const u = seg(t, 0.3, 0.4);
         if (u > 0) rent(k, { u, from: 2.3, to: -0.9, tilt: 0.75, reach: cutReach(k, 15, 26), width: 9, length: 1.8, alpha: 1 - seg(t, 0.42, 0.6) });
       },
@@ -883,15 +894,8 @@ export const BERSERKER: Record<string, SpellVisual> = {
     cast: {
       timing: { secs: 0.65, release: 0.45 },
       pose: (r, t, c) => {
-        const h = cock(c);
-        const right: K3[] = [[0, [26, 14, 0]], [0.32, [160, 8, 0]], [0.45, [76, 2, 0]], [0.52, [76, 2, 0]], [0.6, [82, 4, 0]], [1, [26, 14, 0]]];
-        const elbow: K1[] = [[0, 70], [0.32, 60], [0.45, 14], [0.52, 14], [0.6, 20], [1, 70]];
-        r.arm[1] = e3(t, right);
-        r.elbow[1] = one(t, elbow);
-        r.hand[1] = e3(t, [[0, [0, 0, 0]], [0.32, [-60 + h, 0, 0]], [0.45, [-80 + h, 0, 0]], [0.52, [-80 + h, 0, 0]], [0.6, [-72 + h, 0, 0]], [1, [0, 0, 0]]]);
-        twoHanded(r, t, right, elbow);
-        r.spine = e3(t, [[0, [0, 0, 0]], [0.32, [10, 0, 0]], [0.45, [-14, 0, 0]], [0.52, [-14, 0, 0]], [1, [0, 0, 0]]]);
-        r.chest = e3(t, [[0, [0, 0, 0]], [0.32, [6, 0, -6]], [0.45, [-10, 0, 4]], [1, [0, 0, 0]]]);
+        r.spine = e3(t, [[0, [0, 0, 0]], [0.32, [12, 0, 0]], [0.45, [-14, 0, 0]], [0.52, [-14, 0, 0]], [1, [0, 0, 0]]]);
+        r.chest = e3(t, [[0, [0, 0, 0]], [0.32, [8, 0, -6]], [0.45, [-10, 0, 4]], [1, [0, 0, 0]]]);
         r.head = e3(t, [[0, [0, 0, 0]], [0.32, [-14, 0, 0]], [0.45, [6, 0, 0]], [1, [0, 0, 0]]]);
         r.lift = one(t, [[0, 0], [0.3, 0.8], [0.4, 0.4], [0.45, 0], [1, 0]]);
         r.leg[0] = e3(t, [[0, [2, 2, 0]], [0.32, [6, 3, 0]], [0.45, [22, 4, 0]], [1, [4, 2, 0]]]);
@@ -899,12 +903,14 @@ export const BERSERKER: Record<string, SpellVisual> = {
         r.leg[1] = e3(t, [[0, [0, 2, 0]], [0.45, [-12, 2, 0]], [1, [-2, 2, 0]]]);
         r.knee[1] = one(t, [[0, 4], [0.45, 18], [1, 5]]);
         r.at = e3(t, [[0, [0, 0, 0]], [0.45, [0, 2.5, 0]], [1, [0, 0, 0]]]);
-        r.wield = 1;
+        r.mouth = one(t, [[0, 0], [0.3, 0.1], [0.45, 0.7], [0.6, 0.3], [1, 0]]);
+        // Cocked behind the head, the head of it hanging down the back; brought straight over to stop dead level, and a bounce.
+        swing(r, t, c, [[0, 35, 20, 0.6, 115, 0], [0.32, 200, 4, 0.8, 85, 0], [0.45, 90, 0, 1, 2, 0], [0.52, 88, 0, 1, 3, 0], [0.6, 100, 0, 0.95, -6, 0], [1, 35, 20, 0.6, 115, 0]]);
       },
     },
     fx: {
       charge: (k, t) => {
-        k.glow(k.weaponAt(5), 5, 0.6 * seg(t, 0.1, 0.32) * (1 - seg(t, 0.46, 0.6)));
+        k.glow(axeHead(k), 5, 0.6 * seg(t, 0.1, 0.32) * (1 - seg(t, 0.46, 0.6)));
         const u = seg(t, 0.36, 0.46);
         if (u > 0) rent(k, { u, from: 2.7, to: 0.25, tilt: 0.12, reach: cutReach(k, 14, 22), up: k.caster.tall * 0.7, width: 8, length: 1.3, alpha: 1 - seg(t, 0.48, 0.62) });
       },
@@ -956,11 +962,7 @@ export const BERSERKER: Record<string, SpellVisual> = {
     cast: {
       timing: { secs: 1.3, release: 0.5 },
       pose: (r, t, c) => {
-        const h = cock(c);
         const q = shake(t, 0.5, 0.8, 3);
-        r.arm[1] = e3(t, [[0, [24, 14, 0]], [0.32, [30, -6, 30]], [0.44, [120, 10, 0]], [0.5, [172, 8, 0]], [0.8, [170 + q, 8, 0]], [1, [24, 14, 0]]]);
-        r.elbow[1] = one(t, [[0, 60], [0.32, 110], [0.44, 40], [0.5, 6], [0.8, 8], [1, 60]]);
-        r.hand[1] = e3(t, [[0, [0, 0, 0]], [0.32, [0, 0, 0]], [0.5, [-70 + h, 0, 0]], [0.8, [-70 + h, 0, 0]], [1, [0, 0, 0]]]);
         r.arm[0] = e3(t, [[0, [12, 10, 0]], [0.32, [36, -10, 34]], [0.5, [-8, 34, 0]], [0.8, [-10, 36, 0]], [1, [10, 10, 0]]]);
         r.elbow[0] = one(t, [[0, 24], [0.32, 124], [0.5, 22], [0.8, 24], [1, 24]]);
         r.chest = e3(t, [[0, [0, 0, 0]], [0.32, [-16, 0, 0]], [0.5, [12 + q, -4, 6]], [0.8, [10, -4, 6]], [1, [0, 0, 0]]]);
@@ -972,7 +974,10 @@ export const BERSERKER: Record<string, SpellVisual> = {
           r.leg[s] = e3(t, [[0, [2, 2, 0]], [0.32, [24, 10, 0]], [0.5, [4, 13, 0]], [0.8, [4, 13, 0]], [1, [2, 2, 0]]]);
           r.knee[s] = one(t, [[0, 4], [0.32, 48], [0.5, 8], [0.8, 10], [1, 4]]);
         }
-        r.wield = 1;
+        r.shape = [{ claw: one(t, [[0.4, 0], [0.5, 0.7], [0.8, 0.7], [0.95, 0]]) }, undefined];
+        r.mouth = one(t, [[0, 0], [0.32, 0.1], [0.46, 1], [0.8, 1], [0.95, 0]]);
+        // Gathered in front of the chest, then thrust straight at the sky in one fist, the head of it up.
+        swing(r, t, c, [[0, 35, 20, 0.6, 115, 0], [0.32, 40, 25, 0.5, 95, 0], [0.44, 150, 10, 0.9, 20, 0], [0.5, 174, 8, 1, 4, 0], [0.8, 172 + q, 8, 1, 4, 0], [1, 35, 20, 0.6, 115, 0]], { both: 0 });
       },
     },
     fx: {
@@ -990,7 +995,7 @@ export const BERSERKER: Record<string, SpellVisual> = {
         k.glow(k.chest(), 7, 0.5 * g);
       },
       release: (k) => {
-        k.burst(k.weaponAt(5), 30, { kind: 'ember', colour: [k.pal.core, k.pal.accent, k.pal.main], size: 2, life: [0.4, 0.8], speed: [0.4, 1.1], up: [6, 26], gravity: 8, drag: 0.2 });
+        k.burst(axeHead(k), 30, { kind: 'ember', colour: [k.pal.core, k.pal.accent, k.pal.main], size: 2, life: [0.4, 0.8], speed: [0.4, 1.1], up: [6, 26], gravity: 8, drag: 0.2 });
         k.burst(k.at(k.caster, 0.05), 12, { kind: 'dust', colour: DUST, size: 4, life: [0.5, 1], speed: [0.6, 1.1], up: [1, 4], gravity: 2, drag: 0.1 });
       },
       impact: { secs: 0.85, draw: (k, u) => {
@@ -1001,7 +1006,7 @@ export const BERSERKER: Record<string, SpellVisual> = {
           if (v > 0 && v < 1) shout(k, b, v, 0.95 * (1 - v * v));
         }
         sawRing(k, b, 0.3 + 1.0 * easeOut(u), { teeth: 30, alpha: 0.85 * (1 - smooth(seg(u, 0.25, 0.9))), tooth: 0.12, wide: 0.1, turn: u * 0.4 });
-        k.flare(k.weaponAt(6), 9, flashOf(u, 0.08), k.pal.core);
+        k.flare(axeHead(k), 9, flashOf(u, 0.08), k.pal.core);
         k.light(b, 3.5, 0.8 * (1 - u));
       } },
       linger: {
@@ -1037,12 +1042,15 @@ export const BERSERKER: Record<string, SpellVisual> = {
         r.chest = e3(t, [[0, [0, 0, 0]], [0.18, [12, 0, 0]], [0.3, [4, 0, 0]], [0.36, [8, 0, 0]], [0.42, [3, 0, 0]], [0.6, [8, 0, 0]], [1, [0, 0, 0]]]);
         r.head = e3(t, [[0, [0, 0, 0]], [0.18, [14, 0, 0]], [0.3, [-4, 0, 10]], [0.42, [-4, 0, -10]], [0.6, [-6, 0, 0]], [1, [0, 0, 0]]]);
         r.shrug = [one(t, [[0, 0], [0.18, 1.2], [0.3, 0.3], [1, 0]]), one(t, [[0, 0], [0.18, 1.2], [0.3, 0.3], [1, 0]])];
+        // The sharp breath in through an open mouth, the teeth set for the thumps, and the breath out.
+        r.mouth = one(t, [[0, 0], [0.16, 0.55], [0.24, 0.1], [0.42, 0.1], [0.56, 0.4], [0.8, 0]]);
         // Up on the toes and bouncing with the beats.
         r.lift = one(t, [[0, 0], [0.18, 0.6], [0.3, 0.1], [0.36, 0.6], [0.42, 0.1], [0.5, 0.5], [0.6, 0.1], [1, 0]]);
         for (let s = 0; s < 2; s++) {
           r.foot[s] = one(t, [[0, 0], [0.18, -22], [0.6, -18], [1, 0]]);
           r.knee[s] = one(t, [[0, 4], [0.3, 14], [0.42, 14], [0.6, 10], [1, 4]]);
         }
+        r.carried = 1;
       },
     },
     fx: {
@@ -1097,24 +1105,7 @@ export const BERSERKER: Record<string, SpellVisual> = {
     cast: {
       timing: { secs: 1.35, release: 0.58 },
       pose: (r, t, c) => {
-        const h = cock(c);
-        const q = shake(t, 0.14, 0.26, 1.5, 70);
-        const right: K3[] = [[0, [24, 14, 0]], [0.14, [62, 6, 14]], [0.26, [62 + q, 6, 14]], [0.34, [70, 10, 6]], [0.5, [168, 14, -10]], [0.58, [62, -4, 16]], [0.64, [58, -4, 16]], [0.8, [36, 10, 0]], [1, [24, 14, 0]]];
-        const elbow: K1[] = [[0, 60], [0.14, 96], [0.26, 96], [0.34, 80], [0.5, 60], [0.58, 6], [0.64, 8], [0.8, 30], [1, 60]];
-        r.arm[1] = e3(t, right);
-        r.elbow[1] = one(t, elbow);
-        r.hand[1] = e3(t, [[0, [0, 0, 0]], [0.14, [-62 + h, 0, 0]], [0.26, [-62 + h, 0, 0]], [0.34, [-50 + h, 0, 0]], [0.5, [-20 + h, 0, 0]], [0.58, [-82 + h, 0, 10]], [0.64, [-82 + h, 0, 10]], [0.8, [-40 + h, 0, 0]], [1, [0, 0, 0]]]);
-        // The left palm up to the axe's head, drawn down its edge, then the bloodied fist onto the haft for the blow.
-        if (t < 0.44) {
-          r.arm[0] = e3(t, [[0, [16, 10, 0]], [0.14, [126, -18, 24]], [0.26, [126, -18, 24]], [0.31, [44, 34, -10]], [0.38, [36, 30, -6]], [0.44, [120, 10, 0]]]);
-          r.elbow[0] = one(t, [[0, 24], [0.14, 40], [0.26, 40], [0.31, 16], [0.38, 30], [0.44, 70]]);
-          r.open[0] = t > 0.08 && t < 0.33;
-        } else {
-          twoHanded(r, t, right.map(([a, v]) => [Math.max(a, 0.44), v] as const), elbow.map(([a, v]) => [Math.max(a, 0.44), v] as const));
-          const w = seg(t, 0.44, 0.5);
-          r.arm[0] = [lerp(120, r.arm[0][0], w), lerp(10, r.arm[0][1], w), lerp(0, r.arm[0][2], w)];
-          r.elbow[0] = lerp(70, r.elbow[0], w);
-        }
+        const q = shake(t, 0.14, 0.3, 1.5, 70);
         r.chest = e3(t, [[0, [0, 0, 0]], [0.14, [4, 0, 0]], [0.31, [-6, 0, -10]], [0.5, [12, 0, -10]], [0.58, [-14, 0, 10]], [0.64, [-14, 0, 10]], [0.8, [6, 0, 0]], [1, [0, 0, 0]]]);
         r.spine = e3(t, [[0, [0, 0, 0]], [0.31, [-4, 0, 0]], [0.5, [12, 0, -4]], [0.58, [-24, 0, 6]], [0.64, [-24, 0, 6]], [0.8, [2, 0, 0]], [1, [0, 0, 0]]]);
         r.head = e3(t, [[0, [0, 0, 0]], [0.14, [6, 0, 0]], [0.26, [6, 0, 0]], [0.31, [-16, 0, 10]], [0.5, [-12, 0, 0]], [0.58, [16, 0, 0]], [0.8, [4, 0, 0]], [1, [0, 0, 0]]]);
@@ -1124,7 +1115,14 @@ export const BERSERKER: Record<string, SpellVisual> = {
         r.leg[1] = e3(t, [[0, [0, 2, 0]], [0.5, [-6, 2, 0]], [0.58, [-20, 2, 0]], [1, [-2, 2, 0]]]);
         r.knee[1] = one(t, [[0, 4], [0.58, 22], [1, 5]]);
         r.at = e3(t, [[0, [0, 0, 0]], [0.5, [0, -1, 0]], [0.58, [0, 4, 0]], [0.7, [0, 4, 0]], [1, [0, 0, 0]]]);
-        r.wield = 1;
+        r.mouth = one(t, [[0, 0], [0.22, 0.1], [0.28, 0.45], [0.36, 0.2], [0.58, 0.85], [0.7, 0.4], [1, 0]]);
+        // The axe held up across the face, its head before the eyes; the left palm laid flat on the blade by the head and
+        // drawn down its edge (the left hand on the haft, closing nearer the fist); then both hands to it for the blow.
+        const head = twoHands(c) ? 1 : 0.42;
+        swing(r, t, c, [[0, 35, 20, 0.6, 115, 0], [0.14, 32, 18, 0.53, 93 + q, -80], [0.3, 32, 18, 0.53, 93, -80], [0.38, 60, 12, 0.6, 80, -50], [0.5, 200, 10, 0.85, 70, 0], [0.58, 80, -5, 1, -5, 0], [0.64, 76, -5, 1, -5, 0], [0.8, 50, 10, 0.75, 30, 0], [1, 35, 20, 0.6, 115, 0]],
+          { both: 1, bothAt: one(t, [[0, 2.5], [0.12, 8.2 * head], [0.2, 8.2 * head], [0.3, 5.6 * head], [0.36, 5.6 * head], [0.46, 2.5], [1, 2.5]]) });
+        if (!twoHands(c)) r.both = one(t, [[0.05, 0], [0.14, 1], [0.34, 1], [0.42, 0]]);
+        r.shape = [{ flat: one(t, [[0.08, 0], [0.14, 1], [0.32, 1], [0.38, 0]]) }, undefined];
       },
     },
     fx: {
@@ -1138,7 +1136,7 @@ export const BERSERKER: Record<string, SpellVisual> = {
         // The blade run red, dripping, and the cut hand dripping too, until the blow.
         const red = seg(t, 0.27, 0.34) * (1 - seg(t, 0.62, 0.8));
         if (red > 0) {
-          const head = k.weaponAt(5);
+          const head = axeHead(k);
           k.glow(head, 5, 0.75 * red, DROP);
           k.emit(head, 9 * red, { kind: 'drop', colour: DROP, size: 1.8, life: [0.3, 0.5], speed: [0, 0.1], up: [-4, 0], gravity: 70, bias: 6 });
           if (t < 0.5) k.emit(k.hand(0), 6 * red, { kind: 'drop', colour: DROP, size: 1.6, life: [0.3, 0.5], speed: [0, 0.05], up: [-2, 0], gravity: 70, bias: 6 });
@@ -1146,7 +1144,7 @@ export const BERSERKER: Record<string, SpellVisual> = {
         const u = seg(t, 0.5, 0.6);
         if (u > 0) rent(k, { u, from: 2.6, to: -0.7, tilt: 0.42, reach: cutReach(k, 18, 32), width: 15, length: 2.1, main: DROP, core: '#ff7a5a', ink: DROP_DARK, alpha: 1 - seg(t, 0.62, 0.78) });
         // Drops flung off the blade along its arc.
-        if (u > 0 && u < 1) k.emit(k.weaponAt(5), 50, { kind: 'drop', colour: [DROP, DROP_DARK], size: 2, life: [0.3, 0.6], speed: [0.2, 0.6], up: [0, 10], gravity: 70, bias: 6 });
+        if (u > 0 && u < 1) k.emit(axeHead(k), 50, { kind: 'drop', colour: [DROP, DROP_DARK], size: 2, life: [0.3, 0.6], speed: [0.2, 0.6], up: [0, 10], gravity: 70, bias: 6 });
       },
       hit: (k) => {
         const at = k.heart(k.target);
@@ -1177,14 +1175,7 @@ export const BERSERKER: Record<string, SpellVisual> = {
     cast: {
       timing: { secs: 1.45, release: 0.62 },
       pose: (r, t, c) => {
-        const h = cock(c);
         const q = shake(t, 0.42, 0.56, 1.6, 60);
-        const right: K3[] = [[0, [24, 14, 0]], [0.14, [40, 10, 0]], [0.42, [176 + q, 2, 0]], [0.56, [174, 2, 0]], [0.62, [62, 0, 0]], [0.7, [60, 0, 0]], [0.85, [40, 6, 0]], [1, [24, 14, 0]]];
-        const elbow: K1[] = [[0, 60], [0.14, 50], [0.42, 6], [0.56, 8], [0.62, 2], [0.7, 4], [0.85, 30], [1, 60]];
-        r.arm[1] = e3(t, right);
-        r.elbow[1] = one(t, elbow);
-        r.hand[1] = e3(t, [[0, [0, 0, 0]], [0.42, [-72 + h, 0, 0]], [0.56, [-70 + h, 0, 0]], [0.62, [-78 + h, 0, 0]], [0.7, [-78 + h, 0, 0]], [0.85, [-40 + h, 0, 0]], [1, [0, 0, 0]]]);
-        twoHanded(r, t, right, elbow, 10);
         r.spine = e3(t, [[0, [0, 0, 0]], [0.42, [4, 0, 0]], [0.56, [5, 0, 0]], [0.62, [-20, 0, 0]], [0.7, [-20, 0, 0]], [0.9, [-6, 0, 0]], [1, [0, 0, 0]]]);
         r.chest = e3(t, [[0, [0, 0, 0]], [0.42, [4, 0, 0]], [0.62, [-8, 0, 0]], [1, [0, 0, 0]]]);
         // Eyes on the creature the whole way, and bowed over it after.
@@ -1193,7 +1184,9 @@ export const BERSERKER: Record<string, SpellVisual> = {
           r.leg[s] = e3(t, [[0, [2, 2, 0]], [0.14, [4, 14, 0]], [0.62, [4, 15, 0]], [0.85, [3, 12, 0]], [1, [2, 2, 0]]]);
           r.knee[s] = one(t, [[0, 4], [0.14, 14], [0.56, 12], [0.62, 32], [0.75, 30], [1, 4]]);
         }
-        r.wield = 1;
+        r.mouth = one(t, [[0.5, 0], [0.6, 0.5], [0.7, 0.2], [0.9, 0]]);
+        // Raised straight up on both arms and held there, the head of it to the sky; then straight down, the head ending at the neck.
+        swing(r, t, c, [[0, 35, 20, 0.6, 115, 0], [0.14, 70, 0, 0.7, 60, 0], [0.42, 178 + q, 0, 0.95, 0, 0], [0.56, 176, 0, 0.95, 2, 0], [0.62, 76, 0, 1, -8, 0], [0.7, 72, 0, 1, -8, 0], [0.85, 45, 0, 0.75, 40, 0], [1, 35, 20, 0.6, 115, 0]]);
       },
     },
     fx: {
@@ -1209,7 +1202,7 @@ export const BERSERKER: Record<string, SpellVisual> = {
           const R = Math.max(0.28, (b.wide / 40) * 3.2) * (1.8 - 0.8 * close);
           const turn = close * 1.6;
           arcs(k, b, R, 0.04, [[turn, turn + 1.9], [turn + Math.PI, turn + Math.PI + 1.9]], { alpha: mark, glow: 0.4 });
-          k.flare(k.weaponAt(6), 6, bump01(seg(t, 0.4, 0.58)) * 0.9, k.pal.core, k.now);
+          k.flare(axeHead(k), 6, bump01(seg(t, 0.4, 0.58)) * 0.9, k.pal.core, k.now);
         }
         // The drop: a falling edge down the line, the last tenth of a second before the blow.
         const d = seg(t, 0.565, 0.62);
@@ -1256,13 +1249,6 @@ export const BERSERKER: Record<string, SpellVisual> = {
     cast: {
       timing: { secs: 1.5, release: 0.42 },
       pose: (r, t, c) => {
-        const h = cock(c);
-        const right: K3[] = [[0, [26, 14, 0]], [0.1, [40, 14, 0]], [0.32, [168, 8, 0]], [0.36, [174, 8, 0]], [0.42, [52, 4, 0]], [0.48, [50, 4, 0]], [0.72, [46, 6, 0]], [0.84, [70, 12, 0]], [1, [26, 14, 0]]];
-        const elbow: K1[] = [[0, 70], [0.1, 60], [0.32, 56], [0.36, 62], [0.42, 4], [0.48, 6], [0.72, 12], [0.84, 50], [1, 70]];
-        r.arm[1] = e3(t, right);
-        r.elbow[1] = one(t, elbow);
-        r.hand[1] = e3(t, [[0, [0, 0, 0]], [0.32, [-18 + h, 0, 0]], [0.36, [-24 + h, 0, 0]], [0.42, [-72 + h, 0, 0]], [0.72, [-70 + h, 0, 0]], [0.84, [-30 + h, 0, 0]], [1, [0, 0, 0]]]);
-        twoHanded(r, t, right, elbow);
         r.spine = e3(t, [[0, [0, 0, 0]], [0.32, [20, 0, 0]], [0.36, [22, 0, 0]], [0.42, [-28, 0, 0]], [0.48, [-30, 0, 0]], [0.72, [-32, 0, 0]], [0.84, [-8, 0, 0]], [1, [0, 0, 0]]]);
         r.chest = e3(t, [[0, [0, 0, 0]], [0.32, [12, 0, -6]], [0.42, [-14, 0, 4]], [0.6, [-10 + 2 * Math.sin(t * 40), 0, 0]], [0.72, [-12, 0, 0]], [0.84, [4, 0, -6]], [1, [0, 0, 0]]]);
         r.head = e3(t, [[0, [0, 0, 0]], [0.32, [-22, 0, 0]], [0.42, [20, 0, 0]], [0.72, [16, 0, 0]], [0.84, [0, 0, 0]], [1, [0, 0, 0]]]);
@@ -1274,12 +1260,15 @@ export const BERSERKER: Record<string, SpellVisual> = {
         r.leg[1] = e3(t, [[0, [0, 2, 0]], [0.32, [-4, 2, 0]], [0.42, [-22, 2, 0]], [0.72, [-22, 2, 0]], [1, [-2, 2, 0]]]);
         r.knee[1] = one(t, [[0, 4], [0.42, 24], [0.72, 24], [1, 5]]);
         r.at = e3(t, [[0, [0, 0, 0]], [0.32, [0, -1, 0]], [0.42, [0, 5, 0]], [0.72, [0, 5, 0]], [0.9, [0, 1, 0]], [1, [0, 0, 0]]]);
-        r.wield = 1;
+        r.mouth = one(t, [[0, 0], [0.3, 0.3], [0.42, 1], [0.5, 0.6], [0.55, 0.35], [0.62, 0.6], [0.69, 0.35], [0.76, 0.6], [0.86, 0.9], [1, 0]]);
+        // Back arched and the head of it hanging down behind; over the top and down into the ground ahead, where it sticks;
+        // then heaved out, the head coming up first.
+        swing(r, t, c, [[0, 35, 20, 0.6, 115, 0], [0.1, 60, 5, 0.7, 60, 0], [0.32, 205, 5, 0.85, 95, 0], [0.36, 208, 5, 0.85, 100, 0], [0.42, 55, 0, 1, 5, 0], [0.48, 54, 0, 1, 6, 0], [0.72, 52, 0, 1, 8, 0], [0.84, 75, 5, 0.75, 70, 0], [1, 35, 20, 0.6, 115, 0]]);
       },
     },
     fx: {
       charge: (k, t) => {
-        k.glow(k.weaponAt(5), 6, 0.6 * seg(t, 0.1, 0.34) * (1 - seg(t, 0.42, 0.5)));
+        k.glow(axeHead(k), 6, 0.6 * seg(t, 0.1, 0.34) * (1 - seg(t, 0.42, 0.5)));
         const u = seg(t, 0.355, 0.425);
         if (u > 0) rent(k, { u, from: 3.0, to: -0.55, tilt: 0.16, reach: cutReach(k, 18, 32), up: k.caster.tall * 0.78, width: 15, length: 2.3, alpha: 1 - seg(t, 0.45, 0.62) });
       },
@@ -1299,6 +1288,7 @@ export const BERSERKER: Record<string, SpellVisual> = {
         k.light(b, 3.2, 0.9 * (1 - u));
       } },
       linger: {
+        on: 'spot',
         secs: SMASH_WIND,
         draw: (k, age, left) => {
           const b = k.target;
@@ -1306,7 +1296,7 @@ export const BERSERKER: Record<string, SpellVisual> = {
           const heat = 0.6 * (left / SMASH_WIND);
           cracks(k, b, 0.8, { n: 7, grow: 1, heat, dir: k.toward(k.caster, b), spread: 4.6, salt: 1, width: 2.6, alpha: smooth(left / 0.4) });
           if (!k.fast) k.emit(k.at(b, 0.05), 8 * heat, { kind: 'smoke', colour: '#4a3a33', size: 2.4, sizeEnd: 6, life: [0.7, 1.2], speed: [0.02, 0.08], up: [6, 12], gravity: -3, jitter: 0.3 });
-          if (left < 0.3) k.flare(k.weaponAt(5), 7, Math.sin((Math.PI * (0.3 - left)) / 0.3), k.pal.core, age * 3);
+          if (left < 0.3) k.flare(axeHead(k), 7, Math.sin((Math.PI * (0.3 - left)) / 0.3), k.pal.core, age * 3);
         },
       },
     },
@@ -1322,23 +1312,26 @@ export const BERSERKER: Record<string, SpellVisual> = {
     cast: {
       timing: { secs: WHIRL_SECS, release: WHIRL_FIRST, blendOut: 0.22 },
       pose: (r, t, c) => {
-        const h = cock(c);
         // The turns, read back into a half turn either way so the blend at each end never unwinds them.
         const spin = whirlTurned(t) * 360 - one(t, [[0, 0], [WHIRL_GO, 50], [0.3, 0]]);
         r.pelvis = [0, 0, ((((spin + 180) % 360) + 360) % 360) - 180];
+        // Both arms out level, the axe straight out past the right fist along the arm.
         r.arm[1] = e3(t, [[0, [24, 14, 0]], [WHIRL_GO, [40, 50, -30]], [0.24, [88, 0, -88]], [WHIRL_END - 0.04, [88, 0, -88]], [0.84, [50, 10, -20]], [1, [24, 14, 0]]]);
         r.elbow[1] = one(t, [[0, 60], [WHIRL_GO, 70], [0.24, 6], [WHIRL_END - 0.04, 6], [0.84, 40], [1, 60]]);
-        r.hand[1] = e3(t, [[0, [0, 0, 0]], [0.24, [-84 + h, 0, 0]], [WHIRL_END - 0.04, [-84 + h, 0, 0]], [0.84, [-30 + h, 0, 0]], [1, [0, 0, 0]]]);
+        r.haft = one(t, [[0, 0], [WHIRL_GO, 30], [0.24, 82], [WHIRL_END - 0.04, 82], [0.9, 20]]);
         r.arm[0] = e3(t, [[0, [16, 10, 0]], [WHIRL_GO, [60, 0, 30]], [0.24, [80, 0, -80]], [WHIRL_END - 0.04, [80, 0, -80]], [0.84, [30, 20, 0]], [1, [10, 10, 0]]]);
         r.elbow[0] = one(t, [[0, 24], [WHIRL_GO, 90], [0.24, 20], [WHIRL_END - 0.04, 20], [1, 24]]);
         r.open[0] = t > 0.2 && t < 0.8;
+        r.shape = [{ flat: one(t, [[0.18, 0], [0.26, 1], [0.72, 1], [0.8, 0]]) }, undefined];
         r.spine = e3(t, [[0, [0, 0, 0]], [WHIRL_GO, [-10, 0, -20]], [0.24, [-4, 6, 0]], [WHIRL_END - 0.04, [-4, 6, 0]], [0.84, [-8, 0, 0]], [1, [0, 0, 0]]]);
         r.chest = e3(t, [[0, [0, 0, 0]], [WHIRL_GO, [-6, 0, -26]], [0.24, [0, 4, 6]], [WHIRL_END - 0.04, [0, 4, 6]], [1, [0, 0, 0]]]);
         r.head = e3(t, [[0, [0, 0, 0]], [WHIRL_GO, [-8, 0, 20]], [0.24, [-4, 0, 10]], [WHIRL_END - 0.04, [-4, 0, 10]], [1, [0, 0, 0]]]);
+        r.mouth = one(t, [[0, 0], [WHIRL_GO, 0.2], [0.3, 0.6], [WHIRL_END, 0.5], [0.9, 0]]);
         for (let s = 0; s < 2; s++) {
           r.leg[s] = e3(t, [[0, [2, 2, 0]], [WHIRL_GO, [16, 12, 0]], [0.24, [10, 12, 0]], [WHIRL_END - 0.04, [10, 12, 0]], [0.84, [14, 10, 0]], [1, [2, 2, 0]]]);
           r.knee[s] = one(t, [[0, 4], [WHIRL_GO, 34], [0.24, 20], [WHIRL_END - 0.04, 20], [0.84, 30], [1, 4]]);
         }
+        r.carried = 1;
         r.wield = 1;
       },
     },
@@ -1378,7 +1371,20 @@ export const BERSERKER: Record<string, SpellVisual> = {
         for (let i = 0; i < WHIRL_BLOWS; i++) {
           const v = seg(since, (whirlBlow(i) - WHIRL_FIRST) * secs, (whirlBlow(i) - WHIRL_FIRST) * secs + 0.42);
           if (v <= 0 || v >= 1) continue;
-          sawRing(k, b, 0.3 + (R - 0.3) * easeOut(v), { teeth: Math.round((TAU * R) / 0.3), alpha: 0.95 * (1 - smooth(seg(v, 0.55, 1))), tooth: 0.14, wide: 0.12, turn: i * 0.17 + v * 0.8 });
+          const rr = 0.3 + (R - 0.3) * easeOut(v);
+          sawRing(k, b, rr, { teeth: Math.round((TAU * R) / 0.3), alpha: 0.95 * (1 - smooth(seg(v, 0.55, 1))), tooth: 0.14, wide: 0.12, turn: i * 0.17 + v * 0.8 });
+          // Every enemy within the reach struck as the ring of this blow goes through where it stands.
+          for (const e of struckBy(k, R)) {
+            const d = Math.hypot(e.x - b.x, e.y - b.y);
+            const w = seg(rr, d - 0.15, d + 0.7);
+            if (w <= 0 || w >= 1) continue;
+            const key = `w${i}_${e.who && 'id' in e.who ? e.who.id : 0}`;
+            if (!k.state[key]) {
+              k.state[key] = 1;
+              blood(k, k.heart(e), 6, { dir: k.toward(b, e), cone: 1.2 });
+            }
+            starburst(k, k.heart(e), 8 * (1.1 - 0.4 * w), { points: 6, alpha: flashOf(w, 0.12), turn: i * 0.5 });
+          }
         }
         k.light(b, R + 1, 0.7 * (1 - u));
       } },
@@ -1395,13 +1401,6 @@ export const BERSERKER: Record<string, SpellVisual> = {
     cast: {
       timing: { secs: 1.3, release: 0.5 },
       pose: (r, t, c) => {
-        const h = cock(c);
-        const right: K3[] = [[0, [26, 14, 0]], [0.2, [10, 20, 0]], [0.38, [172, 10, 0]], [0.5, [50, 2, 0]], [0.62, [48, 2, 0]], [0.8, [40, 10, 0]], [1, [26, 14, 0]]];
-        const elbow: K1[] = [[0, 70], [0.2, 80], [0.38, 50], [0.5, 4], [0.62, 6], [0.8, 40], [1, 70]];
-        r.arm[1] = e3(t, right);
-        r.elbow[1] = one(t, elbow);
-        r.hand[1] = e3(t, [[0, [0, 0, 0]], [0.2, [10 + h, 0, 0]], [0.38, [-20 + h, 0, 0]], [0.5, [-76 + h, 0, 0]], [0.62, [-74 + h, 0, 0]], [0.8, [-30 + h, 0, 0]], [1, [0, 0, 0]]]);
-        twoHanded(r, t, right, elbow);
         r.lift = one(t, [[0, 0], [0.2, 0], [0.32, 4.5], [0.4, 4], [0.48, 0.6], [0.5, 0], [1, 0]]);
         r.spine = e3(t, [[0, [0, 0, 0]], [0.2, [-20, 0, 0]], [0.36, [12, 0, 0]], [0.5, [-34, 0, 0]], [0.62, [-34, 0, 0]], [0.8, [-12, 0, 0]], [1, [0, 0, 0]]]);
         r.chest = e3(t, [[0, [0, 0, 0]], [0.2, [-8, 0, 0]], [0.36, [8, 0, 0]], [0.5, [-12, 0, 0]], [1, [0, 0, 0]]]);
@@ -1410,7 +1409,9 @@ export const BERSERKER: Record<string, SpellVisual> = {
           r.leg[s] = e3(t, [[0, [2, 2, 0]], [0.2, [40, 12, 0]], [0.32, [30, 8, 0]], [0.4, [44, 10, 0]], [0.5, [56, 16, 0]], [0.62, [56, 16, 0]], [0.8, [24, 8, 0]], [1, [2, 2, 0]]]);
           r.knee[s] = one(t, [[0, 4], [0.2, 80], [0.3, 30], [0.4, 70], [0.5, 96], [0.62, 96], [0.8, 40], [1, 4]]);
         }
-        r.wield = 1;
+        r.mouth = one(t, [[0, 0], [0.32, 0.3], [0.48, 1], [0.62, 0.8], [0.85, 0]]);
+        // Up off the ground with it overhead, the head hanging back; down into the earth just ahead of the feet.
+        swing(r, t, c, [[0, 35, 20, 0.6, 115, 0], [0.2, 30, 0, 0.6, 140, 0], [0.38, 190, 0, 0.9, 60, 0], [0.5, 60, 0, 0.45, -20, 0], [0.62, 60, 0, 0.45, -20, 0], [0.8, 50, 0, 0.6, 60, 0], [1, 35, 20, 0.6, 115, 0]]);
       },
     },
     fx: {
@@ -1419,7 +1420,7 @@ export const BERSERKER: Record<string, SpellVisual> = {
           k.state.jump = 1;
           k.burst(k.at(k.caster, 0.03), 14, { kind: 'dust', colour: DUST, size: 3.6, life: [0.5, 0.9], speed: [0.4, 0.8], up: [1, 4], gravity: 2, drag: 0.1 });
         }
-        k.glow(k.weaponAt(4), 6, 0.7 * seg(t, 0.25, 0.42) * (1 - seg(t, 0.5, 0.56)));
+        k.glow(axeHead(k), 6, 0.7 * seg(t, 0.25, 0.42) * (1 - seg(t, 0.5, 0.56)));
         const u = seg(t, 0.42, 0.5);
         if (u > 0) rent(k, { u, from: 2.9, to: -0.2, tilt: 0.1, reach: 14, up: k.caster.tall * 0.95, width: 11, length: 1.8, alpha: 1 - seg(t, 0.52, 0.64) });
       },
@@ -1454,6 +1455,10 @@ export const BERSERKER: Record<string, SpellVisual> = {
           const shakeR = R + Math.sin(age * 70) * 0.03;
           sawRing(k, b, shakeR - 0.14, { teeth: Math.round((TAU * R) / 0.3), alpha: 0.85 * a, tooth: 0.16, wide: 0.13, turn: Math.sin(age * 50) * 0.02, glow: 0.5 });
           cracks(k, b, R, { n: 10, grow: 1, heat: 0.7 * a, salt: 5, width: 3.2, alpha: Math.max(0.3, a) });
+          // Each enemy inside it held fast: stone closed round its feet, shaking with the edge, for the second it is held.
+          for (const e of struckBy(k, R)) {
+            k.shards({ x: e.x + Math.sin(age * 60) * 0.01, y: e.y }, { n: 6, r: Math.max(0.12, (e.wide / 40) * 1.5), h: 4, grow: a, main: STONE[0], deep: STONE[1], core: STONE[2], glow: 0 });
+          }
         },
       },
     },
@@ -1480,12 +1485,16 @@ export const BERSERKER: Record<string, SpellVisual> = {
         r.chest = e3(t, [[0, [0, 0, 0]], [0.2, [-10, 0, 0]], [0.55, [14, 0, 0]], [0.84, [12, 0, 0]], [1, [0, 0, 0]]]);
         r.head = e3(t, [[0, [0, 0, 0]], [0.2, [-20, 0, 0]], [0.46, [-24 + q, 0, 0]], [0.55, [32, 0, 0]], [0.84, [30 + roar, 0, 0]], [1, [0, 0, 0]]]);
         r.shrug = [one(t, [[0, 0], [0.3, 0.6], [0.36, 0], [0.42, 0.6], [0.55, 1.4], [0.84, 1.2], [1, 0]]), one(t, [[0, 0], [0.3, 0.6], [0.36, 0], [0.42, 0.6], [0.55, 1.4], [0.84, 1.2], [1, 0]])];
-        // Down on the right knee, the left foot planted ahead; then stood, feet wide.
-        r.leg[0] = e3(t, [[0, [2, 2, 0]], [0.2, [70, 6, 0]], [0.46, [70, 6, 0]], [0.55, [6, 14, 0]], [0.84, [6, 14, 0]], [1, [2, 2, 0]]]);
-        r.knee[0] = one(t, [[0, 4], [0.2, 86], [0.46, 86], [0.55, 10], [1, 4]]);
-        r.leg[1] = e3(t, [[0, [0, 2, 0]], [0.2, [-6, 4, 0]], [0.46, [-6, 4, 0]], [0.55, [-4, 14, 0]], [0.84, [-4, 14, 0]], [1, [0, 2, 0]]]);
-        r.knee[1] = one(t, [[0, 4], [0.2, 110], [0.46, 110], [0.55, 10], [1, 4]]);
-        r.foot[1] = one(t, [[0, 0], [0.2, -40], [0.46, -40], [0.55, 0]]);
+        // Beaten down onto the right knee, the left fist on the ground; then stood, feet wide, arms flung out, screaming.
+        r.kneel = one(t, [[0, 0], [0.16, 1], [0.46, 1], [0.54, 0]]);
+        r.reach = [{ at: [-2.6, 1.8, 1.4], w: one(t, [[0.1, 0], [0.2, 1], [0.44, 1], [0.5, 0]]), stoop: true }, undefined];
+        r.shape = [{ claw: one(t, [[0.5, 0], [0.56, 1], [0.84, 1], [0.95, 0]]) }, { claw: one(t, [[0.5, 0], [0.56, 0.6], [0.84, 0.6], [0.95, 0]]) }];
+        r.mouth = one(t, [[0, 0], [0.2, 0.3], [0.46, 0.3], [0.55, 1], [0.84, 1], [0.95, 0]]);
+        for (let s = 0; s < 2; s++) {
+          r.leg[s] = e3(t, [[0, [2, 2, 0]], [0.46, [2, 2, 0]], [0.55, [s ? -4 : 6, 14, 0]], [0.84, [s ? -4 : 6, 14, 0]], [1, [2, 2, 0]]]);
+          r.knee[s] = one(t, [[0, 4], [0.46, 4], [0.55, 10], [1, 4]]);
+        }
+        r.carried = 1;
       },
     },
     fx: {
@@ -1504,7 +1513,7 @@ export const BERSERKER: Record<string, SpellVisual> = {
       },
       impact: { secs: 1.1, draw: (k, u) => {
         const b = k.caster;
-        k.pillar(b, { r: 9, h: 90, alpha: 0.75 * flashOf(u, 0.06), main: DARK_FIRE.main, deep: DARK_FIRE.deep, core: DARK_FIRE.core });
+        k.pillar(b, { r: 9, h: 55, alpha: 0.75 * flashOf(u, 0.06), main: DARK_FIRE.main, deep: DARK_FIRE.deep, core: DARK_FIRE.core });
         sawRing(k, b, 0.35 + 1.5 * easeOut(u), { teeth: 44, alpha: 1 - smooth(seg(u, 0.3, 1)), tooth: 0.2, wide: 0.15, main: DARK_FIRE.main, deep: DARK_FIRE.deep, turn: -u * 0.5 });
         cracks(k, b, 0.75, { n: 6, grow: 1, heat: 0.8 * (1 - u), salt: 7, width: 2.2 });
         eyes(k, 1);
@@ -1520,7 +1529,7 @@ export const BERSERKER: Record<string, SpellVisual> = {
           const secs = Math.round(k.fx.secs ?? all);
           crown(k, k.at(b, 1.22), secs, left / all, age, a);
           eyes(k, a);
-          k.glow(k.weaponAt(5), 4, 0.8 * a, k.pal.core);
+          k.glow(axeHead(k), 4, 0.8 * a, k.pal.core);
           if (!k.fast) k.emit(k.at(b, 0.6), 10 * a, { kind: 'ember', colour: [DARK_FIRE.core, k.pal.main], size: 1.8, life: [0.4, 0.8], speed: [0.05, 0.2], up: [14, 26], gravity: 0, jitter: 0.15 });
           k.light(b, 3, (0.45 + 0.1 * Math.sin(age * 13)) * a, DARK_FIRE.main);
         },
@@ -1666,4 +1675,40 @@ function crown(k: FxScene, at: P3, n: number, left: number, age: number, a: numb
   k.worldDraw(foot, draw(false), -0.5);
   k.worldDraw(foot, draw(true), 9);
   k.glow(at, 9, 0.5 * a * (0.4 + 0.6 * left));
+}
+
+/*
+ * Each cast is blended in and out here rather than by the framework's own blend
+ * (`blend: false`), for two things that blend must not do to these poses: the
+ * hand goals of `reach` come in by their share where they are, rather than
+ * slid out from the feet, and the weapon stays in the right fist (`carried`
+ * is a hand, nought or one; halfway between is no hand at all). Every other
+ * number is mixed as the framework mixes it.
+ */
+type Mixed = number | boolean | string | Mixed[] | { [k: string]: Mixed } | undefined;
+const copyOf = (v: Mixed): Mixed => (Array.isArray(v) ? v.map(copyOf) : v && typeof v === 'object' ? Object.fromEntries(Object.entries(v).map(([k, x]) => [k, copyOf(x)])) : v);
+function mixOf(from: Mixed, to: Mixed, w: number): Mixed {
+  if (typeof to === 'number') return (typeof from === 'number' ? from : 0) + (to - (typeof from === 'number' ? from : 0)) * w;
+  if (Array.isArray(to)) return to.map((x, i) => mixOf(Array.isArray(from) ? from[i] : undefined, x, w));
+  if (to && typeof to === 'object') {
+    const f = from && typeof from === 'object' && !Array.isArray(from) ? from : {};
+    const out: { [k: string]: Mixed } = {};
+    for (const k of Object.keys(to)) out[k] = mixOf(f[k], to[k], w);
+    return out;
+  }
+  return w >= 0.5 ? to : from ?? to;
+}
+for (const v of Object.values(BERSERKER)) {
+  const pose = v.cast.pose, timing = v.cast.timing;
+  v.cast.blend = false;
+  v.cast.pose = (r, t, c) => {
+    const base = copyOf(r as unknown as Mixed);
+    pose(r, t, c);
+    const reach = r.reach;
+    r.reach = undefined;
+    const w = castWeight(t, timing);
+    Object.assign(r, mixOf(base, r as unknown as Mixed, w) as unknown as Rig);
+    if (reach) r.reach = [reach[0] && { ...reach[0], w: (reach[0].w ?? 1) * w }, reach[1] && { ...reach[1], w: (reach[1].w ?? 1) * w }];
+    if (c.carry) r.carried = 1;
+  };
 }

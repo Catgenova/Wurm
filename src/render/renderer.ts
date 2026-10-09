@@ -68,7 +68,7 @@ import { kilnCentre, type PlacedKiln } from '../game/kiln';
 import { furnitureCentre, furnitureDef, type PlacedFurniture, facingOf as pieceFacing, furnitureFootprint } from '../game/furniture';
 import { UNSEEN, VISIBLE } from '../game/vision';
 import { DAWN, DUSK } from '../game/game';
-import { boatSway, clothInWind, crewOrder, deviceOf, drawFurniture, drawFurnitureLive, driverOn, swayOnScreen, steeredByTiller, woodHex, furnitureHoles, helmSeat, reinsTo, rowedPiece, furnitureSpan, FURNITURE_HEIGHT, glowsAtNight, headingView, mossTrim, PIECE_STAGES, pieceView, planterTrim, roseTrim, type Air, type Crew, type PieceView } from './furniture';
+import { boatSway, clothInWind, crewOrder, deviceOf, drawFurniture, drawFurnitureLive, driverOn, swayOnScreen, WHEELS, WHEEL_STEPS, steeredByTiller, woodHex, furnitureHoles, helmSeat, reinsTo, rowedPiece, furnitureSpan, FURNITURE_HEIGHT, glowsAtNight, headingView, mossTrim, PIECE_STAGES, pieceView, planterTrim, roseTrim, type Air, type Crew, type PieceView } from './furniture';
 import { roseStage } from '../game/roses';
 import { fieldRate } from '../game/growth';
 import { dyeOf } from '../game/dyestuffs';
@@ -187,7 +187,7 @@ import { spellInfo } from './spells/info';
 import type { Body as SpellBody, WorldRec as SpellRec } from './spells/kit';
 import type { CastAt } from '../game/events';
 import { lookStep, yearAt } from './foliage';
-import { FIGURE_TOP, figurePicture, type Seat } from './figure';
+import { cartSway, FIGURE_TOP, figurePicture, type Seat } from './figure';
 /**
  * How much larger a beast in the traces is drawn than one loose: enough that
  * a grown orse, the draught beast, stands a quarter again as tall as a body
@@ -259,6 +259,22 @@ export interface Pick {
   down?: boolean;
 }
 
+/** The most spokes a second a cart's wheels are drawn going by (`wheelTurn`). */
+const WHEEL_RATE = 4;
+
+/** A sway on the screen, about `ox`, `oy` (`swayOnScreen` in `./furniture`). */
+interface Swayed { ox: number; oy: number; a: number; b: number; c: number; d: number; up: number }
+/** Draw through a sway from here on, until the canvas is restored. */
+function swayIn(ctx: CanvasRenderingContext2D, w: Swayed): void {
+  ctx.save();
+  ctx.translate(w.ox, w.oy - w.up);
+  ctx.transform(w.a, w.b, w.c, w.d, 0, 0);
+  ctx.translate(-w.ox, -w.oy);
+}
+/** Where a point on the screen goes, drawn through a sway. */
+const swayedAt = (w: Swayed | undefined, x: number, y: number): [number, number] =>
+  w ? [w.ox + w.a * (x - w.ox) + w.c * (y - w.oy), w.oy - w.up + w.b * (x - w.ox) + w.d * (y - w.oy)] : [x, y];
+
 interface Entity {
   kind: 'tree' | 'bush' | 'stump' | 'player' | 'peer' | 'pile' | 'token' | 'crate' | 'creature' | 'campfire' | 'crop' | 'smelter' | 'kiln' | 'furniture' | 'hull' | 'anvil' | 'post' | 'trap' | 'deck' | 'life' | 'waterplant' | 'spell';
   x: number;
@@ -318,11 +334,12 @@ interface Entity {
   /** The part of the screen a body shows in, for one down a hole: the ground in front of the hole hides the rest (`onFlight`). */
   clip?: Array<[number, number]>;
   /**
-   * The roll, pitch and lift of the boat this is or is aboard, as a change to
-   * the screen about her floor contact (`swayOnScreen` in `./furniture`): she
-   * and everybody on her are drawn through the same one, so they move together.
+   * The roll, pitch and lift of the boat this is or is aboard, or the cart, as
+   * a change to the screen about her floor contact (`swayOnScreen` in
+   * `./furniture`): she and everybody on her are drawn through the same one,
+   * so they move together.
    */
-  sway?: { ox: number; oy: number; c: number; d: number; up: number };
+  sway?: Swayed;
 }
 
 /**
@@ -1056,6 +1073,7 @@ export class Renderer {
       const c = this.game.creatures.active();
       return c ? this.spellBody({ kind: 'creature', id: c.id }) : null;
     },
+    near: (x, y, r) => this.spellsNear(x, y, r),
   });
   /** The season and its day, for the trees' look (`./foliage`): read once a frame off the wall clock, as the hud reads it. */
   private year = yearAt(Date.now() / 1000);
@@ -1275,7 +1293,7 @@ export class Renderer {
     // A spell cast, yours or anybody's in sight: drawn from whoever cast it at whatever it was cast at.
     game.events.on('cast', (c) => {
       const by: Who = c.by === null ? { kind: 'player' } : { kind: 'peer', id: c.by };
-      this.spells.play(c.spell, by, this.spellAim(c.at), { mine: c.by === null });
+      this.spells.play(c.spell, by, this.spellAim(c.at), { mine: c.by === null, companion: c.companion, from: c.from });
     });
     game.events.on('reset', () => {
       this.spells.clear();
@@ -3558,6 +3576,8 @@ export class Renderer {
             fe.view = this.viewOf(fu);
             if (fu.rare) fe.rare = fu.rare;
             if (fu.helm || fu.riders?.length || player.aboard === fu.id || this.helming === fu) this.takeAboard(fu, fe, x, y, zoom);
+            // A cart on the move rocks and bumps on the track under her driver, and her driver with her (`cartSwayOf`).
+            if (reinsTo(fu.kind)) fe.sway = this.cartSwayOf(fu, fe.sx, fe.sy, zoom);
           }
           for (const an of this.game.anvilsOnTile(x, y)) {
             const [wx, wy] = anvilCentre(an);
@@ -3649,7 +3669,10 @@ export class Renderer {
         // At a helm on a deck of its own the driver stands there, not in her middle.
         if (drivenBy && furnitureDef(drivenBy.kind).boat?.helm) this.onDeck(pe, drivenBy, this.game.helmSpot(drivenBy), pe.lift, true);
         // Anything else with a seat, on that seat with what is to hand there.
-        else if (drivenBy) this.seatOn(pe, drivenBy, zoom);
+        else if (drivenBy) {
+          this.seatOn(pe, drivenBy, zoom);
+          if (reinsTo(drivenBy.kind)) pe.sway = this.cartSwayOf(drivenBy, cam.worldToScreenX(vx, vy), cam.worldToScreenY(vx, vy, this.pieceBase(drivenBy, vx, vy)), zoom);
+        }
         // A rider, astride.
         else if (up) pe.seat = SADDLE;
       }
@@ -4044,8 +4067,60 @@ export class Renderer {
     // Heeled to the side her sail is out on: the other side from the wind's, which is the sign of her trim.
     const lee = (this.pieceTrim(f) ?? 0.25) < 0 ? 1 : -1;
     const s = boatSway(this.time, w.under, lee, (f.id * 7.31) % 97);
-    const { c, d, up } = swayOnScreen(fe.view, s, zoom);
-    return { at: { heel: s.heel, pitch: s.pitch }, screen: { ox: fe.sx, oy: fe.sy, c, d, up } };
+    return { at: { heel: s.heel, pitch: s.pitch }, screen: { ox: fe.sx, oy: fe.sy, ...swayOnScreen(fe.view, s, zoom) } };
+  }
+
+  /** Whoever has the reins of `f`: me, or somebody else on the island, while they hold them. */
+  private driverOf(f: PlacedFurniture): { moving: boolean; walkPhase: number } | undefined {
+    if (f.driven) return this.game.player;
+    return f.helm ? this.game.roster.list().find((p) => p.uid === f.helm) : undefined;
+  }
+
+  /**
+   * A cart or a wagon on the move, rocking and bumping on the track as her
+   * driver does (`cartSway` in `./figure`, at their clock), as a change to the
+   * screen about her floor contact, for her and her driver both. Nothing for
+   * one stood still.
+   */
+  private cartSwayOf(f: PlacedFurniture, ox: number, oy: number, zoom: number): Swayed | undefined {
+    const by = this.driverOf(f);
+    if (!by?.moving) return undefined;
+    const def = furnitureDef(f.kind);
+    return { ox, oy, ...swayOnScreen(this.viewOf(f), cartSway(by.walkPhase, true), zoom, def.w / Math.max(1, def.h)) };
+  }
+
+  /**
+   * How far round the wheels of a cart or a wagon are, as a share of the turn
+   * from one spoke to the next (`WHEELS` in `./furniture`): from how far she
+   * has come, so they roll as far as she goes and stop where she stops. They
+   * stood still under a cart going along a track. Counted on once a frame,
+   * however often she is drawn in it.
+   */
+  private readonly rolled = new Map<number, { x: number; y: number; turn: number; at: number }>();
+  private wheelTurn(f: PlacedFurniture): number | undefined {
+    const w = WHEELS[f.kind];
+    if (!w) return undefined;
+    const [x, y] = furnitureCentre(f);
+    let r = this.rolled.get(f.id);
+    if (!r) {
+      r = { x, y, turn: 0, at: this.time };
+      this.rolled.set(f.id, r);
+      if (this.rolled.size > 64) for (const [k, v] of this.rolled) if (this.time - v.at > 10) this.rolled.delete(k);
+    }
+    if (r.at !== this.time) {
+      const d = Math.hypot(x - r.x, y - r.y) * UNITS_PER_TILE;
+      /*
+       * A jump -- set down somewhere else, or seen again after a while -- is not rolled. And never faster than
+       * `WHEEL_RATE` spokes a second: at a cart's pace the spokes go by thirty or forty times a second, which drawn
+       * frame by frame is a wheel standing still or turning backwards, as a wheel filmed does.
+       */
+      const spokes = d / ((2 * Math.PI * w.r) / w.spokes), most = WHEEL_RATE * Math.max(0, this.time - r.at);
+      if (d < 2 * UNITS_PER_TILE) r.turn = (r.turn + Math.min(spokes, most)) % 1;
+      r.x = x;
+      r.y = y;
+      r.at = this.time;
+    }
+    return Math.round(r.turn * WHEEL_STEPS) / WHEEL_STEPS;
   }
 
   /** Somebody on `f`, drawn at `wx`, `wy` on her rather than where they sort, `lift` up. */
@@ -4308,7 +4383,38 @@ export class Renderer {
     return {
       x: cr.x, y: cr.y, z: game.laidOver(Math.floor(cr.x), Math.floor(cr.y)) ?? this.footAt(cr.x, cr.y), tall, wide: 5 * rarityOf(cr).size,
       facing: this.beastFacing.get(cr.id) ?? 0, kind: 'creature',
+      // What is on it that the payload says: a burn or a bleed still running, a trap holding it.
+      burning: (cr.burnUntil ?? 0) > game.time, bleeding: cr.bleedRate > 0 && cr.bleedUntil > game.time, held: cr.trapped != null,
     };
+  }
+
+  /** Everybody and everything within `r` tiles of a point, for an area spell to find what it covers (`FxScene.bodiesWithin`). */
+  private spellsNear(x: number, y: number, r: number): SpellBody[] {
+    const game = this.game;
+    const out: SpellBody[] = [];
+    const add = (w: Who, wx: number, wy: number): void => {
+      // A little over, for a body's middle moving on before the stage measures it again.
+      if (Math.hypot(wx - x, wy - y) > r + 0.5) return;
+      const b = this.spellBody(w);
+      if (!b) return;
+      b.who = w;
+      out.push(b);
+    };
+    add(PLAYER_CASTS, game.player.x, game.player.y);
+    for (const peer of game.roster.list()) {
+      const [px, py] = game.roster.drawnAt(peer);
+      add({ kind: 'peer', id: peer.id }, px, py);
+    }
+    for (const cr of game.creatures.list.values()) add({ kind: 'creature', id: cr.id }, cr.x, cr.y);
+    return out;
+  }
+
+  /** How far off where they stand somebody is drawn while a spell carries them (`SpellStage.shiftOf`), in the screen's pixels. */
+  private spellShift(w: Who): [number, number] {
+    const sh = this.spells.shiftOf(w);
+    if (!sh) return [0, 0];
+    const cam = this.camera;
+    return [cam.worldToScreenX(sh.x, sh.y) - cam.worldToScreenX(0, 0), cam.worldToScreenY(sh.x, sh.y, 0) - cam.worldToScreenY(0, 0, 0)];
   }
 
   /** Somebody turned to face what they are casting at, unless they are walking somewhere. */
@@ -4327,8 +4433,10 @@ export class Renderer {
    * checking how a spell looks (`wurm.spell` in the console). At what is
    * under the cursor -- a creature, somebody, the ground -- unless told, or
    * at yourself for a spell cast only on yourself. Nothing is sent to anybody.
+   * `from` plays it as though the island had just moved you there from that
+   * spot (a Lunge); `companion` as though that creature were your companion.
    */
-  playSpell(spell: string, at?: CastAt): boolean {
+  playSpell(spell: string, at?: CastAt, opts: { from?: { x: number; y: number }; companion?: number } = {}): boolean {
     const info = spellInfo(spell);
     const hover = this.hover;
     const p = this.game.player;
@@ -4341,7 +4449,7 @@ export class Renderer {
       aim = peer ? { kind: 'peer', id: peer.id } : { kind: 'self' };
     } else if (hover) aim = { kind: 'spot', x: hover.wx, y: hover.wy };
     else aim = { kind: 'spot', x: p.x + p.dirX * 3, y: p.y + p.dirY * 3 };
-    return this.spells.play(spell, PLAYER_CASTS, this.spellAim(aim), { mine: true });
+    return this.spells.play(spell, PLAYER_CASTS, this.spellAim(aim), { mine: true, ...opts });
   }
 
   /** What a cast was at, as the stage takes it. */
@@ -4386,11 +4494,7 @@ export class Renderer {
       }
       // A boat on the water, and whoever is aboard her, drawn as she rolls and pitches (`swayOf`).
       if (ent.sway) {
-        const w = ent.sway;
-        ctx.save();
-        ctx.translate(w.ox, w.oy - w.up);
-        ctx.transform(1, 0, w.c, w.d, 0, 0);
-        ctx.translate(-w.ox, -w.oy);
+        swayIn(ctx, ent.sway);
         swayed = true;
       }
       if (ent.kind === 'life') {
@@ -4406,7 +4510,9 @@ export class Renderer {
       const hovering = this.isHovered(ent);
       if (ent.kind === 'player') {
         const struck = this.flashOf(player.attackedAt);
-        const ex = ent.sx + (ent.drawDx ?? 0), ey = ent.sy + (ent.drawDy ?? 0);
+        // Carried from where a spell found you to where the island put you (a Lunge), while its cast plays.
+        const [shx, shy] = this.spellShift(PLAYER_CASTS);
+        const ex = ent.sx + (ent.drawDx ?? 0) + shx, ey = ent.sy + (ent.drawDy ?? 0) + shy;
         // Where your feet are on the screen, for the ring the swing in hand is drawn as (`drawFight`).
         this.feetAt = { x: ex, y: ey - (ent.lift ?? 0) };
         this.clipTo(ctx, ent.clip);
@@ -4436,18 +4542,20 @@ export class Renderer {
         // What this body last said, over its own head. No name drawn under it,
         // so the bubble sits where a peer's name would be.
         const mine = this.game.saidAloud;
-        if (mine) this.overCellar(() => this.speechBubble(ctx, zoom, ex, ey - (ent.lift ?? 0) - FIGURE_TOP * zoom, mine.text, mine.at));
+        if (mine) this.words(ctx, ent.sway, ex, ey - (ent.lift ?? 0) - FIGURE_TOP * zoom, (x, y) => this.speechBubble(ctx, zoom, x, y, mine.text, mine.at));
         continue;
       }
       if (ent.kind === 'peer' && ent.peer) {
         const peer = ent.peer;
         // Somebody on a deck is drawn at their place on it, lifted to it; see `takeAboard`.
-        const ex = ent.sx + (ent.drawDx ?? 0), ey = ent.sy + (ent.drawDy ?? 0) - (ent.lift ?? 0);
+        const [shx, shy] = this.spellShift({ kind: 'peer', id: peer.id });
+        const ex = ent.sx + (ent.drawDx ?? 0) + shx, ey = ent.sy + (ent.drawDy ?? 0) - (ent.lift ?? 0) + shy;
         // The same box a creature catches clicks with, because it is the same
         // figure at the same size. Without one, the only thing you could ever
         // do to another person was walk to the tile they were standing on.
         if (peer.uid) {
-          this.peerHits.push({ x: ent.x, y: ent.y, left: ex - 10 * zoom, top: ey - (FIGURE_TOP - 2) * zoom, w: 20 * zoom, h: FIGURE_TOP * zoom, peer: peer.uid });
+          const [hx, hy] = swayedAt(ent.sway, ex, ey);
+          this.peerHits.push({ x: ent.x, y: ent.y, left: hx - 10 * zoom, top: hy - (FIGURE_TOP - 2) * zoom, w: 20 * zoom, h: FIGURE_TOP * zoom, peer: peer.uid });
         }
         peer.facing = this.facingOnScreen(peer.dirX, peer.dirY, peer.facing);
         this.clipTo(ctx, ent.clip);
@@ -4473,10 +4581,9 @@ export class Renderer {
         );
         if (ent.clip) ctx.restore();
         // Somebody else is only somebody else if you can tell which one.
-        if (zoom >= 0.5) this.overCellar(() => {
+        if (zoom >= 0.5) this.words(ctx, ent.sway, ex, ey - (FIGURE_TOP + 1) * zoom, (ex, ty) => {
           ctx.textAlign = 'center';
           ctx.textBaseline = 'alphabetic';
-          const ty = ey - (FIGURE_TOP + 1) * zoom;
           ctx.strokeStyle = 'rgba(10,10,12,0.85)';
           ctx.lineWidth = 3;
           ctx.font = `${Math.round(11 * zoom)}px system-ui, sans-serif`;
@@ -4510,7 +4617,7 @@ export class Renderer {
         // while they dig reads top to bottom: what they said, what they are
         // doing, who they are.
         const said = peer.said;
-        if (said) this.overCellar(() => this.speechBubble(ctx, zoom, ex, ey - (FIGURE_TOP + 17) * zoom, said, peer.saidAt ?? 0));
+        if (said) this.words(ctx, ent.sway, ex, ey - (FIGURE_TOP + 17) * zoom, (x, y) => this.speechBubble(ctx, zoom, x, y, said, peer.saidAt ?? 0));
         continue;
       }
       if (ent.kind === 'creature' && ent.creature) {
@@ -5358,6 +5465,24 @@ export class Renderer {
    * at a time, and a flight standing in a nearer line went on over a name
    * that stood up into it.
    */
+  /**
+   * Words over somebody -- a name, what they said -- drawn level and square
+   * at `x`, `y` on the screen. Aboard a boat they were drawn through her
+   * sway with her, so a name leant and squashed with her heel: now only where
+   * they go moves with her (`swayedAt`), and they are drawn out of it.
+   */
+  private words(ctx: CanvasRenderingContext2D, sway: Swayed | undefined, x: number, y: number, draw: (x: number, y: number) => void): void {
+    const [ax, ay] = swayedAt(sway, x, y);
+    if (!sway || this.inCellarPass) {
+      this.overCellar(() => draw(ax, ay));
+      return;
+    }
+    // Out of her sway, which is the last thing put on the canvas (`drawEntities`), and back into it after.
+    ctx.restore();
+    draw(ax, ay);
+    swayIn(ctx, sway);
+  }
+
   private overCellar(draw: () => void): void {
     if (this.inCellarPass) this.cellarWords.push(draw);
     else draw();
@@ -12946,6 +13071,8 @@ export class Renderer {
   }
 
   private pieceTrim(f: PlacedFurniture): number | undefined {
+    // A cart's or a wagon's wheels, as far round as she has rolled.
+    if (WHEELS[f.kind]) return this.wheelTurn(f);
     // A rowing boat somebody is rowing has her oars out in their hands, not shipped in her.
     if (rowedPiece(f.kind)) return f.driven || f.helm ? 1 : 0;
     // A lantern post or pillar, with its lantern in it or without (`lamps.ts`).
