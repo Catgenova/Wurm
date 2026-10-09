@@ -97,7 +97,7 @@ import { PAIR_RANGE, GROOM_CAP, GROOM_HEAL, TIER_LEVEL } from '../src/game/husba
 import { BLOW_SHARE, BREED_REST, GESTATION } from '../src/game/creatures';
 import { REST_CAP, REST_MULT, REST_PER_SECOND } from '../src/game/boons';
 import { DAWN, DUSK, DAY_SECONDS, CARRY_BASE, CARRY_PER_STRENGTH, CARRY_STOP } from '../src/game/game';
-import { CARRY_CRAWL } from '../src/game/player';
+import { BASE_SPEED, CARRY_CRAWL } from '../src/game/player';
 import { RELICS, DIGGABLE } from '../src/game/archaeology';
 import { isSeam } from '../src/world/tiles';
 import { CHIP_CHANCE, GRASS_PLANT, KIT_MEND, MOSS_PLANT, TRY_LEARN } from '../src/game/actions';
@@ -1620,6 +1620,13 @@ for (const [fn, v] of [
    */
   ['carry_base', CARRY_BASE], ['carry_per_strength', CARRY_PER_STRENGTH], ['carry_stop', CARRY_STOP],
   ['carry_crawl', CARRY_CRAWL],
+  /*
+   * And the walk itself, which `travel_speed` and so every allowance `rpc_move`
+   * gives a body on foot is reckoned from. It was 2.4, written out by hand in
+   * the riding migration; the browser's is the pace the figure's own legs
+   * carry it (`BASE_SPEED`), and the island holds a body to the same one.
+   */
+  ['base_speed', BASE_SPEED],
   ['hunger_rate', HUNGER_RATE], ['thirst_rate', THIRST_RATE],
   ['say_max', SAY_MAX], ['say_a_minute', SAY_A_MINUTE],
   ['wind_rest', WIND_REST], ['wind_walk', WIND_WALK], ['wind_per_level', WIND_PER_LEVEL],

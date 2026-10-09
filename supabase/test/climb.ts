@@ -20,7 +20,7 @@
  */
 import { execFileSync } from 'node:child_process';
 import { Game } from '../../src/game/game';
-import { CLIMB_LEARN, CLIMB_LEARN_FROM, CLIMB_LEARN_STEEP, MAX_STEP } from '../../src/game/player';
+import { BASE_SPEED, CLIMB_LEARN, CLIMB_LEARN_FROM, CLIMB_LEARN_STEEP, MAX_STEP } from '../../src/game/player';
 import { TileType } from '../../src/world/tiles';
 
 const psql = (sql: string): string =>
@@ -107,16 +107,21 @@ const worth = (c: number): number | null => (c > MAX_STEP * CLIMB_LEARN_FROM ? C
  * The browser tells the island where it is once a second at most, so the
  * island sees a walk as the straight line between two places and pays for the
  * steps along it. Ten seconds since the last move, so the pull-back lets the
- * whole of it stand.
+ * whole of it stand: as many words as it takes to cover the walk at what ten
+ * seconds lets a walking pace go (`rpc_move`), each ten seconds after the last.
  */
 const climbing = (): number => Number(psql(`select skill_of(${W}, ${IVAR}, 'climbing')`));
 const walkIsland = (x0: number, y0: number, x1: number, y1: number, level = 0): { was: number; now: number; at: string } => {
-  psql(`update player set x = ${x0}, y = ${y0}, level = ${level}, moved_at = now() - interval '10 seconds', away = false
-          where world_id = ${W} and uid = ${IVAR};`);
+  psql(`update player set x = ${x0}, y = ${y0}, level = ${level}, away = false where world_id = ${W} and uid = ${IVAR};`);
   const was = climbing();
-  const went = JSON.parse(psql(`
-    select set_config('request.jwt.claims', json_build_object('sub', ${IVAR})::text, false) \\g /dev/null
-    select rpc_move(${W}, ${x1}, ${y1}, ${level})::text;`).split('\n').pop()!) as { x: number; y: number };
+  const words = Math.ceil(Math.hypot(x1 - x0, y1 - y0) / (BASE_SPEED * 10 * 1.6));
+  let went = { x: x0, y: y0 };
+  for (let k = 1; k <= words; k++) {
+    psql(`update player set moved_at = now() - interval '10 seconds' where world_id = ${W} and uid = ${IVAR};`);
+    went = JSON.parse(psql(`
+      select set_config('request.jwt.claims', json_build_object('sub', ${IVAR})::text, false) \\g /dev/null
+      select rpc_move(${W}, ${x0 + ((x1 - x0) * k) / words}, ${y0 + ((y1 - y0) * k) / words}, ${level})::text;`).split('\n').pop()!) as { x: number; y: number };
+  }
   return { was, now: climbing(), at: `${went.x},${went.y}` };
 };
 

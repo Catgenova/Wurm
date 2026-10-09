@@ -39,6 +39,7 @@
  *   * and an answer that comes back after a newer word went changes nothing.
  */
 import { Island, MOVE_EVERY, MOVE_LOST, type PlayerRow } from '../../src/net/island';
+import { BASE_SPEED } from '../../src/game/player';
 
 const ok: string[] = [];
 const bad: string[] = [];
@@ -54,8 +55,8 @@ const clock = (): number => performance.now() - t0;
 const HEAD = '10,10';
 const FOOT = '10,9';
 const tileOf = (x: number, y: number): string => `${Math.floor(x)},${Math.floor(y)}`;
-/** A walking pace, in tiles a second, as the island allows a body that walks (`travel_speed`). */
-const WALK = 2.4;
+/** A walking pace, in tiles a second, as the island allows a body that walks (`travel_speed`, `base_speed`). */
+const WALK = BASE_SPEED;
 
 /*
  * The keeper. Each call reaches it after the first of its two delays and is
@@ -229,7 +230,7 @@ for (const [label, legs] of [
   link = (n) => (n === 0 ? [1600, 40] : [5, 5]);
   let isle = ashore(10.5, 15.5, 0);
   await play([
-    [0, () => go(isle, 10.5, 14.3, 0, 100, false)],
+    [0, () => go(isle, 10.5, 13.6, 0, 100, false)],
     [1.4, () => go(isle, 10.5, 10.98, 0, 101.4, true)],
     [1.45, () => go(isle, 10.5, 9.9, -1, 101.45, true)],
     [2.6, () => go(isle, 10.5, 8.4, -1, 102.6, false)],
@@ -243,7 +244,7 @@ for (const [label, legs] of [
 
   isle = ashore(10.5, 4.5, -1);
   await play([
-    [0, () => go(isle, 10.5, 5.7, -1, 100, false)],
+    [0, () => go(isle, 10.5, 6.4, -1, 100, false)],
     [1.4, () => go(isle, 10.5, 9.02, -1, 101.4, true)],
     [1.45, () => go(isle, 10.5, 10.02, 0, 101.45, true)],
     [2.6, () => go(isle, 10.5, 11.2, 0, 102.6, false)],
@@ -303,7 +304,7 @@ for (const [label, legs] of [
 }
 
 /*
- * Thirty seconds of walking east at 2.4 tiles a second, the game's clock
+ * Thirty seconds of walking east at a walking pace, the game's clock
  * running `fast` times the link's, so the walk takes thirty seconds over that.
  * Then ten seconds of standing at the end of it, as the game goes on calling
  * `move` every frame whether the body moves or not.

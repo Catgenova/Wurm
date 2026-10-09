@@ -409,10 +409,23 @@ const moves: Array<[string, number, number, number, number, number, number, stri
   ['while up onto it from its foot is taken', 23.5, 44.5, -1, 24.5, 44.5, 0, '24,44@0'],
   ['and down off it onto its foot', 24.5, 44.5, 0, 23.5, 44.5, -1, '23,44@-1'],
 ];
+/*
+ * By now Dane has the whole of the cellar's dirt and rock in his pack, half
+ * again past what his back takes, and a body that laden creeps at a twentieth
+ * of a walk (`carry_crawl`): at the pace his legs carry him that is less than a
+ * tile in the ten seconds the island counts at most, and every step below would
+ * be pulled short of the flight. These are about the way down and not the
+ * load, so his back is made strong enough for them, and put back after.
+ */
+const strength = val(`coalesce((select value::text from skill where world_id = ${W} and uid = ${DANE} and id = 'body_strength'), 'none')`);
+psql(`delete from skill where world_id = ${W} and uid = ${DANE} and id = 'body_strength';
+      insert into skill (world_id, uid, id, value) values (${W}, ${DANE}, 'body_strength', 10000);`);
 const wrongMoves = moves.filter(([, x0, y0, l0, x1, y1, l1, want]) => theirMove(x0, y0, l0, x1, y1, l1) !== want);
 check('the island holds a body to the cellar floor and its way down the same way', wrongMoves.length === 0,
   wrongMoves.length ? wrongMoves.map(([s, x0, y0, l0, x1, y1, l1]) => `${s}: ${theirMove(x0, y0, l0, x1, y1, l1)}`).join('; ')
     : moves.map(([s]) => s).join('; '));
+psql(`delete from skill where world_id = ${W} and uid = ${DANE} and id = 'body_strength';
+      ${strength === 'none' ? '' : `insert into skill (world_id, uid, id, value) values (${W}, ${DANE}, 'body_strength', ${strength});`}`);
 
 /* ---- nothing let go of over the stairwell ------------------------------------------ */
 const plank = { kind: 'item', uid: Number(psql(`insert into item (world_id, holder, holder_uid, def, ql, count)

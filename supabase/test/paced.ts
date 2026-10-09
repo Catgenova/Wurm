@@ -17,6 +17,10 @@
  * the first thing measured here: **at a walk, every one of them is what it
  * was, bit for bit.** Only a run is new.
  *
+ * **A planted foot slid.** The walk was quicker than the legs drawn under
+ * it, more than five times; it is the legs' own pace now, and a jog and a
+ * run take the longer strides they are drawn with, measured off the figure.
+ *
  * **The cutaway was per-building.** Step inside a longhouse and every near
  * wall of the whole house faded, the far bedroom's included, though nothing
  * in the bedroom stood between you and anything. Rooms exist now, so the
@@ -27,7 +31,10 @@
 import { Buildings, bordersRoom, borderOf, tileKey, type Side } from '../../src/game/building';
 import { gaitLift, gaitPitch, gaitSin, type Moving } from '../../src/render/sprites';
 import { Gaits } from '../../src/render/gait';
-import { BASE_SPEED } from '../../src/game/player';
+import { BASE_SPEED, CADENCE, gaitAt, phasePerTile, RIDE_PHASE, STRIDE as STRIDES } from '../../src/game/player';
+import { figureJoint, type FigurePose, type V3 } from '../../src/render/figure';
+import { DEFAULT_LOOK, type Look } from '../../src/game/look';
+import { UNITS_PER_TILE } from '../../src/render/iso';
 
 const ok: string[] = [];
 const bad: string[] = [];
@@ -150,6 +157,79 @@ check('and it leans at the ground ahead of it rather than away from it',
     g.of('t', 400, 400, 1 / 60) === 0, 'a jump is a move, not a speed');
 }
 
+/* ---- and a foot on the ground stays where it was put ---------------------- */
+
+/*
+ * The walk was 2.4 tiles a second and the legs drawn under it carried a
+ * body about a fifth of that, so every planted foot skated forward under
+ * every step, more than half a tile a stride. The pace is the legs' now: a
+ * person goes over the ground exactly as fast as a foot on it sweeps back
+ * under them, at a walk, a jog and a run. Measured here off the figure
+ * itself, so that a change to the keyed stride that is not carried into
+ * `STRIDE` fails here rather than on somebody's screen.
+ */
+{
+  const BUILDS = ['woman', 'man', 'neither'] as const;
+  const HEEL: V3 = [0, -0.58, -0.75];
+  const TOE: V3 = [0, 1.72, -0.75];
+  const pose = (phase: number, gait: number, gender: string): FigurePose =>
+    ({ phase, moving: true, gait, facing: 2, swimming: false, working: false, look: { ...DEFAULT_LOOK, gender } as Look });
+  /** Where the left foot meets the ground, ahead of the body's middle, rolling from heel to toe; null in the air. */
+  const contact = (phase: number, gait: number, gender: string): number | null => {
+    const p = pose(phase, gait, gender);
+    const h = figureJoint(p, 'ankle0', HEEL);
+    const t = figureJoint(p, 'ankle0', TOE);
+    if (Math.min(h[2], t[2]) >= 0.03) return null;
+    return h[2] < 0.03 ? h[1] : t[1] - (TOE[1] - HEEL[1]);
+  };
+  /** How far the ground goes back under a planted foot in a whole stride, in the figure's units: a line fitted through its stance. */
+  const stride = (gait: number, gender: string): number => {
+    const N = 192;
+    const at = Array.from({ length: N }, (_, i) => contact((i / N) * TAU, gait, gender));
+    const start = at.findIndex((c, i) => c !== null && at[(i + N - 1) % N] === null);
+    const pts: Array<[number, number]> = [];
+    for (let j = start; at[j % N] !== null && j < start + N; j++) pts.push([j, at[j % N]!]);
+    const mx = pts.reduce((a, q) => a + q[0], 0) / pts.length;
+    const my = pts.reduce((a, q) => a + q[1], 0) / pts.length;
+    const sxy = pts.reduce((a, q) => a + (q[0] - mx) * (q[1] - my), 0);
+    const sxx = pts.reduce((a, q) => a + (q[0] - mx) ** 2, 0);
+    return (-sxy / sxx) * N;
+  };
+  const off = STRIDES.map((s, i) => {
+    const g = i / (STRIDES.length - 1);
+    return Math.abs(BUILDS.reduce((a, b) => a + stride(g, b), 0) / BUILDS.length - s * UNITS_PER_TILE);
+  });
+  check('the stride the pace is reckoned from is the one the figure\'s legs take, at every gait',
+    Math.max(...off) < 0.05, `${STRIDES.length} gaits, worst ${Math.max(...off).toFixed(3)} of a unit from the figure`);
+  check('and at a walk the legs go at the cadence they always did',
+    Math.abs(BASE_SPEED * phasePerTile(BASE_SPEED) - CADENCE) < 1e-9, `${CADENCE} radians a second at ${BASE_SPEED.toFixed(3)} tiles a second`);
+
+  /** The most a planted foot moves over the ground while it is down, going steadily at `speed` with the walk's phase at `perTile` a tile. */
+  const slide = (speed: number, perTile: number, gender: string, g = gaitAt(speed)): number => {
+    const N = 768;
+    const dt = (2 * TAU) / (speed * perTile) / N;
+    let worst = 0;
+    let down: number[] = [];
+    for (let i = 0; i <= N; i++) {
+      const c = contact(speed * perTile * i * dt, g, gender);
+      if (c !== null) down.push(speed * i * dt * UNITS_PER_TILE + c);
+      if ((c === null || i === N) && down.length) {
+        if (down.length > 4) worst = Math.max(worst, Math.max(...down) - Math.min(...down));
+        down = [];
+      }
+    }
+    return worst;
+  };
+  for (const [what, k] of [['a walk', 1], ['a jog', 1.45], ['a flat run', 1.85], ['well past a run', 2.6]] as const) {
+    const worstNow = Math.max(...BUILDS.map((b) => slide(k * BASE_SPEED, phasePerTile(k * BASE_SPEED), b)));
+    check(`at ${what} a planted foot stays planted`, worstNow < 0.4,
+      `${k} times a walk: ${worstNow.toFixed(2)} of a unit at worst over a stance, out of a stride of ${(STRIDES[0] * UNITS_PER_TILE).toFixed(1)}`);
+  }
+  // And what it was, so the measure is seen to measure something: the old pace at a walk, and the clock that went with it.
+  const was = Math.max(...BUILDS.map((b) => slide(2.4, RIDE_PHASE, b, 0)));
+  check('where the old walk slid a planted foot further than a whole stride', was > 10, `${was.toFixed(1)} units over a stance at 2.4 tiles a second`);
+}
+
 /* ---- and a wall knows which room you are in ------------------------------- */
 
 /*
@@ -195,4 +275,4 @@ if (bad.length) {
   console.error(`${bad.length} of ${ok.length + bad.length} are not what they should be`);
   process.exit(1);
 }
-console.log(`a run is not a fast walk, and a wall knows whose room it is in — ${ok.length} of ${ok.length}`);
+console.log(`a run is not a fast walk, a planted foot stays planted, and a wall knows whose room it is in — ${ok.length} of ${ok.length}`);

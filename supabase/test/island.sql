@@ -3529,9 +3529,10 @@ select act_perform(:'world2', :'ivar', 'mount_creature',
   ('{"kind":"creature","id":' || :'horse' || '}')::jsonb) \g /dev/null
 select '460. ' || (select text from event where uid = :'ivar' and kind = 'event' order by n desc limit 1);
 /*
- * A green horse is no quicker than walking, and that is the browser's own
- * arithmetic rather than a slip: `footing` is 0.9 until something has been
- * learned on bad ground. What a horse is worth having is what it learns.
+ * A green horse goes at its kind's pace times a `footing` of 0.9 until
+ * something has been learned on bad ground, which is the browser's own
+ * arithmetic rather than a slip; your own legs go at the pace they are drawn
+ * carrying you (`base_speed`). What a horse is worth having is what it learns.
  */
 select '461. how fast the island will believe you: ' || round(base_speed()::numeric, 2)
      || ' tiles a second on your own legs, and ' || round(travel_speed(:'world2', :'ivar')::numeric, 2)

@@ -1,5 +1,6 @@
 import type { PeerId, PeerState } from '../net/protocol';
 import { tileKey } from './tileindex';
+import { CADENCE, phasePerTile } from './player';
 
 /** Handed back for a tile nobody is standing on, so the common answer is free. */
 const NOBODY: readonly Peer[] = [];
@@ -35,8 +36,23 @@ export interface Peer extends PeerState {
   fromY: number;
   /** How long that walk should take, in seconds: the gap actually observed. */
   span: number;
-  /** Their own walk cycle, so their legs move at their own pace. */
+  /**
+   * Their own walk cycle, counted by the clock at a walk's `CADENCE` as it
+   * always was: what times the rock of a seat or a saddle under them.
+   */
   walkPhase: number;
+  /**
+   * And on their own feet, counted by the ground they are drawn covering: a
+   * stride for every stride's worth (`phasePerTile`), so a foot they put down
+   * stays where it was put however fast they go. It was the clock alone, which
+   * kept up at exactly a walk and nowhere else -- on a road, under a spell or
+   * wading, their feet skated.
+   */
+  stepPhase: number;
+  /** How fast they are drawn going, in tiles a second, smoothed, for the stride that pace is drawn at; and where they were drawn last frame. */
+  pace: number;
+  drawnX: number;
+  drawnY: number;
   /**
    * And which of the eight ways they are drawn turned, kept here for the same
    * reason: it is worked out from a heading that can sit on the line between
@@ -78,6 +94,9 @@ export const saidWords = (line: string): string => line.replace(/^<[^>]*>\s*/, '
 
 /** How far out of step a peer must be before they are snapped rather than walked. */
 const TELEPORT = 6;
+
+/** How quickly a peer's drawn pace follows what it is drawn doing, a second: as slowly as the gait it is drawn at (`EASE` in `../render/gait`). */
+const PACE_EASE = 4;
 
 /**
  * One clock, read here and nowhere else.
@@ -136,7 +155,7 @@ export class Roster {
     if (state.id === this.self) return;
     const had = this.peers.get(state.id);
     if (!had) {
-      this.peers.set(state.id, { ...state, at: now, fromX: state.x, fromY: state.y, span: 0, walkPhase: 0, facing: 1 });
+      this.peers.set(state.id, { ...state, at: now, fromX: state.x, fromY: state.y, span: 0, walkPhase: 0, facing: 1, stepPhase: 0, pace: 0, drawnX: state.x, drawnY: state.y });
       return;
     }
     /*
@@ -203,7 +222,16 @@ export class Roster {
         p.fromY += (p.y - p.fromY) * t;
         if (t >= 1) p.span = 0;
       }
-      if (p.moving) p.walkPhase += dt * 11;
+      if (p.moving) p.walkPhase += dt * CADENCE;
+      // A frame's walk, and not a jump to where somebody turned up after a gap in the word.
+      const [x, y] = this.drawnAt(p);
+      const gone = Math.hypot(x - p.drawnX, y - p.drawnY);
+      p.drawnX = x;
+      p.drawnY = y;
+      if (gone < 1 && dt > 0) {
+        p.pace += (gone / dt - p.pace) * Math.min(1, PACE_EASE * dt);
+        if (p.moving) p.stepPhase += gone * phasePerTile(p.pace);
+      }
       const key = tileKey(Math.floor(p.x), Math.floor(p.y));
       let at = this.byTile.get(key);
       if (!at) {
