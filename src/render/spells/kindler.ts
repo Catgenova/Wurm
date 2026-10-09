@@ -1328,7 +1328,7 @@ function scaldSheet(k: FxScene, from: P3, to: P3, u: number, lift: number): void
   for (let i = 0; i <= n; i++) {
     const f = i / n;
     mid.push(arcAt(from, to, lerp(tail, u, f), lift));
-    wide.push((0.02 + 0.3 * f * f * (0.5 + 0.5 * u)) * (1 + 0.22 * Math.sin(k.now * 17 + i * 2.3)));
+    wide.push((0.02 + 0.22 * f * f * (0.5 + 0.5 * u)) * (1 + 0.25 * Math.sin(k.now * 17 + i * 2.3)));
   }
   const at = (p: P3, w: number, up: number): [number, number] => {
     const q = { x: p.x + side.x * w, y: p.y + side.y * w, z: p.z + up };
@@ -1341,7 +1341,10 @@ function scaldSheet(k: FxScene, from: P3, to: P3, u: number, lift: number): void
   const tips: P3[] = [];
   const outline: Array<[number, number]> = [];
   // As thick as it is wide, near enough, so seen edge on it is still a body of liquid and not a line.
-  const thick = (w: number): number => w * UNITS_PER_TILE * 0.4;
+  // Turned so its width across and its thickness add on the screen rather than cancel: seen side on, the side that is
+  // lower on the screen is the lower edge too.
+  const lower = k.sy({ x: head.x + side.x * 0.1, y: head.y + side.y * 0.1, z: head.z }) > k.sy(head) ? -1 : 1;
+  const thick = (w: number): number => w * UNITS_PER_TILE * 0.3 * lower;
   for (let i = 0; i <= n; i++) outline.push(at(mid[i], wide[i], thick(wide[i])));
   // The front: rounded and lumpy, bulging out ahead, the drops it sheds coming off its lumps.
   const W = wide[n];
