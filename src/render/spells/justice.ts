@@ -21,10 +21,10 @@
 import type { CastPose, SpellVisual } from './index';
 import { spellInfo } from './info';
 import {
-  arcAt, bump, clamp, easeBack, easeIn, easeOut, flashOf, glowPicture, hashOf, lerp, mid3, seg, smooth, TAU,
+  arcAt, bump, clamp, easeBack, easeIn, easeOut, flashOf, hashOf, lerp, mid3, seg, smooth, TAU,
   type Body, type FxScene, type P3, type SpellPalette,
 } from './kit';
-import { weaponCarry } from '../figure';
+import type { HandShape } from '../figure';
 import { euler, one } from './poses';
 
 /** The scales: silver blue and a pale violet. */
@@ -335,47 +335,47 @@ function square(k: FxScene, c: { x: number; y: number }, half: number, o: { band
   const a = o.alpha ?? 1;
   if (half <= 0.02 || a <= 0.01) return;
   const band = Math.min(half * 0.6, o.band ?? 0.08);
-  const corner = (r: number): Pt[] => [[-1, -1], [1, -1], [1, 1], [-1, 1]].map(([i, j]) => {
-    const x = c.x + i * r, y = c.y + j * r;
-    return [k.eye.worldToScreenX(x, y), k.eye.worldToScreenY(x, y, k.ground(x, y) + 0.15)] as Pt;
-  });
-  const out = corner(half), inn = corner(half - band);
-  const mid = [k.eye.worldToScreenX(c.x, c.y), k.eye.worldToScreenY(c.x, c.y, k.ground(c.x, c.y))];
+  const corner = (r: number, i: number): [number, number] => [c.x + SQUARE_CORNERS[i][0] * r, c.y + SQUARE_CORNERS[i][1] * r];
+  const midY = k.eye.worldToScreenY(c.x, c.y, 0);
+  const drawn = clamp(o.draw ?? 1);
+  // Laid as shapes on the island, a side at a time as it is drawn on: the near two sides in the lit tone, the far two shaded.
+  const near: number[][] = [], far: number[][] = [];
+  for (let i = 0; i < 4; i++) {
+    const u = clamp(drawn * 4 - i);
+    if (u <= 0) continue;
+    const j = (i + 1) % 4;
+    const [o0x, o0y] = corner(half, i), [o1x, o1y] = corner(half, j);
+    const [i0x, i0y] = corner(half - band, i), [i1x, i1y] = corner(half - band, j);
+    const side = [o0x, o0y, lerp(o0x, o1x, u), lerp(o0y, o1y, u), lerp(i0x, i1x, u), lerp(i0y, i1y, u), i0x, i0y];
+    (k.eye.worldToScreenY((o0x + o1x) / 2, (o0y + o1y) / 2, 0) > midY ? near : far).push(side);
+  }
+  const studs: number[][] = [];
+  if (o.studs !== false && drawn >= 1) {
+    const r = Math.max(0.04, band * 0.75);
+    for (let i = 0; i < 4; i++) {
+      const [x, y] = corner(half, i);
+      studs.push([x - r, y, x, y - r, x + r, y, x, y + r]);
+    }
+  }
   const { core, main, deep, ink } = k.pal;
   const iw = inkOf(k);
-  const drawn = clamp(o.draw ?? 1);
-  k.groundDraw(c.x, c.y, half + 0.3, (g) => {
-    g.globalAlpha = clamp(a);
-    g.lineJoin = 'miter';
-    for (let i = 0; i < 4; i++) {
-      const j = (i + 1) % 4;
-      // Each side drawn on in turn as it is laid.
-      const u = clamp(drawn * 4 - i);
-      if (u <= 0) continue;
-      const ox = lerp(out[i][0], out[j][0], u), oy = lerp(out[i][1], out[j][1], u);
-      const ix = lerp(inn[i][0], inn[j][0], u), iy = lerp(inn[i][1], inn[j][1], u);
-      const near = (out[i][1] + out[j][1]) / 2 > mid[1];
-      poly(g, [out[i], [ox, oy], [ix, iy], inn[i]], near ? main : deep, ink, iw);
-    }
-    if (o.studs !== false && drawn >= 1) {
-      for (const [sx, sy] of out) {
-        const r = Math.max(1.5, 2.2 * k.zoom);
-        poly(g, [[sx, sy - r], [sx + r * 1.4, sy], [sx, sy + r], [sx - r * 1.4, sy]], core, ink, iw);
-      }
-    }
-  });
+  k.groundShape(c.x, c.y, half + 0.3, [
+    { kind: 'fill', colour: main, alpha: clamp(a), paths: near, lift: 0.15 },
+    { kind: 'fill', colour: deep, alpha: clamp(a), paths: far, lift: 0.15 },
+    { kind: 'stroke', colour: ink, alpha: clamp(a), width: iw, paths: [...near, ...far], closed: true, join: 'miter', lift: 0.15 },
+    { kind: 'fill', colour: core, alpha: clamp(a), paths: studs, lift: 0.2 },
+    { kind: 'stroke', colour: ink, alpha: clamp(a), width: iw, paths: studs, closed: true, join: 'miter', lift: 0.2 },
+  ]);
   const gl = o.glow ?? 1;
-  if (gl > 0) {
-    const pic = glowPicture(k.pal.light);
-    if (pic) {
-      const R = Math.max(5, band * 48 * k.zoom * 2.4);
-      k.glowDraw((g) => {
-        g.globalAlpha = clamp(a * gl * 0.4 * drawn);
-        for (const [sx, sy] of out) g.drawImage(pic, sx - R, sy - R, 2 * R, 2 * R);
-      });
+  if (gl > 0 && drawn > 0) {
+    for (let i = 0; i < 4; i++) {
+      const [x, y] = corner(half, i);
+      k.glow(k.on(x, y, 0.3), Math.max(3, band * 110), a * gl * 0.4 * drawn);
     }
   }
 }
+/** A square's corners, round from the far one, on the land's own lines. */
+const SQUARE_CORNERS = [[-1, -1], [1, -1], [1, 1], [-1, 1]] as const;
 
 /**
  * A rule laid round a point: a fine ring `r` tiles out with `n` ticks
@@ -390,36 +390,34 @@ function tally(k: FxScene, c: { x: number; y: number }, r: number, n: number, li
   if (o.ring !== false) k.ring(c, r, { band: Math.min(0.05, r * 0.12), alpha: a * 0.8 * smooth(grow * 1.5), glow: 0.35, n: Math.max(16, k.facets(r)) });
   const len = o.tick ?? Math.max(0.07, Math.min(0.3, r * 0.22));
   const turn = (o.turn ?? 0) - Math.PI / 2;
-  const ticks: number[] = [];
-  for (let i = 0; i < n; i++) {
+  // The ticks go out the way a clock's hand goes: those still lit bright, those gone dark, and the one going out dimming
+  // as its share of the time runs down.
+  const on: number[][] = [], off: number[][] = [], going: number[][] = [];
+  let goingOn = 0;
+  const shown = Math.ceil(n * grow);
+  for (let i = 0; i < shown; i++) {
     const ang = turn + (i / n) * TAU;
     const cx = Math.cos(ang), cy = Math.sin(ang);
-    for (const rr of [r, r + len]) {
-      const x = c.x + cx * rr, y = c.y + cy * rr;
-      ticks.push(k.eye.worldToScreenX(x, y), k.eye.worldToScreenY(x, y, k.ground(x, y) + 0.2));
+    const tick = [c.x + cx * r, c.y + cy * r, c.x + cx * (r + len), c.y + cy * (r + len)];
+    const v = clamp(lit - i);
+    if (v >= 1) on.push(tick);
+    else if (v <= 0) off.push(tick);
+    else {
+      going.push(tick);
+      goingOn = v;
     }
   }
   const { core, deep, ink } = k.pal;
-  const w = Math.max(1, 1.4 * k.zoom);
-  const shown = Math.ceil(n * grow);
-  k.groundDraw(c.x, c.y, r + len + 0.3, (g) => {
-    g.lineCap = 'butt';
-    for (let i = 0; i < shown; i++) {
-      // The ticks go out the way a clock's hand goes, the last lit one dimming as its share of the time runs out.
-      const on = clamp(lit - i);
-      const seg4 = 4 * i;
-      g.globalAlpha = clamp(a * (0.35 + 0.65 * on));
-      g.strokeStyle = ink;
-      g.lineWidth = w + Math.max(1, 0.8 * k.zoom);
-      g.beginPath();
-      g.moveTo(ticks[seg4], ticks[seg4 + 1]);
-      g.lineTo(ticks[seg4 + 2], ticks[seg4 + 3]);
-      g.stroke();
-      g.strokeStyle = on > 0.02 ? core : deep;
-      g.lineWidth = w;
-      g.stroke();
-    }
-  });
+  const w = Math.max(1, 1.4 * k.zoom), under = w + Math.max(1, 0.8 * k.zoom);
+  const fading = clamp(a * (0.35 + 0.65 * goingOn));
+  k.groundShape(c.x, c.y, r + len + 0.3, [
+    { kind: 'stroke', colour: ink, alpha: clamp(a * 0.35), width: under, paths: off, cap: 'butt', lift: 0.2 },
+    { kind: 'stroke', colour: deep, alpha: clamp(a * 0.35), width: w, paths: off, cap: 'butt', lift: 0.2 },
+    { kind: 'stroke', colour: ink, alpha: fading, width: under, paths: going, cap: 'butt', lift: 0.2 },
+    { kind: 'stroke', colour: core, alpha: fading, width: w, paths: going, cap: 'butt', lift: 0.2 },
+    { kind: 'stroke', colour: ink, alpha: clamp(a), width: under, paths: on, cap: 'butt', lift: 0.2 },
+    { kind: 'stroke', colour: core, alpha: clamp(a), width: w, paths: on, cap: 'butt', lift: 0.2 },
+  ]);
 }
 
 /** A ring hung level round a body at `share` of its height, `r` height units out: its back half behind the body and its front before it. */
@@ -553,34 +551,22 @@ function cracks(k: FxScene, c: { x: number; y: number }, r: number, n: number, o
   const a = o.alpha ?? 1;
   if (a <= 0.01) return;
   const grow = clamp(o.grow ?? 1);
-  const lines: Pt[][] = [];
+  const lines: number[][] = [];
   for (let i = 0; i < n; i++) {
     const ang = (i / n) * TAU + (hashOf(k.seed, i) - 0.5) * 0.5;
     const len = r * (0.55 + 0.45 * hashOf(k.seed + 1, i)) * grow;
-    const pts: Pt[] = [];
+    const run: number[] = [];
     for (let j = 0; j <= 3; j++) {
       const u = j / 3, side = j && j < 3 ? (hashOf(k.seed + 2 + j, i) - 0.5) * 0.25 : 0;
-      const x = c.x + Math.cos(ang + side) * len * u, y = c.y + Math.sin(ang + side) * len * u;
-      pts.push([k.eye.worldToScreenX(x, y), k.eye.worldToScreenY(x, y, k.ground(x, y) + 0.1)]);
+      run.push(c.x + Math.cos(ang + side) * len * u, c.y + Math.sin(ang + side) * len * u);
     }
-    lines.push(pts);
+    lines.push(run);
   }
   const { core, ink } = k.pal;
-  k.groundDraw(c.x, c.y, r + 0.3, (g) => {
-    g.globalAlpha = clamp(a);
-    g.lineJoin = 'miter';
-    g.lineCap = 'round';
-    for (const [w, col] of [[2.6, ink], [1, core]] as const) {
-      g.strokeStyle = col;
-      g.lineWidth = Math.max(0.8, w * k.zoom);
-      g.beginPath();
-      for (const pts of lines) {
-        g.moveTo(pts[0][0], pts[0][1]);
-        for (let j = 1; j < pts.length; j++) g.lineTo(pts[j][0], pts[j][1]);
-      }
-      g.stroke();
-    }
-  });
+  k.groundShape(c.x, c.y, r + 0.3, [
+    { kind: 'stroke', colour: ink, alpha: clamp(a), width: Math.max(0.8, 2.6 * k.zoom), paths: lines, join: 'miter', cap: 'round', lift: 0.1 },
+    { kind: 'stroke', colour: core, alpha: clamp(a), width: Math.max(0.8, 1 * k.zoom), paths: lines, join: 'miter', cap: 'round', lift: 0.1 },
+  ]);
 }
 
 /** A square of light knocked flat out over the ground from a point: Justice's shockwave, square to the tiles. */
@@ -616,6 +602,10 @@ function flatSparks(k: FxScene, at: P3, n: number, speed = 1.6): void {
 const JOINED = [24, -18, 40] as const;
 const JOINED_BEND = 84;
 const HANG = [4, 10, 4] as const;
+/** Both hands the same shape, `w` of the way: joined in prayer, raised, laid down. */
+const both = (shape: HandShape): [HandShape, HandShape] => [shape, shape];
+/** A hand shape at a share. */
+const flat = (w: number): HandShape => ({ flat: w });
 
 /** Mark of Judgment: hands joined and the head bowed; then the right hand lifted and pressed out and down at the creature, as a seal is pressed into wax. */
 const MARK_T = { secs: 1.05, release: 0.52 };
@@ -626,6 +616,7 @@ const markPose: CastPose = (r, t) => {
   r.elbow[1] = one(t, [[0, 15], [0.18, JOINED_BEND], [0.32, JOINED_BEND], [0.44, 112], [0.52, 6], [0.72, 10], [1, 20]]);
   r.hand[1] = euler(t, [[0, [0, 0, 0]], [0.44, [30, 0, 0]], [0.52, [-46, 0, 0]], [0.72, [-40, 0, 0]], [1, [0, 0, 0]]]);
   r.open = [t > 0.12, t > 0.12];
+  r.shape = both(flat(one(t, [[0.06, 0], [0.18, 1], [0.8, 1], [1, 0]])));
   r.head = euler(t, [[0, [0, 0, 0]], [0.18, [-18, 0, 0]], [0.36, [-18, 0, 0]], [0.5, [-4, 0, -4]], [0.75, [-4, 0, -4]], [1, [0, 0, 0]]]);
   r.chest = euler(t, [[0, [0, 0, 0]], [0.36, [-4, 0, 0]], [0.44, [4, 0, -10]], [0.52, [-6, 0, 8]], [0.75, [-5, 0, 6]], [1, [0, 0, 0]]]);
   r.spine = euler(t, [[0, [0, 0, 0]], [0.44, [2, 0, 0]], [0.52, [-8, 0, 0]], [0.75, [-6, 0, 0]], [1, [0, 0, 0]]]);
@@ -645,6 +636,7 @@ const retributionPose: CastPose = (r, t) => {
     r.leg[k] = euler(t, [[0, [2, 2, 0]], [0.38, [10, 4, 0]], [0.5, [0, 8, 0]], [0.75, [0, 8, 0]], [1, [2, 2, 0]]]);
   }
   r.open = [t > 0.46, t > 0.46];
+  r.shape = both(flat(one(t, [[0.42, 0], [0.5, 1], [0.8, 1], [1, 0]])));
   r.head = euler(t, [[0, [0, 0, 0]], [0.3, [-22, 0, 0]], [0.42, [-24, 0, 0]], [0.5, [8, 0, 0]], [0.75, [6, 0, 0]], [1, [0, 0, 0]]]);
   r.chest = euler(t, [[0, [0, 0, 0]], [0.3, [-10, 0, 0]], [0.42, [-12, 0, 0]], [0.5, [10, 0, 0]], [0.75, [8, 0, 0]], [1, [0, 0, 0]]]);
   r.spine = euler(t, [[0, [0, 0, 0]], [0.42, [-6, 0, 0]], [0.5, [4, 0, 0]], [1, [0, 0, 0]]]);
@@ -653,23 +645,19 @@ const retributionPose: CastPose = (r, t) => {
 /** Assay: down on the right knee, the right palm laid flat on the earth ahead and the head bowed over it, listening; pressed once; then up again. */
 const ASSAY_T = { secs: 1.9, release: 0.58 };
 const assayPose: CastPose = (r, t) => {
-  const down = [[0, 0], [0.26, 1], [0.8, 1], [1, 0]] as const;
-  const d = one(t, down);
-  r.leg[0] = euler(t, [[0, [2, 2, 0]], [0.26, [86, 6, 0]], [0.8, [86, 6, 0]], [1, [2, 2, 0]]]);
-  r.knee[0] = one(t, [[0, 4], [0.26, 88], [0.8, 88], [1, 4]]);
-  r.leg[1] = euler(t, [[0, [0, 2, 0]], [0.26, [-6, 4, 0]], [0.8, [-6, 4, 0]], [1, [0, 2, 0]]]);
-  r.knee[1] = one(t, [[0, 4], [0.26, 96], [0.8, 96], [1, 4]]);
-  r.foot[1] = -38 * d;
-  r.spine = euler(t, [[0, [0, 0, 0]], [0.26, [-30, 0, 0]], [0.5, [-32, 0, 0]], [0.58, [-36, 0, 0]], [0.8, [-32, 0, 0]], [1, [0, 0, 0]]]);
-  r.chest = euler(t, [[0, [0, 0, 0]], [0.26, [-10, 0, 4]], [0.58, [-12, 0, 4]], [0.8, [-10, 0, 4]], [1, [0, 0, 0]]]);
-  r.head = euler(t, [[0, [0, 0, 0]], [0.26, [-6, 0, 0]], [0.5, [-14, 0, 0]], [0.8, [-14, 0, 0]], [1, [0, 0, 0]]]);
-  r.arm[1] = euler(t, [[0, HANG], [0.22, [50, 8, 0]], [0.36, [42, 6, 0]], [0.58, [38, 6, 0]], [0.8, [42, 6, 0]], [1, HANG]]);
-  r.elbow[1] = one(t, [[0, 15], [0.22, 24], [0.36, 6], [0.5, 6], [0.58, 0], [0.8, 6], [1, 15]]);
-  r.hand[1] = euler(t, [[0, [0, 0, 0]], [0.36, [-60, 0, 0]], [0.58, [-70, 0, 0]], [0.8, [-60, 0, 0]], [1, [0, 0, 0]]]);
+  r.kneel = one(t, [[0, 0], [0.24, 1], [0.8, 1], [1, 0]]);
+  // The palm on the ground a little ahead and to the right of the knee, the trunk bowed only as far as it takes to get it
+  // there; pressed down a hair at the release.
+  const press = one(t, [[0.5, 0], [0.58, 1], [0.7, 0.4], [0.8, 0]]);
+  r.reach = [undefined, { at: [2.4, 6.5, 0.5 - 0.4 * press], stoop: true, w: one(t, [[0.14, 0], [0.34, 1], [0.8, 1], [0.94, 0]]) }];
+  r.arm[1] = euler(t, [[0, HANG], [0.22, [50, 8, 0]], [0.8, [42, 6, 0]], [1, HANG]]);
+  r.elbow[1] = one(t, [[0, 15], [0.22, 24], [0.8, 6], [1, 15]]);
   r.arm[0] = euler(t, [[0, HANG], [0.26, [62, 10, 6]], [0.8, [62, 10, 6]], [1, HANG]]);
   r.elbow[0] = one(t, [[0, 15], [0.26, 38], [0.8, 38], [1, 15]]);
   r.open = [t > 0.18, t > 0.18];
-  r.shrug = [0, one(t, [[0, 0], [0.5, 0], [0.58, -0.4], [0.7, -0.2], [1, 0]])];
+  r.shape = [flat(one(t, [[0.1, 0], [0.26, 0.6], [0.8, 0.6], [1, 0]])), flat(one(t, [[0.14, 0], [0.34, 1], [0.8, 1], [1, 0]]))];
+  r.chest = euler(t, [[0, [0, 0, 0]], [0.26, [-8, 0, 4]], [0.58, [-10, 0, 4]], [0.8, [-8, 0, 4]], [1, [0, 0, 0]]]);
+  r.head = euler(t, [[0, [0, 0, 0]], [0.26, [-10, 0, 0]], [0.5, [-18, 0, 0]], [0.8, [-18, 0, 0]], [1, [0, 0, 0]]]);
 };
 
 /** Sentence: both hands held out before the belly, palms up, weighing -- the right sinks, the left rises, and back; then both turned over and pressed down hard, the knees giving. */
@@ -688,6 +676,10 @@ const sentencePose: CastPose = (r, t) => {
     r.hand[k] = [lerp(0, -54, press), 0, 0];
   }
   r.open = [t > 0.08, t > 0.08];
+  // Cupped, palms up, as a pan is; turned over flat to press.
+  const cup = one(t, [[0.04, 0], [0.14, 1], [0.5, 1], [0.56, 0]]);
+  r.shape = both({ cup, flat: one(t, [[0.5, 0], [0.56, 1], [0.8, 1], [1, 0]]) });
+  for (let k = 0; k < 2; k++) r.hand[k][1] += (k ? -1 : 1) * 70 * cup;
   r.chest = [lerp(0, -6, press), -4 * Math.min(1, w) * (1 - press), 0];
   r.spine = euler(t, [[0, [0, 0, 0]], [0.5, [-2, 0, 0]], [0.56, [-10, 0, 0]], [0.78, [-8, 0, 0]], [1, [0, 0, 0]]]);
   r.head = euler(t, [[0, [0, 0, 0]], [0.14, [-12, 0, 0]], [0.5, [-10, 0, 0]], [0.56, [-20, 0, 0]], [0.78, [-16, 0, 0]], [1, [0, 0, 0]]]);
@@ -732,6 +724,7 @@ const equityPose: CastPose = (r, t) => {
     r.hand[k] = [0, lerp(lerp(0, s * 70, out), 0, join), 0];
   }
   r.open = [t > 0.06, t > 0.06];
+  r.shape = both(flat(one(t, [[0, 0], [0.12, 1], [0.82, 1], [1, 0]])));
   r.chest = [lerp(0, -4, join), 9 * tip, 0];
   r.spine = [0, -3 * tip, 0];
   r.head = euler(t, [[0, [0, 0, 0]], [0.16, [4, 0, 0]], [0.54, [4, 0, 0]], [0.62, [-16, 0, 0]], [0.82, [-14, 0, 0]], [1, [0, 0, 0]]]);
@@ -742,10 +735,13 @@ const VERDICT_T = { secs: 1.25, release: 0.6 };
 const verdictPose: CastPose = (r, t) => {
   r.arm[0] = euler(t, [[0, HANG], [0.2, [96, -22, 38]], [0.34, [96, -22, 38]], [0.46, JOINED], [0.8, JOINED], [1, HANG]]);
   r.elbow[0] = one(t, [[0, 15], [0.2, 122], [0.34, 122], [0.46, JOINED_BEND], [0.8, JOINED_BEND], [1, 15]]);
-  r.arm[1] = euler(t, [[0, HANG], [0.2, [96, -22, 38]], [0.34, [96, -22, 38]], [0.46, [172, 12, 0]], [0.53, [174, 10, 0]], [0.6, [64, 4, 0]], [0.8, [60, 4, 0]], [1, HANG]]);
+  r.arm[1] = euler(t, [[0, HANG], [0.2, [96, -22, 38]], [0.34, [96, -22, 38]], [0.46, [172, 12, 0]], [0.53, [174, 10, 0]], [0.6, [72, 4, 0]], [0.8, [68, 4, 0]], [1, HANG]]);
   r.elbow[1] = one(t, [[0, 15], [0.2, 122], [0.34, 122], [0.46, 8], [0.53, 4], [0.6, 2], [0.8, 6], [1, 15]]);
   r.hand[1] = euler(t, [[0, [0, 0, 0]], [0.46, [0, 0, 0]], [0.6, [-14, 0, 0]], [1, [0, 0, 0]]]);
   r.open = [t > 0.1, t > 0.1];
+  const point = one(t, [[0.53, 0], [0.6, 1], [0.84, 1], [1, 0]]);
+  r.shape = [flat(one(t, [[0.08, 0], [0.2, 1], [0.84, 1], [1, 0]])), { flat: one(t, [[0.08, 0], [0.2, 1], [0.53, 1], [0.6, 0]]), point }];
+  r.mouth = one(t, [[0.55, 0], [0.6, 0.4], [0.72, 0.3], [0.86, 0]]);
   r.head = euler(t, [[0, [0, 0, 0]], [0.2, [-20, 0, 0]], [0.34, [-22, 0, 0]], [0.46, [12, 0, 0]], [0.53, [14, 0, 0]], [0.6, [-6, 0, 0]], [0.8, [-4, 0, 0]], [1, [0, 0, 0]]]);
   r.chest = euler(t, [[0, [0, 0, 0]], [0.34, [-6, 0, 0]], [0.46, [8, -4, 6]], [0.53, [9, -4, 6]], [0.6, [-8, 2, -4]], [0.8, [-6, 0, -2]], [1, [0, 0, 0]]]);
   r.spine = euler(t, [[0, [0, 0, 0]], [0.46, [4, 0, 0]], [0.6, [-10, 0, 0]], [0.8, [-8, 0, 0]], [1, [0, 0, 0]]]);
@@ -762,6 +758,8 @@ const summonsPose: CastPose = (r, t) => {
   r.elbow[1] = one(t, [[0, 15], [0.24, 8], [0.56, 6], [0.66, 122], [0.84, 118], [1, 15]]);
   r.hand[1] = euler(t, [[0, [0, 0, 0]], [0.24, [10, 0, -70]], [0.56, [10, 0, -70]], [0.66, [0, 0, 0]], [1, [0, 0, 0]]]);
   r.open = [true, t < 0.6];
+  r.shape = [flat(one(t, [[0.1, 0], [0.24, 0.5], [0.84, 0.5], [1, 0]])), flat(one(t, [[0.1, 0], [0.24, 1], [0.58, 1], [0.64, 0]]))];
+  r.mouth = one(t, [[0.26, 0], [0.34, 0.5], [0.44, 0.3], [0.62, 0], [0.66, 0.35], [0.8, 0]]);
   r.arm[0] = euler(t, [[0, HANG], [0.24, [14, 26, 0]], [0.56, [16, 26, 0]], [0.66, [-14, 30, 0]], [0.84, [-12, 28, 0]], [1, HANG]]);
   r.elbow[0] = one(t, [[0, 15], [0.24, 24], [0.66, 30], [1, 15]]);
   r.chest = euler(t, [[0, [0, 0, 0]], [0.24, [-4, 0, 8]], [0.56, [-6, 0, 10]], [0.66, [8, 0, -12]], [0.84, [6, 0, -10]], [1, [0, 0, 0]]]);
@@ -781,8 +779,12 @@ const temperPose: CastPose = (r, t, c) => {
   r.arm[0] = euler(t, [[0, HANG], [0.2, [54, -28, 46]], [0.8, [54, -28, 46]], [1, HANG]]);
   r.elbow[0] = one(t, [[0, 15], [0.2, 104], [0.8, 104], [1, 15]]);
   r.hand[0] = euler(t, [[0, [0, 0, 0]], [0.2, [-30, 0, 0]], [0.8, [-30, 0, 0]], [1, [0, 0, 0]]]);
-  r.open = [t > 0.12, c.carry !== 'fist' && t > 0.12];
-  r.wield = c.carry === 'fist' ? one(t, [[0, 0], [0.16, 1], [0.86, 1], [1, 0]]) : 0;
+  r.open = [t > 0.12, !c.carry && t > 0.12];
+  r.shape = [flat(one(t, [[0.1, 0], [0.2, 1], [0.8, 1], [1, 0]])), undefined];
+  // Whatever is carried is held up into the vigil: a blade by the forearm, a spear or a staff along it.
+  const up = one(t, [[0, 0], [0.16, 1], [0.86, 1], [1, 0]]);
+  r.wield = c.carry === 'fist' ? up : 0;
+  r.wieldStaff = c.carry === 'staff' ? up : 0;
   r.head = euler(t, [[0, [0, 0, 0]], [0.2, [-22, 0, 6]], [0.5, [-24, 0, 6]], [0.62, [8, 0, 4]], [0.8, [6, 0, 4]], [1, [0, 0, 0]]]);
   r.chest = euler(t, [[0, [0, 0, 0]], [0.2, [-6, 0, 0]], [0.5, [-8, 0, 0]], [0.62, [4, 0, -4]], [0.8, [3, 0, -4]], [1, [0, 0, 0]]]);
   r.spine = euler(t, [[0, [0, 0, 0]], [0.5, [-4, 0, 0]], [0.62, [2, 0, 0]], [1, [0, 0, 0]]]);
@@ -800,6 +802,7 @@ const judgmentPose: CastPose = (r, t) => {
   }
   r.foot = [one(t, [[0, 0], [0.36, -6], [0.5, -20], [0.56, 0], [1, 0]]), one(t, [[0, 0], [0.36, -6], [0.5, -20], [0.56, 0], [1, 0]])];
   r.open = [t > 0.08, t > 0.08];
+  r.shape = both({ flat: one(t, [[0.06, 0], [0.18, 1], [0.5, 1], [0.58, 0]]), point: one(t, [[0.5, 0], [0.58, 1], [0.84, 1], [1, 0]]) });
   r.shrug = [one(t, [[0, 0], [0.4, 0], [0.5, 1.2], [0.58, 0], [1, 0]]), one(t, [[0, 0], [0.4, 0], [0.5, 1.2], [0.58, 0], [1, 0]])];
   r.head = euler(t, [[0, [0, 0, 0]], [0.36, [10, 0, 0]], [0.5, [20, 0, 0]], [0.58, [-14, 0, 0]], [0.8, [-12, 0, 0]], [1, [0, 0, 0]]]);
   r.chest = euler(t, [[0, [0, 0, 0]], [0.36, [6, 0, 0]], [0.5, [10, 0, 0]], [0.58, [-8, 0, 0]], [0.8, [-6, 0, 0]], [1, [0, 0, 0]]]);
@@ -816,6 +819,7 @@ const trucePose: CastPose = (r, t) => {
     r.knee[k] = one(t, [[0, 4], [0.44, 4], [0.84, 14], [1, 4]]);
   }
   r.open = [t > 0.08, t > 0.08];
+  r.shape = both(flat(one(t, [[0.06, 0], [0.2, 1], [0.86, 1], [1, 0]])));
   r.head = euler(t, [[0, [0, 0, 0]], [0.24, [2, 0, 0]], [0.44, [2, 0, 0]], [0.84, [-14, 0, 0]], [1, [0, 0, 0]]]);
   r.chest = euler(t, [[0, [0, 0, 0]], [0.24, [4, 0, 0]], [0.44, [4, 0, 0]], [0.84, [-4, 0, 0]], [1, [0, 0, 0]]]);
 };
@@ -828,7 +832,8 @@ const restitutionPose: CastPose = (r, t) => {
     r.elbow[k] = one(t, [[0, 15], [0.26, 40], [0.5, 42], [0.74, 96], [0.86, 94], [1, 15]]);
     r.hand[k] = euler(t, [[0, [0, 0, 0]], [0.26, [30, 0, 0]], [0.5, [30, 0, 0]], [0.74, [0, 0, 0]], [1, [0, 0, 0]]]);
   }
-  r.open = [t > 0.08 && t < 0.72, t > 0.08 && t < 0.72];
+  r.open = [t > 0.08, t > 0.08];
+  r.shape = both({ cup: one(t, [[0.06, 0], [0.22, 1], [0.52, 1], [0.7, 0]]), flat: one(t, [[0.52, 0], [0.72, 1], [0.86, 1], [1, 0]]) });
   r.head = euler(t, [[0, [0, 0, 0]], [0.26, [-22, 0, 0]], [0.5, [-24, 0, 0]], [0.74, [2, 0, 0]], [0.86, [2, 0, 0]], [1, [0, 0, 0]]]);
   r.spine = euler(t, [[0, [0, 0, 0]], [0.26, [-8, 0, 0]], [0.5, [-8, 0, 0]], [0.74, [2, 0, 0]], [1, [0, 0, 0]]]);
   r.knee = [one(t, [[0, 4], [0.26, 12], [0.5, 12], [0.74, 4], [1, 4]]), one(t, [[0, 4], [0.26, 12], [0.5, 12], [0.74, 4], [1, 4]])];
@@ -844,6 +849,8 @@ const executionPose: CastPose = (r, t, c) => {
     r.elbow[k] = one(t, [[0, 15], [0.14, JOINED_BEND], [0.24, 80], [0.44, 22], [0.58, 20], [0.62, 6], [0.84, 10], [1, 15]]);
   }
   r.open = [t > 0.08, t > 0.08];
+  r.shape = both(flat(one(t, [[0.06, 0], [0.14, 1], [0.84, 1], [1, 0]])));
+  r.mouth = one(t, [[0.58, 0], [0.62, 0.6], [0.72, 0.4], [0.86, 0]]);
   r.shrug = [one(t, [[0, 0], [0.34, 0], [0.44, 1.4], [0.58, 1.4], [0.62, 0], [1, 0]]), one(t, [[0, 0], [0.34, 0], [0.44, 1.4], [0.58, 1.4], [0.62, 0], [1, 0]])];
   r.foot = [one(t, [[0, 0], [0.3, 0], [0.44, -22], [0.58, -22], [0.61, 0], [1, 0]]), one(t, [[0, 0], [0.3, 0], [0.44, -22], [0.58, -22], [0.61, 0], [1, 0]])];
   r.spine = euler(t, [[0, [0, 0, 0]], [0.44, [8, 0, 0]], [0.58, [9, 0, 0]], [0.62, [-34, 0, 0]], [0.84, [-30, 0, 0]], [1, [0, 0, 0]]]);
@@ -864,6 +871,7 @@ const oathPose: CastPose = (r, t) => {
   r.arm[0] = euler(t, [[0, HANG], [0.24, [22, -20, 44]], [0.82, [22, -20, 44]], [1, HANG]]);
   r.elbow[0] = one(t, [[0, 15], [0.24, 92], [0.82, 92], [1, 15]]);
   r.open = [t > 0.1, t > 0.1];
+  r.shape = both(flat(one(t, [[0.08, 0], [0.22, 1], [0.84, 1], [1, 0]])));
   r.head = euler(t, [[0, [0, 0, 0]], [0.24, [6, 0, 0]], [0.48, [6, 0, 0]], [0.56, [-6, 0, 0]], [0.82, [-6, 0, 0]], [1, [0, 0, 0]]]);
   r.chest = euler(t, [[0, [0, 0, 0]], [0.24, [4, 0, 4]], [0.48, [4, 0, 4]], [0.56, [-4, 0, 0]], [1, [0, 0, 0]]]);
   r.leg[0] = euler(t, [[0, [2, 2, 0]], [0.5, [2, 2, 0]], [0.56, [12, 3, 0]], [0.82, [10, 3, 0]], [1, [2, 2, 0]]]);
@@ -879,6 +887,7 @@ const rewardPose: CastPose = (r, t) => {
     r.hand[k] = euler(t, [[0, [0, 0, 0]], [0.46, [0, 0, 0]], [0.58, [30, 0, 0]], [1, [0, 0, 0]]]);
   }
   r.open = [t > 0.08, t > 0.08];
+  r.shape = both(flat(one(t, [[0.06, 0], [0.2, 1], [0.84, 1], [1, 0]])));
   r.foot = [one(t, [[0, 0], [0.46, 0], [0.58, -16], [0.8, -16], [0.9, 0], [1, 0]]), one(t, [[0, 0], [0.46, 0], [0.58, -16], [0.8, -16], [0.9, 0], [1, 0]])];
   r.shrug = [one(t, [[0, 0], [0.46, 0.6], [0.58, 1.1], [0.82, 1], [1, 0]]), one(t, [[0, 0], [0.46, 0.6], [0.58, 1.1], [0.82, 1], [1, 0]])];
   r.head = euler(t, [[0, [0, 0, 0]], [0.2, [-20, 0, 0]], [0.3, [-20, 0, 0]], [0.58, [18, 0, 0]], [0.82, [16, 0, 0]], [1, [0, 0, 0]]]);
@@ -989,8 +998,42 @@ const JUDGMENT_IMPACT = 2.4;
 const judgmentSwords = (k: FxScene): number => (k.fast ? 5 : 8);
 /** Each of Judgment's swords, point to pommel: smaller than a Verdict's, there being many. */
 const JUDGMENT_SWORD = 26;
-/** Where each of Judgment's swords comes down: the first at the spot, the rest spread over the ground it covers. */
-function judgmentAt(k: FxScene, i: number, n: number): { x: number; y: number } {
+/** The ticks of a judged creature's tally: the seconds it takes more damage. */
+const JUDGMENT_TICKS = ticksFor(lastsOf('justice_judgment'));
+/** The most creatures Judgment marks for its seconds: past it the marks would crowd the field and cost too much. */
+const JUDGED_MOST = 6;
+/**
+ * The creatures Judgment comes down on: those standing within its reach when the swords first form, nearest the spot
+ * first, kept by who they are (`k.state`) so the same ones are followed wherever they go. The island does not say
+ * which were hunting somebody, and so which it really hurt; these are the ones there.
+ */
+function judged(k: FxScene): Array<Body | null> {
+  if (!k.state.picked) {
+    k.state.picked = 1;
+    const there = k.bodiesWithin(JUDGMENT_R, k.spot, ['creature'])
+      .sort((a, b) => Math.hypot(a.x - k.spot.x, a.y - k.spot.y) - Math.hypot(b.x - k.spot.x, b.y - k.spot.y));
+    let n = 0;
+    for (const b of there) {
+      if (b.who?.kind !== 'creature' || n >= Math.min(JUDGED_MOST, judgmentSwords(k))) continue;
+      k.state[`judged${n++}`] = b.who.id;
+    }
+    k.state.judgedN = n;
+  }
+  const n = k.state.judgedN ?? 0;
+  if (!n) return [];
+  // Followed a little past the reach: a creature struck at the edge that steps out is still marked.
+  const near = k.bodiesWithin(JUDGMENT_R + 4, k.spot, ['creature']);
+  const out: Array<Body | null> = [];
+  for (let i = 0; i < n; i++) {
+    const id = k.state[`judged${i}`];
+    out.push(near.find((b) => b.who?.kind === 'creature' && b.who.id === id) ?? null);
+  }
+  return out;
+}
+/** Where each of Judgment's swords comes down: on a creature standing there, or else spread over the ground it covers. */
+function judgmentAt(k: FxScene, i: number, n: number, on: ReadonlyArray<Body | null>): { x: number; y: number } {
+  const b = on[i];
+  if (b) return { x: b.x, y: b.y };
   if (i === 0) return { x: k.spot.x, y: k.spot.y };
   const ang = ((i - 1) / (n - 1)) * TAU + hashOf(k.seed, i) * 0.7;
   const rr = JUDGMENT_R * (0.35 + 0.55 * Math.sqrt(hashOf(k.seed + 11, i)));
@@ -1007,6 +1050,10 @@ const trucePales = (k: FxScene): number => (k.fast ? 12 : 20);
 const TRUCE_PALE = 12;
 /** The planted sword of a Truce, point to pommel. */
 const TRUCE_SWORD = 34;
+/** Whoever stands on a spot, for a sword planted there to go through rather than over them. */
+const standingAt = (k: FxScene, c: { x: number; y: number }): Body | null => k.bodiesWithin(0.3, c)[0] ?? null;
+/** How many of those inside a Truce are drawn bound by it. */
+const TRUCE_BONDS = 4;
 function pales(k: FxScene, age: number, rise: number, alpha: number): void {
   const n = trucePales(k);
   const left = TRUCE_LASTS - age;
@@ -1269,6 +1316,7 @@ export const JUSTICE: Record<string, SpellVisual> = {
         },
       },
       linger: {
+        on: 'spot',
         draw: (k, age, left) => {
           const a = smooth((age - ASSAY_IMPACT) / 0.6) * smooth(left / 2);
           if (a <= 0.01) return;
@@ -1644,9 +1692,8 @@ export const JUSTICE: Record<string, SpellVisual> = {
           // A glint up the length of it every six seconds: it is kept.
           const v = ((age - 1) % 6) / 0.6;
           if (age < 1 || v >= 1 || left < 0.5) return;
-          // Put away or carried, the thing is wherever the fist is.
-          const h = k.hand(1);
-          k.flare({ x: h.x, y: h.y, z: h.z - 3 * smooth(v) }, 4, Math.sin(Math.PI * v) * 0.8, k.pal.core, Math.PI / 4);
+          // Up the length of it, wherever it is carried.
+          k.flare(temperAt(k, smooth(v)), 4, Math.sin(Math.PI * v) * 0.8, k.pal.core, Math.PI / 4);
         },
       },
     },
@@ -1655,9 +1702,12 @@ export const JUSTICE: Record<string, SpellVisual> = {
   /*
    * Judgment (6 tiles round a spot: every hunting creature there loses 15%
    * and takes 15% more for 30 s). A graduated ring draws itself on at the
-   * reach and swords form over the ground it covers, high up, point down;
-   * the priest's arms come down and the swords fall one after another, each
+   * reach and swords form high over every creature standing in it (and over
+   * bare ground where there are fewer), point down; the priest's arms come
+   * down pointing and the swords fall one after another through them, each
    * planting itself with sparks and a square knocked out, stand, and go up.
+   * Every creature struck then carries a small seal and its tally for the
+   * thirty seconds it takes more damage.
    */
   justice_judgment: {
     palette: PALETTE,
@@ -1668,12 +1718,13 @@ export const JUSTICE: Record<string, SpellVisual> = {
       },
       charge: (k, t) => {
         const n = judgmentSwords(k);
+        const on = t > 0.2 ? judged(k) : [];
         tally(k, k.spot, JUDGMENT_R, 24, 24, { grow: seg(t, 0.1, 0.56), alpha: 0.8, tick: 0.3 });
         // Hung there until the arms come down; from the release the impact holds them and lets them fall.
         for (let i = 0; i < n && t < JUDGMENT_T.release; i++) {
           const form = smooth(seg(t, 0.22 + i * 0.03, 0.42 + i * 0.03));
           if (form <= 0) continue;
-          const at = judgmentAt(k, i, n);
+          const at = judgmentAt(k, i, n, on);
           sword(k, k.on(at.x, at.y, 56 + 6 * hashOf(k.seed + 3, i) + Math.sin(k.now * 2 + i) * 0.8), JUDGMENT_SWORD, { show: form, alpha: Math.min(1, form * 1.5), glow: 0.5 });
         }
         k.light(k.spot, JUDGMENT_R * 0.6, 0.5 * seg(t, 0.2, 0.58));
@@ -1683,23 +1734,43 @@ export const JUSTICE: Record<string, SpellVisual> = {
         draw: (k, u) => {
           const secs = u * JUDGMENT_IMPACT;
           const n = judgmentSwords(k);
+          const on = judged(k);
           for (let i = 0; i < n; i++) {
-            const at = judgmentAt(k, i, n);
+            const at = judgmentAt(k, i, n, on);
+            const body = on[i] ?? null;
             const t0 = judgmentFall(i), fall = 0.14;
             const hang = 56 + 6 * hashOf(k.seed + 3, i);
             const v = clamp((secs - t0) / fall);
             const after = secs - t0 - fall;
             const go = smooth(clamp((after - 0.7) / 0.5));
             const z = lerp(hang, -2, easeIn(v));
-            sword(k, k.on(at.x, at.y, z), JUDGMENT_SWORD, { alpha: 1 - go, glow: 0.6 });
+            // On a creature, through it; on bare ground, into it.
+            sword(k, k.on(at.x, at.y, z), JUDGMENT_SWORD, { alpha: 1 - go, glow: 0.6, through: body });
             if (once(k, `j${i}`, v >= 1)) {
               flatSparks(k, k.on(at.x, at.y, 1), 10, 1.2);
+              if (body) k.burst(k.at(body, 0.6), 8, { kind: 'shard', colour: [STEEL, k.pal.main], size: 1.6, life: [0.3, 0.6], speed: [0.3, 0.8], up: [6, 16], gravity: 60, drag: 0.3 });
               k.burst(k.on(at.x, at.y, 0.5), 4, { kind: 'dust', colour: '#8a7d68', size: 2.8, life: [0.4, 0.7], speed: [0.3, 0.6], up: [1, 4], gravity: 2 });
             }
             if (after > 0) squareOut(k, at, clamp(after / 0.5), 0.36, 0.85);
           }
           tally(k, k.spot, JUDGMENT_R, 24, 24, { alpha: 0.8 * (1 - smooth(seg(u, 0.5, 1))), tick: 0.3 });
           k.light(k.spot, JUDGMENT_R * 0.7, 0.8 * (1 - smooth(seg(u, 0.3, 1))));
+        },
+      },
+      // Each creature it came down on carries the seal of a judged thing -- Mark of Judgment's, smaller -- and its tally,
+      // for the seconds it takes more damage.
+      linger: {
+        on: 'spot',
+        draw: (k, age, left) => {
+          const lasts = lastsOf('justice_judgment');
+          let i = 0;
+          for (const b of judged(k)) {
+            const t0 = judgmentFall(i++) + 0.3;
+            const a = smooth((age - t0) / 0.3) * smooth(left / 0.8);
+            if (!b || a <= 0.01) continue;
+            lozenge(k, over(k, b, 3 + 0.5 * Math.sin(age * 1.6 + i)), 4, { alpha: 0.85 * a, spin: flipTurn(age / 2.5 + i * 0.3), glow: 0.5 });
+            tally(k, b, footR(b), JUDGMENT_TICKS, (JUDGMENT_TICKS * left) / Math.max(1, lasts), { alpha: 0.5 * a, ring: false });
+          }
         },
       },
     },
@@ -1709,8 +1780,9 @@ export const JUSTICE: Record<string, SpellVisual> = {
    * Truce (8 tiles round a spot, 30 s, nothing there strikes or is struck).
    * A palisade of pale stakes rises out of the ground round exactly the eight
    * tiles; a sword comes gently down at the spot and stands planted there,
-   * hilt up -- peace-bonded -- with the light washing out over the ground. As
-   * the thirty seconds go the stakes go down into the ground one by one, and
+   * hilt up -- peace-bonded -- with the light washing out over the ground,
+   * and everyone inside gets a cord of the bond round the waist. As the
+   * thirty seconds go the stakes go down into the ground one by one, and
    * when the last is down the sword lifts away.
    */
   justice_truce: {
@@ -1731,7 +1803,7 @@ export const JUSTICE: Record<string, SpellVisual> = {
         draw: (k, u) => {
           pales(k, 0, 1, 1);
           k.ring(k.spot, TRUCE_R, { band: 0.06, alpha: 0.6, glow: 0.4 });
-          sword(k, k.on(k.spot.x, k.spot.y, lerp(40, -3, easeOut(u))), TRUCE_SWORD, { alpha: smooth(u * 4) });
+          sword(k, k.on(k.spot.x, k.spot.y, lerp(40, -3, easeOut(u))), TRUCE_SWORD, { alpha: smooth(u * 4), through: standingAt(k, k.spot) });
           k.light(k.spot, 3, 0.6);
         },
       },
@@ -1747,13 +1819,17 @@ export const JUSTICE: Record<string, SpellVisual> = {
         },
       },
       linger: {
+        on: 'spot',
         draw: (k, age, left) => {
           const end = smooth(left / 1.2);
           pales(k, age, 1, 1);
-          // No ring on the ground for the thirty seconds: the stakes are the bound, and a ring this wide is redrawn for every
-          // line of the ground it crosses.
+          k.ring(k.spot, TRUCE_R, { band: 0.05, alpha: 0.45 * end, glow: 0.3, dash: 2 });
+          // Everyone inside, people and creatures, with a peace-bond round them: a cord at the waist. The nearest few only, so a
+          // crowd costs no more than a handful.
+          const inside = k.bodiesWithin(TRUCE_R).sort((a, b) => Math.hypot(a.x - k.spot.x, a.y - k.spot.y) - Math.hypot(b.x - k.spot.x, b.y - k.spot.y));
+          for (const b of inside.slice(0, TRUCE_BONDS)) hoop(k, b, 0.45, Math.max(5, b.wide * 1.5), { alpha: 0.55 * end * smooth((age - 0.4) / 0.6), width: 1.1 });
           const lift = 1 - end;
-          sword(k, k.on(k.spot.x, k.spot.y, -3 + 20 * easeIn(lift)), TRUCE_SWORD, { alpha: end });
+          sword(k, k.on(k.spot.x, k.spot.y, -3 + 20 * easeIn(lift)), TRUCE_SWORD, { alpha: end, through: standingAt(k, k.spot) });
           // The peace-bond: a cord tied round the guard of the planted sword.
           const g = k.on(k.spot.x, k.spot.y, -3 + TRUCE_SWORD * 0.72 + 20 * easeIn(lift));
           hoop(k, { x: g.x, y: g.y, z: g.z - 1, tall: 2, wide: 1, facing: 0, kind: 'spot' }, 0.5, 2.6, { alpha: end * smooth((age - 0.3) / 0.4), width: 1.2 });
@@ -2056,10 +2132,10 @@ function equityBeam(k: FxScene, tilt: number, alpha: number, share: number): voi
   });
 }
 
-/** Along the thing Temper is cast on, nought at the fist and one at its far end; the hand itself when nothing is held. */
+/** Along the thing Temper is cast on, nought at the fist and one at its far end, wherever it is carried; between the hands when nothing is held. */
 function temperAt(k: FxScene, u: number): P3 {
-  // Only a fist-held thing follows the forearm and so can be found along it; a bow or a staff is set off the hips.
-  const w = k.caster.figure?.gear?.weapon;
-  const held = !!w && weaponCarry(w.id)?.carry === 'fist';
-  return held ? k.weaponAt(1 + u * 9) : mid3(k.hand(1), k.hand(0), u * 0.5);
+  const grip = k.joint(k.caster, 'grip'), tip = k.joint(k.caster, 'tip');
+  // With nothing held the two are the same fist.
+  if (Math.hypot((tip.x - grip.x) * 40, (tip.y - grip.y) * 40, tip.z - grip.z) < 1.5) return mid3(k.hand(1), k.hand(0), u * 0.5);
+  return mid3(grip, tip, u);
 }

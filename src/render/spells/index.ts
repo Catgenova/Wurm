@@ -265,6 +265,10 @@ export function castOver(r: Rig, p: FigurePose): void {
   if (!base) return;
   const w = castWeight(t, v.cast.timing);
   const mixed = mixDeep(base as unknown as Deep, r as unknown as Deep, w) as unknown as Rig;
+  // Which shoulder a weapon is on, its spin and a swap under way are switches, as in the figure's own blend: half way between
+  // the shoulders is no shoulder at all, and a wrist looked up by it is not there.
+  const switched = w < 0.5 ? base : r;
+  mixed.carried = switched.carried; mixed.spin = switched.spin; mixed.swapping = switched.swapping;
   Object.assign(r, mixed);
 }
 
