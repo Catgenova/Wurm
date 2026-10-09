@@ -58,10 +58,13 @@ const TAU = Math.PI * 2;
 /**
  * Radians of the walk's phase a second at a walking pace. A whole stride --
  * the left foot down and up and the right -- is a turn of it, so this is
- * `CADENCE / TAU` strides a second, about one and three quarters: three and a
- * half steps.
+ * `CADENCE / TAU` strides a second, about two and a half: five steps. It was
+ * eleven, three and a half steps; asked to be twice that for a quicker walk,
+ * and twice that read as a scurry (seven steps a second, a step every eight
+ * or nine frames, quicker than a sprinter's feet), so this is the most that
+ * still reads as a brisk walk at the size the island is played at.
  */
-export const CADENCE = 11;
+export const CADENCE = 16;
 /**
  * How far the ground goes back under a planted foot in one whole stride, in
  * tiles, at a gait of nought (a walk), an eighth, a quarter and so on to one
@@ -83,9 +86,9 @@ export function strideAt(g: number): number {
  * Walking pace on your own feet, in tiles a second: one walking stride for
  * every turn of the walk's phase at `CADENCE`, so that a foot on the ground
  * stays where it was put. It was 2.4 -- nearly ten metres a second on a
- * four-metre tile, more than five times what the legs drawn under it could
- * carry, so every planted foot skated forward over the ground under every
- * step. Everything on foot is reckoned from this one number, on both sides:
+ * four-metre tile, more than five times what the legs drawn under it carried
+ * at the eleven radians a second they stepped at then, so every planted foot
+ * skated forward over the ground under every step. Everything on foot is reckoned from this one number, on both sides:
  * the island's `base_speed()` is the same.
  */
 export const BASE_SPEED = (STRIDE[0] * CADENCE) / TAU;
@@ -117,10 +120,12 @@ export const phasePerTile = (speed: number): number => TAU / strideAt(gaitAt(spe
 /**
  * And carried -- a saddle, a seat, a deck -- the phase only times the rock of
  * the ride (`drive` and `cartSway` in `../render/figure`), and goes as it always
- * has: eleven radians to the 2.4 tiles that used to be a walk. Nothing is
- * planted on the ground for it to keep up with.
+ * has: `RIDE_CADENCE` radians a second at the 2.4 tiles that used to be a walk,
+ * so eleven to 2.4 tiles. Nothing is planted on the ground for it to keep up
+ * with.
  */
-export const RIDE_PHASE = 11 / 2.4;
+export const RIDE_CADENCE = 11;
+export const RIDE_PHASE = RIDE_CADENCE / 2.4;
 /**
  * What is left of your pace half again over the limit.
  *

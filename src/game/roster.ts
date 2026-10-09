@@ -1,6 +1,6 @@
 import type { PeerId, PeerState } from '../net/protocol';
 import { tileKey } from './tileindex';
-import { CADENCE, phasePerTile } from './player';
+import { phasePerTile, RIDE_CADENCE } from './player';
 
 /** Handed back for a tile nobody is standing on, so the common answer is free. */
 const NOBODY: readonly Peer[] = [];
@@ -37,7 +37,7 @@ export interface Peer extends PeerState {
   /** How long that walk should take, in seconds: the gap actually observed. */
   span: number;
   /**
-   * Their own walk cycle, counted by the clock at a walk's `CADENCE` as it
+   * Their own walk cycle, counted by the clock at `RIDE_CADENCE` as it
    * always was: what times the rock of a seat or a saddle under them.
    */
   walkPhase: number;
@@ -222,7 +222,7 @@ export class Roster {
         p.fromY += (p.y - p.fromY) * t;
         if (t >= 1) p.span = 0;
       }
-      if (p.moving) p.walkPhase += dt * CADENCE;
+      if (p.moving) p.walkPhase += dt * RIDE_CADENCE;
       // A frame's walk, and not a jump to where somebody turned up after a gap in the word.
       const [x, y] = this.drawnAt(p);
       const gone = Math.hypot(x - p.drawnX, y - p.drawnY);

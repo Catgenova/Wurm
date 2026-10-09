@@ -5,4 +5,4 @@
 -- this is only the statements that did — every one of them idempotent, in
 -- the order the dump writes them. The whole snapshot lives in
 -- supabase/defs-state.sql.
-create or replace function base_speed() returns double precision language sql immutable as $fn$ select 0.44861799584027995::double precision $fn$;
+create or replace function base_speed() returns double precision language sql immutable as $fn$ select 0.6525352666767709::double precision $fn$;

@@ -201,7 +201,7 @@ check('and it leans at the ground ahead of it rather than away from it',
   });
   check('the stride the pace is reckoned from is the one the figure\'s legs take, at every gait',
     Math.max(...off) < 0.05, `${STRIDES.length} gaits, worst ${Math.max(...off).toFixed(3)} of a unit from the figure`);
-  check('and at a walk the legs go at the cadence they always did',
+  check('and at a walk the legs go at the walking cadence, whatever the stride works out to',
     Math.abs(BASE_SPEED * phasePerTile(BASE_SPEED) - CADENCE) < 1e-9, `${CADENCE} radians a second at ${BASE_SPEED.toFixed(3)} tiles a second`);
 
   /** The most a planted foot moves over the ground while it is down, going steadily at `speed` with the walk's phase at `perTile` a tile. */
