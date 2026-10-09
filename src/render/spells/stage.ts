@@ -20,11 +20,11 @@
  * it, on this browser and on everybody else's watching (`Island.castSeen`).
  */
 import { FIGURE_TOP, figureJoint, weaponSpan, type FigurePose } from '../figure';
-import { HALF_H, HEIGHT_SCALE, TILE_W, UNITS_PER_TILE } from '../iso';
+import { HALF_H, HALF_W, HEIGHT_SCALE, TILE_W, UNITS_PER_TILE } from '../iso';
 import { depthOf, type View } from '../view';
-import { castLefty, lingerSecs, visualOf, type CastAim, type CastNow, type CastTarget, type SpellVisual } from './index';
+import { castLefty, lingerSecs, visualOf, type CastAim, type CastClose, type CastNow, type CastTarget, type CastTravel, type SpellVisual } from './index';
 import { spellInfo, type SpellInfo } from './info';
-import { clamp, drawParticle, FxFrame, FxScene, isLightKind, MOST_PARTICLES, paintGroundLayer, Particles, rngOf, seg, smooth, type Body, type Eye, type GroundLayer, type P3, type Who, type WorldRec } from './kit';
+import { clamp, drawParticle, FxFrame, FxScene, isLightKind, lightTint, MOST_PARTICLES, paintGroundLayer, Particles, rngOf, seg, smooth, type Body, type Eye, type GroundLayer, type P3, type Who, type WorldRec } from './kit';
 
 export type { Who };
 /** What a spell was cast at: somebody, a spot on the ground, or the caster themselves. */
@@ -68,8 +68,15 @@ export interface PlayOpts {
 const CLOSE_ARM = 6;
 /** The furthest a melee cast closes in by default, in tiles (`CastClose.most`). */
 const CLOSE_MOST = 2;
+/** Seconds the trip back of a closing cast runs on past the cast's end, by default: a quarter of a second and this much a tile (`CastClose.after`), between the two below. */
+const BACK_BASE = 0.25, BACK_TILE = 0.15, BACK_LEAST = 0.4, BACK_MOST = 0.6;
 /** Nearer its master than this, in tiles, a companion is drawn beside them rather than in them (`cast.companion`). */
 const BESIDE = 0.35;
+/**
+ * How far over to a light's own colour what it falls on is laid at its middle, at night, for each of its strength
+ * (`lightColour`), and at the most: a light of half strength (a cast's impact) lays a little over half its colour.
+ */
+const LIGHT_COLOUR = 1.2, LIGHT_COLOUR_MOST = 0.75;
 /** Shapes a cast may record in a frame (SPELLS.md's budget), past which the preview says so. */
 const SHAPES_MOST = 15;
 
@@ -118,6 +125,17 @@ interface Playing {
   /** How far the body is drawn closed in on the target this frame (`cast.close`), in tiles. */
   closeX: number;
   closeY: number;
+  /**
+   * The close as it was asked for up to the blow (`cast.close`, its `when` asked of the caster's weapon), how far it carries
+   * the body in height units and which way over the ground, all kept from the blow on; the legs' steps this frame; and
+   * seconds from the start the trip back ends, past the cast's own end (nought for none).
+   */
+  close: CastClose | null;
+  closeBy: number;
+  closeDX: number;
+  closeDY: number;
+  travel: CastTravel | undefined;
+  closeEnd: number;
   /** Where the target stood as the cast was made (`cast.pull`), and how far off where it is it is drawn this frame, in tiles. */
   targetFrom: { x: number; y: number } | null;
   pullX: number;
@@ -200,6 +218,8 @@ export class SpellStage {
   readonly parts = new Particles(MOST_PARTICLES);
   private readonly k = new FxScene();
   private now = 0;
+  /** How dark it is this frame, nought by day to one at the dead of night (`update`'s `night`). */
+  private night = 0;
   private eye: Eye | null = null;
   private seeds = 1;
   /** Lines of the ground to what stands on them this frame, and the clip of each line's tiles for what lies on them. */
@@ -282,6 +302,7 @@ export class SpellStage {
       aimed: at.kind === 'self' || (at.kind === 'player' && by.kind === 'player') ? 'self' : at.kind === 'spot' ? 'spot' : at.kind === 'creature' ? 'creature' : 'person',
       companion, holdAt, holdEnd: hold ? holdAt + Math.max(0, hold.secs ?? lingers) : Infinity,
       from, shiftX: from ? from.x - caster.x : 0, shiftY: from ? from.y - caster.y : 0, aim: null, lefty: false, closeX: 0, closeY: 0,
+      close: null, closeBy: 0, closeDX: 0, closeDY: 0, travel: undefined, closeEnd: 0,
       targetFrom: vis.cast.pull && target && target !== caster && target.kind !== 'spot' ? opts.targetFrom ?? { x: target.x, y: target.y } : null, pullX: 0, pullY: 0,
       petFrom: null, petX: 0, petY: 0, pet: null,
     };
@@ -304,7 +325,8 @@ export class SpellStage {
       const p = this.playing[i];
       if (!sameWho(p.by, w)) continue;
       const e = this.now - p.start;
-      if (e >= 0 && e < poseEnd(p)) return this.castNow(p, e);
+      // And on past it while it bounds back to where it stands (`cast.close`), for the legs to step it.
+      if (e >= 0 && e < Math.max(poseEnd(p), p.travel ? p.closeEnd : 0)) return this.castNow(p, e);
     }
     return undefined;
   }
@@ -333,22 +355,45 @@ export class SpellStage {
   }
 
   /**
-   * How far in a melee cast closes (`cast.close`), nought to one, `e` seconds in: in over the wind-up to the blow,
-   * held through a hold, and back over the recovery.
+   * The close a cast asks for (`cast.close`), with what is in its caster's hand: nothing when it does not close, or not
+   * with that (`CastClose.when`).
    */
-  private closeShare(p: Playing, e: number): number {
+  private closeOf(p: Playing, c: Body): CastClose | null {
     const cl = p.vis.cast.close;
-    if (!cl || e < 0 || e >= poseEnd(p)) return 0;
-    const o = cl === true ? {} : cl, timing = p.vis.cast.timing, rel = timing.release;
+    if (!cl) return null;
+    const o = cl === true ? {} : cl;
+    return o.when && !o.when(c.figure?.gear?.weapon?.id) ? null : o;
+  }
+
+  /**
+   * When a closing cast's trip back begins and ends, in seconds from its start: from `back` of the way through the pose
+   * (its hold counted), to `after` seconds past the pose's end.
+   */
+  private backSpan(p: Playing, o: CastClose): [number, number] {
+    const timing = p.vis.cast.timing, rel = timing.release;
+    const at = (o.back ?? rel + (1 - rel) * 0.3) * timing.secs;
+    const start = at <= p.holdAt ? at : at + (p.holdEnd - p.holdAt);
+    const after = o.after ?? clamp(BACK_BASE + (BACK_TILE * p.closeBy) / UNITS_PER_TILE, BACK_LEAST, BACK_MOST);
+    return [start, poseEnd(p) + Math.max(0, after)];
+  }
+
+  /**
+   * How far in a melee cast closes (`cast.close`), nought to one, `e` seconds in: in over the wind-up to the blow,
+   * held through a hold, and back from the follow-through to a little past the end (`backSpan`). Also how far along
+   * the way in and the way back it is.
+   */
+  private closeShare(p: Playing, e: number, o: CastClose): { share: number; inn: number; out: number; back: [number, number] } {
+    const back = this.backSpan(p, o);
+    if (e < 0 || e >= back[1]) return { share: 0, inn: 0, out: 1, back };
+    const timing = p.vis.cast.timing, rel = timing.release;
     const u = poseClock(p, e) / timing.secs;
-    return smooth(seg(u, o.from ?? 0, o.to ?? rel)) * (1 - smooth(seg(u, o.back ?? rel + (1 - rel) * 0.3, 1)));
+    const inn = smooth(seg(u, o.from ?? 0, o.to ?? rel)), out = smooth(seg(e, back[0], back[1]));
+    return { share: inn * (1 - out), inn, out, back };
   }
 
   /** How far a melee cast carries its body in at the blow, in height units: what its blow is short of the target by, and no further than it may go. */
-  private closeBy(p: Playing, c: Body, aim: CastAim | null): number {
-    const cl = p.vis.cast.close;
-    if (!cl || !aim || c.figure?.moving || c.figure?.swimming || c.figure?.driving) return 0;
-    const o = cl === true ? {} : cl;
+  private closeBy(o: CastClose, c: Body, aim: CastAim | null): number {
+    if (!aim || c.figure?.moving || c.figure?.swimming || c.figure?.driving) return 0;
     const id = c.figure?.gear?.weapon?.id, span = id ? weaponSpan(id) : null;
     const reach = o.reach ?? CLOSE_ARM + (span ? span.to : 0);
     return clamp(aim.near - reach, 0, (o.most ?? CLOSE_MOST) * UNITS_PER_TILE);
@@ -366,7 +411,7 @@ export class SpellStage {
   private castNow(p: Playing, e: number): CastNow {
     return {
       id: p.id, t: Math.min(0.9999, poseClock(p, e) / p.vis.cast.timing.secs), at: p.aimed, held: heldShare(p, e), aim: p.aim ?? undefined,
-      moved: p.from ? Math.hypot(p.shiftX, p.shiftY) : 0, companion: p.pet && p.caster ? this.offsetOf(p.caster, p.pet) : undefined,
+      moved: p.from ? Math.hypot(p.shiftX, p.shiftY) : 0, companion: p.pet && p.caster ? this.offsetOf(p.caster, p.pet) : undefined, travel: p.travel,
     };
   }
 
@@ -389,6 +434,18 @@ export class SpellStage {
     for (const v of this.out.veils) {
       if (!sameWho(v.who, w)) continue;
       if (!best || v.tint + v.fade > best.tint + best.fade) best = { colour: v.colour, tint: v.tint, fade: v.fade };
+    }
+    return best;
+  }
+
+  /**
+   * How a creature is tinted by the spells on it this frame (`FxScene.tint`), for whoever draws it: the strongest it was
+   * given. Nothing when nothing tints it.
+   */
+  tintOf(w: Who): { colour: string; share: number } | undefined {
+    let best: { colour: string; share: number } | undefined;
+    for (const v of this.out.tints) {
+      if (sameWho(v.who, w) && (!best || v.share > best.share)) best = { colour: v.colour, share: v.share };
     }
     return best;
   }
@@ -471,7 +528,7 @@ export class SpellStage {
     k.now = env.now;
     k.dt = Math.min(0.1, env.dt);
     k.fast = env.fast;
-    k.night = clamp(env.night ?? 0);
+    k.night = this.night = clamp(env.night ?? 0);
     k.partCap = env.fast ? Math.round(MOST_PARTICLES / 3) : MOST_PARTICLES;
     this.over.length = 0;
     let keep = 0;
@@ -511,16 +568,42 @@ export class SpellStage {
     // Where the target stands from where the caster stands (before any closing in), for the pose and the effects.
     p.aim = this.aimOf(c, p, p.at.kind === 'self' ? null : this.targetOf(p.at, c, p.target));
     // A melee cast closing in on what it strikes (`cast.close`): the body drawn carried toward it over the wind-up by as
-    // much as its blow falls short, and back over the recovery. Where it is drawn, and so where its effects come from.
-    const by = this.closeBy(p, c, p.aim), share = by > 0 ? this.closeShare(p, t) : 0;
+    // much as its blow falls short, and back from the follow-through to a little past the cast's end, bounding. Where it is
+    // drawn, and so where its effects come from. How far, and which way, are kept from the blow on: the creature struck
+    // may die or run, and the body still has to get back.
+    if (!p.released) {
+      p.close = this.closeOf(p, c);
+      p.closeBy = p.close ? this.closeBy(p.close, c, p.aim) : 0;
+      if (p.target) {
+        const dx = p.target.x - c.x, dy = p.target.y - c.y, l = Math.hypot(dx, dy) || 1;
+        p.closeDX = dx / l;
+        p.closeDY = dy / l;
+      }
+    }
+    const by = p.closeBy, cs = p.close && by > 0 ? this.closeShare(p, t, p.close) : null, share = cs?.share ?? 0;
     p.closeX = p.closeY = 0;
+    p.travel = undefined;
+    p.closeEnd = cs ? cs.back[1] : 0;
     if (p.aim) p.aim.close = by;
-    if (share > 0 && p.target) {
-      const dx = p.target.x - c.x, dy = p.target.y - c.y, l = Math.hypot(dx, dy) || 1, go = (by * share) / UNITS_PER_TILE;
-      p.closeX = (dx / l) * go;
-      p.closeY = (dy / l) * go;
+    if (share > 0) {
+      const go = (by * share) / UNITS_PER_TILE;
+      p.closeX = p.closeDX * go;
+      p.closeY = p.closeDY * go;
       const x = c.x + p.closeX, y = c.y + p.closeY;
       c = { ...c, x, y, z: c.z + this.where.ground(x, y) - this.where.ground(c.x, c.y) };
+    }
+    if (cs && p.close && t < cs.back[1]) {
+      // The way it goes in the body's own frame, for the legs to step it: running in, bounding back (`CastTravel`).
+      const f = this.k.facingDir(c), right = this.k.local(c, UNITS_PER_TILE, 0, 0);
+      const ax = p.closeDX * (right.x - c.x) + p.closeDY * (right.y - c.y), ay = p.closeDX * f.x + p.closeDY * f.y;
+      const l = Math.hypot(ax, ay) || 1, dx = ax / l, dy = ay / l;
+      const steps = p.close.steps ?? true, back = t >= cs.back[0];
+      const stepping = steps === true || steps === (back ? 'back' : 'in');
+      const w = !stepping ? 0 : back ? smooth(seg(cs.out, 0, 0.1)) : smooth(seg(cs.inn, 0, 0.1)) * (1 - smooth(seg(cs.inn, 0.8, 1)));
+      p.travel = {
+        dir: back ? [-dx, -dy] : [dx, dy], by, at: back ? cs.out : cs.inn, gait: back ? 'bound' : 'run', w,
+        ground: [-dx * by * share, -dy * by * share],
+      };
     }
     // The companion, and where it is drawn: carried from where it stood over a leap the island made (`cast.companion`), or
     // put beside its master when the island has put it on the master's own spot.
@@ -578,6 +661,7 @@ export class SpellStage {
     // Whether the cast is played left-handed, decided while it is cast and kept after.
     if (c.figure?.cast) p.lefty = castLefty(c.figure);
     k.aim = p.aim;
+    k.travel = p.travel ?? null;
     k.lefty = p.lefty;
     k.side = p.lefty ? -1 : 1;
     k.timing = timing;
@@ -590,6 +674,8 @@ export class SpellStage {
     k.rand = rngOf((p.seed ^ Math.imul(Math.floor(this.now * 60), 2654435761)) >>> 0);
     k.companion = pet;
     k.lightsLeft = 2;
+    k.healing = !!p.info?.fx.heal;
+    k.grouped = 0;
     k.released = p.released ? t - p.releasedAt : -1;
     k.castLeft = Math.max(0, castEnd - t);
     const shapes0 = this.out.world.length + this.out.ground.length;
@@ -620,11 +706,11 @@ export class SpellStage {
       }
     }
     // Over its budgets this frame: said, for the preview.
-    const shapes = this.out.world.length + this.out.ground.length - shapes0;
+    const shapes = this.out.world.length + this.out.ground.length - shapes0 - k.grouped;
     if (shapes > SHAPES_MOST) this.over.push(`${p.id} ${shapes} shapes`);
     if (k.lightsLeft < 0) this.over.push(`${p.id} lights`);
-    if (!on) return t < Math.max(castEnd, p.arrive + (fx.impact?.secs ?? 0));
-    return !p.released || t < Math.max(castEnd, p.end);
+    if (!on) return t < Math.max(castEnd, p.closeEnd, p.arrive + (fx.impact?.secs ?? 0));
+    return !p.released || t < Math.max(castEnd, p.closeEnd, p.end);
   }
 
   /* ---- laying out --------------------------------------------------------------------- */
@@ -1058,8 +1144,9 @@ export class SpellStage {
   /** Light, over everything and over the night. */
   glowPass(ctx: CanvasRenderingContext2D): void {
     const ps = this.parts;
-    if (!this.out.glow.length && !ps.n) return;
+    if (!this.out.glow.length && !ps.n && !(this.night > 0.02 && this.out.lights.length)) return;
     ctx.save();
+    this.lightColour(ctx);
     ctx.globalCompositeOperation = 'lighter';
     for (const draw of this.out.glow) {
       draw(ctx);
@@ -1076,6 +1163,33 @@ export class SpellStage {
       }
     }
     ctx.restore();
+  }
+
+  /**
+   * The colour of each spell's light laid over what it falls on, at night: its hue, as a colour (`lightTint`), to as
+   * much of the way as it is dark and strong, over the circle it lights. The night takes the cold off a light's circle and
+   * adds its colour to what is under it (`Game.lights`): on grass, a warm white added is the grass's own green brought up,
+   * an olive pool. Laid as a colour over that, it is the light's own.
+   */
+  private lightColour(ctx: CanvasRenderingContext2D): void {
+    const eye = this.eye;
+    if (!eye || this.night <= 0.02 || !this.out.lights.length) return;
+    ctx.globalCompositeOperation = 'color';
+    for (const l of this.out.lights) {
+      const tint = lightTint(l.cast), a = Math.min(LIGHT_COLOUR_MOST, LIGHT_COLOUR * l.strength * this.night);
+      if (a <= 0.01) continue;
+      const x = eye.worldToScreenX(l.x, l.y), y = eye.worldToScreenY(l.x, l.y, this.where.ground(l.x, l.y)), r = l.radius * HALF_W * eye.zoom;
+      const [cr, cg, cb] = [1, 3, 5].map((i) => parseInt(tint.slice(i, i + 2), 16));
+      const grad = ctx.createRadialGradient(x, y, 0, x, y, r);
+      grad.addColorStop(0, `rgba(${cr},${cg},${cb},${a.toFixed(3)})`);
+      grad.addColorStop(0.55, `rgba(${cr},${cg},${cb},${(a * 0.55).toFixed(3)})`);
+      grad.addColorStop(1, `rgba(${cr},${cg},${cb},0)`);
+      ctx.fillStyle = grad;
+      ctx.beginPath();
+      ctx.arc(x, y, r, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.globalCompositeOperation = 'source-over';
   }
 
   /** The screen, last: a flash for your own great casts. */

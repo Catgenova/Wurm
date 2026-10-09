@@ -140,15 +140,17 @@ bone or the weapon's head more than 0.67 units (berserker was 15–16 at facings
 (`melee_reach`: 2.2 tiles for a sword, an axe or bare hands; a spear 3.2) and a creature comes to 1.1 tiles to strike
 (`HUNT_REACH`); a Lunge lands 0.4 inside the reach (1.8). A tile is 40 units and a standing blow reaches about 6
 units plus the weapon (17 for an axe), so no blow can be seen to land standing. `cast.close: true` (or a
-`CastClose` `{ from, to, back, reach, most }`) has the stage carry the drawn body toward the target over the wind-up
-(`from`..`to`, 0 to the release) by exactly what the blow is short of its near side (`reach` = 6 + the weapon's
-length, at most `most` = 2 tiles), and back over the recovery (`back`, the follow-through, to the end). The island
+`CastClose` `{ from, to, back, reach, most, after, steps, when }`) has the stage carry the drawn body toward the
+target over the wind-up (`from`..`to`, 0 to the release) by exactly what the blow is short of its near side (`reach` =
+6 + the weapon's length, at most `most` = 2 tiles), and back from `back` (the follow-through) to `after` seconds past
+the end of the cast (0.4–0.6 by distance), the legs running in and bounding back (see "New API", below). The island
 has not moved the body; it is drawn there and put back. `k.caster` is where it is drawn, so every effect follows; the
 renderer draws it there (`shiftOf`). Not while it walks. `c.aim.close` says how far it will be carried.
 
 **Stepping in: `stepIn(r, t, c, { hit, from?, back?, by?, reach?, most?, lead? })`** (poses.ts), called last in a
-pose: the body carried `by` units ahead over `from`..`hit` (the lead foot — the left — lifted and put down further on,
-the back foot kept where it stood, both legs solved to their feet, the hips let down), and back over `back`..1.
+pose: the body carried `by` units ahead over `from`..`hit` (the lead foot — the left — lifted and put down further on;
+past the first 3 units the back foot follows it in a beat behind, so a long step no longer splits the legs; both legs
+solved to their feet, the hips let down), and back over `back`..1.
 `by` defaults to what is missing: `c.aim.near - c.aim.close - reach` (reach 16), at most `most` (12 units). With
 `cast.close` the stage does the long way and `stepIn` the last stride. Returns how far the body is carried now.
 
@@ -264,7 +266,7 @@ Shapes (sizes in **pixels at zoom 1**, scaled by zoom; distances on the ground i
 | ground | `disc(c, r)`, `scorch(c, r)` | flat pool of colour / ragged burnt patch |
 | ground | `sigil(c, r, {points, step, turn, grow})` | outer + inner band, star, ticks; `grow` draws it on |
 | world | `orb(p, r)` | 6–8-sided lit gem with ink edge + glow |
-| world | `ribbon(points, {width, taper})`, `beam(a, b)` | ribbon/trail through 3D points |
+| world | `ribbon(points, {width, taper})`, `beam(a, b)` | ribbon/trail through 3D points; `taper` 'start' (default), **'end'**, 'both', 'none' |
 | world | `bolt(a, b, {jag, kinks, fork})` | jagged lightning, re-struck every frame |
 | world | `slash(body, {u, from, to, tilt, reach})` | crescent cut by the blade, `u` 0..1 progress |
 | world | `trail(body, {secs, inner, outer, key, edge})` | **the band the real weapon swept** over the last `secs` (0.12) of the cast, from `inner` to `outer` of the way from the fist to the point (0.4..1): the posed figure sampled every 1/60 s of the cast whatever the frame rate (so at 15 fps a blow is a smooth band, not planks), each sample posed once and kept, the head the pose already drawn; tapered to the edge at its tail (eaten, not faded), `main` with a `core` edge, inked. Mirrored casts, reverse grips, any weapon: it is where the weapon was |
@@ -281,7 +283,8 @@ Shapes (sizes in **pixels at zoom 1**, scaled by zoom; distances on the ground i
 | glow | `glow(p, r, alpha, colour, over?)`, `flare(p, r, alpha, colour?, turn?, light?, over?)` | additive, over the night. `flare`'s `light` is its glow's colour (as `Look.light`). **`over: true` lays it over in its own colour instead of adding it**: gold, brass and blood added over grass go lime/olive; laid over they stay gold |
 | light | `light(p, radiusTiles, strength, colour)` | cuts the night like a fire (max 8 at once) |
 | screen | `flash(alpha)` | tint the screen; own casts only, never on fast, capped 0.3 — use for the top tier only |
-| particles | `burst(p, n, opts)`, `emit(p, perSecond, opts)` | `kind`: spark, ember, mote (light, glow pass); smoke, dust, shard, drop, **mist** (things, depth-sorted; mist is a soft round puff with no edge — a breath, a vapour, a healing haze — where smoke is a hard hexagon). `over: true` draws a light kind laid over rather than added (warm sparks that must stay their colour); `ink: false` leaves a shard's dark edge off (small or bright chips) |
+| particles | `burst(p, n, opts)`, `emit(p, perSecond, opts)` | `kind`: spark, ember, mote (a small round glint, neutral), **heal** (the white "+" cross: health given back, heals only) (light, glow pass); smoke, dust, shard, drop, **mist** (things, depth-sorted; mist is a soft round puff with no edge — a breath, a vapour, a healing haze — where smoke is a hard hexagon). `over: true` draws a light kind laid over rather than added (warm sparks that must stay their colour); `ink: false` leaves a shard's dark edge off (small or bright chips) |
+| body | `tint(body, {colour, share})` | a creature tinted `share` of the way to `colour` (the palette's deep) **on itself**, this frame: sick, marked, frozen. Strongest wins; a person's goes to their `veil` |
 | body | `veil(body, {colour, tint, fade})` | a person's own body tinted `tint` of the way to `colour` (the palette's deep) and drawn `fade` of the way to nothing, this frame: a shroud, a stealth, a body gone to smoke. Call it every frame it is wanted, from any part (a linger too); the strongest a body is given wins |
 
 Every shape takes a `Look`: `main`, `deep`, `core`, `ink` (palette overrides), `alpha`, `glow` (0 = none), `light`
@@ -331,7 +334,9 @@ its tail**: `eatTail(points, u)` is the line with its first `u` gone, opaque to 
 
 Ground marks drawn in ink and deep tones vanish at night: give them a night rim (`glow` on a ground layer,
 `glow: k.night`) or choose a light tone by `k.night`. Keep a cast's lights small and warm: about 1.4 tiles and a warm
-white (`'#fff1d6'`) light the ground under a spell; 2.5–3 tiles in a saturated palette colour wash the screen olive.
+white (`'#fff1d6'`) light the ground under a spell. At night the stage now also lays each spell light's own hue over
+the circle it lights (see "New API"), so a warm light reads warm on grass and a blue one blue, rather than the grass's
+own green uncovered; keep the radius small all the same.
 The stage now holds each cast to **two lights a frame** (eight on the screen); more are refused and the preview says so.
 
 ### Fast graphics
@@ -339,6 +344,80 @@ The stage now holds each cast to **two lights a frame** (eight on the screen); m
 On fast graphics the kit's shapes draw **no glow of their own** (`k.glowOf(look)` is 0: the glow is the second copy of
 everything and the first thing to go); `k.glow`, `k.flare` and `k.light` still draw. Big rings keep a few more facets
 per tile out, so they stay round.
+
+## New API (framework pass 3)
+
+All opt-in or a fix to what was already there; a file that uses none of it is drawn as it was, but for the fixes
+listed (motes, rings close up, night lights, the shadow, the trip back, `stepIn`'s back foot).
+
+**The trip back, and footwork for `cast.close`.** The body carried in for a blow is no longer pulled back by the end of
+the cast. The way back starts at `back` (the follow-through, as before) and runs on **past the cast's end** for
+`CastClose.after` seconds (default 0.25 s + 0.15 s a tile, 0.4–0.6 s): about 3–4 tiles a second at the most where it was
+6–14. While the stage carries the body, **the stage steps the legs**: running steps in over the wind-up, two-footed
+bounds back (both feet off the ground, the body lifted, the knees drawn up, landing on bent knees, leant back), each
+foot kept where it lands while the body goes over it (the figure now takes the ground going by under the body,
+`Rig.ground`, so a planted foot stays put in the game too). The steps' share of the legs blends in from the pose's and
+back out at the blow, so a lunge or `stepIn` at the hit is the pose's own. Past the end of the cast the figure is
+still given the cast (`t` at its end, weight nought) so the legs can bound.
+
+- **What the stage is doing, to key to:** `c.travel` in the pose and `k.travel` in the effects, a `CastTravel`
+  `{ dir, by, at, gait: 'run' | 'bound', w, ground }` — the way it goes in the body's frame, how far the whole way is
+  (height units), how far along (0..1), running in or bounding back, the steps' share of the legs; null/undefined
+  while the body is not carried. Key a run's streaks and dust or an arm pumping to it, rather than to a copy of the
+  stage's curve: that copy is now wrong on the way back, which ends `after` seconds past the cast.
+- **Opt out: `close: { ..., steps: false }`** (neither way), `steps: 'in'` or `steps: 'back'` (one way only). Do not
+  leave a file's own run and the stage's both on: the two strides stack. **blade.ts:** delete the five
+  `dash(r, t, c, …)` calls (`measuredCut`, `lunge`, `hamstring`, `shieldBash`, `disarmingCut`) and keep the stage's
+  steps; key `rush` to `k.travel` (`gait === 'run'`, `w`) instead of `pace`/`closeAt`, which assume the way back ends
+  at the end of the cast. (Or keep `dash`, set `steps: false` in `closeOf`, and drive it from `c.travel`.)
+- `after: 0` puts the body back by the end of the cast, as before (no reason to, now).
+- The effects see the body where it is drawn (`k.caster`), all the way home; `k.castLeft` is still the pose's own.
+
+**A close chosen by the weapon: `CastClose.when(weaponId)`.** `close: { from, to, when: (w) => !!w && isKnife(w) }`
+closes only when it says yes for what is in the caster's hand (asked each frame up to the blow, kept from then).
+`cast.close` is still read each frame up to the blow, so a getter keeps working; **skirmisher.ts should switch over**:
+replace `get close() { return runCloses() ? RUN_CLOSE : false; }` with
+`close: { ...RUN_CLOSE, when: (w) => w !== undefined && !WEAPON_BY_ID.get(w)?.thrown }` (a weapon that is not thrown,
+a knife, is a blow; a javelin or an axe is thrown from where it stands) and drop `runCloses` and the map of casters'
+weapons `charge` fills. The getter decided for every Hit and Run on the screen at once; `when` decides for each cast.
+
+**`stepIn`'s back foot follows.** Past the first 3 units the lead foot carries (`LUNGE`), the back foot steps in after
+it, a third of the way behind, so `by: 12` is a step and a half rather than the legs split twenty units apart. `most`
+is still 12; reach is unchanged.
+
+**The shadow follows the body.** While a cast is on a person, their shadow is under their hips as the cast has them
+(`castShade` in sprites.ts, the preview too): a dart with `r.at`, a `stepIn`, a bound all take the shadow with them, and
+it shrinks while the feet are off the ground. Not on the move (the walk's legs).
+
+**Night lights read as their own colour.** At night the stage lays each spell light's hue (`lightTint`: its own hue at
+85% saturation, grey for a white) over the circle it lights, as a colour (`'color'` blend) at up to 0.75 at its middle
+(1.2 × strength × night). The night takes the cold wash off a light's circle, uncovering the grass as green as by day,
+and adds the light's colour; a warm white added to green grass was green (the olive pools). Now a `'#fff1d6'` light at
+0.5 is amber on night grass, Pikeman's blue aim light blue. Nothing changes by day, or for lights that are not spells'.
+
+**Rings round close up.** `k.ring` and `k.disc` cut each facet finer as the ring gets bigger on the screen (`k.finer`:
+a side no longer than 24 px, up to 8 times), so at zoom 3–4 a shock wave is round; at play zoom the counts are as
+they were, and dashes and the glow along a ring go by the old facets. **For your own circles**, `k.roundFacets(r, most)`
+is `facets` cut as finely (Blade's measure, Guardian's Call's ticks); `n:` given to `ring` is used as given.
+
+**Motes are neutral; heals keep the cross.** `kind: 'mote'` is now a small round glint. `kind: 'heal'` is the white
+"+" cross, for health given back and nothing else. A spell whose numbers are a heal (`fx.heal`: Field Dressing,
+Healing Circle, Battlefield Surgery, Restoration, Miracle Worker, Lick Wounds) still draws its motes as the cross;
+everywhere else switch to `'heal'` only where the spell gives health back (Regenerate, Mass Dressing).
+
+**Kit additions.**
+- `k.tint(body, { colour?, share? })`: a creature tinted on itself this frame (`share` 0.4 and the palette's deep by
+  default) — sick, marked — drawn by the renderer as a blow's flash is, in your colour. People: their veil's tint.
+- `k.ribbon(pts, { taper: 'end' })`: widest at the first point, nothing at the last (a beam from an eye, a thrust).
+- `k.together(() => { ... })`: everything recorded inside counts as one shape in the budget. For the same mark on every
+  body an area caught (a burn on each of sixteen creatures a Firestorm caught): each piece still sorts with its body.
+- **Stow and draw animated:** `r.stow` from 0 to 1 now carries the weapon from the hand to where it is put away (the
+  back, a hip sheath, through the belt) over the whole of the stow's rise, and back out as it falls; with the cast's
+  blend-in that is about a tenth of a second. For a slower one key it: `r.stow = one(t, [[0, 0], [0.3, 1], ...])`,
+  with the hand brought to the hip (`reach`) for it to be seen going.
+
+**Preview.** `--pull`, `--peers`, `--room` (above); knives' Hit and Run at melee reach; budget warnings on stdout; a
+spell on oneself gets 4 tiles of room, trimmed back to what was drawn, so a hedge or a ring round the caster is whole.
 
 ## Palettes (in each file's `PALETTE`; tweak your own)
 
@@ -396,11 +475,15 @@ reach of the enemy for Sic, Drag Down, Disembowel, leaping for Pounce, onto you 
 `--species`, `--companion <species>|1|0` (a companion by the caster; on by default for a Beastmaster's spells only),
 `--from <tiles>` (the caster stood that far back before the island moved them: a Lunge; **negative for a leap away**
 from the target, a Parting Throw's default), `--state
-burning|bleeding|held` (on the target creature; bleeding by default for a Disembowel), `--list 1` (every id by group).
+burning|bleeding|held` (on the target creature; bleeding by default for a Disembowel), `--pull <tiles>` (the target
+stood that much further out before the island dragged it in: `cast.pull`, a Hook's default from its own numbers),
+`--peers N` (N people about the target, or about the caster for a spell on oneself), `--room <tiles>` (ground round
+the caster the frame takes in, trimmed back to what was drawn; 4 for a spell on oneself), `--list 1` (every id by group).
+A throwing spell made with a weapon that is not thrown (a knife's Hit and Run) is placed at melee reach.
 Frames run left to right then down; each is labelled with time and phase (cast / release / after), the facing the
 caster is drawn at (turned to the companion for `face: 'companion'`, as the game turns somebody standing), and
 `! …` when a cast went over its budget that frame (shapes over 15, lights over 2) or tinted the screen (`FLASH`:
-keep that to the top tier). A long hold is squeezed to a second of the frames, so the wind-up and the letting go
+keep that to the top tier); the same warnings are printed to stdout, a line a frame (`! over budget t=… …`). A long hold is squeezed to a second of the frames, so the wind-up and the letting go
 still get theirs. The frame reaches a tile past the target, and room over the top for a tall effect. A cell too big
 for a canvas (a big area at zoom 6) is put on more columns, or refused with a message saying so. The top of every picture is trimmed to the tallest
 thing drawn in any of them, so a tall effect over a big creature is not cut off. The tool deletes its own

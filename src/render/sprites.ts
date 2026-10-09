@@ -2,7 +2,7 @@ import { hash2, mulberry32 } from '../world/noise';
 import { cushions, hashOf, type Cushion } from './ivy';
 import type { Look } from '../game/look';
 import { EMOTE_BY_ID, HOPS, emotePose } from '../game/emotes';
-import { drawBust, drawFigure, shineOver, type FigurePose } from './figure';
+import { drawBust, drawFigure, figureJoints, figureStance, shineOver, viewOf, type FigurePose } from './figure';
 import { BUSH_DEFS, TREE_AGES, TREE_DEFS } from '../world/tiles';
 import { drawWildermon, drawWildermonPortrait, modelled, wildermonTop } from './wildermon';
 import { bushYear, leafageOf, newLeaf, type Bloom } from './foliage';
@@ -4976,9 +4976,27 @@ export function drawPlayer(ctx: CanvasRenderingContext2D, sx: number, sy: number
 
 /** The patch of ground a body shades: smaller while a hop has it off the ground, by a fifth at the top. */
 function footShade(ctx: CanvasRenderingContext2D, sx: number, sy: number, zoom: number, pose: PlayerPose): void {
-  const up = pose.emote === 'hop' ? emotePose('hop', pose.emoteT ?? 0).lift / 7 : 0;
+  const cast = castShade(pose);
+  const up = pose.emote === 'hop' ? emotePose('hop', pose.emoteT ?? 0).lift / 7 : cast[2];
   const k = 1 - 0.2 * up;
-  contact(ctx, sx, sy, 8 * zoom * k, 3.4 * zoom * k);
+  contact(ctx, sx + cast[0] * zoom, sy + cast[1] * zoom, 8 * zoom * k, 3.4 * zoom * k);
+}
+
+/**
+ * Where a body's shade goes while a spell is cast with it (`FigurePose.cast`): under its hips as the cast has them
+ * rather than where it stands, so a body the cast carries off its spot (`Rig.at`: a dart, a step in, a bound) takes
+ * its shade with it -- in pixels at zoom one from where it stands, and how far off the ground the feet are, as a hop's
+ * share. Nothing without a cast, or on the move, whose legs are the walk's.
+ */
+export function castShade(pose: FigurePose): [number, number, number] {
+  if (!pose.cast || pose.moving || pose.swimming || pose.driving) return [0, 0, 0];
+  // Under the hips, where the weight is (the light is overhead): not under a foot flung out ahead or behind.
+  const [a, b, h] = figureJoints(pose, ['ankle0', 'ankle1', 'pelvis']);
+  const rest = figureStance(pose.look);
+  const x = h[0], y = h[1];
+  const lift = Math.max(0, Math.min(a[2] - rest[0][2], b[2] - rest[1][2]));
+  const v = viewOf(((Math.round(pose.facing) % 8) + 8) % 8);
+  return [x * v.ex[0] + y * v.ey[0], x * v.ex[1] + y * v.ey[1], Math.min(1, lift / 7)];
 }
 
 /**

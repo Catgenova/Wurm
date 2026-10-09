@@ -4322,7 +4322,8 @@ export class Renderer {
    * does the same work with a silhouette taken off a scratch canvas: white
    * over the top for a blow, and stamped eight ways round the outside for the
    * thing under the cursor, which is a real outline rather than a glow round
-   * a box.
+   * a box. A flash is white unless `colour` says otherwise: a spell's tint on
+   * a creature (`SpellStage.tintOf`) is the same thing in its own colour.
    */
   private paint(
     ctx: CanvasRenderingContext2D,
@@ -4332,6 +4333,7 @@ export class Renderer {
     sx: number,
     sy: number,
     draw: (g: CanvasRenderingContext2D, px: number, py: number) => void,
+    colour = '#ffffff',
   ): void {
     if (effect === 'none') {
       draw(ctx, sx, sy);
@@ -4343,7 +4345,7 @@ export class Renderer {
     const top = sy - oy;
     if (effect === 'flash') {
       ctx.drawImage(pad, left, top, side, side);
-      this.stamp('#ffffff');
+      this.stamp(colour);
       ctx.globalAlpha = Math.max(0, Math.min(1, power));
       ctx.drawImage(pad, left, top, side, side);
       ctx.globalAlpha = 1;
@@ -4694,7 +4696,9 @@ export class Renderer {
         if (cr.windup > 0) this.drawWindupReach(ctx, ent.sx, ent.sy, zoom, cr.windup);
         // Drawn back toward where it stood while a spell that moved it carries it over (`cast.pull`).
         const [csx, csy] = this.spellShift({ kind: 'creature', id: cr.id });
-        this.paint(ctx, zoom, hit > 0 ? 'flash' : hovering ? 'hover' : 'none', hit * 0.92, ent.sx + csx, ent.sy + csy, (g, px, py) =>
+        // Tinted by a spell on it (sick, marked: `FxScene.tint`), on the creature itself, as a blow's flash is but in its colour.
+        const tint = hit > 0 || hovering ? undefined : this.spells.tintOf({ kind: 'creature', id: cr.id });
+        this.paint(ctx, zoom, hit > 0 || tint ? 'flash' : hovering ? 'hover' : 'none', tint ? tint.share : hit * 0.92, ent.sx + csx, ent.sy + csy, (g, px, py) =>
           drawCreature(g, px, py, zoom, {
             species: def.id,
             facing: turned,
@@ -4710,6 +4714,7 @@ export class Renderer {
             graze: cr.state === 'forage',
             rare: cr.rare,
           }),
+          tint?.colour,
         );
         // In the traces: the reins back from its head to the box of what it pulls.
         if (cr.hitchedTo !== null) this.drawReins(ctx, cr, ent.sx, ent.sy, turned, big, zoom);

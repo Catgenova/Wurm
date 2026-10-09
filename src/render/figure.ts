@@ -2107,6 +2107,12 @@ export interface Rig {
   /** How firmly each foot is on the ground, for the body carried on a curve: its knee gives or straightens to keep it there. */
   plant?: [number, number];
   /**
+   * Where the ground under the body has got to, in the body's frame (x to its right, y ahead), while something carries
+   * the body over it that the pose does not know of -- a spell drawing it in to strike and back (`./spells`, `cast.close`):
+   * a foot kept on the ground goes with the ground, so it stays where it was put rather than gliding with the body.
+   */
+  ground?: [number, number];
+  /**
    * How far each hand is open, from closed (nought) to spread (one): a float rather than a switch, so that a hand opening to wave
    * or closing again uncurls and curls its fingers over a few frames (`kit.open`'s steps) instead of snapping from a fist to a fan. `true` is one, so a pose written before the float still reads.
    */
@@ -4152,8 +4158,11 @@ function rigOf(p: FigurePose, fr: Frame, left = lefty(p.facing), kept: Kept = {}
     // Each hand's goal, seeded where the hand is before the cast, so a goal the cast sets is blended in from there (see `Rig.reach`).
     seedReach(r, fr);
     castOver(r, p, castPoser);
-    // Put away for the cast, once it has the hands (`Rig.stow`).
-    if ((r.stow ?? 0) >= 0.5) r.stowed = true;
+    // Put away for the cast, once it has the hands (`Rig.stow`): carried from the hand to where it goes over the middle
+    // half of the way, as work's putting away is (`stowing`), rather than gone from the hand in a frame.
+    const stow = r.stow ?? 0;
+    if (stow >= 0.5) r.stowed = true;
+    if (stow > STOW_CAST[0] && stow < STOW_CAST[1] && held && r.stowing === undefined) r.stowing = STOW_GO[0] + (STOW_GO[1] - STOW_GO[0]) * (stow - STOW_CAST[0]) / (STOW_CAST[1] - STOW_CAST[0]);
   }
   if (r.kneel || r.reach || r.both) castExtras(r, p, fr);
   return r;
@@ -4767,7 +4776,7 @@ function mixRig(a: Rig, b: Rig, w: number): Rig {
     stowed: w < swap ? a.stowed : b.stowed, stowing: a.stowed === b.stowed || a.tool === b.tool ? undefined : b.stowed ? w : 1 - w,
     // Something heavy goes from one shoulder's hand to the other's half way, where the one coming down passes the one going up.
     carried: w < 0.5 ? a.carried : b.carried, spin: w < 0.5 ? a.spin : b.spin, swapping: w < 0.5 ? a.swapping : b.swapping,
-    plant: b.plant ? [b.plant[0] * w, b.plant[1] * w] : a.plant && [a.plant[0] * (1 - w), a.plant[1] * (1 - w)],
+    plant: b.plant ? [b.plant[0] * w, b.plant[1] * w] : a.plant && [a.plant[0] * (1 - w), a.plant[1] * (1 - w)], ground: b.ground ?? a.ground,
     // A cast's asks, blended as a cast blends them in (from nought where one pose has none), so stopping or setting off in the
     // middle of a cast neither drops a blade back to its carry nor straightens a knee that is down; a switch goes over half way.
     wield: some(a.wield, b.wield, n), wieldStaff: some(a.wieldStaff, b.wieldStaff, n), wieldBow: some(a.wieldBow, b.wieldBow, n),
@@ -4869,6 +4878,8 @@ interface Held {
   /** Its feet as drawn, and how high its hips were drawn over them: see `footed`. */
   feet?: Foot[];
   hips?: number;
+  /** Where the ground was under it last time it was drawn (`Rig.ground`). */
+  ground?: [number, number];
   /** Working left-handed, as last changed at a blow, and how far the mallet hand is held down as the far one: see `settle`. */
   left: boolean;
   far: number;
@@ -5128,6 +5139,10 @@ const wrapDeg = (a: number): number => a - 360 * Math.round(a / 360);
  */
 function footed(h: Held, rig: Rig, walking: Rig | undefined, goal: Rig | undefined, fr: Frame, changing: boolean, turned: number, togo: number, now: number, dt: number, starting = false): { rig: Rig; busy: boolean } {
   const moving = !!walking;
+  // The ground carried under the body by a spell since it was last drawn (`Rig.ground`), which a foot on it goes with.
+  const gr = rig.ground, gr0 = h.ground;
+  h.ground = gr && [gr[0], gr[1]];
+  const cx = gr && gr0 ? gr[0] - gr0[0] : 0, cy = gr && gr0 ? gr[1] - gr0[1] : 0;
   if (rig.sink > 0 || rig.sit || rig.lift > 0) {
     h.feet = undefined;
     h.hips = undefined;
@@ -5227,7 +5242,7 @@ function footed(h: Held, rig: Rig, walking: Rig | undefined, goal: Rig | undefin
     // Fixed on the ground: round with the turn, and back with the ground going by if it is on it.
     const q = round(f.at);
     const g = went[k] ?? [gx, gy];
-    f.at = f.down && w.down ? [q[0] + g[0], q[1] + g[1], q[2]] : q;
+    f.at = f.down && w.down ? [q[0] + g[0] + cx, q[1] + g[1] + cy, q[2]] : q;
     f.yaw += turned;
     // Coming down out of a stride into a stop with the other foot already down, kept in the air until it is over where it is to
     // stand: put down short of there, it stepped again at once.
@@ -8429,6 +8444,8 @@ const SWAP_GAP = 0.9, SWAP_ROUND = 1.0;
 const SWAP_BEND = 35;
 /** Over which share of a blend into or out of work a weapon carried in the hand goes onto the back or comes off it: see `wield`. */
 const STOW_GO: [number, number] = [0.05, 0.65];
+/** The part of a cast's `Rig.stow` over which what is in the hand is carried to where it is put away, and back: all of it, so it goes over the whole of the blend into the cast. */
+const STOW_CAST: [number, number] = [0.02, 0.98];
 /** Which way the elbow of a hand on the haft is out, in the chest's frame for the right arm: lower on the haft, further up it, and between. */
 const SWAP_POLE: [V3, V3, V3] = [[0.75, -0.25, -0.62], [0.3, -1, 0], [0.6, -0.3, 0.7]];
 /** Over which of the swap the left elbow goes from down to up as its hand comes to be the further up the haft, and the right's the other way about, mirrored: see `shoulder`. */
@@ -9514,6 +9531,30 @@ function wield(out: Part[], named: Map<string, Part[]>, r: Rig, b: Bones, gear: 
       const xf = joint(aimed(b.chest, [-dir[0] * mid, behind, z - dir[2] * mid], dir, [0, -1, 0]), [0, 0, 0], 0, 0, lr < 0 ? 180 - turn : turn);
       return { xf, lr };
     };
+    // Sheathed at the hip: the scabbard's throat at the belt on the left, forward of the hip, and the blade down and back behind
+    // the leg; a knife's upright at the front of the belt, its handle standing up over it where it shows from either side.
+    const hipAt = (): Xf => {
+      const side = 1.64 * fr.wa * fit + 0.3;
+      const knife = arm.to < KNIFE_TO;
+      // A knife on the right of the buckle, clear of the left hand wherever work holds it; a blade on the left, drawn across.
+      const x = knife ? 1 : -1;
+      // Seated, the scabbard swings back along the seat and a little out, rather than hanging down through it to below the feet.
+      // Standing, a sword's hangs out from the leg enough to be seen past it from the front.
+      const dir = unit(r.sit ? [0.3 * x, -0.9, -0.28] : knife ? [0.12, 0.1, -1] : [-0.3, -0.56, -0.78]);
+      const at: V3 = knife ? [side * 0.84, 1.18 * fit, 1.25] : [-side * 1.06, 0.55, 1.15];
+      const k = arm.throat ?? 0.7;
+      return aimed(b.pelvis, [at[0] - dir[0] * k, at[1] - dir[1] * k, at[2] - dir[2] * k], dir, [x, 0, 0]);
+    };
+    // Through the belt at the right hip, head up: a hatchet by its haft with its head on the belt, a club by its grip under the knob;
+    // an axe's bit turned out from the hip and a little back, so its profile shows from in front and behind, and three-quarters on
+    // from the right and three-quarters away from the left, rather than its edge.
+    const beltAt = (): Xf => {
+      const side = 1.64 * fr.wa * fit + 0.25;
+      const [outward, ahead] = arm.splay ?? [0.12, 0.2];
+      const dir = unit(arm.headUp ? [outward, ahead, 1] : [outward, ahead + 0.02, -1]);
+      const k = arm.belt ?? 0;
+      return aimed(b.pelvis, [side - dir[0] * k, 0.35 - dir[1] * k, 1.15 - dir[2] * k], dir, [-0.5, -1, 0]);
+    };
     // An arrow in the free right hand, with a bow in the left (`Rig.arrowHand`): through the fist as a haft is held, a fifth of
     // the way up from its nock, and the hand closed over it.
     if (r.arrowHand && !r.stowed && arm.carry === 'bow') {
@@ -9581,28 +9622,10 @@ function wield(out: Part[], named: Map<string, Part[]>, r: Rig, b: Bones, gear: 
       }
       for (const h of named.get(`hand${hand}`) ?? []) h.after = grip;
     } else if (arm.stow === 'hip' && c.sheathed) {
-      // The scabbard's throat at the belt on the left, forward of the hip, and the blade down and back behind the leg; a knife's
-      // upright at the front of the belt, its handle standing up over it where it shows from either side.
-      const side = 1.64 * fr.wa * fit + 0.3;
-      const knife = arm.to < KNIFE_TO;
-      // A knife on the right of the buckle, clear of the left hand wherever work holds it; a blade on the left, drawn across.
-      const x = knife ? 1 : -1;
-      // Seated, the scabbard swings back along the seat and a little out, rather than hanging down through it to below the feet.
-      // Standing, a sword's hangs out from the leg enough to be seen past it from the front.
-      const dir = unit(r.sit ? [0.3 * x, -0.9, -0.28] : knife ? [0.12, 0.1, -1] : [-0.3, -0.56, -0.78]);
-      const at: V3 = knife ? [side * 0.84, 1.18 * fit, 1.25] : [-side * 1.06, 0.55, 1.15];
-      const k = arm.throat ?? 0.7;
-      const xf = aimed(b.pelvis, [at[0] - dir[0] * k, at[1] - dir[1] * k, at[2] - dir[2] * k], dir, [x, 0, 0]);
+      const knife = arm.to < KNIFE_TO, x = knife ? 1 : -1, xf = hipAt();
       bit(c.sheathed, xf, 0.03, { after: on('pelvis', 'skirt', 'belt', 'abdomen', knife ? 'thigh1' : 'thigh0'), front: within(xf, mv(b.pelvis.m, [x, 0, 0])) });
     } else if (arm.stow === 'belt') {
-      // Through the belt at the right hip, head up: a hatchet by its haft with its head on the belt, a club by its grip under the knob;
-      // an axe's bit turned out from the hip and a little back, so its profile shows from in front and behind, and three-quarters on
-      // from the right and three-quarters away from the left, rather than its edge.
-      const side = 1.64 * fr.wa * fit + 0.25;
-      const [outward, ahead] = arm.splay ?? [0.12, 0.2];
-      const dir = unit(arm.headUp ? [outward, ahead, 1] : [outward, ahead + 0.02, -1]);
-      const k = arm.belt ?? 0;
-      const xf = aimed(b.pelvis, [side - dir[0] * k, 0.35 - dir[1] * k, 1.15 - dir[2] * k], dir, [-0.5, -1, 0]);
+      const xf = beltAt();
       // Over the chest as well as the hips from its own side: a club's knob stands up beside the ribs, and under the coat it is a stick.
       bit(c.whole, xf, 0.03, { after: on('pelvis', 'skirt', 'belt', 'abdomen', 'chest', 'thigh1'), front: within(xf, mv(b.pelvis.m, [1, 0, 0])) });
     } else {
@@ -9620,14 +9643,17 @@ function wield(out: Part[], named: Map<string, Part[]>, r: Rig, b: Bones, gear: 
      * a long bow left a stub in the hand for one.
      */
     const goes = r.stowing === undefined ? 0 : step(r.stowing, ...STOW_GO);
-    const inHand = goes > 0 && goes < 1 && !(arm.stow === 'hip' && c.sheathed) && arm.stow !== 'belt' && heldFrame({ ...r, stowed: false }, b, arm, facing);
+    // Put away for a spell (`Rig.stow`), it goes into its sheath or through the belt as well as onto the back; for work, only onto the back.
+    const cast = (r.stow ?? 0) > 0;
+    const hip = arm.stow === 'hip' && !!c.sheathed, belt = arm.stow === 'belt';
+    const inHand = goes > 0 && goes < 1 && (cast || (!hip && !belt)) && heldFrame({ ...r, stowed: false }, b, arm, facing);
     if (inHand) {
-      const to = slungAt().xf, from = inHand.xf;
+      const to = hip ? hipAt() : belt ? beltAt() : slungAt().xf, from = inHand.xf;
       out.splice(first);
       back.length = 0;
       slung = strapPal = undefined;
       const t: V3 = [from.t[0] + (to.t[0] - from.t[0]) * goes, from.t[1] + (to.t[1] - from.t[1]) * goes, from.t[2] + (to.t[2] - from.t[2]) * goes];
-      bit(goes < 0.5 ? c.whole : c.sheathed ?? c.whole, { m: turnBetween(from.m, to.m, goes), t }, 0.05);
+      bit(goes < 0.5 || hip ? c.whole : c.sheathed ?? c.whole, { m: turnBetween(from.m, to.m, goes), t }, 0.05);
     }
   }
   const s = gear.offhand;
