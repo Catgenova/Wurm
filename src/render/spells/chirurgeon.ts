@@ -284,7 +284,7 @@ function tally(k: FxScene, c: { x: number; y: number }, r: number, n: number, li
   if (a <= 0.01 || n < 1 || r <= 0.05) return;
   const band = o.band ?? Math.max(0.04, r * 0.11);
   const span = TAU / n, gap = Math.min(span * 0.3, 0.12);
-  const sub = Math.max(2, Math.min(k.fast ? 4 : 8, Math.round(span * r * 5)));
+  const sub = Math.max(2, Math.min(k.fast ? 3 : 5, Math.round(span * r * 4)));
   const turn = (o.turn ?? 0) - Math.PI / 2;
   const whole = Math.floor(lit), part = lit - whole;
   // Each segment a polygon on the island in tiles, in one of three layers -- lit, going out, spent -- so the whole
@@ -1081,7 +1081,6 @@ export const CHIRURGEON: Record<string, SpellVisual> = {
         const r = R * easeOut(seg(u, 0, 0.42));
         const hold = 1 - seg(u, 0.7, 1);
         k.ring(c, Math.max(0.1, r), { band: 0.12 + 0.12 * (1 - seg(u, 0, 0.42)), alpha: hold, glow: 1.2, turn: u * 0.4 });
-        k.disc(c, r, { alpha: 0.07 * hold });
         // Just inside the edge, a running stitch: the circle sewn shut round whoever is in it.
         if (r > 0.6) k.ring(c, r - 0.28, { band: 0.06, alpha: 0.8 * hold, dash: 2, n: Math.max(16, Math.round(r * 12)), main: PALETTE.core, deep: PALETTE.main, glow: 0, turn: u * 0.4 });
         crossOnGround(k, c, Math.min(r * 0.9, R * 0.3), { alpha: 0.6 * hold * seg(u, 0.1, 0.4), turn: 0 });
@@ -1226,9 +1225,8 @@ export const CHIRURGEON: Record<string, SpellVisual> = {
           glint(k, k.heart(b), 3, smooth(age / 0.6) * smooth(left / 1) * flashOf(age % 1, 0.1) * 0.7);
         }
         const a = smooth(age / 0.6) * smooth(left / 1);
-        // The edge of the sickness kept as the seconds of the bleed, a faint stain over all it covers, and a low miasma
-        // creeping inside it.
-        k.disc(k.caster, R * 0.97, { main: BLOOD_DEEP, alpha: 0.06 * a });
+        // The edge of the sickness kept as the seconds of the bleed, and a low miasma creeping inside it. No stain over
+        // the whole of it: the most of its cost for ten seconds, and the tally already marks the edge.
         tally(k, k.caster, R, Math.round(secs), left, { alpha: 0.55 * a, band: 0.12, main: BLOOD, deep: BLOOD_DEEP, ink: BLOOD_INK, light: BLOOD_LIGHT, turn: age * 0.05 });
         if (!k.fast || k.rand() < 0.5) {
           const an = k.rand() * TAU, rr = R * Math.sqrt(k.rand());
