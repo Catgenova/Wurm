@@ -37,7 +37,7 @@
  * over a blow by what the cue says is missing (`c.aim`).
  */
 import { armToward, figureStance, standFeet, type Euler, type Rig, type V3 } from '../figure';
-import type { CastPose, PoseCue } from './index';
+import type { CastPose, CastTravel, PoseCue } from './index';
 import type { CastKind } from './info';
 import { clamp, seg, smooth } from './kit';
 
@@ -316,18 +316,105 @@ export function stepIn(r: Rig, t: number, c: PoseCue, o: { hit: number; from?: n
   const now = by * go * (1 - home);
   const lead = o.lead ?? 0, rear = 1 - lead;
   const feet = figureStance(c.look);
-  // The hips end a little over half way between the feet, so the lead foot goes further than the body does.
-  const stride = now / 0.6;
+  // The hips end a little over half way between the feet, so the lead foot goes further than the body does -- for the first
+  // `LUNGE` units of it. Past that the back foot follows, a beat behind, so a long step is a step and a half rather than the
+  // legs split twenty units apart.
+  const lunge = Math.min(by, LUNGE), rest = by - lunge;
+  const stride = (lunge * go * (1 - home)) / 0.6 + rest * go * (1 - home);
   // Off the ground while it travels, out and back: a step, not a slide.
   const lift = 1.4 * (Math.sin(Math.PI * seg(t, from, o.hit)) + Math.sin(Math.PI * seg(t, back, 1)));
   const put: [V3, V3] = [[...feet[0]] as V3, [...feet[1]] as V3];
   put[lead] = [feet[lead][0], feet[lead][1] + stride, feet[lead][2] + lift];
   put[rear] = [...feet[rear]] as V3;
+  if (rest > 0.01) {
+    // The back foot's step: going a third of the way in after the lead foot does and coming back the sooner, so it never
+    // passes it.
+    const f0 = from + (o.hit - from) * 0.35, b1 = back + (1 - back) * 0.7;
+    const follow = rest * smooth(seg(t, f0, o.hit)) * (1 - smooth(seg(t, back, b1)));
+    put[rear] = [feet[rear][0], feet[rear][1] + follow, feet[rear][2] + 1.4 * (Math.sin(Math.PI * seg(t, f0, o.hit)) + Math.sin(Math.PI * seg(t, back, b1)))];
+  }
   r.at = [r.at[0], r.at[1] + now, r.at[2]];
   // The weight on the back foot while the lead one is up, and over onto it as it lands.
   const on = (lead ? 1 : -1) * (lift > 0.2 ? -0.6 : 0.4);
   standFeet(r, put, { on, bend: o.bend ?? 10, look: c.look });
   return now;
+}
+
+/** How far the body is carried by `stepIn` on the lead foot alone, in height units, before the back foot follows it in. */
+const LUNGE = 3;
+
+/** Height units a running step in covers, and a bound back (`cast.close`'s footwork): how many there are is the way over these. */
+const RUN_STEP = 18, BOUND = 26;
+/** Shares of a step or a bound with a foot on the ground pushing off, the rest in the air. */
+const RUN_CONTACT = 0.3, BOUND_CONTACT = 0.2;
+
+/**
+ * Where foot `k` is along a way `by` units long when `at` (nought to one) of it has been gone, and how far off the
+ * ground: `n` steps, each a push off a foot on the ground for `c` of it and the rest in the air, landing a little
+ * past where the body is (so it goes over the foot and leaves it behind). Running, the feet take it in turns, `first`
+ * on the ground for the first; bounding, both go together. Both come down at the end of the way, a little before the
+ * body has got there, and it settles over them.
+ */
+function footAlong(at: number, by: number, n: number, c: number, k: number, first: number, bound: boolean, high: number): [number, number] {
+  const a = (c * by) / (2 * n), end = 1 - c / (2 * n);
+  // From standing, the first push off is half as long: the body has not got going over the foot yet.
+  let off = bound || k === first ? c / (2 * n) : 0, pos = 0;
+  for (let j = 1; j <= n; j++) {
+    const last = j === n;
+    if (!last && !bound && (first + j) % 2 !== k) continue;
+    const l2 = last ? end : j / n, p2 = last ? by : (j * by) / n + a;
+    if (at < off) return [pos, 0];
+    if (at < l2) {
+      const v = (at - off) / Math.max(1e-6, l2 - off);
+      return [pos + (p2 - pos) * smooth(v), high * Math.sin(Math.PI * v)];
+    }
+    off = last ? 1 : (j + c) / n;
+    pos = p2;
+  }
+  return [pos, 0];
+}
+
+/**
+ * The legs stepping the way the stage carries the body (`CastTravel`, from `cast.close`): running steps in, bounds
+ * back, each foot put down and kept where it is on the ground while the body goes over it, the legs solved to the
+ * feet and the hips let down onto them -- the steps' share of the legs `w`, over whatever the pose had. Called by the
+ * framework after the pose; a pose never needs to.
+ */
+export function travelLegs(r: Rig, tr: CastTravel, look?: PoseCue['look']): void {
+  // The ground going by under the body, for the figure to keep a foot on it where it was put (`Rig.ground`).
+  r.ground = [tr.ground[0], tr.ground[1]];
+  if (tr.w <= 0.004 || tr.by < 4) return;
+  const bound = tr.gait === 'bound';
+  const n = Math.max(1, Math.round(tr.by / (bound ? BOUND : RUN_STEP)));
+  const c = bound ? BOUND_CONTACT : RUN_CONTACT;
+  const high = bound ? 1 + (0.08 * tr.by) / n : 2.2;
+  const feet = figureStance(look);
+  const x = tr.at * tr.by;
+  const put: [V3, V3] = [[0, 0, 0], [0, 0, 0]];
+  let up = 0;
+  for (let k = 0; k < 2; k++) {
+    const [w, z] = footAlong(tr.at, tr.by, n, c, k, 1, bound, high);
+    put[k] = [feet[k][0] + tr.dir[0] * (w - x), feet[k][1] + tr.dir[1] * (w - x), feet[k][2] + z];
+    up += z > 0.05 ? 1 : 0;
+  }
+  const was = { leg: [[...r.leg[0]], [...r.leg[1]]], knee: [...r.knee], at: r.at[2] };
+  // Both feet off the ground: the body lifted by as much as the lower is (the figure stands the lowest sole on the
+  // ground, so a foot in the air is said by lifting the whole), the legs solved to the feet from there.
+  const air = Math.min(put[0][2], put[1][2]) - feet[0][2];
+  if (air > 0) for (const f of put) f[2] -= air;
+  // On the ground the knees give, taking it and pushing off; in the air they are drawn up a little.
+  const bend = bound ? (up === 0 ? 22 : 30) : 14;
+  const on = up === 1 ? (put[0][2] > put[1][2] ? 1 : -1) * 0.8 : 0;
+  standFeet(r, put, { on, bend, look });
+  const w = clamp(tr.w);
+  if (air > 0) r.lift += air * w;
+  for (let k = 0; k < 2; k++) {
+    for (let i = 0; i < 3; i++) r.leg[k][i] = was.leg[k][i] + (r.leg[k][i] - was.leg[k][i]) * w;
+    r.knee[k] = was.knee[k] + (r.knee[k] - was.knee[k]) * w;
+  }
+  r.at[2] = was.at + (r.at[2] - was.at) * w;
+  // Leant into the run, and back over the bounds.
+  r.spine = [r.spine[0] + (bound ? 7 : -7) * w * Math.sin(Math.PI * clamp(tr.at)), r.spine[1], r.spine[2]];
 }
 
 /**

@@ -13,9 +13,11 @@
  *                across what was struck, the measure taken before a blow, the
  *                line scored on the ground;
  *   the measure  a brass arc on the ground that unwinds over what a spell
- *                lasts (`measure`), under the long and the tactical ones only
- *                (Challenge, Hold the Line, Guardian's Call, Last Stand): where
- *                a mark over a creature already counts, it is left off.
+ *                lasts (`measure`), under everything that lasts: full and
+ *                bold under the tactical ones (Challenge, Hold the Line,
+ *                Guardian's Call, Last Stand), a thin one under the rest
+ *                (Hamstring, Deflect, Disarming Cut), and as a brass lip
+ *                round the stamina gauge for Measured Breathing.
  *
  * Blows close in and swing the real weapon through the target (`cast.close`,
  * `wield`): no blow lands from where the island lets it be struck. The buffs
@@ -26,7 +28,7 @@ import { HALF_H, HALF_W, HEIGHT_SCALE } from '../iso';
 import type { CastClose, CastPose, PoseCue, SpellVisual } from './index';
 import { spellInfo } from './info';
 import { bump, clamp, easeOut, flashOf, hashOf, lerp, mid3, seg, smooth, TAU, type Body, type FxScene, type GroundLayer, type Look, type P3, type SpellPalette } from './kit';
-import { euler, one, track, type Key } from './poses';
+import { armOut, euler, one, track, type Key } from './poses';
 
 /** Steel and a cold white edge, with brass where a blow lands. */
 export const PALETTE: SpellPalette = {
@@ -45,6 +47,14 @@ const BRASS_CORE = '#fff4cc';
 /** Breath in the cold: pale, a little blue. */
 const BREATH = '#e6eef8';
 const DUST = '#8a7a62';
+/** A wooden shield's face, and the lit side of it. */
+const WOOD = '#8a6a44';
+const WOOD_LIT = '#d9b98a';
+/** A blade's steel seen whole, between the palette's pale and its deep: grey, so its lit edge reads as an edge. */
+const STEEL = '#8e9eb1';
+/** Blood, and its wet light. */
+const BLOOD = '#b0241c';
+const BLOOD_LIT = '#ff9c8a';
 
 /* ---- where the sword is ----------------------------------------------------------------- */
 
@@ -168,7 +178,9 @@ function bridge(k: FxScene, to: P3, u: number, o: { brass?: boolean; width?: num
 function swept(k: FxScene, alpha = 1, o: { secs?: number; inner?: number; brass?: boolean } = {}): void {
   if (alpha <= 0.01) return;
   const look = o.brass ? { main: PALETTE.accent, core: BRASS_CORE } : { main: PALETTE.main, core: PALETTE.core };
-  k.trail(k.caster, { ...look, alpha, secs: o.secs ?? 0.14, inner: o.inner ?? 0.3, outer: 1.04, glow: 0.6 });
+  // At night the band itself goes down under the dark with everything else, so its edge is lit up over it: white
+  // light along the edge, as bright as the night is deep, so the sweep stays the brightest thing in a blow.
+  k.trail(k.caster, { ...look, alpha, secs: o.secs ?? 0.14, inner: o.inner ?? 0.3, outer: 1.04, glow: 0.6 + 1.2 * k.night, light: k.night > 0.3 ? PALETTE.core : PALETTE.light });
 }
 
 /** The caster's ahead and right over the ground, as unit steps in tiles, ahead being at the target. */
@@ -185,48 +197,92 @@ function frameOf(k: FxScene): { fwd: { x: number; y: number }; right: { x: numbe
 const off = (p: P3, f: ReturnType<typeof frameOf>, right: number, ahead: number, up: number): P3 =>
   ({ x: p.x + f.right.x * right + f.fwd.x * ahead, y: p.y + f.right.y * right + f.fwd.y * ahead, z: p.z + up });
 
+/** A step along the ground that runs straight across the screen, left to right, a tile long. */
+function across(k: FxScene): { x: number; y: number } {
+  const e = k.eye, dx = e.unrotateX(1, -1), dy = e.unrotateY(1, -1), l = Math.hypot(dx, dy) || 1;
+  return { x: dx / l, y: dy / l };
+}
+
+/** `p` moved `x` pixels right and `y` pixels up the screen (at zoom one): sideways over the ground, up in height. */
+function nudge(k: FxScene, p: P3, x: number, y: number): P3 {
+  const d = across(k), h = x / (Math.SQRT2 * HALF_W);
+  return { x: p.x + d.x * h, y: p.y + d.y * h, z: p.z + y / HEIGHT_SCALE };
+}
+
+/**
+ * Where the point of the sword was the frame before and this frame, kept in `k.state` from a strike's `charge`, so
+ * the blow's `hit` can say which way the blade was going through it (`noteTravel`).
+ */
+function notePoint(k: FxScene): void {
+  const s = k.state, p = tipOf(k);
+  if (s.nx !== undefined) { s.ox = s.nx; s.oy = s.ny; s.oz = s.nz; }
+  s.nx = p.x; s.ny = p.y; s.nz = p.z;
+}
+
+/** At the hit: which way the point was going across the screen as it went in (`travel` for `slant`), kept for the cut. */
+function noteTravel(k: FxScene): void {
+  const s = k.state;
+  if (s.ox === undefined || s.tvx !== undefined) return;
+  const o = { x: s.ox, y: s.oy, z: s.oz }, n = { x: s.nx, y: s.ny, z: s.nz };
+  s.tvx = k.sx(n) - k.sx(o);
+  s.tvy = k.sy(o) - k.sy(n);
+}
+
 /**
  * The two ends of a stroke `len` pixels long (at zoom one) through `c`, slanting `deg` degrees up from the
  * screen's level: the first end on the caster's right as the screen has it, raised; the second on the left,
  * lowered. A cut is laid in the screen's terms rather than the body's, so a level cut reads level and a
  * slanting one slants from wherever it is seen -- and never within `apart` degrees of the line from the caster to
  * what it struck, which from some facings would lay it along the blow and read as a thrust through, not a cut across.
+ * Where the blade's own way through it is known (`noteTravel`), the stroke leans the way the blade went -- down to
+ * the left if the blade went down to the left -- so the cut is where the steel passed, from every side.
  */
 function slant(k: FxScene, c: P3, len: number, deg: number, apart = 55): [P3, P3] {
-  const e = k.eye;
-  let dx = e.unrotateX(1, -1), dy = e.unrotateY(1, -1);
-  const l = Math.hypot(dx, dy) || 1;
-  dx /= l;
-  dy /= l;
+  const d = across(k);
   // Which way the caster's right lies across the screen; square on to the viewer, the right of the screen.
   const rt = k.local(k.caster, 1, 0, 0);
   const sign = k.sx(rt) - k.sx(k.caster) < -0.05 * k.zoom ? -1 : 1;
-  // The blow's own line on the screen (up positive), and the cut's, as lines (half a turn the same).
+  // The cut as a line on the screen (up positive, half a turn the same): its first end at `cut` from the middle.
+  const first = sign > 0 ? deg : 180 - deg;
+  // The blow's own line on the screen, kept clear of: a cut at `c`, and how far it had to be turned to be.
   const ax = k.sx(k.target) - k.sx(k.caster), ay = k.sy(k.caster) - k.sy(k.target);
-  if (Math.hypot(ax, ay) > 2 * k.zoom) {
-    const blow = (Math.atan2(ay, ax) * 180) / Math.PI;
-    let cut = sign > 0 ? deg : 180 - deg;
-    const off = ((((cut - blow) % 180) + 270) % 180) - 90;
-    if (Math.abs(off) < apart) cut = blow + (off >= 0 ? apart : -apart);
-    deg = sign > 0 ? cut : 180 - cut;
+  const blow = Math.hypot(ax, ay) > 2 * k.zoom ? (Math.atan2(ay, ax) * 180) / Math.PI : undefined;
+  const clear = (c: number): [number, number] => {
+    if (blow === undefined) return [c, 0];
+    const off = ((((c - blow) % 180) + 270) % 180) - 90;
+    return Math.abs(off) < apart ? [blow + (off >= 0 ? apart : -apart), apart - Math.abs(off)] : [c, 0];
+  };
+  // Of the slant and its mirror, the one that needs turning least; where both stand clear, the one leaning the way
+  // the blade went.
+  const [c0, t0] = clear(first), [c1, t1] = clear(180 - first);
+  let cut = t0 <= t1 ? c0 : c1;
+  const tvx = k.state.tvx ?? 0, tvy = k.state.tvy ?? 0;
+  if (t0 === 0 && t1 === 0 && Math.abs(tvx) > 0.3 * k.zoom && Math.abs(tvy) > 0.3 * k.zoom) {
+    const r = (first * Math.PI) / 180;
+    cut = Math.cos(r) * Math.sin(r) * tvx * tvy < 0 ? 180 - first : first;
   }
-  const a = (deg * Math.PI) / 180;
-  const h = ((len / 2) * Math.cos(a)) / (Math.SQRT2 * HALF_W) * sign, v = ((len / 2) * Math.sin(a)) / HEIGHT_SCALE;
-  return [{ x: c.x + dx * h, y: c.y + dy * h, z: c.z + v }, { x: c.x - dx * h, y: c.y - dy * h, z: c.z - v }];
+  const a = (cut * Math.PI) / 180;
+  const h = ((len / 2) * Math.cos(a)) / (Math.SQRT2 * HALF_W), v = ((len / 2) * Math.sin(a)) / HEIGHT_SCALE;
+  return [{ x: c.x + d.x * h, y: c.y + d.y * h, z: c.z + v }, { x: c.x - d.x * h, y: c.y - d.y * h, z: c.z - v }];
 }
 
 /**
  * The cut left in the air: a long thin straight stroke from `a` to `b`, sharp at both ends, brass with a white
- * heart and an ink edge, drawn out from `a` as `grow` goes to one. Then it hangs, and `part` opens it into two
- * edges drifting apart -- what was struck, cut.
+ * heart and an ink edge, opened out both ways from its middle -- where the blade went in -- as `grow` goes to one, so
+ * its first frame is a spark on what was struck and never a sliver floating off it. Then it hangs, and `part` opens
+ * it into two edges drifting apart -- what was struck, cut.
  */
-function cutLine(k: FxScene, a: P3, b: P3, o: { grow?: number; part?: number; alpha?: number; width?: number } = {}): void {
+function cutLine(k: FxScene, a: P3, b: P3, o: { grow?: number; part?: number; alpha?: number; width?: number; floor?: number } = {}): void {
   const al = o.alpha ?? 1;
   if (al <= 0.01) return;
+  // Kept out of the ground: lifted whole until its lower end clears `floor`.
+  const lift = o.floor === undefined ? 0 : Math.max(0, o.floor - Math.min(a.z, b.z));
+  if (lift > 0) { a = { ...a, z: a.z + lift }; b = { ...b, z: b.z + lift }; }
   const grow = clamp(o.grow ?? 1), part = clamp(o.part ?? 0);
-  const end = mid3(a, b, grow);
-  const pts = [a, mid3(a, end, 0.25), mid3(a, end, 0.5), mid3(a, end, 0.75), end];
-  const w = (o.width ?? 3.4) * (1 - 0.55 * part);
+  const s = mid3(a, b, 0.5 - grow / 2), end = mid3(a, b, 0.5 + grow / 2);
+  const pts = [s, mid3(s, end, 0.25), mid3(s, end, 0.5), mid3(s, end, 0.75), end];
+  // Narrow while it is short, so it opens as a line and not a lozenge.
+  const w = (o.width ?? 3.4) * (1 - 0.55 * part) * (0.45 + 0.55 * grow);
   if (part <= 0) {
     k.ribbon(pts, { ...BRASS, alpha: al, width: w, taper: 'both', glow: 0.8 });
     return;
@@ -252,7 +308,7 @@ function exitBurst(k: FxScene, p: P3, dir: { x: number; y: number }, u: number):
     const ang = (i / 5 - 0.5) * 1.3 + (hashOf(k.seed, i) - 0.5) * 0.2;
     const c = Math.cos(ang), s = Math.sin(ang);
     const dx = dir.x * c - dir.y * s, dy = dir.x * s + dir.y * c, dz = (hashOf(k.seed, i + 3) - 0.45) * 10;
-    const r0 = 0.06 + 0.22 * out, r1 = r0 + 0.1 + 0.16 * (1 - out) * (i % 2 ? 0.6 : 1);
+    const r0 = 0.06 + 0.2 * out, r1 = r0 + 0.08 + 0.12 * (1 - out) * (i % 2 ? 0.6 : 1);
     const a = { x: p.x + dx * r0, y: p.y + dy * r0, z: p.z + dz * r0 }, b = { x: p.x + dx * r1, y: p.y + dy * r1, z: p.z + dz * r1 };
     rays.push(k.sx(a), k.sy(a), k.sx(b), k.sy(b));
   }
@@ -281,9 +337,10 @@ const shieldAt = (k: FxScene): P3 => mid3(k.joint(k.caster, 'elbow0'), k.joint(k
 const HEATER: ReadonlyArray<readonly [number, number]> = [[-1.75, 2.3], [1.75, 2.3], [1.8, 0.6], [1.45, -0.9], [0.8, -2.1], [0, -2.9], [-0.8, -2.1], [-1.45, -0.9], [-1.8, 0.6]];
 
 /**
- * A face of light the shape of the shield the caster carries -- round and bossed for a wooden one, a heater for a
- * metal one -- at `c`, `scale` times its size, flat on to the line from the caster to what it struck and so
- * foreshortened as the ground is: steel with a lit quarter and a brass boss, inked.
+ * A face the shape of the shield the caster carries -- round, wooden and bossed for a wooden one, a steel heater for
+ * a metal one -- at `c`, `scale` times its size, flat on to the line from the caster to what it struck and so
+ * foreshortened as the ground is: its own wood or steel inside a steel rim with a white lip, a soft lit quarter and a
+ * brass boss, inked. The shield itself, not a white oval.
  */
 function shieldFace(k: FxScene, c: P3, scale: number, alpha: number): void {
   if (alpha <= 0.01) return;
@@ -314,17 +371,22 @@ function shieldFace(k: FxScene, c: P3, scale: number, alpha: number): void {
     g.globalAlpha = clamp(alpha);
     g.lineJoin = 'round';
     poly(rim);
-    g.fillStyle = PALETTE.main;
+    g.fillStyle = round ? WOOD : PALETTE.main;
     g.fill();
-    g.lineWidth = Math.max(1, 0.9 * z) + 1.2 * z;
+    g.lineWidth = Math.max(1, 0.9 * z) + 1.8 * z;
     g.strokeStyle = PALETTE.ink;
     g.stroke();
-    g.lineWidth = 1.2 * z;
+    g.lineWidth = 1.8 * z;
+    g.strokeStyle = round ? PALETTE.deep : PALETTE.main;
+    g.stroke();
+    g.globalAlpha = clamp(alpha * 0.6);
+    g.lineWidth = 0.6 * z;
     g.strokeStyle = PALETTE.core;
     g.stroke();
+    g.globalAlpha = clamp(alpha);
     poly(lit);
-    g.globalAlpha = clamp(alpha * 0.7);
-    g.fillStyle = PALETTE.core;
+    g.globalAlpha = clamp(alpha * 0.4);
+    g.fillStyle = round ? WOOD_LIT : PALETTE.core;
     g.fill();
     g.globalAlpha = clamp(alpha);
     poly(boss);
@@ -334,7 +396,7 @@ function shieldFace(k: FxScene, c: P3, scale: number, alpha: number): void {
     g.strokeStyle = PALETTE.ink;
     g.stroke();
   }, 3);
-  k.glow(c, 10 * scale, alpha * 0.4);
+  k.glow(c, 10 * scale, alpha * 0.2);
 }
 
 /**
@@ -370,7 +432,7 @@ function scored(k: FxScene, a: P3, b: P3, w: number, alpha: number): void {
 }
 
 /** Half the length of the line Hold the Line scores, in tiles. */
-const HOLD_HALF = 0.6;
+const HOLD_HALF = 0.45;
 
 /** Hold the Line's scored line, `half` tiles each way along it from where it was scored (kept in `k.state` at the hit). */
 function holdLine(k: FxScene, half: number): [P3, P3] {
@@ -388,7 +450,10 @@ function measure(k: FxScene, c: { x: number; y: number }, r: number, share: numb
   if (alpha <= 0.01 || r <= 0.05) return;
   const s = clamp(share);
   const band = o.band ?? Math.max(0.022, r * 0.065);
-  const n = Math.max(8, Math.round(k.facets(r, 40) * Math.max(s, 0.25)));
+  // Round however close it is seen: never fewer than 40 sides to the full turn, where the kit's own count drops
+  // to a dozen for a small ring.
+  const full = Math.max(40, k.facets(r, 48));
+  const n = Math.max(8, Math.round(full * Math.max(s, 0.25)));
   // Clockwise on the screen from its top: the view's own (-1, -1) is straight up the screen.
   const e = k.eye;
   const a0 = -0.75 * Math.PI;
@@ -405,7 +470,7 @@ function measure(k: FxScene, c: { x: number; y: number }, r: number, share: numb
   const arc = [...outer];
   for (let i = n; i >= 0; i--) arc.push(inner[2 * i], inner[2 * i + 1]);
   const track: number[] = [];
-  const nt = k.facets(r, 32);
+  const nt = full;
   for (let i = 0; i < nt; i++) at(a0 + (i / nt) * TAU, r - band * 0.5, track);
   const ticks: number[][] = [];
   for (let i = 0; i < (o.ticks ?? 4); i++) {
@@ -424,8 +489,8 @@ function measure(k: FxScene, c: { x: number; y: number }, r: number, share: numb
   at(ah + dh * 0.4, r - band * 2.3, head);
   const z = k.zoom, inkW = Math.max(0.8, 0.7 * z);
   const layers: GroundLayer[] = [
-    { kind: 'stroke', colour: PALETTE.ink, alpha: alpha * 0.22, width: inkW, paths: [track], closed: true, lift: 0.15 },
-    { kind: 'stroke', colour: PALETTE.ink, alpha: alpha * 0.22, width: Math.max(0.8, 0.9 * z), paths: ticks, lift: 0.15 },
+    // The track and its ticks in one stroke (a tick closed on itself is the same line).
+    { kind: 'stroke', colour: PALETTE.ink, alpha: alpha * 0.22, width: inkW, paths: [track, ...ticks], closed: true, lift: 0.15 },
   ];
   if (s > 0.002) {
     layers.push(
@@ -444,7 +509,7 @@ function measure(k: FxScene, c: { x: number; y: number }, r: number, share: numb
  * the top of the screen) in the pale of a breath with a white lip, the rest a faint inked track. A tenth of a full bar
  * of stamina each: what a breath gives back, or (full, and not running down) what a swing costs nothing of. One record.
  */
-function breathGauge(k: FxScene, c: { x: number; y: number }, r: number, share: number, alpha: number): void {
+function breathGauge(k: FxScene, c: { x: number; y: number }, r: number, share: number, alpha: number, time?: number): void {
   if (alpha <= 0.01) return;
   const e = k.eye, a0 = -0.75 * Math.PI, N = 10, band = Math.max(0.05, r * 0.16), gap = 0.08;
   const at = (ang: number, rr: number, out: number[]): void => {
@@ -482,6 +547,17 @@ function breathGauge(k: FxScene, c: { x: number; y: number }, r: number, share: 
       { kind: 'stroke', colour: PALETTE.core, alpha, width: Math.max(0.7, 0.6 * z), paths: lips, lift: 0.22 },
     );
   }
+  // How long it has left, as a brass band running round just outside it from the top, clockwise, once.
+  if (time !== undefined && time > 0.002) {
+    const arc: number[] = [], n = Math.max(12, Math.round(48 * time));
+    for (let i = 0; i <= n; i++) at(a0 + (i / n) * time * TAU, r + band * 0.32, arc);
+    // Brighter than the gauge it lies on: it is the one thing in it that moves.
+    const tw = Math.max(1.6, 1.5 * z);
+    layers.push(
+      { kind: 'stroke', colour: PALETTE.ink, alpha: Math.min(1, alpha * 1.6), width: tw + Math.max(1, 0.8 * z), paths: [arc], cap: 'round', lift: 0.23 },
+      { kind: 'stroke', colour: PALETTE.accent, alpha: Math.min(1, alpha * 1.6), width: tw, paths: [arc], cap: 'round', lift: 0.24, glow: 0.6 * k.night, light: BRASS_CORE },
+    );
+  }
   k.groundShape(c.x, c.y, r + 0.3, layers);
 }
 
@@ -489,8 +565,8 @@ function breathGauge(k: FxScene, c: { x: number; y: number }, r: number, share: 
 const markR = (b: Body): number => 0.16 + (b.wide / 40) * 1.4;
 
 /** The measure of a lasting spell at `age` with `left` to go: how much of it is left, faded in and out at the ends. */
-function measureFor(k: FxScene, c: { x: number; y: number }, r: number, age: number, left: number, alpha = 0.85): void {
-  measure(k, c, r, left / Math.max(1e-3, age + left), alpha * smooth(age / 0.35) * smooth(left / 0.5));
+function measureFor(k: FxScene, c: { x: number; y: number }, r: number, age: number, left: number, alpha = 0.85, o: { band?: number } = {}): void {
+  measure(k, c, r, left / Math.max(1e-3, age + left), alpha * smooth(age / 0.35) * smooth(left / 0.5), o);
 }
 
 /**
@@ -576,7 +652,7 @@ function darts(k: FxScene, list: ReadonlyArray<{ c: { x: number; y: number }; di
   }
   const cx = (x0 + x1) / 2, cy = (y0 + y1) / 2;
   k.groundShape(cx, cy, Math.hypot(x1 - x0, y1 - y0) / 2 + s + 0.2, [
-    { kind: 'fill', colour: PALETTE.accent, alpha, paths: whole, lift: 0.2 },
+    { kind: 'fill', colour: PALETTE.accent, alpha, paths: whole, lift: 0.2, glow: 0.5 * k.night, light: BRASS_CORE },
     { kind: 'fill', colour: BRASS_CORE, alpha, paths: lit, lift: 0.21 },
     { kind: 'stroke', colour: PALETTE.ink, alpha, width: Math.max(0.8, 0.7 * k.zoom), paths: whole, closed: true, join: 'miter', lift: 0.22, glow: 0.6 * k.night, light: BRASS_CORE },
   ]);
@@ -621,11 +697,50 @@ function hoop(k: FxScene, c: P3, r: number, o: { alpha?: number; width?: number;
   k.glow(c, Math.max(4, r * HALF_W * 0.9), a * 0.35);
 }
 
-/** A ring of steel light going out over the ground from `c` to `r` tiles as `u` goes to one, thinning as it goes. */
-function wave(k: FxScene, c: { x: number; y: number }, u: number, r: number, alpha = 1, o: Look & { band?: number } = {}): void {
+/**
+ * A ring of steel light going out over the ground from `c` to `r` tiles as `u` goes to one, thinning as it goes:
+ * round however close it is seen, and with a pale lip round its outer edge that is lit at night (laid over the dark
+ * in a pale tone rather than added, which over grass goes olive).
+ */
+function wave(k: FxScene, c: { x: number; y: number }, u: number, r: number, alpha = 1, o: Look & { band?: number; lip?: string } = {}): void {
   const rr = 0.08 + r * (1 - Math.pow(1 - clamp(u), 2.2));
-  k.ring(c, rr, { ...o, band: Math.min(rr * 0.4, (o.band ?? 0.2) * (1 - 0.7 * u)), alpha: alpha * (1 - u * u), turn: u * 0.4 });
+  const al = alpha * (1 - u * u);
+  const n = Math.max(k.facets(rr, 72), Math.min(72, Math.round(28 + rr * 10)));
+  k.ring(c, rr, { ...o, band: Math.min(rr * 0.4, (o.band ?? 0.2) * (1 - 0.7 * u)), alpha: al, turn: u * 0.4, n, glow: 0 });
+  if (al <= 0.01) return;
+  const lip: number[] = [];
+  for (let i = 0; i < n; i++) lip.push(c.x + Math.cos(u * 0.4 + (i / n) * TAU) * rr, c.y + Math.sin(u * 0.4 + (i / n) * TAU) * rr);
+  k.groundShape(c.x, c.y, rr + 0.4, [
+    { kind: 'stroke', colour: o.lip ?? PALETTE.core, alpha: al * 0.8, width: Math.max(0.8, 0.8 * k.zoom), paths: [lip], closed: true, lift: 0.17, glow: 0.9 * k.night, light: o.lip ?? PALETTE.core },
+  ], annulus(c, rr - 0.1, rr + 0.1));
 }
+
+/**
+ * The edge of an area, `r` tiles round `c`: a dashed brass band `band` tiles wide, inked, `turn` turning it, each dash
+ * a quad on the ground -- fine enough to stay round close up -- with a night rim on the dashes in a pale brass, so the
+ * reach still reads after dark. One record.
+ */
+function reachRing(k: FxScene, c: { x: number; y: number }, r: number, band: number, alpha: number, turn: number): void {
+  if (alpha <= 0.01) return;
+  const n = 96, dashes: number[][] = [];
+  const P = (i: number, rr: number): [number, number] => [c.x + Math.cos(turn + (i / n) * TAU) * rr, c.y + Math.sin(turn + (i / n) * TAU) * rr];
+  for (let i = 0; i < n; i += 4) {
+    const q: number[] = [];
+    for (let j = 0; j <= 2; j++) q.push(...P(i + j, r));
+    for (let j = 2; j >= 0; j--) q.push(...P(i + j, r - band));
+    dashes.push(q);
+  }
+  k.groundShape(c.x, c.y, r + 0.4, [
+    { kind: 'fill', colour: PALETTE.accent, alpha, paths: dashes, lift: 0.15, glow: 0.8 * k.night, light: BRASS_CORE },
+    { kind: 'stroke', colour: PALETTE.ink, alpha, width: Math.max(0.8, 0.6 * k.zoom), paths: dashes, closed: true, join: 'round', lift: 0.15 },
+  ], annulus(c, r - band - 0.1, r + 0.1));
+}
+
+/** Only the ground within a ring from `r0` to `r1` tiles round `c` is cut for a mark (`groundShape`'s `keep`): a ring costs its band, not its disc. */
+const annulus = (c: { x: number; y: number }, r0: number, r1: number) => (x: number, y: number, reach: number): boolean => {
+  const d = Math.hypot(x - c.x, y - c.y);
+  return d >= r0 - reach && d <= r1 + reach;
+};
 
 /**
  * Sparks off steel: white and a pale brass, quick, falling. No full brass: added over grass or at night it goes lime,
@@ -806,19 +921,22 @@ const disarmingCut: CastPose = (r, t, c) => {
 /**
  * Challenge: feet together, the hilt brought up before the chin in a salute, blade upright, and held; then the
  * blade swept down and out to point level at the creature, held there while the left hand, open, calls it on --
- * the fingers curled in twice.
+ * the whole arm swung out wide and back in to the chest twice -- and the point kept on it (`cast.hold`) while the
+ * line between them is taut, before it is lowered.
  */
 const challenge: CastPose = (r, t) => {
   // Blade: upright before the face (180), then level at the creature (90).
   r.arm[1] = euler(t, [[0, [24, 14, 0]], [0.26, [42, -12, 30]], [0.4, [42, -12, 30]], [0.55, [86, 6, -2]], [0.82, [84, 6, -2]], [1, [28, 14, 4]]]);
   r.elbow[1] = one(t, [[0, 40], [0.26, 112], [0.4, 112], [0.55, 2], [0.82, 4], [1, 40]]);
   r.hand[1] = euler(t, [[0, [0, 0, 0]], [0.26, [-34, 0, 0]], [0.4, [-34, 0, 0]], [0.55, [-58, 0, 0]], [0.82, [-56, 0, 0]], [1, [-10, 0, 0]]]);
-  // Come on: the whole left arm, palm up, swung up and in toward the chest and out again, twice -- big enough to read
-  // from across the field, where curling fingers are lost.
-  r.arm[0] = euler(t, [[0, [10, 10, 0]], [0.4, [8, 12, 0]], [0.56, [56, 28, -16]], [0.63, [84, 20, -8]], [0.7, [56, 28, -16]], [0.77, [84, 20, -8]],
-    [0.85, [54, 26, -14]], [1, [10, 12, 0]]]);
-  r.elbow[0] = one(t, [[0, 20], [0.4, 22], [0.56, 30], [0.63, 100], [0.7, 30], [0.77, 100], [0.85, 36], [1, 24]]);
-  const curl = one(t, [[0.56, 0], [0.63, 1], [0.7, 0], [0.77, 1], [0.85, 0]]);
+  // Come on: the whole left arm, palm up, swung out wide to the side and then up and in to the chest, twice -- out past
+  // the body's edge and back across it, so it reads from across the field, where curling fingers are lost. Done and
+  // out at the side, open, by the time the point is held on it.
+  const wide = armOut(0, 60, 62);
+  r.arm[0] = euler(t, [[0, [10, 10, 0]], [0.4, [8, 12, 0]], [0.55, wide], [0.61, [84, 18, -8]], [0.67, wide], [0.73, [84, 18, -8]],
+    [0.8, wide], [1, [10, 12, 0]]]);
+  r.elbow[0] = one(t, [[0, 20], [0.4, 22], [0.55, 14], [0.61, 104], [0.67, 14], [0.73, 104], [0.8, 18], [1, 24]]);
+  const curl = one(t, [[0.55, 0], [0.61, 1], [0.67, 0], [0.73, 1], [0.8, 0]]);
   r.shape = [{ flat: one(t, [[0.42, 0], [0.54, 1], [0.9, 1], [1, 0]]) * (1 - curl), claw: curl }, undefined];
   r.hand[0] = euler(t, [[0.42, [0, 0, 0]], [0.54, [0, -80, 0]], [0.9, [0, -80, 0]], [1, [0, 0, 0]]]);
   r.mouth = one(t, [[0.5, 0], [0.58, 0.4], [0.7, 0]]);
@@ -837,9 +955,10 @@ const challenge: CastPose = (r, t) => {
  */
 const secondBreath: CastPose = (r, t) => {
   for (let k = 0; k < 2; k++) {
-    // Opened low and wide, each arm out to its own side and a little ahead, the hands open: the chest let open.
-    r.arm[k] = euler(t, [[0, [20, 10, 0]], [0.2, [44, 4, 10]], [0.5, [40, 46, 0]], [0.66, [34, 42, 0]], [1, [14, 12, 0]]]);
-    r.elbow[k] = one(t, [[0, 20], [0.2, 30], [0.5, 16], [1, 20]]);
+    // Opened low and wide, each arm swung out away from the body to its own side, the hands open: the chest let
+    // open, never an arm pointing ahead.
+    r.arm[k] = euler(t, [[0, [20, 10, 0]], [0.2, [44, 4, 10]], [0.5, armOut(k, 28, 46)], [0.66, armOut(k, 26, 42)], [1, [14, 12, 0]]]);
+    r.elbow[k] = one(t, [[0, 20], [0.2, 30], [0.5, 12], [0.66, 14], [1, 20]]);
   }
   const flat = one(t, [[0.1, 0], [0.3, 0.6], [0.5, 1], [0.8, 1], [1, 0]]);
   r.shape = [{ flat }, undefined];
@@ -904,14 +1023,16 @@ const holdTheLine: CastPose = (r, t) => {
 
 /**
  * Measured Breathing: the sword let down at the side, point low, the left hand flat on the belly, and one slow
- * breath in and out -- the chest and the shoulders rising and falling, the breath let out through the lips, the
- * knees softening on the out-breath.
+ * breath in and out -- on the in-breath the chin lifted, the shoulders drawn up and back and the chest thrown open;
+ * on the out-breath the head and shoulders let fall, the knees giving and the feet stepped a half-pace apart into a
+ * settled stance -- the breath let out through the lips.
  */
 const measuredBreathing: CastPose = (r, t) => {
   // Blade: let down at the side, point low, from the very first (no swing ahead on the way there).
-  r.arm[1] = euler(t, [[0, [24, 14, 0]], [0.08, [12, 18, 0]], [0.85, [10, 20, 0]], [1, [24, 14, 0]]]);
-  r.elbow[1] = one(t, [[0, 40], [0.08, 24], [0.85, 14], [1, 40]]);
-  r.hand[1] = euler(t, [[0, [0, 0, 0]], [0.08, [-40, 0, 0]], [0.85, [-50, 0, 0]], [1, [-10, 0, 0]]]);
+  // The point kept up off the ground to the end, so it never goes down past the feet as the pose is let go.
+  r.arm[1] = euler(t, [[0, [24, 14, 0]], [0.08, [12, 18, 0]], [0.42, [6, 26, 0]], [0.74, [14, 18, 0]], [0.9, [14, 18, 0]], [1, [24, 14, 0]]]);
+  r.elbow[1] = one(t, [[0, 40], [0.08, 24], [0.85, 20], [1, 40]]);
+  r.hand[1] = euler(t, [[0, [0, 0, 0]], [0.08, [-32, 0, 0]], [0.95, [-32, 0, 0]], [1, [-10, 0, 0]]]);
   // The open left hand on the belly, drawn up to the chest with the in-breath and pressed down past the belt with the
   // out-breath: the breath shown by the hand, large enough to read from any side.
   const hand = track(t, [[0, [-2.5, 1.5, 7.1]], [0.16, [-0.8, 2.8, 8.4]], [0.42, [-0.6, 3, 10.2]], [0.5, [-0.6, 3, 10.2]], [0.74, [-1.6, 3.6, 7]],
@@ -920,13 +1041,18 @@ const measuredBreathing: CastPose = (r, t) => {
   r.shape = [{ flat: one(t, [[0.06, 0], [0.18, 1], [0.86, 1], [0.96, 0]]) }, undefined];
   r.hand[0] = euler(t, [[0.1, [0, 0, 0]], [0.18, [-20, 0, -30]], [0.86, [-20, 0, -30]], [0.96, [0, 0, 0]]]);
   r.mouth = one(t, [[0.48, 0], [0.54, 0.3], [0.7, 0.25], [0.76, 0]]);
-  // The chest filling and the shoulders coming up a whole shrug, held, then let go and down past where they began.
-  const s = one(t, [[0, 0], [0.16, 0], [0.42, 1], [0.5, 1], [0.74, -0.3], [0.86, 0], [1, 0]]);
+  // The chest filling and the shoulders coming up a whole shrug, the chin lifted and the body leant back a little
+  // on the rise -- held -- then let go: head and chest down past where they began, the knees giving.
+  const s = one(t, [[0, 0], [0.16, 0], [0.42, 1], [0.5, 1], [0.74, -0.4], [0.86, -0.1], [1, 0]]);
   r.shrug = [s, s];
-  r.chest = euler(t, [[0, [0, 0, 0]], [0.16, [0, 0, 0]], [0.42, [14, 0, 0]], [0.5, [14, 0, 0]], [0.74, [-14, 0, 0]], [0.86, [-6, 0, 0]], [1, [0, 0, 0]]]);
-  r.head = euler(t, [[0, [0, 0, 0]], [0.16, [-6, 0, 0]], [0.42, [12, 0, 0]], [0.5, [12, 0, 0]], [0.74, [-12, 0, 0]], [1, [0, 0, 0]]]);
-  r.spine = euler(t, [[0, [0, 0, 0]], [0.42, [3, 0, 0]], [0.74, [-6, 0, 0]], [1, [0, 0, 0]]]);
-  legs(r, t, [[0, [2, 2, 0, 2, 4, 4]], [0.16, [2, 4, 0, 4, 4, 4]], [0.42, [2, 4, 0, 4, 2, 2]], [0.74, [2, 4, 0, 4, 18, 18]], [1, [2, 2, 0, 2, 4, 4]]]);
+  r.chest = euler(t, [[0, [0, 0, 0]], [0.16, [-2, 0, 0]], [0.42, [18, 0, 0]], [0.5, [18, 0, 0]], [0.74, [-16, 0, 0]], [0.86, [-8, 0, 0]], [1, [0, 0, 0]]]);
+  r.neck = euler(t, [[0, [0, 0, 0]], [0.42, [8, 0, 0]], [0.5, [8, 0, 0]], [0.74, [-6, 0, 0]], [1, [0, 0, 0]]]);
+  r.head = euler(t, [[0, [0, 0, 0]], [0.16, [-6, 0, 0]], [0.42, [16, 0, 0]], [0.5, [16, 0, 0]], [0.74, [-14, 0, 0]], [1, [0, 0, 0]]]);
+  r.spine = euler(t, [[0, [0, 0, 0]], [0.42, [6, 0, 0]], [0.5, [6, 0, 0]], [0.74, [-8, 0, 0]], [1, [0, 0, 0]]]);
+  // Feet together for the in-breath, then a half-pace apart -- left foot forward and out, right back -- as it is
+  // let out, knees giving, and settled there.
+  legs(r, t, [[0, [2, 2, 0, 2, 4, 4]], [0.16, [2, 3, 0, 3, 4, 4]], [0.42, [1, 2, 1, 2, 2, 2]], [0.5, [1, 2, 1, 2, 2, 2]], [0.62, [14, 9, -8, 9, 16, 12]],
+    [0.74, [14, 10, -8, 10, 22, 20]], [0.9, [12, 9, -6, 9, 14, 12]], [1, [2, 2, 0, 2, 4, 4]]]);
   r.wield = 1;
 };
 
@@ -940,7 +1066,8 @@ const guardiansCall: CastPose = (r, t) => {
   r.arm[1] = euler(t, [[0, [24, 14, 0]], [0.32, [56, -14, 30]], [0.5, [172, 12, 0]], [0.78, [170, 12, 0]], [1, [28, 14, 4]]]);
   r.elbow[1] = one(t, [[0, 40], [0.32, 104], [0.5, 4], [0.78, 6], [1, 40]]);
   r.hand[1] = euler(t, [[0, [0, 0, 0]], [0.32, [-50, 0, 0]], [0.5, [-56, 0, 0]], [0.78, [-56, 0, 0]], [1, [-10, 0, 0]]]);
-  r.arm[0] = euler(t, [[0, [12, 10, 0]], [0.32, [40, -6, 30]], [0.5, [70, 80, 0]], [0.78, [66, 78, 0]], [1, [10, 12, 0]]]);
+  // The left arm flung up and wide away from the body, not ahead: a call to everything round, not a point at one.
+  r.arm[0] = euler(t, [[0, [12, 10, 0]], [0.32, [40, -6, 30]], [0.5, armOut(0, 160, 45)], [0.78, armOut(0, 156, 45)], [1, [10, 12, 0]]]);
   r.elbow[0] = one(t, [[0, 24], [0.32, 100], [0.5, 6], [0.78, 8], [1, 26]]);
   r.shape = [{ flat: one(t, [[0.36, 0], [0.48, 1], [0.84, 1], [0.94, 0]]) }, undefined];
   r.mouth = one(t, [[0.42, 0], [0.5, 1], [0.74, 0.9], [0.86, 0]]);
@@ -1005,8 +1132,10 @@ export const BLADE: Record<string, SpellVisual> = {
         }
         k.glow(tipOf(k), 5, 0.6 * bump(t, 0.2, 0.42, 0.5));
         rush(k, t, MEASURED);
+        notePoint(k);
         if (t > 0.46 && t < 0.72) swept(k, 1, { secs: 0.12 });
       },
+      release: noteTravel,
       travel: { secs: bridgeSecs, draw: (k, u) => bridge(k, k.heart(k.target), u) },
       hit: (k) => {
         const f = frameOf(k);
@@ -1014,10 +1143,10 @@ export const BLADE: Record<string, SpellVisual> = {
         k.burst(k.heart(k.target), 8, { kind: 'shard', colour: [PALETTE.main, PALETTE.core], size: 1.6, life: [0.3, 0.6], speed: [0.4, 1.0], up: [8, 20], heading: f.fwd, cone: 1.6, gravity: 50, ink: false });
       },
       impact: { secs: 0.7, draw: (k, u) => {
-        // From high on the caster's right to low on its left, the way the blade came down through it: one long
-        // straight cut, held a beat and then parted -- what cannot miss, cut clean.
+        // Down through it the way the blade came: one long straight cut opened out from where the blade went in,
+        // held a beat and then parted -- what cannot miss, cut clean.
         const [a, b] = slant(k, k.heart(k.target), 44, 40);
-        cutLine(k, a, b, { grow: smooth(u / 0.1), part: smooth(seg(u, 0.35, 1)), alpha: 1 - seg(u, 0.72, 1), width: 4 });
+        cutLine(k, a, b, { grow: smooth(u / 0.1), part: smooth(seg(u, 0.35, 1)), alpha: 1 - seg(u, 0.72, 1), width: 4, floor: k.target.z + 1.5 });
         k.flare(k.heart(k.target), 7 * (1 - u), flashOf(u, 0.08), PALETTE.core, 0.6);
         k.light(k.target, 1.4, 0.7 * (1 - u), '#fff1d6');
       } },
@@ -1029,7 +1158,8 @@ export const BLADE: Record<string, SpellVisual> = {
   // over it for as long as it hunts you, a dart under it turned at you, and the measure running out.
   blade_challenge: {
     palette: PALETTE,
-    cast: { timing: { secs: 1.15, release: 0.55 }, pose: challenge },
+    // The point kept on it while the line runs out and is taut, before the sword is lowered.
+    cast: { timing: { secs: 1.15, release: 0.55 }, pose: challenge, hold: { at: 0.8, secs: 0.55 } },
     fx: {
       charge: (k, t) => {
         // The salute's glint as the hilt comes up before the face, and down the blade as it is laid on the creature.
@@ -1046,9 +1176,12 @@ export const BLADE: Record<string, SpellVisual> = {
         clash(k, k.heart(k.target), 10, k.toward(k.target, k.caster), 1.4, 0.6);
       },
       impact: { secs: 0.6, draw: (k, u) => {
-        // Taut from where the point was laid on it, not from the live point, which the pose lowers after.
+        // Taut from where the point was laid on it, which the pose holds there; gone as the sword is lowered, rather
+        // than left hanging in the air off a point that has gone.
         const a = k.once('rel', () => tipOf(k)), b = k.heart(k.target);
-        k.ribbon([a, mid3(a, b, 0.5), b], { ...BRASS, width: 1.8 * (1 - u), taper: 'none', alpha: 1 - u, glow: 0.6 });
+        const off = Math.hypot(k.sx(tipOf(k)) - k.sx(a), k.sy(tipOf(k)) - k.sy(a)) / k.zoom;
+        const al = (1 - u) * (1 - smooth(seg(off, 1.5, 5)));
+        k.ribbon([a, mid3(a, b, 0.5), b], { ...BRASS, width: 1.8 * (1 - 0.6 * u), taper: 'none', alpha: al, glow: 0.6 });
         k.flare(k.at(k.target, 1.15), 10 * (1 - u), flashOf(u, 0.1), BRASS_CORE, 0, undefined, true);
       } },
       linger: { draw: (k, age, left) => {
@@ -1059,17 +1192,20 @@ export const BLADE: Record<string, SpellVisual> = {
         const open = 0.55 + 0.3 * (1 - smooth(age / 0.25));
         swordGlyph(k, lift, 12, Math.PI - open, a, { brass: true });
         swordGlyph(k, lift, 12, Math.PI + open, a);
-        // Turned at you: a dart on the ground at its feet, pointed at you -- put out past its body where the body
-        // would stand over it (you behind it on the screen), so it is never hidden.
+        // Turned at you: a dart on the ground at its feet, pointed at you. Where its body would stand over it (you
+        // behind it on the screen) it is put off to the side of its feet across the screen instead -- clear of the
+        // body and of the swords over it, which further out behind would sit right under.
         const d = k.toward(b, k.caster), r = markR(b);
         const ex = k.sx(k.caster) - k.sx(b), ey = k.sy(k.caster) - k.sy(b);
         const behind = ey < 0 && Math.abs(ex) < -ey * 1.2;
-        const out = r + (behind ? 0.35 : 0.05);
-        dart(k, { x: b.x + d.x * out, y: b.y + d.y * out }, d, 0.24, 0.95 * a);
+        const side = across(k), sd = ex >= 0 ? 1 : -1, out = r + 0.05;
+        const at = behind ? { x: b.x + side.x * sd * (r + 0.1), y: b.y + side.y * sd * (r + 0.1) } : { x: b.x + d.x * out, y: b.y + d.y * out };
+        dart(k, at, d, 0.24, 0.95 * a);
         measureFor(k, b, r, age, left);
         // Now and then a pulse down the tie between you, from it to you: it is coming. The tie shows faintly under it.
-        const ph = (age % 2.2) / 2.2;
-        if (ph < 0.45) {
+        // The first after the line from the point is gone, so the two never lie side by side.
+        const ph = ((age + 1.4) % 2.2) / 2.2;
+        if (ph < 0.45 && age > 0.75) {
           const from = k.heart(b), to = k.chest(), v = smooth(ph / 0.45), env = Math.sin((Math.PI * ph) / 0.45);
           k.ribbon([from, mid3(from, to, 0.5), to], { ...BRASS, width: 1, taper: 'none', alpha: a * 0.3 * env, glow: 0 });
           // A short brass stroke running down the line, long enough to read as going somewhere.
@@ -1107,7 +1243,7 @@ export const BLADE: Record<string, SpellVisual> = {
         // Out of the far side: where the point comes through.
         const out = off(h, f, 0, 0.1 + k.target.wide / 40, 0);
         k.once('out', () => out);
-        clash(k, out, 22, f.fwd, 0.7, 1.5);
+        clash(k, out, 14, f.fwd, 0.7, 1.5);
       },
       impact: { secs: 0.6, draw: (k, u) => {
         const f = frameOf(k), h = k.heart(k.target);
@@ -1125,26 +1261,31 @@ export const BLADE: Record<string, SpellVisual> = {
 
   // Hamstring (strike, on enemy, lasts 10 s): A blow at 80%; for 10 s it walks, hunts and flees at 50% of its pace.
   // Low and flat at its legs: a brass cut across them at knee height; then, for as long as it lasts, one thin brass
-  // band round its legs and a tether from a hind leg to a peg it has to drag behind it -- taut and dragging as it goes,
-  // slack when it stops -- with the marks of its dragged steps left behind it.
+  // band round its legs, a hind foot dragged -- a furrow scored behind it, a brass tick across it at every dragged
+  // step -- and the thin measure of the ten seconds round its feet.
   blade_hamstring: {
     palette: PALETTE,
     cast: { timing: { secs: 0.85, release: 0.48 }, pose: hamstring, close: closeOf(HAMSTRUNG) },
     fx: {
       charge: (k, t) => {
         rush(k, t, HAMSTRUNG);
+        notePoint(k);
         if (t > 0.38 && t < 0.8) swept(k, 1, { secs: 0.14 });
       },
-      travel: { secs: bridgeSecs, draw: (k, u) => bridge(k, k.at(k.target, 0.2), u) },
+      release: noteTravel,
+      travel: { secs: bridgeSecs, draw: (k, u) => bridge(k, k.at(k.target, 0.22), u) },
       hit: (k) => {
-        const f = frameOf(k), legs = k.at(k.target, 0.2);
+        const f = frameOf(k), legs = k.at(k.target, 0.22);
         clash(k, legs, 20, f.right, 2, 0.8);
         k.burst(k.at(k.target, 0.05), 6, { kind: 'dust', colour: DUST, size: 2.4, life: [0.3, 0.5], speed: [0.2, 0.5], up: [2, 6], gravity: 3 });
       },
       impact: { secs: 0.55, draw: (k, u) => {
-        const legs = k.at(k.target, 0.2);
-        // Nearly level, low, and across the way it was struck from.
-        const [a, b] = slant(k, legs, 40, -6);
+        const legs = k.at(k.target, 0.22);
+        // Level and low, across its legs: low on the legs a cut is never read as a thrust from the side, so it may
+        // come nearer the blow's line than a high one, and it is kept a hair over the ground at both ends.
+        const [a, b] = slant(k, legs, 30, -6, 20);
+        const floor = k.target.z + 1.2;
+        for (const p of [a, b]) p.z = Math.max(p.z, floor);
         cutLine(k, a, b, { grow: smooth(u / 0.12), part: smooth(seg(u, 0.4, 1)), alpha: 1 - seg(u, 0.7, 1), width: 3.4 });
         k.flare(legs, 6 * (1 - u), flashOf(u, 0.1), PALETTE.core, 0);
         k.light(k.target, 1.4, 0.6 * (1 - u), '#fff1d6');
@@ -1152,37 +1293,14 @@ export const BLADE: Record<string, SpellVisual> = {
       linger: { draw: (k, age, left) => {
         const a = smooth(age / 0.3) * smooth(left / 0.6);
         const b = k.target, r = 0.06 + (b.wide / 40) * 0.6;
-        // The hobble: one thin brass band round its legs, pulled tight as it lands.
-        const tight = 1 + 0.5 * (1 - smooth(age / 0.3));
-        hoop(k, k.at(b, 0.18), r * tight, { alpha: a * 0.9, width: 1.2, brass: true, foot: b });
-        // The peg it drags: struck in behind it as the cut lands, and hauled after it once the tether is taut.
-        const s = k.state, back = k.facingDir(b);
-        const LEAD = 0.28 + b.wide / 40;
-        if (s.px === undefined) { s.px = b.x - back.x * LEAD; s.py = b.y - back.y * LEAD; }
-        let d = Math.hypot(b.x - s.px, b.y - s.py);
-        if (d > LEAD) {
-          s.px = b.x + ((s.px - b.x) * LEAD) / d;
-          s.py = b.y + ((s.py - b.y) * LEAD) / d;
-          d = LEAD;
-        }
-        const slack = 1 - d / LEAD;
-        const hind = k.local(b, 0, -b.wide * 0.55, b.tall * 0.22);
-        const peg = k.on(s.px, s.py, 0), top = k.on(s.px, s.py, 3.2);
-        k.string(hind, top, { ...BRASS, alpha: a * 0.9, sag: 0.6 + 5 * slack, n: 6, width: 1.4 });
-        k.ribbon([peg, mid3(peg, top, 0.5), top], { ...BRASS, alpha: a, width: 2.6, taper: 'none', glow: 0 });
-        // Where it has been: kept as a few marks at its dragged steps, each fading.
-        const step = 0.3;
-        if (s.tx === undefined || Math.hypot(b.x - s.tx, b.y - s.ty) > step) {
-          for (let i = 3; i > 0; i--) { s[`x${i}`] = s[`x${i - 1}`] ?? b.x; s[`y${i}`] = s[`y${i - 1}`] ?? b.y; s[`t${i}`] = s[`t${i - 1}`] ?? -9; }
-          s.x0 = b.x; s.y0 = b.y; s.t0 = age;
-          s.tx = b.x; s.ty = b.y;
-          if (age > 0.4) k.burst(k.on(s.px, s.py, 0.5), 3, { kind: 'dust', colour: DUST, size: 2.2, life: [0.3, 0.6], speed: [0.05, 0.2], up: [1, 4], gravity: 2 });
-        }
-        for (let i = 1; i <= 3; i++) {
-          const fade = 1 - seg(age - (s[`t${i}`] ?? -9), 0, 2.4);
-          if (fade <= 0) continue;
-          k.disc({ x: s[`x${i}`], y: s[`y${i}`] }, 0.07, { main: BRASS_DEEP, alpha: 0.6 * fade * a, n: 6 });
-        }
+        // The hobble: one thin brass band round its legs, pulled tight as it lands, and jerked tight again at every
+        // hitch of the dragged foot (`hobbled`), a beat slower than a free step.
+        const hitch = age > 0.5 ? Math.max(0, 1 - ((age - 0.5) % 1.6) / 0.25) : 0;
+        const tight = 1 + 0.5 * (1 - smooth(age / 0.3)) - 0.18 * hitch * hitch;
+        hoop(k, k.at(b, 0.18 + 0.03 * hitch), r * tight, { alpha: a * 0.9, width: 1.4 + 0.6 * hitch, brass: true, foot: b });
+        // The ten seconds, a thin measure round its feet.
+        measureFor(k, b, markR(b), age, left, 0.85, { band: 0.024 });
+        hobbled(k, b, age, a);
       } },
     },
   },
@@ -1226,12 +1344,14 @@ export const BLADE: Record<string, SpellVisual> = {
       linger: { secs: BASH_BACK, draw: (k, age, left) => {
         const a = smooth(age / 0.25) * smooth(left / 0.4);
         const top = k.at(k.target, 1.1);
-        // Reeling for exactly the seconds its next blow is put back: three brass pips going round over it, wobbling.
+        // Reeling for exactly the seconds its next blow is put back: three brass pips going round over it, wobbling,
+        // with a little light of their own so they stand out of the dark.
         for (let i = 0; i < 3; i++) {
           const ang = age * 5 + (i * TAU) / 3;
           const p = { x: top.x + Math.cos(ang) * 0.12, y: top.y + Math.sin(ang) * 0.12, z: top.z + 1.2 * Math.sin(ang * 2) };
-          k.mark(p, { r: 2.6, points: 4, turn: age * 6 + i, alpha: a, glow: 0.4 });
+          k.mark(p, { r: 2.6, points: 4, turn: age * 6 + i, alpha: a, glow: 0.4 + 0.6 * k.night, light: k.night > 0.3 ? BRASS_CORE : undefined });
         }
+        k.light(top, 0.8, 0.25 * a, '#fff1d6');
       } },
     },
   },
@@ -1272,9 +1392,9 @@ export const BLADE: Record<string, SpellVisual> = {
       },
       impact: { secs: 1.3, draw: (k, u) => {
         const c = k.chest();
-        // A ring off the chest, level, going out and thinning.
+        // A small ring off the chest, level, going out and thinning: a breath let go, under the gauge that says it.
         const v = clamp(u / 0.7);
-        hoop(k, c, 0.12 + 0.75 * (1 - Math.pow(1 - v, 2)), { alpha: (1 - v) * 0.9, width: 1.8 * (1 - v) + 0.5, foot: k.caster });
+        hoop(k, c, 0.12 + 0.45 * (1 - Math.pow(1 - v, 2)), { alpha: (1 - v) * 0.45, width: 1.4 * (1 - v) + 0.4, foot: k.caster });
         // What came back, on the stamina gauge at the feet: its share of a full bar lit a segment at a time, in the
         // breath's own colour and not the brass of time kept count of.
         breathGauge(k, k.caster, 0.44, (k.fx.stamina ?? 0.4) * smooth(u / 0.4), (1 - seg(u, 0.75, 1)) * smooth(u / 0.08));
@@ -1284,9 +1404,9 @@ export const BLADE: Record<string, SpellVisual> = {
   },
 
   // Deflect (buff, on self, lasts 6 s): For 6 s, every blow you block lands back on what struck at 50% of the blow.
-  // The parry left hanging: a crescent of steel edge in front of the body, rising across it from low on the left
-  // to high on the right as the guard was taken, a glint running along it, and now and then a blow met on it
-  // -- a flare of steel and a brass stroke thrown back out the way the blow came.
+  // The parry left hanging: the upright sword's edge doubled in light, a crescent bowed out beside the blade, a glint
+  // running up it, and now and then a blow met on it -- a flare of steel and a brass stroke thrown back out the way
+  // the blow came -- with the measure of the six seconds at the feet.
   blade_deflect: {
     palette: PALETTE,
     // The guard held for the six seconds the parry hangs, so the body keeps what the buff says.
@@ -1302,40 +1422,58 @@ export const BLADE: Record<string, SpellVisual> = {
       },
       linger: { draw: (k, age, left) => {
         const a = smooth(age / 0.2) * smooth(left / 0.5);
-        const b = k.caster;
-        // Sprung out wide as the guard is taken, then drawn in to sit a forearm's length off the body.
-        const open = 1 + 0.4 * (1 - smooth(age / 0.25));
-        // A crescent standing in front, bowed out at its middle like the edge of a shield, from low on the left to
-        // high on the right as the guard was taken -- its top no higher than the shoulder and stood well out, so it
-        // never crosses the face from any side.
+        const b = k.caster, st = k.state;
+        // Sprung out wide as the guard is taken, then drawn in to lie close along the blade.
+        const open = 1 + 0.6 * (1 - smooth(age / 0.25));
+        // The edge of the upright sword doubled in light: a crescent from below the hilt up past the point, bowed out
+        // beside the blade on its outer side as the screen has it -- away from the body -- so from every side it is
+        // the same shape in the same place, the parrying edge standing by the sword. Once the guard is let go (walked
+        // off), it stays where the guard was.
+        const live = smooth(k.castLeft / 0.3);
+        const H0 = k.local(b, 2, 4, b.tall * 0.5), T0 = k.local(b, 2, 5, b.tall * 0.5 + 12);
+        const H = mid3(H0, k.hand(1), live), T = mid3(T0, tipOf(k), live);
+        const A = mid3(H, T, -0.2), B = mid3(H, T, 1.25);
+        if (st.dside === undefined) {
+          const away = k.sx(H) - k.sx(k.chest());
+          const ahead = k.sx(k.local(b, 0, 4, 0)) - k.sx(b), right = k.sx(k.local(b, 4, 0, 0)) - k.sx(b);
+          st.dside = Math.abs(away) > 1.5 * k.zoom ? Math.sign(away) : Math.abs(ahead) > 1.5 * k.zoom ? Math.sign(ahead) : Math.sign(right) || 1;
+        }
+        // Square off the blade on the screen, on the outer side.
+        let px = -(k.sy(B) - k.sy(A)), py = k.sx(B) - k.sx(A);
+        const pl = Math.hypot(px, py) || 1;
+        px /= pl; py /= pl;
+        if (Math.sign(px) !== st.dside) { px = -px; py = -py; }
         const at = (s: number, out = 0): P3 => {
-          const ang = s * 0.75 * open;
-          const R = 6 + 4.5 * Math.cos((s * Math.PI) / 2) + out;
-          return k.local(b, Math.sin(ang) * R, Math.cos(ang) * R + 4, b.tall * (0.5 + 0.3 * s));
+          const bow = (1.8 + 5 * Math.sin(Math.PI * clamp(s)) + out) * open;
+          return nudge(k, mid3(A, B, s), px * bow, -py * bow);
         };
         const n = k.fast ? 6 : 10;
         const arc: P3[] = [];
-        for (let i = 0; i <= n; i++) arc.push(at(-1 + (2 * i) / n));
-        k.ribbon(arc, { width: 3, taper: 'both', alpha: 0.75 * a, glow: 0.5 });
+        for (let i = 0; i <= n; i++) arc.push(at(i / n));
+        k.ribbon(arc, { width: 3.2, taper: 'both', alpha: 0.85 * a, glow: 0.5 + 0.5 * k.night, bias: 3 });
         // The glint running up it.
         const g = (age * 0.8) % 1.4;
-        if (g < 1) k.flare(at(-1 + 2 * g, 0.2), 4.5, a * Math.sin(Math.PI * g), PALETTE.core, 0.3);
+        if (g < 1) k.flare(at(g, 0.3), 4.5, a * Math.sin(Math.PI * g), PALETTE.core, 0.3);
         // A blow met: every so often, somewhere along it.
         const beat = Math.floor(age / 1.4);
-        if (k.state.beat !== beat && age > 0.6 && left > 0.5) {
-          k.state.beat = beat;
-          const s = (hashOf(k.seed, beat) - 0.5) * 1.4;
+        if (st.beat !== beat && age > 0.6 && left > 0.6) {
+          st.beat = beat;
+          const s = 0.35 + 0.45 * hashOf(k.seed, beat);
           clash(k, at(s), 9, k.facingDir(b), 1.2, 0.8);
-          k.state.met = age;
-          k.state.ms = s;
+          st.met = age;
+          st.ms = s;
         }
-        const since = age - (k.state.met ?? -9);
-        if (since < 0.35) {
-          const v = since / 0.35;
-          k.flare(at(k.state.ms), 7 * (1 - v), a, PALETTE.core, 0.4);
-          // What lands back: a short brass stroke thrown out from it, the way the blow came.
-          k.ribbon([at(k.state.ms, 1 + 5 * smooth(v)), at(k.state.ms, 2 + 9 * smooth(v))], { ...BRASS, width: 2.4, taper: 'start', alpha: a * (1 - v), glow: 0.5 });
+        const since = age - (st.met ?? -9);
+        if (since < 0.5) {
+          const v = since / 0.5, f = k.facingDir(b), p = at(st.ms);
+          if (v < 0.5) k.flare(p, 7 * (1 - 2 * v), a, PALETTE.core, 0.4);
+          // What lands back: a brass stroke thrown out from it, on along the way the Blade faces, at chest height.
+          const head = 0.15 + 0.55 * easeOut(v), tail = Math.max(0.05, head - 0.35);
+          const q0 = { x: p.x + f.x * tail, y: p.y + f.y * tail, z: p.z }, q1 = { x: p.x + f.x * head, y: p.y + f.y * head, z: p.z };
+          k.ribbon([q0, mid3(q0, q1, 0.5), q1], { ...BRASS, width: 3.4, taper: 'start', alpha: a * (1 - smooth(seg(v, 0.5, 1))), glow: 0.5 });
         }
+        // The six seconds, a thin measure at the feet.
+        measureFor(k, b, 0.34, age, left, 0.85, { band: 0.02 });
       } },
     },
   },
@@ -1357,12 +1495,11 @@ export const BLADE: Record<string, SpellVisual> = {
         const p = k.on(tip.x, tip.y, 0.5);
         clash(k, p, 24, undefined, 0, 0.7);
         k.burst(p, 10, { kind: 'dust', colour: DUST, size: 2.6, life: [0.3, 0.6], speed: [0.3, 0.8], up: [3, 10], gravity: 4, drag: 0.1 });
-        // Where the line lies: a stride ahead of the Blade, across the way it faces, kept where it was scored -- clear
-        // in front of the feet from every side rather than through them. Square across, unless that runs it up the
-        // screen (the Blade side on), where a line on the ground reads as a blade stood upright: then it is laid along
-        // the nearer of the ground's diagonals, still across the way it faces.
+        // Where the line lies: through where the point went in, across the way the Blade faces, kept where it was
+        // scored. Square across, unless that runs it up the screen (the Blade side on), where a line on the ground
+        // reads as a blade stood upright: then it is laid along the nearer of the ground's diagonals, still across.
         const f = k.facingDir(k.caster), st = k.state;
-        st.lx = k.caster.x + f.x * 0.35; st.ly = k.caster.y + f.y * 0.35;
+        st.lx = tip.x; st.ly = tip.y;
         let dx = -f.y, dy = f.x;
         const o = k.on(st.lx, st.ly), q = k.on(st.lx + dx, st.ly + dy);
         if (Math.abs(k.sy(q) - k.sy(o)) > 1.2 * Math.abs(k.sx(q) - k.sx(o))) {
@@ -1398,13 +1535,9 @@ export const BLADE: Record<string, SpellVisual> = {
         // Bound as it lands: each band drawn tight from wider than the arm.
         const bind = 1 + 0.8 * (1 - smooth(age / 0.3));
         for (let i = 0; i < 2; i++) bracer(k, k.joint(b, `elbow${i}`), k.joint(b, `wrist${i}`), a, bind);
-        // Bleeding held back: now and then a drop runs down the sword arm and stops short at the band, and is gone.
-        const ph = (age % 3.2) / 3.2;
-        if (ph < 0.45 && age > 0.6) {
-          const band = mid3(k.joint(b, 'elbow1'), k.joint(b, 'wrist1'), 0.42);
-          const v = smooth(ph / 0.3), from = { ...band, z: band.z + 4.5 }, at = mid3(from, { ...band, z: band.z + 0.9 }, v);
-          k.ribbon([{ ...at, z: at.z + 1.4 }, at], { main: '#9b2a24', core: '#d97a70', ink: PALETTE.ink, width: 1.8, taper: 'start', alpha: a * (1 - smooth(seg(ph, 0.3, 0.45))), glow: 0 });
-        }
+        // Bleeding held back: now and then three drops run down the arm nearer the viewer, one after another, and each
+        // is stopped dead at the band -- it glints as it takes it -- and dries to nothing there.
+        if (age > 0.6) staunched(k, b, (age - 0.6) % 3.2, a);
         measureFor(k, b, 0.4, age, left);
       } },
     },
@@ -1412,15 +1545,17 @@ export const BLADE: Record<string, SpellVisual> = {
 
   // Disarming Cut (strike, on enemy, lasts 30 s): A blow at 70%; its next 3 blows within 30 s do 40% less damage.
   // A rising flick through its guard: a brass cut from low to high, steel chips thrown up off it, and over it
-  // three broken blades -- its next three blows, blunted -- under a measure of the thirty seconds.
+  // three broken swords -- its next three blows, blunted -- with the measure of the thirty seconds under it.
   blade_disarming_cut: {
     palette: PALETTE,
     cast: { timing: { secs: 0.8, release: 0.4 }, pose: disarmingCut, close: closeOf(DISARMING) },
     fx: {
       charge: (k, t) => {
         rush(k, t, DISARMING);
+        notePoint(k);
         if (t > 0.3 && t < 0.66) swept(k, 1, { secs: 0.13 });
       },
+      release: noteTravel,
       travel: { secs: bridgeSecs, draw: (k, u) => bridge(k, k.at(k.target, 0.62), u) },
       hit: (k) => {
         const f = frameOf(k), h = k.at(k.target, 0.62);
@@ -1431,14 +1566,16 @@ export const BLADE: Record<string, SpellVisual> = {
       impact: { secs: 0.6, draw: (k, u) => {
         // From low on the caster's left to high on its right: the way the blade went up, steeper than a cut down.
         const [b, a] = slant(k, k.at(k.target, 0.62), 36, 58);
-        cutLine(k, a, b, { grow: smooth(u / 0.12), part: smooth(seg(u, 0.4, 1)), alpha: 1 - seg(u, 0.7, 1), width: 3.2 });
+        cutLine(k, a, b, { grow: smooth(u / 0.12), part: smooth(seg(u, 0.4, 1)), alpha: 1 - seg(u, 0.7, 1), width: 3.2, floor: k.target.z + 1.5 });
         k.flare(k.at(k.target, 0.62), 7 * (1 - u), flashOf(u, 0.08), PALETTE.core, 0.3);
         k.light(k.target, 1.4, 0.6 * (1 - u), '#fff1d6');
       } },
       linger: { draw: (k, age, left) => {
-        // Its next blows, blunted, one broken blade each: they say what is kept count of, so no measure under it.
+        // Its next blows, blunted, one broken sword each; and under it the measure of the thirty seconds they are
+        // blunted for, which the swords do not say (they count blows, not time).
         const a = smooth(age / 0.4) * smooth(left / 0.8);
-        brokenBlades(k, k.at(k.target, 1.12), k.fx.blows ?? 3, 9, a * 0.95, age);
+        brokenBlades(k, k.at(k.target, 1.14), k.fx.blows ?? 3, 11, a, age);
+        measureFor(k, k.target, markR(k.target), age, left, 0.85, { band: 0.03 });
       } },
     },
   },
@@ -1463,7 +1600,9 @@ export const BLADE: Record<string, SpellVisual> = {
         // with the Blade, a breath every four seconds, and a breath shows at the mouth on each out-breath.
         const ph = (age % 4) / 4;
         const breath = smooth(seg(ph, 0, 0.4)) - smooth(seg(ph, 0.5, 0.95));
-        breathGauge(k, k.caster, 0.5 + 0.03 * breath, 1, (0.5 + 0.2 * breath) * a);
+        // And round its rim, in the brass of time kept count of, what is left of the twenty seconds: a lip running
+        // round once, while the stamina stays full.
+        breathGauge(k, k.caster, 0.5 + 0.03 * breath, 1, (0.5 + 0.2 * breath) * a, left / Math.max(1e-3, age + left));
         if (!k.fast && ph > 0.5 && ph < 0.7) k.emit(k.local(k.caster, 0, 2.5, k.head().z - k.caster.z - 1.5), 6, { kind: 'mist', colour: BREATH, size: 1.6, life: [0.6, 1], speed: [0.04, 0.1], up: [1, 2], heading: k.facingDir(k.caster), cone: 0.8, gravity: -2, drag: 0.4 });
       } },
     },
@@ -1486,7 +1625,7 @@ export const BLADE: Record<string, SpellVisual> = {
         k.flash(0.06);
       },
       impact: { secs: 1.0, draw: (k, u) => {
-        wave(k, k.caster, smooth(u / 0.7), CALL_REACH, 1, { ...BRASS, band: 0.22 });
+        wave(k, k.caster, smooth(u / 0.7), CALL_REACH, 1, { ...BRASS, band: 0.22, lip: BRASS_CORE });
         k.light(k.caster, 1.4, 0.7 * (1 - u), '#fff1d6');
       } },
       linger: { draw: (k, age, left) => {
@@ -1494,7 +1633,7 @@ export const BLADE: Record<string, SpellVisual> = {
         const b = k.caster;
         // The reach, faint, its edge dashed; and just inside it one round of darts stepping in at the Blade -- kept to
         // the edge, so the ground inside stays clear for the marks that matter.
-        k.ring(b, CALL_REACH, { ...BRASS, band: 0.06, dash: 3, alpha: 0.55 * a, glow: 0.3, turn: age * 0.05 });
+        reachRing(k, b, CALL_REACH, 0.06, 0.55 * a, age * 0.05);
         const n = 6, step = (age * 0.55) % 1, rr = CALL_REACH * (1 - 0.12 * step);
         const wave6: Array<{ c: { x: number; y: number }; dir: { x: number; y: number } }> = [];
         for (let i = 0; i < n; i++) {
@@ -1521,7 +1660,7 @@ export const BLADE: Record<string, SpellVisual> = {
           const tick = seg(age, hitAt, hitAt + 0.5);
           if (tick > 0 && tick < 1) {
             const rr = r * (1.6 - 0.6 * smooth(tick)), q: number[] = [];
-            for (let i = 0; i < 12; i++) q.push(c.x + Math.cos((i / 12) * TAU) * rr, c.y + Math.sin((i / 12) * TAU) * rr);
+            for (let i = 0; i < 24; i++) q.push(c.x + Math.cos((i / 24) * TAU) * rr, c.y + Math.sin((i / 24) * TAU) * rr);
             ticks.push(q);
             tickA = Math.max(tickA, a * (1 - tick));
           }
@@ -1564,11 +1703,12 @@ export const BLADE: Record<string, SpellVisual> = {
       },
       hit: (k) => {
         clash(k, k.chest(), 30, undefined, 0, 1);
-        k.burst(k.at(k.caster, 0.05), 20, { kind: 'dust', colour: DUST, size: 3.4, life: [0.5, 1], speed: [0.8, 1.6], up: [2, 8], gravity: 2, drag: 0.1 });
+        k.burst(k.at(k.caster, 0.05), 20, { kind: 'dust', colour: DUST, size: 2.4, life: [0.3, 0.6], speed: [0.8, 1.6], up: [2, 8], gravity: 2, drag: 0.1 });
         k.flash(0.08, PALETTE.light);
       },
       impact: { secs: 0.8, draw: (k, u) => {
-        wave(k, k.caster, u, 1.6, 0.55, { band: 0.06 });
+        // The shock of the stand, out to just past the ring of swords.
+        wave(k, k.caster, u, 1.1, 0.55, { band: 0.04 });
         k.light(k.caster, 1.4, 0.9 * (1 - u), '#fff1d6');
       } },
       linger: { draw: (k, age, left) => {
@@ -1612,7 +1752,14 @@ export const BLADE: Record<string, SpellVisual> = {
         measureFor(k, b, 0.5, age, left);
         // A little light off the steel for the ten seconds, so the ring of swords stands in the dark.
         k.light(b, 1.4, 0.35 * a * smooth(age / 0.4), '#fff1d6');
-        if (!k.fast) k.emit(k.at(b, 0.6), 6, { kind: 'mote', colour: [BRASS_CORE, PALETTE.core], size: 1.4, life: [0.6, 1.1], speed: [0.05, 0.12], up: [4, 10], gravity: 0, jitter: 0.2 });
+        // Steel catching the light: a glint going round the swords' blades one after another -- steel, and nothing
+        // given back (it is damage kept off, not health).
+        if (age > 0.4) {
+          const gi = Math.floor(age / 0.7) % n, gu = (age % 0.7) / 0.7;
+          const ang = (gi / n) * TAU + 0.2;
+          const shine = k.on(b.x + Math.cos(ang) * R, b.y + Math.sin(ang) * R, stand);
+          k.flare(shine, 4, a * Math.sin(Math.PI * gu), PALETTE.core, 0.3 + gu);
+        }
       } },
     },
   },
@@ -1656,70 +1803,184 @@ function bracer(k: FxScene, e: P3, w: P3, alpha: number, bind = 1): void {
 }
 
 /**
- * `n` blades snapped short, side by side in the air over `p`, `r` pixels at zoom one each: each stood hilt down --
- * pommel, grip and a brass guard -- with a wide stub of blade going up from the guard to a jagged break, and its lost
- * point tilted off beside it, falling away. Hilt low and the break on top, so at play size it reads as a sword broken
- * rather than a dagger pointing down. A creature's next blows, blunted -- one each. All in one record, as they always
- * sort together over the one head.
+ * `n` swords snapped in two, side by side in the air over `p`, `r` pixels at zoom one each: each stood hilt down --
+ * pommel, grip and a broad brass guard -- with a long stub of steel blade going up from the guard to a jagged break,
+ * and just over it, across a hair of air, the lost point, tilted off the line and rocking: one sword, broken. Steel
+ * with a lit edge down its left, inked, the point as solid as the stub so the eye joins them. A creature's next
+ * blows, blunted -- one each. All in one record, as they always sort together over the one head.
  */
 function brokenBlades(k: FxScene, p: P3, n: number, r: number, alpha: number, age: number): void {
   if (alpha <= 0.01 || n <= 0) return;
-  const x0 = k.sx(p), y0 = k.sy(p), R = r * k.zoom, gap = R * 1.05;
-  const w = R * 0.15;
+  const x0 = k.sx(p), y0 = k.sy(p), R = r * k.zoom, gap = R * 0.95;
+  const W = 0.15, L = 0.12;
   const poly = (g: CanvasRenderingContext2D, pts: ReadonlyArray<readonly [number, number]>): void => {
     g.beginPath();
     pts.forEach(([px, py], i) => (i ? g.lineTo(px * R, py * R) : g.moveTo(px * R, py * R)));
     g.closePath();
   };
-  const W = w / R;
-  // The stub and its jagged break, and the lit half of it; the lost point, its broken base jagged to match.
-  const stub = [[-W, 0.24], [-W, -0.06], [-W * 0.4, -0.18], [0, -0.07], [W * 0.5, -0.22], [W, -0.1], [W, 0.24]] as const;
-  const stubLit = [[-W, 0.24], [-W, -0.06], [-W * 0.4, -0.18], [0, -0.07], [0, 0.24]] as const;
-  const point = [[-W, 0], [-W * 0.4, -0.1], [0, 0], [W * 0.5, -0.12], [W, -0.02], [W * 0.7, -0.34], [0, -0.52], [-W * 0.7, -0.34]] as const;
+  // Up is minus. The stub from the guard (0.3) up to its jagged break (about -0.1), and the lit strip down its left;
+  // the lost point from its own jagged base (0) up to its tip, the lit strip likewise.
+  const stub = [[-W, 0.3], [-W, -0.05], [-W * 0.4, -0.14], [0, -0.05], [W * 0.5, -0.17], [W, -0.08], [W, 0.3]] as const;
+  const stubLit = [[-W, 0.3], [-W, -0.05], [-W * 0.4, -0.14], [-W + L, -0.1], [-W + L, 0.3]] as const;
+  const point = [[-W, 0.02], [-W * 0.4, -0.06], [0, 0.03], [W * 0.5, -0.08], [W, 0.0], [W * 0.85, -0.3], [0, -0.46], [-W * 0.85, -0.3]] as const;
+  const pointLit = [[-W, 0.02], [-W * 0.4, -0.06], [-W + L, -0.04], [-W + L * 0.8, -0.32], [0, -0.46], [-W * 0.85, -0.3]] as const;
+  const z = k.zoom;
   k.worldDraw(p, (g) => {
     g.globalAlpha = clamp(alpha);
     g.lineJoin = 'miter';
-    g.lineWidth = Math.max(0.9, 0.8 * k.zoom);
+    g.lineWidth = Math.max(0.8, 0.6 * z);
     g.strokeStyle = PALETTE.ink;
     for (let i = 0; i < n; i++) {
       // Each bobbing a little on its own beat.
-      const x = x0 + (i - (n - 1) / 2) * gap, y = y0 - Math.sin(age * 1.8 + i * 1.3) * R * 0.06;
+      const x = x0 + (i - (n - 1) / 2) * gap, y = y0 - Math.sin(age * 1.8 + i * 1.3) * R * 0.05;
       g.save();
       g.translate(x, y);
+      // Pommel, grip, and the guard broad across the top of the hilt.
+      poly(g, [[0, 0.6], [W * 1.2, 0.68], [0, 0.76], [-W * 1.2, 0.68]]);
+      g.fillStyle = PALETTE.accent;
+      g.fill();
+      g.stroke();
+      g.fillStyle = BRASS_DEEP;
+      g.beginPath();
+      g.rect(-R * W * 0.6, R * 0.42, R * W * 1.2, R * 0.19);
+      g.fill();
+      g.stroke();
+      g.fillStyle = PALETTE.accent;
+      g.beginPath();
+      g.rect(-R * 0.36, R * 0.29, R * 0.72, R * 0.14);
+      g.fill();
+      g.stroke();
+      g.fillStyle = BRASS_CORE;
+      g.fillRect(-R * 0.33, R * 0.3, R * 0.66, R * 0.04);
       poly(g, stub);
-      g.fillStyle = PALETTE.main;
+      g.fillStyle = STEEL;
       g.fill();
       g.stroke();
       poly(g, stubLit);
-      g.fillStyle = PALETTE.core;
-      g.fill();
-      // Guard, grip and pommel, below the stub.
-      g.fillStyle = PALETTE.accent;
-      g.beginPath();
-      g.rect(-R * 0.36, R * 0.22, R * 0.72, R * 0.11);
-      g.fill();
-      g.stroke();
-      g.fillStyle = PALETTE.deep;
-      g.beginPath();
-      g.rect(-w * 0.65, R * 0.33, w * 1.3, R * 0.24);
-      g.fill();
-      g.stroke();
-      poly(g, [[0, 0.56], [W * 1.1, 0.64], [0, 0.72], [-W * 1.1, 0.64]]);
-      g.fillStyle = PALETTE.accent;
-      g.fill();
-      g.stroke();
-      // The lost point, off to the side and above, tilted and turning slowly as it falls away.
-      const fall = (age * 0.6 + i * 0.37) % 1;
-      g.translate(R * (0.32 + 0.06 * fall), -R * (0.3 - 0.12 * fall));
-      g.rotate(0.6 + 0.5 * fall);
-      g.globalAlpha = clamp(alpha * (1 - 0.5 * fall));
-      poly(g, point);
       g.fillStyle = PALETTE.main;
       g.fill();
+      // The lost point, over the break across a hair of air, tilted off the line and rocking on it.
+      g.translate(R * 0.04, -R * 0.27);
+      g.rotate(0.42 + 0.08 * Math.sin(age * 1.3 + i * 2.1));
+      poly(g, point);
+      g.fillStyle = STEEL;
+      g.fill();
       g.stroke();
-      g.globalAlpha = clamp(alpha);
+      poly(g, pointLit);
+      g.fillStyle = PALETTE.main;
+      g.fill();
       g.restore();
     }
   }, 2);
-  k.glow(p, r * 2, alpha * 0.25, PALETTE.light);
+  k.glow(p, r * 1.6, alpha * (0.1 + 0.3 * k.night), PALETTE.light);
+}
+
+/**
+ * A creature going at half its pace: a hind foot dragged. A furrow scored in the ground behind the hind foot -- along
+ * the way it has really come while it moves, a short stub straight back while it stands -- inked, its lip a
+ * scrape of brass, and a puff of dust off the foot at every step it drags (every 1.6 s while it stands, the foot
+ * hitched). One record however long.
+ */
+function hobbled(k: FxScene, b: Body, age: number, alpha: number): void {
+  if (alpha <= 0.01) return;
+  const s = k.state, back = k.facingDir(b);
+  const foot = k.local(b, -b.wide * 0.12, -b.wide * 0.6, 0);
+  // Its dragged steps: where the foot was at each, and when, newest first.
+  const STEP = 0.14, KEEP = 2.4, N = 5;
+  if (s.hx === undefined || Math.hypot(foot.x - s.hx, foot.y - s.hy) > STEP) {
+    for (let i = N; i > 1; i--) { s[`hx${i}`] = s[`hx${i - 1}`]; s[`hy${i}`] = s[`hy${i - 1}`]; s[`ht${i}`] = s[`ht${i - 1}`]; }
+    if (s.hx !== undefined) { s.hx1 = s.hx; s.hy1 = s.hy; s.ht1 = age; }
+    s.hx = foot.x; s.hy = foot.y;
+    if (age > 0.4) k.burst(k.on(foot.x, foot.y, 0.5), 4, { kind: 'dust', colour: DUST, size: 2, life: [0.3, 0.6], speed: [0.05, 0.25], up: [1, 4], heading: back, cone: 1, gravity: 2 });
+  }
+  const pts: Array<{ x: number; y: number }> = [foot];
+  for (let i = 1; i <= N; i++) {
+    const t0 = s[`ht${i}`];
+    if (t0 === undefined || age - t0 > KEEP) break;
+    pts.push({ x: s[`hx${i}`], y: s[`hy${i}`] });
+  }
+  // Standing: the stub of a dragged foot, and the foot hitched every 1.6 s (the band jerks with it).
+  if (pts.length < 2) {
+    const stub = { x: foot.x - back.x * 0.3, y: foot.y - back.y * 0.3 };
+    pts.push(stub);
+    const beat = Math.floor((age - 0.5) / 1.6);
+    if (age > 0.5 && s.hitch !== beat) {
+      s.hitch = beat;
+      k.burst(k.on(foot.x, foot.y, 0.5), 3, { kind: 'dust', colour: DUST, size: 1.8, life: [0.3, 0.5], speed: [0.05, 0.2], up: [1, 3], heading: back, cone: 1, gravity: 2 });
+    }
+  }
+  // The furrow: a wedge down the line, widest at the foot.
+  const L: number[] = [], R: number[] = [];
+  const dirAt = (i: number): [number, number] => {
+    const q = pts[Math.min(pts.length - 1, i + 1)], o = pts[Math.max(0, i - (i + 1 < pts.length ? 0 : 1))];
+    const dx = q.x - o.x, dy = q.y - o.y, l = Math.hypot(dx, dy) || 1;
+    return [dx / l, dy / l];
+  };
+  for (let i = 0; i < pts.length; i++) {
+    const p = pts[i], [dx, dy] = dirAt(i);
+    const w = 0.07 * (1 - (0.75 * i) / Math.max(1, pts.length - 1));
+    L.push(p.x - dy * w, p.y + dx * w);
+    R.unshift(p.x + dy * w, p.y - dx * w);
+  }
+  const furrow = [...L, ...R];
+  const z = k.zoom;
+  let x0 = foot.x, y0 = foot.y, x1 = foot.x, y1 = foot.y;
+  for (const p of pts) { x0 = Math.min(x0, p.x); y0 = Math.min(y0, p.y); x1 = Math.max(x1, p.x); y1 = Math.max(y1, p.y); }
+  k.groundShape((x0 + x1) / 2, (y0 + y1) / 2, Math.max(x1 - x0, y1 - y0) / 2 + 0.3, [
+    { kind: 'fill', colour: '#3e3226', alpha: alpha * 0.9, paths: [furrow], lift: 0.12 },
+    { kind: 'stroke', colour: PALETTE.ink, alpha: alpha * 0.7, width: Math.max(0.8, 0.6 * z), paths: [furrow], closed: true, join: 'round', lift: 0.12 },
+    // The earth turned up along its lip, and where each dragged step bit: a pale brass scrape.
+    { kind: 'stroke', colour: BRASS_DEEP, alpha: alpha * 0.9, width: Math.max(1, 0.9 * z), paths: [L], cap: 'round', lift: 0.13, glow: 0.5 * k.night, light: BRASS_CORE },
+  ]);
+}
+
+/**
+ * Bleeding staunched, `ph` seconds into a round of it: three drops of blood, one after another, run down the arm of
+ * `b` nearer the viewer from high on the upper arm to its upper band and are stopped there -- the band glinting as
+ * each is taken -- and shrink to nothing. Big enough to read at play size (a drop six pixels tall at zoom two); one
+ * record.
+ */
+function staunched(k: FxScene, b: Body, ph: number, alpha: number): void {
+  if (alpha <= 0.01 || ph > 1.6) return;
+  // The arm nearer the viewer: the one whose elbow stands lower on the screen at its own height.
+  const e0 = k.joint(b, 'elbow0'), e1 = k.joint(b, 'elbow1');
+  const side = k.sy({ ...e1, z: b.z }) >= k.sy({ ...e0, z: b.z }) ? 1 : 0;
+  const sh = k.joint(b, `arm${side}`), el = k.joint(b, `elbow${side}`), wr = k.joint(b, `wrist${side}`);
+  const from = mid3(sh, el, 0.25), band = mid3(el, wr, 0.3);
+  const drops: Array<[number, number, number, number]> = [];
+  for (let i = 0; i < 3; i++) {
+    const t0 = i * 0.32, u = ph - t0;
+    if (u < 0 || u > 1.0) continue;
+    const run = smooth(clamp(u / 0.4));
+    // Down the upper arm to the elbow, then on down the forearm to the band.
+    const p = run < 0.5 ? mid3(from, el, run * 2) : mid3(el, band, run * 2 - 1);
+    const dry = 1 - smooth(seg(u, 0.7, 1.0));
+    const squash = smooth(seg(u, 0.38, 0.5));
+    drops.push([k.sx(p), k.sy(p), dry, squash]);
+    if (u > 0.4 && u < 0.6) k.flare(band, 4.5 * (1 - (u - 0.4) / 0.2), alpha, PALETTE.core, 0.6);
+  }
+  if (!drops.length) return;
+  const z = k.zoom, R0 = 1.6 * z;
+  k.worldDraw(band, (g) => {
+    g.globalAlpha = clamp(alpha);
+    g.lineJoin = 'round';
+    for (const [x, y, dry, squash] of drops) {
+      const R = R0 * (0.25 + 0.75 * dry), tail = R * (2.3 - 1.1 * squash), wide = R * (1 + 0.25 * squash);
+      g.beginPath();
+      g.moveTo(x, y - tail);
+      g.bezierCurveTo(x + wide * 0.4, y - tail * 0.5, x + wide, y - R * 0.6, x + wide, y);
+      g.arc(x, y, wide, 0, Math.PI);
+      g.bezierCurveTo(x - wide, y - R * 0.6, x - wide * 0.4, y - tail * 0.5, x, y - tail);
+      g.closePath();
+      g.fillStyle = BLOOD;
+      g.fill();
+      g.lineWidth = Math.max(0.8, 0.6 * z);
+      g.strokeStyle = PALETTE.ink;
+      g.stroke();
+      g.fillStyle = BLOOD_LIT;
+      g.beginPath();
+      g.arc(x - wide * 0.35, y - R * 0.2, R * 0.32, 0, TAU);
+      g.fill();
+    }
+  }, 4);
 }
