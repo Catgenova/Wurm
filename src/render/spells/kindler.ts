@@ -24,7 +24,9 @@ import {
   arcAt, bump, clamp, easeIn, easeOut, flashOf, glowPicture, hashOf, lerp, mid3, seg, smooth, TAU,
   type Body, type FxScene, type P3, type SpellPalette,
 } from './kit';
+import type { HandShape, V3 } from '../figure';
 import { UNITS_PER_TILE } from '../iso';
+import { spellInfo } from './info';
 import { beats, euler, one } from './poses';
 
 /** Fire: a white-yellow heart, orange body, a deep red edge. Garnet and ruby. */
@@ -347,10 +349,101 @@ const burnPower = (each: number | undefined): number => clamp((each ?? 0.01) / 0
 /** Tiles out from the middle of a body to round its feet, with room: what a ring under it or a patch of ground lit under it is sized by. */
 const footOf = (b: Body): number => clamp((b.wide / UNITS_PER_TILE) * 2.6, 0.25, 0.7);
 
-/** A burn lingering on what it was cast at, for the spell's own seconds, at the strength its numbers say. */
+/** How many times as long a Firebrand makes every burn: what a burn's linger has to allow for. */
+const BRAND_LONG = spellInfo('kindler_firebrand')?.fx.long ?? 1;
+/** Seconds a burn spell's linger is kept for: its own, as long again as a Firebrand can make them. */
+const burnSecs = (id: string): number => (spellInfo(id)?.lasts ?? 0) * BRAND_LONG;
+
+/**
+ * Who has had a burn drawn on them this frame: two casts that both burn one
+ * creature (an Immolate, and the Scorch over it) draw the island's one burn
+ * once. Begun again at the first burn of each frame.
+ */
+const burnt = { now: -1, who: new Set<string>() };
+const keyOf = (b: Body): string => (b.who && b.who.kind !== 'player' ? `${b.who.kind}${b.who.id}` : `${b.x.toFixed(2)},${b.y.toFixed(2)}`);
+
+/**
+ * How a burn on `b` stands by what the island says of it (`Body.burning`):
+ * its share of strength left and how much of it to draw, or null when it is
+ * out. Once the creature has been seen burning, its burn goes on until the
+ * island says it is out -- a Firebrand's doubled seconds, a Combust's or a
+ * poultice's early end -- and dies over a breath then; never seen burning (no
+ * word yet, or a person), it burns for its own `secs`. `slot` keeps one
+ * body's watch apart from another's in `k.state`.
+ */
+function burnNow(k: FxScene, b: Body, slot: string, age: number, secs: number): { life: number; alpha: number } | null {
+  const st = k.state, seen = `${slot}s`, out = `${slot}o`;
+  if (b.burning) {
+    st[seen] = 1;
+    st[out] = -1;
+  }
+  const rise = smooth(age / 0.35);
+  if (st[seen] === 1) {
+    const left = 0.35 + 0.65 * clamp((secs - age) / Math.max(0.01, secs));
+    if (b.burning !== false) return { life: left, alpha: rise };
+    if ((st[out] ?? -1) < 0) st[out] = age;
+    const f = 1 - (age - st[out]) / 0.6;
+    return f > 0 ? { life: left * f, alpha: rise * f } : null;
+  }
+  if (age >= secs) return null;
+  return { life: (secs - age) / Math.max(0.01, secs), alpha: rise * smooth((secs - age) / 0.9) };
+}
+
+/** Whether `b`'s burn has been drawn already this frame; marks it drawn. */
+function burntAlready(k: FxScene, b: Body): boolean {
+  if (burnt.now !== k.now) {
+    burnt.now = k.now;
+    burnt.who.clear();
+  }
+  const key = keyOf(b);
+  if (burnt.who.has(key)) return true;
+  burnt.who.add(key);
+  return false;
+}
+
+/** A burn drawn on `b` as the island has it, once a frame whoever asks. */
+function burnWatched(k: FxScene, b: Body, slot: string, age: number, secs: number, power: number): void {
+  const now = burnNow(k, b, slot, age, secs);
+  if (now && !burntAlready(k, b)) burnOn(k, b, age, power, now.life, now.alpha);
+}
+
+/** A burn lingering on what it was cast at, at the strength its numbers say, for as long as the island has it burning. */
 function burnLinger(k: FxScene, age: number, left: number): void {
-  const life = left / Math.max(0.01, age + left);
-  burnOn(k, k.target, age, burnPower(k.fx.each), life, smooth(age / 0.35) * smooth(left / 0.9));
+  burnWatched(k, k.target, 't', age, k.fx.secs ?? age + left, burnPower(k.fx.each));
+}
+
+/** The creatures in `ids` (`k.state[prefix + i]`, `k.state[prefix + 'n']` of them), wherever they have got to, by slot. */
+function marked(k: FxScene, prefix: string, c: { x: number; y: number }, r: number): Array<[number, Body]> {
+  const n = k.state[`${prefix}n`] ?? 0;
+  if (!n) return [];
+  const out: Array<[number, Body]> = [];
+  for (const b of k.bodiesWithin(r, c, ['creature'])) {
+    if (b.who?.kind !== 'creature') continue;
+    for (let i = 0; i < n; i++) if (k.state[`${prefix}${i}`] === b.who.id) out.push([i, b]);
+  }
+  return out;
+}
+
+/** Remember the creatures within `r` of `c` now, by their ids, up to `most` of them: who an area spell caught. */
+function mark(k: FxScene, prefix: string, c: { x: number; y: number }, r: number, most: number): void {
+  let n = 0;
+  for (const b of k.bodiesWithin(r, c, ['creature'])) {
+    if (b.who?.kind !== 'creature' || n >= most) continue;
+    k.state[`${prefix}${n++}`] = b.who.id;
+  }
+  k.state[`${prefix}n`] = n;
+}
+
+/** Share of a wave's way out (`r = from + (to - from) * easeOut(u)`) at which it reaches `d`. */
+const reachedAt = (d: number, from: number, to: number): number => 1 - Math.cbrt(1 - clamp((d - from) / Math.max(0.01, to - from)));
+
+/** A creature caught in the fire of an area: a few tongues up it for a moment, the heat of the blow. */
+function alight(k: FxScene, b: Body, h: number, heat: number, alpha: number, key: number): void {
+  if (alpha <= 0.01 || h <= 0.3) return;
+  const fl: Flame[] = [];
+  fireCluster(k, k.at(b, 0.5), h, heat, key, fl);
+  flameGroup(k, k.on(b.x, b.y), fl, alpha, 3);
+  k.glow(k.heart(b), 6 + h, 0.5 * alpha);
 }
 
 /**
@@ -394,9 +487,35 @@ function fireball(k: FxScene, head: P3, prev: P3, r: number, tail: number, rock 
 function kindle(k: FxScene, at: P3, u: number, size = 1.8): void {
   const a = bump(u, 0, 0.35, 1);
   if (a <= 0.01) return;
-  k.orb(at, size * (0.6 + 0.4 * a), { ...GEM, alpha: a, turn: k.now * 5, glow: 0, bias: 3 });
-  k.glow(at, size * 4, a * 0.7, GEM.main);
+  k.orb(at, size * (0.6 + 0.4 * a), { ...GEM, alpha: a, turn: k.now * 5, glow: 0.8, light: GEM.main, bias: 3 });
   k.flare(at, size * 3.5 * a, a * 0.8, GEM.core, k.now * 2);
+}
+
+/**
+ * The creature a Heat Seeker goes to, as far as this end can tell. The island
+ * picks the one within its reach with the least of its health left, the nearer
+ * of two alike, and does not say which; a creature's health is not here, so
+ * this takes the nearest within the reach -- the island's own choice whenever
+ * one creature is in reach or all are as hurt as each other. Chosen once and
+ * followed by its id; null when nothing is in reach.
+ */
+function quarryOf(k: FxScene): Body | null {
+  const R = k.fx.reach ?? 10;
+  if (k.state.q === undefined) {
+    let best: Body | null = null, bd = Infinity;
+    for (const b of k.bodiesWithin(R, k.caster, ['creature'])) {
+      const d = Math.hypot(b.x - k.caster.x, b.y - k.caster.y);
+      if (b.who?.kind === 'creature' && d < bd) {
+        best = b;
+        bd = d;
+      }
+    }
+    k.state.q = best?.who?.kind === 'creature' ? best.who.id : -1;
+    return best;
+  }
+  if (k.state.q < 0) return null;
+  for (const b of k.bodiesWithin(R * 1.6, k.caster, ['creature'])) if (b.who?.kind === 'creature' && b.who.id === k.state.q) return b;
+  return null;
 }
 
 /** A star of tongues bursting out of a point, `n` of them, `len` pixels long at zoom one: a detonation. */
@@ -450,6 +569,16 @@ const cast = (pose: CastPose): CastPose => (r, t, c) => {
   pose(r, t, c);
 };
 
+/** A hand's shape keyed over the cast: each of its shares eased from one key to the next, nought where a key leaves it out. */
+function shapeAt(t: number, keys: ReadonlyArray<readonly [number, HandShape]>): HandShape {
+  const out: HandShape = {};
+  for (const name of ['claw', 'cup', 'flat', 'point', 'two'] as const) {
+    const v = one(t, keys.map(([at, h]) => [at, h[name] ?? 0] as const));
+    if (v > 0.001) out[name] = v;
+  }
+  return out;
+}
+
 /** Scorch: a backhand flick, the right hand cocked at the left shoulder and snapped out at the creature, two fingers' worth. */
 const scorchPose: CastPose = cast((r, t, c) => {
   const b = beats(c);
@@ -466,6 +595,8 @@ const scorchPose: CastPose = cast((r, t, c) => {
   r.knee[0] = one(t, [[0, 4], [b.top, 8], [b.let, 20], [1, 6]]);
   r.leg[1] = euler(t, [[0, [0, 2, 0]], [b.top, [6, 2, 0]], [b.let, [-10, 2, 0]], [1, [-2, 2, 0]]]);
   r.knee[1] = one(t, [[0, 4], [b.top, 16], [b.let, 8], [1, 4]]);
+  // The flame held in a loose bowl of the fingers as the hand cocks, flicked off two fingers at the snap.
+  r.shape = [undefined, shapeAt(t, [[0, {}], [b.top * 0.6, { cup: 0.8 }], [b.let - 0.04, { cup: 0.6 }], [b.let, { two: 1 }], [b.through, { two: 0.8 }], [1, {}]])];
 });
 
 /** Ember: a coal pinched out of the left fist, the right hand swung down and back, and lobbed underhand. */
@@ -484,6 +615,8 @@ const emberPose: CastPose = cast((r, t, c) => {
   for (let k = 0; k < 2; k++) r.knee[k] = one(t, [[0, 4], [pinch, 6], [b.top, 22], [b.let, 6], [1, 4]]);
   r.leg[0] = euler(t, [[0, [2, 2, 0]], [b.top, [16, 3, 0]], [b.let, [20, 3, 0]], [1, [4, 2, 0]]]);
   r.leg[1] = euler(t, [[0, [0, 2, 0]], [b.top, [12, 2, 0]], [b.let, [-8, 2, 0]], [1, [0, 2, 0]]]);
+  // The coal pinched out between two fingers; the hand that lobs it opens flat under it as it goes.
+  r.shape = [undefined, shapeAt(t, [[0, {}], [pinch, { two: 0.6, claw: 0.3 }], [b.top, { two: 0.6, claw: 0.3 }], [b.let, { flat: 1 }], [b.through, { flat: 0.8 }], [1, {}]])];
 });
 
 /** Flash Fire: both palms drawn in to the chest, a step in, and shoved out at the creature an arm's length off; the body kicked back by it. */
@@ -502,6 +635,9 @@ const flashFirePose: CastPose = cast((r, t, c) => {
   r.knee[0] = one(t, [[0, 4], [b.top, 18], [b.let, 32], [b.through, 22], [1, 6]]);
   r.leg[1] = euler(t, [[0, [0, 2, 0]], [b.top, [4, 2, 0]], [b.let, [-18, 2, 0]], [1, [-2, 2, 0]]]);
   r.knee[1] = one(t, [[0, 4], [b.top, 18], [b.let, 10], [1, 4]]);
+  // Palms cupped round the heat at the chest, then shoved out flat, fingers spread a little with the force of it.
+  const hands = shapeAt(t, [[0, {}], [b.top * 0.5, { cup: 0.7 }], [b.top, { cup: 0.7 }], [b.let, { flat: 0.8, claw: 0.2 }], [b.through, { flat: 0.8 }], [1, {}]]);
+  r.shape = [hands, hands];
 });
 
 /** Scald: a sweeping fling from the left hip out across the front, the hand open as if throwing out a pan, the left arm out for balance. */
@@ -520,6 +656,9 @@ const scaldPose: CastPose = cast((r, t, c) => {
   for (let k = 0; k < 2; k++) r.knee[k] = one(t, [[0, 4], [b.top, 20], [b.let, 12], [1, 4]]);
   r.leg[0] = euler(t, [[0, [2, 2, 0]], [b.top, [8, 6, 0]], [b.let, [18, 6, 0]], [1, [4, 2, 0]]]);
   r.leg[1] = euler(t, [[0, [0, 2, 0]], [b.top, [6, 6, 0]], [b.let, [-8, 6, 0]], [1, [0, 2, 0]]]);
+  // The right hand a bowl that holds the scald back at the hip, flat as it flings it; the left flat out for balance.
+  r.shape = [shapeAt(t, [[0, {}], [b.top, { flat: 0.7 }], [b.through, { flat: 0.7 }], [1, {}]]),
+    shapeAt(t, [[0, {}], [b.top * 0.5, { cup: 1 }], [b.top, { cup: 1 }], [b.let, { flat: 1 }], [b.through, { flat: 0.7 }], [1, {}]])];
 });
 
 /** Immolate: the left arm points it out; the right hand, palm up, lifts the fire up out of the ground under it and closes on it. */
@@ -537,6 +676,9 @@ const immolatePose: CastPose = cast((r, t, c) => {
   r.leg[0] = euler(t, [[0, [2, 2, 0]], [b.top * 0.4, [10, 8, 0]], [b.through, [12, 8, 0]], [1, [4, 2, 0]]]);
   r.leg[1] = euler(t, [[0, [0, 2, 0]], [b.top * 0.4, [-8, 8, 0]], [b.through, [-8, 8, 0]], [1, [0, 2, 0]]]);
   for (let k = 0; k < 2; k++) r.knee[k] = one(t, [[0, 4], [b.top, 10], [b.let, 18], [1, 4]]);
+  // The left forefinger names it; the right palm, up, lifts the fire out of the ground and clutches it at the let.
+  r.shape = [shapeAt(t, [[0, {}], [b.top * 0.4, { point: 1 }], [b.through, { point: 1 }], [1, {}]]),
+    shapeAt(t, [[0, {}], [b.top * 0.35, { flat: 1 }], [b.top, { flat: 0.6, claw: 0.4 }], [b.let, { claw: 1 }], [b.through, { claw: 0.4 }], [1, {}]])];
 });
 
 /** Combust: the right hand reaches out, clawed, and holds the burn in it; then the fist closes and is yanked back, the body jerking with it. */
@@ -557,6 +699,9 @@ const combustPose: CastPose = cast((r, t, c) => {
   r.knee[0] = one(t, [[0, 4], [b.top, 26], [b.through, 10], [1, 4]]);
   r.leg[1] = euler(t, [[0, [0, 2, 0]], [b.top, [-12, 2, 0]], [b.through, [-4, 2, 0]], [1, [0, 2, 0]]]);
   r.knee[1] = one(t, [[0, 4], [b.top, 8], [b.through, 16], [1, 4]]);
+  // Clawed as it takes hold of the burn, shut hard on the yank; teeth bared with it.
+  r.shape = [undefined, shapeAt(t, [[0, {}], [b.top * 0.6, { claw: 1 }], [b.top, { claw: 1 }], [b.let, {}], [1, {}]])];
+  r.mouth = one(t, [[0, 0], [b.top, 0.15], [b.let, 0.45], [b.through, 0.2], [1, 0]]);
 });
 
 /** Inferno Bolt: the fire gathered between both hands at the right hip, the body wound round it, then both palms driven out together in a lunge. */
@@ -578,6 +723,10 @@ const infernoPose: CastPose = cast((r, t, c) => {
   r.knee[0] = one(t, [[0, 4], [b.top, 26], [b.let, 36], [b.through, 32], [1, 6]]);
   r.leg[1] = euler(t, [[0, [0, 2, 0]], [b.top, [-6, 6, 0]], [b.let, [-22, 4, 0]], [b.through, [-20, 4, 0]], [1, [0, 2, 0]]]);
   r.knee[1] = one(t, [[0, 4], [b.top, 26], [b.let, 12], [1, 4]]);
+  // Clawed round the ball at the hip, flat behind it in the thrust, a grunt with it.
+  const hands = shapeAt(t, [[0, {}], [b.top * 0.4, { claw: 0.7, cup: 0.3 }], [b.top, { claw: 0.8, cup: 0.2 }], [b.let, { flat: 1 }], [b.through, { flat: 0.8 }], [1, {}]]);
+  r.shape = [hands, hands];
+  r.mouth = one(t, [[0, 0], [b.top, 0.1], [b.let, 0.6], [b.through, 0.3], [1, 0]]);
 });
 
 /** Meteor: both arms up to the sky, open, reaching for it; then hauled down hard, fists closed, into a crouch as it falls. */
@@ -599,6 +748,10 @@ const meteorPose: CastPose = cast((r, t, c) => {
   r.leg[1] = euler(t, [[0, [0, 2, 0]], [b.top, [0, 6, 0]], [b.let, [-6, 8, 0]], [hold, [-6, 8, 0]], [1, [0, 2, 0]]]);
   r.knee[0] = one(t, [[0, 4], [b.top, 2], [b.let, 46], [hold, 42], [1, 6]]);
   r.knee[1] = one(t, [[0, 4], [b.top, 2], [b.let, 36], [hold, 32], [1, 4]]);
+  // Fingers spread to the sky, straining for it; fists as it is hauled down, and a shout with it.
+  const hands = shapeAt(t, [[0, {}], [reach, { claw: 0.5, flat: 0.5 }], [b.top, { claw: 0.8, flat: 0.2 }], [b.let, {}], [1, {}]]);
+  r.shape = [hands, hands];
+  r.mouth = one(t, [[0, 0], [b.top, 0.2], [b.let, 0.9], [hold, 0.4], [1, 0]]);
 });
 
 /** Heat Seeker: the flame cupped in the left palm, the right hand circling over it, the head turning to search; then it is sent up and away. */
@@ -622,6 +775,9 @@ const heatSeekerPose: CastPose = cast((r, t, c) => {
   r.chest = euler(t, [[0, [0, 0, 0]], [b.top, [-2, 0, 0]], [b.let, [10, 0, 0]], [1, [0, 0, 0]]]);
   r.chest[2] += look * 0.35;
   r.spine = euler(t, [[0, [0, 0, 0]], [b.let, [4, 0, 0]], [1, [0, 0, 0]]]);
+  // The left palm cupped under the wisp; the right forefinger stirs it, and the hand opens flat to send it.
+  r.shape = [shapeAt(t, [[0, {}], [cup, { cup: 1 }], [b.let, { cup: 1 }], [b.through, { cup: 0.4 }], [1, {}]]),
+    shapeAt(t, [[0, {}], [cup, { point: 1 }], [b.top, { point: 1 }], [b.let, { flat: 1 }], [b.through, { flat: 0.6 }], [1, {}]])];
 });
 
 /** Stoke: the coal cupped in both hands and lifted to the mouth, blown on twice, bellows-like, then closed in the right fist and kept. */
@@ -646,6 +802,10 @@ const stokePose: CastPose = cast((r, t, c) => {
     r.knee[k] = one(t, [[0, 4], [low, 30], [up, 18], [b.let, 20], [b.through, 4], [1, 4]]);
     r.leg[k] = euler(t, [[0, [2, 2, 0]], [low, [16, 4, 0]], [up, [10, 4, 0]], [b.let, [10, 4, 0]], [b.through, [2, 2, 0]], [1, [2, 2, 0]]]);
   }
+  // Both hands a bowl round the coal at the mouth; the right shuts on it once it is hot. Lips pursed, blowing.
+  r.shape = [shapeAt(t, [[0, {}], [low, { cup: 1 }], [b.let, { cup: 1 }], [b.through, {}], [1, {}]]),
+    shapeAt(t, [[0, {}], [low, { cup: 1 }], [b.let - 0.02, { cup: 1 }], [b.let + 0.04, {}], [1, {}]])];
+  r.mouth = 0.12 * bump(t, up, up + 0.04, b.let) + 0.3 * blow;
 });
 
 /** Firebrand: an hourglass written in the air with the right forefinger, then pressed into the raised left forearm, where it stays. */
@@ -668,6 +828,11 @@ const firebrandPose: CastPose = cast((r, t, c) => {
   r.chest = euler(t, [[0, [0, 0, 0]], [w0, [2, 0, -6]], [w1, [2, 0, -4]], [b.let, [-6, 0, 10]], [b.through, [4, 0, 6]], [1, [0, 0, 0]]]);
   r.spine = euler(t, [[0, [0, 0, 0]], [b.let, [-6, 0, 0]], [b.through, [4, 0, 0]], [1, [0, 0, 0]]]);
   r.head = euler(t, [[0, [0, 0, 0]], [w0, [-10, 0, 0]], [w1, [-16, 0, 0]], [b.let, [-18, 0, 14]], [b.through, [-6, 0, 12]], [1, [0, 0, 0]]]);
+  // The forefinger writes; the hand opens flat to press the glyph in.
+  r.shape = [undefined, shapeAt(t, [[0, {}], [w0 - 0.04, { point: 1 }], [w1, { point: 1 }], [b.let, { flat: 1 }], [b.through, { flat: 0.6 }], [1, {}]])];
+  // The hand put on the glyph's own strokes as it writes them: the points the fire is drawn through (`brandPoint`).
+  const pen = smooth(seg(t, w0 - 0.06, w0)) * (1 - smooth(seg(t, w1, w1 + 0.08)));
+  if (pen > 0) r.reach = [undefined, { at: brandPoint(c.facing, seg(t, w0, w1) * 4), w: pen }];
 });
 
 /** Blaze Aura: arms out low and palms down, the body turning right round to lay the fire out in a ring, and settling with the arms wide. */
@@ -687,6 +852,8 @@ const blazeAuraPose: CastPose = cast((r, t, c) => {
   r.spine = [one(t, [[0, 0], [open, -4], [b.let, 2], [1, 0]]), 0, turn * 0.45];
   r.chest = [one(t, [[0, 0], [b.let, 4], [1, 0]]), 0, turn * 0.55];
   r.head = [one(t, [[0, 0], [open, -10], [b.let, 2], [1, 0]]), 0, turn * 0.3];
+  const palms = shapeAt(t, [[0, {}], [open, { flat: 1 }], [b.through, { flat: 1 }], [1, {}]]);
+  r.shape = [palms, palms];
 });
 
 /** Firestorm: crouched low with the fists crossed over the heart, then rising on the legs as the arms spiral up and fling wide over the head. */
@@ -705,6 +872,10 @@ const firestormPose: CastPose = cast((r, t, c) => {
   r.spine = euler(t, [[0, [0, 0, 0]], [low, [-20, 0, 0]], [b.top, [0, 0, 0]], [b.let, [10, 0, 0]], [b.through, [8, 0, 0]], [1, [0, 0, 0]]]);
   r.chest = euler(t, [[0, [0, 0, 0]], [low, [-10, 0, 0]], [b.let, [10, 0, 0]], [1, [0, 0, 0]]]);
   r.head = euler(t, [[0, [0, 0, 0]], [low, [-20, 0, 0]], [b.top, [6, 0, 0]], [b.let, [24, 0, 0]], [b.through, [20, 0, 0]], [1, [0, 0, 0]]]);
+  // Fists over the heart, then flung open, fingers spread, with a shout at the let.
+  const hands = shapeAt(t, [[0, {}], [b.top - 0.04, {}], [b.let, { claw: 0.6, flat: 0.4 }], [b.through, { claw: 0.4, flat: 0.6 }], [1, {}]]);
+  r.shape = [hands, hands];
+  r.mouth = one(t, [[0, 0], [b.top, 0.3], [b.let, 1], [b.through, 0.6], [1, 0]]);
 });
 
 /** Pyre: the hands clasped round the ruby at the chest, raised over the head together, and hammered down to the ground on one knee. */
@@ -718,14 +889,14 @@ const pyrePose: CastPose = cast((r, t, c) => {
     r.open[k] = false;
     r.shrug[k] = one(t, [[0, 0], [b.top, 0.6], [b.let, 0], [1, 0]]);
   }
-  r.spine = euler(t, [[0, [0, 0, 0]], [clasp, [-4, 0, 0]], [b.top, [12, 0, 0]], [b.let, [-30, 0, 0]], [hold, [-26, 0, 0]], [1, [0, 0, 0]]]);
+  r.spine = euler(t, [[0, [0, 0, 0]], [clasp, [-4, 0, 0]], [b.top, [12, 0, 0]], [b.let, [-12, 0, 0]], [hold, [-10, 0, 0]], [1, [0, 0, 0]]]);
   r.chest = euler(t, [[0, [0, 0, 0]], [b.top, [6, 0, 0]], [b.let, [-12, 0, 0]], [1, [0, 0, 0]]]);
   r.head = euler(t, [[0, [0, 0, 0]], [clasp, [-14, 0, 0]], [b.top, [18, 0, 0]], [b.let, [6, 0, 0]], [hold, [4, 0, 0]], [1, [0, 0, 0]]]);
-  r.leg[0] = euler(t, [[0, [2, 2, 0]], [b.top, [4, 4, 0]], [b.let, [44, 6, 0]], [hold, [42, 6, 0]], [1, [4, 2, 0]]]);
-  r.knee[0] = one(t, [[0, 4], [b.top, 2], [b.let, 70], [hold, 66], [1, 6]]);
-  r.leg[1] = euler(t, [[0, [0, 2, 0]], [b.top, [0, 4, 0]], [b.let, [-14, 6, 0]], [hold, [-12, 6, 0]], [1, [0, 2, 0]]]);
-  r.knee[1] = one(t, [[0, 4], [b.top, 2], [b.let, 92], [hold, 86], [1, 4]]);
-  r.foot[1] = one(t, [[0, 0], [b.let, 30], [hold, 28], [1, 0]]);
+  // Down on the right knee with the blow, and the clasped fists brought down to the ground before it.
+  r.kneel = one(t, [[0, 0], [b.top, 0], [b.let, 1], [hold, 1], [1, 0]]);
+  const down = smooth(seg(t, lerp(b.top, b.let, 0.5), b.let)) * (1 - smooth(seg(t, hold, 1)));
+  if (down > 0) r.reach = [{ at: [-0.5, 4.5, 1.8], w: down, stoop: true }, { at: [0.5, 4.5, 1.8], w: down, stoop: true }];
+  r.mouth = one(t, [[0, 0], [b.top, 0.3], [b.let, 0.8], [hold, 0.3], [1, 0]]);
 });
 
 /** `track` for three numbers, as a mutable triple. */
@@ -735,6 +906,29 @@ function track1(t: number, keys: ReadonlyArray<readonly [number, readonly [numbe
 
 /** When the Firebrand's hourglass is written, as shares of the cast. */
 const BRAND_WRITE = [0.12, 0.44] as const;
+
+/**
+ * A point along the hourglass the Firebrand writes, `u` nought to four along
+ * its strokes (top left, top right, bottom left, bottom right, top left), in
+ * the caster's own frame (right, ahead, up). It is written square to the
+ * viewer, whichever way the caster faces, so it reads as a glyph and not
+ * as a line seen edge on: its across is the way that is level on the screen,
+ * turned into the body's terms for its facing (as `FxScene.local` turns
+ * them back). The pose puts the hand on it and the fire is drawn through it.
+ */
+function brandPoint(facing: number, u: number): V3 {
+  const th = Math.PI / 4 - (facing * Math.PI) / 4, sn = Math.sin(th), cs = Math.cos(th);
+  // Level on the screen is along the view's (1, -1); in the body's terms, by the same turn `local` undoes.
+  const ax = (-sn - cs) / Math.SQRT2, ay = (cs - sn) / Math.SQRT2;
+  const corners: ReadonlyArray<readonly [number, number]> = [[-1, 1], [1, 1], [-1, -1], [1, -1], [-1, 1]];
+  const v = clamp(u, 0, 4), i = Math.min(3, Math.floor(v)), f = smooth(v - i);
+  const across = lerp(corners[i][0], corners[i + 1][0], f) * BRAND_W, up = lerp(corners[i][1], corners[i + 1][1], f) * BRAND_H;
+  return [BRAND_AT[0] + ax * across, BRAND_AT[1] + ay * across, BRAND_AT[2] + up];
+}
+/** Where the glyph is written, before the chest and a little to the right, and its half width and half height (figure units). */
+const BRAND_AT: V3 = [2.6, 5.5, 11.5];
+const BRAND_W = 2.2;
+const BRAND_H = 2.8;
 
 /* ---- what a Firebrand writes ------------------------------------------------------------- */
 
@@ -854,7 +1048,7 @@ export const KINDLER: Record<string, SpellVisual> = {
           k.light(k.target, 2, 0.7 * (1 - u));
         },
       },
-      linger: { draw: burnLinger },
+      linger: { on: 'target', secs: burnSecs('kindler_scorch'), draw: burnLinger },
     },
   },
 
@@ -898,6 +1092,18 @@ export const KINDLER: Record<string, SpellVisual> = {
         }
         const edge = bump(t, 0.46, 0.52, 0.8);
         k.ring(k.caster, R, { band: 0.08, alpha: 0.5 * edge, dash: 3, glow: 0.5, main: PALETTE.main, deep: PALETTE.deep, turn: k.now * 0.2 });
+        // What it found, picked out as the second pulse goes over it and held till it goes: a ring at its feet, its heart lit.
+        if (t > 0.36) {
+          const q = quarryOf(k);
+          if (q) {
+            const d = Math.hypot(q.x - k.caster.x, q.y - k.caster.y);
+            const found = smooth(seg(t, lerp(0.36, 0.62, reachedAt(d, 0.4, R)), 1)) ;
+            if (found > 0.01) {
+              k.ring(q, footOf(q) * (1.6 - 0.5 * found), { band: 0.05, alpha: 0.85 * found, glow: 0.7, main: PALETTE.accent, deep: PALETTE.main, dash: 3, turn: k.now });
+              k.glow(k.heart(q), 7, 0.5 * found, PALETTE.accent);
+            }
+          }
+        }
       },
       release: (k) => {
         k.burst(k.at(k.caster, 1.05), 14, { kind: 'spark', colour: [PALETTE.core, GOLD], size: 1.6, life: [0.2, 0.45], speed: [0.4, 1.2], up: [10, 40], gravity: 30 });
@@ -905,7 +1111,31 @@ export const KINDLER: Record<string, SpellVisual> = {
       travel: {
         secs: () => 0.85,
         draw: (k, u) => {
-          // Up over the shoulder, a turn in the air, and away at the far edge of its reach.
+          const q = quarryOf(k);
+          if (q) {
+            // Up over the shoulder, a curl at the top as it turns, and down on the creature it found.
+            const start = k.at(k.caster, 1.1), end = k.heart(q);
+            const side = k.toward(k.caster, q);
+            const top = k.on(lerp(start.x, end.x, 0.35), lerp(start.y, end.y, 0.35), Math.max(start.z, end.z) + 40);
+            const at = (v: number): P3 => {
+              const w = v * v * 0.45 + v * 0.55, iw = 1 - w;
+              const curl = Math.sin(Math.PI * Math.min(1, w * 1.6)) * 0.9 * iw;
+              return {
+                x: iw * iw * start.x + 2 * iw * w * top.x + w * w * end.x - side.y * curl,
+                y: iw * iw * start.y + 2 * iw * w * top.y + w * w * end.y + side.x * curl,
+                z: iw * iw * start.z + 2 * iw * w * top.z + w * w * end.z,
+              };
+            };
+            const head = at(u);
+            const pts: P3[] = [];
+            for (let i = 7; i >= 0; i--) pts.push(at(Math.max(0, u - i * 0.035)));
+            k.ribbon(pts, { width: 2.6, alpha: 0.85, glow: 0.8 });
+            fireball(k, head, pts[pts.length - 2], 2.4, 3.4);
+            k.light(head, 2, 0.5);
+            k.emit(head, 30, { kind: 'ember', size: 1.3, life: [0.2, 0.45], speed: [0.05, 0.2], up: [-4, 4], gravity: 4, jitter: 0.04 });
+            return;
+          }
+          // Nothing within its reach that this end can see: up over the shoulder, a turn in the air, and away.
           const R = k.fx.reach ?? 10;
           const dir = k.facingDir(k.caster);
           const side = { x: -dir.y, y: dir.x };
@@ -923,6 +1153,26 @@ export const KINDLER: Record<string, SpellVisual> = {
           fireball(k, head, pts[pts.length - 2], 2 * fade + 0.4, 3.4);
           k.light(head, 2, 0.5 * fade);
           k.emit(head, 30 * fade, { kind: 'ember', size: 1.3, life: [0.2, 0.45], speed: [0.05, 0.2], up: [-4, 4], gravity: 4, jitter: 0.04 });
+        },
+      },
+      hit: (k) => {
+        const q = quarryOf(k);
+        if (!q) return;
+        const at = k.heart(q);
+        k.burst(at, 24, { kind: 'spark', colour: [PALETTE.core, GOLD], size: 1.7, life: [0.2, 0.45], speed: [0.6, 1.8], up: [4, 30], gravity: 50, drag: 0.1 });
+        k.burst(at, 6, { kind: 'smoke', colour: SMOKE, size: 2.2, life: [0.4, 0.8], speed: [0.05, 0.2], up: [6, 12] });
+      },
+      impact: {
+        secs: 0.6,
+        draw: (k, u) => {
+          const q = quarryOf(k);
+          if (!q) return;
+          // It strikes from above: a star of flame thrown down and out, a breath of fire up it, out.
+          const at = k.heart(q);
+          starburst(k, at, 6, 10 * (0.5 + 0.5 * easeOut(u * 2)), 2.4, cooling(u), 1 - seg(u, 0.45, 1), k.seed);
+          alight(k, q, 6 * (1 - smooth(seg(u, 0.2, 1))), cooling(u * 0.7), 1 - seg(u, 0.7, 1), 2);
+          k.flare(at, 9 * (1 - u), flashOf(u), PALETTE.core);
+          k.light(q, 2.2, 0.8 * (1 - u));
         },
       },
     },
@@ -1061,7 +1311,7 @@ export const KINDLER: Record<string, SpellVisual> = {
               const bx = fx + vx * off, by = fy + vy * off;
               // Fire rises: the tips lift off the line of the shove, more as it dies and less is pushing it.
               const rise = len * (0.18 + 0.7 * die);
-              flames.push({ bx, by, tx: bx + vx * len * (1 - 0.4 * die), ty: by + vy * len * (1 - 0.4 * die) - rise, w: len * 0.24, heat: cooling(u) + 0.5 - 0.4 * rk, wob: sway(k.now, rk * 3 + i) * 0.8 });
+              flames.push({ bx, by, tx: bx + vx * len * (1 - 0.4 * die), ty: by + vy * len * (1 - 0.4 * die) - rise, w: len * 0.2, heat: cooling(u) * 0.6 + 0.9 - 0.45 * rk, wob: sway(k.now, rk * 3 + i) * 0.8 });
             }
           }
           // Sorted with whichever end is nearer the viewer, so it lies over the nearer of the two.
@@ -1118,6 +1368,7 @@ export const KINDLER: Record<string, SpellVisual> = {
         },
       },
       linger: {
+        on: 'caster',
         draw: (k, age, left) => {
           // Banked in the hand: a coal, no flame on it, glowing steady with two sparks going slowly round it -- heat kept
           // for the next fire, not fire. It gutters only as the last few seconds go.
@@ -1153,22 +1404,29 @@ export const KINDLER: Record<string, SpellVisual> = {
         const [w0, w1] = BRAND_WRITE;
         const drawn = seg(t, w0, w1) * 4;
         if (drawn <= 0) return;
-        // Written flat to the viewer before the chest, then pressed into the forearm and shrinking onto it.
+        // Written square to the viewer through the points the hand is put on (`brandPoint`), then pressed into the
+        // forearm and shrinking onto it.
         const press = smooth(seg(t, w1 + 0.04, 0.6));
         const arm = mid3(k.joint(k.caster, 'elbow0', [0, 0, 0]), k.hand(0), 0.6);
-        const c = mid3(k.local(k.caster, 1.2, 7.5, 12.8), arm, press);
         const a = 1 - seg(t, 0.58, 0.62);
-        const cx = k.sx(c), cy = k.sy(c), W = 4 * k.zoom * (1 - 0.7 * press), H = 5.5 * k.zoom * (1 - 0.7 * press);
-        // Top left, top right, bottom left, bottom right, top left: the strokes the right hand makes.
-        const xs = [cx - W, cx + W, cx - W, cx + W, cx - W], ys = [cy - H, cy - H, cy + H, cy + H, cy - H];
-        const end = Math.min(4, drawn), i = Math.min(3, Math.floor(end)), f = end - i;
-        const hx = lerp(xs[i], xs[i + 1], f), hy = lerp(ys[i], ys[i + 1], f);
+        const on = (u: number): P3 => {
+          const [x, y, up] = brandPoint(k.caster.facing, u);
+          return mid3(k.local(k.caster, x, y, up), arm, press * 0.85);
+        };
+        const end = Math.min(4, drawn), whole = Math.floor(end);
+        const pts: P3[] = [];
+        for (let j = 0; j <= whole; j++) pts.push(on(j));
+        if (end > whole) pts.push(on(end));
+        const xs = pts.map((q) => k.sx(q)), ys = pts.map((q) => k.sy(q));
+        const hx = xs[xs.length - 1], hy = ys[ys.length - 1];
+        const c = on(2);
+        const cx = k.sx(c), cy = k.sy(c);
+        const W = Math.max(...xs.map((x) => Math.abs(x - cx))) + 1, H = Math.max(...ys.map((y) => Math.abs(y - cy))) + 1;
         const z = k.zoom;
         const path = (g: CanvasRenderingContext2D): void => {
           g.beginPath();
           g.moveTo(xs[0], ys[0]);
-          for (let j = 1; j <= i; j++) g.lineTo(xs[j], ys[j]);
-          g.lineTo(hx, hy);
+          for (let j = 1; j < xs.length; j++) g.lineTo(xs[j], ys[j]);
         };
         k.worldDraw(c, (g) => {
           g.globalAlpha = clamp(a);
@@ -1214,6 +1472,7 @@ export const KINDLER: Record<string, SpellVisual> = {
         },
       },
       linger: {
+        on: 'caster',
         draw: (k, age, left) => {
           const a = smooth(age / 0.5) * smooth(left / 0.8);
           const share = left / Math.max(0.01, age + left);
@@ -1277,11 +1536,13 @@ export const KINDLER: Record<string, SpellVisual> = {
         },
       },
       linger: {
+        on: 'target',
+        secs: burnSecs('kindler_immolate'),
         draw: (k, age, left) => {
           burnLinger(k, age, left);
           // The ground it was lit from stays scorched under it for the first few seconds.
           const b = k.target;
-          k.scorch(b, footOf(b), { alpha: 0.4 * (1 - seg(age, 2, 5)) * smooth(left) });
+          k.scorch(b, footOf(b), { alpha: 0.4 * (1 - seg(age, 2, 5)) });
         },
       },
     },
@@ -1301,6 +1562,9 @@ export const KINDLER: Record<string, SpellVisual> = {
         const hand = k.hand(1), b = k.target, heart = k.heart(b);
         kindle(k, hand, seg(t, 0, 0.25), 1.4);
         const grip = smooth(seg(t, 0.2, 0.48));
+        // The burn it goes up from (the island casts Combust only on a burning creature): on it till the grip takes it,
+        // shrinking into the hold, its fire pulled in.
+        if (t < 0.5 && !burntAlready(k, b)) burnOn(k, b, t * 0.85, burnPower(0.02), 1 - 0.85 * grip, 1 - 0.5 * grip);
         if (grip > 0.01 && t < 0.5) {
           // The hold: a taut, trembling line of heat from the open hand into it.
           k.bolt(hand, heart, { width: 0.7 + 0.6 * grip, jag: 3 * (1 - grip) + 1.2, kinks: 6, fork: 0, alpha: 0.85 * grip, main: PALETTE.main, core: PALETTE.core, glow: 0.35 });
@@ -1376,6 +1640,7 @@ export const KINDLER: Record<string, SpellVisual> = {
         },
       },
       linger: {
+        on: 'caster',
         draw: (k, age, left) => {
           const R = k.fx.reach ?? 2;
           if (age < 0.6) return;
@@ -1384,6 +1649,16 @@ export const KINDLER: Record<string, SpellVisual> = {
           // Knee-high tongues standing at its reach and turning with the caster, lower as its seconds run out.
           flameRing(k, k.caster, R, { h: AURA_H * (0.6 + 0.4 * share) * a, w: 2, heat: 1, turn: k.now * AURA_TURN, alpha: a, crest: k.now * AURA_TURN * 4, front: 0.75 });
           k.ring(k.caster, R, { band: 0.12, alpha: 0.55 * a, glow: 0.6, turn: k.now * AURA_TURN });
+          // Its fire on whatever stands in it, a round a second: a lick of flame off the ring and up each one.
+          const round = age - 0.6, lick = round - Math.floor(round);
+          if (lick < 0.5) {
+            let i = 0;
+            for (const b of k.bodiesWithin(R, k.caster, ['creature'])) {
+              const at = k.heart(b);
+              starburst(k, at, 4, 7 * easeOut(lick * 4), 1.6, cooling(lick * 2), a * (1 - seg(lick, 0.25, 0.5)), k.seed + Math.floor(round) + i);
+              alight(k, b, 4 * (1 - smooth(seg(lick, 0.1, 0.5))), 1, a, i++);
+            }
+          }
           k.emit(k.at(k.caster, 0.05), 12 * a, { kind: 'ember', size: 1.3, life: [0.5, 1], speed: [0.05, 0.2], up: [10, 20], gravity: -2, jitter: R * 0.9 });
           k.light(k.caster, R + 0.8, 0.5 * a);
         },
@@ -1446,9 +1721,11 @@ export const KINDLER: Record<string, SpellVisual> = {
         },
       },
       linger: {
+        on: 'target',
+        secs: burnSecs('kindler_inferno_bolt'),
         draw: (k, age, left) => {
           burnLinger(k, age, left);
-          k.scorch(k.target, 0.5, { alpha: 0.35 * (1 - seg(age, 1, 4)) * smooth(left) });
+          k.scorch(k.target, 0.5, { alpha: 0.35 * (1 - seg(age, 1, 4)) });
         },
       },
     },
@@ -1497,6 +1774,10 @@ export const KINDLER: Record<string, SpellVisual> = {
       hit: (k) => {
         const W = k.fx.wide ?? 3;
         const at = k.on(k.spot.x, k.spot.y, 3);
+        // Where it fell, for the crater: the creature it fell on may run, or die of it.
+        k.state.x = k.spot.x;
+        k.state.y = k.spot.y;
+        mark(k, 'm', k.spot, W, 8);
         k.flash(0.22, PALETTE.core);
         k.burst(at, 90, { kind: 'spark', colour: [PALETTE.core, GOLD, PALETTE.main], size: 2.2, life: [0.4, 0.8], speed: [W * 1.2, W * 3], up: [10, 60], gravity: 60, drag: 0.1 });
         k.burst(at, 30, { kind: 'ember', size: 2.2, life: [0.8, 1.6], speed: [0.5, W], up: [20, 50], gravity: 20 });
@@ -1507,7 +1788,7 @@ export const KINDLER: Record<string, SpellVisual> = {
         secs: 1.1,
         draw: (k, u) => {
           const W = k.fx.wide ?? 3;
-          const c = k.spot;
+          const c = k.on(k.state.x ?? k.spot.x, k.state.y ?? k.spot.y);
           // The shockwave and the fire riding it, out to exactly its reach and no further.
           const wave = easeOut(seg(u, 0, 0.55));
           const r = 0.3 + (W - 0.3) * wave;
@@ -1520,13 +1801,24 @@ export const KINDLER: Record<string, SpellVisual> = {
           k.scorch(c, 0.95, { alpha: 0.55 * smooth(u * 4) });
           k.ring(c, W, { band: 0.08, alpha: 0.8 * (1 - u), glow: 0.6, main: PALETTE.deep, deep: PALETTE.ink });
           k.light(c, W + 1.5, 1 - 0.4 * u);
+          // Every other creature within it, struck as the wave of fire reaches it.
+          const near = marked(k, 'm', c, W * 2);
+          for (const [i, b] of near) {
+            if (b.who?.kind === 'creature' && k.target.who?.kind === 'creature' && b.who.id === k.target.who.id) continue;
+            const at = reachedAt(Math.hypot(b.x - c.x, b.y - c.y), 0.3, W) * 0.55, v = seg(u, at, at + 0.4);
+            if (v <= 0 || v >= 1) continue;
+            starburst(k, k.heart(b), 5, 9 * easeOut(v * 2), 2, cooling(v), 1 - seg(v, 0.4, 1), k.seed + i);
+            alight(k, b, 7 * (1 - smooth(v)), cooling(v * 0.7), 1, i);
+          }
         },
       },
       linger: {
+        // The crater's own, not a number of the spell's: long enough to be seen cooling, no longer.
         secs: 5,
+        on: 'spot',
         draw: (k, age, left) => {
           const W = k.fx.wide ?? 3;
-          const c = k.spot;
+          const c = k.on(k.state.x ?? k.spot.x, k.state.y ?? k.spot.y);
           const a = smooth(left / 2);
           // The crater left: molten at the heart, cooling to coals, a few tongues on its lip, smoke going up.
           k.scorch(c, 0.95, { alpha: 0.55 * a });
@@ -1572,6 +1864,7 @@ export const KINDLER: Record<string, SpellVisual> = {
         const R = k.fx.reach ?? 6;
         k.state.x = k.caster.x;
         k.state.y = k.caster.y;
+        mark(k, 'f', k.caster, R, 8);
         k.flash(0.2);
         k.burst(k.at(k.caster, 0.4), 80, { kind: 'spark', colour: [PALETTE.core, GOLD, PALETTE.main], size: 2, life: [0.4, 0.8], speed: [R * 0.8, R * 1.5], up: [4, 24], gravity: 20, drag: 0.2 });
         k.burst(k.at(k.caster, 0.05), 24, { kind: 'dust', colour: [DIRT, ASH], size: 4, sizeEnd: 8, life: [0.6, 1], speed: [R * 0.6, R], up: [2, 6], gravity: 2, drag: 0.15 });
@@ -1580,7 +1873,7 @@ export const KINDLER: Record<string, SpellVisual> = {
         secs: 1.0,
         draw: (k, u) => {
           const R = k.fx.reach ?? 6;
-          const c = k.caster;
+          const c = k.on(k.state.x ?? k.caster.x, k.state.y ?? k.caster.y);
           // The wall rolling out to exactly its reach: tall and white near, lower and orange as it goes, stopping there.
           const wave = easeOut(seg(u, 0, 0.7));
           const r = 0.5 + (R - 0.5) * wave;
@@ -1588,16 +1881,25 @@ export const KINDLER: Record<string, SpellVisual> = {
           k.ring(c, r, { band: 0.4 * (1 - wave) + 0.15, alpha: 1 - seg(u, 0.75, 1), glow: 1, main: PALETTE.accent });
           k.disc(c, r, { main: PALETTE.deep, alpha: 0.18 * (1 - u) });
           k.light(c, R + 1, 1 - 0.4 * u);
+          // Each creature it caught struck as the wall reaches it (its burn is the linger's).
+          for (const [i, b] of marked(k, 'f', c, R * 2)) {
+            const at = reachedAt(Math.hypot(b.x - c.x, b.y - c.y), 0.5, R) * 0.7, v = seg(u, at, at + 0.35);
+            if (v > 0 && v < 1) starburst(k, k.heart(b), 5, 10 * easeOut(v * 2), 2.2, cooling(v), 1 - seg(v, 0.4, 1), k.seed + i);
+          }
         },
       },
       linger: {
+        on: 'spot',
+        secs: burnSecs('kindler_firestorm'),
         draw: (k, age, left) => {
           const R = k.fx.reach ?? 6;
-          if (age < 0.7) return;
-          const total = age + left;
           // Where it was cast, not where the caster has walked since: the ground burns, not the Kindler.
           const c = k.on(k.state.x ?? k.spot.x, k.state.y ?? k.spot.y);
-          const a = smooth(left / 1.2);
+          // Every creature it caught, burning for as long as the island has it burning, wherever it runs.
+          for (const [i, b] of marked(k, 'f', c, R * 4)) burnWatched(k, b, `f${i}`, age, k.fx.secs ?? age + left, burnPower(k.fx.each));
+          const total = k.fx.secs ?? age + left;
+          if (age < 0.7 || age >= total) return;
+          const a = smooth((total - age) / 1.2);
           // Fires left on the ground it swept, each going out at its own moment over the storm's seconds, so the field
           // burns down rather than switching off.
           const n = k.fast ? 5 : 10;
@@ -1615,7 +1917,7 @@ export const KINDLER: Record<string, SpellVisual> = {
           k.ring(c, R, { band: 0.1, alpha: 0.45 * a, dash: 4, glow: 0.6, main: PALETTE.deep, deep: PALETTE.ink });
           k.emit(k.on(c.x, c.y, 1), 18 * a, { kind: 'ember', size: 1.4, life: [0.6, 1.2], speed: [0.05, 0.2], up: [10, 20], gravity: -2, jitter: R * 0.8 });
           k.emit(k.on(c.x, c.y, 2), 6 * a, { kind: 'smoke', colour: [SMOKE, ASH], size: 3, sizeEnd: 7, life: [1, 1.8], speed: [0.02, 0.1], up: [8, 14], gravity: -3, jitter: R * 0.7 });
-          k.light(c, R, 0.45 * (left / total) * a + 0.1 * a);
+          k.light(c, R, 0.45 * ((total - age) / total) * a + 0.1 * a);
         },
       },
     },
@@ -1703,6 +2005,7 @@ export const KINDLER: Record<string, SpellVisual> = {
         const c = k.caster;
         k.state.x = c.x;
         k.state.y = c.y;
+        mark(k, 'p', c, R, 8);
         for (let i = 0; i < 6; i++) {
           const at = inDisc(k, c, R * 0.9, i, 61);
           k.burst(k.on(at.x, at.y, 2), 14, { kind: 'spark', colour: [PALETTE.core, GOLD], size: 1.8, life: [0.3, 0.7], speed: [0.1, 0.5], up: [30, 70], gravity: 50 });
@@ -1713,7 +2016,7 @@ export const KINDLER: Record<string, SpellVisual> = {
         secs: 0.9,
         draw: (k, u) => {
           const R = k.fx.reach ?? 3;
-          const c = k.caster;
+          const c = k.on(k.state.x ?? k.caster.x, k.state.y ?? k.caster.y);
           // The whole round at once: a field of tongues standing up everywhere in it in the same instant.
           const env = easeOut(seg(u, 0, 0.1)) * (1 - smooth(seg(u, 0.3, 1)));
           const heat = cooling(seg(u, 0.1, 0.8));
@@ -1735,10 +2038,14 @@ export const KINDLER: Record<string, SpellVisual> = {
           k.disc(c, R, { main: u < 0.2 ? PALETTE.core : PALETTE.main, alpha: 0.4 * (1 - smooth(u * 1.4)) });
           k.ring(c, R, { band: 0.22, alpha: 1 - seg(u, 0.5, 1), glow: 1, main: PALETTE.accent });
           k.light(c, R + 1.5, 1 - 0.5 * u);
+          // And every creature in it alight with the ground, in the same instant.
+          for (const [i, b] of marked(k, 'p', c, R * 2)) alight(k, b, 12 * env, heat, 1, i);
         },
       },
       linger: {
+        // The scorched round's own, not a number of the spell's (it is over when it lands): long enough to see it smoke.
         secs: 2.5,
+        on: 'spot',
         draw: (k, age, left) => {
           const R = k.fx.reach ?? 3;
           const a = smooth(left / 1.5);
