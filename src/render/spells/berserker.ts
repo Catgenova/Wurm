@@ -9,21 +9,25 @@
  * shown too -- blood (`DROP`) off the body, a pool under a bleeding wound.
  * Whatever lasts counts itself down where it can be read: a Battle Rage's
  * ring of teeth under the feet loses one a second, a Last Rage's crown one a
- * second, an Adrenaline's ticks one a second, a hold's arc closes.
+ * second, an Adrenaline's smaller amber ring one a second, a hold's arc closes.
+ * Nothing red is faded over the grass, where half gone is olive: blood dries
+ * (`dry`), cuts are eaten from the tail, rings drop their teeth or thin away.
  *
  * The blows are struck with the weapon itself: a battle axe or a maul is held
  * in the fist square across it (`carry 'shoulder'`), so pitching the wrist
  * aims the haft and the swing of the arm swings the head; a one-handed axe
- * (`carry 'fist'`) is taken by the forearm with `wield`, which lies a little
- * nearer the arm, so its wrist is cocked by `FIST_COCK` more to point the same
- * way. The left hand comes onto the haft for the two-handed blows.
+ * (`carry 'fist'`) is taken by the forearm with `wield`. The left hand comes onto the haft for the two-handed blows. A weapon on
+ * the left shoulder is swung from the left (`cast.mirror`), never changing
+ * hands; the stage carries the body in to what it strikes and a last stride
+ * puts the lead foot down (`cast.close`, `stride`), so blows land; and every
+ * cut is the band the weapon really swept (`rent`).
  */
-import { castWeight, type SpellVisual } from './index';
+import type { SpellVisual } from './index';
 import { spellInfo } from './info';
-import { clamp, easeIn, easeOut, flashOf, glowPicture, hashOf, lerp, seg, smooth, TAU, type Body, type FxScene, type GroundLayer, type P3, type SpellPalette } from './kit';
-import { euler, one } from './poses';
+import { clamp, dry, easeOut, eatTail, flashOf, glowPicture, hashOf, lateFade, lerp, seg, smooth, TAU, type Body, type FxScene, type GroundLayer, type P3, type SpellPalette } from './kit';
+import { armOut, euler, one, stepIn } from './poses';
 import type { PoseCue } from './index';
-import { figureProportions, type Rig } from '../figure';
+import { figureJoint, figureJoints, figureProportions, weaponSpan, type Rig, type V3 } from '../figure';
 import { KNIFE_BLEED_SECS } from '../../game/fight';
 
 /** Blood red going to ember orange: rage, and what it costs. */
@@ -145,49 +149,123 @@ function glowsAlong(k: FxScene, pic: HTMLCanvasElement, xs: number[], ys: number
   });
 }
 
-/** Points round a cut in the plane `kit.slash` uses: `tilt` from upright toward the body's right, `from`/`to` round it, `reach` out from `up`. */
-function arcPoints(k: FxScene, b: Body, o: { from: number; to: number; tilt: number; reach: number; up: number; u: number; length: number; wobble?: number; rise?: number }): P3[] {
-  const u = clamp(o.u);
-  const head = lerp(o.from, o.to, u);
-  const tail = o.from < o.to ? Math.max(o.from, head - o.length) : Math.min(o.from, head + o.length);
-  const n = k.fast ? 7 : 13;
-  const pts: P3[] = [];
-  const ct = Math.cos(o.tilt), st = Math.sin(o.tilt);
-  for (let i = 0; i <= n; i++) {
-    const ang = lerp(tail, head, i / n);
-    // A wild cut wanders in and out as it goes, the same way every frame of the cast.
-    const r = o.reach * (1 + (o.wobble ?? 0) * Math.sin(ang * 3.1 + (k.seed % 7)));
-    const c = Math.cos(ang) * r, s = Math.sin(ang) * r;
-    // Out toward what was struck it reaches as far as it must; up and down, no further than arms and a haft (`rise`).
-    const sv = s * (o.rise ?? 1);
-    pts.push(k.local(b, sv * st, c, Math.max(1, o.up + sv * ct)));
-  }
-  return pts;
-}
+/**
+ * How often a torn cut samples the weapon it follows, in seconds of the cast's own clock: a two-hundred-and-fortieth,
+ * as a haymaker goes a third of a turn in a twenty-fifth of a second, and sampled a sixtieth apart that is two straight
+ * planks with a kink between them rather than an arc.
+ */
+const RENT_STEP = 1 / 240;
+/** Each cast's samples of where its weapon was, kept by the step they were taken at (see `rent`). */
+const rents = new WeakMap<object, Map<string, Map<number, [V3, V3]>>>();
 
 /**
- * A torn cut: the crescent a heavy blade leaves, its leading edge hot and its
- * trailing edge ragged. Laid out as `kit.slash` is (`from`, `to`, `tilt`,
- * `reach` from a shoulder `up` over the feet), drawn with `band`.
+ * A torn cut: the band the real weapon swept over the last `secs` of the cast, from `inner` to `outer` of the way
+ * from the fist to the head -- sampled off the caster's posed figure every sixtieth of a second of the cast, so it
+ * is exactly where the weapon went, at every facing, left-handed or right, with any weapon. Its leading edge (the
+ * head's path) hot and inked, its trailing edge bitten into a saw: this trade's cut, which `kit.trail` draws smooth.
+ * It dies from its tail as the weapon slows (the samples close up on the head), never by its alpha; give a shorter
+ * `secs` to eat it faster. The runs of it behind the body are drawn behind it, the rest in front.
  */
-function rent(k: FxScene, o: {
-  u: number; from: number; to: number; tilt: number; reach: number; up?: number; length?: number; width?: number; alpha?: number;
-  wobble?: number; main?: string; core?: string; ink?: string; glow?: number; bias?: number;
-}): void {
-  if ((o.alpha ?? 1) <= 0.01) return;
-  // However far a cut reaches toward its mark, it rises and falls no more than the arm and the haft swing it.
-  const rise = Math.min(1, REACH_UP / o.reach);
+function rent(k: FxScene, o: { secs?: number; inner?: number; outer?: number; key?: string; main?: string; core?: string; ink?: string; glow?: number } = {}): void {
   const b = k.caster;
-  const up = o.up ?? b.tall * 0.7;
-  const pts = arcPoints(k, b, { from: o.from, to: o.to, tilt: o.tilt, reach: o.reach, up, u: o.u, length: o.length ?? 1.6, wobble: o.wobble, rise });
-  band(k, pts, { width: o.width ?? 10, alpha: o.alpha, teeth: true, pivot: k.local(b, 0, 0, up), main: o.main, core: o.core, ink: o.ink, glow: o.glow, bias: o.bias });
+  const fig = b.figure, cast = fig?.cast, timing = k.timing;
+  if (!fig || !cast || !timing) return;
+  const id = fig.gear?.weapon?.id, span = id ? weaponSpan(id) : null;
+  const len = span ? span.to : 4;
+  const zIn = len * clamp(o.inner ?? 0.55), zOut = len * (o.outer ?? 1.04);
+  const back = clamp(o.secs ?? 0.12, RENT_STEP, 0.3);
+  const now = cast.t * timing.secs;
+  let mine = rents.get(k.state);
+  if (!mine) rents.set(k.state, (mine = new Map()));
+  const key = `${o.key ?? ''}|${zIn.toFixed(2)}|${zOut.toFixed(2)}`;
+  let buf = mine.get(key);
+  if (!buf) mine.set(key, (buf = new Map()));
+  const first = Math.ceil((now - back) / RENT_STEP), last = Math.floor(now / RENT_STEP - 1e-6);
+  for (const j of buf.keys()) if (j < first || j > last) buf.delete(j);
+  const posed = { ...fig, facing: b.facing };
+  const wants: Array<readonly [string, V3]> = [['weapon', [0, 0, zIn]], ['weapon', [0, 0, zOut]]];
+  for (let j = Math.max(0, first); j <= last; j++) {
+    if (buf.has(j)) continue;
+    const got = figureJoints({ ...posed, cast: { ...cast, t: (j * RENT_STEP) / timing.secs } }, wants);
+    buf.set(j, [got[0], got[1]]);
+  }
+  const ins: P3[] = [], outs: P3[] = [];
+  for (const j of [...buf.keys()].sort((x, y) => x - y)) {
+    const [i0, o0] = buf.get(j) as [V3, V3];
+    ins.push(k.local(b, i0[0], i0[1], i0[2]));
+    outs.push(k.local(b, o0[0], o0[1], o0[2]));
+  }
+  // The head: the weapon where it is drawn now.
+  const hi = figureJoint(posed, 'weapon', [0, 0, zIn]), ho = figureJoint(posed, 'weapon', [0, 0, zOut]);
+  ins.push(k.local(b, hi[0], hi[1], hi[2]));
+  outs.push(k.local(b, ho[0], ho[1], ho[2]));
+  const n = outs.length;
+  if (n < 2) return;
+  const xo = outs.map((p) => k.sx(p)), yo = outs.map((p) => k.sy(p));
+  // Too short to be a cut: the weapon has all but stopped, and what it swept is eaten.
+  let swept = 0;
+  for (let i = 1; i < n; i++) swept += Math.hypot(xo[i] - xo[i - 1], yo[i] - yo[i - 1]);
+  if (swept < 2.5 * k.zoom) return;
+  // In front of the body or behind it, a point at a time, by where it stands over the ground against the body's middle.
+  const by = k.eye.worldToScreenY(b.x, b.y, 0);
+  const front = outs.map((p) => k.eye.worldToScreenY(p.x, p.y, 0) >= by - 0.05);
+  const main = o.main ?? k.pal.main, core = o.core ?? k.pal.core, ink = o.ink ?? k.pal.ink;
+  const inkW = Math.max(0.8, 0.7 * k.zoom);
+  // The trailing edge narrowed onto the leading one down the cut: the whole band at the head, none of it at the tail.
+  const full = (i: number): number => Math.pow(i / (n - 1), 0.6);
+  const xi = ins.map((p, i) => lerp(xo[i], k.sx(p), full(i))), yi = ins.map((p, i) => lerp(yo[i], k.sy(p), full(i)));
+  const draw = (i0: number, i1: number, inFront: boolean): void => {
+    if (i1 - i0 < 1) return;
+    // The saw: a notch bitten back toward the leading edge every tooth's length along it, however fast it went.
+    const lead: number[] = [], torn: number[] = [], hot: number[] = [];
+    const tooth = 3.2 * k.zoom;
+    let run = 0;
+    for (let i = i0; i <= i1; i++) {
+      lead.push(xo[i], yo[i]);
+      hot.push(lerp(xo[i], xi[i], 0.28), lerp(yo[i], yi[i], 0.28));
+      torn.push(xi[i], yi[i]);
+      if (i < i1) run += Math.hypot(xo[i + 1] - xo[i], yo[i + 1] - yo[i]);
+      if (i < i1 && run >= tooth) {
+        run = 0;
+        const mx = (xi[i] + xi[i + 1]) / 2, my = (yi[i] + yi[i + 1]) / 2, ox = (xo[i] + xo[i + 1]) / 2, oy = (yo[i] + yo[i + 1]) / 2;
+        torn.push(lerp(mx, ox, 0.6), lerp(my, oy, 0.6));
+      }
+    }
+    k.worldDraw(inFront ? outs[i1] : { x: b.x, y: b.y, z: b.z }, (g) => {
+      g.globalAlpha = 1;
+      g.lineJoin = 'miter';
+      const shape = (edge: number[]): void => {
+        g.beginPath();
+        g.moveTo(lead[0], lead[1]);
+        for (let j = 2; j < lead.length; j += 2) g.lineTo(lead[j], lead[j + 1]);
+        for (let j = edge.length - 2; j >= 0; j -= 2) g.lineTo(edge[j], edge[j + 1]);
+        g.closePath();
+      };
+      shape(torn);
+      g.fillStyle = main;
+      g.fill();
+      g.lineWidth = inkW * 0.8;
+      g.strokeStyle = ink;
+      g.stroke();
+      shape(hot);
+      g.fillStyle = core;
+      g.fill();
+      g.lineJoin = 'round';
+    }, inFront ? 1.5 : -0.6);
+  };
+  // Cut into runs where it passes behind the body and back out, each run sharing its end point with the next.
+  let s0 = 0;
+  for (let i = 1; i < n; i++) {
+    if (front[i] !== front[s0]) {
+      draw(s0, i, front[s0] && front[i]);
+      s0 = i;
+    }
+  }
+  draw(s0, n - 1, front[s0]);
+  const gl = (o.glow ?? 1) * (k.fast ? 0 : 1);
+  const pic = gl > 0 ? glowPicture(k.pal.light) : null;
+  if (pic) glowsAlong(k, pic, xo, yo, Math.max(5, 4.5 * k.zoom), 0.4 * gl, 2);
 }
-
-/** How far a cut rises over the shoulder or falls below it at most, in height units: an arm and a haft. */
-const REACH_UP = 11;
-
-/** How far out a blow's cut reaches, in the body's units: out toward what it struck, as far as a lunge and a long haft carry it. */
-const cutReach = (k: FxScene, least = 14, most = 30): number => clamp(k.dist * 40 * 0.62, least, most);
 
 /**
  * Where a blow lands: a jagged star, `r` pixels at zoom one, its points
@@ -396,38 +474,42 @@ function arcs(k: FxScene, c: Ground, r: number, wide: number, spans: ReadonlyArr
   if (gl > 0) k.glow(k.on(c.x, c.y, 1), r * 40 * 0.8, a * gl * 0.25);
 }
 
-/** Where on a person war-fire rises from: the shoulders twice over, the elbows, the fists, and for a fiercer fire the hips. */
-const FIRE_AT: ReadonlyArray<readonly [string, number]> = [['arm0', 0.9], ['arm1', 0.9], ['wrist0', 0.6], ['hip1', 1], ['arm0', 0.6], ['arm1', 0.6], ['hip0', 1], ['wrist1', 0.5], ['elbow0', 0.55], ['elbow1', 0.55]];
-/** Which of those burn behind the body whichever way it faces, so the fire frames it rather than hiding it: all but the fists and elbows. */
-const FIRE_BEHIND = (bone: string): boolean => bone.startsWith('arm') || bone.startsWith('hip');
+/**
+ * Where on a person war-fire rises from, in order as `n` grows: the shoulders, the back of the head, one off each
+ * fist, a second lower down each shoulder blade, and for a fiercer fire the hips. Each is [bone, a point on it, size,
+ * behind]: all but the fists burn behind the body whichever way it faces, so the fire frames the body and the face
+ * rather than lying over them as red outlines.
+ */
+const FIRE_AT: ReadonlyArray<readonly [string, V3, number, boolean]> = [
+  ['arm0', [0, -0.4, -0.2], 1, true], ['arm1', [0, -0.4, -0.2], 1, true], ['head', [0, -1.1, 0.4], 1.15, true],
+  ['wrist0', [0, 0, -0.3], 0.55, false], ['wrist1', [0, 0, -0.3], 0.55, false],
+  ['arm0', [0, -0.6, -2.2], 0.8, true], ['arm1', [0, -0.6, -2.2], 0.8, true], ['hip0', [0, -0.5, 0], 0.85, true], ['hip1', [0, -0.5, 0], 0.85, true],
+];
 
 /**
- * War-fire: tongues of flame licking up off a body -- off its shoulders and
- * fists first, then elbows and hips as `n` grows -- each leaning out away from
- * the middle of the body so the face stays clear, those on the far side of it
- * drawn behind it, flickering on the drawing clock. `h` height units tall.
+ * War-fire: broad tongues of flame licking up off a body -- off its shoulders, the back of its head and its fists
+ * first, then down its back and off its hips as `n` grows -- each leaning out away from the middle of the body so
+ * the face stays clear, flickering on the drawing clock. `h` height units tall.
  */
 function warFire(k: FxScene, b: Body, o: { n?: number; h?: number; alpha?: number; main?: string; deep?: string; core?: string; salt?: number }): void {
   const a = o.alpha ?? 1;
   if (a <= 0.01) return;
-  const n = Math.min(FIRE_AT.length, k.fast ? Math.min(4, o.n ?? 6) : o.n ?? 6);
+  const n = Math.min(FIRE_AT.length, k.fast ? Math.min(5, o.n ?? 6) : o.n ?? 6);
   const H = o.h ?? 7;
   const salt = k.seed + (o.salt ?? 0);
   const mid = k.chest(b);
   const midX = k.sx(mid);
-  const depth = (p: P3): number => k.eye.worldToScreenY(p.x, p.y, 0);
-  const midD = depth(mid);
   const back: number[][] = [], front: number[][] = [];
+  const gx: number[] = [], gy: number[] = [];
   for (let i = 0; i < n; i++) {
-    const [bone, size] = FIRE_AT[i];
-    // A little way down the bone from its joint, and the second tongue off a shoulder a little further out.
-    const foot = k.joint(b, bone, [0, 0, i >= 4 && i < 6 ? -1.4 : -0.3], 0.7);
+    const [bone, on, size, behind] = FIRE_AT[i];
+    const foot = k.joint(b, bone, [on[0], on[1], on[2]], 0.7);
     const bx = k.sx(foot), by = k.sy(foot);
     const out = Math.sign(bx - midX) || (i % 2 ? 1 : -1);
-    const fl = 0.68 + 0.32 * Math.sin(k.now * (8.5 + i * 1.3) + i * 2.1) * Math.sin(k.now * 4.7 + i * 0.7);
-    const tall = k.hpx(H * size * (0.75 + 0.35 * hashOf(salt, i)) * fl);
-    const w = (2.3 + 1.3 * hashOf(salt + 3, i)) * size * k.zoom;
-    const behind = FIRE_BEHIND(bone);
+    const fl = 0.7 + 0.3 * Math.sin(k.now * (8.5 + i * 1.3) + i * 2.1) * Math.sin(k.now * 4.7 + i * 0.7);
+    // Coming and going it grows and dies down rather than fading: red half gone over grass is olive.
+    const tall = k.hpx(H * size * (0.75 + 0.35 * hashOf(salt, i)) * fl * a);
+    const w = (3.4 + 2 * hashOf(salt + 3, i)) * size * k.zoom * (0.5 + 0.5 * a);
     // Licking: the tip whips side to side faster than the body of the flame sways, which is what makes it read as fire.
     const sway = Math.sin(k.now * 6.3 + i * 1.7) * tall * 0.14 + out * tall * (behind ? 0.4 : 0.14);
     const whip = Math.sin(k.now * 11.7 + i * 2.9) * tall * 0.1;
@@ -443,7 +525,10 @@ function warFire(k: FxScene, b: Body, o: { n?: number; h?: number; alpha?: numbe
       bx + w * 0.92 + sway * 0.25, by - tall * 0.36,
       bx + w, by,
     ];
-    (behind || depth(foot) < midD - 0.5 ? back : front).push(q);
+    // A fist up by the face (a weapon carried at the shoulder) burns behind too, or its flame is drawn over the face.
+    (behind || foot.z > mid.z - 3 ? back : front).push(q);
+    gx.push(bx + sway * 0.4, bx + sway * 0.8);
+    gy.push(by - tall * 0.3, by - tall * 0.7);
   }
   const main = o.main ?? k.pal.main, deep = o.deep ?? k.pal.deep, core = o.core ?? k.pal.accent;
   const draw = (list: number[][], alpha: number) => (g: CanvasRenderingContext2D): void => {
@@ -484,9 +569,12 @@ function warFire(k: FxScene, b: Body, o: { n?: number; h?: number; alpha?: numbe
     }
   };
   const foot = { x: b.x, y: b.y, z: b.z };
-  if (back.length) k.worldDraw(foot, draw(back, a), -0.4);
-  if (front.length) k.worldDraw(foot, draw(front, a * 0.9), 0.8);
-  k.glow(k.at(b, 0.7), 10 + H, a * 0.3);
+  if (back.length) k.worldDraw(foot, draw(back, 1), -0.4);
+  if (front.length) k.worldDraw(foot, draw(front, 1), 0.8);
+  k.glow(k.at(b, 0.7), 10 + Math.min(H, 9), a * 0.3);
+  // Each tongue alight in the dark: a glow down its middle, stronger at night, where a flame is what lights the body.
+  const pic = k.fast ? null : glowPicture(k.pal.light);
+  if (pic) glowsAlong(k, pic, gx, gy, Math.max(5, 4 * k.zoom), (0.25 + 0.5 * k.night) * a, 1);
 }
 
 /**
@@ -556,8 +644,8 @@ function mixHex(a: string, b: string, u: number): string {
   return `#${((1 << 24) | (ch(16) << 16) | (ch(8) << 8) | ch(0)).toString(16).slice(1)}`;
 }
 
-/** The enemies a blow round the caster reaches: every creature and other person within `r` tiles, the caster left out, at most six. */
-const struckBy = (k: FxScene, r: number): Body[] => k.bodiesWithin(r, k.caster, ['creature', 'peer']).slice(0, 6);
+/** The enemies a blow round the caster reaches: every creature anybody may harm within `r` tiles of the caster, at most six. */
+const struckBy = (k: FxScene, r: number): Body[] => k.enemiesWithin(r, k.caster).slice(0, 6);
 
 /** The head of the weapon in the caster's hands, wherever the pose has put it: the edge of an axe, the face of a maul. */
 const axeHead = (k: FxScene): P3 => k.joint(k.caster, 'tip');
@@ -570,8 +658,11 @@ function blood(k: FxScene, at: P3, n: number, o: { dir?: Ground; cone?: number; 
   });
 }
 
-/** A pool of blood on the ground, ragged, `r` tiles. */
-const pool = (k: FxScene, c: Ground, r: number, alpha: number): void => k.scorch(c, r, { colour: POOL, alpha });
+/**
+ * A pool of blood on the ground, ragged, `r` tiles, `dried` (nought to one) of the way from wet to dry: it darkens
+ * toward its own brown-black rather than fading, which over grass goes olive; `alpha` only for its last moment.
+ */
+const pool = (k: FxScene, c: Ground, r: number, dried: number, alpha = 1): void => k.scorch(c, r, { colour: dry(POOL, dried, EARTH), alpha: 0.92 * alpha });
 
 /** Stone chips and dust thrown up off the ground at a point. */
 function rubble(k: FxScene, c: P3, n: number, wide: number): void {
@@ -634,21 +725,38 @@ const dirOf = (pitch: number, yaw: number): [number, number, number] => {
   const p = pitch * RAD, y = yaw * RAD;
   return [Math.sin(p) * Math.sin(y), Math.sin(p) * Math.cos(y), -Math.cos(p)];
 };
+/**
+ * How low what a blow is aimed at stands, nought to one: one for a wolf's back or head at the caster's knee, nought
+ * for a man's chest or head at the caster's own, from the cue's aim (`c.aim`); a man's height when there is none.
+ */
+function lowness(c: PoseCue, at: 'chest' | 'head'): number {
+  const h = c.aim ? c.aim[at] : at === 'head' ? 16 : 11;
+  const [lo, hi] = at === 'head' ? [5, 16] : [4, 11];
+  return 1 - clamp((h - lo) / (hi - lo), 0, 1);
+}
+
 /** The cue's weapon is held in both hands: a battle axe or a maul (shouldered), not a hatchet. */
 const twoHands = (c: PoseCue): boolean => c.carry === 'shoulder';
 
-function swing(r: Rig, t: number, c: PoseCue, keys: readonly Swing[], o: { both?: number; bothAt?: number } = {}): void {
+/*
+ * The weapon never changes hands: a battle axe or a maul on the left shoulder is swung left-handed (`cast.mirror`),
+ * the pose written right-handed as ever and mirrored by the framework, so `carried` is never touched here.
+ */
+function swing(r: Rig, t: number, c: PoseCue, keys: readonly Swing[], o: { both?: number; bothAt?: number; stepped?: boolean } = {}): void {
   const ch = (j: number): number => one(t, keys.map((k) => [k[0], k[j]] as const));
   const pitch = ch(1), yaw = ch(2), out = ch(3);
-  // The swinging shoulder, from the hips as the trunk is leant and the knees let the hips down.
+  // The swinging shoulder, from the hips as the trunk is leant and the knees let the hips down -- or, stepping in
+  // (`stepIn`, which has put the feet and let the hips down itself), where the step has carried the hips.
   const lean = (r.spine[0] + r.chest[0]) * RAD;
   const knee = ((r.knee[0] + r.knee[1]) / 2) * RAD;
-  const hips = BUILD.hips - (BUILD.thigh + BUILD.shin) * (1 - Math.cos(knee / 2)) * (1 - (r.kneel ?? 0)) + (r.lift ?? 0) * 0.5;
-  const sh: [number, number, number] = [BUILD.shoulder[0] * 0.55, -Math.sin(lean) * TRUNK, hips + Math.cos(lean) * TRUNK];
+  // On the move the walk keeps its own hips and feet (`castOver`), so the hand goals are from where the walk has them.
+  const body = c.moving ? [0, 0, 0] : r.at;
+  const drop = c.moving ? 0 : o.stepped ? r.at[2] : -(BUILD.thigh + BUILD.shin) * (1 - Math.cos(knee / 2)) * (1 - (r.kneel ?? 0));
+  const hips = BUILD.hips + drop + (c.moving ? 0 : (r.lift ?? 0) * 0.5);
+  const sh: [number, number, number] = [body[0] + BUILD.shoulder[0] * 0.55, body[1] - Math.sin(lean) * TRUNK, hips + Math.cos(lean) * TRUNK];
   const d = dirOf(pitch, yaw);
   const at: [number, number, number] = [sh[0] + d[0] * ARM * out, sh[1] + d[1] * ARM * out, sh[2] + d[2] * ARM * out];
   r.reach = [r.reach?.[0], { at, haft: dirOf(pitch + ch(4), yaw + ch(5)) }];
-  r.carried = 1;
   r.wield = 1;
   if (twoHands(c)) {
     r.both = o.both ?? 1;
@@ -656,7 +764,50 @@ function swing(r: Rig, t: number, c: PoseCue, keys: readonly Swing[], o: { both?
   }
 }
 
+/**
+ * How far short of the weapon's own reach a blow's last stride stops, in height units: the stage carries the body
+ * in until the blow would reach the near side of what it strikes (`cast.close`, six and the weapon's length), and the
+ * stride goes this much less than that again -- so the head lands in the creature, not on the air in front of it.
+ */
+const STRIDE_SHORT = 7;
+/**
+ * The furthest that stride carries the body, in height units. The back foot stays where it stood and a leg is about
+ * six and a half long, so the hips can go no more than three or so past it and stay up: `stepIn`'s own twelve (and
+ * even five) sat the body down on the ground with its legs split. The stage carries the rest of the way (`cast.close`).
+ */
+const STRIDE_MOST = 3;
+
+/**
+ * The last stride in to a blow, standing (`stepIn`): the lead foot put down nearer over `from`..`hit`, the back one
+ * kept, and back again from `back`. Called before `swing`, which reaches from where the step has carried the body;
+ * says whether the feet were put (and so the hips with them).
+ */
+function stride(r: Rig, t: number, c: PoseCue, o: { hit: number; from?: number; back?: number; short?: number; bend?: number }): boolean {
+  if (c.moving || !c.aim) return false;
+  const by = clamp(c.aim.near - c.aim.close - (o.short ?? STRIDE_SHORT), 0, STRIDE_MOST);
+  if (by <= 0.01) return false;
+  // The step is the going forward: the pose's own lean of the hips ahead is kept to a unit, or it and the step together
+  // carry the hips further past the planted back foot than the leg reaches.
+  r.at[1] = Math.min(r.at[1], 1);
+  stepIn(r, t, c, { hit: o.hit, from: o.from, back: o.back, by, bend: o.bend });
+  return true;
+}
+
 /* ---- the spells ------------------------------------------------------------------------------------------------- */
+
+/**
+ * The same turn of a joint written the other way about when its yaw is past a quarter turn: pitch and yaw half a
+ * turn on, the roll taken from the far side. `armOut` gives an arm flung up and out as [-158, 62, 180], and keyed
+ * against a pose near nought that swings the long way round (and its yaw flips between 180 and -180 from one key to
+ * the next); written [22, 118, 0], it is the same arm and keys straight.
+ */
+function unflip(e: readonly [number, number, number]): [number, number, number] {
+  if (Math.abs(e[2]) <= 90) return [e[0], e[1], e[2]];
+  const wrap = (a: number): number => ((((a + 180) % 360) + 360) % 360) - 180;
+  return [wrap(e[0] + 180), 180 - e[1], wrap(e[2] + 180)];
+}
+/** Last Rage's arms flung wide: a V up and out, the same for either arm (`out` is away from the body for both). */
+const LAST_V = unflip(armOut(1, 140, 55));
 
 /** Overhead Smash's own numbers: how much later the caster's own next swing comes. */
 const SMASH_WIND = num('berserker_overhead_smash', 'wind', 1.5);
@@ -694,12 +845,13 @@ export const BERSERKER: Record<string, SpellVisual> = {
   // Wild Swing (strike, on enemy): A blow at 140% that misses twice as often as a swing does.
   //
   // A haymaker swung flat from far round the right, so hard the body follows it round and the back foot has to
-  // stumble across to catch it. The cut wanders as it goes, and a second, fainter one wanders beside it: a blow
-  // that could land anywhere.
+  // stumble across to catch it, carried in to what it strikes over the wind-up. The cut is the band the axe really
+  // swept, torn; the blow lands where the axe is, and sparks and blood go off the way it was going.
   berserker_wild_swing: {
     palette: PALETTE,
     cast: {
       timing: { secs: 0.85, release: 0.4 },
+      close: { from: 0.04, to: 0.4 },
       pose: (r, t, c) => {
         r.pelvis = e3(t, [[0, [0, 0, 0]], [0.3, [0, 0, -24]], [0.4, [0, 0, 6]], [0.6, [0, 0, 34]], [0.8, [0, 0, 18]], [1, [0, 0, 0]]]);
         r.spine = e3(t, [[0, [0, 0, 0]], [0.3, [4, -4, -18]], [0.4, [-10, 4, 6]], [0.6, [-14, 8, 24]], [0.8, [-4, 2, 8]], [1, [0, 0, 0]]]);
@@ -710,7 +862,7 @@ export const BERSERKER: Record<string, SpellVisual> = {
         r.knee[0] = one(t, [[0, 4], [0.3, 10], [0.4, 30], [0.6, 34], [1, 6]]);
         r.leg[1] = e3(t, [[0, [0, 2, 0]], [0.3, [-12, 6, 0]], [0.45, [-18, 2, 0]], [0.58, [30, -14, 20]], [0.7, [16, -10, 14]], [1, [-2, 2, 0]]]);
         r.knee[1] = one(t, [[0, 4], [0.3, 22], [0.45, 16], [0.58, 46], [0.7, 18], [1, 5]]);
-        r.at = e3(t, [[0, [0, 0, 0]], [0.3, [0, -1, 0]], [0.4, [0, 3, 0]], [0.62, [-2, 6, 0]], [1, [0, 0, 0]]]);
+        r.at = e3(t, [[0, [0, 0, 0]], [0.3, [0, -1, 0]], [0.4, [0, 4, 0]], [0.62, [-2, 7, 0]], [1, [0, 0, 0]]]);
         r.mouth = one(t, [[0, 0], [0.32, 0.2], [0.4, 0.75], [0.6, 0.5], [0.85, 0]]);
         // Flat round from far behind the right shoulder, the head dragging, through level, and on across to the left.
         swing(r, t, c, [[0, 35, 20, 0.6, 115, 0], [0.3, 100, 118, 0.85, 0, 45], [0.35, 102, 122, 0.85, 0, 50], [0.4, 92, 6, 1, 0, -4], [0.5, 88, -55, 0.95, 0, -20], [0.62, 76, -95, 0.85, 0, -30], [0.8, 50, -40, 0.7, 50, 0], [1, 35, 20, 0.6, 115, 0]]);
@@ -724,38 +876,32 @@ export const BERSERKER: Record<string, SpellVisual> = {
     },
     fx: {
       charge: (k, t) => {
-        k.glow(axeHead(k), 5, 0.5 * seg(t, 0.12, 0.32));
-        const reach = cutReach(k, 16, 30);
-        const u = seg(t, 0.32, 0.46);
-        const fade = 1 - seg(t, 0.46, 0.62);
-        if (u > 0) {
-          rent(k, { u, from: 1.9, to: -2.1, tilt: 1.32, reach, up: k.caster.tall * 0.6, width: 11, length: 2.2, wobble: 0.14, alpha: fade });
-          // The wild second edge, wide of the first and late.
-          rent(k, { u: seg(t, 0.35, 0.5), from: 1.7, to: -2.3, tilt: 1.18, reach: reach * 0.84, up: k.caster.tall * 0.8, width: 6, length: 1.6, wobble: 0.24, alpha: 0.5 * fade, glow: 0.3 });
-        }
+        k.glow(axeHead(k), 5, 0.5 * seg(t, 0.12, 0.32) * (1 - seg(t, 0.36, 0.42)));
+        // The band the axe swept, a little longer than a blow's for a haymaker, eaten as the follow-through slows.
+        if (t > 0.3 && t < 0.75) rent(k, { secs: 0.1, inner: 0.5 });
       },
       hit: (k) => {
         const at = k.heart(k.target);
         const along = k.toward(k.caster, k.target);
-        // The cut runs right to left across the target: the sparks go off to the caster's left.
-        const left = { x: along.y, y: -along.x };
-        k.burst(at, 26, { kind: 'spark', size: 2.2, life: [0.25, 0.5], speed: [1.2, 2.6], up: [2, 24], heading: { x: left.x * 0.8 + along.x * 0.6, y: left.y * 0.8 + along.y * 0.6 }, cone: 1.3, gravity: 60, drag: 0.1 });
-        blood(k, at, 8, { dir: left, cone: 1.2 });
+        // The cut runs across the target from the swinging side: the sparks and the blood go off the other way.
+        const across = { x: along.y * k.side, y: -along.x * k.side };
+        k.burst(at, 26, { kind: 'spark', size: 2.2, life: [0.25, 0.5], speed: [1.2, 2.6], up: [2, 24], heading: { x: across.x * 0.8 + along.x * 0.6, y: across.y * 0.8 + along.y * 0.6 }, cone: 1.3, gravity: 60, drag: 0.1 });
+        blood(k, at, 8, { dir: across, cone: 1.2 });
         k.burst(k.at(k.caster, 0.05), 8, { kind: 'dust', colour: DUST, size: 3.4, life: [0.5, 0.9], speed: [0.2, 0.5], up: [2, 6], gravity: 2 });
       },
       impact: { secs: 0.55, draw: (k, u) => {
         const at = k.heart(k.target);
         starburst(k, at, 11 * (1.15 - 0.5 * u), { alpha: flashOf(u, 0.1), points: 6 });
-        k.light(k.target, 2.6, 0.7 * (1 - u));
+        k.light(k.target, 1.6, 0.7 * (1 - u));
       } },
     },
   },
 
   // Shrug It Off (buff, on self): Your worst wound is 50% less severe, and it stops bleeding.
   //
-  // Hunched over the hurt, dripping; then a roll of one shoulder and the other that flings the blood off, and the
-  // chest thrown out. The wound is seared shut: a zigzag of heat across the chest that cools from white through
-  // ember to a dark seam, hissing, and a small ring of teeth knocked out round the feet.
+  // Hunched over the hurt, the free hand clamped on it, dripping; then a roll of one shoulder and the other that
+  // flings the blood off, and the chest thrown out. The wound is seared shut where the hand held it: a stitched bar
+  // of heat across the belly that cools from white through ember to a dark seam and stays, a puff of steam off it.
   berserker_shrug_it_off: {
     palette: PALETTE,
     cast: {
@@ -766,7 +912,7 @@ export const BERSERKER: Record<string, SpellVisual> = {
         r.spine = e3(t, [[0, [0, 0, 0]], [0.25, [-8, 0, 0]], [0.5, [6, 0, 0]], [1, [0, 0, 0]]]);
         r.neck = e3(t, [[0, [0, 0, 0]], [0.25, [-12, 0, 0]], [0.36, [-4, 14, 0]], [0.44, [-4, -14, 0]], [0.5, [6, 0, 0]], [1, [0, 0, 0]]]);
         r.head = e3(t, [[0, [0, 0, 0]], [0.25, [-14, 0, 0]], [0.36, [0, 10, 0]], [0.44, [0, -10, 0]], [0.5, [10, 0, 0]], [0.65, [6, 0, 0]], [1, [0, 0, 0]]]);
-        // Hunched with the left hand clamped over the wound; then both fists clenched as the chest goes out.
+        // Hunched with the free (left) hand clamped over the wound; then both fists clenched as the chest goes out.
         r.arm[0] = e3(t, [[0, [10, 10, 0]], [0.25, [34, -14, 34]], [0.42, [30, -8, 28]], [0.5, [-14, 26, 0]], [0.62, [-12, 24, 0]], [1, [8, 10, 0]]]);
         r.elbow[0] = one(t, [[0, 30], [0.25, 112], [0.42, 100], [0.5, 34], [1, 24]]);
         r.arm[1] = e3(t, [[0, [10, 10, 0]], [0.25, [20, 4, 10]], [0.45, [24, 22, 10]], [0.5, [-14, 26, 0]], [0.62, [-12, 24, 0]], [1, [8, 10, 0]]]);
@@ -775,13 +921,12 @@ export const BERSERKER: Record<string, SpellVisual> = {
         r.mouth = one(t, [[0, 0], [0.25, 0.25], [0.45, 0.15], [0.52, 0.55], [0.7, 0.3], [1, 0]]);
         r.knee = [one(t, [[0, 4], [0.25, 22], [0.5, 2], [1, 4]]), one(t, [[0, 4], [0.25, 22], [0.5, 2], [1, 4]])];
         r.leg = [e3(t, [[0, [2, 2, 0]], [0.25, [10, 6, 0]], [0.5, [0, 8, 0]], [1, [2, 2, 0]]]), e3(t, [[0, [2, 2, 0]], [0.25, [10, 6, 0]], [0.5, [0, 8, 0]], [1, [2, 2, 0]]])];
-        r.carried = 1;
       },
     },
     fx: {
       charge: (k, t) => {
-        // The wound dripping while hunched over it, then flung off by each roll of the shoulders.
-        if (t < 0.32) k.emit(k.chest(), 10 * seg(t, 0.05, 0.25), { kind: 'drop', colour: DROP, size: 1.8, life: [0.4, 0.6], speed: [0, 0.08], up: [-2, 2], gravity: 60, bias: 6 });
+        // The wound dripping under the hand while hunched over it, then flung off by each roll of the shoulders.
+        if (t < 0.32) k.emit(wound(k), 10 * seg(t, 0.05, 0.25), { kind: 'drop', colour: DROP, size: 1.8, life: [0.4, 0.6], speed: [0, 0.08], up: [-2, 2], gravity: 60, bias: 6 });
         for (const [at, side] of [[0.36, 1], [0.44, -1]] as const) {
           if ((k.state[`f${side}`] ?? 0) === 0 && t >= at) {
             k.state[`f${side}`] = 1;
@@ -792,60 +937,87 @@ export const BERSERKER: Record<string, SpellVisual> = {
       },
       release: (k) => {
         k.burst(k.at(k.caster, 0.05), 10, { kind: 'dust', colour: DUST, size: 3.2, life: [0.5, 0.8], speed: [0.4, 0.7], up: [1, 4], gravity: 2, drag: 0.1 });
-        k.burst(k.chest(), 14, { kind: 'ember', colour: [k.pal.core, k.pal.accent], size: 1.8, life: [0.3, 0.6], speed: [0.2, 0.6], up: [4, 16], gravity: 10 });
+        // Seared: the one puff of steam off the wound, going out and up.
+        k.burst(wound(k), 12, { kind: 'mist', colour: '#e8ded6', size: 2.2, sizeEnd: 6, life: [0.5, 0.9], speed: [0.15, 0.4], up: [6, 14], gravity: -4, drag: 0.4, heading: k.facingDir(k.caster), cone: 1.4 });
+        k.burst(wound(k), 10, { kind: 'ember', colour: [k.pal.core, k.pal.accent], size: 1.6, life: [0.25, 0.5], speed: [0.2, 0.5], up: [4, 12], gravity: 10 });
       },
-      impact: { secs: 1.3, draw: (k, u) => {
-        // The seal: a zigzag seared across the chest, white-hot, cooling through the ember to a dark seam.
-        const heat = 1 - smooth(seg(u, 0.08, 0.8));
-        const a = smooth(u / 0.05) * (1 - smooth(seg(u, 0.75, 1)));
+      impact: { secs: 2.2, draw: (k, u) => {
+        // The seal: a stitched bar seared across the wound, white-hot, cooling through the ember to a dark seam that stays.
+        const secs = 2.2, age = u * secs;
+        const heat = 1 - smooth(seg(age, 0.1, 1.1));
         const b = k.caster;
-        const c = k.chest();
+        const c = wound(k);
         const f = k.facingDir(b);
-        const pts: P3[] = [];
-        for (let i = 0; i < 7; i++) {
-          const s = (i / 6 - 0.5) * 4.4;
-          pts.push({ x: c.x - (f.y * s) / 40, y: c.y + (f.x * s) / 40, z: c.z + (i % 2 ? 0.8 : -0.8) * (1 - 0.4 * Math.abs(i / 6 - 0.5)) + 0.3 });
+        const across = { x: -f.y, y: f.x };
+        // Only on the front of the body: from behind, the body hides it.
+        const shows = k.eye.worldToScreenY(c.x + f.x * 0.05, c.y + f.y * 0.05, 0) >= k.eye.worldToScreenY(c.x, c.y, 0);
+        const grow = easeOut(seg(age, 0, 0.12));
+        const L = 2.8 * grow;
+        const bar: P3[] = [-1, -0.5, 0, 0.5, 1].map((s) => ({ x: c.x + (across.x * s * L) / 40, y: c.y + (across.y * s * L) / 40, z: c.z + s * 0.25 }));
+        const main = mixHex(DROP_DARK, k.pal.accent, heat), core = mixHex('#3a0a0a', k.pal.core, heat);
+        // It closes at the end rather than fading: the seam drawn shorter from both ends.
+        const shut = 1 - smooth(seg(age, secs - 0.35, secs));
+        if (shut > 0.02) {
+          const mid = bar[2], pts = bar.map((p) => ({ x: lerp(mid.x, p.x, shut), y: lerp(mid.y, p.y, shut), z: lerp(mid.z, p.z, shut) }));
+          band(k, pts, { width: 2.6, taper: 'both', main, core, ink: '#2a0806', glow: heat, bias: shows ? 10 : -2 });
+          // The stitches: short bars across it, dark once cool.
+          const st: P3[][] = [-0.7, -0.25, 0.25, 0.7].map((s) => {
+            const p = { x: lerp(mid.x, mid.x + (across.x * s * L) / 40, shut), y: lerp(mid.y, mid.y + (across.y * s * L) / 40, shut), z: mid.z + s * 0.25 * shut };
+            return [{ x: p.x, y: p.y, z: p.z + 0.75 }, { x: p.x, y: p.y, z: p.z - 0.75 }];
+          });
+          k.shapes(c, st.map((pts) => ({ pts, fill: false, ink: mixHex('#2a0806', k.pal.core, heat * 0.6), width: 1.1, closed: false })), { bias: shows ? 10.5 : -1.5 });
         }
-        band(k, pts, { width: 1.9, alpha: a, taper: 'both', main: mixHex(DROP_DARK, k.pal.accent, heat), core: mixHex(DROP, k.pal.core, heat), glow: heat, bias: 10 });
-        if (!k.fast && u < 0.7) k.emit(c, 9 * heat, { kind: 'smoke', colour: '#d9cfc6', size: 1.4, sizeEnd: 3.6, life: [0.4, 0.7], speed: [0.03, 0.1], up: [8, 14], gravity: -4, jitter: 0.04, bias: 10 });
-        sawRing(k, b, 0.24 + 0.4 * easeOut(u * 1.8), { teeth: 18, alpha: 0.8 * (1 - smooth(seg(u, 0.1, 0.5))), tooth: 0.07, wide: 0.08, turn: 0.3 + u });
-        k.light(b, 2.0, 0.55 * heat);
+        if (!k.fast && heat > 0.1) k.emit(c, 7 * heat, { kind: 'mist', colour: '#d9cfc6', size: 1.4, sizeEnd: 3.6, life: [0.4, 0.7], speed: [0.03, 0.1], up: [8, 14], gravity: -4, jitter: 0.04, bias: 10 });
+        k.light(b, 1.4, 0.55 * heat, '#fff1d6');
       } },
     },
   },
 
   // Rending Chop (strike, on enemy): With an axe in hand: a blow at 110% that bleeds it as a knife does, 15% of the blow a second for 6 s.
   //
-  // A one-armed chop down across from high on the right, the axe let bite and then wrenched back out toward the hip:
-  // the wrench is what tears the wound. Three ragged gashes stay open on the creature for the bleed's seconds, wet
-  // again and dripping at every second's tick, a pool spreading under it.
+  // A one-armed chop down across from high on the right, a step in to land it, the axe let bite, held, and then
+  // wrenched back out toward the hip: the wrench is what tears the wound, and the blood comes out after it. Three
+  // ragged gashes stay open on the creature for the bleed's seconds, wet again and dripping at every second's tick,
+  // and a pool spreads under it and dries.
   berserker_rending_chop: {
     palette: PALETTE,
     cast: {
-      timing: { secs: 0.9, release: 0.38 },
+      timing: { secs: 1.0, release: 0.34 },
+      close: { from: 0.06, to: 0.34, back: 0.72 },
       pose: (r, t, c) => {
-        r.chest = e3(t, [[0, [0, 0, 0]], [0.3, [6, -6, -26]], [0.38, [-10, 6, 18]], [0.46, [-10, 6, 18]], [0.58, [4, 0, -16]], [1, [0, 0, 0]]]);
-        r.spine = e3(t, [[0, [0, 0, 0]], [0.3, [6, 0, -8]], [0.38, [-16, 0, 8]], [0.46, [-16, 0, 8]], [0.58, [4, 0, -8]], [1, [0, 0, 0]]]);
-        r.head = e3(t, [[0, [0, 0, 0]], [0.3, [-4, 0, 18]], [0.38, [8, 0, -10]], [0.58, [-4, 0, 6]], [1, [0, 0, 0]]]);
-        r.leg[0] = e3(t, [[0, [2, 2, 0]], [0.3, [8, 3, 0]], [0.38, [28, 4, 0]], [0.58, [20, 4, 0]], [1, [4, 2, 0]]]);
-        r.knee[0] = one(t, [[0, 4], [0.38, 30], [0.58, 18], [1, 6]]);
-        r.leg[1] = e3(t, [[0, [0, 2, 0]], [0.38, [-16, 2, 0]], [0.58, [-10, 2, 0]], [1, [-2, 2, 0]]]);
-        r.knee[1] = one(t, [[0, 4], [0.38, 16], [0.58, 22], [1, 5]]);
-        r.at = e3(t, [[0, [0, 0, 0]], [0.38, [0, 3, 0]], [0.46, [0, 3, 0]], [0.6, [0, -1, 0]], [1, [0, 0, 0]]]);
-        r.mouth = one(t, [[0, 0], [0.36, 0.3], [0.46, 0.4], [0.56, 0.8], [0.72, 0.2], [1, 0]]);
-        // Down across from high on the right, let bite, then wrenched back out toward the hip with the head still forward.
-        swing(r, t, c, [[0, 35, 20, 0.6, 115, 0], [0.3, 165, 38, 0.85, 65, 0], [0.38, 80, -10, 1, -5, 0], [0.46, 76, -12, 1, -5, 0], [0.58, 32, 28, 0.55, 55, -20], [0.72, 40, 28, 0.6, 70, -10], [1, 35, 20, 0.6, 115, 0]]);
+        r.chest = e3(t, [[0, [0, 0, 0]], [0.26, [6, -6, -26]], [0.34, [-10, 6, 18]], [0.46, [-10, 6, 18]], [0.56, [6, 0, -18]], [0.68, [6, 0, -20]], [1, [0, 0, 0]]]);
+        r.spine = e3(t, [[0, [0, 0, 0]], [0.26, [6, 0, -8]], [0.34, [-16, 0, 8]], [0.46, [-16, 0, 8]], [0.56, [4, 0, -10]], [0.68, [4, 0, -10]], [1, [0, 0, 0]]]);
+        r.head = e3(t, [[0, [0, 0, 0]], [0.26, [-4, 0, 18]], [0.34, [8, 0, -10]], [0.56, [-6, 0, 8]], [0.68, [-6, 0, 8]], [1, [0, 0, 0]]]);
+        r.leg[0] = e3(t, [[0, [2, 2, 0]], [0.26, [8, 3, 0]], [0.34, [28, 4, 0]], [0.6, [20, 4, 0]], [1, [4, 2, 0]]]);
+        r.knee[0] = one(t, [[0, 4], [0.34, 30], [0.6, 18], [1, 6]]);
+        r.leg[1] = e3(t, [[0, [0, 2, 0]], [0.34, [-16, 2, 0]], [0.6, [-10, 2, 0]], [1, [-2, 2, 0]]]);
+        r.knee[1] = one(t, [[0, 4], [0.34, 16], [0.6, 22], [1, 5]]);
+        r.at = e3(t, [[0, [0, 0, 0]], [0.34, [0, 2, 0]], [0.46, [0, 2, 0]], [0.6, [0, -2, 0]], [0.7, [0, -2, 0]], [1, [0, 0, 0]]]);
+        r.mouth = one(t, [[0, 0], [0.32, 0.3], [0.46, 0.4], [0.54, 0.85], [0.7, 0.6], [0.82, 0.2], [1, 0]]);
+        const stepped = stride(r, t, c, { hit: 0.34, from: 0.14, back: 0.72, bend: 16 });
+        // Down into its back however low it stands: a wolf's below the hips, a man's at the chest.
+        const low = lowness(c, 'chest');
+        const bite = lerp(82, 58, low), lag = lerp(-5, -22, low);
+        // Down across from high on the right, let bite and held there a beat, then wrenched back out toward the hip --
+        // held there too, so the tear reads -- with the head still forward.
+        swing(r, t, c, [[0, 35, 20, 0.6, 115, 0], [0.26, 165, 38, 0.85, 65, 0], [0.34, bite, -10, 1, lag, 0], [0.46, bite - 4, -12, 1, lag, 0], [0.56, 34, 30, 0.55, 55, -20], [0.68, 30, 32, 0.55, 58, -20], [0.8, 40, 28, 0.6, 70, -10], [1, 35, 20, 0.6, 115, 0]], { stepped });
         if (!twoHands(c)) {
-          r.arm[0] = e3(t, [[0, [20, 12, 0]], [0.3, [56, 4, 24]], [0.38, [18, 30, 0]], [0.58, [40, 20, 10]], [1, [8, 12, 0]]]);
-          r.elbow[0] = one(t, [[0, 30], [0.3, 96], [0.38, 30], [0.58, 70], [1, 24]]);
+          r.arm[0] = e3(t, [[0, [20, 12, 0]], [0.26, [56, 4, 24]], [0.34, [18, 30, 0]], [0.56, [40, 20, 10]], [0.68, [40, 20, 10]], [1, [8, 12, 0]]]);
+          r.elbow[0] = one(t, [[0, 30], [0.26, 96], [0.34, 30], [0.56, 70], [1, 24]]);
         }
       },
     },
     fx: {
       charge: (k, t) => {
-        k.glow(axeHead(k), 4.5, 0.55 * seg(t, 0.1, 0.3));
-        const u = seg(t, 0.3, 0.4);
-        if (u > 0) rent(k, { u, from: 2.3, to: -0.9, tilt: 0.75, reach: cutReach(k, 15, 26), width: 9, length: 1.8, alpha: 1 - seg(t, 0.42, 0.6) });
+        k.glow(axeHead(k), 4.5, 0.55 * seg(t, 0.1, 0.26) * (1 - seg(t, 0.3, 0.36)));
+        // The chop, and the short tear back out of the wound in blood.
+        if (t > 0.24 && t < 0.46) rent(k, { secs: 0.08 });
+        if (t > 0.46 && t < 0.66) rent(k, { secs: 0.07, inner: 0.7, key: 'wrench', main: DROP, core: '#ff7a5a', ink: DROP_DARK, glow: 0.4 });
+        // The wrench out: the wound torn wider and the blood pulled out after the axe.
+        if ((k.state.wrench ?? 0) === 0 && t > 0.5) {
+          k.state.wrench = 1;
+          blood(k, k.heart(k.target), 18, { dir: k.toward(k.target, k.caster), cone: 1.1, speed: [0.6, 1.6], up: [8, 20], size: 2.4 });
+        }
       },
       hit: (k) => {
         const at = k.heart(k.target);
@@ -855,30 +1027,33 @@ export const BERSERKER: Record<string, SpellVisual> = {
       impact: { secs: 0.5, draw: (k, u) => {
         const at = k.heart(k.target);
         starburst(k, at, 9 * (1 - 0.4 * u), { points: 5, alpha: flashOf(u, 0.05) * 0.9 });
-        // The wrench out, a fifth of a second on: the wound torn wider and the blood pulled after the axe.
-        if ((k.state.wrench ?? 0) === 0 && u > 0.36) {
-          k.state.wrench = 1;
-          blood(k, at, 16, { dir: k.toward(k.target, k.caster), cone: 1.1, speed: [0.6, 1.6], up: [8, 20], size: 2.4 });
-        }
-        k.light(k.target, 2.2, 0.6 * (1 - u));
+        k.light(k.target, 1.6, 0.6 * (1 - u));
       } },
       linger: {
         secs: KNIFE_BLEED_SECS,
         draw: (k, age, left) => {
           const b = k.target;
+          // The bleed ends with the island's word, once it has said the creature bleeds and then that it does not.
+          if (b.bleeding) k.state.bled = 1;
+          if (k.state.bled && !b.bleeding && k.state.staunched === undefined) k.state.staunched = age;
+          const end = Math.min(left, k.state.staunched === undefined ? left : 0.4 - (age - k.state.staunched));
+          if (end <= 0) return;
           const at = k.heart(b);
           const size = Math.max(6, b.tall * 0.36);
           // Each second's bleed: the gashes wet again and a drop or two falling from them.
           const pulse = 1 - smooth((age % 1) / 0.4);
-          const fade = smooth(left / 0.8);
-          gashes(k, at, size, { open: easeOut(age / 0.2) * (0.75 + 0.25 * easeOut(seg(age, 0.2, 0.5))), alpha: fade, wet: pulse });
+          // They close at the end rather than fade.
+          const shut = smooth(end / 0.6);
+          gashes(k, at, size, { open: easeOut(age / 0.2) * (0.75 + 0.25 * easeOut(seg(age, 0.2, 0.5))) * shut, wet: pulse * shut });
           const n = Math.floor(age);
-          if ((k.state.tick ?? -1) < n) {
+          if ((k.state.tick ?? -1) < n && end > 0.5) {
             k.state.tick = n;
             blood(k, at, 4, { speed: [0.02, 0.15], up: [-4, 4], size: 2 });
           }
-          pool(k, b, 0.1 + 0.2 * smooth(age / KNIFE_BLEED_SECS), 0.7 * smooth(left / 1));
-          k.glow(at, 5, 0.45 * pulse * fade, DROP);
+          // The pool spreads as long as it bleeds and dries as it goes; it lets go by its alpha only in its last fifth of a second.
+          const all = age + left;
+          pool(k, b, 0.1 + 0.18 * smooth(age / all), smooth(age / all) * 0.7 + 0.3 * (1 - pulse), lateFade(end));
+          k.glow(at, 5, 0.45 * pulse * shut, DROP, true);
         },
       },
     },
@@ -886,50 +1061,56 @@ export const BERSERKER: Record<string, SpellVisual> = {
 
   // Skull Crack (strike, on enemy, lasts 2 s): With a maul in hand: a blow at 120% that holds it where it stands, neither moving nor striking, for 2 s;
   //
-  // Short and brutal: the maul cocked behind the head on both hands, up on the toes, and brought straight down on
-  // the skull, stopping dead at head height with a bounce. The blow rings round the head twice; then, for the
-  // hold, three sparks circle it dazed while a band round its feet closes, all the way shut as the hold lets go.
+  // Short and brutal: the maul cocked behind the head on both hands, up on the toes, a step in, and brought straight
+  // down onto the skull wherever it is -- a wolf's at the knee, a man's at the head -- stopping dead on it with a
+  // bounce. The blow rings round the head twice; then, for the hold, three sparks circle it dazed while a band round
+  // its feet closes, all the way shut as the hold lets go.
   berserker_skull_crack: {
     palette: PALETTE,
     cast: {
-      timing: { secs: 0.65, release: 0.45 },
+      timing: { secs: 0.7, release: 0.45 },
+      close: { from: 0.04, to: 0.45 },
       pose: (r, t, c) => {
-        r.spine = e3(t, [[0, [0, 0, 0]], [0.32, [12, 0, 0]], [0.45, [-14, 0, 0]], [0.52, [-14, 0, 0]], [1, [0, 0, 0]]]);
-        r.chest = e3(t, [[0, [0, 0, 0]], [0.32, [8, 0, -6]], [0.45, [-10, 0, 4]], [1, [0, 0, 0]]]);
-        r.head = e3(t, [[0, [0, 0, 0]], [0.32, [-14, 0, 0]], [0.45, [6, 0, 0]], [1, [0, 0, 0]]]);
+        r.spine = e3(t, [[0, [0, 0, 0]], [0.32, [12, 0, 0]], [0.45, [-22, 0, 0]], [0.54, [-22, 0, 0]], [1, [0, 0, 0]]]);
+        r.chest = e3(t, [[0, [0, 0, 0]], [0.32, [8, 0, -6]], [0.45, [-14, 0, 4]], [1, [0, 0, 0]]]);
+        r.head = e3(t, [[0, [0, 0, 0]], [0.32, [-14, 0, 0]], [0.45, [-10, 0, 0]], [1, [0, 0, 0]]]);
         r.lift = one(t, [[0, 0], [0.3, 0.8], [0.4, 0.4], [0.45, 0], [1, 0]]);
-        r.leg[0] = e3(t, [[0, [2, 2, 0]], [0.32, [6, 3, 0]], [0.45, [22, 4, 0]], [1, [4, 2, 0]]]);
-        r.knee[0] = one(t, [[0, 4], [0.32, 6], [0.45, 30], [0.55, 26], [1, 6]]);
-        r.leg[1] = e3(t, [[0, [0, 2, 0]], [0.45, [-12, 2, 0]], [1, [-2, 2, 0]]]);
-        r.knee[1] = one(t, [[0, 4], [0.45, 18], [1, 5]]);
+        r.leg[0] = e3(t, [[0, [2, 2, 0]], [0.32, [6, 3, 0]], [0.45, [26, 4, 0]], [1, [4, 2, 0]]]);
+        r.knee[0] = one(t, [[0, 4], [0.32, 6], [0.45, 34], [0.55, 30], [1, 6]]);
+        r.leg[1] = e3(t, [[0, [0, 2, 0]], [0.45, [-14, 2, 0]], [1, [-2, 2, 0]]]);
+        r.knee[1] = one(t, [[0, 4], [0.45, 22], [1, 5]]);
         r.at = e3(t, [[0, [0, 0, 0]], [0.45, [0, 2.5, 0]], [1, [0, 0, 0]]]);
         r.mouth = one(t, [[0, 0], [0.3, 0.1], [0.45, 0.7], [0.6, 0.3], [1, 0]]);
-        // Cocked behind the head, the head of it hanging down the back; brought straight over to stop dead level, and a bounce.
-        swing(r, t, c, [[0, 35, 20, 0.6, 115, 0], [0.32, 200, 4, 0.8, 85, 0], [0.45, 90, 0, 1, 2, 0], [0.52, 88, 0, 1, 3, 0], [0.6, 100, 0, 0.95, -6, 0], [1, 35, 20, 0.6, 115, 0]]);
+        const stepped = stride(r, t, c, { hit: 0.45, from: 0.24, bend: 20 });
+        // Down onto the skull, however high it is: a knee-high head takes the blow well below level, a man's nearly at it.
+        const low = lowness(c, 'head');
+        const p = lerp(84, 50, low), lag = lerp(0, -16, low);
+        // Cocked behind the head, the head of it hanging down the back; brought straight over and down to stop dead, and a bounce.
+        swing(r, t, c, [[0, 35, 20, 0.6, 115, 0], [0.32, 200, 4, 0.8, 85, 0], [0.45, p, 0, 1, lag, 0], [0.53, p - 2, 0, 1, lag + 1, 0], [0.6, p + 10, 0, 0.95, lag - 6, 0], [1, 35, 20, 0.6, 115, 0]], { stepped });
       },
     },
     fx: {
       charge: (k, t) => {
-        k.glow(axeHead(k), 5, 0.6 * seg(t, 0.1, 0.32) * (1 - seg(t, 0.46, 0.6)));
-        const u = seg(t, 0.36, 0.46);
-        if (u > 0) rent(k, { u, from: 2.7, to: 0.25, tilt: 0.12, reach: cutReach(k, 14, 22), up: k.caster.tall * 0.7, width: 8, length: 1.3, alpha: 1 - seg(t, 0.48, 0.62) });
+        k.glow(axeHead(k), 5, 0.6 * seg(t, 0.1, 0.32) * (1 - seg(t, 0.38, 0.46)));
+        if (t > 0.34 && t < 0.56) rent(k, { secs: 0.08 });
       },
       hit: (k) => {
-        const skull = k.at(k.target, 0.86);
-        k.burst(skull, 22, { kind: 'spark', colour: [k.pal.core, k.pal.accent], size: 2, life: [0.2, 0.45], speed: [1, 2.2], up: [6, 26], gravity: 50 });
+        const skull = k.muzzle(k.target);
+        k.burst(skull, 22, { kind: 'spark', colour: [k.pal.core, k.pal.accent], size: 2, life: [0.2, 0.45], speed: [1, 2.2], up: [6, 26], gravity: 50, over: true });
         k.burst(k.at(k.target, 0.04), 8, { kind: 'dust', colour: DUST, size: 3.4, life: [0.5, 0.9], speed: [0.3, 0.6], up: [1, 5], gravity: 2 });
       },
       impact: { secs: 0.6, draw: (k, u) => {
         const b = k.target;
-        const skull = k.at(b, 0.86);
+        const skull = k.muzzle(b);
         starburst(k, skull, 10 * (1 - 0.35 * u), { points: 8, alpha: flashOf(u, 0.06) });
         // The blow ringing round the head, twice, as a bell does.
         for (let i = 0; i < 2; i++) {
           const v = seg(u, i * 0.22, 0.6 + i * 0.22);
-          if (v > 0 && v < 1) haloRing(k, skull, { x: b.x, y: b.y, z: b.z }, 5 + 13 * easeOut(v), { alpha: 1 - v, width: 2.6 * (1 - v) + 0.6 });
+          // Thinning to nothing as it spreads, rather than fading: orange half gone over grass is khaki.
+          if (v > 0 && v < 0.92) haloRing(k, skull, { x: b.x, y: b.y, z: b.z }, 5 + 13 * easeOut(v), { width: 2.8 * (1 - v / 0.92) + 0.3 });
         }
         cracks(k, b, 0.32, { n: 5, grow: easeOut(u * 3), heat: 0.6 * (1 - u), alpha: 1 - smooth(seg(u, 0.6, 1)), salt: 3, width: 1.6 });
-        k.light(b, 2.4, 0.7 * (1 - u));
+        k.light(b, 1.6, 0.7 * (1 - u));
       } },
       linger: {
         draw: (k, age, left) => {
@@ -937,16 +1118,18 @@ export const BERSERKER: Record<string, SpellVisual> = {
           const hold = age + left;
           const a = smooth(age / 0.2) * smooth(left / 0.25);
           // Three dazed sparks circling the skull.
-          const skull = k.at(b, 1.0);
+          const skull = k.muzzle(b);
+          const up = skull.z - b.z + 2.5;
           for (let i = 0; i < 3; i++) {
             const an = age * 5.5 + (i * TAU) / 3;
-            const p = k.local(b, Math.cos(an) * b.wide * 1.3, Math.sin(an) * b.wide * 1.3, skull.z - b.z + Math.sin(an * 2) * 0.6);
-            k.mark(p, { r: 2.6, points: 4, turn: age * 7 + i, alpha: a, bias: Math.sin(an) < 0 ? 4 : -4, glow: 0.7 });
+            const p = k.local(b, Math.cos(an) * b.wide * 0.9, Math.sin(an) * b.wide * 0.9, up + Math.sin(an * 2) * 0.6);
+            const q = { x: p.x + skull.x - b.x, y: p.y + skull.y - b.y, z: p.z };
+            k.mark(q, { r: 2.6 * a, points: 4, turn: age * 7 + i, bias: Math.sin(an) < 0 ? 4 : -4, glow: 0.7 });
           }
-          // The hold: a band round the feet, closing as it runs out.
+          // The hold: a band round the feet in the one colour, closing as it runs out.
           const R = Math.max(0.24, (b.wide / 40) * 2.6);
           const gone = (age / hold) * TAU;
-          arcs(k, b, R, 0.045, [[-Math.PI / 2 + gone, Math.PI * 1.5]], { alpha: 0.9 * a, main: k.pal.accent, deep: k.pal.main });
+          if (a > 0.05) arcs(k, b, R, 0.045 * a, [[-Math.PI / 2 + gone, Math.PI * 1.5]], { alpha: 1, main: k.pal.accent, deep: k.pal.accent, glow: 0.4 + 0.6 * k.night });
         },
       },
     },
@@ -955,8 +1138,9 @@ export const BERSERKER: Record<string, SpellVisual> = {
   // Battle Rage (buff, on self, lasts 15 s): For 15 s you deal 30% more damage and take 20% more.
   //
   // Crouched and gathering, fists in, then up into a war cry: the weapon thrust at the sky, the other fist down and
-  // out, chest out and head back, the cry going out ahead as torn rings. Fire licks up off the shoulders and the
-  // fists for as long as it lasts, and a ring of small teeth round the feet, one for each second, loses one a second.
+  // out, chest out and head back, the cry going out ahead as torn rings. Broad fire licks up off the shoulders, the
+  // back of the head and the fists for as long as it lasts; a ring of small teeth knocked out round the feet, one for
+  // each second, loses one a second; and now and then a drop of the caster's own blood falls -- what it costs.
   berserker_battle_rage: {
     palette: PALETTE,
     cast: {
@@ -988,38 +1172,45 @@ export const BERSERKER: Record<string, SpellVisual> = {
           for (let i = 0; i < 2; i++) {
             const an = k.rand() * TAU, rr = 0.7 + 0.4 * k.rand();
             const p = k.on(k.caster.x + Math.cos(an) * rr, k.caster.y + Math.sin(an) * rr, 2 + 10 * k.rand());
-            if (k.rand() < 0.6 * g) k.burst(p, 1, { kind: 'ember', size: 1.8, life: [0.25, 0.4], speed: [1.6, 2.4], up: [2, 10], heading: { x: -Math.cos(an), y: -Math.sin(an) }, cone: 0.2, gravity: 0, drag: 0.3 });
+            if (k.rand() < 0.6 * g) k.burst(p, 1, { kind: 'ember', size: 1.8, life: [0.25, 0.4], speed: [1.6, 2.4], up: [2, 10], heading: { x: -Math.cos(an), y: -Math.sin(an) }, cone: 0.2, gravity: 0, drag: 0.3, over: true });
           }
         }
         k.scorch(k.caster, 0.3 * (0.5 + 0.5 * g), { colour: EARTH, alpha: 0.3 * g * (1 - seg(t, 0.6, 0.95)) });
         k.glow(k.chest(), 7, 0.5 * g);
       },
       release: (k) => {
-        k.burst(axeHead(k), 30, { kind: 'ember', colour: [k.pal.core, k.pal.accent, k.pal.main], size: 2, life: [0.4, 0.8], speed: [0.4, 1.1], up: [6, 26], gravity: 8, drag: 0.2 });
-        k.burst(k.at(k.caster, 0.05), 12, { kind: 'dust', colour: DUST, size: 4, life: [0.5, 1], speed: [0.6, 1.1], up: [1, 4], gravity: 2, drag: 0.1 });
+        k.burst(axeHead(k), 30, { kind: 'ember', colour: [k.pal.core, k.pal.accent, k.pal.main], size: 2, life: [0.4, 0.8], speed: [0.4, 1.1], up: [6, 26], gravity: 8, drag: 0.2, over: true });
+        k.burst(k.at(k.caster, 0.05), 16, { kind: 'dust', colour: DUST, size: 4, life: [0.5, 1], speed: [0.6, 1.1], up: [1, 4], gravity: 2, drag: 0.1 });
       },
       impact: { secs: 0.85, draw: (k, u) => {
         const b = k.caster;
         // The cry: three torn rings going out ahead of the face, one after the other.
         for (let i = 0; i < 3; i++) {
           const v = seg(u, i * 0.13, 0.5 + i * 0.13);
-          if (v > 0 && v < 1) shout(k, b, v, 0.95 * (1 - v * v));
+          if (v > 0 && v < 1) shout(k, b, v, 1);
         }
-        sawRing(k, b, 0.3 + 1.0 * easeOut(u), { teeth: 30, alpha: 0.85 * (1 - smooth(seg(u, 0.25, 0.9))), tooth: 0.12, wide: 0.1, turn: u * 0.4 });
         k.flare(axeHead(k), 9, flashOf(u, 0.08), k.pal.core);
-        k.light(b, 3.5, 0.8 * (1 - u));
+        k.light(b, 2.2, 0.8 * (1 - u));
       } },
       linger: {
         draw: (k, age, left) => {
           const b = k.caster;
           const all = age + left;
           const a = smooth(age / 0.4) * smooth(left / 0.6);
-          warFire(k, b, { n: 8, h: 6, alpha: 0.95 * a, main: RAGE_FIRE.main, deep: RAGE_FIRE.deep, core: RAGE_FIRE.core });
-          // A tooth for every second of it, one burning away each second.
+          warFire(k, b, { n: 5, h: 7, alpha: a, main: RAGE_FIRE.main, deep: RAGE_FIRE.deep, core: RAGE_FIRE.core });
+          // A tooth for every second of it, one burning away each second: knocked out from the feet by the cry, then held.
           const secs = Math.round(k.fx.secs ?? all);
-          sawRing(k, b, 0.34, { teeth: secs, left: left / all, alpha: 0.7 * a, turn: -Math.PI / 2, tooth: 0.09, wide: 0.09, glow: 0.3 });
-          if (!k.fast) k.emit(k.at(b, 0.75), 8 * a, { kind: 'ember', colour: [k.pal.accent, k.pal.core], size: 1.6, life: [0.4, 0.8], speed: [0.05, 0.2], up: [12, 22], gravity: 0, jitter: 0.12 });
-          k.light(b, 2.4, (0.32 + 0.08 * Math.sin(age * 11)) * a);
+          const out = easeOut(seg(age, 0, 0.35));
+          sawRing(k, b, 0.12 + 0.22 * out + 0.06 * Math.sin(Math.PI * out), { teeth: secs, left: left / all, alpha: lateFade(left, 0.3), turn: -Math.PI / 2, tooth: 0.09 + 0.05 * (1 - out), wide: 0.09, glow: 0.3 + 0.5 * k.night });
+          if (!k.fast) k.emit(k.at(b, 0.75), 8 * a, { kind: 'ember', colour: [k.pal.accent, k.pal.core], size: 1.6, life: [0.4, 0.8], speed: [0.05, 0.2], up: [12, 22], gravity: 0, jitter: 0.12, over: true });
+          // What it costs: every second and a half a drop of the caster's own blood off an arm or the chest.
+          const drip = Math.floor(age / 1.5);
+          if (drip > (k.state.drip ?? 0) && left > 0.6) {
+            k.state.drip = drip;
+            const from = ['arm0', 'arm1', 'chest', 'elbow0'][drip % 4];
+            blood(k, k.joint(b, from, [0, 0.6, -1.4], 0.6), 3, { speed: [0.05, 0.25], up: [0, 6], size: 2 });
+          }
+          k.light(b, 1.8, (0.32 + 0.08 * Math.sin(age * 11)) * a);
         },
       },
     },
@@ -1028,8 +1219,9 @@ export const BERSERKER: Record<string, SpellVisual> = {
   // Adrenaline (buff, on self, lasts 10 s): Costs no stamina. For 10 s a swing or a draw costs no stamina and takes 15% less time.
   //
   // A sharp breath in and two thumps of the left fist on the chest, up on the toes: the heart kicking. For as long
-  // as it lasts the heart beats fast and bright (a double pulse off the chest and round the feet), quick amber
-  // streaks run up the body, and a ring of ticks round the feet, one a second, goes out a tick at a time.
+  // as it lasts the heart beats fast and bright, and on every beat the weapon arm and the weapon itself flicker
+  // ahead of themselves -- a quick after-image of the weapon, the swing that comes sooner. A ring of small amber
+  // teeth round the feet, one a second, loses a tooth a second.
   berserker_adrenaline: {
     palette: PALETTE,
     cast: {
@@ -1050,12 +1242,11 @@ export const BERSERKER: Record<string, SpellVisual> = {
           r.foot[s] = one(t, [[0, 0], [0.18, -22], [0.6, -18], [1, 0]]);
           r.knee[s] = one(t, [[0, 4], [0.3, 14], [0.42, 14], [0.6, 10], [1, 4]]);
         }
-        r.carried = 1;
       },
     },
     fx: {
       charge: (k, t) => {
-        k.glow(k.chest(), 6, 0.6 * seg(t, 0.05, 0.28), QUICK.main);
+        k.glow(k.chest(), 6, 0.6 * seg(t, 0.05, 0.28), QUICK.main, true);
       },
       release: (k) => heartbeat(k, 1),
       impact: { secs: 0.5, draw: (k, u) => {
@@ -1064,32 +1255,26 @@ export const BERSERKER: Record<string, SpellVisual> = {
           k.state.dub = 1;
           heartbeat(k, 0.8);
         }
-        k.ring(k.caster, 0.2 + 0.55 * easeOut(u), { band: 0.05, alpha: 0.9 * (1 - u), main: QUICK.main, deep: QUICK.deep, glow: 0.6 });
       } },
       linger: {
         draw: (k, age, left) => {
           const b = k.caster;
           const all = age + left;
           const a = smooth(age / 0.3) * smooth(left / 0.6);
-          // The heart: a double beat every half second, off the chest and round the feet.
+          // The heart: a double beat every half second and a little more, off the chest.
           const beat = (age % 0.55) / 0.55;
           const p1 = 1 - smooth(beat / 0.18), p2 = 1 - smooth(seg(beat, 0.2, 0.4));
           const pulse = Math.max(p1, 0.7 * p2);
           const heart = k.chest();
-          k.glow(heart, 4 + 4 * pulse, (0.3 + 0.6 * pulse) * a, QUICK.main);
+          k.glow(heart, 4 + 4 * pulse, (0.3 + 0.6 * pulse) * a, QUICK.main, true);
           k.flare(heart, 3 + 4 * pulse, pulse * a, QUICK.core);
-          k.ring(b, 0.26 + 0.2 * (1 - p1), { band: 0.03, alpha: 0.5 * p1 * a, main: QUICK.main, deep: QUICK.deep, glow: 0.3 });
-          // A tick for every second of it.
+          // On each beat the weapon flickers ahead of itself: what swings sooner.
+          quickening(k, b, p1 * a);
+          // A tooth for every second of it, one going out each second.
           const secs = Math.round(k.fx.secs ?? all);
-          const lit = Math.ceil((left / all) * secs - 1e-6);
-          const spans: Array<[number, number]> = [];
-          for (let i = 0; i < lit; i++) {
-            const an = -Math.PI / 2 + (i / secs) * TAU;
-            spans.push([an + 0.12, an + TAU / secs - 0.12]);
-          }
-          arcs(k, b, 0.4, 0.035, spans, { alpha: 0.65 * a, main: QUICK.main, deep: QUICK.deep, glow: 0.2 });
-          // Quick streaks running up the body.
-          k.emit(k.at(b, 0.15), 14 * a, { kind: 'spark', colour: [QUICK.core, QUICK.main], size: 1.4, life: [0.16, 0.28], speed: [0, 0.03], up: [70, 110], gravity: 0, drag: 1, jitter: 0.11, jitterZ: 4 });
+          // Smaller and quicker than a rage's: its teeth run round into place on the first beat rather than fading in.
+          sawRing(k, b, 0.27, { teeth: secs, left: Math.min(left / all, easeOut(age / 0.35)), alpha: lateFade(left, 0.3), turn: -Math.PI / 2, tooth: 0.07, wide: 0.07, main: QUICK.main, deep: QUICK.deep, glow: 0.3 + 0.5 * k.night });
+          k.light(b, 1.3, (0.2 + 0.35 * pulse) * a, '#fff1d6');
         },
       },
     },
@@ -1097,83 +1282,102 @@ export const BERSERKER: Record<string, SpellVisual> = {
 
   // Blood Price (strike, on enemy): Costs no stamina but 10% of your health: a blow at 250%.
   //
-  // The price paid first: the axe held up before the face and the left palm drawn down its edge, the blood
-  // flying off the hand; the blade runs red and drips. Then a huge two-handed downstroke in blood, splashing the
-  // creature and the ground, and blood off the caster as it lands -- the tenth of their health it took.
+  // The price paid first: the axe held up high before the face and the free palm drawn down its edge, a burst of
+  // blood off the hand; the blade runs red and drips. Then a step in and a huge two-handed downstroke in blood,
+  // splashing the creature and the ground, and blood off the caster as it lands -- the tenth of their health it took.
   berserker_blood_price: {
     palette: PALETTE,
     cast: {
       timing: { secs: 1.35, release: 0.58 },
+      close: { from: 0.34, to: 0.58 },
       pose: (r, t, c) => {
         const q = shake(t, 0.14, 0.3, 1.5, 70);
-        r.chest = e3(t, [[0, [0, 0, 0]], [0.14, [4, 0, 0]], [0.31, [-6, 0, -10]], [0.5, [12, 0, -10]], [0.58, [-14, 0, 10]], [0.64, [-14, 0, 10]], [0.8, [6, 0, 0]], [1, [0, 0, 0]]]);
+        r.chest = e3(t, [[0, [0, 0, 0]], [0.14, [6, 0, -8]], [0.31, [-6, 0, -10]], [0.5, [12, 0, -10]], [0.58, [-14, 0, 10]], [0.64, [-14, 0, 10]], [0.8, [6, 0, 0]], [1, [0, 0, 0]]]);
         r.spine = e3(t, [[0, [0, 0, 0]], [0.31, [-4, 0, 0]], [0.5, [12, 0, -4]], [0.58, [-24, 0, 6]], [0.64, [-24, 0, 6]], [0.8, [2, 0, 0]], [1, [0, 0, 0]]]);
-        r.head = e3(t, [[0, [0, 0, 0]], [0.14, [6, 0, 0]], [0.26, [6, 0, 0]], [0.31, [-16, 0, 10]], [0.5, [-12, 0, 0]], [0.58, [16, 0, 0]], [0.8, [4, 0, 0]], [1, [0, 0, 0]]]);
+        r.head = e3(t, [[0, [0, 0, 0]], [0.14, [10, 0, 6]], [0.26, [10, 0, 6]], [0.31, [-16, 0, 10]], [0.5, [-12, 0, 0]], [0.58, [16, 0, 0]], [0.8, [4, 0, 0]], [1, [0, 0, 0]]]);
         r.shrug = [one(t, [[0, 0], [0.64, 0], [0.74, 0.9], [0.84, 0.1], [0.92, 0.7], [1, 0]]), one(t, [[0, 0], [0.64, 0], [0.74, 0.9], [0.84, 0.1], [0.92, 0.7], [1, 0]])];
         r.leg[0] = e3(t, [[0, [2, 2, 0]], [0.5, [8, 4, 0]], [0.58, [32, 4, 0]], [0.8, [20, 4, 0]], [1, [4, 2, 0]]]);
         r.knee[0] = one(t, [[0, 4], [0.5, 8], [0.58, 40], [0.8, 20], [1, 6]]);
         r.leg[1] = e3(t, [[0, [0, 2, 0]], [0.5, [-6, 2, 0]], [0.58, [-20, 2, 0]], [1, [-2, 2, 0]]]);
         r.knee[1] = one(t, [[0, 4], [0.58, 22], [1, 5]]);
-        r.at = e3(t, [[0, [0, 0, 0]], [0.5, [0, -1, 0]], [0.58, [0, 4, 0]], [0.7, [0, 4, 0]], [1, [0, 0, 0]]]);
+        r.at = e3(t, [[0, [0, 0, 0]], [0.5, [0, -1, 0]], [0.58, [0, 3, 0]], [0.7, [0, 3, 0]], [1, [0, 0, 0]]]);
         r.mouth = one(t, [[0, 0], [0.22, 0.1], [0.28, 0.45], [0.36, 0.2], [0.58, 0.85], [0.7, 0.4], [1, 0]]);
-        // The axe held up across the face, its head before the eyes; the left palm laid flat on the blade by the head and
-        // drawn down its edge (the left hand on the haft, closing nearer the fist); then both hands to it for the blow.
+        const stepped = stride(r, t, c, { hit: 0.58, from: 0.44, bend: 18 });
+        // The axe held up high across the face, its head before the eyes and out toward the near side of the body; the
+        // free palm laid flat on the blade by the head and drawn down its edge (the hand on the haft, closing nearer the
+        // fist); then both hands to it for the blow.
         const head = twoHands(c) ? 1 : 0.42;
-        swing(r, t, c, [[0, 35, 20, 0.6, 115, 0], [0.14, 32, 18, 0.53, 93 + q, -80], [0.3, 32, 18, 0.53, 93, -80], [0.38, 60, 12, 0.6, 80, -50], [0.5, 200, 10, 0.85, 70, 0], [0.58, 80, -5, 1, -5, 0], [0.64, 76, -5, 1, -5, 0], [0.8, 50, 10, 0.75, 30, 0], [1, 35, 20, 0.6, 115, 0]],
-          { both: 1, bothAt: one(t, [[0, 2.5], [0.12, 8.2 * head], [0.2, 8.2 * head], [0.3, 5.6 * head], [0.36, 5.6 * head], [0.46, 2.5], [1, 2.5]]) });
+        // Turned out toward whoever is looking, so the palm on the blade is not hidden behind the head: as far round toward
+        // the viewer as the arm goes in front of the body (the viewer is round to the right by an eighth a facing).
+        const cam = ((((c.facing * 45 + 180) % 360) + 360) % 360) - 180;
+        // With its back to the viewer the blade is held up over the head as well, where it shows above the shoulders.
+        const show = clamp(cam === -180 ? 180 : cam, -50, 50) * 0.85, high = Math.abs(cam) > 90 ? 100 : 62;
+        swing(r, t, c, [[0, 35, 20, 0.6, 115, 0], [0.14, high, show, 0.66, 80 + q, -80], [0.3, high, show, 0.66, 80, -80], [0.38, 80, 8, 0.65, 70, -50], [0.5, 200, 10, 0.85, 70, 0], [0.58, 80, -5, 1, -5, 0], [0.64, 76, -5, 1, -5, 0], [0.8, 50, 10, 0.75, 30, 0], [1, 35, 20, 0.6, 115, 0]],
+          { both: 1, bothAt: one(t, [[0, 2.5], [0.12, 8.2 * head], [0.2, 8.2 * head], [0.3, 5.6 * head], [0.36, 5.6 * head], [0.46, 2.5], [1, 2.5]]), stepped });
         if (!twoHands(c)) r.both = one(t, [[0.05, 0], [0.14, 1], [0.34, 1], [0.42, 0]]);
         r.shape = [{ flat: one(t, [[0.08, 0], [0.14, 1], [0.32, 1], [0.38, 0]]) }, undefined];
       },
     },
     fx: {
       charge: (k, t) => {
-        // The palm drawn down the edge: blood off the hand as it comes away.
+        // The palm drawn down the edge: a burst of blood off the hand as it comes away.
+        const palm = k.hand(k.lefty ? 1 : 0);
         if ((k.state.cut ?? 0) === 0 && t >= 0.28) {
           k.state.cut = 1;
-          blood(k, k.hand(0), 16, { speed: [0.3, 0.9], up: [4, 16], size: 2.2 });
-          k.flare(k.hand(0), 6, 0.9, '#ff6a52');
+          blood(k, palm, 28, { speed: [0.4, 1.2], up: [6, 22], size: 2.6 });
+          k.state.cutAt = k.now;
+        }
+        if (k.state.cut && k.now - (k.state.cutAt ?? 0) < 0.3) {
+          const v = (k.now - (k.state.cutAt ?? 0)) / 0.3;
+          starburst(k, palm, 7 * (1 - 0.5 * v), { points: 5, alpha: flashOf(v, 0.1), main: DROP, core: '#ff7a5a', ink: DROP_DARK, glow: 0.5 });
+          k.flare(palm, 6, 1 - v, '#ff6a52', 0, undefined, true);
         }
         // The blade run red, dripping, and the cut hand dripping too, until the blow.
         const red = seg(t, 0.27, 0.34) * (1 - seg(t, 0.62, 0.8));
         if (red > 0) {
           const head = axeHead(k);
-          k.glow(head, 5, 0.75 * red, DROP);
+          k.glow(head, 5, 0.75 * red, DROP, true);
           k.emit(head, 9 * red, { kind: 'drop', colour: DROP, size: 1.8, life: [0.3, 0.5], speed: [0, 0.1], up: [-4, 0], gravity: 70, bias: 6 });
-          if (t < 0.5) k.emit(k.hand(0), 6 * red, { kind: 'drop', colour: DROP, size: 1.6, life: [0.3, 0.5], speed: [0, 0.05], up: [-2, 0], gravity: 70, bias: 6 });
+          if (t < 0.5) k.emit(palm, 6 * red, { kind: 'drop', colour: DROP, size: 1.6, life: [0.3, 0.5], speed: [0, 0.05], up: [-2, 0], gravity: 70, bias: 6 });
         }
-        const u = seg(t, 0.5, 0.6);
-        if (u > 0) rent(k, { u, from: 2.6, to: -0.7, tilt: 0.42, reach: cutReach(k, 18, 32), width: 15, length: 2.1, main: DROP, core: '#ff7a5a', ink: DROP_DARK, alpha: 1 - seg(t, 0.62, 0.78) });
-        // Drops flung off the blade along its arc.
-        if (u > 0 && u < 1) k.emit(axeHead(k), 50, { kind: 'drop', colour: [DROP, DROP_DARK], size: 2, life: [0.3, 0.6], speed: [0.2, 0.6], up: [0, 10], gravity: 70, bias: 6 });
+        // The downstroke in blood, off the real blade, and drops flung off it along its arc.
+        if (t > 0.5 && t < 0.7) {
+          rent(k, { secs: 0.09, inner: 0.62, main: DROP, core: '#ff7a5a', ink: DROP_DARK });
+          if (t < 0.6) k.emit(axeHead(k), 50, { kind: 'drop', colour: [DROP, DROP_DARK], size: 2, life: [0.3, 0.6], speed: [0.2, 0.6], up: [0, 10], gravity: 70, bias: 6 });
+        }
       },
       hit: (k) => {
         const at = k.heart(k.target);
         const along = k.toward(k.caster, k.target);
         blood(k, at, 36, { dir: along, cone: 2.2, speed: [0.6, 2], up: [8, 30], size: 2.6 });
-        k.burst(at, 24, { kind: 'spark', colour: [k.pal.core, k.pal.accent], size: 2.2, life: [0.25, 0.5], speed: [1, 2.4], up: [4, 24], heading: along, cone: 2, gravity: 60 });
+        k.burst(at, 24, { kind: 'spark', colour: [k.pal.core, k.pal.accent], size: 2.2, life: [0.25, 0.5], speed: [1, 2.4], up: [4, 24], heading: along, cone: 2, gravity: 60, over: true });
         // The price: blood off the caster as the blow takes it.
         blood(k, k.chest(), 10, { speed: [0.1, 0.5], up: [2, 10] });
       },
-      impact: { secs: 0.9, draw: (k, u) => {
+      impact: { secs: 1.6, draw: (k, u) => {
+        const secs = 1.6, age = u * secs, left = secs - age;
         const at = k.heart(k.target);
-        starburst(k, at, 16 * (1.1 - 0.4 * u), { points: 9, alpha: flashOf(u, 0.06), main: DROP, core: k.pal.core, ink: DROP_DARK });
-        const fade = 1 - smooth(seg(u, 0.55, 1));
-        pool(k, k.target, 0.14 + 0.16 * easeOut(u * 2), 0.75 * fade);
-        pool(k, k.caster, 0.08 + 0.07 * easeOut(u * 2), 0.65 * fade);
-        k.light(k.target, 3, 0.9 * (1 - u), DROP);
+        starburst(k, at, 16 * (1.1 - 0.4 * seg(age, 0, 0.9)), { points: 9, alpha: flashOf(seg(age, 0, 0.9), 0.06), main: DROP, core: k.pal.core, ink: DROP_DARK });
+        // Both pools spread, dry to brown-black, and only then let go.
+        const grow = easeOut(seg(age, 0, 0.5)), drying = smooth(seg(age, 0.3, 1.3));
+        pool(k, k.target, 0.14 + 0.16 * grow, drying, lateFade(left));
+        // The caster's own, where they stood at the blow: it stays there when the body steps back out of the blow.
+        pool(k, k.once('paid', () => ({ x: k.caster.x, y: k.caster.y, z: k.caster.z })), 0.08 + 0.07 * grow, drying, lateFade(left));
+        k.light(k.target, 1.8, 0.9 * (1 - seg(age, 0, 0.9)));
       } },
     },
   },
 
   // Execute (strike, on enemy): A blow at 300% on a creature below 25% of its health, and at 100% on one above it.
   //
-  // An executioner's stroke: feet set wide, the axe raised straight overhead on both arms and held there while a
-  // thin red line marks the creature from above and two arcs close on it; then the drop, straight down the line,
-  // and a level cut clean through it at the neck, the two halves of the cut parting.
+  // An executioner's stroke: feet set wide, walked up to it with the axe going up straight overhead on both arms and
+  // held there while a red line marks the creature from above down to its neck and two arcs close on it; then a step
+  // and the drop, straight down the line, and a level cut clean through it at the neck, the two halves parting.
   berserker_execute: {
     palette: PALETTE,
     cast: {
       timing: { secs: 1.45, release: 0.62 },
+      close: { from: 0.06, to: 0.44, back: 0.8 },
       pose: (r, t, c) => {
         const q = shake(t, 0.42, 0.56, 1.6, 60);
         r.spine = e3(t, [[0, [0, 0, 0]], [0.42, [4, 0, 0]], [0.56, [5, 0, 0]], [0.62, [-20, 0, 0]], [0.7, [-20, 0, 0]], [0.9, [-6, 0, 0]], [1, [0, 0, 0]]]);
@@ -1185,69 +1389,73 @@ export const BERSERKER: Record<string, SpellVisual> = {
           r.knee[s] = one(t, [[0, 4], [0.14, 14], [0.56, 12], [0.62, 32], [0.75, 30], [1, 4]]);
         }
         r.mouth = one(t, [[0.5, 0], [0.6, 0.5], [0.7, 0.2], [0.9, 0]]);
+        const stepped = stride(r, t, c, { hit: 0.62, from: 0.5, back: 0.8, bend: 18 });
         // Raised straight up on both arms and held there, the head of it to the sky; then straight down, the head ending at the neck.
-        swing(r, t, c, [[0, 35, 20, 0.6, 115, 0], [0.14, 70, 0, 0.7, 60, 0], [0.42, 178 + q, 0, 0.95, 0, 0], [0.56, 176, 0, 0.95, 2, 0], [0.62, 76, 0, 1, -8, 0], [0.7, 72, 0, 1, -8, 0], [0.85, 45, 0, 0.75, 40, 0], [1, 35, 20, 0.6, 115, 0]]);
+        swing(r, t, c, [[0, 35, 20, 0.6, 115, 0], [0.14, 70, 0, 0.7, 60, 0], [0.42, 178 + q, 0, 0.95, 0, 0], [0.56, 176, 0, 0.95, 2, 0], [0.62, 72, 0, 1, -12, 0], [0.7, 68, 0, 1, -12, 0], [0.85, 45, 0, 0.75, 40, 0], [1, 35, 20, 0.6, 115, 0]], { stepped });
       },
     },
     fx: {
       charge: (k, t) => {
         const b = k.target;
-        const top = k.at(b, 3.2), neck = k.at(b, 0.62);
-        // The line it falls down, and the arcs closing on it, while the axe is up.
+        const neck = neckOf(k, b), top = { x: neck.x, y: neck.y, z: b.z + b.tall * 3 };
+        // The line it falls down, from high over it to the neck, and the arcs closing on it, while the axe is up.
         const mark = smooth(seg(t, 0.2, 0.44)) * (1 - seg(t, 0.6, 0.64));
         if (mark > 0) {
-          const pulse = 0.75 + 0.25 * Math.sin(k.now * 14);
-          band(k, [top, k.at(b, 1.9), k.at(b, 1.1)], { width: 1.3, alpha: mark * pulse * 0.9, taper: 'both', main: k.pal.main, core: k.pal.core, glow: 0.6 });
+          const down = smooth(seg(t, 0.2, 0.4));
+          const end = { x: neck.x, y: neck.y, z: lerp(top.z, neck.z, down) };
+          band(k, [top, { x: top.x, y: top.y, z: lerp(top.z, end.z, 0.5) }, end], { width: 2.1, alpha: 1, taper: 'start', main: k.pal.main, core: k.pal.core, glow: 0.6 * mark });
+          if (down > 0.95) k.flare(neck, 4, 0.7 * mark * (0.75 + 0.25 * Math.sin(k.now * 14)), k.pal.core);
           const close = smooth(seg(t, 0.2, 0.56));
           const R = Math.max(0.28, (b.wide / 40) * 3.2) * (1.8 - 0.8 * close);
           const turn = close * 1.6;
-          arcs(k, b, R, 0.04, [[turn, turn + 1.9], [turn + Math.PI, turn + Math.PI + 1.9]], { alpha: mark, glow: 0.4 });
+          // Drawn thin and thickening rather than faded in, and thinned away again: no khaki ghost of red on the grass.
+          if (mark > 0.05) arcs(k, b, R, 0.045 * mark, [[turn, turn + 1.9], [turn + Math.PI, turn + Math.PI + 1.9]], { alpha: 1, glow: 0.4 + 0.5 * k.night });
           k.flare(axeHead(k), 6, bump01(seg(t, 0.4, 0.58)) * 0.9, k.pal.core, k.now);
         }
-        // The drop: a falling edge down the line, the last tenth of a second before the blow.
-        const d = seg(t, 0.565, 0.62);
-        if (d > 0 && d < 1) {
-          const tip = { x: top.x, y: top.y, z: lerp(top.z, neck.z, easeIn(d)) };
-          band(k, [{ x: top.x, y: top.y, z: Math.max(tip.z + 2, lerp(top.z, tip.z, 0.2)) }, { x: tip.x, y: tip.y, z: tip.z + (top.z - tip.z) * 0.2 }, tip], { width: 7, alpha: 1, main: k.pal.main, core: k.pal.core, glow: 1, bias: 10 });
-        }
+        // The drop, off the real blade.
+        if (t > 0.54 && t < 0.72) rent(k, { secs: 0.08 });
       },
       hit: (k) => {
-        const neck = k.at(k.target, 0.62);
+        const neck = neckOf(k, k.target);
         blood(k, neck, 24, { speed: [0.5, 1.5], up: [10, 30], size: 2.4 });
-        k.burst(neck, 16, { kind: 'spark', colour: [k.pal.core], size: 2, life: [0.2, 0.4], speed: [1.4, 2.6], up: [-2, 6], gravity: 20 });
+        k.burst(neck, 16, { kind: 'spark', colour: [k.pal.core], size: 2, life: [0.2, 0.4], speed: [1.4, 2.6], up: [-2, 6], gravity: 20, over: true });
       },
-      impact: { secs: 0.9, draw: (k, u) => {
+      impact: { secs: 1.5, draw: (k, u) => {
+        const secs = 1.5, age = u * secs, left = secs - age;
         const b = k.target;
-        const neck = k.at(b, 0.62);
-        // The level cut through it, flung out to both sides, its halves parting.
+        const neck = neckOf(k, b);
+        // The level cut through it, flung out to both sides, its halves parting -- and eaten from its ends rather than faded.
         const f = k.toward(k.caster, b);
         const side = { x: -f.y, y: f.x };
-        const len = ((b.wide * 1.6 + 6) * (0.45 + 0.55 * easeOut(u * 3))) / 40;
-        const part = 0.7 * easeOut(seg(u, 0.12, 0.6));
-        const a = flashOf(u, 0.04);
-        for (const s of [1, -1]) {
-          const z = neck.z + s * part;
-          const p0 = { x: neck.x - side.x * len * s, y: neck.y - side.y * len * s, z };
-          const p1 = { x: neck.x + side.x * len * s, y: neck.y + side.y * len * s, z };
-          band(k, [p0, { x: lerp(p0.x, p1.x, 0.5), y: lerp(p0.y, p1.y, 0.5), z }, p1], { width: 4.5 * (1 - 0.6 * u), alpha: a, taper: 'both', bias: 10 });
+        const v = seg(age, 0, 0.8);
+        const len = ((b.wide * 1.6 + 6) * (0.45 + 0.55 * easeOut(v * 3)) * (1 - smooth(seg(v, 0.55, 1)))) / 40;
+        const part = 0.7 * easeOut(seg(v, 0.12, 0.6));
+        if (len > 0.01) {
+          for (const s of [1, -1]) {
+            const z = neck.z + s * part;
+            const p0 = { x: neck.x - side.x * len * s, y: neck.y - side.y * len * s, z };
+            const p1 = { x: neck.x + side.x * len * s, y: neck.y + side.y * len * s, z };
+            band(k, [p0, { x: lerp(p0.x, p1.x, 0.5), y: lerp(p0.y, p1.y, 0.5), z }, p1], { width: 4.5 * (1 - 0.5 * v), alpha: 1, taper: 'both', bias: 10 });
+          }
         }
-        starburst(k, neck, 7 * (1 - u), { points: 4, alpha: a, turn: 0 });
-        pool(k, b, 0.12 + 0.14 * easeOut(u * 2), 0.7 * (1 - smooth(seg(u, 0.6, 1))));
-        k.light(b, 2.6, 0.8 * (1 - u));
+        starburst(k, neck, 7 * (1 - v), { points: 4, alpha: flashOf(v, 0.04), turn: 0 });
+        pool(k, b, 0.12 + 0.14 * easeOut(seg(age, 0, 0.5)), smooth(seg(age, 0.3, 1.2)), lateFade(left));
+        k.light(b, 1.8, 0.8 * (1 - v));
       } },
     },
   },
 
   // Overhead Smash (strike, on enemy): A crushing blow at 250% that cannot miss; your own next swing comes 1.5 s later.
   //
-  // The biggest wind-up the trade has: back arched, the axe hanging down behind it, then over and down two-handed
-  // through the creature into the ground, where it sticks. The ground splits and throws up stone; the caster is
-  // left bent over the stuck axe and heaves it out, and the cracks smoulder for the 1.5 s the next swing waits,
-  // the axe's head glinting when it is ready again.
+  // The biggest wind-up the trade has: back arched, the axe hanging down behind it, a step in, then over and down
+  // two-handed through the creature into the ground, where it sticks. The ground splits from where the head went
+  // in and out under the creature, and throws up stone; the caster is left bent over the stuck axe and heaves it out,
+  // and the cracks smoulder for the 1.5 s the next swing waits, the axe's head glinting when it is ready again.
   berserker_overhead_smash: {
     palette: PALETTE,
     cast: {
       timing: { secs: 1.5, release: 0.42 },
+      close: { from: 0.06, to: 0.42, back: 0.74 },
       pose: (r, t, c) => {
         r.spine = e3(t, [[0, [0, 0, 0]], [0.32, [20, 0, 0]], [0.36, [22, 0, 0]], [0.42, [-28, 0, 0]], [0.48, [-30, 0, 0]], [0.72, [-32, 0, 0]], [0.84, [-8, 0, 0]], [1, [0, 0, 0]]]);
         r.chest = e3(t, [[0, [0, 0, 0]], [0.32, [12, 0, -6]], [0.42, [-14, 0, 4]], [0.6, [-10 + 2 * Math.sin(t * 40), 0, 0]], [0.72, [-12, 0, 0]], [0.84, [4, 0, -6]], [1, [0, 0, 0]]]);
@@ -1259,43 +1467,51 @@ export const BERSERKER: Record<string, SpellVisual> = {
         r.knee[0] = one(t, [[0, 4], [0.32, 18], [0.42, 44], [0.72, 44], [0.84, 20], [1, 6]]);
         r.leg[1] = e3(t, [[0, [0, 2, 0]], [0.32, [-4, 2, 0]], [0.42, [-22, 2, 0]], [0.72, [-22, 2, 0]], [1, [-2, 2, 0]]]);
         r.knee[1] = one(t, [[0, 4], [0.42, 24], [0.72, 24], [1, 5]]);
-        r.at = e3(t, [[0, [0, 0, 0]], [0.32, [0, -1, 0]], [0.42, [0, 5, 0]], [0.72, [0, 5, 0]], [0.9, [0, 1, 0]], [1, [0, 0, 0]]]);
+        r.at = e3(t, [[0, [0, 0, 0]], [0.32, [0, -1, 0]], [0.42, [0, 3, 0]], [0.72, [0, 3, 0]], [0.9, [0, 1, 0]], [1, [0, 0, 0]]]);
         r.mouth = one(t, [[0, 0], [0.3, 0.3], [0.42, 1], [0.5, 0.6], [0.55, 0.35], [0.62, 0.6], [0.69, 0.35], [0.76, 0.6], [0.86, 0.9], [1, 0]]);
+        const stepped = stride(r, t, c, { hit: 0.42, from: 0.28, back: 0.74, bend: 26 });
         // Back arched and the head of it hanging down behind; over the top and down into the ground ahead, where it sticks;
         // then heaved out, the head coming up first.
-        swing(r, t, c, [[0, 35, 20, 0.6, 115, 0], [0.1, 60, 5, 0.7, 60, 0], [0.32, 205, 5, 0.85, 95, 0], [0.36, 208, 5, 0.85, 100, 0], [0.42, 55, 0, 1, 5, 0], [0.48, 54, 0, 1, 6, 0], [0.72, 52, 0, 1, 8, 0], [0.84, 75, 5, 0.75, 70, 0], [1, 35, 20, 0.6, 115, 0]]);
+        swing(r, t, c, [[0, 35, 20, 0.6, 115, 0], [0.1, 60, 5, 0.7, 60, 0], [0.32, 205, 5, 0.85, 95, 0], [0.36, 208, 5, 0.85, 100, 0], [0.42, 55, 0, 1, 5, 0], [0.48, 54, 0, 1, 6, 0], [0.72, 52, 0, 1, 8, 0], [0.84, 75, 5, 0.75, 70, 0], [1, 35, 20, 0.6, 115, 0]], { stepped });
       },
     },
     fx: {
       charge: (k, t) => {
-        k.glow(axeHead(k), 6, 0.6 * seg(t, 0.1, 0.34) * (1 - seg(t, 0.42, 0.5)));
-        const u = seg(t, 0.355, 0.425);
-        if (u > 0) rent(k, { u, from: 3.0, to: -0.55, tilt: 0.16, reach: cutReach(k, 18, 32), up: k.caster.tall * 0.78, width: 15, length: 2.3, alpha: 1 - seg(t, 0.45, 0.62) });
+        k.glow(axeHead(k), 6, 0.6 * seg(t, 0.1, 0.34) * (1 - seg(t, 0.38, 0.43)));
+        if (t > 0.35 && t < 0.5) rent(k, { secs: 0.09 });
       },
       hit: (k) => {
-        const b = k.target;
-        rubble(k, k.at(b, 0.05), 22, 1.2);
-        k.burst(k.heart(b), 30, { kind: 'spark', colour: [k.pal.core, k.pal.accent], size: 2.2, life: [0.25, 0.55], speed: [1, 2.6], up: [8, 34], gravity: 70 });
-        blood(k, k.heart(b), 10);
+        const bite = biteOf(k);
+        rubble(k, bite, 22, 1.2);
+        k.burst(bite, 30, { kind: 'spark', colour: [k.pal.core, k.pal.accent], size: 2.2, life: [0.25, 0.55], speed: [1, 2.6], up: [8, 34], gravity: 70, over: true });
+        blood(k, k.heart(k.target), 10);
       },
       impact: { secs: 0.9, draw: (k, u) => {
         const b = k.target;
-        const ahead = k.toward(k.caster, b);
-        starburst(k, k.heart(b), 15 * (1.15 - 0.45 * u), { points: 8, alpha: flashOf(u, 0.05) });
-        k.scorch(b, 0.3, { colour: EARTH, alpha: 0.6 * (1 - smooth(seg(u, 0.7, 1))) });
-        cracks(k, b, 0.8, { n: 7, grow: easeOut(u * 3), heat: 1 - 0.4 * u, dir: ahead, spread: 4.6, salt: 1, width: 2.6 });
-        k.ring(b, 0.15 + 0.75 * easeOut(u), { band: 0.1 * (1 - u) + 0.02, alpha: 0.9 * (1 - u), glow: 0.6 });
-        k.light(b, 3.2, 0.9 * (1 - u));
+        const bite = biteOf(k);
+        // From where the head went into the ground, out under the creature and past it.
+        const ahead = k.toward(bite, b);
+        const run = clamp(Math.hypot(b.x - bite.x, b.y - bite.y) + 0.45, 0.8, 2.2);
+        starburst(k, { x: bite.x, y: bite.y, z: bite.z + 2 }, 15 * (1.15 - 0.45 * u), { points: 8, alpha: flashOf(u, 0.05) });
+        k.scorch(bite, 0.3, { colour: EARTH, alpha: 0.6 });
+        cracks(k, bite, run, { n: 7, grow: easeOut(u * 2.5), heat: 1 - 0.4 * u, dir: ahead, spread: 2.4, salt: 1, width: 2.6 });
+        // The shock going out over the ground, thinning to nothing as it goes rather than fading.
+        if (u < 0.85) k.ring(bite, 0.15 + 0.75 * easeOut(u), { band: 0.06 * (1 - u / 0.85) + 0.005, alpha: 1, glow: 0.6 });
+        k.light(bite, 1.8, 0.9 * (1 - u));
       } },
       linger: {
         on: 'spot',
         secs: SMASH_WIND,
         draw: (k, age, left) => {
           const b = k.target;
+          const bite = biteOf(k);
           // Cracks smouldering for as long as the caster's next swing waits, then the axe's head glinting: ready.
           const heat = 0.6 * (left / SMASH_WIND);
-          cracks(k, b, 0.8, { n: 7, grow: 1, heat, dir: k.toward(k.caster, b), spread: 4.6, salt: 1, width: 2.6, alpha: smooth(left / 0.4) });
-          if (!k.fast) k.emit(k.at(b, 0.05), 8 * heat, { kind: 'smoke', colour: '#4a3a33', size: 2.4, sizeEnd: 6, life: [0.7, 1.2], speed: [0.02, 0.08], up: [6, 12], gravity: -3, jitter: 0.3 });
+          const run = clamp(Math.hypot(b.x - bite.x, b.y - bite.y) + 0.45, 0.8, 2.2);
+          // The scorch where it went in cools and goes; the cracks draw back into it at the end rather than fading.
+          k.scorch(bite, 0.3, { colour: EARTH, alpha: 0.6 * lateFade(left, 0.4) });
+          cracks(k, bite, run, { n: 7, grow: smooth(left / 0.4), heat, dir: k.toward(bite, b), spread: 2.4, salt: 1, width: 2.6 });
+          if (!k.fast) k.emit(bite, 8 * heat, { kind: 'smoke', colour: '#4a3a33', size: 2.4, sizeEnd: 6, life: [0.7, 1.2], speed: [0.02, 0.08], up: [6, 12], gravity: -3, jitter: 0.3 });
           if (left < 0.3) k.flare(axeHead(k), 7, Math.sin((Math.PI * (0.3 - left)) / 0.3), k.pal.core, age * 3);
         },
       },
@@ -1304,34 +1520,32 @@ export const BERSERKER: Record<string, SpellVisual> = {
 
   // Whirlwind (nova, on self, 2 tiles round): Two blows at 90% on every enemy within 2 tiles of you.
   //
-  // Crouched and wound round to the right, then two full turns with the axe out at arm's length, the blade's path
-  // a torn ring round the body. Each turn's blow goes out over the ground as a ring of teeth to the 2 tiles it
-  // reaches, the second following the first.
+  // Crouched and wound round to the right, then two full turns with the axe out at arm's length, leaning into the
+  // turn, the blade's path a torn ring round the body. Each turn's blow goes out over the ground as a ring of teeth
+  // to the 2 tiles it reaches, the second following the first, and every enemy inside is struck as it passes.
   berserker_whirlwind: {
     palette: PALETTE,
     cast: {
       timing: { secs: WHIRL_SECS, release: WHIRL_FIRST, blendOut: 0.22 },
-      pose: (r, t, c) => {
+      pose: (r, t) => {
         // The turns, read back into a half turn either way so the blend at each end never unwinds them.
         const spin = whirlTurned(t) * 360 - one(t, [[0, 0], [WHIRL_GO, 50], [0.3, 0]]);
         r.pelvis = [0, 0, ((((spin + 180) % 360) + 360) % 360) - 180];
-        // Both arms out level, the axe straight out past the right fist along the arm.
+        // The weapon arm out level, the axe straight out past the fist along the arm; the other arm out for balance, fist shut.
         r.arm[1] = e3(t, [[0, [24, 14, 0]], [WHIRL_GO, [40, 50, -30]], [0.24, [88, 0, -88]], [WHIRL_END - 0.04, [88, 0, -88]], [0.84, [50, 10, -20]], [1, [24, 14, 0]]]);
         r.elbow[1] = one(t, [[0, 60], [WHIRL_GO, 70], [0.24, 6], [WHIRL_END - 0.04, 6], [0.84, 40], [1, 60]]);
         r.haft = one(t, [[0, 0], [WHIRL_GO, 30], [0.24, 82], [WHIRL_END - 0.04, 82], [0.9, 20]]);
-        r.arm[0] = e3(t, [[0, [16, 10, 0]], [WHIRL_GO, [60, 0, 30]], [0.24, [80, 0, -80]], [WHIRL_END - 0.04, [80, 0, -80]], [0.84, [30, 20, 0]], [1, [10, 10, 0]]]);
-        r.elbow[0] = one(t, [[0, 24], [WHIRL_GO, 90], [0.24, 20], [WHIRL_END - 0.04, 20], [1, 24]]);
-        r.open[0] = t > 0.2 && t < 0.8;
-        r.shape = [{ flat: one(t, [[0.18, 0], [0.26, 1], [0.72, 1], [0.8, 0]]) }, undefined];
-        r.spine = e3(t, [[0, [0, 0, 0]], [WHIRL_GO, [-10, 0, -20]], [0.24, [-4, 6, 0]], [WHIRL_END - 0.04, [-4, 6, 0]], [0.84, [-8, 0, 0]], [1, [0, 0, 0]]]);
-        r.chest = e3(t, [[0, [0, 0, 0]], [WHIRL_GO, [-6, 0, -26]], [0.24, [0, 4, 6]], [WHIRL_END - 0.04, [0, 4, 6]], [1, [0, 0, 0]]]);
-        r.head = e3(t, [[0, [0, 0, 0]], [WHIRL_GO, [-8, 0, 20]], [0.24, [-4, 0, 10]], [WHIRL_END - 0.04, [-4, 0, 10]], [1, [0, 0, 0]]]);
+        r.arm[0] = e3(t, [[0, [16, 10, 0]], [WHIRL_GO, [60, 0, 30]], [0.24, [70, 0, -70]], [WHIRL_END - 0.04, [70, 0, -70]], [0.84, [30, 20, 0]], [1, [10, 10, 0]]]);
+        r.elbow[0] = one(t, [[0, 24], [WHIRL_GO, 90], [0.24, 50], [WHIRL_END - 0.04, 50], [1, 24]]);
+        r.shape = [{ claw: one(t, [[0.18, 0], [0.26, 0.6], [0.72, 0.6], [0.8, 0]]) }, undefined];
+        r.spine = e3(t, [[0, [0, 0, 0]], [WHIRL_GO, [-10, 0, -20]], [0.24, [-6, 12, 0]], [WHIRL_END - 0.04, [-6, 12, 0]], [0.84, [-8, 0, 0]], [1, [0, 0, 0]]]);
+        r.chest = e3(t, [[0, [0, 0, 0]], [WHIRL_GO, [-6, 0, -26]], [0.24, [0, 6, 6]], [WHIRL_END - 0.04, [0, 6, 6]], [1, [0, 0, 0]]]);
+        r.head = e3(t, [[0, [0, 0, 0]], [WHIRL_GO, [-8, 0, 20]], [0.24, [-4, -8, 14]], [WHIRL_END - 0.04, [-4, -8, 14]], [1, [0, 0, 0]]]);
         r.mouth = one(t, [[0, 0], [WHIRL_GO, 0.2], [0.3, 0.6], [WHIRL_END, 0.5], [0.9, 0]]);
         for (let s = 0; s < 2; s++) {
           r.leg[s] = e3(t, [[0, [2, 2, 0]], [WHIRL_GO, [16, 12, 0]], [0.24, [10, 12, 0]], [WHIRL_END - 0.04, [10, 12, 0]], [0.84, [14, 10, 0]], [1, [2, 2, 0]]]);
-          r.knee[s] = one(t, [[0, 4], [WHIRL_GO, 34], [0.24, 20], [WHIRL_END - 0.04, 20], [0.84, 30], [1, 4]]);
+          r.knee[s] = one(t, [[0, 4], [WHIRL_GO, 34], [0.24, 22], [WHIRL_END - 0.04, 22], [0.84, 30], [1, 4]]);
         }
-        r.carried = 1;
         r.wield = 1;
       },
     },
@@ -1340,15 +1554,16 @@ export const BERSERKER: Record<string, SpellVisual> = {
         const b = k.caster;
         const R = k.fx.reach ?? 2;
         const go = seg(t, WHIRL_GO, WHIRL_END);
-        // Where the blade is round the body, in the same turns the pose makes.
+        // Where the blade is round the body, in the same turns the pose makes (the other way round when swung left-handed).
         if (go > 0 && go < 1) {
           const ang = -Math.PI / 2 + TAU * whirlTurned(t);
           swirl(k, b, ang, 2.6 * Math.min(1, go * 5, (1 - go) * 5), 15);
-          k.ring(b, R, { band: 0.03, alpha: 0.3 * smooth(go * 4) * (1 - smooth(seg(go, 0.85, 1))), dash: 3, turn: -ang * 0.3, glow: 0.2 });
+          k.ring(b, R, { band: 0.03, alpha: 0.3 * smooth(go * 4) * (1 - smooth(seg(go, 0.85, 1))), dash: 3, turn: -ang * 0.3 * k.side, glow: 0.2 + 0.4 * k.night });
           if (!k.fast) {
-            const f = k.facingDir(b);
-            const ca = Math.atan2(f.y, f.x) - ang;
-            k.emit(k.at(b, 0.03), 36, { kind: 'dust', colour: DUST, size: 3, life: [0.4, 0.7], speed: [0.8, 1.3], up: [2, 6], heading: { x: Math.cos(ca + Math.PI / 2), y: Math.sin(ca + Math.PI / 2) }, cone: 0.8, gravity: 2, drag: 0.2, jitter: 0.4 });
+            // Dust thrown off the way the blade is going.
+            const p0 = k.local(b, -Math.sin(ang) * k.side, Math.cos(ang), 0), p1 = k.local(b, -Math.sin(ang + 0.2) * k.side, Math.cos(ang + 0.2), 0);
+            const hx = p1.x - p0.x, hy = p1.y - p0.y, hl = Math.hypot(hx, hy) || 1;
+            k.emit(k.at(b, 0.03), 36, { kind: 'dust', colour: DUST, size: 3, life: [0.4, 0.7], speed: [0.8, 1.3], up: [2, 6], heading: { x: hx / hl, y: hy / hl }, cone: 0.8, gravity: 2, drag: 0.2, jitter: 0.4 });
           }
         }
         // Each blow after the first, on the turn it lands.
@@ -1372,7 +1587,8 @@ export const BERSERKER: Record<string, SpellVisual> = {
           const v = seg(since, (whirlBlow(i) - WHIRL_FIRST) * secs, (whirlBlow(i) - WHIRL_FIRST) * secs + 0.42);
           if (v <= 0 || v >= 1) continue;
           const rr = 0.3 + (R - 0.3) * easeOut(v);
-          sawRing(k, b, rr, { teeth: Math.round((TAU * R) / 0.3), alpha: 0.95 * (1 - smooth(seg(v, 0.55, 1))), tooth: 0.14, wide: 0.12, turn: i * 0.17 + v * 0.8 });
+          // As many teeth as the ring is long, so it is a saw at every size; it goes by dropping them, not by fading.
+          sawRing(k, b, rr, { teeth: Math.max(6, Math.round((TAU * rr) / 0.3)), left: 1 - smooth(seg(v, 0.6, 1)), tooth: 0.14 * (1 - 0.5 * v), wide: 0.12, turn: (i * 0.17 + v * 0.8) * k.side });
           // Every enemy within the reach struck as the ring of this blow goes through where it stands.
           for (const e of struckBy(k, R)) {
             const d = Math.hypot(e.x - b.x, e.y - b.y);
@@ -1386,7 +1602,7 @@ export const BERSERKER: Record<string, SpellVisual> = {
             starburst(k, k.heart(e), 8 * (1.1 - 0.4 * w), { points: 6, alpha: flashOf(w, 0.12), turn: i * 0.5 });
           }
         }
-        k.light(b, R + 1, 0.7 * (1 - u));
+        k.light(b, 2, 0.7 * (1 - u));
       } },
     },
   },
@@ -1394,8 +1610,9 @@ export const BERSERKER: Record<string, SpellVisual> = {
   // Earthshaker (nova, on self, 3 tiles round, lasts 1 s): With a maul in hand: a blow at 100% on every enemy within 3 tiles of you, and each one held where it stands for 1 s.
   //
   // Down into a crouch, up off the ground with the maul overhead, and down with it into the earth between the feet.
-  // The ground cracks out all round to the 3 tiles it reaches, a wave of stone standing up as it runs out, and the
-  // edge of it holds, shaking, for the second everything in it is held.
+  // The ground cracks out all round to the 3 tiles it reaches, a lip of stone standing up behind the wave as it runs
+  // out; every enemy it reaches is struck as it passes, and stone closes round its feet; the edge holds, shaking,
+  // for the second everything in it is held.
   berserker_earthshaker: {
     palette: PALETTE,
     cast: {
@@ -1420,44 +1637,57 @@ export const BERSERKER: Record<string, SpellVisual> = {
           k.state.jump = 1;
           k.burst(k.at(k.caster, 0.03), 14, { kind: 'dust', colour: DUST, size: 3.6, life: [0.5, 0.9], speed: [0.4, 0.8], up: [1, 4], gravity: 2, drag: 0.1 });
         }
-        k.glow(axeHead(k), 6, 0.7 * seg(t, 0.25, 0.42) * (1 - seg(t, 0.5, 0.56)));
-        const u = seg(t, 0.42, 0.5);
-        if (u > 0) rent(k, { u, from: 2.9, to: -0.2, tilt: 0.1, reach: 14, up: k.caster.tall * 0.95, width: 11, length: 1.8, alpha: 1 - seg(t, 0.52, 0.64) });
+        k.glow(axeHead(k), 6, 0.7 * seg(t, 0.25, 0.42) * (1 - seg(t, 0.46, 0.51)));
+        if (t > 0.4 && t < 0.58) rent(k, { secs: 0.09 });
       },
       hit: (k) => {
         const b = k.caster;
         k.flash(0.12);
         rubble(k, k.at(b, 0.05), 30, 1.8);
-        k.burst(k.at(b, 0.1), 40, { kind: 'spark', colour: [k.pal.core, k.pal.accent], size: 2, life: [0.3, 0.6], speed: [1.5, 3.2], up: [4, 22], gravity: 40, drag: 0.1 });
+        k.burst(k.at(b, 0.1), 40, { kind: 'spark', colour: [k.pal.core, k.pal.accent], size: 2, life: [0.3, 0.6], speed: [1.5, 3.2], up: [4, 22], gravity: 40, drag: 0.1, over: true });
       },
       impact: { secs: 1.0, draw: (k, u) => {
         const b = k.caster;
         const R = QUAKE_R;
         const wave = easeOut(seg(u, 0, 0.35));
-        cracks(k, b, R, { n: 10, grow: easeOut(seg(u, 0, 0.3)), heat: 1 - 0.3 * u, salt: 5, width: 3.2 });
-        k.ring(b, 0.2 + (R - 0.2) * wave, { band: 0.2 * (1 - wave) + 0.05, alpha: 1 - smooth(seg(u, 0.55, 1)), glow: 0.8 });
-        // Stone standing up behind the wave as it runs out, and settling.
-        const stand = Math.sin(Math.PI * seg(u, 0.03, 0.6));
-        if (stand > 0) k.shards(b, { n: k.fast ? 8 : 16, r: Math.max(0.3, (R - 0.2) * wave - 0.15), h: 7, grow: stand, main: STONE[0], deep: STONE[1], core: STONE[2], glow: 0 });
+        const rr = 0.2 + (R - 0.2) * wave;
+        // The cracks run out with the wave and smoulder for the hold, then draw back into the ground.
+        cracks(k, b, R, { n: 10, grow: easeOut(seg(u, 0, 0.3)) * (1 - smooth(seg(u, 0.75, 1))), heat: 1 - 0.5 * u, salt: 5, width: 3.2 });
+        // The wave's front: a thin band that thins away as the held edge of teeth comes up in its place (the linger).
+        if (u < 0.55) k.ring(b, rr, { band: 0.06 * (1 - smooth(seg(u, 0.32, 0.55))) + 0.005, alpha: 1, glow: 0.8 });
+        // A lip of stone standing up just behind the wave as it runs out, and settling into the ground.
+        const stand = Math.sin(Math.PI * seg(u, 0.03, 0.65));
+        if (stand > 0.02) lip(k, b, Math.max(0.3, rr - 0.12), 4.5 * stand);
         if (u < 0.55 && !k.fast) {
           const an = k.rand() * TAU;
-          const rr = 0.2 + (R - 0.2) * wave;
           k.burst(k.on(b.x + Math.cos(an) * rr, b.y + Math.sin(an) * rr, 1), 2, { kind: 'dust', colour: DUST, size: 3.6, life: [0.5, 0.9], speed: [0.1, 0.3], up: [2, 8], gravity: 2 });
         }
-        k.light(b, R + 1, 0.9 * (1 - u));
+        // Every enemy it reaches struck as the wave goes under it: a star on it and the ground thrown up round its feet.
+        for (const e of struckBy(k, R)) {
+          const d = Math.hypot(e.x - b.x, e.y - b.y);
+          const w = seg(rr, d - 0.1, d + 0.8);
+          if (w <= 0) continue;
+          const key = `q_${e.who && 'id' in e.who ? e.who.id : Math.round(e.x * 97 + e.y * 13)}`;
+          if (!k.state[key]) {
+            k.state[key] = 1;
+            rubble(k, k.at(e, 0.05), 10, 0.8);
+          }
+          if (w < 1) starburst(k, k.heart(e), 9 * (1.1 - 0.4 * w), { points: 7, alpha: flashOf(w, 0.1) });
+        }
+        k.light(b, 2.2, 0.9 * (1 - u));
       } },
       linger: {
         draw: (k, age, left) => {
           const b = k.caster;
           const R = QUAKE_R;
-          const a = smooth(seg(age, 0.25, 0.4)) * smooth(left / 0.35);
-          // The edge holding, shaking: everything inside it is held until it lets go.
+          // Up once the wave is out (a third of a second in), and gone with the hold.
+          const a = smooth(seg(age, 0.3, 0.42)) * smooth(left / 0.3);
+          // The edge holding, shaking: everything inside it is held until it lets go. It goes by losing its teeth.
           const shakeR = R + Math.sin(age * 70) * 0.03;
-          sawRing(k, b, shakeR - 0.14, { teeth: Math.round((TAU * R) / 0.3), alpha: 0.85 * a, tooth: 0.16, wide: 0.13, turn: Math.sin(age * 50) * 0.02, glow: 0.5 });
-          cracks(k, b, R, { n: 10, grow: 1, heat: 0.7 * a, salt: 5, width: 3.2, alpha: Math.max(0.3, a) });
+          sawRing(k, b, shakeR - 0.14, { teeth: Math.round((TAU * R) / 0.3), left: a, tooth: 0.16, wide: 0.13, turn: Math.sin(age * 50) * 0.02, glow: 0.5 + 0.5 * k.night });
           // Each enemy inside it held fast: stone closed round its feet, shaking with the edge, for the second it is held.
           for (const e of struckBy(k, R)) {
-            k.shards({ x: e.x + Math.sin(age * 60) * 0.01, y: e.y }, { n: 6, r: Math.max(0.12, (e.wide / 40) * 1.5), h: 4, grow: a, main: STONE[0], deep: STONE[1], core: STONE[2], glow: 0 });
+            lip(k, { x: e.x + Math.sin(age * 60) * 0.01, y: e.y }, Math.max(0.12, (e.wide / 40) * 1.5), 4 * a, true);
           }
         },
       },
@@ -1467,7 +1697,7 @@ export const BERSERKER: Record<string, SpellVisual> = {
   // Last Rage (buff, on self, lasts 10 s): Costs no stamina. Only below 25% of your health: for 10 s every blow you land is critical.
   //
   // Beaten down onto one knee, shaking, the ground cracking under it; then up with arms flung wide and the head
-  // thrown back in a scream, a column of dark fire going up off the body. For the 10 s it lasts the fire burns dark
+  // thrown back in a scream, a column of fire going up off the body. For the 10 s it lasts the fire burns dark
   // and high on the whole body, the eyes burn, the weapon's head is white-hot, and a crown of ten spikes over the
   // head -- every blow critical -- loses a spike a second.
   berserker_last_rage: {
@@ -1478,8 +1708,9 @@ export const BERSERKER: Record<string, SpellVisual> = {
         const q = shake(t, 0.2, 0.46, 2.4, 70);
         const roar = shake(t, 0.56, 0.84, 2, 50);
         for (let s = 0; s < 2; s++) {
-          r.arm[s] = e3(t, [[0, [12, 12, 0]], [0.2, [s ? 30 : 46, 6, 10]], [0.46, [s ? 30 : 46, 6, 10]], [0.55, [140, 60, -10]], [0.84, [142 + roar, 62, -10]], [1, [12, 12, 0]]]);
-          r.elbow[s] = one(t, [[0, 24], [0.2, s ? 60 : 30], [0.46, s ? 60 : 30], [0.55, 20], [0.84, 22], [1, 24]]);
+          // Flung up and wide, away from the body: a V, never crossed over the head, the roar shaking it.
+          r.arm[s] = e3(t, [[0, [12, 12, 0]], [0.2, [s ? 30 : 46, 6, 10]], [0.46, [s ? 30 : 46, 6, 10]], [0.55, LAST_V], [0.84, [LAST_V[0] - 2 + roar, LAST_V[1] + 3, LAST_V[2]]], [1, [12, 12, 0]]]);
+          r.elbow[s] = one(t, [[0, 24], [0.2, s ? 60 : 30], [0.46, s ? 60 : 30], [0.55, 8], [0.84, 10], [1, 24]]);
         }
         r.spine = e3(t, [[0, [0, 0, 0]], [0.2, [-24 + q, 0, 0]], [0.46, [-26, 0, 0]], [0.55, [10, 0, 0]], [0.84, [10 + roar, 0, 0]], [1, [0, 0, 0]]]);
         r.chest = e3(t, [[0, [0, 0, 0]], [0.2, [-10, 0, 0]], [0.55, [14, 0, 0]], [0.84, [12, 0, 0]], [1, [0, 0, 0]]]);
@@ -1494,7 +1725,6 @@ export const BERSERKER: Record<string, SpellVisual> = {
           r.leg[s] = e3(t, [[0, [2, 2, 0]], [0.46, [2, 2, 0]], [0.55, [s ? -4 : 6, 14, 0]], [0.84, [s ? -4 : 6, 14, 0]], [1, [2, 2, 0]]]);
           r.knee[s] = one(t, [[0, 4], [0.46, 4], [0.55, 10], [1, 4]]);
         }
-        r.carried = 1;
       },
     },
     fx: {
@@ -1508,30 +1738,33 @@ export const BERSERKER: Record<string, SpellVisual> = {
       release: (k) => {
         const b = k.caster;
         k.flash(0.22, DARK_FIRE.main);
-        k.burst(k.at(b, 0.5), 56, { kind: 'ember', colour: [DARK_FIRE.core, k.pal.main, k.pal.accent], size: 2, life: [0.5, 1], speed: [1.2, 2.6], up: [10, 40], gravity: 10, drag: 0.3, jitter: 0.12 });
+        k.burst(k.at(b, 0.5), 56, { kind: 'ember', colour: [DARK_FIRE.core, k.pal.main, k.pal.accent], size: 2, life: [0.5, 1], speed: [1.2, 2.6], up: [10, 40], gravity: 10, drag: 0.3, jitter: 0.12, over: true });
         rubble(k, k.at(b, 0.04), 16, 1.4);
       },
       impact: { secs: 1.1, draw: (k, u) => {
         const b = k.caster;
-        k.pillar(b, { r: 9, h: 55, alpha: 0.75 * flashOf(u, 0.06), main: DARK_FIRE.main, deep: DARK_FIRE.deep, core: DARK_FIRE.core });
-        sawRing(k, b, 0.35 + 1.5 * easeOut(u), { teeth: 44, alpha: 1 - smooth(seg(u, 0.3, 1)), tooth: 0.2, wide: 0.15, main: DARK_FIRE.main, deep: DARK_FIRE.deep, turn: -u * 0.5 });
-        cracks(k, b, 0.75, { n: 6, grow: 1, heat: 0.8 * (1 - u), salt: 7, width: 2.2 });
+        sawRing(k, b, 0.35 + 1.5 * easeOut(u), { teeth: 44, left: 1 - smooth(seg(u, 0.35, 1)), tooth: 0.2 * (1 - 0.4 * u), wide: 0.15, main: DARK_FIRE.main, deep: DARK_FIRE.deep, turn: -u * 0.5 });
+        // The cracks it was beaten into cool and draw back into the ground as the fire takes over.
+        cracks(k, b, 0.75, { n: 6, grow: 1 - smooth(seg(u, 0.6, 1)), heat: 0.8 * (1 - u), salt: 7, width: 2.2 });
         eyes(k, 1);
-        k.light(b, 5, 1 - 0.6 * u, DARK_FIRE.main);
+        k.light(b, 2.4, 1 - 0.6 * u, '#ff7a3a');
       } },
       linger: {
         draw: (k, age, left) => {
           const b = k.caster;
           const all = age + left;
           const a = smooth(age / 0.4) * smooth(left / 0.8);
-          warFire(k, b, { n: 10, h: 7.5, alpha: a, main: DARK_FIRE.main, deep: DARK_FIRE.deep, core: DARK_FIRE.core, salt: 3 });
+          // The column of fire at the scream is this same fire gone up three times as high, settling over a second to what
+          // burns for the rest: flame, inked in its own dark, not a pillar of light that fades through brown over the grass.
+          const up = 1 - smooth(seg(age, 0.15, 1.2));
+          warFire(k, b, { n: 9, h: 8.5 + 20 * up, alpha: a, main: up > 0.3 ? '#c8281a' : DARK_FIRE.main, deep: DARK_FIRE.deep, core: up > 0.3 ? '#ffb060' : DARK_FIRE.core, salt: 3 });
           // A spike of the crown for every second of it, one going out each second.
           const secs = Math.round(k.fx.secs ?? all);
           crown(k, k.at(b, 1.22), secs, left / all, age, a);
           eyes(k, a);
           k.glow(axeHead(k), 4, 0.8 * a, k.pal.core);
-          if (!k.fast) k.emit(k.at(b, 0.6), 10 * a, { kind: 'ember', colour: [DARK_FIRE.core, k.pal.main], size: 1.8, life: [0.4, 0.8], speed: [0.05, 0.2], up: [14, 26], gravity: 0, jitter: 0.15 });
-          k.light(b, 3, (0.45 + 0.1 * Math.sin(age * 13)) * a, DARK_FIRE.main);
+          if (!k.fast) k.emit(k.at(b, 0.6), 10 * a, { kind: 'ember', colour: [DARK_FIRE.core, k.pal.main], size: 1.8, life: [0.4, 0.8], speed: [0.05, 0.2], up: [14, 26], gravity: 0, jitter: 0.15, over: true });
+          k.light(b, 1.8, (0.45 + 0.1 * Math.sin(age * 13)) * a, '#ff7a3a');
         },
       },
     },
@@ -1539,6 +1772,98 @@ export const BERSERKER: Record<string, SpellVisual> = {
 };
 
 /* ---- helpers the spells above share, past the record so it reads first ---------------------------------------------- */
+
+/** Where Shrug It Off's wound is: on the belly, on the side of the free hand that clamped it (the left, or the right swung left-handed). */
+function wound(k: FxScene): P3 {
+  // On the front of the trunk, low on the ribs, so it moves with the hunch and the chest thrown out.
+  return k.joint(k.caster, 'chest', [-1.1 * k.side, 1.45, -1.3], 0.55);
+}
+
+/** Where a creature's neck is, for a stroke that takes the head: most of the way from its middle to its head; a person's own neck. */
+function neckOf(k: FxScene, b: Body): P3 {
+  if (b.figure) return k.joint(b, 'neck', [0, 0, 0.6], 0.8);
+  const m = k.muzzle(b), h = k.heart(b);
+  return { x: lerp(h.x, m.x, 0.6), y: lerp(h.y, m.y, 0.6), z: lerp(h.z, m.z, 0.6) };
+}
+
+/** Where an Overhead Smash's head went into the ground: under the weapon's head at the blow, kept there for the rest of the cast. */
+const biteOf = (k: FxScene): P3 => k.once('bite', () => {
+  const h = axeHead(k);
+  return k.on(h.x, h.y, 0);
+});
+
+/**
+ * Adrenaline's beat in the weapon: an after-image of it a little up and ahead of where it is, going on toward it and
+ * eaten from the grip as `p` dies down -- the swing that comes sooner -- and quick streaks up off the weapon arm.
+ */
+function quickening(k: FxScene, b: Body, p: number): void {
+  if (p <= 0.04) return;
+  const grip = k.joint(b, 'grip'), tip = k.joint(b, 'tip');
+  if (Math.hypot((tip.x - grip.x) * 40, (tip.y - grip.y) * 40, tip.z - grip.z) < 2) return;
+  const f = k.facingDir(b);
+  const off = (q: P3, s: number): P3 => ({ x: q.x + f.x * 0.05 * p * s, y: q.y + f.y * 0.05 * p * s, z: q.z + 2.4 * p * s });
+  const mid = { x: lerp(grip.x, tip.x, 0.6), y: lerp(grip.y, tip.y, 0.6), z: lerp(grip.z, tip.z, 0.6) };
+  band(k, eatTail([off(grip, 0.5), off(mid, 0.8), off(tip, 1)], 1 - p), { width: 2.8, taper: 'start', main: QUICK.main, core: QUICK.core, ink: QUICK.deep, glow: 0.6, bias: 3 });
+  if (!k.fast) k.emit(k.hand(k.lefty ? 0 : 1), 36 * p, { kind: 'spark', colour: [QUICK.core, QUICK.main], size: 1.3, life: [0.12, 0.22], speed: [0, 0.03], up: [50, 80], gravity: 0, drag: 1, jitter: 0.03, jitterZ: 2, over: true });
+}
+
+/**
+ * A lip of stone standing up out of the ground round a point, `r` tiles out, `h` height units tall: a continuous
+ * row of short teeth, as many as the ring is long, each lit on its left and shaded on its right, recorded in four
+ * arcs each sorted where it stands, so bodies inside the ring stand behind its near side and in front of its far.
+ * `collar`: a small ring of it closed round somebody's feet, its near half only, as one shape in front of them.
+ */
+function lip(k: FxScene, c: Ground, r: number, h: number, collar = false): void {
+  if (h <= 0.15 || r <= 0.05) return;
+  const n = Math.min(k.fast ? 30 : 60, Math.max(collar ? 9 : 12, Math.round((TAU * r) / 0.2)));
+  const arcs = collar ? 1 : 4, per = Math.ceil(n / arcs);
+  const cy = k.sy(k.on(c.x, c.y));
+  for (let s = 0; s < arcs; s++) {
+    const teeth: number[][] = [];
+    for (let i = s * per; i < Math.min(n, (s + 1) * per); i++) {
+      if (collar && k.sy(k.on(c.x + Math.cos(((i + 0.5) / n) * TAU) * r, c.y + Math.sin(((i + 0.5) / n) * TAU) * r)) < cy - 0.5) continue;
+      const a0 = (i / n) * TAU, a1 = ((i + 1) / n) * TAU, am = (a0 + a1) / 2 + ((hashOf(k.seed, i) - 0.5) * TAU) / n * 0.6;
+      const tall = 0.55 + 0.6 * hashOf(k.seed + 5, i);
+      const p0 = k.on(c.x + Math.cos(a0) * r, c.y + Math.sin(a0) * r), p1 = k.on(c.x + Math.cos(a1) * r, c.y + Math.sin(a1) * r);
+      const pm = k.on(c.x + Math.cos(am) * (r + 0.03), c.y + Math.sin(am) * (r + 0.03));
+      const bx = (k.sx(p0) + k.sx(p1)) / 2, by = (k.sy(p0) + k.sy(p1)) / 2;
+      teeth.push([k.sx(p0), k.sy(p0), k.sx(pm), k.sy(pm) - k.hpx(h * tall), k.sx(p1), k.sy(p1), bx, by]);
+    }
+    if (!teeth.length) continue;
+    const am = ((s + 0.5) / arcs) * TAU;
+    const at = collar ? k.on(c.x, c.y) : k.on(c.x + Math.cos(am) * r, c.y + Math.sin(am) * r);
+    k.worldDraw(at, (g) => {
+      g.globalAlpha = 1;
+      g.lineJoin = 'miter';
+      g.lineWidth = Math.max(0.6, 0.45 * k.zoom);
+      g.strokeStyle = EARTH;
+      for (const q of teeth) {
+        const lx = Math.min(q[0], q[4]) === q[0] ? 0 : 4;
+        // The lit facet (the left of the tooth on the screen) and the shaded one.
+        g.beginPath();
+        g.moveTo(q[lx], q[lx + 1]);
+        g.lineTo(q[2], q[3]);
+        g.lineTo(q[6], q[7]);
+        g.closePath();
+        g.fillStyle = STONE[2];
+        g.fill();
+        g.beginPath();
+        g.moveTo(q[4 - lx], q[5 - lx]);
+        g.lineTo(q[2], q[3]);
+        g.lineTo(q[6], q[7]);
+        g.closePath();
+        g.fillStyle = STONE[1];
+        g.fill();
+        g.beginPath();
+        g.moveTo(q[0], q[1]);
+        g.lineTo(q[2], q[3]);
+        g.lineTo(q[4], q[5]);
+        g.stroke();
+      }
+      g.lineJoin = 'round';
+    }, 0.5);
+  }
+}
 
 /** Up and back down over nought to one. */
 function bump01(u: number): number {
@@ -1578,9 +1903,9 @@ function swirl(k: FxScene, b: Body, ang: number, len: number, reach: number): vo
     if (list.length >= 2) band(k, list, { width: 9, taper: 'both', teeth: true, pivot: k.at(b, 0.6), sortAt: { x: b.x, y: b.y, z: b.z }, bias: side === 'f' ? 1.5 : -0.6 });
   };
   for (let i = 0; i <= n; i++) {
-    // Turning to the body's left (counter-clockwise from above), as the pelvis yaws.
+    // Turning to the body's left (counter-clockwise from above), as the pelvis yaws -- to its right when swung left-handed.
     const a = ang - len + (len * i) / n;
-    const p = k.local(b, -Math.sin(a) * reach, Math.cos(a) * reach, up + Math.sin(a * 2) * 0.8);
+    const p = k.local(b, -Math.sin(a) * reach * k.side, Math.cos(a) * reach, up + Math.sin(a * 2) * 0.8);
     const side = k.sy(p) >= mid ? 'f' : 'b';
     if (prev && side !== prev) {
       // Carry the point over so the two halves meet.
@@ -1678,37 +2003,9 @@ function crown(k: FxScene, at: P3, n: number, left: number, age: number, a: numb
 }
 
 /*
- * Each cast is blended in and out here rather than by the framework's own blend
- * (`blend: false`), for two things that blend must not do to these poses: the
- * hand goals of `reach` come in by their share where they are, rather than
- * slid out from the feet, and the weapon stays in the right fist (`carried`
- * is a hand, nought or one; halfway between is no hand at all). Every other
- * number is mixed as the framework mixes it.
+ * Every cast here is made with what is in the hands, and a battle axe or a maul carried on the left shoulder (seen
+ * from facings 3, 6 and 7) is swung from the left: the framework mirrors these right-handed poses onto the left side
+ * (`cast.mirror`) and blends them in and out itself, so the weapon stays in the fist it was carried in from the first
+ * frame to the last.
  */
-type Mixed = number | boolean | string | Mixed[] | { [k: string]: Mixed } | undefined;
-const copyOf = (v: Mixed): Mixed => (Array.isArray(v) ? v.map(copyOf) : v && typeof v === 'object' ? Object.fromEntries(Object.entries(v).map(([k, x]) => [k, copyOf(x)])) : v);
-function mixOf(from: Mixed, to: Mixed, w: number): Mixed {
-  if (typeof to === 'number') return (typeof from === 'number' ? from : 0) + (to - (typeof from === 'number' ? from : 0)) * w;
-  if (Array.isArray(to)) return to.map((x, i) => mixOf(Array.isArray(from) ? from[i] : undefined, x, w));
-  if (to && typeof to === 'object') {
-    const f = from && typeof from === 'object' && !Array.isArray(from) ? from : {};
-    const out: { [k: string]: Mixed } = {};
-    for (const k of Object.keys(to)) out[k] = mixOf(f[k], to[k], w);
-    return out;
-  }
-  return w >= 0.5 ? to : from ?? to;
-}
-for (const v of Object.values(BERSERKER)) {
-  const pose = v.cast.pose, timing = v.cast.timing;
-  v.cast.blend = false;
-  v.cast.pose = (r, t, c) => {
-    const base = copyOf(r as unknown as Mixed);
-    pose(r, t, c);
-    const reach = r.reach;
-    r.reach = undefined;
-    const w = castWeight(t, timing);
-    Object.assign(r, mixOf(base, r as unknown as Mixed, w) as unknown as Rig);
-    if (reach) r.reach = [reach[0] && { ...reach[0], w: (reach[0].w ?? 1) * w }, reach[1] && { ...reach[1], w: (reach[1].w ?? 1) * w }];
-    if (c.carry) r.carried = 1;
-  };
-}
+for (const v of Object.values(BERSERKER)) v.cast.mirror = true;
