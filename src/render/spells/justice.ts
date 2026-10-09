@@ -1550,16 +1550,16 @@ const judgmentForm = (t: number, i: number, n: number): number => {
   return smooth(seg(t, t0, t0 + 0.16));
 };
 /**
- * The creatures Judgment comes down on: the wild ones standing within its reach when the swords first form -- never a
- * companion or a beast somebody keeps, which the rule does not touch -- nearest the spot first, kept by who they are
- * (`k.state`) so the same ones are followed wherever they go. The island does not say which were hunting somebody, and
- * so which it really hurt; these are the ones there that it may.
+ * The creatures Judgment comes down on: those the island said it struck and marked (only the ones hunting somebody), or
+ * where it did not say, the wild ones standing within its reach when the swords first form -- never a companion or a
+ * beast somebody keeps, which the rule does not touch -- nearest the spot first, kept by who they are (`k.state`) so the
+ * same ones are followed wherever they go.
  */
 function judged(k: FxScene): Array<Body | null> {
   if (!k.state.picked) {
     k.state.picked = 1;
     const pet = k.companion;
-    const there = k.enemiesWithin(JUDGMENT_R, k.spot)
+    const there = k.struck(JUDGMENT_R, k.spot)
       .filter((b) => !b.companion && !(pet && Math.hypot(b.x - pet.x, b.y - pet.y) < 0.3))
       .sort((a, b) => Math.hypot(a.x - k.spot.x, a.y - k.spot.y) - Math.hypot(b.x - k.spot.x, b.y - k.spot.y));
     // A sword for every creature there, as many as there are swords; the nearest few of them also carry the mark.
@@ -1572,8 +1572,9 @@ function judged(k: FxScene): Array<Body | null> {
   }
   const n = k.state.judgedN ?? 0;
   if (!n) return [];
-  // Followed a little past the reach: a creature struck at the edge that steps out is still marked.
-  const near = k.bodiesWithin(JUDGMENT_R + 4, k.spot, ['creature']);
+  // Followed a little past the reach: a creature struck at the edge that steps out is still marked; and one the island
+  // said it struck, wherever it has gone.
+  const near = k.hit ?? k.bodiesWithin(JUDGMENT_R + 4, k.spot, ['creature']);
   const out: Array<Body | null> = [];
   for (let i = 0; i < n; i++) {
     const id = k.state[`judged${i}`];
@@ -2609,7 +2610,9 @@ export const JUSTICE: Record<string, SpellVisual> = {
           for (const b of judged(k).slice(0, JUDGED_MOST)) {
             // Each seal comes as its sword goes up, so the two never stand over it together.
             const t0 = judgmentFall(i++) + 0.14 + 1.05;
-            const a = smooth((age - t0) / 0.3) * smooth(left / 0.8);
+            // For as long as the island says that one's mark lasts.
+            const ends = b ? k.secsOn(b, age + left) : age + left;
+            const a = smooth((age - t0) / 0.3) * smooth(Math.min(left, ends - age) / 0.8);
             if (!b || a <= 0.01) continue;
             const p = over(k, b, 3 + 0.5 * Math.sin(age * 1.6 + i));
             lozenge(k, p, 4.4, { alpha: 0.9 * a, spin: flipTurn(age / 2.5 + i * 0.3), glow: lerp(0.5, 1, k.night) });

@@ -21,7 +21,7 @@
  */
 import type { CastPose, PoseCue, SpellVisual } from './index';
 import {
-  arcAt, bump, clamp, dry, easeIn, easeOut, flashOf, glowPicture, hashOf, lateFade, lerp, mid3, seg, smooth, TAU,
+  arcAt, bump, clamp, dry, easeIn, easeOut, flashOf, glowPicture, hashOf, lateFade, lerp, mid3, seg, smooth, TAU, USED_FADE,
   type Body, type FxScene, type P3, type ShapePiece, type SpellPalette,
 } from './kit';
 import { armToward, figureStance, standFeet, type Euler, type HandShape, type Rig, type V3 } from '../figure';
@@ -641,7 +641,7 @@ function burnWatched(k: FxScene, b: Body, slot: string, age: number, secs: numbe
 
 /** A burn lingering on what it was cast at, at the strength its numbers say, for as long as the island has it burning. */
 function burnLinger(k: FxScene, age: number, left: number): void {
-  burnWatched(k, k.target, 't', age, k.fx.secs ?? age + left, burnPower(k.fx.each));
+  burnWatched(k, k.target, 't', age, k.secsOn(k.target, k.fx.secs ?? age + left), burnPower(k.fx.each));
 }
 
 /** The creatures in `ids` (`k.state[prefix + i]`, `k.state[prefix + 'n']` of them), wherever they have got to, by slot. */
@@ -649,17 +649,21 @@ function marked(k: FxScene, prefix: string, c: { x: number; y: number }, r: numb
   const n = k.state[`${prefix}n`] ?? 0;
   if (!n) return [];
   const out: Array<[number, Body]> = [];
-  for (const b of k.bodiesWithin(r, c, ['creature'])) {
+  // Those the island said it reached are followed wherever they run; otherwise those still within `r` of where it was.
+  for (const b of k.hit ?? k.bodiesWithin(r, c, ['creature'])) {
     if (b.who?.kind !== 'creature') continue;
     for (let i = 0; i < n; i++) if (k.state[`${prefix}${i}`] === b.who.id) out.push([i, b]);
   }
   return out;
 }
 
-/** Remember the creatures within `r` of `c` now, by their ids, up to `most` of them: who an area spell caught. */
+/**
+ * Remember who an area spell caught, by their ids, up to `most` of them: the creatures the island said its fire took
+ * (`k.struck`), or where it did not say, every creature within `r` of `c` now.
+ */
 function mark(k: FxScene, prefix: string, c: { x: number; y: number }, r: number, most: number): void {
   let n = 0;
-  for (const b of k.bodiesWithin(r, c, ['creature'])) {
+  for (const b of k.hit ? k.struck(r, c) : k.bodiesWithin(r, c, ['creature'])) {
     if (b.who?.kind !== 'creature' || n >= most) continue;
     k.state[`${prefix}${n++}`] = b.who.id;
   }
@@ -757,6 +761,12 @@ function kindle(k: FxScene, at: P3, u: number, size = 1.8): void {
  */
 function quarryOf(k: FxScene): Body | null {
   const R = k.fx.reach ?? 10;
+  // The island says which it went to, when it says anything: the one creature its fire reached.
+  if (k.state.q === undefined && k.hit) {
+    const got = k.struck(R, k.caster)[0] ?? null;
+    k.state.q = got?.who?.kind === 'creature' ? got.who.id : -1;
+    return got;
+  }
   if (k.state.q === undefined) {
     let best: Body | null = null, bd = Infinity;
     for (const b of k.bodiesWithin(R, k.caster, ['creature'])) {
@@ -2041,11 +2051,17 @@ export const KINDLER: Record<string, SpellVisual> = {
         on: 'caster',
         draw: (k, age, left) => {
           // Banked in the fist: a coal glowing through the fingers, and a small tongue standing off it that swells and
-          // sinks on a slow beat -- heat kept for the next fire, breathing. It gutters only as the last seconds go.
-          const a = smooth(age / 0.5) * smooth(left / 1.5);
-          const gutter = left < 5 ? 0.6 + 0.4 * Math.abs(Math.sin(age * 9)) : 1;
+          // sinks on a slow beat -- heat kept for the next fire, breathing. It gutters only as the last seconds go; and
+          // when the island says the next fire spent it (`k.used`), it goes out of the fist into that fire at once.
+          const spent = k.used >= 0 ? smooth(k.used / USED_FADE) : 0;
+          const a = smooth(age / 0.5) * (k.used >= 0 ? 1 - spent : smooth(left / 1.5));
+          const gutter = left < 5 && k.used < 0 ? 0.6 + 0.4 * Math.abs(Math.sin(age * 9)) : 1;
           const at = k.hand(1);
           const coal = { ...at, z: at.z + 0.6 };
+          if (k.used >= 0 && !k.state.spent) {
+            k.state.spent = 1;
+            k.burst(coal, 18, { kind: 'spark', colour: [PALETTE.core, GOLD], size: 1.4, life: [0.15, 0.35], speed: [0.4, 1], up: [6, 20], gravity: 20, over: true });
+          }
           const beat = 0.5 + 0.5 * Math.sin((age / 3) * TAU - Math.PI / 2);
           k.orb(coal, 1.5, { ...COAL, core: PALETTE.accent, alpha: a, glow: 0.6 * gutter, bias: 1, turn: age * 0.7 });
           handFlame(k, { ...coal, z: coal.z + 0.6 }, (0.9 + 1.5 * beat) * gutter, 0.9, 1 + 0.5 * beat, a);
@@ -2698,7 +2714,7 @@ export const KINDLER: Record<string, SpellVisual> = {
           for (const [i, b] of marked(k, 'f', c, R * 4)) {
             // Burning from when the wall reached it, not before.
             const lit = reachedAt(Math.hypot(b.x - c.x, b.y - c.y), 0.5, R) * 0.7 * FIRESTORM_WAVE;
-            if (age > lit) burnWatched(k, b, `f${i}`, age - lit, k.fx.secs ?? age + left, burnPower(k.fx.each), false);
+            if (age > lit) burnWatched(k, b, `f${i}`, age - lit, k.secsOn(b, k.fx.secs ?? age + left), burnPower(k.fx.each), false);
           }
           const total = k.fx.secs ?? age + left;
           // The field is the wall's until it is done.

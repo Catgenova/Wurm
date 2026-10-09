@@ -427,13 +427,15 @@ function forearmWound(k: FxScene): { at: P3; ang: number } {
 const MOST_MARKED = 8;
 
 /**
- * Everybody of these kinds an area spell round the caster covers, the caster
- * left out (their own part is drawn already), the nearest first, with the
- * share of the radius each stands at: what a ring going out reaches in turn.
+ * Everybody of these kinds an area spell round the caster covers -- those the
+ * island said it healed, or where it did not say, everybody standing in it --
+ * the caster left out (their own part is drawn already), the nearest first,
+ * with the share of the radius each stands at: what a ring going out reaches
+ * in turn.
  */
 function covered(k: FxScene, r: number, kinds: ReadonlyArray<Body['kind']>): Array<{ b: Body; d: number }> {
   const out: Array<{ b: Body; d: number }> = [];
-  for (const b of k.bodiesWithin(r, k.caster, kinds)) {
+  for (const b of k.reached(r, k.caster, kinds)) {
     const d = Math.hypot(b.x - k.caster.x, b.y - k.caster.y);
     if (d < 0.05) continue;
     out.push({ b, d: d / r });
@@ -1494,7 +1496,8 @@ export const CHIRURGEON: Record<string, SpellVisual> = {
         const st = k.state;
         st.cx = k.caster.x; st.cy = k.caster.y;
         let n = 0;
-        for (const b of k.bodiesWithin(R, k.caster, ['creature'])) {
+        // Those the island said it took, or where it did not say, every creature standing in it.
+        for (const b of k.hit ? k.struck(R, k.caster) : k.bodiesWithin(R, k.caster, ['creature'])) {
           if (n >= MOST_MARKED || b.who?.kind !== 'creature') continue;
           st[`c${n}`] = b.who.id;
           st[`d${n}`] = Math.hypot(b.x - k.caster.x, b.y - k.caster.y) / R;

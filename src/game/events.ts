@@ -34,6 +34,40 @@ export interface CastSeen {
    * drawn carried from there over the cast (`cast.pull`) rather than jumping. Your own casts only.
    */
   targetFrom?: { x: number; y: number };
+  /** What the island said the cast did (`CastTold`); left out by an island from before it, and for a cast drawn from the console. */
+  told?: CastTold;
+}
+
+/**
+ * What the island said a cast did, for drawing it as it went rather than from
+ * the spell's own numbers and whatever stands near: who it reached, the
+ * seconds what it left lasts on each and whether it holds them still; the
+ * caster's waiting spells it spent (a Stoke, a Thicken); the largest skin it
+ * laid or the skin a Ward Burst broke, as a share of health; and an Execute's
+ * on a creature below its line.
+ */
+export interface CastTold {
+  hit: CastHit[];
+  used?: string[];
+  size?: number;
+  low?: boolean;
+}
+/** One that a cast reached: a creature, you or somebody else (never `spot`), how long what it left lasts on them, and whether it holds them still. */
+export interface CastHit {
+  at: CastAt;
+  secs?: number;
+  held?: boolean;
+}
+/**
+ * Something of a spell's that fired after its cast, on its own: a Ward Link
+ * laying a skin back over somebody. `by` the caster, a peer's id or null for
+ * you; `on` whom; `size` how large, as a share of health.
+ */
+export interface CastFired {
+  spell: string;
+  by: number | null;
+  on: CastAt;
+  size?: number;
 }
 /** What a spell was cast at, as it is drawn: the caster, you, somebody else, a creature, or a spot on the ground. */
 export type CastAt =
@@ -46,6 +80,8 @@ export type CastAt =
 export type GameEvents = {
   /** A spell was cast, by you or by somebody in sight: see `CastSeen`. */
   cast: [seen: CastSeen];
+  /** Something of a spell's fired after its cast, by you or by somebody in sight: see `CastFired`. */
+  castFired: [fired: CastFired];
   log: [entry: LogEntry];
   inventory: [];
   skill: [id: string, gain: number];

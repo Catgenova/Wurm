@@ -63,6 +63,9 @@ you like: `{ ...placeholder(id, PALETTE), fx: { ...placeholder(id, PALETTE).fx, 
 `linger` runs for `SpellInfo.lasts`, derived from the game's own numbers (never typed twice): `fx.secs`; a hold's
 seconds (`fx.hold`, a Binder's hold as a share of a Snare at binding 50); a skin (Warder, Aegis, Bulwark) shows for
 `SKIN_SHOWN` = 12 s because the island does not say when it is used up. Give `linger: { secs: n, draw }` to override.
+Where the island says how long what the cast left on its target lasts (`k.told`, below), a linger on the target lasts
+that instead: a Skull Crack's mark 1 s on a monster and 2 s on an animal, a Scorch's burn as long as a Firebrand made it.
+A waiting spell the island says a later cast spent (a Stoke, a Thicken) has its linger let go `USED_FADE` (0.4 s) after.
 Lingers on a creature end when the creature dies or leaves sight; `linger.on` says what a linger is on, and so what
 ends it early: `'target'` (the default), `'caster'` (a stance or a skin of one's own after a strike: it plays on when the
 creature struck dies, and ends only if the caster goes) or `'spot'` (an area on the ground: only its seconds end it).
@@ -232,9 +235,12 @@ Who is in reach: `k.enemiesWithin(r, c = k.spot)` — the creatures anybody may 
 beast on a deed or in a pen, yours or anybody's): **what an area harm strikes** (a ricochet, a fan of blades, a
 judgment). `k.bodiesWithin(r, c = k.spot, kinds?)` → every person and creature standing within `r` tiles of `c`
 (the caster among them when inside), each a `Body` whose `kind` ('player' | 'peer' | 'creature') and `who` tell them
-apart — lay a skin on every ally a ward covers, a mark on every creature a judgment hits:
-`for (const b of k.bodiesWithin(k.fx.reach, k.caster, ['player', 'peer'])) k.shell(b, ...)`. Asked of the world once a
-frame for the same numbers; the island does not say who a spell actually reached, so this is who is there.
+apart. Asked of the world once a frame for the same numbers: this is who is there. **Who the cast reached** is what the
+island says (`k.told`, below), through `k.struck(r, c)` (the creatures it struck: blows that landed, fire that took,
+flights, holds; `enemiesWithin(r, c)` where it said nothing) and `k.reached(r, c, kinds)` (everybody it reached: a
+Rally's people, a Sanctuary's skins; `bodiesWithin(r, c, kinds)` where it said nothing). Lay a skin on every ally a
+ward covered, a mark on every creature a judgment hit:
+`for (const b of k.reached(k.fx.reach, k.caster, ['player', 'peer'])) k.shell(b, ...)`.
 
 A creature body also carries `species` (for `k.muzzle`), `reach` (how near it strikes from, in tiles: 1.1, or 6 for
 a thrower — a reach advantage is measured from it), `tame`, `companion`, `hostile` (hunting or fighting somebody), and
@@ -243,8 +249,33 @@ a thrower — a reach advantage is measured from it), `tame`, `companion`, `host
 with no model).
 
 What is on a creature, where the island's payload says: `k.target.burning` (a Kindler's burn running — Combust),
-`k.target.bleeding` (a knife's bleed running), `k.target.held` (a trap holding it). People carry none of these, and no
-other mark is in the payload.
+`k.target.bleeding` (a knife's bleed running), `k.target.held` (a trap holding it, or a hold an earlier cast was told
+of — a Bind, a Lock, a Skull Crack, an Earthshaker, a Still field — for as long as the island said it holds: a Shatter
+on one is the larger). People carry none of these, and no other mark is in the payload.
+
+### What the island says a cast did: `k.told`
+
+The island tells the caster what each cast did (`rpc_cast_spell`'s answer, `fx_told`), and the caster's browser passes
+it on with the cast, so every browser drawing it has the same. `k.told` is null where it says nothing (an island from
+before it; the preview with `told: false`): every helper below then falls back to what stands near, as before.
+
+| field | what | read it with |
+|---|---|---|
+| `hit` | who it reached, each `{ who, secs?, held? }`, in the order it reached them | `k.hit` (the bodies, where they are this frame), `k.struck`, `k.reached`, `k.reachedOn(b)` |
+| `hit[].secs` | seconds what it left on that one lasts: a hold, a root, a flight (a monster's Panic 3 s), a burn, a bleed, a slow, a mark, a buff | `k.secsOn(b, otherwise)` |
+| `hit[].held` | it holds that one still (neither moving nor striking) | `k.heldOn(b, otherwise)` |
+| `used` | the caster's waiting spells it spent: `kindler_stoke`, `warder_thicken` | on the spent one's own cast `k.used`, seconds since (−1 while it waits); on the cast that spent it `k.told.used` (a skin laid with a Thicken is `fx.more` as large) |
+| `size` | the largest skin it laid, or the skin a Ward Burst broke, as a share of health | `k.told.size` |
+| `low` | an Execute on a creature below its line: the 300% stroke | `k.told.low` |
+
+And what fires after a cast, on its own (a Ward Link laying a skin back over somebody): the island tells the caster's
+browser, which passes it on; the stage hands it to that cast as `k.fired`, `[{ on, age, size }]`: on whom (where they
+are now), seconds since, and how large.
+
+Where there is no island to ask (`wurm.spell` in the console, the preview), `guessTold` (`guess.ts`) works the same
+fields out by the island's rules from who stands where: whom an area reaches, a monster's share of a hold, a Panic's
+monsters for their own seconds, a Fright on a monster refused (and so not drawn). `supabase/test/did.ts` holds it to what
+the island says.
 
 Time and randomness: `k.now`, `k.dt`, `k.rand()` (fresh each frame — crackle), `k.seed` + `hashOf(seed, i)`
 (stable per cast), `k.state` (your per-cast scratch numbers), `k.fast`, `k.mine` (your own cast), `k.zoom`,
@@ -479,6 +510,10 @@ burning|bleeding|held` (on the target creature; bleeding by default for a Disemb
 stood that much further out before the island dragged it in: `cast.pull`, a Hook's default from its own numbers),
 `--peers N` (N people about the target, or about the caster for a spell on oneself), `--room <tiles>` (ground round
 the caster the frame takes in, trimmed back to what was drawn; 4 for a spell on oneself), `--list 1` (every id by group).
+The sheet plays each cast with what the island would say it did (`guessTold`): a monster target (`--species ogre`) is
+held for a monster's share, a Fright on one is refused and nothing is drawn (said on stdout). `SheetOpts.told: false`
+draws it from what stands near instead, a `Told` given draws exactly that, and `SheetOpts.crowdSpecies` makes the crowd
+another kind than the target (monsters among animals, for a Panic).
 A throwing spell made with a weapon that is not thrown (a knife's Hit and Run) is placed at melee reach.
 Frames run left to right then down; each is labelled with time and phase (cast / release / after), the facing the
 caster is drawn at (turned to the companion for `face: 'companion'`, as the game turns somebody standing), and
@@ -508,9 +543,16 @@ this and saves crops: `scratchpad/anim/spells/ingame.mjs` (see its header; it ne
 
 - Your cast: spell bar → island (`rpc_cast_spell`) → on acceptance the bar raises `game.events 'cast'` with the
   real target (creature / person / spot / self); the renderer's `SpellStage` plays it. A refusal draws nothing.
-- Peers: your browser then broadcasts `{uid, spell, at, pet?, from?}` on the island's body channel (`Island.castSeen`,
-  event `cast`): `pet` your companion's creature id, `from` where you stood if the island moved you for the spell.
-  Other browsers raise the same event with the caster as that peer (`CastSeen.companion`, `CastSeen.from`), so they
-  see the real beast act and the body travel. Same visuals, `k.mine` false.
-- Lingering effects are timed from the spell's own seconds on the drawing clock; they are not restored after a
-  reload and end early only when what they are on is gone.
+- The island's answer says what the cast did (`hit`, `secs`, `held`, `used`, `size`, `low`: `ToldWire` in
+  `src/net/told.ts`); the bar raises it with the cast (`CastSeen.told`) and the stage plays it (`PlayOpts.told`, `k.told`).
+- Peers: your browser then broadcasts `{uid, spell, at, pet?, from?, told?}` on the island's body channel
+  (`Island.castSeen`, event `cast`): `pet` your companion's creature id, `from` where you stood if the island moved you
+  for the spell, `told` what the island said it did. Other browsers raise the same event with the caster as that peer
+  (`CastSeen.companion`, `CastSeen.from`, `CastSeen.told`), so they see the real beast act, the body travel and the
+  real targets. Same visuals, `k.mine` false.
+- What fires after a cast: the island sends `fx` `{spell, on, size}` to the caster's own topic (`fx_fired`); their
+  browser raises `castFired` and passes it on (event `castfx`) for everybody watching; the stage hands it to the cast
+  (`SpellStage.fired`, `k.fired`).
+- Lingering effects are timed on the drawing clock from the seconds the island said (the spell's own where it said
+  none); they are not restored after a reload, and end early when what they are on is gone or the island says what
+  they show was spent.

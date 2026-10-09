@@ -9,6 +9,7 @@ import { CLASS_SPELL_BY_ID } from '../game/talents';
 import { percent } from '../game/words';
 import type { MenuItem } from './contextmenu';
 import type { FaithBook } from './faithbook';
+import { toldIn, toldOf } from '../net/told';
 
 /** What a spell is sent at (`rpc_cast_spell`'s `p_target`); the island decides what kind of thing it counts as. */
 export type SpellAim =
@@ -209,8 +210,18 @@ export class SpellBar {
     if (!spell) return;
     const moved = Math.hypot(p.x - from.x, p.y - from.y) > MOVED_BY_CAST;
     const pet = this.game.creatures.active();
+    // What the island said it did, out of the answer just taken (`fx_told`): nothing from an island from before it.
+    const wire = toldIn(this.book.said);
+    const me = this.book.island?.uid;
+    const told = wire ? toldOf(wire, (uid) => {
+      if (uid === me) return { kind: 'you' };
+      const peer = this.game.roster.list().find((q) => q.uid === uid);
+      return peer ? { kind: 'peer', id: peer.id, uid } : null;
+    }) : undefined;
     // Given whether or not it has been moved yet: the island's word of where it went may come after this.
-    this.game.events.emit('cast', { spell, by: null, at: castAtOf(this.game, aim), companion: pet?.id, from: moved ? from : undefined, targetFrom: foeFrom });
+    this.game.events.emit('cast', {
+      spell, by: null, at: castAtOf(this.game, aim), companion: pet?.id, from: moved ? from : undefined, targetFrom: foeFrom, told,
+    });
   }
 
   /** "Cast ..." for every spell on the bar that takes this, for the menu of whatever it is. */

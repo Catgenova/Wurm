@@ -14,7 +14,10 @@
  * somebody else) and by how thick they lie, which is the size of the skin.
  *
  * A skin shows for `SKIN_SHOWN` seconds, the island not saying when one is
- * used up. Over that time it has to read as a ward on the body without
+ * used up. What it does say (`k.told`) is followed: a skin laid with a
+ * Thicken waiting is drawn that much thicker, a ward over many is drawn on
+ * those it covered, a Ward Burst throws off as much skin as it broke, and a
+ * Ward Link draws the skin it lays back over somebody when it does. Over that time it has to read as a ward on the body without
  * hiding the body: the plates facing the viewer are nearly clear and only
  * their edges show, the ones seen edge-on at the rim are the solid ones (as
  * a soap bubble is), and the back half is drawn behind the body, so the
@@ -28,7 +31,8 @@
 import { HEIGHT_SCALE } from '../iso';
 import type { CastPose, SpellVisual } from './index';
 import { spellInfo } from './info';
-import { arcAt, bump, clamp, easeBack, easeIn, easeOut, flashOf, hashOf, lerp, mid3, seg, smooth, TAU, type Body, type FxScene, type P3, type SpellPalette } from './kit';
+import { spellDef, spellForce } from '../../game/arcane';
+import { arcAt, bump, clamp, easeBack, easeIn, easeOut, flashOf, hashOf, lerp, mid3, seg, smooth, TAU, USED_FADE, type Body, type FxScene, type P3, type SpellPalette } from './kit';
 import { armToward } from '../figure';
 import { armOut, euler, one, stepIn } from './poses';
 
@@ -89,6 +93,19 @@ function skinOf(id: string): number {
   const aegis = fxOf('aegis').power || 1;
   return fx.power ? fx.power / aegis : 1;
 }
+/** How many times as large a skin a Thicken waiting makes the next one. */
+const THICKEN_MORE = fxOf('warder_thicken').more || 1;
+/** A skin's size as it was laid: larger by a Thicken where the island says the cast spent one (`told.used`). */
+const thick = (k: FxScene, s: number): number => (k.told?.used?.includes('warder_thicken') ? s * THICKEN_MORE : s);
+
+/**
+ * A skin at 100% at a middling warding and cut (an Aegis's force out of a stone of 50 at warding 50, in hundredths of
+ * health), and how heavy a Ward Burst is drawn by the skin the island says it broke (`told.size`) over that: a thin one
+ * throws off fewer, smaller plates, a deep one more and larger; one, where it did not say.
+ */
+const SKIN_MID = spellForce(spellDef('aegis')!, 50, 50, 1) / 100;
+const burstHeft = (k: FxScene): number => (k.told?.size !== undefined ? clamp(k.told.size / SKIN_MID, 0.4, 2) : 1);
+
 /** How solid a skin's plates are drawn: a thin one is mostly edges, a full one has faces. */
 const fillOf = (skin: number): number => 0.16 + 0.34 * Math.min(1, skin);
 /** And how heavy its edges are. */
@@ -1527,20 +1544,22 @@ const same = (a: Body, b: Body): boolean => (a.who && b.who ? whoKey(a) === whoK
  * within `R` tiles the first frame it is asked (the island covers who is
  * there as it closes, so somebody who walks in later is not drawn covered),
  * found again each frame wherever they have gone, nearest first and at most
- * `most` of them. Each comes with how far they stood, for a skin that
- * reaches them a moment after the caster's.
+ * `most` of them; with `told`, those the island said the cast reached, where
+ * it said. Each comes with how far they stood, for a skin that reaches them a
+ * moment after the caster's.
  */
-function covered(k: FxScene, R: number, most = 8): Array<{ b: Body; d: number }> {
+function covered(k: FxScene, R: number, most = 8, told = false): Array<{ b: Body; d: number }> {
   const c = k.caster;
   if (!k.state.counted) {
     k.state.counted = 1;
-    for (const b of k.bodiesWithin(R, c, ['player', 'peer'])) {
+    // With `told`, those the island said the cast laid on (`k.reached`): a ward's skin goes only where it is the larger.
+    for (const b of told ? k.reached(R, c, ['player', 'peer']) : k.bodiesWithin(R, c, ['player', 'peer'])) {
       if (!same(b, c)) k.state['in:' + whoKey(b)] = 1 + Math.hypot(b.x - c.x, b.y - c.y);
     }
   }
   const out: Array<{ b: Body; d: number }> = [];
   // Looked for a little further out than the reach, as they may have walked off; the skin goes with them.
-  for (const b of k.bodiesWithin(R + 8, c, ['player', 'peer'])) {
+  for (const b of told && k.hit ? k.hit : k.bodiesWithin(R + 8, c, ['player', 'peer'])) {
     const d = k.state['in:' + whoKey(b)];
     if (d && !same(b, c)) out.push({ b, d: d - 1 });
   }
@@ -1573,7 +1592,7 @@ const ward = (): SpellVisual => {
         k.flare(k.chest(), 7 * (1 - u), flashOf(u, 0.1));
       } },
       // Knitted a beat after the release, while the hand is still going down over it, so it is seen smoothed on.
-      linger: { draw: (k, age, left) => skinLinger(k, k.caster, age, left, { knit: { from: 'point', th: frontOf(k.caster), ph: 0.35 }, secs: 0.5, delay: 0.1, skin: s }) },
+      linger: { draw: (k, age, left) => skinLinger(k, k.caster, age, left, { knit: { from: 'point', th: frontOf(k.caster), ph: 0.35 }, secs: 0.5, delay: 0.1, skin: thick(k, s) }) },
     },
   };
 };
@@ -1603,7 +1622,7 @@ const wardOther = (): SpellVisual => {
         stamp(k, k.target, u, 0.28, 0.42);
         k.flare(k.heart(k.target), 8 * (1 - u), flashOf(u, 0.1));
       } },
-      linger: { draw: (k, age, left) => skinLinger(k, k.target, age, left, { knit: { from: 'point', th: bearing(k, k.target, k.caster), ph: 0.3 }, secs: 0.5, skin: s }) },
+      linger: { draw: (k, age, left) => skinLinger(k, k.target, age, left, { knit: { from: 'point', th: bearing(k, k.target, k.caster), ph: 0.3 }, secs: 0.5, skin: thick(k, s) }) },
     },
   };
 };
@@ -1649,7 +1668,7 @@ const greaterWard = (): SpellVisual => {
         }
         k.light(b, 2, 0.7 * (1 - u));
       } },
-      linger: { draw: (k, age, left) => skinLinger(k, k.caster, age, left, { knit: { from: 'down' }, secs: fall, skin: s, cover: laid, hot: 0.5 }) },
+      linger: { draw: (k, age, left) => skinLinger(k, k.caster, age, left, { knit: { from: 'down' }, secs: fall, skin: thick(k, s), cover: laid, hot: 0.5 }) },
     },
   };
 };
@@ -1690,10 +1709,10 @@ const deepWard = (): SpellVisual => {
         k.light(b, 2, 0.5 * (1 - u));
       } },
       linger: { draw: (k, age, left) => {
-        skinLinger(k, k.caster, age, left, { knit: { from: 'up' }, secs: 0.55, skin: s / 2, spin: 0.1, hot: 0.5 });
+        skinLinger(k, k.caster, age, left, { knit: { from: 'up' }, secs: 0.55, skin: thick(k, s) / 2, spin: 0.1, hot: 0.5 });
         // The second skin, the half of it past a full one: wider, deeper green, turning the other way, and laid once the
         // first has settled, so the two are never hot together.
-        skinLinger(k, k.caster, age, left, { knit: { from: 'up' }, secs: 0.55, delay: 0.45, skin: s / 2, size: 1.16, spin: -0.08, pal: OUTER, layer: 1, hot: 0.35 });
+        skinLinger(k, k.caster, age, left, { knit: { from: 'up' }, secs: 0.55, delay: 0.45, skin: thick(k, s) / 2, size: 1.16, spin: -0.08, pal: OUTER, layer: 1, hot: 0.35 });
       } },
     },
   };
@@ -1757,7 +1776,7 @@ const greaterWardOther = (): SpellVisual => {
         stamp(k, b, u, 0.32, 0.52);
         k.light(b, 3, 0.6 * (1 - u));
       } },
-      linger: { draw: (k, age, left) => skinLinger(k, k.target, age, left, { knit: { from: 'spiral', th: bearing(k, k.target, k.caster) }, secs: 0.6, skin: s }) },
+      linger: { draw: (k, age, left) => skinLinger(k, k.target, age, left, { knit: { from: 'spiral', th: bearing(k, k.target, k.caster) }, secs: 0.6, skin: thick(k, s) }) },
     },
   };
 };
@@ -1801,7 +1820,12 @@ const thicken = (): SpellVisual => {
       linger: { draw: (k, age, left) => {
         const v = seg(age, 0.3, 0.8);
         if (v <= 0) return;
-        const a = v * smooth(left / 1);
+        // Until the island says the next skin spent it (`k.used`): then the bracer goes off the arm into that skin at once.
+        const a = v * (k.used >= 0 ? 1 - smooth(k.used / USED_FADE) : smooth(left / 1));
+        if (k.used >= 0 && !k.state.spent) {
+          k.state.spent = 1;
+          k.burst(k.joint(k.caster, 'elbow0', [0, 0, -1.0]), 12, { kind: 'shard', colour: [PALETTE.main, PALETTE.core], size: 1.6, life: [0.2, 0.4], speed: [0.3, 0.7], up: [2, 10], gravity: 30, ink: false });
+        }
         // Waiting for the next skin: plates going round the left forearm as a bracer, a whole ring of them and half a
         // ring again over it -- the skin and the half more the next one will be -- on the body, moving with the arm.
         const b = k.caster;
@@ -1861,6 +1885,9 @@ function chain(k: FxScene, c: { x: number; y: number }, reach: number, rings: nu
     { kind: 'stroke', colour: o.colour, alpha: o.alpha, width: W * 1.3, paths: bars, cap: 'round', lift },
   ]);
 }
+
+/** Seconds a skin a Ward Link lays back over somebody is drawn knitting over them, from when the island says it fired. */
+const LINK_SHOWN = 3;
 
 /** Ward Link: links wound up round the caster, then sent out along the ground in six chains to a ring at the link's reach; a linked pair over the head for as long as it holds. */
 const wardLink = (): SpellVisual => {
@@ -1931,6 +1958,13 @@ const wardLink = (): SpellVisual => {
         link(k, k.at(b, 1.26), 5.5 * pulse, { alpha: 0.9 * a, turn: age * 1.1 });
         // A smaller pair over everybody it links: theirs is the skin that comes back.
         for (const { b: o } of covered(k, R)) link(k, k.at(o, 1.22), 4 * pulse, { alpha: 0.75 * a, turn: age * 1.1 + 1 });
+        // And the skin it lays back over somebody whose skin of yours was used up, where and when the island says it did
+        // (`k.fired`): knitted round them for a few seconds, as large as it laid it.
+        for (const f of k.fired) {
+          if (!f.on || f.age >= LINK_SHOWN) continue;
+          stamp(k, f.on, clamp(f.age / 0.6), 0.26, 0.4);
+          skinLinger(k, f.on, f.age, LINK_SHOWN - f.age, { knit: { from: 'spiral', th: bearing(k, f.on, b) }, secs: 0.5, skin: fxOf(id).skin || 0.3, lit: false });
+        }
         k.ring(b, 0.32, { n: 6, turn: Math.PI / 6, band: 0.04, alpha: 0.35 * a, glow: 0.2 });
       } },
     },
@@ -1991,7 +2025,8 @@ const wardBurst = (): SpellVisual => {
       },
       impact: { secs: 1.0, draw: (k, u) => {
         const b = k.caster;
-        const n = k.fast ? 9 : 16;
+        const heft = burstHeft(k);
+        const n = Math.round((k.fast ? 9 : 16) * (0.5 + 0.5 * Math.min(1.25, heft)));
         const flying: Plates = [];
         for (let i = 0; i < n; i++) {
           const an = (i / n) * TAU + hashOf(k.seed, i) * 0.4;
@@ -2004,7 +2039,7 @@ const wardBurst = (): SpellVisual => {
           // From where it lay on the skin, not from the middle of the body.
           const d = lerp((b.wide * 2.6) / 40, far, v), px = b.x + Math.cos(an) * d, py = b.y + Math.sin(an) * d;
           const p = { x: px, y: py, z: k.ground(px, py) + Math.max(0.6, z) };
-          plate(k, p, 3.2, { alpha: 1 - fall * fall, spin: fall > 0 ? 1.2 : an + u * 20, tip: fall > 0 ? 1 : 0, hot: v < 0.75 ? 1 : 0, glow: 0.4 * (1 - fall), into: flying });
+          plate(k, p, 3.2 * (0.75 + 0.25 * heft), { alpha: 1 - fall * fall, spin: fall > 0 ? 1.2 : an + u * 20, tip: fall > 0 ? 1 : 0, hot: v < 0.75 ? 1 : 0, glow: 0.4 * (1 - fall), into: flying });
         }
         // Sorted with the caster while they leave the body; once they are out and lying on the ground, under everything.
         drawPlates(k, b, flying, u < 0.45 ? 1 : -2);
@@ -2013,10 +2048,11 @@ const wardBurst = (): SpellVisual => {
         hexRow(k, b, 0.5 + (R - 0.5) * ring, 0.15 * (1 - 0.3 * ring), { alpha: smooth(u / 0.04) * (1 - smooth(seg(u, 0.35, 0.8))), turn: u * 0.8 });
         // Where it stopped, held a moment as the plates lie there.
         hexRow(k, b, R, 0.1, { alpha: 0.7 * bump(u, 0.3, 0.42, 0.9), turn: Math.PI / 6 });
-        k.flare(k.at(b, 0.5), 8 * (1 - u), flashOf(u, 0.05));
+        k.flare(k.at(b, 0.5), 8 * (0.7 + 0.3 * heft) * (1 - u), flashOf(u, 0.05));
         k.light(b, 2, 0.9 * (1 - u));
-        // Every creature inside it is struck as the plates reach it: a flash and chips of topaz off it.
-        for (const c of k.bodiesWithin(R, b, ['creature'])) {
+        // Every creature it struck as the plates reach it (those the island said its fire took, or where it did not say,
+        // every creature inside it): a flash and chips of topaz off it.
+        for (const c of k.hit ? k.struck(R, b) : k.bodiesWithin(R, b, ['creature'])) {
           const at = (Math.hypot(c.x - b.x, c.y - b.y) / R) * 0.4, key = 'hit' + whoKey(c);
           if (u < at) continue;
           if (!k.state[key]) {
@@ -2187,9 +2223,10 @@ const sanctuary = (): SpellVisual => {
       } },
       linger: { draw: (k, age, left) => {
         hexRow(k, k.caster, R, 0.2, { alpha: 0.85 * (1 - smooth((age - 1.2) / 2)), turn: 0.1 });
-        skinLinger(k, k.caster, age, left, { knit: { from: 'down' }, secs: 0.6, delay: 0.65, skin: s });
+        // Over the caster unless the island says theirs was larger already.
+        if (k.reachedOn(k.caster)) skinLinger(k, k.caster, age, left, { knit: { from: 'down' }, secs: 0.6, delay: 0.65, skin: thick(k, s) });
         // And over everybody else it closed over, as the fall of light reaches them.
-        for (const { b, d } of covered(k, R)) skinLinger(k, b, age, left, { knit: { from: 'down' }, secs: 0.6, delay: 0.7 + d * 0.06, skin: s, lit: false });
+        for (const { b, d } of covered(k, R, 8, true)) skinLinger(k, b, age, left, { knit: { from: 'down' }, secs: 0.6, delay: 0.7 + d * 0.06, skin: thick(k, s), lit: false });
       } },
     },
   };
@@ -2257,7 +2294,7 @@ const bastion = (): SpellVisual => {
         }
         stoneSkin(k, b, age, left, secs, count, 0.12);
         // On everybody it covered too, as the shock reaches where they stand.
-        covered(k, R, 6).forEach(({ b: o, d }, i) => stoneSkin(k, o, age, left, secs, count, 0.12 + (d / R) * 0.3, `:${i}`));
+        covered(k, R, 6, true).forEach(({ b: o, d }, i) => stoneSkin(k, o, age, left, secs, count, 0.12 + (d / R) * 0.3, `:${i}`));
       } },
     },
   };
@@ -2371,7 +2408,7 @@ const aegis = (): SpellVisual => {
         stamp(k, b, u, 0.3, 0.5);
       } },
       linger: { draw: (k, age, left) => {
-        skinLinger(k, k.caster, age, left, { knit: { from: 'close', th: frontOf(k.caster) }, secs: close, skin: s, size: 0.95, spin: 0, pal: TOPAZ });
+        skinLinger(k, k.caster, age, left, { knit: { from: 'close', th: frontOf(k.caster) }, secs: close, skin: thick(k, s), size: 0.95, spin: 0, pal: TOPAZ });
         // Where it closed stays to be seen for as long as it is over them, and a glint runs down it every few seconds: an
         // Aegis is one skin, sealed, and that seam is what tells it from a Ward across a field.
         const ph = (age - close * 2) % 3.6;
@@ -2472,7 +2509,7 @@ const bulwark = (): SpellVisual => {
     if (v <= 0 || v >= 1) return;
     const b = k.caster;
     const to: Array<{ o: Body; n: number }> = [{ o: b, n: k.fast ? 3 : 6 }];
-    for (const { b: o } of covered(k, R)) to.push({ o, n: k.fast ? 1 : 2 });
+    for (const { b: o } of covered(k, R, 8, true)) to.push({ o, n: k.fast ? 1 : 2 });
     const flying: Plates = [];
     to.forEach(({ o, n }, j) => {
       const aim = Math.atan2(o.y - b.y, o.x - b.x);
@@ -2511,10 +2548,10 @@ const bulwark = (): SpellVisual => {
       linger: { draw: (k, age, left) => {
         // Laid as the plates thrown in off the wall land (`inward`), the impact being 1.3 s.
         const landed = LAND * 1.3 - 0.06;
-        skinLinger(k, k.caster, age, left, { knit: { from: 'up' }, secs: 0.45, delay: landed, skin: s });
+        if (k.reachedOn(k.caster)) skinLinger(k, k.caster, age, left, { knit: { from: 'up' }, secs: 0.45, delay: landed, skin: thick(k, s) });
         // Everybody inside the wall as it folded in: theirs closes from the side the wall was, outside first, to a seam
         // toward the caster -- the plates came in from out there.
-        for (const { b } of covered(k, R)) skinLinger(k, b, age, left, { knit: { from: 'close', th: bearing(k, b, k.caster) }, secs: 0.45, delay: landed, skin: s, lit: false });
+        for (const { b } of covered(k, R, 8, true)) skinLinger(k, b, age, left, { knit: { from: 'close', th: bearing(k, b, k.caster) }, secs: 0.45, delay: landed, skin: thick(k, s), lit: false });
       } },
     },
   };

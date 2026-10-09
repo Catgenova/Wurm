@@ -42,7 +42,8 @@
  * it; with a `travel` it lands that many seconds later, without one at once;
  * `impact` plays from the landing; `linger` from the landing for the spell's
  * `lasts` (its `secs`, or how long it holds -- see `SpellInfo`) or the
- * `secs` it gives itself.
+ * `secs` it gives itself, or on its target the seconds the island said it
+ * gave that one (`k.told`).
  *
  * ### The pose
  *
@@ -70,9 +71,12 @@
  * (`groundPath` on the ground); `glow`, `flare` as light; `light` for the
  * night; `burst` and `emit` for particles; `flash` for the screen. They are
  * called afresh every frame and draw only that frame. `k.bodiesWithin(r)`
- * finds who an area covers; `k.from` is where the island moved the caster
- * from for this cast; `k.target.burning` (and `bleeding`, `held`) what the
- * island says is on a creature.
+ * finds who stands in an area, and `k.struck(r)` / `k.reached(r)` who the
+ * island says the cast reached there (`k.told`: with `k.secsOn`, `k.heldOn`,
+ * `k.used` for a waiting spell spent, `k.fired` for what fired after it);
+ * `k.from` is where the island moved the caster from for this cast;
+ * `k.target.burning` (and `bleeding`, `held`) what the island says is on a
+ * creature.
  *
  * Opt-in, and nothing changes for a spell that does not ask: `cast.face`
  * (turn to the companion, or not at all), `cast.hold` (hold the pose past the

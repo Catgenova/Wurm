@@ -482,12 +482,14 @@ function fieldAt(k: FxScene): P3 {
 }
 
 /**
- * The creatures standing in an area -- not the caster's own companion -- nearest first and at most `most` of them: what an
- * area binding is drawn on. The island does not say who it reached, so this is who is there now.
+ * The creatures an area binding is drawn on -- not the caster's own companion -- nearest first and at most `most` of them:
+ * those the island said it reached (`k.struck`), wherever they are, or where it did not say, those standing in it now.
+ * Pass `age` to leave out each one once what the island said it gave that one is over (`k.secsOn`), as it lets go.
  */
-function caught(k: FxScene, c: { x: number; y: number }, r: number, most = 5): Body[] {
+function caught(k: FxScene, c: { x: number; y: number }, r: number, most = 5, age?: number): Body[] {
   const pet = k.companion;
-  return k.bodiesWithin(r, c, ['creature'])
+  return (k.hit ? k.struck(r, c) : k.bodiesWithin(r, c, ['creature']))
+    .filter((b) => age === undefined || age < k.secsOn(b, Infinity))
     .filter((b) => !pet || Math.hypot(b.x - pet.x, b.y - pet.y) > 0.05)
     .sort((a, b) => Math.hypot(a.x - c.x, a.y - c.y) - Math.hypot(b.x - c.x, b.y - c.y))
     .slice(0, most);
@@ -2217,7 +2219,7 @@ const mire: SpellVisual = {
       const r = lerp(0.85, MIRE_R, spread);
       slick(k, c, r, age, a);
       crusts(k, c, r * 1.03, seg(age, 0.6, 1.6) * smooth(left / 0.8), a);
-      mired(k, c, r, caught(k, c, r), age, a * smooth(seg(age, 0.2, 0.6)));
+      mired(k, c, r, caught(k, c, r, 5, age), age, a * smooth(seg(age, 0.2, 0.6)));
       tally(k, c, r * 1.1, left, age + left, 0.8 * a, 24);
       k.light(c, 1.6, (0.25 + 0.15 * k.night) * a, '#fff1d6');
       if (!k.fast) k.emit({ ...c, z: c.z + 0.5 }, 5 * a, { kind: 'mote', colour: [P.main, P.accent], size: 1.4, life: [1.0, 1.6], speed: [0.02, 0.05], up: [1, 3], gravity: 0, drag: 0.5, jitter: r * 0.7 });
@@ -2339,7 +2341,7 @@ const massRoot: SpellVisual = {
         }
       }
       // Each creature caught is rooted when the crack running its way reaches it: one mark on all of them, one shape.
-      k.together(() => caught(k, c, MASS_R).forEach((b, i) => {
+      k.together(() => caught(k, c, MASS_R, 5, age).forEach((b, i) => {
         const reached = seg(run, Math.hypot(b.x - c.x, b.y - c.y) / MASS_R - 0.05, 1);
         if (reached > 0) rootSpikes(k, b, seg(age, 0.5 * Math.hypot(b.x - c.x, b.y - c.y) / MASS_R, 1) * sink, a, 60 + i * 5, 5, false);
       }));
@@ -2649,8 +2651,8 @@ const stillfield: SpellVisual = {
       // Whatever is caught stops where it stands: a band of frost round it, clasped with a stone on the side toward the
       // viewer -- on the band, not hung over its head.
       const d = k.toward({ x: 0, y: 0 }, { x: 1, y: 1 });
-      k.together(() => caught(k, c, r).forEach((b, i) => {
-        const s = smooth(seg(age, 0.15 + 0.05 * i, 0.4 + 0.05 * i));
+      k.together(() => caught(k, c, r, 5, age).forEach((b, i) => {
+        const s = smooth(seg(age, 0.15 + 0.05 * i, 0.4 + 0.05 * i)) * smooth((k.secsOn(b, age + left) - age) / 0.3);
         const rr = girth(b) * lerp(1.8, 1.05, easeBack(s)), z = b.z + b.tall * 0.45;
         hoop(k, b, z, rr, { alpha: a * s, h: band(b) * 0.7, n: 8, glow: 0.3, main: P.core, core: '#ffffff' });
         gemAt(k, { x: b.x + d.x * rr, y: b.y + d.y * rr, z }, s, 1.3, 0.4 + i, { alpha: a, bias: 6 });

@@ -595,14 +595,14 @@ const creatureNo = (b: Body): number => (b.who && b.who.kind === 'creature' ? b.
 const sameBody = (a: Body, b: Body): boolean =>
   a.who && b.who ? a.who.kind === b.who.kind && creatureNo(a) === creatureNo(b) : Math.hypot(a.x - b.x, a.y - b.y) < 0.05;
 /**
- * The other enemies standing within `r` tiles of what was hit, nearest first:
- * who a glance or a fan finds. Only what anybody may harm (`enemiesWithin`:
- * no companion, no beast on a deed or in a pen), and never the caster's own
- * companion whatever the stage knows of it. The island does not say who it
- * reached, so this is who is there -- which is who it picks from.
+ * The other enemies a glance or a fan found, nearest what was hit first: those
+ * the island said its throws landed on (`k.struck`), or where it did not say,
+ * those standing within `r` tiles of what was hit -- only what anybody may
+ * harm (`enemiesWithin`: no companion, no beast on a deed or in a pen) --
+ * and never the caster's own companion whatever the stage knows of it.
  */
 const othersNear = (k: FxScene, r: number): Body[] =>
-  k.enemiesWithin(r, k.target).filter((b) => !sameBody(b, k.target) && creatureNo(b) >= 0 && !b.companion && !(k.companion && sameBody(b, k.companion)))
+  (k.hit ? k.struck(r, k.target) : k.enemiesWithin(r, k.target)).filter((b) => !sameBody(b, k.target) && creatureNo(b) >= 0 && !b.companion && !(k.companion && sameBody(b, k.companion)))
     .sort((a, b) => Math.hypot(a.x - k.target.x, a.y - k.target.y) - Math.hypot(b.x - k.target.x, b.y - k.target.y));
 /** A creature found by its number near a point, this frame; null when it is gone from there. */
 const creatureBy = (k: FxScene, no: number, c: { x: number; y: number }, r: number): Body | null =>

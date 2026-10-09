@@ -1,4 +1,5 @@
 import type { WornWire } from '../game/worn';
+import { firedIn, toldIn, type FiredWire, type ToldWire } from './told';
 import type { RealtimeChannel } from '@supabase/supabase-js';
 import type { ErrorReport } from './errors';
 import { CHUNK, World } from '../world/world';
@@ -545,9 +546,10 @@ export interface ClassCard {
  * Your faith as the island keeps it (`faith_said`): your faith and favour,
  * your patron, the spells you have taken, the bar, and the island's own
  * refusal for every patron and every one of your patron's spells, null where
- * there is none. Every faith door answers with all of it, or with `why`.
+ * there is none. Every faith door answers with all of it, or with `why`; a
+ * cast's says what it did as well (`ToldWire`, read with `toldIn`).
  */
-export interface FaithSaid {
+export interface FaithSaid extends Partial<ToldWire> {
   faith: number;
   favour: number;
   cap: number;
@@ -677,13 +679,15 @@ export type CastWire =
 
 /**
  * What else a cast says as it goes between browsers, for drawing it as the
- * caster saw it: their companion's creature id (`pet`), and where they stood
- * before the island moved them for it (`from`). Both optional, so a browser
- * that sends neither is drawn as it always was.
+ * caster saw it: their companion's creature id (`pet`), where they stood
+ * before the island moved them for it (`from`), and what the island said it
+ * did (`told`). All optional, so a browser that sends none is drawn as it
+ * always was.
  */
 export interface CastMore {
   pet?: number;
   from?: { x: number; y: number };
+  told?: ToldWire;
 }
 
 /** The extras of a cast heard from somebody else's browser, checked: anything malformed is left out. */
@@ -695,6 +699,8 @@ export function castMoreIn(v: unknown): CastMore {
   if (num(o.pet)) out.pet = o.pet;
   const f = o.from as Record<string, unknown> | undefined;
   if (f && typeof f === 'object' && num(f.x) && num(f.y)) out.from = { x: f.x, y: f.y };
+  const told = toldIn(o.told);
+  if (told) out.told = told;
   return out;
 }
 
@@ -720,6 +726,12 @@ export interface IslandHooks {
    * way.
    */
   castSeen?: (uid: string, spell: string, at: CastWire, more: CastMore) => void;
+  /**
+   * Something of a spell's fired after its cast (`FiredWire`): `uid` the
+   * caster, ours when the island told us (`fx`), somebody else's when their
+   * browser passed it on (`castFired`). Only drawn.
+   */
+  castFired?: (uid: string, fired: FiredWire) => void;
   /** A line for the log, from the island rather than from here. */
   /**
    * A line for the log. `at` is when the island wrote it, in milliseconds —
@@ -2081,6 +2093,14 @@ export class Island {
         const at = castWireIn(e.at);
         if (at) this.hooks.castSeen?.(e.uid, e.spell, at, castMoreIn(e));
       });
+      // And something of a spell of theirs that fired after its cast, as the island told them (`castFired`).
+      this.bodies.on('broadcast', { event: 'castfx' }, (m) => {
+        if (!this.bodies) return;
+        const e = (m as { payload?: { uid?: unknown } }).payload;
+        const f = firedIn(e);
+        if (!e || !f || typeof e.uid !== 'string' || e.uid === this.uid) return;
+        this.hooks.castFired?.(e.uid, f);
+      });
       this.bodies.subscribe();
     }
   }
@@ -2126,7 +2146,14 @@ export class Island {
       [own, (ch) => ch
         .on('broadcast', { event: 'said' }, (m) => this.heardLines(heardBody(m)))
         .on('broadcast', { event: 'pack' }, (m) => this.heardPack(heardBody(m)))
-        .on('broadcast', { event: 'moved' }, (m) => this.heardMoved(heardBody(m)))],
+        .on('broadcast', { event: 'moved' }, (m) => this.heardMoved(heardBody(m)))
+        // Something of one of our spells fired after its cast (`fx_fired`): drawn here, and passed on for everybody watching.
+        .on('broadcast', { event: 'fx' }, (m) => {
+          const f = firedIn((m as { payload?: unknown }).payload);
+          if (!f || !this.uid) return;
+          this.hooks.castFired?.(this.uid, f);
+          this.castFired(f);
+        })],
       [`said:${worldId}`, (ch) => ch.on('broadcast', { event: 'said' }, (m) => this.heardLines(heardBody(m)))],
     ]);
     for (const b of this.blocksAround(here.x, here.y)) {
@@ -2938,6 +2965,12 @@ export class Island {
   castSeen(spell: string, at: CastWire, more: CastMore = {}): void {
     if (!this.bodies || !this.uid) return;
     void this.bodies.send({ type: 'broadcast', event: 'cast', payload: { uid: this.uid, spell, at, ...more } });
+  }
+
+  /** Pass on something of one of your spells that the island said fired after its cast, for everybody watching to draw. */
+  castFired(f: FiredWire): void {
+    if (!this.bodies || !this.uid) return;
+    void this.bodies.send({ type: 'broadcast', event: 'castfx', payload: { uid: this.uid, ...f } });
   }
 
   /** Say you waved, to whoever is listening on this island. */

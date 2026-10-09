@@ -182,11 +182,12 @@ import {
 import { hingeKey, hingeOf, isDrawbridge, landingOf } from '../game/gates';
 import { bridgeDone, type Bridge } from '../game/bridges';
 import { SmallLife, type Mote } from './life';
-import { personBody, SpellStage, type Aim, type Who } from './spells/stage';
+import { personBody, SpellStage, type Aim, type Told, type Who } from './spells/stage';
+import { guessTold, type Standing } from './spells/guess';
 import { creatureWide } from './spells/kit';
 import { spellInfo } from './spells/info';
 import type { Body as SpellBody, WorldRec as SpellRec } from './spells/kit';
-import type { CastAt } from '../game/events';
+import type { CastAt, CastTold } from '../game/events';
 import { lookStep, yearAt } from './foliage';
 import { cartSway, FIGURE_TOP, figurePicture, type Seat } from './figure';
 /**
@@ -1298,7 +1299,15 @@ export class Renderer {
     // A spell cast, yours or anybody's in sight: drawn from whoever cast it at whatever it was cast at.
     game.events.on('cast', (c) => {
       const by: Who = c.by === null ? { kind: 'player' } : { kind: 'peer', id: c.by };
-      this.spells.play(c.spell, by, this.spellAim(c.at), { mine: c.by === null, companion: c.companion, from: c.from, targetFrom: c.targetFrom });
+      this.spells.play(c.spell, by, this.spellAim(c.at), {
+        mine: c.by === null, companion: c.companion, from: c.from, targetFrom: c.targetFrom, told: c.told && this.spellTold(c.told),
+      });
+    });
+    // Something of a spell's that fired after its cast (a Ward Link's skin going back over somebody), for its cast to draw.
+    game.events.on('castFired', (f) => {
+      const by: Who = f.by === null ? { kind: 'player' } : { kind: 'peer', id: f.by };
+      const on = this.spellAim(f.on);
+      this.spells.fired(f.spell, by, on.kind === 'spot' || on.kind === 'self' ? null : on, f.size);
     });
     game.events.on('reset', () => {
       this.spells.clear();
@@ -4488,6 +4497,9 @@ export class Renderer {
    * at yourself for a spell cast only on yourself. Nothing is sent to anybody.
    * `from` plays it as though the island had just moved you there from that
    * spot (a Lunge); `companion` as though that creature were your companion.
+   * What it did is worked out by the island's rules from who stands where
+   * (`guessTold`): whom an area reaches, a monster's share of a hold; and a
+   * spell the island would refuse on what it is aimed at is not played.
    */
   playSpell(spell: string, at?: CastAt, opts: { from?: { x: number; y: number }; companion?: number } = {}): boolean {
     const info = spellInfo(spell);
@@ -4502,7 +4514,28 @@ export class Renderer {
       aim = peer ? { kind: 'peer', id: peer.id } : { kind: 'self' };
     } else if (hover) aim = { kind: 'spot', x: hover.wx, y: hover.wy };
     else aim = { kind: 'spot', x: p.x + p.dirX * 3, y: p.y + p.dirY * 3 };
-    return this.spells.play(spell, PLAYER_CASTS, this.spellAim(aim), { mine: true, ...opts });
+    const to = this.spellAim(aim);
+    const standing = (w: Who | undefined, b: SpellBody | null): Standing | null =>
+      w && b ? { who: w, x: b.x, y: b.y, kind: b.kind, species: b.species, tame: b.tame, hostile: b.hostile } : null;
+    const me = standing(PLAYER_CASTS, this.spellBody(PLAYER_CASTS));
+    if (!me) return false;
+    const centre = to.kind === 'spot' ? to : me;
+    const near = this.spellsNear(centre.x, centre.y, (info?.radius ?? 0) + (info?.fx.wide ?? 0) + 2)
+      .map((b) => standing(b.who, b)).filter((q): q is Standing => !!q);
+    const told = guessTold(spell, me, to.kind === 'spot' ? to : to.kind === 'self' ? null : standing(to, this.spellBody(to)), near);
+    if (!told) return false;
+    return this.spells.play(spell, PLAYER_CASTS, to, { mine: true, ...opts, told });
+  }
+
+  /** What the island said a cast did, as the stage takes it: everybody it reached by who they are on the screen. */
+  private spellTold(t: CastTold): Told {
+    const hit: Array<Told['hit'][number]> = [];
+    for (const h of t.hit) {
+      const at = this.spellAim(h.at);
+      if (at.kind === 'spot' || at.kind === 'self') continue;
+      hit.push({ who: at, ...(h.secs !== undefined ? { secs: h.secs } : {}), ...(h.held ? { held: true } : {}) });
+    }
+    return { hit, used: t.used, size: t.size, low: t.low };
   }
 
   /** What a cast was at, as the stage takes it. */

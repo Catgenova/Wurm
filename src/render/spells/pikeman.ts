@@ -1252,8 +1252,9 @@ export const PIKEMAN: Record<string, SpellVisual> = {
           // The edge marked as it is reached: the five tiles it gives breath to.
           if (out > 0.92) k.ring(k.caster, R, { band: Math.max(0.01, 0.06 * thin), alpha: 0.85 * last, dash: 4, main: k.pal.accent, glow: 0.4 * k.night });
           rallyHeads(k, r, fade * (1 - smooth(seg(out, 0.9, 1))));
-          // Everybody it passes over, as it passes: the caster at once, the rest as the wave gets to them.
-          for (const b of k.bodiesWithin(R, k.caster, ['player', 'peer'])) given(k, b, age - waveAt(Math.hypot(b.x - k.caster.x, b.y - k.caster.y), R));
+          // Everybody it gave breath to, as it passes: the caster at once, the rest as the wave gets to them -- those the
+          // island said it reached (nobody down at nought), or where it did not say, everybody standing in it.
+          for (const b of k.reached(R, k.caster, ['player', 'peer'])) given(k, b, age - waveAt(Math.hypot(b.x - k.caster.x, b.y - k.caster.y), R));
           warmLight(k, k.caster, Math.min(1.6, r + 0.4), 0.5 * fade);
           if (age < 0.12) k.flare(k.at(k.caster, 0.08), 12, flashOf(age / 0.12), k.pal.core, 0.3);
         },

@@ -984,9 +984,13 @@ function fleeWay(k: FxScene, b: { x: number; y: number }): { x: number; y: numbe
   return { x: t.x, y: t.y, d };
 }
 
-/** The wild creatures an area spell takes (no companion, no penned beast): those standing in it now, the nearest few, so a herd does not cost a frame. */
+/**
+ * The wild creatures an area spell took (no companion, no penned beast): those the island said it reached, wherever
+ * they have run (`k.struck`), or where it did not say, those standing in it now; the nearest few, so a herd does not
+ * cost a frame.
+ */
 function taken(k: FxScene, c: { x: number; y: number }, r: number, most = 8): ReturnType<FxScene['bodiesWithin']> {
-  const all = k.enemiesWithin(r, c);
+  const all = k.struck(r, c);
   if (all.length <= most) return all;
   return all.sort((a, b) => Math.hypot(a.x - c.x, a.y - c.y) - Math.hypot(b.x - c.x, b.y - c.y)).slice(0, most);
 }
@@ -1881,7 +1885,8 @@ export const CHAOS: Record<string, SpellVisual> = {
         // Every wild creature standing in it sick, and carrying it as it goes: the ground going bad under its feet,
         // flies at it, a sick vapour rising off its back, and its blood let, each in its turn a beat.
         const beat = ticked(k, age, 'beat') && left > 0.5;
-        const sick = taken(k, k.spot, R, 6), turn = Math.floor(age) % Math.max(1, sick.length);
+        // Each for as long as the island says its bleed runs.
+        const sick = taken(k, k.spot, R, 6).filter((b) => age < k.secsOn(b, age + left)), turn = Math.floor(age) % Math.max(1, sick.length);
         sick.forEach((b, i) => {
           pool(k, b, footR(b) * 1.1, '#4e5a22', 0.65 * a, 7, { share: 0.5, colour: '#8a9a2e', alpha: 0.55 * a, salt: 8 });
           // Flies at it, the sign of sickness anybody reads (the nearest few: a herd would cost a frame).
@@ -1955,12 +1960,15 @@ export const CHAOS: Record<string, SpellVisual> = {
         timeArc(k, k.spot, R, arcLeft(Math.max(0, age - 0.45), left, lastsOf(PANIC)), { alpha: 0.8 * smooth(left / 0.8), band: 0.1 });
         // A low breath of dread blown outward along the ground with them, not sparkle.
         k.emit(k.on(k.spot.x, k.spot.y, 1), 6 * a, { kind: 'mist', colour: [k.pal.main, k.pal.deep], size: 1.8, life: [0.6, 1], speed: [R * 0.5, R * 0.9], up: [0, 3], gravity: 0, drag: 1 });
-        // Over every creature fleeing it -- in it, or just run out of it -- an arrowhead pointing the way it runs.
+        // Over every creature fleeing it -- in it, or just run out of it -- an arrowhead pointing the way it runs, for as
+        // long as the island says that one flees: a monster for its own three seconds.
         const beat = bump((age * 2.2) % 1, 0, 0.12, 0.5);
         for (const b of taken(k, k.spot, R + 3)) {
+          const runs = k.secsOn(b, age + left);
+          if (age >= runs) continue;
           const w = fleeWay(k, b);
-          const out = w.d > R ? 1 - (w.d - R) / 3 : 1;
-          fleeMark(k, b, w, 0.32, 0.9 * a * out, beat);
+          const out = w.d > R ? Math.max(0, 1 - (w.d - R) / 3) : 1;
+          fleeMark(k, b, w, 0.32, 0.9 * a * out * smooth((runs - age) / 0.4), beat);
         }
       } },
     },

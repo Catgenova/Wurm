@@ -19,7 +19,8 @@ import { castShade, drawCreature } from '../sprites';
 import { wildermonTop } from '../wildermon';
 import { lingerSecs, visualOf } from './index';
 import { spellInfo } from './info';
-import { creatureWide, type Body } from './kit';
+import { guessTold, type Standing } from './guess';
+import { creatureWide, type Body, type Told } from './kit';
 import { personBody, SpellStage, type Aim, type Who } from './stage';
 
 export interface SheetOpts {
@@ -79,6 +80,26 @@ export interface SheetOpts {
   pull?: number;
   /** This many people standing about the target (or about the caster, for a spell on oneself), for ally spells on everybody in reach. */
   peers?: number;
+  /** What the crowd are (`crowd`), where they are not the target's kind: a monster among animals, for a spell that treats the two apart. */
+  crowdSpecies?: string;
+  /**
+   * What the island says the cast did (`Told`): by default worked out from the island's rules for the scene drawn
+   * (`guessTold`) -- whom an area reaches, a monster's share of a hold -- and a cast the island refuses on the target is
+   * not drawn at all; `false` for none, the effects drawing from what stands near; or given, by the scene's own ids
+   * (the target creature 1, the crowd from 10, the people about from 40, a person target peer 1, the caster player).
+   */
+  told?: Told | false;
+  /**
+   * A second cast by the caster `at` seconds in, at the same target: one that spends a waiting spell of the first (a
+   * Scorch after a Stoke, a Ward after a Thicken), with what the island says it did (`told`, worked out as the first's is
+   * where not given), so the first is seen let go when it is spent.
+   */
+  then?: { spell: string; at: number; told?: Told };
+  /**
+   * Seconds into the sheet the island says the cast fired after it (a Ward Link's skin back over somebody), how large,
+   * and on whom: the target (the caster for a spell on oneself), or the first of the people about (`peers`).
+   */
+  fired?: Array<{ at: number; size?: number; on?: 'target' | 'peer' }>;
   /**
    * Tiles of ground round the caster the frame takes in at least, its sides trimmed back to what was drawn: so a stance's
    * ring or hedge round the caster is not cut off. Four for a spell on oneself by default, none otherwise.
@@ -237,6 +258,8 @@ export function spellSheet(o: SheetOpts): HTMLCanvasElement {
     peers.push({ x: ox + Math.cos(a) * d, y: oy + Math.sin(a) * d, f, pose: { phase: 0, moving: false, facing: f, swimming: false, working: false, look: { ...DEFAULT_LOOK, gender: i % 2 ? 'man' : 'woman', shirt: shirts[i % 4] }, gear: { weapon: { id: 'sword', material: 'iron' } } } });
   }
   const sp = SPECIES[species] ?? Object.values(SPECIES)[0];
+  const csp = (o.crowdSpecies ? SPECIES[o.crowdSpecies] : undefined) ?? sp;
+  const cTall = Math.max(22, wildermonTop(csp.id) ?? 0) / HEIGHT_SCALE;
   const spTall = Math.max(22, wildermonTop(sp.id) ?? 0) / HEIGHT_SCALE;
   const pet = petSpecies ? SPECIES[petSpecies] ?? sp : null;
   const petTall = pet ? Math.max(22, wildermonTop(pet.id) ?? 0) / HEIGHT_SCALE : 0;
@@ -253,7 +276,7 @@ export function spellSheet(o: SheetOpts): HTMLCanvasElement {
     if (w.id === PET_ID) return pet ? { x: px, y: py, z: 0, tall: petTall, facing, kind: 'creature', ...beast(pet, petTall), tame: true, companion: true } : null;
     if (w.id >= CROWD_ID) {
       const q = crowd[w.id - CROWD_ID];
-      return q ? { x: q.x, y: q.y, z: 0, tall: spTall, facing: q.f, kind: 'creature', ...beast(sp, spTall), hostile: true } : null;
+      return q ? { x: q.x, y: q.y, z: 0, tall: cTall, facing: q.f, kind: 'creature', ...beast(csp, cTall), hostile: true } : null;
     }
     return { x: tx, y: ty, z: 0, tall: spTall, facing: tFacing, kind: 'creature', ...beast(sp, spTall), hostile: true, ...flags };
   };
@@ -364,8 +387,33 @@ export function spellSheet(o: SheetOpts): HTMLCanvasElement {
   let now = 0;
   const night01 = o.night ? 1 : 0;
   stage.update({ eye: cam, now, dt, fast: !!o.fast, night: night01 });
-  stage.play(o.spell, by, at, { mine: true, now: 0, companion: pet ? PET_ID : undefined, from, targetFrom });
   sheetWarnings.length = 0;
+  // What the island would say it did, by its rules for this scene, unless told otherwise; nothing drawn where it refuses.
+  const standing = (w: Who): Standing | null => {
+    const b = bodyOf(w);
+    return b ? { who: w, x: b.x, y: b.y, kind: b.kind, species: b.species, tame: b.tame, hostile: b.hostile } : null;
+  };
+  const scene = everyone.map(standing).filter((q): q is Standing => !!q);
+  const told = o.told === false ? undefined : o.told ?? guessTold(o.spell, standing(by) as Standing,
+    at.kind === 'spot' ? { x: at.x, y: at.y } : at.kind === 'self' ? null : standing(at), scene);
+  if (told === null) sheetWarnings.push(`the island refuses ${o.spell} on a ${sp.id}: nothing is drawn`);
+  else stage.play(o.spell, by, at, { mine: true, now: 0, companion: pet ? PET_ID : undefined, from, targetFrom, told });
+  // What comes after it, played as the clock reaches it: a second cast, and what the island says fired.
+  const after: Array<{ at: number; go: () => void }> = [];
+  if (o.then) {
+    const then = o.then;
+    const thenTold = then.told ?? guessTold(then.spell, standing(by) as Standing,
+      at.kind === 'spot' ? { x: at.x, y: at.y } : at.kind === 'self' ? null : standing(at), scene) ?? undefined;
+    after.push({ at: then.at, go: () => stage.play(then.spell, by, at, { mine: true, now: then.at, told: thenTold }) });
+  }
+  for (const f of o.fired ?? []) {
+    const on: Who = f.on === 'peer' ? { kind: 'peer', id: PEER_ID } : at.kind === 'spot' || at.kind === 'self' ? by : at;
+    after.push({ at: f.at, go: () => stage.fired(o.spell, by, on, f.size) });
+  }
+  after.sort((p, q) => p.at - q.at);
+  const due = (t: number): void => {
+    while (after.length && after[0].at <= t + 1e-9) (after.shift() as { go: () => void }).go();
+  };
   const night = document.createElement('canvas');
   night.width = W;
   night.height = H;
@@ -380,9 +428,11 @@ export function spellSheet(o: SheetOpts): HTMLCanvasElement {
     while (now + dt <= times[f] + 1e-9) {
       now += dt;
       at(now);
+      due(now);
       stage.update({ eye: cam, now, dt, fast: !!o.fast, night: night01 });
     }
     at(times[f]);
+    due(times[f]);
     stage.update({ eye: cam, now: times[f], dt: Math.max(1e-4, times[f] - now), fast: !!o.fast, night: night01 });
     now = times[f];
     // What went over budget in this frame, or tinted the screen, said in its label.
@@ -447,7 +497,7 @@ export function spellSheet(o: SheetOpts): HTMLCanvasElement {
     for (const [i, q] of crowd.entries()) {
       const qx = cam.worldToScreenX(q.x, q.y), qy = cam.worldToScreenY(q.x, q.y, 0);
       const tint = stage.tintOf({ kind: 'creature', id: CROWD_ID + i });
-      items.push({ sy: qy, draw: () => tinted(tint, () => drawCreature(g, qx, qy, zoom, { species: sp.id, facing: q.f, phase: 0, moving: false, gait: 0, colors: sp.variants[0], health: 1, fleece: 1 })) });
+      items.push({ sy: qy, draw: () => tinted(tint, () => drawCreature(g, qx, qy, zoom, { species: csp.id, facing: q.f, phase: 0, moving: false, gait: 0, colors: csp.variants[0], health: 1, fleece: 1 })) });
     }
     for (const [i, q] of peers.entries()) {
       const qx = cam.worldToScreenX(q.x, q.y), qy = cam.worldToScreenY(q.x, q.y, 0);

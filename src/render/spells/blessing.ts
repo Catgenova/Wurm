@@ -1573,9 +1573,10 @@ export const BLESSING: Record<string, SpellVisual> = {
             k.emit(k.on(c.x + Math.cos(an) * rr, c.y + Math.sin(an) * rr, 2), 15, { kind: 'mote', colour: GOLD, over: true, size: 1.4, life: [0.6, 1.0], speed: [0, 0.03], up: [10, 18], gravity: 0 });
           }
           k.light(c, R * (0.4 + 0.6 * out), 0.85 * (1 - u * u));
-          // Everybody it reaches, and every wildermon there, mended as the rain gets to them: nearer ones first.
+          // Everybody it mended and every wildermon it tended, as the rain gets to them (those the island said it did, or
+          // where it did not say, everybody standing in it): nearer ones first.
           let n = 0;
-          for (const b of k.bodiesWithin(R, c)) {
+          for (const b of k.reached(R, c)) {
             if (n >= BENEDICTION_MENDED) break;
             const v = seg(u, 0.18 + 0.3 * (Math.hypot(b.x - c.x, b.y - c.y) / R), 0.95);
             const key = `m${n++}`;

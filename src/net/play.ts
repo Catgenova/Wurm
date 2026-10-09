@@ -4,8 +4,10 @@ import { EMOTE_BY_ID } from '../game/emotes';
 import { cleanLook } from '../game/look';
 import { whoAmI } from './accounts';
 import { supabase } from './supabase';
+import { toldOf, toldWire } from './told';
 import { Island, type CastMore, type CastWire, type ItemRow, type PlayerRow } from './island';
 import { isSpell } from '../render/spells/info';
+import type { CastAt } from '../game/events';
 import { generateAtlasWorld, loadAtlas } from '../world/atlas-world';
 import { ACTION_BY_ID, type ActionDef, type Target } from '../game/actions';
 import { hiddenAsk } from '../game/gates';
@@ -549,13 +551,19 @@ export async function startIsland(params: URLSearchParams, tell: Telling): Promi
    * raises `cast` then), goes out for everybody watching to draw; anybody
    * else's comes in and is drawn here, at whoever or wherever it went.
    */
+  // Somebody a cast reached, by uid, as it is drawn: you, or a peer by the number the roster files them under.
+  const personAt = (uid: string): CastAt => (uid === island.uid ? { kind: 'you' } : { kind: 'peer', id: hashId(uid), uid });
   game.events.on('cast', (c) => {
     if (c.by !== null) return;
     const at = c.at;
-    // With the companion's creature, so everybody sees the real beast act, and where you stood if the island moved you.
+    // With the companion's creature, so everybody sees the real beast act, where you stood if the island moved you, and
+    // what the island said it did.
     const more: CastMore = {};
     if (c.companion !== undefined) more.pet = c.companion;
     if (c.from) more.from = c.from;
+    if (c.told) {
+      more.told = toldWire(c.told, (a) => (a.kind === 'you' || a.kind === 'self' ? island.uid || null : a.kind === 'peer' ? a.uid ?? null : null));
+    }
     island.castSeen(c.spell, at.kind === 'peer' && at.uid ? { kind: 'player', uid: at.uid }
       : at.kind === 'creature' ? { kind: 'creature', id: at.id }
         : at.kind === 'spot' ? { kind: 'spot', x: at.x, y: at.y } : { kind: 'self' }, more);
@@ -569,8 +577,15 @@ export async function startIsland(params: URLSearchParams, tell: Telling): Promi
       at: at.kind === 'player' ? (at.uid === island.uid ? { kind: 'you' } : { kind: 'peer', id: hashId(at.uid), uid: at.uid })
         : at.kind === 'creature' ? { kind: 'creature', id: at.id }
           : at.kind === 'spot' ? { kind: 'spot', x: at.x, y: at.y } : { kind: 'self' },
-      companion: more.pet, from: more.from,
+      companion: more.pet, from: more.from, told: more.told ? toldOf(more.told, personAt) : undefined,
     });
+  };
+  // Something of a spell's that fired after its cast: yours, as the island told you, or somebody else's, as their browser did.
+  island.hooks.castFired = (uid, f) => {
+    if (!isSpell(f.spell)) return;
+    const by = uid === island.uid ? null : hashId(uid);
+    if (by !== null && !game.roster.get(by)) return;
+    game.events.emit('castFired', { spell: f.spell, by, on: personAt(f.on), size: f.size });
   };
   game.woreTitle = (id: string | null) => void island.wearTitle(id);
   /*

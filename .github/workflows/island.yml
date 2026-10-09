@@ -1787,6 +1787,22 @@ jobs:
             --outfile=node_modules/.cache/warder.mjs --log-level=error
           node node_modules/.cache/warder.mjs
 
+      - name: A cast says what it did
+        run: |
+          # The browser drew an area spell on everything in its ring, a hold
+          # for its full seconds on a monster that is held for half of them, a
+          # flight on a monster a Fright is refused on, and a Stoke's glow for
+          # a minute after the fire spent it. Now the door's answer says who a
+          # cast reached and for how long, which it holds still, the waiting
+          # spells it spent and the skin it laid; and a Ward Link firing tells
+          # the Warder's browser. Through `rpc_cast_spell`, as a browser casts:
+          # a Firestorm, an Earthshaker, a Skull Crack on a monster and an
+          # animal, an Execute, a Fright and a Panic on both, a Stoke and a
+          # Thicken spent, a Ward Link fired.
+          npx esbuild supabase/test/did.ts --bundle --platform=node --format=esm \
+            --outfile=node_modules/.cache/did.mjs --log-level=error
+          node node_modules/.cache/did.mjs
+
       - name: The single staircase, and wagons up wide ones
         run: |
           # The second model of every flight, half the tile wide, up the half

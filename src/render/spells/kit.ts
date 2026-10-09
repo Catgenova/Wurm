@@ -218,6 +218,25 @@ export interface Eye {
 
 /** Somebody or something a spell is cast by or at, by who they are: you, somebody else by their id, a creature by its id. */
 export type Who = { kind: 'player' } | { kind: 'peer'; id: number } | { kind: 'creature'; id: number };
+/** Whether two `Who`s are the same somebody. */
+export const sameWho = (a: Who, b: Who): boolean => a.kind === b.kind && (a.kind === 'player' || (a as { id: number }).id === (b as { id: number }).id);
+
+/** Seconds a linger plays on once the island says the waiting spell it shows was spent (`Told.used`), to let it go rather than cut it. */
+export const USED_FADE = 0.4;
+
+/**
+ * What the island said a cast did (`fx_told` on the island, `CastTold` in the game), as the stage plays it: who it
+ * reached, each by who they are on the screen, with the seconds what it left lasts on them (`secs`: a hold, a root,
+ * a flight, a burn, a bleed, a slow, a mark, a buff) and whether it holds them still (`held`); the caster's waiting
+ * spells it spent (`used`: `kindler_stoke`, `warder_thicken`); the largest skin it laid, or the skin a Ward Burst
+ * broke, as a share of health (`size`); and an Execute's on a creature below its line (`low`).
+ */
+export interface Told {
+  hit: ReadonlyArray<{ who: Who; secs?: number; held?: boolean }>;
+  used?: readonly string[];
+  size?: number;
+  low?: boolean;
+}
 
 /**
  * Something a spell is cast by or at: a person or a creature, where its feet
@@ -256,7 +275,9 @@ export interface Body {
   hostile?: boolean;
   /**
    * What the island says is on a creature now, where the payload carries it: a
-   * Kindler's burn running, a knife's bleed running, held fast in a trap.
+   * Kindler's burn running, a knife's bleed running, held fast in a trap or by
+   * a hold a cast was told of (`Told.held`: a Bind, a Lock, a Skull Crack, an
+   * Earthshaker, a Still field) for as long as the island said it holds.
    * Nothing is said of people, and no other mark is in the payload.
    */
   burning?: boolean;
@@ -813,6 +834,24 @@ export class FxScene {
   healing = false;
   /** Shapes recorded inside `together` this frame past the first of each lot, which the budget does not count again. */
   grouped = 0;
+  /**
+   * What the island said this cast did (`Told`), or null where it said nothing: an island from before it, a cast drawn
+   * from the console or the preview without it. Read it through `hit`, `reached`, `struck`, `secsOn`, `heldOn`, `used`
+   * and `fired`, which fall back to what stands near when it is null.
+   */
+  told: Told | null = null;
+  /** The bodies the island said the cast reached, where each is this frame (those gone left out); null where it did not say. */
+  hit: Body[] | null = null;
+  /**
+   * Seconds since the island said this cast's waiting spell was spent (a Stoke's glow by the fire it fed, a Thicken by
+   * the skin it made larger); minus one while it waits. The stage ends its linger `USED_FADE` after.
+   */
+  used = -1;
+  /**
+   * What the island said this cast fired after it was cast (a Ward Link's skin going back over somebody): on whom, where
+   * they are this frame (null when they are gone), how long ago in seconds, and how large as a share of health.
+   */
+  fired: ReadonlyArray<{ on: Body | null; age: number; size?: number }> = [];
 
   eye!: Eye;
   out!: FxFrame;
@@ -1150,6 +1189,48 @@ export class FxScene {
   }
 
   /**
+   * What an area spell reached: the bodies the island said it did (`hit`), of the `kinds` asked, wherever they are now;
+   * and where it did not say, everybody within `r` tiles of `c` as `bodiesWithin` finds them. A Rally's people, a
+   * Sanctuary's skins, a Healing Circle's hurt.
+   */
+  reached(r: number, c: { x: number; y: number } = this.spot, kinds?: ReadonlyArray<Body['kind']>): Body[] {
+    if (!this.hit) return this.bodiesWithin(r, c, kinds);
+    return kinds ? this.hit.filter((b) => kinds.includes(b.kind)) : this.hit.slice();
+  }
+
+  /**
+   * What an area harm struck: the creatures the island said it reached (a blow that landed, a fire that took, a flight,
+   * a hold); and where it did not say, `enemiesWithin(r, c)`. A Firestorm's burns, a Panic's flights, a Judgment's marks.
+   */
+  struck(r: number, c: { x: number; y: number } = this.spot): Body[] {
+    return this.hit ? this.hit.filter((b) => b.kind === 'creature') : this.enemiesWithin(r, c);
+  }
+
+  /** The island's word on one body: what it said of it, or nothing (not reached, or nothing said). */
+  private toldOn(b: Body): Told['hit'][number] | undefined {
+    const w = b.who;
+    return w && this.told ? this.told.hit.find((h) => sameWho(h.who, w)) : undefined;
+  }
+
+  /**
+   * Seconds what this cast left on `b` lasts, as the island said (a monster held for its own share of a hold, a
+   * monster put to flight for a Panic's three seconds); `otherwise` where it did not say.
+   */
+  secsOn(b: Body, otherwise: number): number {
+    return this.toldOn(b)?.secs ?? otherwise;
+  }
+
+  /** Whether the island said this cast reached `b`; `otherwise` where it said nothing at all. */
+  reachedOn(b: Body, otherwise = true): boolean {
+    return this.told ? !!this.toldOn(b) : otherwise;
+  }
+
+  /** Whether the island said this cast holds `b` still; `otherwise` where it said nothing at all. */
+  heldOn(b: Body, otherwise = false): boolean {
+    return this.told ? !!this.toldOn(b)?.held : otherwise;
+  }
+
+  /**
    * A line through points cut where it passes `b`: the runs of it behind the body (further from the viewer than
    * where the body stands, as the sort goes) and the runs in front, each cut exactly where it crosses. For a chain, a
    * braid, a tether that goes round or past somebody: record the back runs sorted behind the body and the front ones
@@ -1189,8 +1270,9 @@ export class FxScene {
    * inside; each body's `kind` and `who` tell which. What an area spell
    * covers: a skin on every ally in a ward, a mark on every creature a
    * judgment hits. `kinds` keeps only those kinds. Found afresh each frame (and
-   * asked once a frame however often it is called with the same numbers); the
-   * island does not say who a spell actually reached, so this is who is there.
+   * asked once a frame however often it is called with the same numbers). This
+   * is who is there; who the island says a spell reached is `reached` and
+   * `struck`, which come back to this where it said nothing.
    */
   bodiesWithin(r: number, c: { x: number; y: number } = this.spot, kinds?: ReadonlyArray<Body['kind']>): Body[] {
     const all = this.near?.(c.x, c.y, r) ?? [];

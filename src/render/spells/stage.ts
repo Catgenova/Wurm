@@ -13,8 +13,11 @@
  * A cast ends when its pose, its impact and its lingering are all over; what
  * it lingers on going away (a creature killed, a person gone) ends it then,
  * unless it lingers on the caster or the spot (`linger.on`).
- * The island does not say when an effect is over before its time -- a skin
- * used up, a hold broken -- so a linger lasts the spell's own seconds.
+ * What the island said the cast did comes with it (`PlayOpts.told`): its
+ * linger on what it was cast at lasts the seconds the island gave that (a
+ * monster's shorter hold), a waiting spell the island says a later cast spent
+ * ends its linger then (`used`), and what fires after it (`fired`) is handed
+ * to its linger. Without it, a linger lasts the spell's own seconds.
  *
  * Nothing here is the island's. A cast is drawn when the island said yes to
  * it, on this browser and on everybody else's watching (`Island.castSeen`).
@@ -24,9 +27,9 @@ import { HALF_H, HALF_W, HEIGHT_SCALE, TILE_W, UNITS_PER_TILE } from '../iso';
 import { depthOf, type View } from '../view';
 import { castLefty, lingerSecs, visualOf, type CastAim, type CastClose, type CastNow, type CastTarget, type CastTravel, type SpellVisual } from './index';
 import { spellInfo, type SpellInfo } from './info';
-import { clamp, drawParticle, FxFrame, FxScene, isLightKind, lightTint, MOST_PARTICLES, paintGroundLayer, Particles, rngOf, seg, smooth, type Body, type Eye, type GroundLayer, type P3, type Who, type WorldRec } from './kit';
+import { clamp, drawParticle, FxFrame, FxScene, isLightKind, lightTint, MOST_PARTICLES, paintGroundLayer, Particles, rngOf, sameWho, seg, smooth, USED_FADE, type Body, type Eye, type GroundLayer, type P3, type Told, type Who, type WorldRec } from './kit';
 
-export type { Who };
+export type { Told, Who };
 /** What a spell was cast at: somebody, a spot on the ground, or the caster themselves. */
 export type Aim = Who | { kind: 'spot'; x: number; y: number } | { kind: 'self' };
 
@@ -62,6 +65,8 @@ export interface PlayOpts {
   targetFrom?: { x: number; y: number };
   /** Where the caster's companion stood before the cast, for a spell the island moves it with (`cast.companion`); where it stood as the cast began when not given. */
   companionFrom?: { x: number; y: number };
+  /** What the island said the cast did (`Told`), for its effects to follow; left out, they draw from what stands near. */
+  told?: Told;
 }
 
 /** How far ahead of the feet a standing blow lands with nothing in the hand, in height units; a weapon's length is added to it (`cast.close`). */
@@ -146,6 +151,12 @@ interface Playing {
   petY: number;
   /** The companion as found last frame, for the pose (`PoseCue.companion`). */
   pet: Body | null;
+  /** What the island said it did, or null (`PlayOpts.told`). */
+  told: Told | null;
+  /** Seconds from the start the island said the waiting spell it shows was spent (`Told.used`); minus one while it waits. */
+  usedT: number;
+  /** What the island said fired after it (`fired`): on whom, seconds from the start, how large. */
+  fires: Array<{ on: Who | null; t: number; size?: number }>;
 }
 
 /**
@@ -200,7 +211,6 @@ function clipToTile(poly: readonly number[], tx: number, ty: number): number[] {
   return pts;
 }
 
-const sameWho = (a: Who, b: Who): boolean => a.kind === b.kind && (a.kind === 'player' || (a as { id: number }).id === (b as { id: number }).id);
 
 /** Seconds along a cast's pose `e` seconds after it began: the wall's own seconds, but for the stop through a hold. */
 function poseClock(p: Playing, e: number): number {
@@ -209,6 +219,12 @@ function poseClock(p: Playing, e: number): number {
 }
 /** Seconds from the start a cast's pose is over: its own seconds, and however long it is held. */
 const poseEnd = (p: Playing): number => p.vis.cast.timing.secs + (p.holdEnd > p.holdAt ? p.holdEnd - p.holdAt : 0);
+/** Seconds a cast lingers from where it lands: its own, cut short by the island's word that what it shows was spent. */
+const lingersOf = (p: Playing): number => (p.usedT >= 0 ? Math.min(p.lingers, Math.max(0, p.usedT - p.arrive) + USED_FADE) : p.lingers);
+/** Seconds from the start everything a cast does after it lands is over: its impact and its linger. */
+const endOf = (p: Playing): number => Math.max(p.arrive + (p.vis.fx.impact?.secs ?? 0), p.arrive + lingersOf(p));
+/** A key for somebody, for what the stage keeps about them between casts. */
+const whoKey = (w: Who): string => (w.kind === 'player' ? 'p' : `${w.kind === 'peer' ? 'q' : 'c'}${w.id}`);
 /** How far through its hold a cast is at `e`, nought to one. */
 const heldShare = (p: Playing, e: number): number => (p.holdEnd > p.holdAt ? clamp((e - p.holdAt) / (p.holdEnd - p.holdAt)) : e > p.holdAt ? 1 : 0);
 
@@ -249,6 +265,8 @@ export class SpellStage {
   private runLayers: RunLayer[] = [];
   /** Joints asked for this frame, by body and bone. */
   private joints = new Map<string, P3>();
+  /** Creatures the island said a cast holds still (`Told.held`), to when on the drawing clock: `Body.held` for every cast. */
+  private holds = new Map<string, number>();
 
   constructor(private readonly where: Where) {
     this.k.parts = this.parts;
@@ -290,7 +308,25 @@ export class SpellStage {
       : face === 'companion' ? (companion ? this.bodyOf(companion) : this.where.companion?.(by) ?? null) ?? target : target;
     if (toward && toward !== caster && (Math.abs(toward.x - caster.x) > 0.05 || Math.abs(toward.y - caster.y) > 0.05)) this.where.turn?.(by, toward.x, toward.y);
     const timing = vis.cast.timing;
-    const lingers = lingerSecs(vis, info);
+    const told = opts.told ?? null;
+    let lingers = lingerSecs(vis, info);
+    if (told) {
+      // A linger on what it was cast at lasts what the island said it gave that: a monster's shorter hold, a burn made longer.
+      const aimed = at.kind === 'self' ? by : at.kind === 'spot' ? null : at;
+      const on = aimed && (vis.fx.linger?.on ?? 'target') === 'target' ? told.hit.find((h) => sameWho(h.who, aimed)) : undefined;
+      if (on?.secs !== undefined && vis.fx.linger) lingers = on.secs;
+      for (const h of told.hit) if (h.held && h.secs) this.holds.set(whoKey(h.who), Math.max(this.holds.get(whoKey(h.who)) ?? 0, now + h.secs));
+      // And a waiting spell of the caster's it spent (a Stoke, a Thicken): that one's linger lets go now.
+      for (const id of told.used ?? []) {
+        for (let i = this.playing.length - 1; i >= 0; i--) {
+          const q = this.playing[i];
+          if (q.id === id && q.usedT < 0 && sameWho(q.by, by)) {
+            q.usedT = now - q.start;
+            break;
+          }
+        }
+      }
+    }
     const hold = vis.cast.hold;
     const holdAt = hold ? timing.secs * clamp(hold.at) : Infinity;
     const from = opts.from && Math.hypot(opts.from.x - caster.x, opts.from.y - caster.y) > 0.05
@@ -304,7 +340,7 @@ export class SpellStage {
       from, shiftX: from ? from.x - caster.x : 0, shiftY: from ? from.y - caster.y : 0, aim: null, lefty: false, closeX: 0, closeY: 0,
       close: null, closeBy: 0, closeDX: 0, closeDY: 0, travel: undefined, closeEnd: 0,
       targetFrom: vis.cast.pull && target && target !== caster && target.kind !== 'spot' ? opts.targetFrom ?? { x: target.x, y: target.y } : null, pullX: 0, pullY: 0,
-      petFrom: null, petX: 0, petY: 0, pet: null,
+      petFrom: null, petX: 0, petY: 0, pet: null, told, usedT: -1, fires: [],
     };
     if (vis.cast.companion) {
       const pet = companion ? this.bodyOf(companion) : this.where.companion?.(by) ?? null;
@@ -317,6 +353,20 @@ export class SpellStage {
       this.playing.splice(old >= 0 ? old : 0, 1);
     }
     return true;
+  }
+
+  /**
+   * Something of a cast's that the island said fired after it (a Ward Link laying a skin back over somebody): handed to
+   * the latest such cast of `by`'s still playing, for its linger to draw (`FxScene.fired`). False when none is.
+   */
+  fired(spell: string, by: Who, on: Who | null, size?: number): boolean {
+    for (let i = this.playing.length - 1; i >= 0; i--) {
+      const p = this.playing[i];
+      if (p.id !== spell || !sameWho(p.by, by)) continue;
+      p.fires.push({ on, t: this.now - p.start, ...(size !== undefined ? { size } : {}) });
+      return true;
+    }
+    return false;
   }
 
   /** The cast somebody is part way through, for their figure (`FigurePose.cast`). */
@@ -468,6 +518,7 @@ export class SpellStage {
   /** Forget everything: a new island, a new body. */
   clear(): void {
     this.playing.length = 0;
+    this.holds.clear();
     this.parts.clear();
     this.out.reset();
   }
@@ -476,6 +527,8 @@ export class SpellStage {
   private bodyOf(w: Who): Body | null {
     const b = this.where.body(w);
     if (b && !b.who) b.who = w;
+    // Held still by a hold the island told of, for as long as it said.
+    if (b && w.kind === 'creature' && !b.held && (this.holds.get(whoKey(w)) ?? 0) > this.now) b.held = true;
     return b;
   }
 
@@ -483,6 +536,16 @@ export class SpellStage {
     if (at.kind === 'self') return caster;
     if (at.kind === 'spot') return { x: at.x, y: at.y, z: this.where.ground(at.x, at.y), tall: 0, wide: 0, facing: 0, kind: 'spot' };
     return this.bodyOf(at) ?? last;
+  }
+
+  /** The bodies a cast reached, as the island said, where each is this frame; those not to be found are left out. */
+  private hitBodies(told: Told): Body[] {
+    const out: Body[] = [];
+    for (const h of told.hit) {
+      const b = this.bodyOf(h.who);
+      if (b) out.push(b);
+    }
+    return out;
   }
 
   /** Everybody near a point, asked of the world once a frame for each point and reach. */
@@ -531,6 +594,7 @@ export class SpellStage {
     k.night = this.night = clamp(env.night ?? 0);
     k.partCap = env.fast ? Math.round(MOST_PARTICLES / 3) : MOST_PARTICLES;
     this.over.length = 0;
+    for (const [key, until] of this.holds) if (until <= this.now) this.holds.delete(key);
     let keep = 0;
     for (const p of this.playing) {
       if (this.run(p)) this.playing[keep++] = p;
@@ -678,6 +742,11 @@ export class SpellStage {
     k.grouped = 0;
     k.released = p.released ? t - p.releasedAt : -1;
     k.castLeft = Math.max(0, castEnd - t);
+    // What the island said it did: whom it reached, where they are now; what of it was spent; what fired after it.
+    k.told = p.told;
+    k.hit = p.told ? this.hitBodies(p.told) : null;
+    k.used = p.usedT >= 0 ? t - p.usedT : -1;
+    k.fired = p.fires.length ? p.fires.map((f) => ({ on: f.on ? this.bodyOf(f.on) : null, age: t - f.t, size: f.size })) : NO_FIRES;
     const shapes0 = this.out.world.length + this.out.ground.length;
 
     const fx = p.vis.fx;
@@ -688,7 +757,7 @@ export class SpellStage {
       fx.release?.(k);
       const travel = fx.travel ? Math.max(0, fx.travel.secs(k.dist)) : 0;
       p.arrive = t + travel;
-      p.end = Math.max(p.arrive + (fx.impact?.secs ?? 0), p.arrive + p.lingers);
+      p.end = endOf(p);
     }
     if (p.released && fx.travel && t >= p.releasedAt && t < p.arrive) fx.travel.draw(k, (t - p.releasedAt) / Math.max(1e-3, p.arrive - p.releasedAt));
     if (p.released && !p.landed && t >= p.arrive) {
@@ -697,12 +766,14 @@ export class SpellStage {
     }
     if (p.landed && fx.impact && t - p.arrive < fx.impact.secs) fx.impact.draw(k, (t - p.arrive) / fx.impact.secs);
     let on = true;
-    if (p.landed && fx.linger && p.lingers > 0) {
+    const lingers = lingersOf(p);
+    if (p.usedT >= 0 && p.released) p.end = endOf(p);
+    if (p.landed && fx.linger && lingers > 0) {
       // What it lingered on is gone: over now. A linger on the caster or on the spot plays on.
       if (gone && (fx.linger.on ?? 'target') === 'target') on = false;
       else {
         const age = t - p.arrive;
-        if (age < p.lingers) fx.linger.draw(k, age, p.lingers - age);
+        if (age < lingers) fx.linger.draw(k, age, lingers - age);
       }
     }
     // Over its budgets this frame: said, for the preview.
@@ -1227,6 +1298,7 @@ export class SpellStage {
 
 const NONE: readonly WorldRec[] = [];
 const NO_BODIES: readonly Body[] = [];
+const NO_FIRES: FxScene['fired'] = [];
 
 /** How tall a person stands, in height units, for a body the stage is given. */
 export const PERSON_TALL = FIGURE_TOP / HEIGHT_SCALE;

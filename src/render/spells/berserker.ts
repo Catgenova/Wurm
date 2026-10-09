@@ -669,8 +669,11 @@ function mixHex(a: string, b: string, u: number): string {
   return `#${((1 << 24) | (ch(16) << 16) | (ch(8) << 8) | ch(0)).toString(16).slice(1)}`;
 }
 
-/** The enemies a blow round the caster reaches: every creature anybody may harm within `r` tiles of the caster, at most six. */
-const struckBy = (k: FxScene, r: number): Body[] => k.enemiesWithin(r, k.caster).slice(0, 6);
+/**
+ * The enemies a blow round the caster reached, at most six: those the island said its blows landed on (`k.struck`), or
+ * where it did not say, every creature anybody may harm within `r` tiles of the caster.
+ */
+const struckBy = (k: FxScene, r: number): Body[] => k.struck(r, k.caster).slice(0, 6);
 
 /** The head of the weapon in the caster's hands, wherever the pose has put it: the edge of an axe, the face of a maul. */
 const axeHead = (k: FxScene): P3 => k.joint(k.caster, 'tip');
@@ -1469,6 +1472,7 @@ export const BERSERKER: Record<string, SpellVisual> = {
   // An executioner's stroke: feet set wide, walked up to it with the axe going up straight overhead on both arms and
   // held there while a red line marks the creature from above down to its neck and two arcs close on it; then a step
   // and the drop, straight down the line, and a level cut clean through it at the neck, the two halves parting.
+  // The 300% stroke, on one the island says was below its line (`told.low`), throws twice the blood and cuts broader.
   berserker_execute: {
     palette: PALETTE,
     cast: {
@@ -1514,8 +1518,10 @@ export const BERSERKER: Record<string, SpellVisual> = {
       },
       hit: (k) => {
         const neck = neckOf(k, k.target);
-        blood(k, neck, 24, { speed: [0.5, 1.5], up: [10, 30], size: 2.4 });
-        k.burst(neck, 16, { kind: 'spark', colour: [k.pal.core], size: 2, life: [0.2, 0.4], speed: [1.4, 2.6], up: [-2, 6], gravity: 20, over: true });
+        // The full stroke, on one the island says was below its line (`low`): three times the blow, twice the blood.
+        const full = k.told?.low ? 2 : 1;
+        blood(k, neck, 24 * full, { speed: [0.5, 1.5 * full], up: [10, 30], size: 2.4 });
+        k.burst(neck, 16 * full, { kind: 'spark', colour: [k.pal.core], size: 2, life: [0.2, 0.4], speed: [1.4, 2.6], up: [-2, 6], gravity: 20, over: true });
       },
       impact: { secs: 1.5, draw: (k, u) => {
         const secs = 1.5, age = u * secs, left = secs - age;
@@ -1532,10 +1538,10 @@ export const BERSERKER: Record<string, SpellVisual> = {
             const z = neck.z + s * part;
             const p0 = { x: neck.x - side.x * len * s, y: neck.y - side.y * len * s, z };
             const p1 = { x: neck.x + side.x * len * s, y: neck.y + side.y * len * s, z };
-            band(k, [p0, { x: lerp(p0.x, p1.x, 0.5), y: lerp(p0.y, p1.y, 0.5), z }, p1], { width: 4.5 * (1 - 0.5 * v), alpha: 1, taper: 'both', bias: 10 });
+            band(k, [p0, { x: lerp(p0.x, p1.x, 0.5), y: lerp(p0.y, p1.y, 0.5), z }, p1], { width: (k.told?.low ? 7 : 4.5) * (1 - 0.5 * v), alpha: 1, taper: 'both', bias: 10 });
           }
         }
-        starburst(k, neck, 7 * (1 - v), { points: 4, alpha: flashOf(v, 0.04), turn: 0 });
+        starburst(k, neck, (k.told?.low ? 13 : 7) * (1 - v), { points: k.told?.low ? 8 : 4, alpha: flashOf(v, 0.04), turn: 0 });
         pool(k, b, 0.12 + 0.14 * easeOut(seg(age, 0, 0.5)), smooth(seg(age, 0.3, 1.2)), lateFade(left));
         k.light(b, 1.8, 0.8 * (1 - v));
       } },
@@ -1792,9 +1798,13 @@ export const BERSERKER: Record<string, SpellVisual> = {
           // the ground all round at once -- letting go everywhere, not a sweep that leaves a C.
           const shakeR = R + Math.sin(age * 70) * 0.03;
           if (a > 0.03) sawRing(k, b, shakeR - 0.14, { teeth: Math.round((TAU * R) / 0.3), tooth: 0.16 * a, wide: 0.13, turn: Math.sin(age * 50) * 0.02, glow: (0.5 + 0.5 * k.night) * a });
-          // Each enemy inside it held fast: stone closed round its feet, shaking with the edge, for the second it is held.
+          // Each enemy inside it held fast: stone closed round its feet, shaking with the edge, for as long as the island
+          // says it holds that one; one the blow killed is not held at all.
           for (const e of struckBy(k, R)) {
-            lip(k, { x: e.x + Math.sin(age * 60) * 0.01, y: e.y }, Math.max(0.12, (e.wide / 40) * 1.5), 4 * a, true);
+            const hold = k.secsOn(e, age + left);
+            if (!k.heldOn(e, true) || age >= hold) continue;
+            const ae = a * smooth((hold - age) / 0.3);
+            lip(k, { x: e.x + Math.sin(age * 60) * 0.01, y: e.y }, Math.max(0.12, (e.wide / 40) * 1.5), 4 * ae, true);
           }
         },
       },
