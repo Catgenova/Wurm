@@ -884,35 +884,9 @@ const KNIFE_IN = new WeakMap<object, boolean>();
 const NO_LOOK = {};
 const knifeIn = (c: PoseCue): boolean => c.carry === 'fist' && (KNIFE_IN.get(c.look ?? NO_LOOK) ?? false);
 
-/**
- * The Hit and Run casts going, by the caster's look: whether each is a knife blow, and when it was last drawn (the
- * drawing clock). A knife blow is struck from the weapon's melee reach, two tiles off, so the stage carries the body
- * in for it (`cast.close`) -- and a throw must not be carried anywhere. The stage asks the spell's `close` without
- * saying whose cast it asks for, so it is given only while every Hit and Run being drawn is a knife blow: one caster at
- * a time, as it nearly always is. With a throw and a knife blow going at once the knife lunges where it stands
- * (`runKnifePose`) and its cut is drawn at its own reach.
- */
-const RUN_GOING = new Map<object, { knife: boolean; seen: number }>();
-let RUN_NOW = 0;
 const sayKnife = (k: FxScene): void => {
-  const look = k.caster.figure?.look ?? NO_LOOK, knife = thrownBy(k) === 'knife';
-  KNIFE_IN.set(look, knife);
-  RUN_NOW = Math.max(RUN_NOW, k.now);
-  RUN_GOING.set(look, { knife, seen: k.now });
+  KNIFE_IN.set(k.caster.figure?.look ?? NO_LOOK, thrownBy(k) === 'knife');
 };
-/** Whether Hit and Run closes in now: every one going is a knife blow (and there is one). */
-function runCloses(): boolean {
-  let any = false;
-  for (const [look, g] of RUN_GOING) {
-    if (RUN_NOW - g.seen > 1) {
-      RUN_GOING.delete(look);
-      continue;
-    }
-    if (!g.knife) return false;
-    any = true;
-  }
-  return any;
-}
 
 const runThrowPose: CastPose = (r, t, c) => {
   const wind = 0.28, rel = 0.42, thr = 0.56, off = 0.74;
@@ -947,10 +921,9 @@ const RUN_CLOSE: CastClose = { from: RUN_IN - 0.06, to: RUN_CUT, back: RUN_THROU
 /**
  * Hit and Run with a knife: a running stride in, the knife cut across the body from out on the right to the left hip
  * through what it strikes, and a spring back out with the hips already turning away and the head left looking back.
- * The stage carries the body (and its shadow) in to the creature over the stride and back out after (`RUN_CLOSE`);
- * the stride is light on its feet, off the ground a little at the middle of each. Not carried (walking, or a throw
- * going at once, `runCloses`), it is a lunge on the spot instead: the front foot put down further on, the back one
- * kept.
+ * The stage carries the body (and its shadow) in to the creature over the stride and back out after (`RUN_CLOSE`),
+ * and steps the legs for it: running in, bounding back. Not carried (walking, or in reach already), it is a lunge on
+ * the spot instead: the front foot put down further on, the back one kept.
  */
 const runKnifePose: CastPose = (r, t, c) => {
   const carried = (c.aim?.close ?? 0) > 0;
@@ -969,8 +942,7 @@ const runKnifePose: CastPose = (r, t, c) => {
   r.knee[0] = one(t, [[0, 6], [RUN_IN, 30], [(RUN_IN + RUN_CUT) / 2, 50], [RUN_CUT, 40], [RUN_THROUGH, 36], [(RUN_THROUGH + RUN_OUT) / 2, 40], [RUN_OUT, 16], [1, 6]]);
   r.leg[1] = E(t, [[0, [0, 2, 0]], [RUN_IN, [-8, 2, 0]], [(RUN_IN + RUN_CUT) / 2, [-30, 4, 0]], [RUN_CUT, [-34, 4, 0]], [RUN_THROUGH, [-22, 10, 0]], [(RUN_THROUGH + RUN_OUT) / 2, [-30, 14, 0]], [RUN_OUT, [-26, 14, 0]], [1, [-2, 2, 0]]]);
   r.knee[1] = one(t, [[0, 6], [RUN_IN, 20], [(RUN_IN + RUN_CUT) / 2, 60], [RUN_CUT, 24], [RUN_THROUGH, 20], [(RUN_THROUGH + RUN_OUT) / 2, 50], [RUN_OUT, 34], [1, 6]]);
-  if (carried) r.lift = (r.lift ?? 0) + 1.4 * (Math.sin(Math.PI * seg(t, RUN_IN, RUN_CUT - 0.04)) + Math.sin(Math.PI * seg(t, RUN_THROUGH + 0.04, RUN_OUT)));
-  else stepIn(r, t, c, { hit: RUN_CUT, from: RUN_IN, back: RUN_THROUGH + 0.04, most: 12, bend: 16 });
+  if (!carried) stepIn(r, t, c, { hit: RUN_CUT, from: RUN_IN, back: RUN_THROUGH + 0.04, most: 12, bend: 16 });
 };
 
 const runPose: CastPose = (r, t, c) => (knifeIn(c) ? runKnifePose : runThrowPose)(r, t, c);
@@ -1516,10 +1488,9 @@ export const SKIRMISHER: Record<string, SpellVisual> = {
     const thrown = throwTravel(RUN_FLIGHT, { wake: { span: 0.14, spread: 0.04, width: 2 } });
     return {
       palette: PALETTE,
-      // Closed in for a knife blow alone (`runCloses`): read each frame, as the stage asks it each frame.
-      cast: { timing: RUN.timing, pose: runPose, get close() {
-        return runCloses() ? RUN_CLOSE : false;
-      } },
+      // Closed in for a blow with a weapon that is not thrown (a knife); a javelin or an axe is thrown from where it
+      // stands. Asked for each cast, of what is in that caster's hand.
+      cast: { timing: RUN.timing, pose: runPose, close: { ...RUN_CLOSE, when: (w) => w !== undefined && !WEAPON_BY_ID.get(w)?.thrown } },
       fx: {
         charge: (k, t) => {
           sayKnife(k);

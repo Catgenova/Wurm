@@ -9,8 +9,9 @@
  *
  *   claws    three or four curved rakes across what was struck (`rake`)
  *   jaws     a bite closing (`bite`), a ring of teeth on the ground (`toothRing`)
- *   paws     prints where it pushed off and landed (`paw`)
- *   hackles  a crest standing along its back when its blood is up (`crest`)
+ *   paws     prints where it pushed off and landed (`pawTrack`), a forepaw pinning (`pinPaw`)
+ *   hackles  a crest standing along its back when its blood is up (`crest`); for
+ *            Bloodlust, the beast itself flushed red (`k.tint`) under a low ruff
  *   voice    arcs going out from a mouth, the beast's or the handler's (`howl`)
  *   the beast itself, in light, when it leaps (`spirit`)
  *
@@ -514,7 +515,7 @@ function howl(k: FxScene, from: P3, ang: number, u: number, o: { n?: number; rea
  * the longest, in height units; `beat` how many times a second they surge. Leaves (a flame's tongue) for Bloodlust's
  * blood, `claws` (tapered hooks) for Primal Fury's.
  */
-function crest(k: FxScene, b: Body, o: { len: number; alpha: number; beat: number; t: number; main: string; core: string; light: string; n: number; claws?: boolean }): void {
+function crest(k: FxScene, b: Body, o: { len: number; alpha: number; beat: number; t: number; main: string; core: string; light: string; n: number; claws?: boolean; span?: number }): void {
   if (o.alpha <= 0.01 || o.len <= 0.2) return;
   // The line of the back, from where the head is: the shoulders a third of the way to it, the rump as far behind.
   const head = k.muzzle(b);
@@ -527,7 +528,9 @@ function crest(k: FxScene, b: Body, o: { len: number; alpha: number; beat: numbe
   }
   const backZ = b.z + b.tall * 0.55;
   const shoulder = { x: b.x + fx * 0.32, y: b.y + fy * 0.32, z: backZ + b.tall * 0.04 };
-  const rump = { x: b.x - fx * 0.62, y: b.y - fy * 0.62, z: backZ - b.tall * 0.04 };
+  // `span` of the back from the shoulders: all of it for a crest, the shoulders alone for a ruff.
+  const sp = o.span ?? 1;
+  const rump = { x: b.x + fx * (0.32 - 0.94 * sp), y: b.y + fy * (0.32 - 0.94 * sp), z: backZ + b.tall * (0.04 - 0.08 * sp) };
   const s0x = k.sx(shoulder), s0y = k.sy(shoulder), s1x = k.sx(rump), s1y = k.sy(rump);
   // Toward the tail on the screen, for the lean: none when the beast faces straight at the viewer or away.
   let tx = s1x - s0x, ty = s1y - s0y;
@@ -577,37 +580,71 @@ function crest(k: FxScene, b: Body, o: { len: number; alpha: number; beat: numbe
 }
 
 /**
- * A talon out of the ground: rooted `R` tiles from `c` at angle `ang`, rising
- * `h` height units and hooking in over whatever stands at `c`. `grow` nought
- * to one, how far out of the ground.
+ * The beast's forepaw in light, come down on a creature's back from the beast's side and pinning it: the foreleg
+ * reaching in from over the beast's side, the paw on the back, and its claws hooked over and down the far flank.
+ * `side` +1 when the creature is to the right of the beast on the screen; `drop` pixels at zoom one it still has to come
+ * down (nought: on the back); `press` how hard it bears down (nought to one), squashing the paw.
  */
-function talon(k: FxScene, c: { x: number; y: number; z: number }, ang: number, R: number, h: number, grow: number, alpha: number, w = 4): void {
-  if (grow <= 0.02 || alpha <= 0.01) return;
-  const xs: number[] = [], ys: number[] = [];
-  const m = k.fast ? 5 : 7;
-  const ca = Math.cos(ang), sa = Math.sin(ang);
-  for (let i = 0; i <= m; i++) {
-    const s = (i / m) * grow;
-    // Straight up out of the ground, curling in over it near the top, and the tip hooking down onto it at the end: a
-    // claw closing, its point over the body rather than beside it -- not an arch, and not a leg standing on the ground.
-    const rr = R * (1 - 0.72 * s * s);
-    const rise = Math.sin((Math.min(s, 0.82) / 0.82) * (Math.PI / 2));
-    const z = c.z + h * (rise - 0.3 * Math.max(0, (s - 0.82) / 0.18)) - h * 0.15 * (1 - grow);
-    xs.push(k.eye.worldToScreenX(c.x + ca * rr, c.y + sa * rr));
-    ys.push(k.eye.worldToScreenY(c.x + ca * rr, c.y + sa * rr, z));
+function pinPaw(k: FxScene, b: Body, side: number, drop: number, press: number, alpha: number): void {
+  if (alpha <= 0.01) return;
+  const back = { x: b.x, y: b.y, z: b.z + b.tall * 0.6 };
+  const S = Math.max(6 * k.zoom, k.hpx(b.tall * 0.4));
+  const x0 = k.sx(back) - side * S * 0.25, y0 = k.sy(back) - drop * k.zoom + S * 0.12 * press;
+  const ink = k.pal.ink, main = k.pal.main, core = k.pal.core, deep = k.pal.deep;
+  const inkW = Math.max(0.8, 0.7 * k.zoom);
+  // Claws: from the paw's front edge over the far side and down it, hooked, in the paw's own units (x toward the far side).
+  const claws: number[][] = [];
+  for (const [cy, reach] of [[-0.32, 0.95], [-0.08, 1.05], [0.16, 0.9]] as const) {
+    const xs: number[] = [], ys: number[] = [];
+    for (let j = 0; j <= 6; j++) {
+      const v = j / 6, an = v * 1.9;
+      xs.push(x0 + side * S * (0.45 + Math.sin(an) * 0.5 * reach));
+      ys.push(y0 + S * (cy - 0.15 + (1 - Math.cos(an)) * 0.42 * reach));
+    }
+    claws.push(xs, ys);
   }
-  const base = { x: c.x + ca * R, y: c.y + sa * R, z: c.z };
-  const W = w * k.zoom, inkW = Math.max(0.8, 0.7 * k.zoom);
-  const ink = k.pal.ink;
-  k.worldDraw(base, (g) => {
+  const sq = 1 - 0.18 * press;
+  k.worldDraw(back, (g) => {
     g.globalAlpha = clamp(alpha);
-    taper(g, xs, ys, W, 0, IVORY, '#ffffff', ink, inkW);
-    // Where it comes out of the ground, a collar of torn earth.
-    g.fillStyle = '#4a3420';
-    g.beginPath();
-    g.ellipse(xs[0], ys[0], W * 0.9, W * 0.38, 0, 0, TAU);
-    g.fill();
-  });
+    g.lineJoin = 'miter';
+    g.lineWidth = inkW;
+    g.strokeStyle = ink;
+    const poly = (pts: ReadonlyArray<readonly [number, number]>, fill: string): void => {
+      g.beginPath();
+      pts.forEach(([px, py], n) => (n ? g.lineTo : g.moveTo).call(g, x0 + side * px * S, y0 + py * S * sq));
+      g.closePath();
+      g.fillStyle = fill;
+      g.fill();
+      g.stroke();
+    };
+    // The foreleg: a stroke of light reaching in from over the beast's side and down, nothing where it leaves the beast
+    // and broad at the wrist -- the beast's reach, ending in its paw.
+    const lx: number[] = [], ly: number[] = [];
+    for (let j = 0; j <= 8; j++) {
+      const v = j / 8;
+      lx.push(x0 + side * S * (-1.7 + 1.55 * v - 0.3 * Math.sin(Math.PI * v)));
+      ly.push(y0 + S * sq * (-1.65 + 1.4 * v - 0.2 * Math.sin(Math.PI * v)));
+    }
+    // Light, not a limb: uninked and half seen, so the paw is the solid thing and the reach only says where from.
+    g.globalAlpha = clamp(alpha * 0.5);
+    taper(g, lx, ly, S * 0.8, 0.85, k.pal.light, core, ink, 0);
+    g.globalAlpha = clamp(alpha);
+    // The paw, round and flat on the back; three toes along its front edge, where the claws come out.
+    const blob: Array<[number, number]> = [];
+    for (let j = 0; j < 10; j++) {
+      const an = (j / 10) * TAU;
+      blob.push([-0.08 + Math.cos(an) * 0.55, -0.15 + Math.sin(an) * 0.42]);
+    }
+    poly(blob, main);
+    for (const ty of [-0.42, -0.16, 0.1]) {
+      const toe: Array<[number, number]> = [];
+      for (let j = 0; j < 6; j++) toe.push([0.47 + Math.cos((j / 6) * TAU) * 0.15, ty + Math.sin((j / 6) * TAU) * 0.12]);
+      poly(toe, dry(main, 0.2, deep));
+    }
+    poly([[-0.5, -0.4], [-0.15, -0.53], [0.22, -0.46], [0.05, -0.36], [-0.38, -0.28]], core);
+    for (let c = 0; c < claws.length; c += 2) taper(g, claws[c], claws[c + 1], S * 0.22, 0, IVORY, '#ffffff', ink, inkW);
+  }, 5);
+  k.glow({ ...back, z: back.z + 2 }, 8 + b.wide * 0.5, alpha * 0.3);
 }
 
 /**
@@ -646,42 +683,19 @@ function pawSign(k: FxScene, p: P3, size: number, alpha: number): void {
     g.fillStyle = core;
     g.fill();
     // The toes in an arc over it, the outer two lower.
-    for (const [tx, ty, r] of [[-0.62, -0.42, 0.2], [-0.22, -0.72, 0.22], [0.22, -0.72, 0.22], [0.62, -0.42, 0.2]] as const) {
+    for (const [tx, ty, r] of [[-0.68, -0.44, 0.24], [-0.25, -0.78, 0.26], [0.25, -0.78, 0.26], [0.68, -0.44, 0.24]] as const) {
       const pts: Array<[number, number]> = [];
       for (let i = 0; i < 5; i++) {
         const an = -Math.PI / 2 + (i / 5) * TAU;
         pts.push([tx + Math.cos(an) * r * 0.85, ty + Math.sin(an) * r]);
       }
-      poly(pts, tx < 0 ? main : deep);
+      // Toes as bright as the pad, so the four read as toes at play size; the right-hand pair a shade down.
+      poly(pts, tx < 0 ? main : dry(main, 0.25, deep));
     }
   }, 4);
-  k.glow(p, size * 2.6, alpha * 0.5);
+  k.glow(p, size * 2.6, alpha * 0.25);
 }
 
-
-/**
- * A tooth standing in the air at `p`: a curved fang, root up (or, `up`, root down and point up: the lower jaw's),
- * `size` pixels at zoom one. `lean` tips it.
- */
-function fang(k: FxScene, p: P3, size: number, alpha: number, lean = 0, bias = 0, up = false): void {
-  if (alpha <= 0.01) return;
-  const x = k.sx(p), y = k.sy(p), S = size * k.zoom, dir = up ? -1 : 1;
-  const xs: number[] = [], ys: number[] = [];
-  for (let i = 0; i <= 5; i++) {
-    const s = i / 5;
-    // From the root to the point, hooking: a canine.
-    xs.push(x + (Math.sin(s * 1.6) * 0.45 - 0.2 + lean * (s - 0.5)) * S * dir);
-    ys.push(y + (s * 2 - 1) * S * dir);
-  }
-  const ink = k.pal.ink, deep = k.pal.deep, inkW = Math.max(0.8, 0.7 * k.zoom);
-  k.worldDraw(p, (g) => {
-    g.globalAlpha = clamp(alpha);
-    taper(g, xs, ys, S * 0.9, 0, IVORY, '#ffffff', ink, inkW);
-    // The root, set in a band of the beast's colour.
-    g.fillStyle = deep;
-    g.fillRect(xs[0] - S * 0.5, ys[0] - S * 0.12, S, S * 0.24);
-  }, bias);
-}
 
 /**
  * A beast at full stretch in the air, nose to tail along +x with its back up:
@@ -790,17 +804,21 @@ function leapAlong(k: FxScene, at: (v: number) => P3, u: number, scale = 1): voi
 
 /**
  * The beast in light wrapped round the real one while the stage carries it (`cast.companion`, `smooth(u)` of the way
- * from `from`): lifted on a low arc, kept low enough that the light stays round the body under it -- one beast leaping,
- * not a body sliding along with a double flying over it.
+ * from `from`): lifted on an arc a body height or two high at its top (more the further it goes), its shadow kept on the
+ * body's own path, so it reads as a leap rather than a dash along the ground. It sets off from the body and comes down
+ * onto it: one beast leaping. (The stage carries the body along the ground only; a `lift` on `cast.companion` would let
+ * the body itself rise.)
  */
 function rideLeap(k: FxScene, beast: Body, from: { x: number; y: number }, u: number, scale: number): void {
   const g = smooth(u);
   const tiles = Math.hypot(beast.x - from.x, beast.y - from.y) / Math.max(0.05, g);
-  const H = Math.min(5, 2 + tiles);
+  const H = Math.min(10, 4 + tiles * 1.5);
   leapAlong(k, (v) => {
     const f = g > 0.02 ? v / g : 0;
     return k.on(from.x + (beast.x - from.x) * f, from.y + (beast.y - from.y) * f, beast.tall * 0.45 + 4 * H * v * (1 - v));
   }, g, scale);
+  // The body under it lit amber by its own leap, the light and the body one beast rather than a body and a double.
+  k.tint(beast, { colour: k.pal.main, share: 0.5 * Math.sin(Math.PI * clamp(g)) });
 }
 
 /* ---- the twelve -------------------------------------------------------------------------- */
@@ -819,7 +837,10 @@ const sicPose: CastPose = (r, t, c) => {
   r.mouth = one(t, [[0, 0], [lips, 0.22], [b.top, 0.22], [b.let, 0.55], [b.through, 0.3], [1, 0]]);
   r.arm[0] = euler(t, [[0, [10, 10, 0]], [lips, [66, -16, 36]], [b.top, [66, -16, 36]], [b.let, [-18, 26, 0]], [b.through, [-14, 24, 0]], [1, [10, 10, 0]]]);
   r.elbow[0] = one(t, [[0, 20], [lips, 148], [b.top, 148], [b.let, 30], [1, 22]]);
-  r.arm[1] = euler(t, [[0, [10, 10, 0]], [lips, [24, 30, -10]], [b.top, [40, 40, -24]], [b.let, [86, 2, 0]], [b.through, [84, 4, 0]], [1, [20, 10, 0]]]);
+  // The point aimed in the chest's frame: the trunk is pitched 28 degrees forward over it, so the arm is raised that much
+  // less 8 (the enemy's chest is below the shoulder) above the chest's level, and the hand ends level at the enemy.
+  const point = armToward(1, [0.1, 0.94, 0.34]);
+  r.arm[1] = euler(t, [[0, [10, 10, 0]], [lips, [24, 30, -10]], [b.top, [40, 40, -24]], [b.let, point], [b.through, point], [1, [20, 10, 0]]]);
   r.elbow[1] = one(t, [[0, 20], [b.top, 104], [b.let, 0], [b.through, 4], [1, 22]]);
   r.hand[1] = euler(t, [[0, [0, 0, 0]], [b.top, [24, 0, 0]], [b.let, [-12, 0, 0]], [1, [0, 0, 0]]]);
   r.chest = euler(t, [[0, [0, 0, 0]], [lips, [6, 0, -14]], [b.top, [8, 0, -28]], [b.let, [-10, 0, 16]], [b.through, [-9, 0, 14]], [1, [0, 0, 0]]]);
@@ -869,7 +890,8 @@ const sic: SpellVisual = {
       // The rake's size is the blow's (130% of the beast's own reads a third longer than Pounce's plain one), and the
       // creature's: a small one is not raked past its own back.
       const fit = Math.min(1, k.target.tall / 22);
-      rake(k, at, { ang, len: 12 * SIC_MORE * fit, gap: 3.4 * fit, u: seg(u, 0, 0.22), alpha: 1 - seg(u, 0.45, 1), bend: 0.14 });
+      // Broad amber, ivory along the lit edge and inked dark, so a pale coat does not swallow it at play size.
+      rake(k, at, { ang, len: 12 * SIC_MORE * fit, gap: 3.4 * fit, u: seg(u, 0, 0.22), alpha: 1 - seg(u, 0.45, 1), bend: 0.14, width: Math.max(2, 2.6 * fit), core: IVORY });
       k.flare(at, 5 * (1 - u), 0.6 * flashOf(u, 0.08), k.pal.core, 0.4);
       k.light(k.target, 2, 0.5 * (1 - u));
     } },
@@ -883,7 +905,9 @@ const pouncePose: CastPose = (r, t, c) => {
   const low = b.top * 0.55;
   // Swung back low past the hip, then flung flat out at where it lands -- not up, which reads as hailing a friend -- and
   // held there while it flies.
-  const fling = armToward(1, [0.15, 0.9, 0.35]);
+  // Aimed in the chest's frame, a little below its level: the trunk comes up and back over the release, and the hand
+  // should end level with where the beast lands, not raised to it.
+  const fling = armToward(1, [0.12, 0.98, -0.12]);
   r.arm[1] = euler(t, [[0, [10, 10, 0]], [low, [42, 18, 0]], [b.top, [-34, 18, 0]], [b.let, fling], [b.through, fling], [1, [20, 10, 0]]]);
   r.elbow[1] = one(t, [[0, 20], [low, 36], [b.top, 30], [b.let, 2], [b.through, 4], [1, 22]]);
   r.hand[1] = euler(t, [[0, [0, 0, 0]], [b.top, [20, 0, 0]], [b.let, [-6, 0, 0]], [b.through, [-6, 0, 0]], [1, [0, 0, 0]]]);
@@ -961,27 +985,36 @@ const pounce: SpellVisual = {
     hit: (k) => {
       const at = k.heart(k.target), away = k.toward(leapFrom(k, k.target, 0), k.target);
       k.burst(at, 14, { kind: 'spark', colour: [k.pal.main, IVORY], size: 1.8, life: [0.2, 0.45], speed: [0.8, 2], up: [4, 28], heading: away, cone: 2, gravity: 60, drag: 0.08, over: true });
-      // The landing's dust thrown out all round, low and fast.
-      k.burst(k.at(k.target, 0.04), 18, { kind: 'dust', colour: '#8a7a62', size: 3.2, life: [0.4, 0.8], speed: [0.8, 1.4], up: [1, 4], gravity: 3, drag: 0.2 });
+      // The landing's dust: four low puffs kicked out round where it comes down, each with its own short arc on the ground.
+      const head = k.toward(leapFrom(k, k.target, 0), k.target);
+      const land = { x: k.target.x - head.x * 0.42, y: k.target.y - head.y * 0.42 };
+      for (let i = 0; i < 4; i++) {
+        const an = (i / 4) * TAU + 0.4 + hashOf(k.seed, i) * 0.5, dir = { x: Math.cos(an), y: Math.sin(an) };
+        k.burst(k.on(land.x + dir.x * 0.14, land.y + dir.y * 0.14, 1), 4, { kind: 'dust', colour: '#8a7a62', size: 3, life: [0.35, 0.7], speed: [0.4, 0.8], up: [1, 4], heading: dir, cone: 0.7, gravity: 3, drag: 0.25 });
+      }
     },
     impact: { secs: Math.max(0.85, (POUNCE.back ?? 0.5) + 0.35), draw: (k, u) => {
       const secs = Math.max(0.85, (POUNCE.back ?? 0.5) + 0.35), age = u * secs;
       const at = k.heart(k.target), from = leapFrom(k, k.target, 0);
       const side = sideOf(k, from, k.target);
-      // Both forepaws, straight down the body: a weight landing, not a swipe.
+      // Both forepaws, straight down the flank: a weight landing, not a swipe -- fitted to the creature as Sic's rake is,
+      // laid low on its side and all but parallel, so they read as two paws come down on it and not a fan over its back.
+      const fit = Math.min(1, k.target.tall / 22);
+      const flank = k.at(k.target, 0.45);
       for (const s of [-1, 1]) {
-        rake(k, at, { shift: [s * 5, 1], ang: Math.PI / 2 - side * 0.2 - s * 0.45, len: 12 * (POUNCE.more ?? 1), gap: 2.8, width: 1.8, u: seg(u, 0, 0.18), alpha: 1 - seg(u, 0.55, 1), bend: s * 0.12, glow: 0.6 });
+        rake(k, flank, { shift: [s * 4 * fit, 0], ang: Math.PI / 2 - side * 0.2 - s * 0.2, len: 12 * (POUNCE.more ?? 1) * fit, gap: 2.8 * fit, width: Math.max(1.6, 2.2 * fit), u: seg(u, 0, 0.18), alpha: 1 - seg(u, 0.55, 1), bend: s * 0.12, glow: 0.6, core: IVORY });
       }
-      // The landing in the ground: dust thrown out in broken arcs, not a hoop, and the prints it lands on.
+      // The landing in the ground: four short scuffs close round it where the puffs of dust went up, and the prints it
+      // lands on.
       const head = k.toward(from, k.target);
       const sx = -head.y * 0.12, sy = head.x * 0.12;
       const land = { x: k.target.x - head.x * 0.42, y: k.target.y - head.y * 0.42 };
       const go = easeOut(seg(u, 0, 0.5)), dust = 1 - seg(u, 0.25, 0.7);
       if (dust > 0.01) {
-        // Each arc a short curve hugging the landing, its ends drawn in as it spreads: a puff of dust going out, not a hoop.
-        const r = 0.16 + 0.34 * go, segs: Array<[P3, P3]> = [];
-        for (let i = 0; i < 6; i++) {
-          const a0 = (i / 6) * TAU + hashOf(k.seed, i) * 0.5, span = 0.7 - 0.35 * go;
+        // Each a short curve hugging the landing, its ends drawn in as it spreads: kicked-up earth, not a hoop.
+        const r = 0.1 + 0.2 * go, segs: Array<[P3, P3]> = [];
+        for (let i = 0; i < 4; i++) {
+          const a0 = (i / 4) * TAU + 0.4 + hashOf(k.seed, i) * 0.5 - 0.25, span = 0.6 - 0.3 * go;
           for (let j = 0; j < 3; j++) {
             const b0 = a0 + (span * j) / 3, b1 = a0 + (span * (j + 1)) / 3;
             segs.push([k.on(land.x + Math.cos(b0) * r, land.y + Math.sin(b0) * r), k.on(land.x + Math.cos(b1) * r, land.y + Math.sin(b1) * r)]);
@@ -1047,38 +1080,38 @@ const dragDown: SpellVisual = {
       k.burst(k.heart(k.target), 10 * (DRAG.more ?? 1) + 4, { kind: 'spark', colour: [IVORY, k.pal.main], size: 1.6, life: [0.15, 0.35], speed: [0.5, 1.2], up: [4, 16], gravity: 50, over: true });
     },
     impact: { secs: 0.6, draw: (k, u) => {
-      // The bite, side-on into the flank from the beast's side: the jaws open wide, snap shut, and hang on, in the dark of
-      // the beast's colour once closed so the shut jaws read as a grip and not as a lozenge of light.
+      // The bite, side-on into the flank from the beast's side: the jaws open wide, snap shut, and hang on, kept in the
+      // beast's amber shut as open, so the closed jaws still read as jaws.
       const side = sideOf(k, strikerOf(k), k.target);
       const at = k.at(k.target, 0.55);
       const sx = k.sx(at) - side * k.hpx(k.target.wide * 0.6);
       const open = smooth(seg(u, 0, 0.2)), snap = easeIn(seg(u, 0.3, 0.4));
       const shut = snap > 0 ? snap : 1 - open;
-      bite(k, at, { size: 9, shut, face: side, alpha: smooth(u / 0.08) * (1 - seg(u, 0.72, 0.95)), turn: 0, shiftX: sx - k.sx(at), jaw: snap >= 1 ? k.pal.deep : undefined });
+      bite(k, at, { size: 7.5, shut, face: side, alpha: smooth(u / 0.08) * (1 - seg(u, 0.55, 0.8)), turn: 0, shiftX: sx - k.sx(at) });
       k.light(k.target, 2, 0.5 * (1 - u));
     } },
-    // Held for the hold's seconds: talons up out of the ground round its feet, hooked in over it -- and, once up, bearing
-    // down on it, pressing it into a dent in the ground: dragged down, not caged.
+    // Held for the hold's seconds: the beast's forepaw in light come down on the creature's back from the beast's side,
+    // its claws hooked over the far flank -- pinned down by the beast, not caged -- pressed hard once as it lands, the
+    // creature darkened under it and pressed into a dent in the ground.
     linger: { draw: (k, age, left) => {
       const b = k.target;
-      // Rooted close round its feet and standing over its back, so each point comes down onto it from above.
-      const R = Math.max(0.15, (b.wide / 40) * 2);
-      const grow = easeOut(seg(age, 0.05, 0.3)) * smooth(left / 0.35);
-      const press = bump(age, 0.28, 0.4, 0.75) * 0.6 + 0.4 * seg(age, 0.3, 0.45);
-      const h = Math.max(8, b.tall * 0.95) * (1 - 0.15 * press);
-      for (let i = 0; i < 5; i++) {
-        const ang = (i / 5) * TAU + 0.3 + hashOf(k.seed, i) * 0.4;
-        // A tremor in them while it strains against them.
-        const strain = 0.04 * Math.sin(age * 23 + i * 2.1) * Math.max(0, Math.sin(age * 2.4 + i));
-        talon(k, b, ang + strain, R, h * (0.85 + 0.25 * hashOf(k.seed + 1, i)), grow, 1, 3);
-      }
-      if (k.state.pressed === undefined && age > 0.38) {
+      const side = sideOf(k, strikerOf(k), b);
+      const R = Math.max(0.12, (b.wide / 40) * 1.6);
+      // Coming down as the bite lets go, so the two are seen one after the other.
+      const grow = smooth(seg(age, 0.26, 0.42)) * smooth(left / 0.35);
+      // Once, hard, as it lands; then held down a little for the rest, with a tremor while it strains.
+      const press = bump(age, 0.44, 0.52, 0.85) + 0.3 * seg(age, 0.55, 0.85);
+      const strain = 0.6 * Math.sin(age * 23) * Math.max(0, Math.sin(age * 2.4));
+      pinPaw(k, b, side, 14 * (1 - easeIn(seg(age, 0.26, 0.46))) + strain, press, grow);
+      // The creature itself darkened and pressed for the whole hold.
+      k.tint(b, { colour: '#3a2a1a', share: 0.32 * grow * (0.75 + 0.25 * press) });
+      if (k.state.pressed === undefined && age > 0.47) {
         k.state.pressed = 1;
-        k.burst(k.at(b, 0.03), 10, { kind: 'dust', colour: '#7d6a4e', size: 2.6, life: [0.35, 0.7], speed: [0.5, 1.0], up: [1, 4], gravity: 3, drag: 0.2 });
+        k.burst(k.at(b, 0.03), 12, { kind: 'dust', colour: '#7d6a4e', size: 2.8, life: [0.35, 0.7], speed: [0.6, 1.1], up: [1, 4], gravity: 3, drag: 0.2 });
       }
-      // The dent it is pressed into, deepening as the talons bear down.
-      k.scorch(b, R * (0.9 + 0.3 * press), { colour: '#2e2014', alpha: (0.25 + 0.25 * press) * grow });
-      // A low light in the hold, so it reads in the dark as well: a creature pinned in a ring of bone.
+      // The dent it is pressed into, deepening as the paw bears down.
+      k.scorch(b, R * (0.9 + 0.3 * press), { colour: '#2e2014', alpha: (0.3 + 0.25 * press) * grow });
+      // A low light in the hold, so it reads in the dark as well.
       k.light(b, 1.4, 0.35 * grow);
       k.glow(k.at(b, 0.3), 10, 0.25 * grow);
       if (!k.fast) k.emit(k.at(b, 0.02), 3 * grow, { kind: 'dust', colour: '#7d6a4e', size: 2.2, life: [0.4, 0.7], speed: [0.1, 0.3], up: [1, 4], gravity: 2, jitter: R });
@@ -1115,7 +1148,7 @@ const disembowel: SpellVisual = {
     charge: (k, t) => k.glow(k.hand(1), 4, 0.7 * bump(t, 0.2, 0.42, 0.55), BLOOD.light),
     hit: (k) => {
       const at = k.heart(k.target), away = k.toward(strikerOf(k), k.target);
-      k.burst(at, 18, { kind: 'drop', colour: [BLOOD.main, BLOOD.deep], size: 2.2, life: [0.35, 0.7], speed: [0.4, 1.1], up: [6, 22], heading: away, cone: 2, gravity: 70, drag: 0.4 });
+      k.burst(at, 12, { kind: 'drop', colour: [BLOOD.main, BLOOD.deep], size: 1.8, life: [0.35, 0.7], speed: [0.4, 1.1], up: [6, 18], heading: away, cone: 1.6, gravity: 70, drag: 0.4 });
       k.burst(at, 10, { kind: 'spark', colour: [BLOOD.core, k.pal.core], size: 1.6, life: [0.15, 0.3], speed: [0.6, 1.4], up: [4, 14], heading: away, cone: 1.6, gravity: 50, over: true });
     },
     impact: { secs: 0.6, draw: (k, u) => {
@@ -1142,11 +1175,13 @@ const disembowel: SpellVisual = {
       const tick = Math.floor(age);
       const since = age - tick;
       const pulse = flashOf(clamp(since / 0.5), 0.15);
-      // The cuts kept on the flank, short and thin, inside the body's outline: near gone between beats, opening on each.
+      // The cuts kept on the flank, short, inside the body's outline: dark and plain between beats, opening red on each.
+      // And the creature itself flushed with its blood, deeper on each beat: a bleeding body, read at any size.
       const fit = Math.min(1, b.tall / 22);
       const at = k.at(b, 0.42);
-      rake(k, at, { ang: Math.PI / 2 - side * 0.3, n: 4, len: 9 * fit, gap: 2 * fit, u: 1, alpha: a * (0.15 + 0.75 * pulse), bend: 0.22,
-        fill: BLOOD.deep, core: BLOOD.main, light: BLOOD.light, width: 1.3, glow: 0.4 * pulse });
+      rake(k, at, { ang: Math.PI / 2 - side * 0.3, n: 4, len: 9 * fit, gap: 2 * fit, u: 1, alpha: a * (0.4 + 0.55 * pulse), bend: 0.22,
+        fill: BLOOD.deep, core: BLOOD.main, light: BLOOD.light, width: 1.6, glow: 0.4 * pulse });
+      k.tint(b, { colour: BLOOD.deep, share: a * (0.15 + 0.15 * pulse) });
       k.light(b, 1.2, 0.35 * a * pulse, BLOOD.light);
       if ((k.state.tick ?? -1) < tick && left > 0.3 && shut === 1) {
         k.state.tick = tick;
@@ -1157,7 +1192,7 @@ const disembowel: SpellVisual = {
       // heart over its dark, the older blood drying darker rather than fading to mud.
       const secs = GUT.secs ?? 8;
       const grow = clamp(age / secs);
-      bloodPool(k, b, 0.06 + 0.12 * grow, a, grow * 0.6);
+      bloodPool(k, b, 0.1 + 0.18 * grow, a, grow * 0.6);
     } },
   },
 };
@@ -1202,9 +1237,14 @@ const lickPose: CastPose = (r, t, c) => {
   // back along it twice; the left hand on the raised knee. The hand goes as near the beast as a kneeling arm reaches
   // (the body is turned to it), and the strokes in light carry the rest of the way when it stands further off.
   const pet = c.companion;
-  const ahead = pet ? clamp(pet.ahead - 5, 4.5, 9) : 7, aside = pet ? clamp(pet.aside, -3, 3) : 1;
+  // A beast further off than a kneeling arm reaches is gone to first: a step and a half in to it (at most 0.65 tiles,
+  // so the cast stays where it is cast), knelt there, and back again after rising.
+  const by = pet ? clamp(pet.ahead - 14, 0, 26) : 0;
+  // The hands' places are from where the feet stood, so each is carried on by as far as the step has taken the body.
+  const went = by > 0 ? stepIn(r, t, c, { hit: down * 0.9, from: 0.02, back: 0.8, by, most: 26, bend: 14 }) : 0;
+  const ahead = (pet ? clamp(pet.ahead - 5 - by, 4.5, 9) : 7) + went, aside = pet ? clamp(pet.aside, -3, 3) : 1;
   // Knelt while the hand strokes, then up again over the last of the cast, unhurried.
-  const on = one(t, [[0, 0], [down, 1], [b.through + 0.04, 1], [0.97, 0]]);
+  const on = one(t, [[0, 0], [by > 0 ? down * 0.6 : 0, 0], [down, 1], [b.through + 0.04, 1], [by > 0 ? 0.86 : 0.97, 0]]);
   r.kneel = on;
   r.spine = euler(t, [[0, [0, 0, 0]], [down, [-6, 0, 0]], [b.through, [-8, 0, 0]], [1, [0, 0, 0]]]);
   r.head = euler(t, [[0, [0, 0, 0]], [down, [-18, 0, 4]], [b.let, [-24, 0, 6]], [b.through, [-20, 0, 4]], [1, [0, 0, 0]]]);
@@ -1212,7 +1252,7 @@ const lickPose: CastPose = (r, t, c) => {
   const s1 = lerp(down, s1e, 0.5), s2 = lerp(b.let, s2e, 0.5);
   const along = one(t, [[0, 0], [down, 0], [s1, 1], [b.let, 0], [s2, 1], [b.through, 0.4], [1, 0.4]]);
   r.reach = [
-    { at: [-2.6, 4.5, 5.6], w: on },
+    { at: [-2.6, 4.5 + went, 5.6], w: on },
     { at: [aside + lerp(0.8, 0, along), ahead + lerp(1.2, -1.2, along), lerp(4.4, 5.4, along)], w: on, stoop: true },
   ];
   r.hand[1] = euler(t, [[0, [0, 0, 0]], [down, [-24, 0, 0]], [s1, [6, 0, 0]], [b.let, [-24, 0, 0]], [s2, [6, 0, 0]], [1, [0, 0, 0]]]);
@@ -1262,7 +1302,8 @@ const lickWounds: SpellVisual = {
     hit: (k) => {
       const beast = beastOf(k);
       if (!beast) return;
-      k.burst(k.at(beast, 0.5), 8, { kind: 'mote', colour: [WILD.core, WILD.main], size: 1.6, life: [0.5, 1.0], speed: [0.1, 0.35], up: [10, 24], gravity: 0, jitter: 0.12 });
+      // Few, and rising quickly off its back, so they do not pile up on the lick still going over it.
+      k.burst(k.at(beast, 0.75), 5, { kind: 'mote', colour: [WILD.core, WILD.main], size: 1.6, life: [0.5, 1.0], speed: [0.1, 0.35], up: [16, 28], gravity: 0, jitter: 0.14 });
     },
     impact: { secs: 1.3, draw: (k, u) => {
       const beast = beastOf(k);
@@ -1338,11 +1379,11 @@ const snarlPose: CastPose = (r, t, c) => {
   r.knee[1] = one(t, [[0, 4], [b.top, 26], [b.let, 20], [1, 5]]);
 };
 
-/** The beast's own jaws, at its head and a little over it, facing the way it faces on the screen: where its snarl is shown. */
+/** The beast's own jaws, on its muzzle, facing the way it faces on the screen: where its snarl is shown. */
 function jawsOf(k: FxScene, beast: Body): { at: P3; face: number } {
   const head = k.muzzle(beast);
   const dx = k.sx(head) - k.sx(beast);
-  return { at: { ...head, z: head.z + 3 }, face: Math.abs(dx) > 0.5 ? Math.sign(dx) : sideOf(k, k.caster, beast) };
+  return { at: head, face: Math.abs(dx) > 0.5 ? Math.sign(dx) : sideOf(k, k.caster, beast) };
 }
 
 const snarl: SpellVisual = {
@@ -1357,7 +1398,7 @@ const snarl: SpellVisual = {
       if (!beast || k.released >= 0) return;
       const j = jawsOf(k, beast);
       const a = smooth(seg(t, 0.12, 0.3));
-      bite(k, j.at, { size: 11, shut: 1 - easeOut(seg(t, 0.12, 0.4)) * 0.9, face: j.face, alpha: a, turn: -0.1 });
+      bite(k, j.at, { size: 7, shut: 1 - easeOut(seg(t, 0.12, 0.4)) * 0.9, face: j.face, alpha: a, turn: -0.1 });
     },
     hit: (k) => {
       const beast = beastOf(k);
@@ -1384,7 +1425,7 @@ const snarl: SpellVisual = {
         for (const b of turnedOn(k, beast, reach)) {
           const head = k.toward(b, beast);
           const run = easeOut(inward) * Math.min(0.7, Math.hypot(beast.x - b.x, beast.y - b.y) * 0.3);
-          list.push({ x: b.x + head.x * (0.3 + run), y: b.y + head.y * (0.3 + run), head, size: 0.45, alpha: bump(inward, 0, 0.12, 1), main: k.pal.core });
+          list.push({ x: b.x + head.x * (0.3 + run), y: b.y + head.y * (0.3 + run), head, size: 0.3, alpha: bump(inward, 0, 0.12, 1), main: k.pal.core });
           if (inward < 0.35) k.flare(k.at(b, 1.12), 7, 1 - inward / 0.35, k.pal.core, inward * 3, k.pal.light, true);
         }
         const n = k.fast ? 4 : 6;
@@ -1396,9 +1437,10 @@ const snarl: SpellVisual = {
         }
         chevrons(k, beast, reach, list);
       }
-      // The jaws snapping shut once, as the snarl goes out, and let go.
+      // The jaws snapping shut once, as the snarl goes out, held shut a moment at full strength (a snap seen, not a
+      // dimming), and let go.
       const j = jawsOf(k, beast);
-      bite(k, j.at, { size: 11, shut: 0.1 + 0.9 * easeIn(seg(u, 0, 0.07)), face: j.face, alpha: 1 - seg(u, 0.14, 0.3), turn: -0.1 });
+      bite(k, j.at, { size: 7, shut: 0.1 + 0.9 * easeIn(seg(u, 0, 0.07)), face: j.face, alpha: 1 - seg(u, 0.2, 0.34), turn: -0.1 });
       k.light(beast, Math.min(reach, 2.5), 0.45 * held);
     } },
   },
@@ -1471,24 +1513,18 @@ const guardMe: SpellVisual = {
     impact: { secs: 1.4, draw: (k, u) => {
       const reach = GUARD.reach ?? 6;
       const c = k.caster;
-      // Everything hunting you within its reach called in: the reach drawn as teeth pointing in, broken in four, drawn in
-      // toward you and the beast -- the group's teeth, and no dashed ring (that is Vengeance's beast's reach).
+      // Everything hunting you within its reach called in: the reach drawn as a ring of arrowheads pointing in, closing on
+      // you and the beast -- arrows are Guard Me's, as the ring of teeth is Snarl's -- on a thin line that keeps them one
+      // ring however far apart they stand.
       const pull = easeIn(seg(u, 0.1, 0.85));
       const r = reach * (1 - 0.82 * pull);
       const ring = smooth(u / 0.1) * (1 - seg(u, 0.75, 0.95));
-      const spans: Array<[number, number]> = [];
-      for (let i = 0; i < 4; i++) {
-        const a0 = (i / 4) * TAU + 0.25 - u * 0.4;
-        spans.push([a0, a0 + TAU / 4 - 0.5]);
-      }
-      toothRing(k, c, r, { spans, band: 0.06 + 0.04 * pull, len: 0.2 + 0.06 * (1 - pull), alpha: 0.9 * ring, teeth: Math.round(reach * 5), glow: 0.4 });
-      // The creatures that are there marked as it reaches them, each set running at the beast at your side; and arrowheads
-      // in at the gaps, for the reach of it.
+      k.ring(c, r, { band: 0.035, alpha: 0.55 * ring, glow: 0.3 });
       const list: Chevron[] = [];
-      const n = 4;
+      const n = k.fast ? 12 : 16;
       for (let i = 0; i < n; i++) {
-        const ang = (i / n) * TAU + 0.25 - u * 0.4 - 0.25;
-        list.push({ x: c.x + Math.cos(ang) * (r + 0.1), y: c.y + Math.sin(ang) * (r + 0.1), head: { x: -Math.cos(ang), y: -Math.sin(ang) }, size: 0.32 + 0.1 * (1 - pull), alpha: ring });
+        const ang = (i / n) * TAU + 0.2 - u * 0.4;
+        list.push({ x: c.x + Math.cos(ang) * (r + 0.05), y: c.y + Math.sin(ang) * (r + 0.05), head: { x: -Math.cos(ang), y: -Math.sin(ang) }, size: 0.34 + 0.08 * (1 - pull), alpha: ring, main: k.pal.main });
       }
       const side = sideOfKeeper(k);
       for (const b of turnedOn(k, c, reach)) {
@@ -1500,11 +1536,15 @@ const guardMe: SpellVisual = {
         if (reached < 1) k.flare(k.at(b, 1.12), 7, 1 - reached, k.pal.core, reached * 3, k.pal.light, true);
       }
       chevrons(k, c, reach, list);
-      // The line it holds: a crescent of teeth on the ground before you both, facing out.
+      // The line it holds: a crescent of teeth on the ground before you both, facing out -- turned from straight ahead
+      // toward the side the beast stands on and set out past it, so the beast stands at the line it holds.
       const face = k.facingDir(c);
       const fa = Math.atan2(face.y, face.x);
+      const sa = Math.atan2(side.y - c.y, side.x - c.x);
+      const toward = Math.atan2(Math.sin(sa - fa), Math.cos(sa - fa));
+      const mid = fa + Math.sign(toward) * Math.min(0.6, Math.abs(toward));
       const wall = smooth(seg(u, 0, 0.18)) * (1 - seg(u, 0.75, 1));
-      toothRing(k, c, 0.7, { from: fa - 1.25, to: fa + 1.25, out: true, teeth: 7, len: 0.16, band: 0.07, alpha: wall, glow: 0.6 });
+      toothRing(k, c, 1.0, { from: mid - 1.2, to: mid + 1.2, out: true, teeth: 9, len: 0.16, band: 0.07, alpha: wall, glow: 0.6 });
       k.light(c, 1.6, 0.5 * wall, '#fff1d6');
     } },
   },
@@ -1557,22 +1597,25 @@ const bloodlust: SpellVisual = {
     impact: { secs: 0.7, draw: (k, u) => {
       const beast = beastOf(k);
       if (!beast) return;
-      // Its hackles thrown up in red along its back, surging high as the blood reaches it and settling.
+      // The blood reaching it: the whole beast flushed red at once, and a low ruff of hackles thrown up over its shoulders.
+      k.tint(beast, { colour: BLOOD.main, share: 0.6 * flashOf(u, 0.12) });
       const len = lustCrest(beast) * (1 + 0.5 * flashOf(u, 0.15));
-      crest(k, beast, { len, alpha: flashOf(u, 0.1) * 0.95, beat: 1.2, t: k.now, main: BLOOD.main, core: BLOOD.core, light: BLOOD.light, n: k.fast ? 5 : 6 });
+      crest(k, beast, { len, alpha: flashOf(u, 0.1) * 0.95, beat: 1.2, t: k.now, main: BLOOD.main, core: BLOOD.core, light: BLOOD.light, n: 3, span: 0.3 });
       k.light(beast, 1.6, 0.6 * (1 - u), BLOOD.light);
     } },
-    // For its seconds: the red crest kept up along its back, swelling on each beat of a heart and shortening as the
-    // seconds run out (to half at the end), so a glance says how much is left; drops of blood falling off it.
+    // For its seconds: the beast's own body flushing red on a heartbeat (1.2 a second) -- the flush fainter as the seconds
+    // run out, so a glance says how much is left -- and the low ruff kept up over its shoulders; a drop of blood now and
+    // then. Primal Fury's mark is a crest of gold claws the length of the back; this is the beast itself going red.
     linger: { draw: (k, age, left) => {
       const beast = beastOf(k);
       if (!beast) return;
       const a = smooth(age / 0.5) * smooth(left / 1);
-      const beat = Math.pow(Math.max(0, Math.sin(age * 1.2 * TAU)), 6);
-      const remains = 0.5 + 0.5 * clamp(left / Math.max(1, age + left));
-      crest(k, beast, { len: lustCrest(beast) * remains * (0.85 + 0.25 * beat), alpha: a * (0.7 + 0.25 * beat), beat: 0, t: age, main: BLOOD.main, core: BLOOD.core, light: BLOOD.light, n: k.fast ? 5 : 6 });
+      const beat = Math.pow(Math.max(0, Math.sin(age * 1.2 * TAU)), 3);
+      const remains = clamp(left / Math.max(1, age + left));
+      k.tint(beast, { colour: BLOOD.main, share: a * (0.24 + 0.3 * beat) * (0.45 + 0.55 * remains) });
+      crest(k, beast, { len: lustCrest(beast) * (0.5 + 0.5 * remains) * (0.85 + 0.25 * beat), alpha: a * (0.7 + 0.25 * beat), beat: 0, t: age, main: BLOOD.main, core: BLOOD.core, light: BLOOD.light, n: 3, span: 0.3 });
       k.light(beast, 1.4, 0.3 * a * (0.6 + 0.4 * beat), BLOOD.light);
-      if (!k.fast) k.emit(k.at(beast, 0.65), 3 * a, { kind: 'drop', colour: [BLOOD.main, BLOOD.deep], size: 1.6, life: [0.4, 0.6], speed: [0.02, 0.08], up: [0, 2], gravity: 50, jitter: 0.1 });
+      if (!k.fast) k.emit(k.at(beast, 0.65), 2 * a, { kind: 'drop', colour: [BLOOD.main, BLOOD.deep], size: 1.6, life: [0.4, 0.6], speed: [0.02, 0.08], up: [0, 2], gravity: 50, jitter: 0.1 });
     } },
   },
 };
@@ -1584,6 +1627,8 @@ const furyCrest = (b: Body): number => b.tall * Math.min(0.5, 0.9 * ((FURY.more 
 
 /* Primal Fury: for `secs` seconds the companion's blows are `more` times as large and come `quick` times as often. */
 const FURY = fxOf('beastmaster_primal_fury');
+/** Primal Fury's impact, seconds. */
+const FURY_IMPACT = 1.3;
 const FURY_GOLD = { main: '#f0a030', core: '#fff3c2', deep: '#8a4a12', light: '#ffb84a' };
 const furyPose: CastPose = (r, t, c) => {
   const b = beats(c);
@@ -1622,45 +1667,68 @@ const primalFury: SpellVisual = {
     hit: (k) => {
       k.flash(0.12, FURY_GOLD.light);
       k.burst(k.at(k.caster, 0.05), 14, { kind: 'dust', colour: '#8a7a62', size: 3.2, life: [0.5, 0.9], speed: [1.0, 1.8], up: [2, 8], gravity: 3, drag: 0.1 });
-      const beast = beastOf(k);
-      if (!beast) return;
-      k.burst(k.at(beast, 0.6), 40, { kind: 'ember', colour: [FURY_GOLD.core, FURY_GOLD.main, FURY_GOLD.light], size: 2, life: [0.4, 0.9], speed: [0.3, 1.0], up: [10, 34], gravity: 6, over: true });
     },
-    impact: { secs: 1.3, draw: (k, u) => {
-      // The roar: arcs going out to both sides of the head, and the shock in the ground, out far enough to reach the beast.
+    impact: { secs: FURY_IMPACT, draw: (k, u) => {
+      // The roar: arcs going out to both sides of the head, and the shock in the ground, out far enough to reach the beast,
+      // held bright until it has.
       const roar = seg(u, 0, 0.55);
       for (const ang of [-0.4, -Math.PI + 0.4]) howl(k, k.head(), ang, roar, { n: 3, reach: 22, span: 0.8, width: 2, main: FURY_GOLD.main, light: FURY_GOLD.light });
       const beast = beastOf(k);
       const out = beast ? Math.max(1.5, Math.hypot(beast.x - k.caster.x, beast.y - k.caster.y) + 0.3) : 1.5;
+      const arrive = beast ? furyArrive(k, beast) : 0.2;
       const r = 0.2 + (out - 0.2) * easeOut(seg(u, 0, 0.5));
-      k.ring(k.caster, r, { band: 0.18 * (1 - u), alpha: 0.9 * (1 - seg(u, 0.2, 0.6)), main: FURY_GOLD.main, deep: FURY_GOLD.deep, glow: 0.6 });
+      k.ring(k.caster, r, { band: 0.18 * (1 - u), alpha: 0.9 * (1 - seg(u, arrive + 0.1, arrive + 0.4)), main: FURY_GOLD.main, deep: FURY_GOLD.deep, glow: 0.6 });
       k.light(k.caster, 2, 0.7 * (1 - u), FURY_GOLD.light);
-      if (!beast) return;
-      // On the beast: claw gouges torn in the ground round it, and its crest of claws thrown up gold.
-      for (let i = 0; i < 4; i++) {
-        const ang = (i / 4) * TAU + 0.6 + hashOf(k.seed, i) * 0.4;
-        const rr = 0.45;
-        const dir = { x: Math.cos(ang), y: Math.sin(ang) };
-        gouge(k, beast.x + dir.x * rr, beast.y + dir.y * rr, dir, 0.4, 0.9 * (1 - seg(u, 0.75, 1)), 3, easeOut(seg(u, i * 0.04, 0.16 + i * 0.04)), FURY_GOLD.main);
+      if (!beast || u < arrive) return;
+      // On the beast, once the shock has reached it and not before: the earth torn round it in three claw-gouges, gold
+      // flying off it, and (the linger) its crest of claws thrown up.
+      if (k.state.reached === undefined) {
+        k.state.reached = 1;
+        k.burst(k.at(beast, 0.6), 40, { kind: 'ember', colour: [FURY_GOLD.core, FURY_GOLD.main, FURY_GOLD.light], size: 2, life: [0.4, 0.9], speed: [0.3, 1.0], up: [10, 34], gravity: 6, over: true });
       }
-      const len = furyCrest(beast) * (1 + 0.4 * flashOf(u, 0.12));
-      crest(k, beast, { len, alpha: 0.95 * Math.min(1, flashOf(u, 0.08) + 0.5), beat: (FURY.quick ?? 1.5) * 1.2, t: k.now, main: FURY_GOLD.main, core: FURY_GOLD.core, light: FURY_GOLD.light, n: 5, claws: true });
-      k.light(beast, 1.8, 0.9 * (1 - 0.6 * u), FURY_GOLD.light);
+      const fade = 1 - seg(u, 0.75, 1);
+      for (let i = 0; i < 3; i++) {
+        const ang = [0.5, 2.6, 4.3][i] + hashOf(k.seed, i) * 0.5;
+        const rr = 0.42 + 0.08 * hashOf(k.seed + 2, i);
+        const dir = { x: Math.cos(ang + 0.5), y: Math.sin(ang + 0.5) };
+        const x = beast.x + Math.cos(ang) * rr, y = beast.y + Math.sin(ang) * rr;
+        const torn = easeOut(seg(u, arrive + i * 0.03, arrive + 0.12 + i * 0.03));
+        // Torn earth: a dark scuff under each, the furrows in it.
+        k.scorch({ x, y }, 0.12 * torn, { colour: '#2e2014', alpha: 0.6 * fade });
+        gouge(k, x, y, dir, 0.28, 0.9 * fade, 3, torn, FURY_GOLD.main);
+      }
+      k.light(beast, 1.8, 0.9 * (1 - seg(u, arrive, 1) * 0.6), FURY_GOLD.light);
     } },
-    // For its seconds: the gold crest of claws up and surging -- `quick` times as fast as Bloodlust's heart -- sparks off
-    // it rising, and the claws drawing in as the seconds run out.
+    // For its seconds, from the moment the shock reaches the beast: the gold crest of claws thrown up along its back with
+    // a surge and kept up, beating `quick` times as fast as Bloodlust's heart -- sparks off it rising -- and the claws
+    // drawing in as the seconds run out.
     linger: { draw: (k, age, left) => {
       const beast = beastOf(k);
       if (!beast) return;
-      const a = smooth(age / 0.4) * smooth(left / 1);
+      const at = furyArrive(k, beast) * FURY_IMPACT;
+      if (age < at) return;
+      const since = age - at;
+      const a = smooth(since / 0.08) * smooth(left / 1);
       const remains = 0.5 + 0.5 * clamp(left / Math.max(1, age + left));
-      crest(k, beast, { len: furyCrest(beast) * remains, alpha: a * 0.85, beat: 1.2 * (FURY.quick ?? 1.5), t: age, main: FURY_GOLD.main, core: FURY_GOLD.core, light: FURY_GOLD.light, n: 5, claws: true });
+      const surge = 1 + 0.4 * flashOf(clamp(since / 0.9), 0.12);
+      crest(k, beast, { len: furyCrest(beast) * remains * surge, alpha: a * (0.85 + 0.1 * flashOf(clamp(since / 0.6), 0.1)), beat: 1.2 * (FURY.quick ?? 1.5), t: age, main: FURY_GOLD.main, core: FURY_GOLD.core, light: FURY_GOLD.light, n: 5, claws: true });
       k.emit(k.at(beast, 0.6), 7 * a, { kind: 'spark', colour: [FURY_GOLD.core, FURY_GOLD.light], size: 1.5, life: [0.25, 0.5], speed: [0.1, 0.4], up: [16, 30], gravity: 0, jitter: 0.12, over: true });
       // Its own light only once the impact's two are out, so the cast keeps to two lights.
-      k.light(beast, 1.6, 0.35 * a * smooth((age - 1.3) / 0.3), FURY_GOLD.light);
+      k.light(beast, 1.6, 0.35 * a * smooth((age - FURY_IMPACT) / 0.3), FURY_GOLD.light);
     } },
   },
 };
+
+/**
+ * When Primal Fury's shock in the ground reaches the beast, as a share of the impact: where the ring's radius,
+ * `0.2 + (out - 0.2) * easeOut(u / 0.5)`, comes to the beast's distance. Nothing shows on the beast before then.
+ */
+function furyArrive(k: FxScene, beast: Body): number {
+  const d = Math.hypot(beast.x - k.caster.x, beast.y - k.caster.y);
+  const out = Math.max(1.5, d + 0.3);
+  const want = clamp((d - 0.2) / (out - 0.2));
+  return 0.5 * (1 - Math.cbrt(1 - want));
+}
 
 /* Vengeance: for `secs` seconds every creature that lands a blow on you is struck back by the companion at `more` of its blow, within `reach` tiles of it. */
 const VENGE = fxOf('beastmaster_vengeance');
@@ -1686,21 +1754,24 @@ const vengePose: CastPose = (r, t, c) => {
 };
 
 /**
- * A bite going round a body at its chest: an upper fang and a lower facing each other, a pair of jaws -- whoever strikes
- * it is bitten. Behind it when it goes behind.
+ * A bite going round a body at its chest: the beast's jaws, side-on (`bite`, the group's jaws), facing the way they go
+ * round -- whoever strikes it is bitten. Every two seconds they are drawn slowly open and snapped shut, held shut a
+ * moment and let go. Behind it when they go behind.
  */
-function fangWard(k: FxScene, b: Body, age: number, alpha: number, size = 6, R = Math.max(0.2, (b.wide / 40) * 3.4)): void {
+function fangWard(k: FxScene, b: Body, age: number, alpha: number, size = 5, R = Math.max(0.24, (b.wide / 40) * 4.1)): void {
   const an = age * 0.9;
   const bob = Math.sin(age * 2) * 1.2;
-  const p = { x: b.x + Math.cos(an) * R, y: b.y + Math.sin(an) * R, z: b.z + b.tall * 0.62 + bob };
-  // Behind the body when the bite is on its far side, in front when near.
+  const at = (a: number): P3 => ({ x: b.x + Math.cos(a) * R, y: b.y + Math.sin(a) * R, z: b.z + b.tall * 0.74 + bob });
+  const p = at(an);
   const behind = k.eye.worldToScreenY(p.x, p.y, 0) < k.eye.worldToScreenY(b.x, b.y, 0);
-  // Opening a little and closing, slowly: the upper fang over the lower, their points passing as jaws do.
-  const gap = size * 0.35 * (0.5 + 0.5 * Math.sin(age * 3));
-  const bias = behind ? -2 : 2;
-  fang(k, { ...p, z: p.z + (size * 0.8 + gap) / HEIGHT_SCALE }, size, alpha, 0.2, bias);
-  fang(k, { ...p, z: p.z - (size * 0.65 + gap) / HEIGHT_SCALE }, size * 0.85, alpha, 0.2, bias, true);
-  k.glow(p, size * 1.8, alpha * 0.4);
+  // Facing the way it goes round on the screen; seen end on, the way it last went.
+  const dx = k.sx(at(an + 0.2)) - k.sx(p);
+  const face = Math.abs(dx) > 0.3 ? Math.sign(dx) : (k.state.face ?? 1);
+  k.state.face = face;
+  const phase = (age % 2) / 2;
+  const shut = phase < 0.78 ? 0.6 * (1 - smooth(phase / 0.78)) : phase < 0.86 ? easeIn(seg(phase, 0.78, 0.84)) : 1 - 0.4 * seg(phase, 0.9, 1);
+  k.glow(p, size * 2.6, alpha * (0.4 + 0.3 * shut), k.pal.light);
+  bite(k, p, { size, shut, face, alpha, turn: -0.1, bias: behind ? -2 : 2 });
 }
 
 const vengeance: SpellVisual = {
@@ -1714,13 +1785,15 @@ const vengeance: SpellVisual = {
       if (!beast) return;
       // How far the beast answers: its own prints going round it at its reach, one after another, held and let go.
       const reach = VENGE.reach ?? 5;
-      const n = 12, prints: Print[] = [];
+      // Close enough together (a tile apart) to be a track and so a ring, laid one after another round it over 0.6 s.
+      const n = 30, prints: Print[] = [];
       const fade = 1 - seg(u, 0.7, 1);
       for (let i = 0; i < n; i++) {
         const an = (i / n) * TAU + 0.2;
-        const show = smooth(seg(u, i * 0.035, i * 0.035 + 0.12));
-        const side = (i % 2 ? 1 : -1) * 0.06;
-        prints.push({ x: beast.x + Math.cos(an) * (reach + side), y: beast.y + Math.sin(an) * (reach + side), head: { x: -Math.sin(an), y: Math.cos(an) }, size: 0.3, alpha: 0.85 * show * fade });
+        const at = (i / n) * 0.5;
+        const show = smooth(seg(u, at, at + 0.05));
+        const side = (i % 2 ? 1 : -1) * 0.07;
+        prints.push({ x: beast.x + Math.cos(an) * (reach + side), y: beast.y + Math.sin(an) * (reach + side), head: { x: -Math.sin(an), y: Math.cos(an) }, size: 0.22, alpha: 0.9 * show * fade });
       }
       pawTrack(k, beast, reach, prints, k.pal.main, 0.5 + 0.5 * k.night);
       // A thread between you, for a moment: it is watching you.
@@ -1732,7 +1805,7 @@ const vengeance: SpellVisual = {
       const a = smooth(age / 0.25) * smooth(left / 1.2);
       const close = easeOut(clamp(age / 0.6));
       const c = k.caster;
-      fangWard(k, c, age * (1 + 2 * (1 - close)), (0.85 + 0.15 * (1 - close)) * a, 6 + 1.6 * (1 - close), Math.max(0.2, (c.wide / 40) * 3.4) * (2.6 - 1.6 * close));
+      fangWard(k, c, age * (1 + 2 * (1 - close)), (0.85 + 0.15 * (1 - close)) * a, 5 + 1.2 * (1 - close), Math.max(0.24, (c.wide / 40) * 4.1) * (2.2 - 1.2 * close));
       const beast = beastOf(k);
       const since = (age + 1) % 4;
       if (beast && age > 2 && since < 0.45) k.string(k.at(beast, 0.7), k.chest(), { sag: 3, alpha: 0.4 * a * bump(since, 0, 0.1, 0.45), glow: 0.5 });
@@ -1783,7 +1856,7 @@ function along2(a: P3, b: P3, along: number): P3 {
 function braid(k: FxScene, a: P3, b: P3, grow: number, alpha: number, phase: number, width = 2): void {
   if (grow <= 0.02 || alpha <= 0.01) return;
   const share = BOND.share ?? 0.5;
-  const n = k.fast ? 12 : 22;
+  const n = k.fast ? 18 : 22;
   const at = (along: number, strand: number): P3 => {
     const p = along2(a, b, along);
     // Pinched to nothing at both hearts and at the knot, widest between: two strands tied in the middle.
@@ -1909,13 +1982,23 @@ const callOfTheWild: SpellVisual = {
   cast: { timing: { secs: 2.0, release: 0.55 }, pose: callPose },
   fx: {
     charge: (k, t) => {
-      // The howl, going up and out from the cupped hands in four long arcs, lit, and the breath of it rising off the head:
-      // the cast's longest stretch has something to see.
+      // The howl: one long call up from the cupped hands with the head back -- four short arcs let go one after another,
+      // each climbing on its own and tipped the other way from the last, so the call wavers up as a column rather than
+      // spreading as rings round one point -- and the breath of it rising off the mouth as mist: the cast's longest
+      // stretch has something to see.
       const v = seg(t, 0.15, 0.55);
-      const lean = sideOf(k, k.caster, k.target) > 0 ? 0.5 : -0.5;
-      if (v > 0 && v < 1) howl(k, k.head(), -Math.PI / 2 + lean, (v * 2) % 1, { n: 4, reach: 30, span: 0.8, width: 2.4, alpha: 1 - seg(t, 0.5, 0.56), glow: 0.6 });
+      const mouth = { ...k.head(), z: k.head().z + 1 };
+      if (v > 0 && v < 1) {
+        for (let i = 0; i < 4; i++) {
+          const w = seg(v, i * 0.17, i * 0.17 + 0.5);
+          if (w <= 0 || w >= 1) continue;
+          const lean = (i % 2 ? 1 : -1) * 0.45;
+          const at = { ...mouth, z: mouth.z + 3 + easeOut(w) * 22 };
+          howl(k, at, -Math.PI / 2 + lean, w, { n: 1, reach: 11, span: 0.75, width: 2.4, alpha: 1, glow: 0.6 });
+        }
+        if (!k.fast || v < 0.5) k.emit(mouth, 10, { kind: 'mist', colour: '#e8e2d0', size: 1.6, sizeEnd: 4, life: [0.5, 0.8], speed: [0.02, 0.08], up: [10, 18], gravity: -2, drag: 0.3, jitter: 0.03 });
+      }
       k.glow(k.head(), 6, 0.6 * bump(t, 0.15, 0.4, 0.58), WILD.light);
-      if (v > 0 && v < 1) k.emit({ ...k.head(), z: k.head().z + 2 }, 16, { kind: 'mote', colour: [WILD.core, k.pal.core], size: 1.5, life: [0.4, 0.7], speed: [0.02, 0.1], up: [14, 26], gravity: 0, jitter: 0.08, over: true });
     },
     // The call carried to it: the beast in light, small, loping over the ground from you to the creature.
     travel: { secs: (tiles) => 0.25 + tiles * 0.09, draw: (k, u) => {
@@ -1960,7 +2043,8 @@ const callOfTheWild: SpellVisual = {
       // The sign of a tame popped up over it on the call's arrival, springing and settling: it is yours.
       const sign = seg(u, 0, 0.2);
       const bob = Math.sin(u * 9) * 0.6 * (1 - u);
-      pawSign(k, { ...k.at(b, 1), z: b.z + b.tall + 6 + bob }, 7 * easeBack(sign), smooth(sign * 3) * (1 - seg(u, 0.82, 1)));
+      // Never smaller on the screen than at zoom three, so its toes read at play size before its light does.
+      pawSign(k, { ...k.at(b, 1), z: b.z + b.tall + 6 + bob }, 7 * Math.max(1, 3 / k.zoom) * easeBack(sign), smooth(sign * 3) * (1 - seg(u, 0.82, 1)));
       if (sign > 0 && sign < 0.4) k.flare(k.at(b, 1.2), 7, 0.7 * (1 - sign / 0.4), k.pal.core, 0, k.pal.light, true);
       k.light(b, 1.6, 0.6 * (1 - u), WILD.light);
     } },

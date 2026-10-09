@@ -24,8 +24,8 @@
 import type { CastPose, SpellVisual } from './index';
 import { spellInfo } from './info';
 import {
-  arcAt, bump, clamp, dry, easeIn, easeOut, eatTail, flashOf, hashOf, lerp, mid3, mixColour, seg, smooth, TAU,
-  nearSegments, type FxScene, type GroundLayer, type P3, type SpellPalette,
+  arcAt, bump, clamp, dry, easeIn, easeOut, eatTail, flashOf, hashOf, lateFade, lerp, mid3, mixColour, seg, smooth, TAU,
+  nearSegments, type Body, type FxScene, type GroundLayer, type P3, type SpellPalette,
 } from './kit';
 import { armOut, euler, one } from './poses';
 import { armToward, type HandGoal, type V3 } from '../figure';
@@ -125,7 +125,8 @@ function timeArc(k: FxScene, c: { x: number; y: number }, r: number, left: numbe
   const tilePx = k.px(HALF_H * Math.SQRT2);
   const band = Math.max(o.band ?? Math.max(0.025, r * 0.045), k.px(1.9) / tilePx);
   const bandPx = band * tilePx;
-  const n = Math.max(3, Math.ceil(Math.max(24, k.facets(r, 48)) * f));
+  // Fewer facets on fast graphics, where the ground pass pays for each.
+  const n = Math.max(3, Math.ceil((k.fast ? 24 : Math.max(24, k.facets(r, 48))) * f));
   const outer: number[] = [], inner: number[] = [];
   const start = -Math.PI * 0.75;
   for (let i = 0; i <= n; i++) {
@@ -409,31 +410,36 @@ function hexRunes(k: FxScene, b: { x: number; y: number; z: number; tall: number
 }
 
 /** Jagged cracks run out across the ground from a point, `grow` of the way to `r` tiles, glowing along their length. */
-function cracks(k: FxScene, c: { x: number; y: number }, r: number, o: { n?: number; grow?: number; alpha?: number; turn?: number; width?: number } = {}): void {
+function cracks(k: FxScene, c: { x: number; y: number }, r: number, o: { n?: number; grow?: number; alpha?: number; turn?: number; width?: number; from?: number } = {}): void {
   const a = o.alpha ?? 1, grow = clamp(o.grow ?? 1);
   if (a <= 0.01 || grow <= 0.01) return;
-  const n = o.n ?? 9, seg0 = k.fast ? 4 : 6;
+  // On fast graphics fewer lines and one stroke: the ground pass pays for every one of them.
+  const n = Math.min(o.n ?? 9, k.fast ? 6 : 99), seg0 = k.fast ? 4 : 6, from = Math.max(0, o.from ?? 0);
   const lines: number[][] = [], segs: number[] = [];
   for (let i = 0; i < n; i++) {
     const base = (o.turn ?? 0) + (i / n) * TAU + (hashOf(k.seed + 23, i) - 0.5) * 0.5;
-    const len = r * (0.6 + 0.4 * hashOf(k.seed + 29, i)) * easeOut(clamp(grow * 1.2 - 0.2 * hashOf(k.seed + 31, i)));
+    // Out from `from` (the lip of a crater: the cracks run out of it, not over its floor).
+    const len = (r - from) * (0.6 + 0.4 * hashOf(k.seed + 29, i)) * easeOut(clamp(grow * 1.2 - 0.2 * hashOf(k.seed + 31, i)));
+    if (len <= 0.02) continue;
     const pts: number[] = [];
     // Wandering a little either side of its line, by no more than a fraction of a step: a crack, not a scribble.
     const ca = Math.cos(base), sa = Math.sin(base), step = len / seg0;
     let side = 0;
     for (let j = 0; j <= seg0; j++) {
-      const d = j * step;
+      const d = from + j * step;
       if (j > 0) side += (hashOf(k.seed + 37 + i, j) - 0.5) * step * 0.7;
       pts.push(c.x + ca * d - sa * side, c.y + sa * d + ca * side);
       if (j > 0) segs.push(pts[2 * j - 2], pts[2 * j - 1], pts[2 * j], pts[2 * j + 1]);
     }
     lines.push(pts);
   }
+  if (!lines.length) return;
   const A = clamp(a), wd = o.width ?? 1;
-  k.groundShape(c.x, c.y, r + 0.5, [
-    { kind: 'stroke', colour: k.pal.ink, alpha: A, width: Math.max(1.6, 2.6 * k.zoom * wd), paths: lines, join: 'miter', lift: 0.1 },
-    { kind: 'stroke', colour: k.pal.accent, alpha: A, width: Math.max(0.7, 0.9 * k.zoom * wd), paths: lines, join: 'miter', lift: 0.11 },
-  ], (x, y, reach) => nearSegments(segs, x, y, reach + 0.05));
+  // The dark of the break, and the green glowing down it (lit at night); on fast graphics the dark line alone, which
+  // is what reads over grass.
+  const layers: GroundLayer[] = [{ kind: 'stroke', colour: k.pal.ink, alpha: A, width: Math.max(1.6, (k.fast ? 2 : 2.6) * k.zoom * wd), paths: lines, join: 'miter', lift: 0.1, glow: k.fast ? 0.5 * k.night : 0, light: k.pal.accent }];
+  if (!k.fast) layers.push({ kind: 'stroke', colour: k.pal.accent, alpha: A, width: Math.max(0.7, 0.9 * k.zoom * wd), paths: lines, join: 'miter', lift: 0.11, glow: 0.5 * k.night, light: k.pal.accent });
+  k.groundShape(c.x, c.y, r + 0.5, layers, (x, y, reach) => nearSegments(segs, x, y, reach + 0.05));
 }
 
 /**
@@ -468,33 +474,98 @@ function nearWay(k: FxScene, c: { x: number; y: number }): { x: number; y: numbe
   return { x: dx / l, y: dy / l };
 }
 
+/** A closed outline the other way round: laid in the same fill as an outline round it, it cuts a hole in it. */
+function backwards(pts: readonly number[]): number[] {
+  const out: number[] = [];
+  for (let i = pts.length - 2; i >= 0; i -= 2) out.push(pts[i], pts[i + 1]);
+  return out;
+}
+
 /**
- * A crater punched in the ground, `r` tiles: a broken rim of rock, the far
- * wall inside it lit (it faces the light over the viewer's shoulder), and the
- * floor in shadow pushed toward the near lip, so it reads as a hole and not a
- * stain.
+ * A crater punched in the ground, `r` tiles at most: a broken rim of rock,
+ * the far wall inside it lit (it faces the light over the viewer's shoulder),
+ * and the floor in shadow pushed toward the near lip, so it reads as a hole
+ * and not a stain.
+ *
+ * Nobody stands on nothing. Whoever stands in it (`bodies`: the creature it
+ * was cast at, the caster cast at their own feet) is left on a pillar of the
+ * ground they stood on, the crater broken out round it: a hole in every layer
+ * the size of their footing (wound the other way, so the fill leaves it), and
+ * the pillar's near face, a crescent of earth under its lip. A hole is kept
+ * inside each layer's own ragged edge, so one at the rim notches the crater
+ * rather than spilling past it.
  */
-function crater(k: FxScene, c: { x: number; y: number }, r: number, alpha: number): void {
+function crater(k: FxScene, c: { x: number; y: number }, r: number, alpha: number, bodies: ReadonlyArray<{ x: number; y: number; wide: number }> = []): void {
   if (alpha <= 0.01 || r <= 0.05) return;
   const n = nearWay(k, c), off = Math.min(0.12, r * 0.12), A = clamp(alpha);
-  k.groundShape(c.x, c.y, r + 0.4, [
-    { kind: 'fill', colour: '#4a3e36', alpha: A, paths: [ragged(k, c, r, 9)], lift: 0.08 },
-    { kind: 'fill', colour: '#6a5a70', alpha: A, paths: [ragged(k, c, r * 0.86, 10)], lift: 0.09 },
-    { kind: 'fill', colour: '#1c1420', alpha: A, paths: [ragged(k, { x: c.x + n.x * off, y: c.y + n.y * off }, r * 0.74, 11)], lift: 0.1 },
-  ], inBand(c.x, c.y, 0, r));
+  const floorC = { x: c.x + n.x * off, y: c.y + n.y * off };
+  const islands = bodies
+    .map((b, i) => ({ x: b.x, y: b.y, r: footR(b) * 1.15 + 0.03, i }))
+    .filter((p) => Math.hypot(p.x - c.x, p.y - c.y) < r + p.r)
+    .slice(0, 6);
+  // A ragged edge of `rad` comes no nearer its middle than 0.72 of it, and its chords a little nearer still.
+  const within = (pts: number[], cx: number, cy: number, rad: number): number[] => {
+    const most = rad * 0.66, out: number[] = [];
+    for (let i = 0; i < pts.length; i += 2) {
+      const dx = pts[i] - cx, dy = pts[i + 1] - cy, d = Math.hypot(dx, dy);
+      const s = d > most ? most / d : 1;
+      out.push(cx + dx * s, cy + dy * s);
+    }
+    return out;
+  };
+  const shapes = islands.map((p) => ragged(k, p, p.r, 30 + p.i));
+  const holes = (cx: number, cy: number, rad: number): number[][] => shapes.map((h) => backwards(within(h, cx, cy, rad)));
+  const layers: GroundLayer[] = [
+    { kind: 'fill', colour: '#4a3e36', alpha: A, paths: [ragged(k, c, r, 9), ...holes(c.x, c.y, r)], lift: 0.08 },
+    { kind: 'fill', colour: '#6a5a70', alpha: A, paths: [ragged(k, c, r * 0.86, 10), ...holes(c.x, c.y, r * 0.86)], lift: 0.09 },
+    { kind: 'fill', colour: '#1c1420', alpha: A, paths: [ragged(k, floorC, r * 0.74, 11), ...holes(floorC.x, floorC.y, r * 0.74)], lift: 0.1 },
+  ];
+  // Each pillar's face, toward the viewer under its lip: a crescent of earth, inked round the lip in a lit stone so the
+  // ground it stands on reads as standing up out of the pit -- where it stands in the pit's floor.
+  const face: number[][] = [], lip: number[][] = [];
+  islands.forEach((p, j) => {
+    const drop = Math.min(0.1, p.r * 0.3), out = ragged(k, { x: p.x + n.x * drop, y: p.y + n.y * drop }, p.r * 1.06, 30 + p.i);
+    face.push(within(out, floorC.x, floorC.y, r * 0.74), backwards(within(shapes[j], floorC.x, floorC.y, r * 0.74)));
+    if (Math.hypot(p.x - floorC.x, p.y - floorC.y) + p.r < r * 0.5) lip.push(shapes[j]);
+  });
+  if (face.length) layers.push({ kind: 'fill', colour: '#5a4a3e', alpha: A, paths: face, lift: 0.105 });
+  if (lip.length) layers.push({ kind: 'stroke', colour: '#8a7a68', alpha: A, width: Math.max(1, 1.1 * k.zoom), paths: lip, closed: true, join: 'miter', lift: 0.11 });
+  k.groundShape(c.x, c.y, r + 0.4, layers, inBand(c.x, c.y, 0, r));
+}
+
+/**
+ * Plague's front running out over the ground: not a hoop but the edge of a
+ * spreading sickness -- a lumpy, crooked line, bulging and pinched as a stain
+ * creeps, inked, lime along its middle, `r` tiles out.
+ */
+function sickFront(k: FxScene, c: { x: number; y: number }, r: number, alpha: number): void {
+  if (alpha <= 0.01 || r <= 0.1) return;
+  const n = Math.max(18, Math.min(k.fast ? 40 : 64, Math.ceil(r * 12))), pts: number[] = [];
+  for (let i = 0; i < n; i++) {
+    const an = (i / n) * TAU;
+    // Lobes where it has crept ahead and bites where it lags: a few slow bulges, and a little ragged on top of them.
+    const lobe = 0.06 * Math.sin(an * 5 + k.seed) + 0.04 * Math.sin(an * 9 + k.seed * 1.7) + 0.03 * (hashOf(k.seed + 151, i) - 0.5);
+    pts.push(c.x + Math.cos(an) * r * (1 + lobe), c.y + Math.sin(an) * r * (1 + lobe));
+  }
+  const A = clamp(alpha);
+  k.groundShape(c.x, c.y, r * 1.15 + 0.4, [
+    { kind: 'stroke', colour: ROT_DEEP, alpha: A, width: Math.max(2, 2.6 * k.zoom), paths: [pts], closed: true, join: 'round', lift: 0.12 },
+    { kind: 'stroke', colour: ROT, alpha: A, width: Math.max(1, 1.2 * k.zoom), paths: [pts], closed: true, join: 'round', lift: 0.13, glow: 0.3 + 0.5 * k.night, light: ROT },
+  ], inBand(c.x, c.y, r * 0.85, r * 1.15));
 }
 
 /**
  * Plague's blight: the ground it sickens broken out in sores rather than
  * painted over. Each sore is its own shape -- five to nine ragged points,
- * stretched along a way of its own -- in one of three sick tones (a bruise, a
- * near black, a bilious olive), some with a weeping yellow-green heart; they
+ * stretched along a way of its own -- in one of three sick tones (a bruise
+ * edged in rot, a thin dried brown, a bilious olive), every one with a
+ * weeping yellow-green heart, so each reads as a lesion and not a stone; they
  * gather in a few clusters near the middle, as a sickness spreads from where it
  * took, with a few strays out toward the edge. `grow` spreads them from the
  * middle out. Small pieces, each in a tile or two, so the ground pass cuts them
  * for next to nothing; half as many on fast graphics.
  */
-const SORE_TONES = ['#4e2648', '#2c1a22', '#6e7a2a'] as const;
+const SORE_TONES = ['#4e2648', '#3a2a1a', '#6e7a2a'] as const;
 function blight(k: FxScene, c: { x: number; y: number }, r: number, grow: number, alpha: number, n = 26): void {
   if (alpha <= 0.01 || grow <= 0.01) return;
   if (k.fast) n = Math.ceil(n / 2);
@@ -548,15 +619,17 @@ function blight(k: FxScene, c: { x: number; y: number }, r: number, grow: number
     }
     const tone = Math.floor(hashOf(k.seed + 97, i) * 3);
     tones[tone].push(outer);
-    if (tone !== 1 && hashOf(k.seed + 101, i) < 0.6) heart.push(inner);
+    heart.push(inner);
     segs.push(x, y, x, y);
   }
   if (!segs.length) return;
   const A = clamp(alpha), layers: GroundLayer[] = [];
-  if (stain.length) layers.push({ kind: 'fill', colour: '#5e6a26', alpha: A * 0.45, paths: stain, lift: 0.07 });
+  if (stain.length) layers.push({ kind: 'fill', colour: '#6e7a2a', alpha: A * 0.6, paths: stain, lift: 0.07 });
   tones.forEach((paths, t) => {
-    if (paths.length) layers.push({ kind: 'fill', colour: SORE_TONES[t], alpha: A * (t === 2 ? 0.75 : 0.6), paths, lift: 0.08 });
+    if (paths.length) layers.push({ kind: 'fill', colour: SORE_TONES[t], alpha: A * (t === 2 ? 0.75 : t === 1 ? 0.45 : 0.6), paths, lift: 0.08 });
   });
+  // The bruises' raw edge, so they read as broken skin of the ground rather than lying on it.
+  if (tones[0].length) layers.push({ kind: 'stroke', colour: ROT_DEEP, alpha: A, width: Math.max(1, k.zoom * 0.5), paths: tones[0], closed: true, join: 'round', lift: 0.085 });
   if (heart.length) layers.push({ kind: 'fill', colour: ROT, alpha: A * 0.6, paths: heart, lift: 0.09, glow: 0.35 * k.night, light: ROT });
   k.groundShape(c.x, c.y, r + 0.5, layers, (x, y, reach) => nearSegments(segs, x, y, reach + r * 0.3));
 }
@@ -575,7 +648,7 @@ function flies(k: FxScene, b: { x: number; y: number; z: number; tall: number; w
     const z = b.z + b.tall * (0.95 + 0.3 * Math.sin(t * 2.3 + i)) + 1;
     pts.push(k.eye.worldToScreenX(x, y), k.eye.worldToScreenY(x, y, z));
   }
-  const s = Math.max(1.2, 0.9 * k.zoom), flap = Math.sin(k.now * 60) > 0 ? 1 : 0.4;
+  const s = Math.max(1.6, 1.1 * k.zoom), flap = Math.sin(k.now * 60) > 0 ? 1 : 0.4;
   k.worldDraw({ x: b.x, y: b.y, z: b.z }, (g) => {
     g.globalAlpha = clamp(alpha);
     g.fillStyle = '#e8f0f0';
@@ -724,9 +797,11 @@ function chevrons(k: FxScene, c: { x: number; y: number }, r: number, n: number,
  */
 const ROCK = ['#6a5a70', '#5a4e44', '#645464'] as const;
 function spires(k: FxScene, c: { x: number; y: number }, r: number, n: number, h: number, grow: number, salt: number,
-  avoid: ReadonlyArray<{ x: number; y: number }> = [], clear = 0.6): void {
+  avoid: ReadonlyArray<{ x: number; y: number; z: number; tall: number; wide: number }> = [], clear = 1.0): void {
   if (grow <= 0.01) return;
   const seam = k.pal.accent, ink = k.pal.ink;
+  // Where each body stands on the screen: a spire standing in front of one, over its legs, is not raised at all.
+  const boxes = avoid.map((b) => ({ x: k.eye.worldToScreenX(b.x, b.y), y: k.eye.worldToScreenY(b.x, b.y, b.z), top: k.hpx(b.tall), half: k.hpx(Math.max(3, b.wide)) }));
   const pieces: Array<{ base: P3; sy: number; draw: (g: CanvasRenderingContext2D) => void }> = [];
   for (let i = 0; i < n; i++) {
     const an = (i / n) * TAU + hashOf(k.seed + salt, i) * 0.9;
@@ -737,6 +812,9 @@ function spires(k: FxScene, c: { x: number; y: number }, r: number, n: number, h
     const tall = h * (0.7 + 0.6 * hashOf(k.seed + salt + 2, i)) * grow;
     const lean = (hashOf(k.seed + salt + 3, i) - 0.5) * 0.5 + Math.cos(an) * 0.25;
     const bx = k.sx(base), by = k.sy(base), H = k.hpx(tall), W = H * 0.32;
+    // Judged at its full height, so it does not come up clear and then grow over the body.
+    const Hf = k.hpx(h * (0.7 + 0.6 * hashOf(k.seed + salt + 2, i))), Wf = Hf * 0.32;
+    if (boxes.some((q) => by > q.y && by - Hf < q.y && Math.abs(bx - q.x) < Wf + q.half)) continue;
     const tx = bx + lean * H * 0.4, ty = by - H;
     // Snapped: the top a slant from a lower left point to a higher right one, the break lit from over the shoulder.
     const snap = 0.08 + 0.1 * hashOf(k.seed + salt + 4, i);
@@ -853,6 +931,49 @@ function fleeMark(k: FxScene, b: { x: number; y: number; z: number; tall: number
     g.lineCap = 'butt';
     g.lineJoin = 'round';
   }, 3);
+  // Lit at night, so the way it runs still reads in the dark.
+  if (k.night > 0.01) k.glow(at, size * 14, 0.35 * k.night * alpha, k.pal.main);
+}
+
+/**
+ * A shriek going out: a crescent drawn upright to the viewer (as the flee mark
+ * is), bowed the way it goes on the screen, so from any facing it reads as a
+ * curve and never edge-on as a dart. `sdx, sdy` the way it goes on the screen
+ * (a unit), `half` its half-span and `w` its thickness in pixels at zoom one.
+ */
+function shriekArc(k: FxScene, c: P3, sdx: number, sdy: number, half: number, w: number, alpha: number, bias = 3): void {
+  if (alpha <= 0.01 || half <= 0.1) return;
+  const x = k.sx(c), y = k.sy(c), H = half * k.zoom, W = w * k.zoom, px = -sdy, py = sdx;
+  const n = 8, outer: number[] = [], inner: number[] = [];
+  for (let j = 0; j <= n; j++) {
+    const s = (j / n) * 2 - 1, bow = (1 - s * s) * H * 0.55, th = W * Math.pow(1 - s * s, 0.8);
+    const bx = x + px * s * H + sdx * bow, by = y + py * s * H + sdy * bow;
+    outer.push(bx + sdx * th * 0.5, by + sdy * th * 0.5);
+    inner.push(bx - sdx * th * 0.5, by - sdy * th * 0.5);
+  }
+  const main = k.pal.main, core = k.pal.core, ink = k.pal.ink;
+  k.worldDraw(c, (g) => {
+    g.globalAlpha = clamp(alpha);
+    g.lineJoin = 'miter';
+    g.beginPath();
+    g.moveTo(outer[0], outer[1]);
+    for (let j = 1; j <= n; j++) g.lineTo(outer[2 * j], outer[2 * j + 1]);
+    for (let j = n; j >= 0; j--) g.lineTo(inner[2 * j], inner[2 * j + 1]);
+    g.closePath();
+    g.fillStyle = main;
+    g.fill();
+    g.lineWidth = Math.max(0.8, 0.7 * k.zoom);
+    g.strokeStyle = ink;
+    g.stroke();
+    // Its leading edge in the pale core.
+    g.beginPath();
+    for (let j = 1; j < n; j++) (j === 1 ? g.moveTo(outer[2 * j], outer[2 * j + 1]) : g.lineTo(outer[2 * j], outer[2 * j + 1]));
+    g.lineWidth = Math.max(0.8, W * 0.3);
+    g.strokeStyle = core;
+    g.stroke();
+    g.lineJoin = 'round';
+  }, bias);
+  k.glow(c, half * 1.2, alpha * 0.25, k.pal.main);
 }
 
 /** Which way a creature runs from Panic: straight out from the spot, or away from the caster when it stands on the spot itself. */
@@ -870,9 +991,111 @@ function taken(k: FxScene, c: { x: number; y: number }, r: number, most = 8): Re
   return all.sort((a, b) => Math.hypot(a.x - c.x, a.y - c.y) - Math.hypot(b.x - c.x, b.y - c.y)).slice(0, most);
 }
 
+/** Grave-stone: a weathered violet-grey, its lit face, its shaded side and its top. */
+const GRAVE = ['#9a8ea8', '#5e5470', '#b4a8c0'];
+/**
+ * Headstones standing up round a body, as Undying is knelt among graves:
+ * five flat slabs `r` tiles out, each a face to the viewer with a rounded
+ * shoulder of a top, a shaded side for its thickness, inked, each leaning its
+ * own way. `grow` nought to one raises them out of the ground. Those behind
+ * the body are drawn behind it and those before it in front, two records.
+ */
+function graves(k: FxScene, b: Body, r: number, grow: number): void {
+  if (grow <= 0.01) return;
+  const cy = k.sy(b), back: Array<() => (g: CanvasRenderingContext2D) => void> = [], front: typeof back = [];
+  for (let i = 0; i < 5; i++) {
+    const an = (i / 5) * TAU + 0.4 + (hashOf(k.seed + 161, i) - 0.5) * 0.6;
+    const gx = b.x + Math.cos(an) * r * (0.9 + 0.2 * hashOf(k.seed + 163, i)), gy = b.y + Math.sin(an) * r * (0.9 + 0.2 * hashOf(k.seed + 163, i));
+    const base = k.on(gx, gy), x = k.sx(base), y = k.sy(base);
+    const H = k.hpx(3.6 * (0.8 + 0.4 * hashOf(k.seed + 167, i))) * easeOut(grow), W = k.hpx(2.4), D = W * 0.35;
+    const lean = (hashOf(k.seed + 173, i) - 0.5) * 0.5, ca = Math.cos(lean), sa = Math.sin(lean);
+    // A point on the slab's face: across (-1..1 of the half width) and up (0..1 of its height), leant about its foot.
+    const P = (u: number, v: number): [number, number] => [x + u * W * 0.5 * ca + v * H * sa, y + u * W * 0.5 * sa - v * H * ca];
+    const draw = () => (g: CanvasRenderingContext2D): void => {
+      const poly = (pts: Array<[number, number]>, fill: string): void => {
+        g.beginPath();
+        g.moveTo(pts[0][0], pts[0][1]);
+        for (let j = 1; j < pts.length; j++) g.lineTo(pts[j][0], pts[j][1]);
+        g.closePath();
+        g.fillStyle = fill;
+        g.fill();
+        g.stroke();
+      };
+      g.globalAlpha = 1;
+      g.lineJoin = 'miter';
+      g.lineWidth = Math.max(0.8, 0.6 * k.zoom);
+      g.strokeStyle = k.pal.ink;
+      const face: Array<[number, number]> = [P(-1, 0), P(-1, 0.8), P(-0.6, 0.97), P(0, 1), P(0.6, 0.97), P(1, 0.8), P(1, 0)];
+      // Its thickness, to the shaded right and back up the screen.
+      poly([P(1, 0), P(1, 0.8), [P(1, 0.8)[0] + D, P(1, 0.8)[1] - D * 0.5], [P(1, 0)[0] + D, P(1, 0)[1] - D * 0.5]], GRAVE[1]);
+      poly(face, GRAVE[0]);
+      // A lit top edge, and a crack down the face.
+      g.beginPath();
+      g.moveTo(...P(-0.9, 0.82)); g.lineTo(...P(-0.55, 0.94)); g.lineTo(...P(0, 0.97));
+      g.strokeStyle = GRAVE[2];
+      g.stroke();
+      g.beginPath();
+      g.moveTo(...P(0.1, 0.9)); g.lineTo(...P(-0.15, 0.6)); g.lineTo(...P(0.1, 0.35));
+      g.strokeStyle = k.pal.ink;
+      g.stroke();
+      g.lineJoin = 'round';
+    };
+    (y > cy ? front : back).push(draw);
+  }
+  const foot = { x: b.x, y: b.y, z: b.z };
+  if (back.length) k.worldDraw(foot, (g) => { for (const d of back) d()(g); }, -0.5);
+  if (front.length) k.worldDraw(foot, (g) => { for (const d of front) d()(g); }, 3);
+}
+
+/** The stretch of a line between `a` and `b` of the way along it (by length): a run going along a path. */
+function stretch(pts: readonly P3[], a: number, b: number): P3[] {
+  const len = (p: P3, q: P3): number => Math.hypot((q.x - p.x) * UNITS_PER_TILE, (q.y - p.y) * UNITS_PER_TILE, q.z - p.z);
+  const cum = [0];
+  for (let i = 1; i < pts.length; i++) cum.push(cum[i - 1] + len(pts[i - 1], pts[i]));
+  const total = cum[cum.length - 1] || 1;
+  const at = (u: number): P3 => {
+    const d = clamp(u) * total;
+    let i = 1;
+    while (i < pts.length - 1 && cum[i] < d) i++;
+    const s = (d - cum[i - 1]) / ((cum[i] - cum[i - 1]) || 1);
+    return mid3(pts[i - 1], pts[i], clamp(s));
+  };
+  const out = [at(a)];
+  for (let i = 1; i < pts.length - 1; i++) if (cum[i] / total > a && cum[i] / total < b) out.push(pts[i]);
+  out.push(at(b));
+  return out;
+}
+
 /** Blood let fall from a point: a few drops, heavy, that land. */
 function bleed(k: FxScene, at: P3, n: number, spread = 0.04): void {
   k.burst(at, n, { kind: 'drop', colour: [BLOOD, BLOOD_DEEP], size: 2, sizeEnd: 1.4, life: [0.35, 0.6], speed: [0.05, 0.35], up: [-2, 8], gravity: 70, drag: 0.6, jitter: spread, bias: 2 });
+}
+
+/**
+ * Blood Price's cost on the ground: six small pools spattered round the feet
+ * on the cut hand's side (the left), each landing in its turn as `grow` goes
+ * nought to one, drying toward its own dark as `dried` does rather than fading
+ * into the grass. All in one record.
+ */
+function spatter(k: FxScene, grow: number, dried: number, alpha: number): void {
+  if (alpha <= 0.01 || grow <= 0.01) return;
+  const b = k.caster, layers: GroundLayer[] = [], wet: number[][] = [], dark: number[][] = [];
+  let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity;
+  for (let i = 0; i < 6; i++) {
+    const land = clamp((grow - i * 0.12) / 0.3);
+    if (land <= 0) continue;
+    // Out to the left of the feet and a little ahead, where the cut palm was held.
+    // Kept where it fell: a caster walking on leaves it behind.
+    const c = k.once('spatter' + i, () => k.local(b, -2.2 - 4 * hashOf(k.seed + 131, i), -1 + 4.5 * hashOf(k.seed + 137, i), 0));
+    const r = (0.03 + 0.05 * hashOf(k.seed + 139, i)) * easeOut(land);
+    (i % 2 ? dark : wet).push(ragged(k, c, r, 140 + i));
+    x0 = Math.min(x0, c.x); x1 = Math.max(x1, c.x); y0 = Math.min(y0, c.y); y1 = Math.max(y1, c.y);
+  }
+  if (!wet.length && !dark.length) return;
+  const A = clamp(alpha);
+  if (wet.length) layers.push({ kind: 'fill', colour: dry(BLOOD, dried * 0.8), alpha: A, paths: wet, lift: 0.08, glow: 0.3 * k.night, light: BLOOD });
+  if (dark.length) layers.push({ kind: 'fill', colour: dry(BLOOD, 0.35 + 0.5 * dried), alpha: A, paths: dark, lift: 0.08, glow: 0.3 * k.night, light: BLOOD });
+  k.groundShape((x0 + x1) / 2, (y0 + y1) / 2, Math.hypot(x1 - x0, y1 - y0) / 2 + 0.2, layers);
 }
 
 /** Once a whole second goes by, for what ticks: a bleed's beat. */
@@ -1133,17 +1356,18 @@ const unmakePose: CastPose = (r, t) => {
 const soulRendPose: CastPose = (r, t) => {
   r.spine = euler(t, [[0.1, [0, 0, 0]], [0.4, [-16, 0, 0]], [0.5, [12, 0, 0]], [0.7, [8, 0, 0]], [1, [0, 0, 0]]]);
   // The chest wrenched round after the leading (right) hand as the two are torn apart: a wide, level rip.
-  r.chest = euler(t, [[0.1, [0, 0, 0]], [0.4, [-10, 0, 0]], [0.5, [14, 0, -8]], [0.7, [10, 0, -6]], [1, [0, 0, 0]]]);
+  r.chest = euler(t, [[0.1, [0, 0, 0]], [0.4, [-10, 0, 0]], [0.5, [14, 0, -14]], [0.7, [10, 0, -10]], [1, [0, 0, 0]]]);
   r.head = euler(t, [[0.1, [0, 0, 0]], [0.4, [-2, 0, 0]], [0.5, [10, 0, 4]], [0.7, [6, 0, 3]], [1, [0, 0, 0]]]);
   const claw = one(t, [[0.12, 0], [0.3, 1], [0.8, 1], [0.95, 0]]);
   for (let k = 0; k < 2; k++) {
-    // Torn apart sideways at shoulder height, out and back past the hips: not flung up.
+    // Torn apart and back: out to the sides and pulled behind the body, a little down, the hands ending behind the
+    // hips as cloth is torn -- not held level in a T, and not flung up.
     const s = k ? 1 : -1;
     // Steered as a direction (the upper arm's, in the chest's frame), so the swing from ahead to the side goes round
     // level and not up over the head as angles mixed half way would.
     r.arm[k] = armToward(k, dirAt(t, [[0.1, [s * 0.17, 0.1, -0.98]], [0.4, [s * 0.12, 0.98, 0.1]], [0.45, [s * 0.18, 0.97, 0.12]],
-      [0.5, [s * 0.86, -0.42, 0.08]], [0.7, [s * 0.9, -0.36, 0]], [1, [s * 0.17, 0.1, -0.98]]]));
-    r.elbow[k] = one(t, [[0.1, 14], [0.4, 22], [0.45, 30], [0.5, 30], [0.7, 34], [1, 14]]);
+      [0.5, [s * 0.72, -0.6, -0.36]], [0.7, [s * 0.66, -0.68, -0.3]], [1, [s * 0.17, 0.1, -0.98]]]));
+    r.elbow[k] = one(t, [[0.1, 14], [0.4, 22], [0.45, 30], [0.5, 45], [0.7, 40], [1, 14]]);
     r.hand[k] = euler(t, [[0.1, [0, 0, 0]], [0.4, [-40, 0, 0]], [0.5, [20, 0, 0]], [0.7, [20, 0, 0]], [1, [0, 0, 0]]]);
     r.open[k] = false;
   }
@@ -1250,10 +1474,12 @@ const undyingPose: CastPose = (r, t) => {
   r.chest = euler(t, [[0.1, [0, 0, 0]], [0.36, [-6, 0, 0]], [0.5, [-6, 0, 0]], [0.58, [16, 0, 0]], [0.76, [12, 0, 0]], [1, [0, 0, 0]]]);
   r.head = euler(t, [[0.1, [0, 0, 0]], [0.36, [-28, 0, 0]], [0.5, [-30, 0, 0]], [0.58, [28, 0, 0]], [0.76, [20, 0, 0]], [1, [0, 0, 0]]]);
   for (let k = 0; k < 2; k++) {
-    // Flung wide and low, palms out, with the roar: open to whatever comes, not pointing at it.
-    r.arm[k] = euler(t, [[0.1, [6, 10, 0]], [0.36, [56, -30, 48]], [0.5, [56, -30, 48]], [0.58, armOut(k, 45, 78)], [0.76, armOut(k, 40, 72)], [1, [8, 10, 0]]]);
-    r.elbow[k] = one(t, [[0.1, 14], [0.36, 142], [0.5, 142], [0.58, 30], [0.76, 30], [1, 14]]);
-    r.hand[k] = euler(t, [[0.5, [0, 0, 0]], [0.58, [-20, 0, 0]], [0.76, [-20, 0, 0]], [1, [0, 0, 0]]]);
+    // Flung up and out in a V over the head with the roar, palms open to the sky: open to whatever comes, and from
+    // every side a V, never an arm pointing at something.
+    const s = k ? 1 : -1;
+    r.arm[k] = euler(t, [[0.1, [6, 10, 0]], [0.36, [56, -30, 48]], [0.5, [56, -30, 48]], [0.58, armToward(k, [s * 0.7, -0.2, 0.68])], [0.76, armToward(k, [s * 0.66, -0.18, 0.72])], [1, [8, 10, 0]]]);
+    r.elbow[k] = one(t, [[0.1, 14], [0.36, 142], [0.5, 142], [0.58, 20], [0.76, 20], [1, 14]]);
+    r.hand[k] = euler(t, [[0.5, [0, 0, 0]], [0.58, [-30, 0, 0]], [0.76, [-30, 0, 0]], [1, [0, 0, 0]]]);
     r.open[k] = false;
   }
   const laid = one(t, [[0.14, 0], [0.3, 1], [0.5, 1], [0.56, 0]]);
@@ -1292,7 +1518,8 @@ export const CHAOS: Record<string, SpellVisual> = {
         if (g <= 0) return;
         const at = k.hand(1);
         k.glow(at, 5, 0.7 * g, k.pal.accent);
-        rune(k, { x: at.x, y: at.y, z: at.z + 1.2 }, 2.2 * g, Math.floor(k.now * 6), { alpha: g, turn: k.now * 3 });
+        // Over the fingertips, not over the mouth they are held to.
+        rune(k, { x: at.x, y: at.y, z: at.z + 2.4 }, 1.6 * g, Math.floor(k.now * 6), { alpha: g, turn: k.now * 3 });
       },
       release: (k) => {
         const a = k.hand(1);
@@ -1310,7 +1537,6 @@ export const CHAOS: Record<string, SpellVisual> = {
           const side = Math.sin(v * 9 + i * 2.1) * 0.12 * (1 - v);
           p.x += side * 0.7; p.y -= side * 0.7;
           rune(k, p, 3.4, i, { turn: k.now * 2 + i, alpha: smooth(v * 6) });
-          k.emit(p, 14, { kind: 'mote', colour: k.pal.accent, size: 1.2, life: [0.2, 0.4], speed: [0, 0.05], up: [-2, 2], gravity: 0 });
         }
       } },
       hit: (k) => {
@@ -1331,17 +1557,42 @@ export const CHAOS: Record<string, SpellVisual> = {
         const beat = bump(age % 1, 0, 0.06, 0.35);
         hexRunes(k, b, footR(b), 5 + age * 1.1, a, beat);
         const heart = k.heart(b), foot = k.local(b, 0.6, 0.3, 0.6);
-        if (ticked(k, age, 'beat') && left > 0.5) {
+        const beatNow = ticked(k, age, 'beat') && left > 0.5;
+        if (beatNow) {
           k.burst(heart, 4, { kind: 'drop', colour: [BLOOD, BLOOD_DEEP], size: 2.8, sizeEnd: 2, life: [0.4, 0.6], speed: [0.02, 0.1], up: [-6, 0], gravity: 60, drag: 0.6, jitter: 0.04, bias: 2 });
         }
-        // The run: down the flank from the heart, eaten from the top as the beat passes.
+        // The run: down the flank from the heart, eaten from the top as the beat passes; lit at night.
         const run = bump(age % 1, 0, 0.1, 0.7);
         if (run > 0.02) {
           const pts = [heart, mid3(heart, foot, 0.5), foot];
-          k.ribbon(eatTail(pts, 1 - run), { width: 2.2, taper: 'start', alpha: 0.95 * a, ...bloodLook, glow: 0, bias: 2 });
+          k.ribbon(eatTail(pts, 1 - run), { width: 2.2, taper: 'start', alpha: 0.95 * a, ...bloodLook, glow: 0.4 * k.night, bias: 2 });
         }
+        // The pool lies where it bled: a creature that runs leaves it, and leaves a trail of splashes behind it a beat
+        // apart, each drying and shrinking over three seconds.
         const lost = clamp(age / lasts);
-        pool(k, k.local(b, 0.3, 0.1, 0), footR(b) * (0.35 + 0.55 * lost), dry(BLOOD, 0.3 * lost), 0.8 * a, 5, { share: 0.5, colour: BLOOD_DEEP, alpha: 0.7 * a, salt: 6 });
+        const anchor = k.once('pool', () => k.local(b, 0.3, 0.1, 0));
+        const moved = Math.hypot(b.x - anchor.x, b.y - anchor.y) > footR(b) * 1.2;
+        if (moved && k.state.poolLost === undefined) k.state.poolLost = lost;
+        const grown = Math.min(lost, k.state.poolLost ?? 1);
+        pool(k, anchor, footR(b) * (0.35 + 0.55 * grown), dry(BLOOD, 0.3 * grown + (moved ? 0.4 * (lost - grown) * 3 : 0)), 0.8 * a, 5, { share: 0.5, colour: BLOOD_DEEP, alpha: 0.7 * a, salt: 6 });
+        if (moved && beatNow) {
+          const slot = (k.state.splashes ?? 0) % 6;
+          k.state.splashes = (k.state.splashes ?? 0) + 1;
+          k.state['sx' + slot] = b.x; k.state['sy' + slot] = b.y; k.state['st' + slot] = age;
+        }
+        const drops: number[][] = [];
+        let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity;
+        for (let i = 0; i < 6; i++) {
+          const t0 = k.state['st' + i];
+          if (t0 === undefined || age - t0 > 3) continue;
+          const r = footR(b) * 0.3 * (1 - 0.6 * smooth((age - t0) / 3)) * easeOut(clamp((age - t0) * 4));
+          const x = k.state['sx' + i], y = k.state['sy' + i];
+          if (r <= 0.02) continue;
+          drops.push(ragged(k, { x, y }, r, 20 + i));
+          x0 = Math.min(x0, x); x1 = Math.max(x1, x); y0 = Math.min(y0, y); y1 = Math.max(y1, y);
+        }
+        if (drops.length) k.groundShape((x0 + x1) / 2, (y0 + y1) / 2, Math.hypot(x1 - x0, y1 - y0) / 2 + 0.3, [{ kind: 'fill', colour: dry(BLOOD, 0.45), alpha: 0.85 * a, paths: drops, lift: 0.08 }]);
+        k.light(anchor, 0.6, 0.25 * k.night * a, '#ff6070');
         timeArc(k, b, footR(b), arcLeft(age, left, lasts), { alpha: 0.75 * smooth(left / 0.8) });
       } },
     },
@@ -1360,18 +1611,14 @@ export const CHAOS: Record<string, SpellVisual> = {
       // The shriek going out to it: three crescents, each wider and fainter than the last, quick, bowed toward it.
       travel: { secs: (tiles) => 0.08 + tiles * 0.045, draw: (k, u) => {
         const from = k.head(), to = k.heart(k.target);
-        const dir = k.toward(k.caster, k.target);
+        // Drawn upright to the viewer, bowed the way they go on the screen: arcs from every facing, never darts.
+        let sdx = k.sx(to) - k.sx(from), sdy = k.sy(to) - k.sy(from);
+        const l = Math.hypot(sdx, sdy) || 1;
+        sdx /= l; sdy /= l;
         for (let i = 0; i < 3; i++) {
           const v = clamp(u * 1.5 - i * 0.22);
           if (v <= 0 || v >= 1) continue;
-          const c = mid3(from, to, v);
-          const half = 0.08 + 0.22 * v, bow = 0.1 * (0.4 + v);
-          const pts: P3[] = [];
-          for (let j = 0; j <= 8; j++) {
-            const s = j / 4 - 1;
-            pts.push({ x: c.x - dir.y * s * half - dir.x * bow * s * s, y: c.y + dir.x * s * half - dir.y * bow * s * s, z: c.z - 2 * s * s });
-          }
-          k.ribbon(pts, { width: 3.4 * (1 - v * 0.35), taper: 'both', alpha: 0.95 * (1 - v * 0.6), main: k.pal.main, core: k.pal.core, glow: 0.6 });
+          shriekArc(k, mid3(from, to, v), sdx, sdy, 4 + 8 * v, 3 * (1 - v * 0.35), 0.95 * (1 - v * 0.6));
         }
       } },
       // Startled: the jolt over its head, jumping up out of it.
@@ -1410,29 +1657,27 @@ export const CHAOS: Record<string, SpellVisual> = {
         // What is paid gathering in the raised palm, red going over to the patron's violet.
         const g = smooth(seg(t, 0.42, 0.58));
         if (g > 0) k.orb({ x: palm.x, y: palm.y, z: palm.z + 2 }, 1.2 + 1.6 * g, { alpha: g * (1 - seg(t, 0.58, 0.6)), ...bloodLook, turn: k.now * 2 });
-        pool(k, k.local(k.caster, -3, 3, 0), 0.03 + 0.05 * smooth(seg(t, 0.36, 0.6)), BLOOD_DEEP, 0.75 * smooth(seg(t, 0.36, 0.5)) * (1 - seg(t, 0.85, 1)), 3);
+        // Where it falls: spattered on the ground by the cut hand's side, drop by drop.
+        if (k.released < 0) spatter(k, smooth(seg(t, 0.34, 0.58)), 0, 1);
       },
       hit: (k) => {
         const palm = k.hand(0);
         // Taken up: the blood rising off the palm as drops, not sparks.
         k.burst({ x: palm.x, y: palm.y, z: palm.z + 2 }, 8, { kind: 'drop', colour: [BLOOD, BLOOD_DEEP], size: 1.8, sizeEnd: 1.2, life: [0.4, 0.7], speed: [0.05, 0.2], up: [10, 20], gravity: -8, drag: 0.4, jitter: 0.02 });
       },
-      // Taken: the blood goes up off the palm as violet and comes down into the head as favour, and the patron's star
-      // answers under the feet in blood, half grown: paid in health, its own mark among the self rites.
+      // Taken: the blood goes up off the palm, turning the patron's violet, and sinks into the crown as favour; what
+      // was paid lies spattered on the ground by the cut hand, drying -- blood on the ground, which no other rite of
+      // the faith leaves.
       impact: { secs: 1.0, draw: (k, u) => {
         const palm = k.hand(0);
         const top = { x: palm.x, y: palm.y, z: palm.z + 2 + 6 * easeOut(u * 2) };
-        const into = mid3(top, k.head(), easeIn(seg(u, 0.4, 0.9)));
+        // Over the crown, not into the face: it shrinks to nothing there.
+        const into = mid3(top, k.at(k.caster, 1.12), easeIn(seg(u, 0.4, 0.9)));
         const col = mixColour(BLOOD, k.pal.main, smooth(u * 2.2));
-        k.orb(into, 2.8 * (1 - 0.6 * seg(u, 0.6, 1)), { alpha: 1 - seg(u, 0.85, 1), main: col, deep: k.pal.deep, core: k.pal.core, turn: u * 6 });
-        // Drying where it was spilt rather than fading into the grass, and gone at the last.
-        const dried = seg(u, 0.3, 0.85);
-        chaosStar(k, k.caster, 0.34, { grow: 0.6 * easeOut(u * 3), turn: -0.2 + u * 0.3, alpha: 0.95 * (1 - seg(u, 0.75, 1)), main: dry(BLOOD, dried), head: dry(BLOOD_CORE, dried, BLOOD), light: BLOOD, glow: 0.3 });
+        const r = 2.8 * (1 - seg(u, 0.6, 0.95));
+        if (r > 0.2) k.orb(into, r, { main: col, deep: k.pal.deep, core: k.pal.core, turn: u * 6 });
+        spatter(k, 1, seg(u, 0.2, 0.85), 1 - seg(u, 0.8, 1));
         k.light(k.caster, 1.4, 0.5 * flashOf(u, 0.2), '#ff9a9a');
-        if (u > 0.85 && !k.state.took) {
-          k.state.took = 1;
-          k.burst(k.head(), 4, { kind: 'mote', colour: k.pal.main, size: 1.2, life: [0.3, 0.5], speed: [0.1, 0.3], up: [4, 10], gravity: 0 });
-        }
       } },
     },
   },
@@ -1470,18 +1715,26 @@ export const CHAOS: Record<string, SpellVisual> = {
           k.orb(p, 1.8 + 0.6 * (i === 0 ? 1 : 0), { ...bloodLook, ink: k.pal.ink, glow: 0.5, turn: k.now * 5 + i });
         }
         k.light(to, 2, 0.4 * u);
+        // What it was taken out of: bleeding at the heart while it is drawn, a pool gathering under it.
+        const b = k.target;
+        k.emit(from, 8, { kind: 'drop', colour: [BLOOD, BLOOD_DEEP], size: 1.8, sizeEnd: 1.2, life: [0.3, 0.5], speed: [0.02, 0.1], up: [-4, 0], gravity: 60, drag: 0.5, jitter: 0.03, bias: 2 });
+        pool(k, k.once('bled', () => k.local(b, 0.4, 0.2, 0)), footR(b) * 0.5 * easeOut(u), BLOOD, 0.85, 12, { share: 0.5, colour: BLOOD_DEEP, alpha: 0.8, salt: 13 });
       } },
       // Into you: the blood hauled into the chest, where it beats once and turns to the patron's green as it heals
-      // you, a few green motes rising off it; a ring of the blood at the feet, drying as it spreads.
-      hit: (k) => {
-        k.burst(k.chest(), 6, { kind: 'mote', colour: k.pal.accent, size: 1.2, life: [0.3, 0.5], speed: [0.05, 0.25], up: [4, 10], gravity: 0 });
-      },
-      impact: { secs: 0.8, draw: (k, u) => {
-        const chest = k.chest();
-        const pulse = seg(u, 0.15, 0.5), col = mixColour(BLOOD, k.pal.accent, pulse);
-        k.orb(chest, 1.8 + 1.6 * bump(u, 0.05, 0.2, 0.5), { sides: 6, alpha: 1 - seg(u, 0.7, 1), main: col, deep: mixColour(BLOOD_DEEP, '#2f7a28', pulse), core: mixColour(BLOOD_CORE, '#e6ffe0', pulse), light: col, turn: 0.4, glow: 0.6 });
-        if (u > 0.3 && u < 0.7) k.emit(chest, 12, { kind: 'mote', colour: k.pal.accent, size: 1.1, life: [0.4, 0.6], speed: [0.02, 0.08], up: [8, 14], gravity: 0, jitter: 0.05 });
-        k.ring(k.caster, 0.12 + footR(k.caster) * easeOut(u), { band: 0.04, alpha: 0.95 * (1 - seg(u, 0.7, 1)), main: dry(BLOOD, u), deep: BLOOD_DEEP, light: BLOOD, glow: 0.3 });
+      // you. Under the creature it was taken from, its blood drying on the ground.
+      impact: { secs: 2.0, draw: (k, u) => {
+        const chest = k.chest(), v = clamp(u * 2.5);
+        const pulse = seg(v, 0.15, 0.5), col = mixColour(BLOOD, k.pal.accent, pulse);
+        if (v < 1) k.orb(chest, 1.8 + 1.6 * bump(v, 0.05, 0.2, 0.5), { sides: 6, alpha: 1 - seg(v, 0.7, 1), main: col, deep: mixColour(BLOOD_DEEP, '#2f7a28', pulse), core: mixColour(BLOOD_CORE, '#e6ffe0', pulse), light: col, turn: 0.4, glow: 0.6 });
+        // The blood taken in turning to the patron's green as it heals: a few drops lifting off the front of the chest
+        // (out in front of the body, never up over the face).
+        if (u > 0.06 && !k.state.healed) {
+          k.state.healed = 1;
+          const f = k.facingDir(k.caster), c = k.chest();
+          k.burst({ x: c.x + f.x * 0.1, y: c.y + f.y * 0.1, z: c.z }, 5, { kind: 'drop', colour: [BLOOD, '#5fbf4a', k.pal.accent], size: 1.8, sizeEnd: 1.2, life: [0.35, 0.55], speed: [0.05, 0.15], up: [2, 6], gravity: 0, drag: 0.6, jitter: 0.03, heading: f, cone: 0.8 });
+        }
+        const b = k.target;
+        pool(k, k.once('bled', () => k.local(b, 0.4, 0.2, 0)), footR(b) * 0.5, dry(BLOOD, seg(u, 0.1, 0.9)), 0.85 * lateFade(1 - u, 0.2), 12, { share: 0.5, colour: BLOOD_DEEP, alpha: 0.8 * lateFade(1 - u, 0.2), salt: 13 });
       } },
     },
   },
@@ -1498,26 +1751,32 @@ export const CHAOS: Record<string, SpellVisual> = {
         k.glow(k.hand(1), 5, 0.7 * g, k.pal.deep);
         k.emit(k.hand(1), 14 * g, { kind: 'smoke', colour: [k.pal.deep, k.pal.ink], size: 1.6, life: [0.3, 0.5], speed: [0, 0.05], up: [-8, -4], gravity: 6 });
         const b = k.target;
-        // Low over its back from the first, closing in as they gather: they are its, not the sky's.
+        // Born just over its back and growing down into it as they gather: they are its, not the sky's.
         const w = Math.max(0.14, b.wide / 28);
-        thorns(k, b, { R: w * (1.6 - 0.4 * g), z: b.tall * 1.25, n: 5, len: 3.6, dir: 'down', width: 1.8, turn: 0.2, grow: g, alpha: 0.85 * g, main: k.pal.main, deep: k.pal.ink });
+        thorns(k, b, { R: w * (1.6 - 0.4 * g), z: b.tall * (1.0 + 0.15 * (1 - g)), n: 5, len: 3.6 * (0.6 + 0.4 * g), dir: 'down', width: 1.8, turn: 0.2, grow: g, alpha: 0.85 * g, main: k.pal.main, deep: k.pal.ink });
       },
       // Pressed down onto it, with the palm.
       impact: { secs: 0.6, draw: (k, u) => {
         const b = k.target, w = Math.max(0.14, b.wide / 28);
         const down = easeIn(clamp(u * 2.2));
-        thorns(k, b, { R: w * (1.2 - 0.15 * down), z: b.tall * (1.25 - 0.4 * down), n: 5, len: 3.6, dir: 'down', width: 1.8, turn: 0.2, main: k.pal.main, deep: k.pal.ink });
+        thorns(k, b, { R: w * (1.2 - 0.15 * down), z: b.tall * (1.0 - 0.3 * down), n: 5, len: 3.6 + 0.6 * down, dir: 'down', width: 1.8, turn: 0.2, main: k.pal.main, deep: k.pal.ink });
         if (u > 0.45 && !k.state.thud) {
           k.state.thud = 1;
           k.burst(k.at(b, 0.05), 10, { kind: 'dust', colour: '#6a5a74', size: 2.6, life: [0.4, 0.7], speed: [0.3, 0.7], up: [1, 4], gravity: 2, drag: 0.2 });
         }
       } },
-      // Bowed under it while it lasts: the talons on its shoulders, sagging with each breath, and its strength trickling out of it.
+      // Bowed under it while it lasts: the talons sunk in its flanks, bearing down with each breath, and on the low of
+      // each a puff of dust off its feet, pressed into the ground.
       linger: { draw: (k, age, left) => {
         const b = k.target, a = fadeOf(age, left), w = Math.max(0.14, b.wide / 28);
-        const sag = 0.04 * Math.sin(age * 2.2);
-        thorns(k, b, { R: w * 1.05, z: b.tall * (0.85 + sag), n: 5, len: 3.6, dir: 'down', width: 1.8, turn: 0.2, alpha: 0.8 * a, main: k.pal.main, deep: k.pal.ink });
-        k.emit(k.at(b, 0.75), 4 * a, { kind: 'mote', colour: k.pal.deep, size: 1.4, life: [0.5, 0.8], speed: [0, 0.04], up: [-10, -6], gravity: 0, jitter: 0.08 });
+        const ph = age * 2.2, sag = 0.1 * Math.sin(ph);
+        thorns(k, b, { R: w * 1.05, z: b.tall * (0.7 + sag), n: 5, len: 4.2, dir: 'down', width: 1.8, turn: 0.2, alpha: 0.85 * a, main: k.pal.main, deep: k.pal.ink });
+        // The low of every breath (one in under three seconds).
+        const low = Math.floor((ph + Math.PI / 2) / TAU);
+        if (low > (k.state.low ?? 0) && left > 0.5) {
+          k.state.low = low;
+          k.burst(k.at(b, 0.02), 6, { kind: 'mist', colour: '#6a5a74', size: 2, life: [0.4, 0.7], speed: [0.2, 0.4], up: [0, 2], gravity: 1, drag: 0.4, jitter: b.wide / 60 });
+        }
         timeArc(k, b, footR(b), arcLeft(age, left, (lastsOf('chaos_cower') || 1)), { alpha: 0.7 * smooth(left / 0.8) });
       } },
     },
@@ -1557,9 +1816,12 @@ export const CHAOS: Record<string, SpellVisual> = {
         const a = fadeOf(age, left), fist = k.hand(1);
         const beat = bump((age * 0.9) % 1, 0, 0.08, 0.5);
         thorns(k, { x: fist.x, y: fist.y, z: fist.z - 1.2 }, { R: 0.06, z: 0, n: 5, len: 2.8, dir: 'in', turn: age * 0.6, alpha: 0.95 * a, width: 1.3, main: BLOOD, deep: BLOOD_DEEP });
-        k.glow(fist, 4 + 2 * beat, (0.3 + 0.3 * beat) * a, BLOOD, true);
-        if (ticked(k, age, 'drip') && left > 0.5) k.burst({ x: fist.x, y: fist.y, z: fist.z - 1 }, 1, { kind: 'drop', colour: BLOOD, size: 2.2, sizeEnd: 1.6, life: [0.5, 0.7], speed: [0, 0.02], up: [-2, 0], gravity: 60, bias: 2 });
-        timeArc(k, k.caster, footR(k.caster), arcLeft(age, left, (lastsOf('chaos_pact') || 1)), { alpha: 0.75 * smooth(left / 0.8), main: BLOOD });
+        // The fist throbs red on the beat: the hand carries the read at play size, not the ground.
+        k.glow(fist, 4 + 4 * beat, (0.25 + 0.55 * beat) * a, BLOOD, true);
+        k.glow(fist, 3, 0.5 * beat * a, BLOOD_CORE, true);
+        if (ticked(k, age, 'drip') && left > 0.5) k.burst({ x: fist.x, y: fist.y, z: fist.z - 1 }, 2, { kind: 'drop', colour: BLOOD, size: 2.6, sizeEnd: 1.8, life: [0.5, 0.7], speed: [0, 0.03], up: [-2, 0], gravity: 60, bias: 2 });
+        // The time under the feet in the dark of the blood, quiet: the quieter of the two bargains' bands.
+        timeArc(k, k.caster, footR(k.caster), arcLeft(age, left, (lastsOf('chaos_pact') || 1)), { alpha: 0.55 * smooth(left / 0.8), main: BLOOD_DEEP });
       } },
     },
   },
@@ -1602,7 +1864,8 @@ export const CHAOS: Record<string, SpellVisual> = {
       // and the band of its time drawn round behind the front.
       impact: { secs: 1.2, draw: (k, u) => {
         const R = radiusOf(PLAGUE), e = easeOut(u * 1.3);
-        k.ring(k.spot, R * e, { band: 0.06, alpha: 0.85 * (1 - seg(u, 0.75, 1)), main: ROT, deep: ROT_DEEP, light: ROT, turn: 0.3, glow: 0.2 });
+        // Gone as it reaches the edge, where the band of the time takes over: never two lines at once.
+        sickFront(k, k.spot, R * e, 0.9 * (1 - seg(u, 0.45, 0.7)));
         k.light(k.spot, R * 0.4, 0.45 * (1 - u * 0.5), '#c8f08a');
       } },
       // Festering for its seconds: the sores weeping, a thin haze over them, its edge the band of the time it has left.
@@ -1612,21 +1875,24 @@ export const CHAOS: Record<string, SpellVisual> = {
         const R = radiusOf(PLAGUE), a = fadeOf(age, left, 0.01, 1.5);
         blight(k, k.spot, R, easeOut(age * 1.1), 0.85 * a);
         timeArc(k, k.spot, R, arcLeft(Math.max(0, age - 0.7), left, lastsOf(PLAGUE)), { alpha: 0.85 * smooth(left / 0.8), band: 0.1, main: ROT });
-        k.emit(k.on(k.spot.x, k.spot.y, 2), 4 * a, { kind: 'mist', colour: [ROT, '#6e7a2a'], size: 2, life: [1.8, 2.4], speed: [0.02, 0.08], up: [2, 5], gravity: -1, jitter: R * 0.5 });
-        // Every wild creature standing in it sick, and carrying it as it goes: the ground going bad under its feet, a
-        // sick vapour rising off its back, and on the beat its blood let.
+        // Particles held to ten a second all told for its thirty seconds, whatever stands in it: the haze 1.5, a
+        // vapour off the nearest three at 1.5 each, one creature's blood let a beat (2), a bubble's 2.
+        k.emit(k.on(k.spot.x, k.spot.y, 2), 1.5 * a, { kind: 'mist', colour: [ROT, '#6e7a2a'], size: 2.4, life: [1.8, 2.4], speed: [0.02, 0.08], up: [2, 5], gravity: -1, jitter: R * 0.5 });
+        // Every wild creature standing in it sick, and carrying it as it goes: the ground going bad under its feet,
+        // flies at it, a sick vapour rising off its back, and its blood let, each in its turn a beat.
         const beat = ticked(k, age, 'beat') && left > 0.5;
-        taken(k, k.spot, R, 6).forEach((b, i) => {
+        const sick = taken(k, k.spot, R, 6), turn = Math.floor(age) % Math.max(1, sick.length);
+        sick.forEach((b, i) => {
           pool(k, b, footR(b) * 1.1, '#4e5a22', 0.65 * a, 7, { share: 0.5, colour: '#8a9a2e', alpha: 0.55 * a, salt: 8 });
           // Flies at it, the sign of sickness anybody reads (the nearest few: a herd would cost a frame).
-          if (i < 4) flies(k, b, 5, a);
-          k.emit(k.at(b, 0.95), 3 * a, { kind: 'mist', colour: [ROT, '#c8e070'], size: 2, life: [0.7, 1.1], speed: [0, 0.04], up: [3, 6], gravity: -1, jitter: b.wide / 60 });
-          if (beat) bleed(k, k.heart(b), 3, 0.06);
+          if (i < 4) flies(k, b, 7, a);
+          if (i < 3) k.emit(k.at(b, 0.95), 1.5 * a, { kind: 'mist', colour: '#c8e070', size: 2.6, life: [0.7, 1.1], speed: [0, 0.04], up: [3, 6], gravity: -1, jitter: b.wide / 60 });
+          if (beat && i === turn) bleed(k, k.heart(b), 2, 0.06);
         });
         // A bubble breaks each second somewhere in it, on the same beat.
         if (beat) {
           const an = k.rand() * TAU, rr = Math.sqrt(k.rand()) * R * 0.8;
-          k.burst(k.on(k.spot.x + Math.cos(an) * rr, k.spot.y + Math.sin(an) * rr, 1), 8, { kind: 'drop', colour: [ROT, k.pal.accent], size: 1.5, life: [0.3, 0.5], speed: [0.2, 0.5], up: [8, 16], gravity: 60 });
+          k.burst(k.on(k.spot.x + Math.cos(an) * rr, k.spot.y + Math.sin(an) * rr, 1), 2, { kind: 'drop', colour: [ROT, k.pal.accent], size: 1.8, life: [0.3, 0.5], speed: [0.2, 0.4], up: [8, 14], gravity: 60 });
         }
         k.light(k.spot, R * 0.3, 0.25 * a, '#c8f08a');
       } },
@@ -1643,13 +1909,22 @@ export const CHAOS: Record<string, SpellVisual> = {
         const g = smooth(seg(t, 0.12, 0.48));
         k.glow(k.chest(), 6, 0.7 * g * (1 - seg(t, 0.5, 0.56)), k.pal.deep);
         k.emit(k.chest(), 20 * g * (t < 0.5 ? 1 : 0), { kind: 'smoke', colour: [k.pal.ink, k.pal.deep], size: 1.4, life: [0.2, 0.4], speed: [0.1, 0.3], up: [-2, 2], gravity: 0, jitter: 0.12 });
+        // The shriek out of the thrown-back head: three arcs going up off the mouth, widening, the faith's shriek as
+        // Fright's goes out at a creature.
+        const since = k.released;
+        if (since >= 0 && since < 0.45) {
+          const mouth = k.head();
+          for (let i = 0; i < 3; i++) {
+            const v = clamp((since - i * 0.08) / 0.3);
+            if (v <= 0 || v >= 1) continue;
+            shriekArc(k, { x: mouth.x, y: mouth.y, z: mouth.z + 2 + 7 * v }, 0, -1, 3 + 6 * v, 2.4 * (1 - 0.5 * v), 1 - v * v);
+          }
+        }
       },
-      release: (k) => {
-        k.burst(k.head(), 16, { kind: 'mote', colour: [k.pal.core, k.pal.main], size: 2, life: [0.3, 0.5], speed: [0.6, 1.2], up: [8, 20], gravity: 10 });
-      },
-      // The shriek: everything round the spot thrown out from it in three quick shock rings, arrows racing out on the ground.
+      // The shriek: everything round the spot thrown out from it in two quick shock rings, arrows racing out on the
+      // ground, and a low drift of dust thrown off it.
       hit: (k) => {
-        k.burst(k.on(k.spot.x, k.spot.y, 2), 30, { kind: 'dust', colour: ['#5a4a66', '#3a2a44'], size: 3, life: [0.5, 0.9], speed: [radiusOf(PANIC) * 0.4, radiusOf(PANIC) * 0.9], up: [1, 5], gravity: 2, drag: 0.15 });
+        k.burst(k.on(k.spot.x, k.spot.y, 2), 14, { kind: 'mist', colour: '#5a4a66', size: 2, life: [0.5, 0.9], speed: [radiusOf(PANIC) * 0.3, radiusOf(PANIC) * 0.7], up: [1, 4], gravity: 2, drag: 0.3 });
       },
       impact: { secs: 0.9, draw: (k, u) => {
         const R = radiusOf(PANIC);
@@ -1678,7 +1953,8 @@ export const CHAOS: Record<string, SpellVisual> = {
         }
         // Drawn round behind the shock as it reaches the edge, then emptying.
         timeArc(k, k.spot, R, arcLeft(Math.max(0, age - 0.45), left, lastsOf(PANIC)), { alpha: 0.8 * smooth(left / 0.8), band: 0.1 });
-        k.emit(k.on(k.spot.x, k.spot.y, 1), 6 * a, { kind: 'mote', colour: [k.pal.main, k.pal.core], size: 1.4, life: [0.6, 1], speed: [R * 0.5, R * 0.9], up: [0, 3], gravity: 0, drag: 1 });
+        // A low breath of dread blown outward along the ground with them, not sparkle.
+        k.emit(k.on(k.spot.x, k.spot.y, 1), 6 * a, { kind: 'mist', colour: [k.pal.main, k.pal.deep], size: 1.8, life: [0.6, 1], speed: [R * 0.5, R * 0.9], up: [0, 3], gravity: 0, drag: 1 });
         // Over every creature fleeing it -- in it, or just run out of it -- an arrowhead pointing the way it runs.
         const beat = bump((age * 2.2) % 1, 0, 0.12, 0.5);
         for (const b of taken(k, k.spot, R + 3)) {
@@ -1725,15 +2001,26 @@ export const CHAOS: Record<string, SpellVisual> = {
             const v = clamp(rise * 1.3 - i * 0.15);
             if (v <= 0 || v >= 1) continue;
             const an = i * 2.1 + v * 5;
-            const p = mid3(from, to, easeIn(v));
-            p.x += Math.cos(an) * 0.15 * (1 - v); p.y += Math.sin(an) * 0.15 * (1 - v);
-            // Favour as light, not as the patron's dark gem.
-            k.orb(p, 1.6, { turn: k.now * 5, main: k.pal.core, deep: '#c89ae8', core: '#ffffff', light: k.pal.core, glow: 0.9 });
+            const at = (w: number): P3 => {
+              const q = mid3(from, to, easeIn(w)), aw = i * 2.1 + w * 5;
+              q.x += Math.cos(aw) * 0.15 * (1 - w); q.y += Math.sin(aw) * 0.15 * (1 - w);
+              return q;
+            };
+            const p = at(v);
+            // Favour as light, not as the patron's dark gem, each with a short tail of its way up so the rise reads.
+            k.ribbon([at(Math.max(0, v - 0.16)), at(Math.max(0, v - 0.08)), p], { width: 2.2, taper: 'start', alpha: 0.8, main: k.pal.core, core: '#ffffff', ink: '#8a5aa8', light: k.pal.core, glow: 0.5 });
+            k.orb(p, 2.2, { turn: k.now * 5 + an, main: k.pal.core, deep: '#c89ae8', core: '#ffffff', light: k.pal.core, glow: 0.9 });
           }
         }
-        // Where it fell, the ground cracked under it: the thing is unmade, not prayed for.
+        // Where it was, nothing: a small tear in the air at the hands where the thing went, gaping once and snapping
+        // shut in splinters. Unmade -- gone nowhere, which no other rite of the faith does.
         const fell = k.once('fell', () => mid3(k.hand(0), k.hand(1), 0.5));
-        cracks(k, fell, 0.4, { n: 6, grow: easeOut(u * 3), alpha: 1 - seg(u, 0.6, 1), turn: 0.3, width: 0.5 });
+        const gape = bump(u, 0, 0.12, 0.4);
+        rift(k, fell, { len: 3 + 2 * gape, wide: 2, open: gape, tilt: 0.25, alpha: 1, bias: 3 });
+        if (u > 0.36 && !k.state.shut) {
+          k.state.shut = 1;
+          k.burst(fell, 8, { kind: 'shard', colour: [k.pal.main, k.pal.core], size: 1.2, life: [0.2, 0.35], speed: [0.3, 0.6], up: [-3, 3], gravity: 0, drag: 0.6, spin: 4, ink: false });
+        }
         k.light(k.caster, 1.4, 0.5 * flashOf(u, 0.1), '#f0dcff');
       } },
     },
@@ -1781,8 +2068,8 @@ export const CHAOS: Record<string, SpellVisual> = {
         // Whole, it is dim and small: the split is the bright beat, not the pull.
         if (split < 0.05) soulWisp(k, { x: at.x, y: at.y, z: at.z + 6 * up }, at, 2.2, smooth(u * 10), 0.5);
         else for (const s of [-1, 1]) {
-          const p = { x: at.x + (-away.y * s * 0.18 + away.x * 0.05) * split, y: at.y + (away.x * s * 0.18 + away.y * 0.05) * split, z: at.z + 6 * up + 2 * split };
-          soulWisp(k, p, { x: at.x, y: at.y, z: at.z + 6 * up }, 3 * (1 - 0.3 * split), fade);
+          const p = { x: at.x + (-away.y * s * 0.28 + away.x * 0.05) * split, y: at.y + (away.x * s * 0.28 + away.y * 0.05) * split, z: at.z + 6 * up + 2 * split };
+          soulWisp(k, p, { x: at.x, y: at.y, z: at.z + 6 * up }, 3.6 * (1 - 0.3 * split), fade, 1);
         }
         k.light(b, 1.4, 0.8 * flashOf(u, 0.1), '#e0c8ff');
       } },
@@ -1801,6 +2088,14 @@ export const CHAOS: Record<string, SpellVisual> = {
         if (g > 0) k.emit(mid3(k.hand(0), k.hand(1), 0.5), 24 * g, { kind: 'mist', colour: [k.pal.ink, k.pal.deep], size: 2, life: [0.4, 0.7], speed: [0.03, 0.12], up: [-12, -6], gravity: 4, jitter: 0.05 });
         const hood = smooth(seg(t, 0.3, 0.6));
         k.veil(k.caster, { colour: SHROUD_DARK, tint: 0.7 * hood, fade: 0.4 * hood });
+        // The hood itself, in the hands: a dark cowl hanging from them over the crown, drawn down the sides of the
+        // head as they come down, and gone into the body's own dark as the veil takes it.
+        const cowl = smooth(seg(t, 0.24, 0.32)) * (1 - smooth(seg(t, 0.56, 0.7)));
+        if (cowl > 0.01) {
+          const crown = k.at(k.caster, 1.06), l = k.hand(0), r = k.hand(1);
+          const sag = (h: P3): P3 => { const m = mid3(crown, h, 0.5); return { x: m.x, y: m.y, z: m.z + 1.2 }; };
+          k.ribbon([l, sag(l), crown, sag(r), r], { width: 3.4, taper: 'none', alpha: 0.85 * cowl, main: SHROUD_DARK, core: k.pal.deep, ink: k.pal.ink, glow: 0 , bias: 2 });
+        }
       },
       // Veiled: a fog rolling off the feet out to the edge past which nothing knows you are there, and settling at it.
       hit: (k) => {
@@ -1818,7 +2113,8 @@ export const CHAOS: Record<string, SpellVisual> = {
       linger: { on: 'caster', draw: (k, age, left) => {
         const R = radiusOf(SHROUD), a = fadeOf(age, left, 0.01, 1.5);
         k.veil(k.caster, { colour: SHROUD_DARK, tint: 0.7 * a, fade: (0.4 + 0.05 * Math.sin(age * 1.7)) * a });
-        timeArc(k, k.caster, R, arcLeft(Math.max(0, age - 0.6), left, lastsOf(SHROUD)), { alpha: 0.75 * smooth(left / 0.8), band: 0.1, main: k.pal.main });
+        // Quiet: you should know how far you are hidden, but the mark of it should not shout.
+        timeArc(k, k.caster, R, arcLeft(Math.max(0, age - 0.6), left, lastsOf(SHROUD)), { alpha: 0.45 * smooth(left / 0.8), band: 0.1, main: k.pal.deep });
         k.emit(k.at(k.caster, 0.04), 6 * a, { kind: 'mist', colour: [k.pal.ink, k.pal.deep], size: 1.6, life: [1, 1.2], speed: [0.04, 0.12], up: [0, 3], gravity: -1, jitter: 0.12 });
       } },
     },
@@ -1859,16 +2155,27 @@ export const CHAOS: Record<string, SpellVisual> = {
         k.glow(heart, 8 + 6 * beat, 0.7 * (1 - u), BLOOD, true);
         k.light(k.caster, 1.4, 0.6 * (1 - u), '#ffb0a0');
       } },
-      // While it lasts: a heart of blood beating in the chest, and on each beat a thin red ring going out from the
-      // feet and fading -- the pulse of a feeder, in the faith's ground language; the time under the feet.
+      // While it lasts: a heart of blood beating in the chest, and on each beat the blood sent out from it down both
+      // arms to the hands -- the hands that land the blows that feed you; the time under the feet.
       linger: { on: 'caster', draw: (k, age, left) => {
         const a = fadeOf(age, left), heart = k.chest();
         const ph = age % 1.1;
         const beat = Math.max(bump(ph, 0, 0.06, 0.22), 0.6 * bump(ph, 0.22, 0.28, 0.45));
-        k.orb(heart, 1.5 + 0.7 * beat, { ...bloodLook, ink: k.pal.ink, alpha: 0.95 * a, sides: 6, turn: 0.4, glow: 0.4 });
+        k.orb(heart, 1.8 + 0.9 * beat, { ...bloodLook, ink: k.pal.ink, alpha: 0.95 * a, sides: 6, turn: 0.4, glow: 0.4 });
         k.glow(heart, 5 + 3 * beat, 0.4 * a * (0.5 + beat), BLOOD, true);
-        const fr = footR(k.caster), out = seg(ph, 0, 0.7);
-        if (out < 1) k.ring(k.caster, fr + 0.03 + 0.14 * easeOut(out), { band: 0.03, alpha: 0.9 * a * (1 - out * out), main: dry(BLOOD, out * 0.6), deep: BLOOD_DEEP, light: BLOOD, glow: 0.3 * k.night });
+        // Down the arms: a run of blood from the chest to each hand, its head reaching the hand and its tail eaten
+        // after it from the chest, over a quarter second a beat; the hands glowing red as it gets there.
+        const head = easeOut(seg(ph, 0.02, 0.18)), tail = easeIn(seg(ph, 0.1, 0.3));
+        if (head > 0 && tail < 1) {
+          for (const s of [0, 1]) {
+            // Down the arm itself: the chest, the shoulder, the elbow, the hand.
+            const arm = [heart, k.joint(k.caster, `arm${s}`, [0, 0, 0]), k.joint(k.caster, `elbow${s}`, [0, 0, 0]), k.hand(s)];
+            k.ribbon(stretch(arm, tail, head), { width: 1.8, taper: 'none', alpha: 0.95 * a, ...bloodLook, ink: k.pal.ink, glow: 0.4, bias: 2 });
+          }
+        }
+        const reached = bump(ph, 0.16, 0.22, 0.45);
+        if (reached > 0) for (const s of [0, 1]) k.glow(k.hand(s), 4, 0.6 * a * reached, BLOOD, true);
+        const fr = footR(k.caster);
         timeArc(k, k.caster, fr, arcLeft(age, left, (lastsOf('chaos_blood_feast') || 1)), { alpha: 0.75 * smooth(left / 0.8), main: BLOOD });
       } },
     },
@@ -1905,12 +2212,6 @@ export const CHAOS: Record<string, SpellVisual> = {
         k.burst(c, 40, { kind: 'dust', colour: ['#5a4a3e', '#3e3430', k.pal.deep], size: 4, life: [0.8, 1.4], speed: [R * 0.4, R * 0.9], up: [2, 8], gravity: 2, drag: 0.2 });
         k.burst(c, 30, { kind: 'spark', colour: [k.pal.core, k.pal.accent, k.pal.main], size: 2, life: [0.3, 0.7], speed: [R * 0.3, R * 0.8], up: [10, 40], gravity: 40 });
         k.flash(0.22, k.pal.light);
-        // Each creature it takes, struck: torn flesh and grit off it, and its blood.
-        for (const b of taken(k, k.spot, R, 6)) {
-          const at = k.heart(b);
-          k.burst(at, 10, { kind: 'shard', colour: [k.pal.main, k.pal.deep, '#4a3e36'], size: 1.8, life: [0.4, 0.7], speed: [0.4, 1], up: [8, 20], gravity: 50, spin: 3 });
-          bleed(k, at, 6, 0.08);
-        }
       },
       // The ground breaks: rock torn up in rings running out to the edge (never through anybody standing there), a
       // black column at the heart, the shock to the very rim, and a crater left where it struck.
@@ -1928,12 +2229,27 @@ export const CHAOS: Record<string, SpellVisual> = {
         const rr = 0.3 + R * easeOut(seg(u, 0, 0.5));
         k.ring(k.spot, rr, { band: Math.min(rr * 0.3, 0.35 * (1 - u)), alpha: 1 - seg(u, 0.4, 0.75), glow: 0.8, turn: u });
         chaosStar(k, k.spot, R, { grow: 1, turn: 0.1, alpha: 0.9 * (1 - seg(u, 0.8, 1)), main: dry(k.pal.main, seg(u, 0.4, 0.85)), head: dry(k.pal.accent, seg(u, 0.4, 0.85)) });
-        cracks(k, k.spot, R * 0.85, { n: 10, grow: 1, alpha: 1 });
-        crater(k, k.spot, R * 0.18 * easeOut(u * 3), 1);
+        // The crater punched where it struck, anybody on the spot left standing on a pillar in it; the cracks run out
+        // from its lip.
+        const cr = R * 0.18 * easeOut(u * 3), near = k.bodiesWithin(R * 0.18 + 0.6, k.spot);
+        crater(k, k.spot, cr, 1, near);
+        cracks(k, k.spot, R * 0.85, { n: 10, grow: 1, alpha: 1, from: cr * 0.9 });
         k.light(k.spot, 3, 1 - u * 0.6, '#e8d8ff');
         k.light(k.caster, 1.4, 0.4 * (1 - u), '#fff1d6');
-        // Each creature it takes, struck where it stands: a short column of the patron's dark on it, green at its heart.
-        for (const b of taken(k, k.spot, R, 3)) k.pillar(b, { r: 3, h: 30, alpha: flashOf(u, 0.06) * (1 - seg(u, 0.4, 0.7)), main: k.pal.deep, deep: k.pal.ink, core: k.pal.accent });
+        // The blast reaching each creature it takes in turn, as the break runs out past it: a short column of the
+        // patron's dark on it, and as it strikes, its blood and a ring of grit and torn stuff thrown off it. (The one on
+        // the spot is under the great column already.)
+        taken(k, k.spot, R, 6).forEach((b, i) => {
+          const d = Math.hypot(b.x - k.spot.x, b.y - k.spot.y), t0 = (d / R) * 0.3, v = seg(u, t0, t0 + 0.25);
+          if (d > 0.6 && v > 0 && v < 1) k.pillar(b, { r: 3, h: 30, alpha: flashOf(v, 0.15) * (1 - v), main: k.pal.deep, deep: k.pal.ink, core: k.pal.accent });
+          const key = 'struck' + (b.who && b.who.kind !== 'player' ? b.who.id : -1 - i);
+          if (u >= t0 && !k.state[key]) {
+            k.state[key] = 1;
+            const at = k.heart(b);
+            k.burst(at, 10, { kind: 'shard', colour: [k.pal.main, k.pal.deep, '#4a3e36'], size: 1.6, life: [0.3, 0.5], speed: [0.6, 1], up: [2, 6], gravity: 30, drag: 0.5, spin: 3 });
+            bleed(k, at, 6, 0.08);
+          }
+        });
       } },
       // What it leaves: the cracks cooling and the crater, for a few seconds.
       linger: { on: 'spot', secs: 4.5, draw: (k, age, left) => {
@@ -1941,8 +2257,9 @@ export const CHAOS: Record<string, SpellVisual> = {
         if (age < 1.5) return;
         const R = radiusOf(CATACLYSM), a = smooth(left / 3);
         // The crater closing up rather than fading into the grass, gone by alpha only at the very last.
-        crater(k, k.spot, R * 0.18 * (0.35 + 0.65 * smooth(left / 3)), smooth(left / 0.6));
-        cracks(k, k.spot, R * 0.85, { n: 10, grow: 1, alpha: a * (0.6 + 0.4 * Math.sin(age * 6) * a) });
+        const cr = R * 0.18 * (0.35 + 0.65 * smooth(left / 3));
+        crater(k, k.spot, cr, smooth(left / 0.6), k.bodiesWithin(R * 0.18 + 0.6, k.spot));
+        cracks(k, k.spot, R * 0.85, { n: 10, grow: 1, alpha: a * (0.6 + 0.4 * Math.sin(age * 6) * a), from: cr * 0.9 });
         k.emit(k.on(k.spot.x, k.spot.y, 1), 20 * a, { kind: 'smoke', colour: ['#3e3430', k.pal.deep], size: 3, life: [0.8, 1.4], speed: [0.05, 0.2], up: [4, 10], gravity: -2, jitter: R * 0.5 });
       } },
     },
@@ -1978,7 +2295,11 @@ export const CHAOS: Record<string, SpellVisual> = {
         abyssEye(k, over, { r: 9 * (1 - 0.3 * u), open: fade, alpha: fade, look: { x: 0, y: 1.5 } });
         // The stare out of the eye's own pupil, narrowing to the creature.
         // Sorted with the eye but under it, so it comes out of the pupil rather than lying over it.
-        k.ribbon([k.heart(b), mid3(over, k.heart(b), 0.5), over], { width: 2.4 * fade, taper: 'start', alpha: 0.8 * fade, main: k.pal.deep, core: k.pal.accent, light: k.pal.accent, glow: 0.6, sortAt: over, bias: 1 });
+        // A cone of the eye's light, wide at the eye and narrowing onto it, with a thin green thread of the iris's
+        // own light down its middle: light leaving an eye, not a string.
+        const stare = [k.heart(b), mid3(over, k.heart(b), 0.5), over];
+        k.ribbon(stare, { width: 8 * fade, taper: 'start', alpha: 0.5 * fade, main: k.pal.deep, core: k.pal.main, light: k.pal.accent, glow: 0.4, edge: false, sortAt: over, bias: 1 });
+        k.ribbon(stare, { width: 1.5 * fade, taper: 'start', alpha: 0.9 * fade, main: k.pal.accent, core: '#e6ffe0', light: k.pal.accent, glow: 0.6, edge: false, sortAt: over, bias: 1.1 });
         // Cracked open where it was looked at: what makes every blow cut deeper.
         thorns(k, b, { R: Math.max(0.16, b.wide / 25) * (1.6 - 0.5 * easeOut(u * 2)), z: b.tall * 0.5, n: 7, len: 5, dir: 'in', turn: 0.2, alpha: 1 - seg(u, 0.8, 1) * 0.3, main: k.pal.accent, deep: '#2f7a28', width: 1.6 });
         k.light(b, 1.4, 0.8 * flashOf(u, 0.1), '#e0c8ff');
@@ -1991,11 +2312,9 @@ export const CHAOS: Record<string, SpellVisual> = {
         // High over it, clear of the flee mark under it (the faith's mark for running, as on Fright and Panic).
         abyssEye(k, { x: b.x, y: b.y, z: b.z + b.tall * 1.12 + 10 }, { r: 5, open: blink * smooth(age / 0.4), alpha: a, look: { x: (away.x - away.y) * 1.4, y: (away.x + away.y) * 0.5 } });
         fleeMark(k, b, k.toward(k.caster, b), 0.24, 0.9 * a, bump((age * 2.2) % 1, 0, 0.12, 0.5));
-        // Three green splinters circling in it: the cracks every blow gets in by.
-        for (let i = 0; i < 3; i++) {
-          const an = age * 1.3 + (i * TAU) / 3;
-          k.orb({ x: b.x + Math.cos(an) * w * 1.1, y: b.y + Math.sin(an) * w * 1.1, z: b.z + b.tall * (0.5 + 0.12 * Math.sin(age * 2 + i)) }, 1.6, { sides: 4, turn: an, alpha: 0.9 * a, main: k.pal.accent, deep: '#2f7a28', core: '#e6ffe0', glow: 0.5 });
-        }
+        // Three green splinters left driven into it from the stare, slowly going round: the cracks every blow gets in by
+        // (the impact's thorns, fewer and kept).
+        thorns(k, b, { R: w * 1.15, z: b.tall * 0.5, n: 3, len: 3.6, dir: 'in', turn: age * 1.3, alpha: 0.95 * a, main: k.pal.accent, deep: '#1f5a1a', width: 1.5 });
         timeArc(k, b, footR(b), arcLeft(age, left, lastsOf(GAZE)), { alpha: 0.75 * smooth(left / 0.8) });
         k.light(b, 1.4, 0.35 * a, '#e0c8ff');
       } },
@@ -2011,14 +2330,14 @@ export const CHAOS: Record<string, SpellVisual> = {
       charge: (k, t) => {
         const g = smooth(seg(t, 0.2, 0.52));
         if (g <= 0) return;
-        k.shards(k.caster, { n: 6, r: 0.5, h: 4.5, grow: g * (1 - seg(t, 0.55, 0.6)), main: '#d8cce4', deep: '#7a6a8c', core: '#ffffff', glow: 0.4 });
+        graves(k, k.caster, 0.55, g * (1 - seg(t, 0.55, 0.6)));
         k.emit(k.at(k.caster, 0.02), 30 * g, { kind: 'smoke', colour: [k.pal.ink, k.pal.deep], size: 2.2, life: [0.5, 0.9], speed: [0.02, 0.1], up: [4, 10], gravity: -2, jitter: 0.5 });
         chaosStar(k, k.caster, 0.8, { grow: g, turn: -0.2, alpha: 0.85 * g });
       },
       // Up from the grave: the stones burst, a black column through you, and the crown of thorns set on the head.
       hit: (k) => {
-        k.burst(k.at(k.caster, 0.2), 40, { kind: 'shard', colour: ['#d8cce4', '#7a6a8c'], size: 2.2, life: [0.4, 0.9], speed: [0.6, 1.6], up: [10, 30], gravity: 60, spin: 3, jitter: 0.5 });
-        k.burst(k.chest(), 6, { kind: 'mote', colour: k.pal.accent, size: 1.4, life: [0.5, 0.9], speed: [0.2, 0.7], up: [10, 26], gravity: 0 });
+        k.burst(k.at(k.caster, 0.2), 40, { kind: 'shard', colour: [GRAVE[0], GRAVE[1]], size: 2.2, life: [0.4, 0.9], speed: [0.6, 1.6], up: [10, 30], gravity: 60, spin: 3, jitter: 0.5 });
+        k.burst(k.chest(), 4, { kind: 'ember', colour: k.pal.accent, size: 1.4, life: [0.5, 0.9], speed: [0.2, 0.5], up: [10, 20], gravity: 0 });
         k.flash(0.2, k.pal.deep);
       },
       impact: { secs: 1.2, draw: (k, u) => {
@@ -2033,7 +2352,7 @@ export const CHAOS: Record<string, SpellVisual> = {
         const a = fadeOf(age, left, 0.3, 1.5), head = k.head();
         thorns(k, { x: head.x, y: head.y, z: head.z + 2.2 }, { R: 0.075, z: 0, n: 7, len: 2.4, dir: 'up', turn: age * 0.5, alpha: 0.95 * a, main: k.pal.accent, deep: '#2f7a28', width: 0.9 });
         k.glow({ x: head.x, y: head.y, z: head.z + 3 }, 5, 0.35 * a, k.pal.accent);
-        if (!k.fast) k.emit({ x: head.x, y: head.y, z: head.z + 3 }, 3 * a, { kind: 'ember', colour: [k.pal.accent, k.pal.core], size: 1.2, life: [0.5, 0.9], speed: [0, 0.04], up: [4, 8], gravity: 0, jitter: 0.08 });
+        if (!k.fast) k.emit({ x: head.x, y: head.y, z: head.z + 3 }, 3 * a, { kind: 'ember', colour: k.pal.accent, size: 1.2, life: [0.5, 0.9], speed: [0, 0.04], up: [4, 8], gravity: 0, jitter: 0.08 });
         timeArc(k, k.caster, footR(k.caster), arcLeft(age, left, (lastsOf('chaos_undying') || 1)), { alpha: 0.65 * smooth(left / 0.8) });
       } },
     },
