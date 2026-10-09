@@ -52,8 +52,11 @@
  * are small and thrown away. A spell that wants a hundred of something wants
  * a particle burst, not a hundred records.
  */
+import { figureJoint, figureJoints, viewOf, weaponSpan, type FigurePose, type V3 } from '../figure';
 import { HALF_H, HALF_W, HEIGHT_SCALE, UNITS_PER_TILE } from '../iso';
 import type { View } from '../view';
+import { wildermonHead, wildermonTop } from '../wildermon';
+import type { CastAim } from './index';
 
 /* ---- numbers ------------------------------------------------------------------ */
 
@@ -118,6 +121,54 @@ export function mixColour(a: string, b: string, u: number): string {
   const [r0, g0, b0] = rgbOf(a), [r1, g1, b1] = rgbOf(b);
   return `rgb(${Math.round(lerp(r0, r1, u))}, ${Math.round(lerp(g0, g1, u))}, ${Math.round(lerp(b0, b1, u))})`;
 }
+
+/* ---- going without going muddy ------------------------------------------------------------ */
+
+/*
+ * Something faded by its alpha over the ground is mixed with the ground: red
+ * half gone over grass is olive, gold is khaki. These go another way. A pool
+ * or a stain dries -- darkens toward its own deep shade, keeping its hue --
+ * and is let go by alpha only at the very end (`lateFade`); a cut or a trail
+ * is eaten from its tail (`eatTail`), opaque to the last.
+ */
+
+/** Three numbers as '#rrggbb'. */
+const hexOf = (r: number, g: number, b: number): string =>
+  '#' + [r, g, b].map((v) => Math.max(0, Math.min(255, Math.round(v))).toString(16).padStart(2, '0')).join('');
+
+/**
+ * A colour dried, `u` of the way (nought to one) toward `to` -- its own shade at `dark` of its brightness
+ * (0.45) when not given: blood going brown-black, a glow going to embers. As '#rrggbb', so it can go
+ * anywhere a palette colour can (a light, a glow).
+ */
+export function dry(hex: string, u: number, to?: string, dark = 0.45): string {
+  const [r, g, b] = rgbOf(hex);
+  const [r1, g1, b1] = to ? rgbOf(to) : [r * dark, g * dark, b * dark];
+  const k = clamp(u);
+  return hexOf(lerp(r, r1, k), lerp(g, g1, k), lerp(b, b1, k));
+}
+
+/**
+ * Points along a line with its first `u` (nought to one) eaten away, measured along its length: what is left of a
+ * cut or a trail as it goes, its head where it was. One point (the head) once it is all gone. Allocates its answer.
+ */
+export function eatTail(pts: readonly P3[], u: number): P3[] {
+  const n = pts.length;
+  if (n < 2 || u <= 0) return pts.slice();
+  const len = (a: P3, b: P3): number => Math.hypot((b.x - a.x) * UNITS_PER_TILE, (b.y - a.y) * UNITS_PER_TILE, b.z - a.z);
+  let total = 0;
+  for (let i = 1; i < n; i++) total += len(pts[i - 1], pts[i]);
+  let left = clamp(u) * total;
+  for (let i = 1; i < n; i++) {
+    const a = pts[i - 1], b = pts[i], l = len(a, b);
+    if (left <= l) return [mid3(a, b, l > 0 ? left / l : 1), ...pts.slice(i)];
+    left -= l;
+  }
+  return [pts[n - 1]];
+}
+
+/** An alpha held at one until the last `secs` (0.2) of what is `left`, then let down to nought: for a mark that has dried first. */
+export const lateFade = (left: number, secs = 0.2): number => (secs > 0 ? smooth(left / secs) : left > 0 ? 1 : 0);
 
 /**
  * The colours of a school, a trade or a patron. Every spell of a group draws in
@@ -189,6 +240,20 @@ export interface Body {
   figure?: import('../figure').FigurePose;
   /** Who it is, when the stage knows: to tell the bodies `FxScene.bodiesWithin` finds apart, and the caster among them. */
   who?: Who;
+  /** For a creature: its kind, for where its head is (`FxScene.muzzle`). */
+  species?: string;
+  /**
+   * For a creature: how near it can strike you from, in tiles, as the game has it (`beastReach`): a blow's
+   * `HUNT_REACH`, or a thrower's `THROW_REACH`. Where a reach advantage is measured from.
+   */
+  reach?: number;
+  /**
+   * For a creature: somebody's -- a companion out (`companion`), a beast on a deed or in a pen -- rather than wild; and
+   * after somebody now (`hostile`), hunting or fighting. Left out (false) for what the stage cannot tell.
+   */
+  tame?: boolean;
+  companion?: boolean;
+  hostile?: boolean;
   /**
    * What the island says is on a creature now, where the payload carries it: a
    * Kindler's burn running, a knife's bleed running, held fast in a trap.
@@ -199,6 +264,45 @@ export interface Body {
   held?: boolean;
 }
 
+/* ---- kept between frames for a cast -------------------------------------------------- */
+
+/** Seconds of a cast's own clock between a weapon trail's samples: a sixtieth, whatever the frames are drawn at. */
+const TRAIL_STEP = 1 / 60;
+/**
+ * Each cast's weapon trails' samples (`FxScene.trail`), by its `state` (which is the cast's own, and goes with it) and
+ * the trail: by step, the inner and the outer point in the body's frame.
+ */
+const trails = new WeakMap<object, Map<string, Map<number, [V3, V3]>>>();
+
+/** Where a creature's head is on its own model, standing: units ahead of its feet and up, and how tall the model is, in height units. */
+const kindHeads = new Map<string, { ahead: number; up: number; tall: number } | null>();
+function headOfKind(species: string): { ahead: number; up: number; tall: number } | null {
+  let h = kindHeads.get(species);
+  if (h === undefined) {
+    // Seen side on (facing two), ahead is across the screen, so where the head is on the screen there says both how far
+    // ahead of the feet it is and how high.
+    const at = wildermonHead(species, 2), top = wildermonTop(species), ey = viewOf(2).ey;
+    h = null;
+    if (at && top && Math.abs(ey[0]) > 1e-3) {
+      const ahead = at[0] / ey[0];
+      h = { ahead, up: -(at[1] - ahead * ey[1]) / HEIGHT_SCALE, tall: Math.max(22, top) / HEIGHT_SCALE };
+    }
+    kindHeads.set(species, h);
+  }
+  return h;
+}
+
+/**
+ * How wide a creature of a kind stands, as `Body.wide` (height units from its middle out to its side), at its own
+ * size: from the length of its own model -- how far ahead of its feet its head is -- measured against the ulva's,
+ * which stands five wide. A rabbit-sized thing is narrower, an ogre or a bear broader; a kind with no model is five.
+ */
+export function creatureWide(species: string): number {
+  const h = headOfKind(species), ref = headOfKind('ulva');
+  if (!h || !ref || Math.abs(ref.ahead) < 0.5) return 5;
+  return 5 * clamp(Math.max(Math.abs(h.ahead), h.tall * 0.35) / Math.max(Math.abs(ref.ahead), ref.tall * 0.35), 0.5, 4);
+}
+
 /* ---- the pools ---------------------------------------------------------------- */
 
 /** The most particles alive at once, over every spell on the screen; a third of it on fast graphics. */
@@ -207,8 +311,8 @@ export const MOST_PARTICLES = 1200;
 export const MOST_LIGHTS = 8;
 
 /** Kinds of particle, by how they are drawn. The first three are light, added in the glow pass; the rest are things, sorted in the world. */
-export type ParticleKind = 'spark' | 'ember' | 'mote' | 'smoke' | 'dust' | 'shard' | 'drop';
-const KIND_NO: Record<ParticleKind, number> = { spark: 0, ember: 1, mote: 2, smoke: 3, dust: 4, shard: 5, drop: 6 };
+export type ParticleKind = 'spark' | 'ember' | 'mote' | 'smoke' | 'dust' | 'shard' | 'drop' | 'mist';
+const KIND_NO: Record<ParticleKind, number> = { spark: 0, ember: 1, mote: 2, smoke: 3, dust: 4, shard: 5, drop: 6, mist: 7 };
 /** Whether a kind is light (glow pass) rather than a thing (world pass). */
 export const isLightKind = (k: number): boolean => k <= 2;
 
@@ -246,6 +350,15 @@ export interface BurstOpts {
   spin?: number;
   /** For world kinds: drawn this much nearer the viewer in the sort, in pixels, to keep in front of whatever they came off. */
   bias?: number;
+  /**
+   * For light kinds (spark, ember, mote): laid over the picture in their own colour rather than added to it. Added,
+   * a warm colour takes the green of the grass under it into itself -- brass and gold sparks go lime, and at night
+   * the wash under them does the same -- so a spark that has to stay its colour (brass, blood, anything but a white
+   * or a pale tint) is drawn over. Still drawn after the night, so it shines in the dark as the others do.
+   */
+  over?: boolean;
+  /** For shards: `false` leaves off the dark edge, for chips small or bright enough that an edge makes them dark specks. */
+  ink?: boolean;
 }
 
 /**
@@ -271,6 +384,8 @@ export class Particles {
   readonly spin: Float32Array;
   readonly bias: Float32Array;
   readonly kind: Uint8Array;
+  /** One for drawn over rather than added (`BurstOpts.over`), two for a shard with no edge (`BurstOpts.ink`). */
+  readonly flags: Uint8Array;
   readonly colour: Uint16Array;
   readonly fade: Uint16Array;
   /** Colours by number: a particle keeps a number rather than a string. */
@@ -285,6 +400,7 @@ export class Particles {
     this.x = f(); this.y = f(); this.z = f(); this.vx = f(); this.vy = f(); this.vz = f();
     this.age = f(); this.life = f(); this.size = f(); this.size1 = f(); this.grav = f(); this.drag = f(); this.spin = f(); this.bias = f();
     this.kind = new Uint8Array(most);
+    this.flags = new Uint8Array(most);
     this.colour = new Uint16Array(most);
     this.fade = new Uint16Array(most);
   }
@@ -399,6 +515,13 @@ export interface GroundLayer {
   closed?: boolean;
   join?: CanvasLineJoin;
   cap?: CanvasLineCap;
+  /**
+   * Light from it as well, this bright (nought or left out for none): its lines and its fills laid again in the glow
+   * pass, over the night, in `light` (the palette's light unless given) -- so a ring or a tick on the ground still
+   * shows in the dark. Lines glow three times as wide as they are drawn.
+   */
+  glow?: number;
+  light?: string;
 }
 
 /** Shapes on the ground drawn whole, each point put on the land where it is: for the preview, and anything else that wants them uncut. */
@@ -505,13 +628,24 @@ export interface LightRec {
 }
 
 /** What a frame of every spell on the screen came to, pass by pass. Filled by `FxScene`, drawn by the stage. */
+/** A person veiled this frame: who, and the veil (`FigurePose.veil`). */
+export interface VeilRec {
+  who: Who;
+  colour: string;
+  tint: number;
+  fade: number;
+}
+
 export class FxFrame {
   ground: GroundRec[] = [];
   world: WorldRec[] = [];
   glow: Array<(g: CanvasRenderingContext2D) => void> = [];
   screen: Array<(g: CanvasRenderingContext2D, w: number, h: number) => void> = [];
   lights: LightRec[] = [];
+  /** Bodies veiled this frame (`FxScene.veil`), for whoever draws them. */
+  veils: VeilRec[] = [];
   reset(): void {
+    this.veils.length = 0;
     this.ground.length = 0;
     this.world.length = 0;
     this.glow.length = 0;
@@ -577,6 +711,12 @@ export class FxScene {
   fast = false;
   /** Whether you cast it, rather than somebody else: a screen accent is only ever for the caster. */
   mine = false;
+  /**
+   * How dark it is where it is drawn, nought by day to one at the dead of night, as the island lays its night: for
+   * choosing tones -- a mark in ink by day and in its light at night, a glow that only wants to show in the dark. The
+   * kit's own shapes do not use it; nothing changes unless a spell asks.
+   */
+  night = 0;
   /** The spell's palette. */
   pal!: SpellPalette;
   /** The spell's numbers, as the island casts it from: `secs`, `reach`, `radius` and the rest. */
@@ -611,12 +751,41 @@ export class FxScene {
   ground: (x: number, y: number) => number = () => 0;
   /** Where a joint of a person is (`figureJoint`), by the stage. */
   jointOf: ((b: Body, bone: string, at?: [number, number, number]) => P3 | null) | null = null;
+  /**
+   * The cast is being played left-handed (`cast.mirror`: a shouldered weapon on the left shoulder): the weapon is in the
+   * left hand and the blows come from the left. `side` is minus one then and one otherwise -- multiply anything put to
+   * one side by it (`k.local(b, k.side * 4, ...)`, a slash's `tilt`), and ask for `k.hand(k.lefty ? 0 : 1)`.
+   */
+  lefty = false;
+  side = 1;
+  /** Where the target stands from the caster, as the pose is told it (`CastAim`); nothing for a cast on oneself. */
+  aim: CastAim | null = null;
+  /** The cast's timing (its seconds and its release), for what samples the pose through it (`trail`). */
+  timing: { secs: number; release: number } | null = null;
+  /**
+   * Seconds since the spell left the hand (minus one before it has), and seconds left of the cast's pose (its hold
+   * included; nought once it is over): `charge` is called to the end of the pose, not only to the release, so a
+   * warning or a charge that has to go at the release fades by `released`, and one that has to last the pose fades
+   * out over the end by `castLeft` rather than vanishing in a frame.
+   */
+  released = -1;
+  castLeft = 0;
+  /** Lights this cast may still put down this frame (`light`): two a cast, eight on the screen. */
+  lightsLeft = 2;
 
   eye!: Eye;
   out!: FxFrame;
   parts!: Particles;
   /** How many particles may be alive at once, on this graphics setting. */
   partCap = MOST_PARTICLES;
+
+  /**
+   * How bright a shape's own glow is drawn (`Look.glow`, one by default): none on fast graphics, where the glow is the
+   * second copy of everything drawn and the first thing to go. `k.glow`, `k.flare` and `k.light` are kept.
+   */
+  glowOf(o: Look): number {
+    return this.fast ? 0 : o.glow ?? 1;
+  }
 
   /* ---- projecting -------------------------------------------------------------- */
 
@@ -692,6 +861,264 @@ export class FxScene {
   }
 
   /**
+   * A point kept for the rest of the cast from the first frame it is asked for (in `k.state`, under `name`): where the
+   * weapon's tip was at the hit, so a lance or a line tied to it stays put while the pose recovers rather than
+   * kinking and swinging at the sky with the live tip. `get` is asked once.
+   *
+   *     hit: (k) => { k.once('tip', () => k.joint(k.caster, 'tip')); },
+   *     impact: { secs: 0.4, draw: (k, u) => k.ribbon(eatTail([k.once('tip', ...), k.heart()], u), ...) },
+   */
+  once(name: string, get: () => P3): P3 {
+    const st = this.state, kx = name + ':x', ky = name + ':y', kz = name + ':z';
+    if (st[kx] === undefined) {
+      const p = get();
+      st[kx] = p.x;
+      st[ky] = p.y;
+      st[kz] = p.z;
+    }
+    return { x: st[kx], y: st[ky], z: st[kz] };
+  }
+
+  /**
+   * An aura hugging a body: a halo the shape of the body rather than an egg round it -- a band round its outline,
+   * close at the sides and over the head, wavering upward like heat (`flow`, how fast; `waver`, how far, in pixels at
+   * zoom one), the band behind the body and only its two edges down the sides in front, so the body shows inside it.
+   * A siphon's draw, a shroud, a body kept from death -- anything that is the body's own and not a skin laid over it,
+   * which is the Warder's `shell`. `size` over a snug fit (one), `width` the band's in pixels at zoom one (3).
+   */
+  aura(b: Body, o: Look & { size?: number; width?: number; flow?: number; waver?: number; n?: number } = {}): void {
+    const a = o.alpha ?? 0.8;
+    if (a <= 0.01) return;
+    const size = o.size ?? 1;
+    const foot = { x: b.x, y: b.y, z: b.z };
+    const cx = this.sx(foot), base = this.sy(foot);
+    const H = b.tall * HEIGHT_SCALE * this.zoom * 1.06 * size, Wd = Math.max(H * 0.2, b.wide * 1.9 * this.zoom * size);
+    const n = o.n ?? (this.fast ? 14 : 22);
+    const band = (o.width ?? 3) * this.zoom, wav = (o.waver ?? 1.6) * this.zoom, flow = o.flow ?? 1.2;
+    // Round the outline from the right foot, up over the head and down to the left: a body's silhouette, wide at the
+    // shoulders, narrow at the neck, round over the head.
+    const outer: number[] = [], inner: number[] = [];
+    for (let i = 0; i <= n; i++) {
+      const u = i / n, ang = Math.PI * u;
+      const up = Math.sin(ang) * 0.95 + 0.05 * (1 - Math.cos(2 * ang));
+      const side = Math.cos(ang);
+      const shoulder = 1 - 0.25 * Math.max(0, Math.sin(ang * 1.0) - 0.82) * 5;
+      const wob = Math.sin(this.now * flow * TAU - u * 9 + this.seed) * wav;
+      const x = cx + side * (Wd * shoulder + wob * 0.6), y = base - up * H - Math.abs(wob) * Math.sin(ang);
+      outer.push(x, y);
+      inner.push(cx + side * Math.max(0, Wd * shoulder - band), base - up * Math.max(0, H - band));
+    }
+    const main = o.main ?? this.pal.main, core = o.core ?? this.pal.core, ink = o.ink ?? this.pal.ink;
+    const m = n + 1;
+    // Behind: the whole band, a little thinner in tone.
+    this.worldDraw(foot, (g) => {
+      g.globalAlpha = clamp(a * 0.6);
+      g.fillStyle = main;
+      g.beginPath();
+      for (let i = 0; i < m; i++) (i ? g.lineTo(outer[2 * i], outer[2 * i + 1]) : g.moveTo(outer[0], outer[1]));
+      for (let i = m - 1; i >= 0; i--) g.lineTo(inner[2 * i], inner[2 * i + 1]);
+      g.closePath();
+      g.fill();
+    }, -0.3);
+    // In front: the two edges down the sides, from the hips up to the shoulders, in its core with an inked outside.
+    const sideRun = (from: number, to: number): number[] => {
+      const out: number[] = [];
+      for (let i = from; i <= to; i++) out.push(outer[2 * i], outer[2 * i + 1]);
+      return out;
+    };
+    const k0 = Math.round(n * 0.08), k1 = Math.round(n * 0.3);
+    const runs = [sideRun(k0, k1), sideRun(n - k1, n - k0)];
+    this.worldDraw(foot, (g) => {
+      g.globalAlpha = clamp(a);
+      g.lineJoin = 'round';
+      g.lineCap = 'round';
+      for (const [wd, col] of [[band * 0.7 + Math.max(1, 0.8 * this.zoom), ink], [band * 0.7, core]] as const) {
+        g.lineWidth = wd;
+        g.strokeStyle = col;
+        g.beginPath();
+        for (const r of runs) for (let i = 0; i < r.length; i += 2) (i ? g.lineTo(r[i], r[i + 1]) : g.moveTo(r[i], r[i + 1]));
+        g.stroke();
+      }
+      g.lineCap = 'butt';
+    }, 0.6);
+    const gl = this.glowOf(o);
+    if (gl > 0) this.glow(this.at(b, 0.55), (H / this.zoom) * 0.7, a * gl * 0.3, o.light);
+  }
+
+  /**
+   * A creature's head, where its jaws are: from the creature's own model where it has one (`species` on the body),
+   * scaled to the body's size and turned the way it faces; a person's head; or up its height otherwise. Where a bite
+   * starts, a muzzle is bound, a howl comes from.
+   */
+  muzzle(b: Body = this.target): P3 {
+    if (b.figure) return this.head(b);
+    const h = b.species ? headOfKind(b.species) : null;
+    if (!h) return this.at(b, 0.85);
+    const k = h.tall > 0 ? b.tall / h.tall : 1;
+    return this.local(b, 0, h.ahead * k, h.up * k);
+  }
+
+  /**
+   * A person veiled for this frame: `tint` (nought to one) of the way to `colour` (the palette's deep) over the whole
+   * body, and the body drawn `fade` of the way to nothing -- a shroud, a body gone to smoke, the dark of a stealth.
+   * Only people (whose figure is drawn); the strongest veil a body is given in a frame is the one drawn. Called every
+   * frame it is wanted, from any part of a cast (a linger as well).
+   */
+  veil(b: Body = this.caster, o: { colour?: string; tint?: number; fade?: number } = {}): void {
+    if (!b.figure || !b.who) return;
+    const tint = clamp(o.tint ?? 0), fade = clamp(o.fade ?? 0);
+    if (tint <= 0.004 && fade <= 0.004) return;
+    this.out.veils.push({ who: b.who, colour: o.colour ?? this.pal.deep, tint, fade });
+  }
+
+  /**
+   * The swept trail of a body's weapon through the air: the band its blade swept over the last `secs` (0.12) of the
+   * cast, from `inner` to `outer` of the way from the fist to the point (0.4 to 1), drawn through where the weapon
+   * really was -- the posed figure sampled every sixtieth of a second of the cast whatever the frames are drawn at, so
+   * at fifteen frames a second a blow is still a smooth band and not three planks. Its head is the weapon as drawn this
+   * frame; its tail narrows to the edge, eaten rather than faded. Opaque by default, in `main` with a `core` strip
+   * along the edge and the edge inked.
+   *
+   * Cheap: each sample is posed once and kept for the rest of the trail's life, and the head is the pose the effects
+   * were already asking of (`k.joint`) -- a posing a sixtieth of a second, however many frames. `key` names it, for
+   * two trails off one cast. Only while the body is in a cast (its pose stops in a hold, and the trail shrinks away).
+   */
+  trail(b: Body = this.caster, o: Look & { secs?: number; inner?: number; outer?: number; key?: string; edge?: boolean } = {}): void {
+    const fig = b.figure, cast = fig?.cast, timing = this.timing;
+    if (!fig || !cast || !timing) return;
+    const a = o.alpha ?? 1;
+    if (a <= 0.01) return;
+    const id = fig.gear?.weapon?.id, span = id ? weaponSpan(id) : null;
+    const reach = span ? span.to : 0;
+    const zIn = reach * clamp(o.inner ?? 0.4), zOut = reach * clamp(o.outer ?? 1);
+    const back = Math.min(0.3, Math.max(TRAIL_STEP, o.secs ?? 0.12));
+    const now = cast.t * timing.secs;
+    // This cast's samples, kept by the step of the cast's own clock each was taken at.
+    let mine = trails.get(this.state);
+    if (!mine) trails.set(this.state, (mine = new Map()));
+    const key = `${o.key ?? ''}|${zIn.toFixed(2)}|${zOut.toFixed(2)}`;
+    let buf = mine.get(key);
+    if (!buf) mine.set(key, (buf = new Map()));
+    const first = Math.ceil((now - back) / TRAIL_STEP), last = Math.floor(now / TRAIL_STEP - 1e-6);
+    for (const j of buf.keys()) if (j < first || j > last) buf.delete(j);
+    const posed: FigurePose = { ...fig, facing: b.facing };
+    const wants: Array<readonly [string, V3]> = [['weapon', [0, 0, zIn]], ['weapon', [0, 0, zOut]]];
+    for (let j = Math.max(0, first); j <= last; j++) {
+      if (buf.has(j)) continue;
+      const got = figureJoints({ ...posed, cast: { ...cast, t: (j * TRAIL_STEP) / timing.secs } }, wants);
+      buf.set(j, [got[0], got[1]]);
+    }
+    const inner: P3[] = [], outer: P3[] = [];
+    const put = (i0: V3, o0: V3): void => {
+      inner.push(this.local(b, i0[0], i0[1], i0[2]));
+      outer.push(this.local(b, o0[0], o0[1], o0[2]));
+    };
+    for (const j of [...buf.keys()].sort((x, y) => x - y)) {
+      const s = buf.get(j) as [V3, V3];
+      put(s[0], s[1]);
+    }
+    // The head: the weapon where it is drawn now, the pose the effects already asked of.
+    put(figureJoint(posed, 'weapon', [0, 0, zIn]), figureJoint(posed, 'weapon', [0, 0, zOut]));
+    const n = outer.length;
+    if (n < 2) return;
+    // The inner edge narrowed toward the outer one down the trail: all of the band at the head, none of it at the tail.
+    const xo: number[] = [], yo: number[] = [], xi: number[] = [], yi: number[] = [], xc: number[] = [], yc: number[] = [];
+    for (let i = 0; i < n; i++) {
+      const u = i / (n - 1);
+      const ox = this.sx(outer[i]), oy = this.sy(outer[i]), ix = this.sx(inner[i]), iy = this.sy(inner[i]);
+      xo.push(ox);
+      yo.push(oy);
+      xi.push(lerp(ox, ix, u));
+      yi.push(lerp(oy, iy, u));
+      xc.push(lerp(ox, ix, 0.3 * u));
+      yc.push(lerp(oy, iy, 0.3 * u));
+    }
+    const main = o.main ?? this.pal.main, core = o.core ?? this.pal.core, ink = o.ink ?? this.pal.ink;
+    const inkW = Math.max(0.8, 0.7 * this.zoom);
+    let near = n - 1;
+    for (let i = 0; i < n; i++) if (yo[i] > yo[near]) near = i;
+    this.worldDraw(outer[near], (g) => {
+      g.globalAlpha = clamp(a);
+      const band = (x0: number[], y0: number[], x1: number[], y1: number[]): void => {
+        g.beginPath();
+        g.moveTo(x0[0], y0[0]);
+        for (let i = 1; i < n; i++) g.lineTo(x0[i], y0[i]);
+        for (let i = n - 1; i >= 0; i--) g.lineTo(x1[i], y1[i]);
+        g.closePath();
+      };
+      band(xo, yo, xi, yi);
+      g.fillStyle = main;
+      g.fill();
+      band(xo, yo, xc, yc);
+      g.fillStyle = core;
+      g.fill();
+      if (o.edge !== false) {
+        g.lineWidth = inkW;
+        g.strokeStyle = ink;
+        g.lineJoin = 'round';
+        g.beginPath();
+        g.moveTo(xo[0], yo[0]);
+        for (let i = 1; i < n; i++) g.lineTo(xo[i], yo[i]);
+        g.stroke();
+      }
+    }, o.bias ?? 0);
+    const gl = this.glowOf(o);
+    if (gl > 0) {
+      const pic = glowPicture(o.light ?? this.pal.light);
+      if (pic) {
+        const R = Math.max(5, 5 * this.zoom);
+        this.out.glow.push((g) => {
+          g.globalAlpha = clamp(a * gl * 0.35);
+          for (let i = n - 1; i >= 0; i -= 2) g.drawImage(pic, xo[i] - R, yo[i] - R, 2 * R, 2 * R);
+        });
+      }
+    }
+  }
+
+  /**
+   * The creatures within `r` tiles of a point (the spot by default) that are anybody's to harm: wild ones, not a
+   * companion, a beast on a deed or one in a pen -- yours or anybody else's. What an area harm (a ricochet, a fan of
+   * blades, a judgment) should strike, where `bodiesWithin` is everybody standing there.
+   */
+  enemiesWithin(r: number, c: { x: number; y: number } = this.spot): Body[] {
+    return this.bodiesWithin(r, c, ['creature']).filter((b) => !b.tame);
+  }
+
+  /**
+   * A line through points cut where it passes `b`: the runs of it behind the body (further from the viewer than
+   * where the body stands, as the sort goes) and the runs in front, each cut exactly where it crosses. For a chain, a
+   * braid, a tether that goes round or past somebody: record the back runs sorted behind the body and the front ones
+   * in front of it (`polyline`'s and `ribbon`'s `around` do just that).
+   */
+  aroundBody(b: Body, pts: readonly P3[]): { back: P3[][]; front: P3[][]; backAt: Array<[number, number]>; frontAt: Array<[number, number]> } {
+    const back: P3[][] = [], front: P3[][] = [], backAt: Array<[number, number]> = [], frontAt: Array<[number, number]> = [];
+    const by = this.eye.worldToScreenY(b.x, b.y, this.ground(b.x, b.y));
+    const d = (p: P3): number => this.eye.worldToScreenY(p.x, p.y, this.ground(p.x, p.y)) - by;
+    const last = Math.max(1, pts.length - 1);
+    // Each run, and where it starts and ends along the whole line as a share of its points (for a taper kept whole).
+    let run: P3[] = [pts[0]], from = 0, was = d(pts[0]);
+    const end = (inFront: boolean, to: number): void => {
+      if (run.length < 2) return;
+      (inFront ? front : back).push(run);
+      (inFront ? frontAt : backAt).push([from / last, to / last]);
+    };
+    for (let i = 1; i < pts.length; i++) {
+      const now = d(pts[i]);
+      if ((was > 0) !== (now > 0)) {
+        const u = was / (was - now), cut = mid3(pts[i - 1], pts[i], u);
+        run.push(cut);
+        end(was > 0, i - 1 + u);
+        run = [cut];
+        from = i - 1 + u;
+      }
+      run.push(pts[i]);
+      was = now;
+    }
+    end(was > 0, last);
+    return { back, front, backAt, frontAt };
+  }
+
+  /**
    * Everybody and everything standing within `r` tiles of a point (the spot by
    * default): people (you, others) and creatures, the caster among them when
    * inside; each body's `kind` and `who` tell which. What an area spell
@@ -753,29 +1180,42 @@ export class FxScene {
 
   /** A light in the night at a point: `radius` tiles, `strength` nought to one, in the palette's light unless told. */
   light(p: { x: number; y: number }, radius: number, strength: number, colour = this.pal.light): void {
-    if (strength <= 0.01 || this.out.lights.length >= MOST_LIGHTS) return;
+    if (strength <= 0.01) return;
+    // Counted asked for, so a cast over its two shows as over (`SpellStage.over`), and refused past them.
+    if (this.lightsLeft-- <= 0 || this.out.lights.length >= MOST_LIGHTS) return;
     this.out.lights.push({ x: p.x, y: p.y, radius, strength: clamp(strength), cast: channelsOf(colour), castAlpha: 0.32 * clamp(strength) });
   }
 
   /* ---- glow -------------------------------------------------------------------------- */
 
-  /** A soft glow round a point, `r` pixels at zoom one, in the palette's light unless told. */
-  glow(p: P3, r: number, alpha = 1, colour = this.pal.light): void {
+  /**
+   * A soft glow round a point, `r` pixels at zoom one, in the palette's light unless told. Added to what is under it,
+   * as light is; `over` lays it over instead, in its own colour, for a warm one (gold, brass, blood) that added over
+   * grass goes lime -- still after the night, so it still shows in the dark.
+   */
+  glow(p: P3, r: number, alpha = 1, colour = this.pal.light, over = false): void {
     if (alpha <= 0.01 || r <= 0) return;
     const pic = glowPicture(colour);
     if (!pic) return;
     const x = this.sx(p), y = this.sy(p), R = r * this.zoom;
     this.out.glow.push((g) => {
       g.globalAlpha = clamp(alpha);
+      if (over) g.globalCompositeOperation = 'source-over';
       g.drawImage(pic, x - R, y - R, 2 * R, 2 * R);
+      if (over) g.globalCompositeOperation = 'lighter';
     });
   }
-  /** A four-pointed glint: the moment something lands, or a star. `r` pixels at zoom one. */
-  flare(p: P3, r: number, alpha = 1, colour = this.pal.core, turn = 0): void {
+  /**
+   * A four-pointed glint: the moment something lands, or a star. `r` pixels at zoom one; `colour` the glint's own
+   * (the palette's core), `light` the glow round it (the palette's light), as `Look.light` is for the other shapes;
+   * `over` lays both over rather than adding them (see `glow`), for a gold or brass glint that has to stay gold.
+   */
+  flare(p: P3, r: number, alpha = 1, colour = this.pal.core, turn = 0, light = this.pal.light, over = false): void {
     if (alpha <= 0.01 || r <= 0) return;
     const x = this.sx(p), y = this.sy(p), R = r * this.zoom, w = R * 0.16;
     this.out.glow.push((g) => {
       g.globalAlpha = clamp(alpha);
+      if (over) g.globalCompositeOperation = 'source-over';
       g.fillStyle = colour;
       g.beginPath();
       for (let i = 0; i < 4; i++) {
@@ -786,8 +1226,9 @@ export class FxScene {
         g.lineTo(x + s * w, y - c * w * 0.5);
       }
       g.fill();
+      if (over) g.globalCompositeOperation = 'lighter';
     });
-    this.glow(p, r * 0.7, alpha * 0.6);
+    this.glow(p, r * 0.7, alpha * 0.6, light, over);
   }
 
   /* ---- the screen ------------------------------------------------------------------- */
@@ -826,7 +1267,8 @@ export class FxScene {
   /** Facets round a circle: fewer far off and on fast graphics, never fewer than a hexagon. */
   facets(rTiles: number, most = 48): number {
     const n = Math.round(10 + rTiles * 7 * Math.min(2, this.zoom));
-    return Math.max(6, Math.min(this.fast ? Math.min(most, 18) : most, n));
+    // On fast graphics fewer, but a big ring still round: a few more for every tile out.
+    return Math.max(6, Math.min(this.fast ? Math.min(most, 18 + Math.round(rTiles * 3)) : most, n));
   }
 
   /**
@@ -843,6 +1285,13 @@ export class FxScene {
   groundShape(x: number, y: number, r: number, layers: GroundLayer[], keep?: (x: number, y: number, reach: number) => boolean): void {
     const eye = this.eye, ground = this.ground;
     this.out.ground.push({ x0: x - r, y0: y - r, x1: x + r, y1: y + r, shape: layers, keep, draw: (g) => drawGroundLayers(g, layers, eye, ground) });
+    // Whatever of it is to glow, again over the night: the same paths in the light's colour, lines widened.
+    for (const l of layers) {
+      const gl = l.glow ?? 0;
+      if (gl <= 0 || !l.paths.length || l.alpha <= 0.01) continue;
+      const lit: GroundLayer = { ...l, colour: l.light ?? this.pal.light, alpha: clamp(l.alpha * gl * 0.45), width: (l.width ?? 1) * 3, join: 'round', cap: 'round' };
+      this.out.glow.push((g) => drawGroundLayers(g, [lit], eye, ground));
+    }
   }
 
   /**
@@ -888,7 +1337,7 @@ export class FxScene {
       const d = Math.hypot(tx - cx, ty - cy);
       return d >= rIn - reach && d <= rOut + reach;
     });
-    const gl = o.glow ?? 1;
+    const gl = this.glowOf(o);
     if (gl > 0) {
       const pic = glowPicture(o.light ?? this.pal.light);
       if (pic) {
@@ -1089,15 +1538,23 @@ export class FxScene {
       }
       g.stroke();
     }, o.bias ?? 0);
-    const gl = o.glow ?? 1;
+    const gl = this.glowOf(o);
     if (gl > 0) this.glow(p, r * 3.2, a * gl * 0.8, o.light);
   }
 
   /** A ribbon through points in the world, `width` pixels at zoom one at its widest, tapering to nothing at the first point: a trail, a slash, a wisp. */
-  ribbon(pts: readonly P3[], o: Look & { taper?: 'start' | 'both' | 'none'; edge?: boolean } = {}): void {
+  ribbon(pts: readonly P3[], o: Look & { taper?: 'start' | 'both' | 'none'; edge?: boolean; around?: Body; sortAt?: P3; span?: readonly [number, number] } = {}): void {
     const n = pts.length;
     const a = o.alpha ?? 1;
     if (n < 2 || a <= 0.01) return;
+    if (o.around) {
+      // Cut where it passes the body, each piece tapered as its stretch of the whole was.
+      const { back, front, backAt, frontAt } = this.aroundBody(o.around, pts);
+      const foot = { x: o.around.x, y: o.around.y, z: o.around.z };
+      back.forEach((run, i) => this.ribbon(run, { ...o, around: undefined, sortAt: foot, span: backAt[i], bias: (o.bias ?? 0) - 0.5 }));
+      front.forEach((run, i) => this.ribbon(run, { ...o, around: undefined, sortAt: foot, span: frontAt[i], bias: (o.bias ?? 0) + 0.5 }));
+      return;
+    }
     const W = (o.width ?? 4) * this.zoom;
     const xs: number[] = [], ys: number[] = [];
     for (const p of pts) {
@@ -1112,7 +1569,7 @@ export class FxScene {
       const l = Math.hypot(dx, dy) || 1;
       dx /= l;
       dy /= l;
-      const u = i / (n - 1);
+      const u = o.span ? lerp(o.span[0], o.span[1], i / (n - 1)) : i / (n - 1);
       const w = (W / 2) * (taper === 'none' ? 1 : taper === 'both' ? Math.sin(Math.PI * u) : u);
       left.push(xs[i] - dy * w, ys[i] + dx * w);
       right.push(xs[i] + dy * w, ys[i] - dx * w);
@@ -1120,7 +1577,7 @@ export class FxScene {
     const main = o.main ?? this.pal.main, core = o.core ?? this.pal.core, ink = o.ink ?? this.pal.ink;
     const inkW = Math.max(0.8, 0.7 * this.zoom);
     // Sorted with its nearest end, so it passes in front of what is behind both ends.
-    const near = pts[ys.indexOf(Math.max(...ys))] ?? pts[n - 1];
+    const near = o.sortAt ?? pts[ys.indexOf(Math.max(...ys))] ?? pts[n - 1];
     this.worldDraw(near, (g) => {
       g.globalAlpha = clamp(a);
       const outline = (): void => {
@@ -1154,7 +1611,7 @@ export class FxScene {
       g.fillStyle = core;
       g.fill();
     }, o.bias ?? 0);
-    const gl = o.glow ?? 1;
+    const gl = this.glowOf(o);
     if (gl > 0) {
       const pic = glowPicture(o.light ?? this.pal.light);
       if (pic) {
@@ -1228,7 +1685,7 @@ export class FxScene {
       stroke(g, Math.max(0.8, W * 0.4), core);
       g.lineJoin = 'round';
     }, -0.5);
-    const gl = o.glow ?? 1;
+    const gl = this.glowOf(o);
     if (gl > 0) {
       const light = o.light ?? this.pal.light;
       this.out.glow.push((g) => {
@@ -1283,13 +1740,13 @@ export class FxScene {
    * still shows through. `size` over the body's own (one fits a person
    * snugly), `turn` turns its facets.
    */
-  shell(b: Body, o: Look & { size?: number; turn?: number; sides?: number } = {}): void {
+  shell(b: Body, o: Look & { size?: number; turn?: number; sides?: number; back?: number; lit?: boolean; rim?: number; tall?: number } = {}): void {
     const a = o.alpha ?? 0.6;
     if (a <= 0.01) return;
     const size = o.size ?? 1;
     const c = this.at(b, 0.5);
     const x = this.sx(c), y = this.sy(c);
-    const ry = b.tall * HEIGHT_SCALE * this.zoom * 0.62 * size;
+    const ry = b.tall * HEIGHT_SCALE * this.zoom * 0.62 * size * (o.tall ?? 1);
     const rx = Math.max(ry * 0.55, b.wide * 2.6 * this.zoom * size);
     const sides = o.sides ?? (this.fast ? 8 : 12);
     const turn = o.turn ?? 0;
@@ -1314,7 +1771,7 @@ export class FxScene {
       if (i === 0) rim.moveTo(ptsX[0], ptsY[0]);
       else rim.lineTo(ptsX[i], ptsY[i]);
       const mx = (ptsX[i] + ptsX[j]) / 2 - x, my = (ptsY[i] + ptsY[j]) / 2 - y;
-      if (-0.6 * mx / rx - 0.8 * my / ry < 0.45) continue;
+      if (o.lit === false || -0.6 * mx / rx - 0.8 * my / ry < 0.45) continue;
       lit.moveTo(lerp(x, ptsX[i], 0.82), lerp(y, ptsY[i], 0.82));
       lit.lineTo(ptsX[i], ptsY[i]);
       lit.lineTo(ptsX[j], ptsY[j]);
@@ -1323,8 +1780,9 @@ export class FxScene {
     }
     rim.lineTo(ptsX[0], ptsY[0]);
     // Behind: the whole of it, faint, its facets in two tones.
-    this.worldDraw(foot, (g) => {
-      g.globalAlpha = clamp(a * 0.45);
+    const back = o.back ?? 0.45;
+    if (back > 0) this.worldDraw(foot, (g) => {
+      g.globalAlpha = clamp(a * back);
       g.fillStyle = deep;
       g.fill(back0);
       g.fillStyle = main;
@@ -1333,14 +1791,14 @@ export class FxScene {
     // In front: the rim, and the facets the light catches.
     this.worldDraw(foot, (g) => {
       g.globalAlpha = clamp(a);
-      g.lineWidth = Math.max(0.9, 0.8 * this.zoom);
+      g.lineWidth = Math.max(0.9, (o.rim ?? 0.8) * this.zoom);
       g.strokeStyle = ink;
       g.stroke(rim);
       g.globalAlpha = clamp(a * 0.55);
       g.fillStyle = core;
       g.fill(lit);
     }, 0.6);
-    const gl = o.glow ?? 1;
+    const gl = this.glowOf(o);
     if (gl > 0) this.glow(c, (ry / this.zoom) * 1.1, a * gl * 0.35, o.light);
   }
 
@@ -1368,7 +1826,7 @@ export class FxScene {
       g.fillStyle = fade(core, a * 0.9);
       g.fillRect(x - R * 0.3, y - H, R * 0.6, H);
     }, 0.4);
-    const gl = o.glow ?? 1;
+    const gl = this.glowOf(o);
     if (gl > 0) {
       this.glow(foot, (o.r ?? 8) * 2.6, a * gl * 0.6, o.light);
       this.glow(this.on(c.x, c.y, (o.h ?? 40) * 0.35), (o.r ?? 8) * 2.2, a * gl * 0.4, o.light);
@@ -1477,10 +1935,17 @@ export class FxScene {
    * Sorted with its nearest point, as a ribbon is. No glow unless `glow` is
    * given.
    */
-  polyline(pts: readonly P3[], o: Look & { closed?: boolean } = {}): void {
+  polyline(pts: readonly P3[], o: Look & { closed?: boolean; around?: Body; sortAt?: P3 } = {}): void {
     const n = pts.length;
     const a = o.alpha ?? 1;
     if (n < 2 || a <= 0.01) return;
+    if (o.around) {
+      const { back, front } = this.aroundBody(o.around, o.closed ? [...pts, pts[0]] : pts);
+      const foot = { x: o.around.x, y: o.around.y, z: o.around.z };
+      for (const run of back) this.polyline(run, { ...o, closed: false, around: undefined, sortAt: foot, bias: (o.bias ?? 0) - 0.5 });
+      for (const run of front) this.polyline(run, { ...o, closed: false, around: undefined, sortAt: foot, bias: (o.bias ?? 0) + 0.5 });
+      return;
+    }
     const path = new Path2D();
     let near = pts[0], nearY = -Infinity;
     for (let i = 0; i < n; i++) {
@@ -1497,7 +1962,7 @@ export class FxScene {
     if (o.closed) path.closePath();
     const W = (o.width ?? 1.2) * this.zoom;
     const main = o.main ?? this.pal.main, ink = o.ink ?? this.pal.ink;
-    this.worldDraw(near, (g) => {
+    this.worldDraw(o.sortAt ?? near, (g) => {
       g.globalAlpha = clamp(a);
       g.lineJoin = 'round';
       g.lineCap = 'round';
@@ -1629,12 +2094,13 @@ export class FxScene {
       ps.age[s] = 0;
       ps.life[s] = lerp(l0, l1, r());
       ps.size[s] = (o.size ?? 2.2) * (0.7 + 0.6 * r());
-      ps.size1[s] = o.sizeEnd ?? (kind === 3 || kind === 4 ? ps.size[s] * 2.6 : ps.size[s] * 0.3);
-      ps.grav[s] = o.gravity ?? (kind === 3 ? -6 : 30);
+      ps.size1[s] = o.sizeEnd ?? (kind === 3 || kind === 4 || kind === 7 ? ps.size[s] * 2.6 : ps.size[s] * 0.3);
+      ps.grav[s] = o.gravity ?? (kind === 3 || kind === 7 ? -6 : 30);
       ps.drag[s] = o.drag ?? 0.25;
       ps.spin[s] = (o.spin ?? 1.5) * (r() - 0.5) * 2;
       ps.bias[s] = o.bias ?? 0;
       ps.kind[s] = kind;
+      ps.flags[s] = (o.over ? 1 : 0) | (o.ink === false ? 2 : 0);
       ps.colour[s] = ps.colourOf(colours[Math.floor(r() * colours.length) % colours.length]);
       ps.fade[s] = fade;
     }
@@ -1709,6 +2175,16 @@ export function drawParticle(g: CanvasRenderingContext2D, ps: Particles, i: numb
     g.fill();
     return;
   }
+  if (k === 7) {
+    // Mist: a soft round puff with no edge, opening out and thinning -- a breath, a vapour off a dressing, a healing
+    // haze -- where smoke is a hard flat hexagon. Laid over, not added, so it is its own colour by day.
+    const pic = glowPicture(colour.startsWith('#') ? colour : '#ffffff');
+    if (!pic) return;
+    g.globalAlpha = 0.5 * (1 - u) * Math.min(1, u * 6);
+    const s = Math.max(1, size) * 1.8;
+    g.drawImage(pic, x - s, y - s * 0.8, 2 * s, 1.6 * s);
+    return;
+  }
   if (k === 5) {
     // A shard: a spinning inked triangle.
     const turn = ps.spin[i] * ps.age[i] * TAU;
@@ -1724,6 +2200,7 @@ export function drawParticle(g: CanvasRenderingContext2D, ps: Particles, i: numb
     }
     g.closePath();
     g.fill();
+    if (ps.flags[i] & 2) return;
     g.lineWidth = Math.max(0.6, 0.5 * zoom);
     g.strokeStyle = 'rgba(20,16,24,0.8)';
     g.stroke();

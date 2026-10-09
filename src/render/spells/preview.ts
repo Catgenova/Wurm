@@ -10,6 +10,8 @@
  */
 import { Camera } from '../../engine/camera';
 import { SPECIES } from '../../game/creatures';
+import { beastReach, COMPANION_REACH, HUNT_REACH, reachOf } from '../../game/fight';
+import { WEAPON_BY_ID } from '../../game/gear';
 import { DEFAULT_LOOK } from '../../game/look';
 import { drawFigure, FIGURE_TOP, type FigurePose, type GearLook } from '../figure';
 import { HALF_H, HALF_W, HEIGHT_SCALE } from '../iso';
@@ -17,7 +19,7 @@ import { drawCreature } from '../sprites';
 import { wildermonTop } from '../wildermon';
 import { lingerSecs, visualOf } from './index';
 import { spellInfo } from './info';
-import type { Body } from './kit';
+import { creatureWide, type Body } from './kit';
 import { personBody, SpellStage, type Aim, type Who } from './stage';
 
 export interface SheetOpts {
@@ -27,8 +29,27 @@ export interface SheetOpts {
   frames?: number;
   zoom?: number;
   target?: 'creature' | 'player' | 'tile' | 'self';
-  /** Tiles to the target; by default as near as the spell is cast from. */
-  dist?: number;
+  /**
+   * Tiles to the target along the ground; by default where the island has it (see `distFor`). `'reach'` is as far as
+   * the weapon in hand reaches (`meleeReach`: 2.2 tiles, more for a spear), `'hunt'` as near as a creature comes to
+   * strike (`HUNT_REACH`, 1.1). On a diagonal facing a tile's step crosses more of the drawn grid than side on.
+   */
+  dist?: number | 'reach' | 'hunt';
+  /** The caster walking at this gait (nought a walk, one a run) through the cast, on the spot: the legs the walk's, the cast over the arms. */
+  walk?: number;
+  /** This many more creatures standing about the target (or about the caster, for a spell on oneself), in reach of it: for area spells. */
+  crowd?: number;
+  /** What a person target holds (a blessing on somebody's weapon). */
+  targetWeapon?: string;
+  /**
+   * Where the companion stands: at the caster's heel (`'heel'`), in reach of the target as the island has it for a
+   * blow through it (`'near'`, within `COMPANION_REACH`), or off at a distance (`'far'`); and where the island puts it
+   * at `petSnap` seconds (the release when not given): on the target (`'target'`, a Pounce) or on the caster
+   * (`'caster'`, a Guard Me). By default as the spell has it.
+   */
+  petAt?: 'heel' | 'near' | 'far';
+  petTo?: 'target' | 'caster';
+  petSnap?: number;
   species?: string;
   /** Seconds the sheet covers; by default the cast, its flight, its impact and a little of what lingers. */
   secs?: number;
@@ -54,8 +75,13 @@ export interface SheetOpts {
 
 /** The companion's creature id, beside the target's one. */
 const PET_ID = 2;
-/** Pixels at zoom one left over the tallest body for what is drawn over it, trimmed back to what was. */
-const TOP_ROOM = 150;
+/** Pixels at zoom one left over the tallest body for what is drawn over it, trimmed back to what was: a sword of 64 units stood over a creature. */
+const TOP_ROOM = 260;
+/** The first of the crowd's creature ids (`crowd`). */
+const CROWD_ID = 10;
+/** The most a canvas may be, a side and in all. */
+const SIDE_MOST = 32000;
+const AREA_MOST = 250_000_000;
 
 /** What a spell wants in the hand, for a caster drawn holding it. */
 function gearFor(spell: string, weapon?: string, offhand?: string): GearLook {
@@ -74,18 +100,43 @@ function gearFor(spell: string, weapon?: string, offhand?: string): GearLook {
   return gear;
 }
 
-/** How far off the target stands by default: in reach for a blow, at a middling throw for the rest. */
-function distFor(spell: string): number {
+/** How far the weapon in hand reaches, in tiles, as the island has it (`melee_reach`, before anybody's perks). */
+function meleeReachOf(weapon: string | undefined): number {
+  const w = weapon ? WEAPON_BY_ID.get(weapon) : undefined;
+  return w && !w.ammo ? reachOf(w) : reachOf({ range: undefined });
+}
+
+/**
+ * Where the target stands by default, and where the caster stood before the island moved them: as the island has
+ * it. A blow or a thrust as far as the weapon reaches (2.2 tiles, a spear's 3.2), which is where the island lets one
+ * be struck from; a stride (a Lunge) ends 0.4 inside that reach, from as far back as its stride; a leap away (a
+ * Parting Throw) starts that far nearer (a negative `from`); a spell on somebody else inside its own reach; the rest
+ * at a middling throw.
+ */
+function distFor(spell: string, weapon: string | undefined): { dist: number; from?: number } {
   const info = spellInfo(spell);
+  const fx = info?.fx ?? {}, reach = meleeReachOf(weapon);
+  if (fx.leap) return { dist: Math.min(4, reach + fx.leap), from: -fx.leap };
   switch (info?.kind) {
-    case 'strike': return 1.1;
-    case 'thrust': return 1.7;
-    case 'buff': case 'nova': case 'pray': return 0;
-    case 'ally': return 2.5;
-    case 'ground': return 3;
-    default: return Math.min(4, info?.fx.reach ?? 4);
+    case 'strike': case 'thrust':
+      // A stride to it: the island puts the body a pace inside its reach of it, from where it stood.
+      if (fx.reach && fx.reach > reach) return { dist: reach - 0.4, from: Math.min(fx.reach, 4) - (reach - 0.4) };
+      return { dist: reach };
+    case 'buff': case 'nova': case 'pray': return { dist: 0 };
+    case 'ally': return { dist: Math.max(1, Math.min(2.5, (fx.reach ?? 3) * 0.8)) };
+    case 'ground': return { dist: 3 };
+    default: return { dist: Math.min(4, fx.reach ?? 4) };
   }
 }
+
+/** What the island says is on the target by default for a spell that wants it so (a Disembowel on a bleeding creature). */
+const STATE_FOR: Record<string, 'burning' | 'bleeding' | 'held'> = { beastmaster_disembowel: 'bleeding' };
+
+/** Where a Beastmaster's companion stands for each spell by default, and where the island puts it. */
+const PET_FOR: Record<string, { at?: 'heel' | 'near' | 'far'; to?: 'target' | 'caster' }> = {
+  beastmaster_sic: { at: 'near' }, beastmaster_drag_down: { at: 'near' }, beastmaster_disembowel: { at: 'near' },
+  beastmaster_pounce: { at: 'heel', to: 'target' }, beastmaster_guard_me: { at: 'far', to: 'caster' },
+};
 
 /** A sheet of pictures through a spell, as a canvas. */
 export function spellSheet(o: SheetOpts): HTMLCanvasElement {
@@ -97,7 +148,11 @@ export function spellSheet(o: SheetOpts): HTMLCanvasElement {
   const frames = Math.max(1, o.frames ?? 10);
   const self = info?.on.length === 1 && info.on[0] === 'self';
   const want = o.target ?? (self ? 'self' : info?.on.includes('area') ? 'tile' : info?.on.includes('player') ? 'player' : 'creature');
-  const dist = want === 'self' ? 0 : o.dist ?? Math.max(1, distFor(o.spell));
+  const weaponId = gearFor(o.spell, o.weapon, o.offhand).weapon?.id;
+  const deflt = distFor(o.spell, weaponId);
+  const dist = want === 'self' ? 0 : o.dist === 'reach' ? meleeReachOf(weaponId) : o.dist === 'hunt' ? HUNT_REACH : o.dist ?? Math.max(1, deflt.dist);
+  const fromBack = o.from ?? (o.dist === undefined && want !== 'self' ? deflt.from : undefined);
+  const state = o.state ?? STATE_FOR[o.spell];
   const species = o.species ?? 'ulva';
   const look = { ...DEFAULT_LOOK, shirt: 'madder', trousers: 'unbleached' };
   const gear = gearFor(o.spell, o.weapon, o.offhand);
@@ -114,32 +169,77 @@ export function spellSheet(o: SheetOpts): HTMLCanvasElement {
   const fx = cam.unrotateX(du, dv), fy = cam.unrotateY(du, dv);
   const tx = cx + fx * dist, ty = cy + fy * dist;
   const tFacing = (facing + 4) % 8;
-  // The companion a little behind the caster and off to their left, turned the way they are.
+  // The companion: by default a little behind the caster and off to their left, turned the way they are; for a blow
+  // through it, in its reach of the target, as the island has it; and moved where the island moves it.
   const lx = cam.unrotateX(-dv, du), ly = cam.unrotateY(-dv, du);
-  const px = cx - fx * 0.6 + lx * 1.1, py = cy - fy * 0.6 + ly * 1.1;
-  // Where the caster stood before the island moved them, for a move (`from` tiles back along the way they face).
-  const from = o.from ? { x: cx - fx * o.from, y: cy - fy * o.from } : undefined;
-
-  const casterPose = (): FigurePose => ({ phase: 0, moving: false, facing, swimming: false, working: false, look, gear });
-  const targetPose: FigurePose = { phase: 0, moving: false, facing: tFacing, swimming: false, working: false, look: { ...DEFAULT_LOOK, gender: 'man', shirt: 'woad' } };
+  const petAt = o.petAt ?? PET_FOR[o.spell]?.at ?? 'heel', petTo = o.petTo ?? PET_FOR[o.spell]?.to;
+  const pet0 = petAt === 'near' ? { x: tx - fx * COMPANION_REACH * 0.85 + lx * 0.3, y: ty - fy * COMPANION_REACH * 0.85 + ly * 0.3 }
+    : petAt === 'far' ? { x: cx - fx * 1.5 + lx * 2.5, y: cy - fy * 1.5 + ly * 2.5 } : { x: cx - fx * 0.6 + lx * 1.1, y: cy - fy * 0.6 + ly * 1.1 };
+  const pd = Math.hypot(tx - pet0.x, ty - pet0.y) || 1;
+  const pet1 = petTo === 'target' ? { x: tx - ((tx - pet0.x) / pd) * COMPANION_REACH * 0.5, y: ty - ((ty - pet0.y) / pd) * COMPANION_REACH * 0.5 }
+    : petTo === 'caster' ? { x: cx, y: cy } : pet0;
+  const vis0 = visualOf(o.spell);
+  const petSnap = o.petSnap ?? (vis0 ? vis0.cast.timing.secs * vis0.cast.timing.release : 0);
+  let px = pet0.x, py = pet0.y;
+  // Where the caster stood before the island moved them, for a move (`from` tiles back along the way they face; less
+  // than nought for a leap away, nearer the target).
+  const from = fromBack ? { x: cx - fx * fromBack, y: cy - fy * fromBack } : undefined;
+  // The caster's facing, which the stage may turn (to the companion, for `cast.face: 'companion'`), as the game does
+  // for somebody standing; and the walk, on the spot, at the game's own pace through the stride.
+  let cf = facing, phase = 0;
+  const walking = o.walk !== undefined;
+  const gait = Math.max(0, Math.min(1, o.walk ?? 0));
+  const casterPose = (): FigurePose => ({ phase, moving: walking, gait, facing: cf, swimming: false, working: false, look, gear });
+  const tgear: GearLook = o.targetWeapon && o.targetWeapon !== 'none' ? { weapon: { id: o.targetWeapon, material: 'iron' } } : {};
+  const targetPose: FigurePose = { phase: 0, moving: false, facing: tFacing, swimming: false, working: false, look: { ...DEFAULT_LOOK, gender: 'man', shirt: 'woad' }, gear: tgear };
+  // Others standing about, in reach of where the spell lands: round the target, or round the caster for a spell on oneself.
+  const crowd: Array<{ x: number; y: number; f: number }> = [];
+  const ox = want === 'self' ? cx : tx, oy = want === 'self' ? cy : ty;
+  const ring = Math.max(1.1, Math.min(3.5, (info?.radius || 2) * 0.7));
+  for (let i = 0; i < (o.crowd ?? 0); i++) {
+    const a = 0.6 + (i * 2 * Math.PI) / Math.max(3, o.crowd ?? 0), d = ring * (0.75 + 0.25 * ((i * 7) % 3) / 2);
+    crowd.push({ x: ox + Math.cos(a) * d, y: oy + Math.sin(a) * d, f: (i * 3 + 1) % 8 });
+  }
   const sp = SPECIES[species] ?? Object.values(SPECIES)[0];
   const spTall = Math.max(22, wildermonTop(sp.id) ?? 0) / HEIGHT_SCALE;
   const pet = petSpecies ? SPECIES[petSpecies] ?? sp : null;
   const petTall = pet ? Math.max(22, wildermonTop(pet.id) ?? 0) / HEIGHT_SCALE : 0;
-  const flags = { burning: o.state === 'burning', bleeding: o.state === 'bleeding', held: o.state === 'held' };
+  const flags = { burning: state === 'burning', bleeding: state === 'bleeding', held: state === 'held' };
+  // Each creature as the game has it: its kind (for its head), how wide it stands and how near it strikes from.
+  const beast = (kind: typeof sp, tall: number): Pick<Body, 'species' | 'wide' | 'reach'> => ({ species: kind.id, wide: creatureWide(kind.id) * tall / (Math.max(22, wildermonTop(kind.id) ?? 0) / HEIGHT_SCALE), reach: beastReach(kind) });
   const bodyOf = (w: Who): Body | null => {
-    if (w.kind === 'player') return personBody(cx, cy, 0, facing, 'player', casterPose());
+    if (w.kind === 'player') return personBody(cx, cy, 0, cf, 'player', casterPose());
     if (w.kind === 'peer') return personBody(tx, ty, 0, tFacing, 'peer', targetPose);
-    if (w.id === PET_ID) return pet ? { x: px, y: py, z: 0, tall: petTall, wide: 5, facing, kind: 'creature' } : null;
-    return { x: tx, y: ty, z: 0, tall: spTall, wide: 5, facing: tFacing, kind: 'creature', ...flags };
+    if (w.id === PET_ID) return pet ? { x: px, y: py, z: 0, tall: petTall, facing, kind: 'creature', ...beast(pet, petTall), tame: true, companion: true } : null;
+    if (w.id >= CROWD_ID) {
+      const q = crowd[w.id - CROWD_ID];
+      return q ? { x: q.x, y: q.y, z: 0, tall: spTall, facing: q.f, kind: 'creature', ...beast(sp, spTall), hostile: true } : null;
+    }
+    return { x: tx, y: ty, z: 0, tall: spTall, facing: tFacing, kind: 'creature', ...beast(sp, spTall), hostile: true, ...flags };
   };
   const everyone: Who[] = [{ kind: 'player' }];
   if (want === 'player') everyone.push({ kind: 'peer', id: 1 });
   if (want === 'creature') everyone.push({ kind: 'creature', id: 1 });
   if (pet) everyone.push({ kind: 'creature', id: PET_ID });
+  crowd.forEach((_, i) => everyone.push({ kind: 'creature', id: CROWD_ID + i }));
   const stage = new SpellStage({
     body: bodyOf,
     ground: () => 0,
+    // Turned to face what it is cast at, or the companion, as the game turns somebody standing (not walking).
+    turn: (w, x, y) => {
+      if (walking || w.kind !== 'player') return;
+      let best = cf, most = -2;
+      for (let f = 0; f < 8; f++) {
+        const a = Math.PI / 4 - (f * Math.PI) / 4;
+        const ux = cam.unrotateX(Math.cos(a), Math.sin(a)), uy = cam.unrotateY(Math.cos(a), Math.sin(a));
+        const d = (ux * (x - cx) + uy * (y - cy)) / ((Math.hypot(ux, uy) || 1) * (Math.hypot(x - cx, y - cy) || 1));
+        if (d > most) {
+          most = d;
+          best = f;
+        }
+      }
+      cf = best;
+    },
     companion: (w) => (w.kind === 'player' ? bodyOf({ kind: 'creature', id: PET_ID }) : null),
     near: (x, y, r) => everyone.map((w) => ({ w, b: bodyOf(w) })).filter(({ b }) => b && Math.hypot(b.x - x, b.y - y) <= r + 0.5).map(({ w, b }) => ({ ...(b as Body), who: w })),
   });
@@ -158,8 +258,11 @@ export function spellSheet(o: SheetOpts): HTMLCanvasElement {
   const sx = (x: number, y: number): number => (x - y) * HALF_W;
   const sy = (x: number, y: number): number => (x + y) * HALF_H;
   const spread = info?.radius ? info.radius * 1.1 : 0;
-  const xs = [sx(cx, cy), sx(tx, ty), ...(pet ? [sx(px, py)] : []), ...(from ? [sx(from.x, from.y)] : [])];
-  const ys = [sy(cx, cy), sy(tx, ty), ...(pet ? [sy(px, py)] : []), ...(from ? [sy(from.x, from.y)] : [])];
+  // A tile past the target as well: what stands beyond it (a grave over a friend, a sword planted behind) is in the frame.
+  const past = want === 'self' ? { x: cx, y: cy } : { x: tx + fx, y: ty + fy };
+  const spots = [{ x: cx, y: cy }, { x: tx, y: ty }, past, ...(pet ? [pet0, pet1] : []), ...(from ? [from] : []), ...crowd];
+  const xs = spots.map((q) => sx(q.x, q.y));
+  const ys = spots.map((q) => sy(q.x, q.y));
   const tallest = Math.max(FIGURE_TOP, (want === 'creature' ? spTall : 0) * HEIGHT_SCALE, petTall * HEIGHT_SCALE);
   const minX = Math.min(...xs) - spread * HALF_W - 34;
   const maxX = Math.max(...xs) + spread * HALF_W + 34;
@@ -167,7 +270,12 @@ export function spellSheet(o: SheetOpts): HTMLCanvasElement {
   const maxY = Math.max(...ys) + spread * HALF_H + 22;
   // Never smaller than a person and a sigil round them.
   const W = Math.ceil(Math.max(110, maxX - minX) * zoom), H = Math.ceil(Math.max(105, maxY - minY) * zoom);
-  const cols = Math.max(1, Math.min(frames, o.cols ?? Math.max(1, Math.floor(4200 / W))));
+  // A canvas over 32767 pixels a side, or over about 268 million in all, cannot be made: a big area spell at zoom six
+  // was one cell wide and ten tall. More across, then, and a clear refusal where even one cell will not go.
+  if (W > SIDE_MOST || H > SIDE_MOST || W * H > AREA_MOST) throw new Error(`a cell of ${W}x${H} px is too big at zoom ${zoom}: ask for less zoom`);
+  let cols = Math.max(1, Math.min(frames, o.cols ?? Math.max(1, Math.floor(4200 / W))));
+  while (cols < frames && (Math.ceil(frames / cols) * H > SIDE_MOST || W * cols * H * Math.ceil(frames / cols) > AREA_MOST)) cols++;
+  if (W * cols > SIDE_MOST || W * cols * H * Math.ceil(frames / cols) > AREA_MOST) throw new Error(`${frames} frames of ${W}x${H} px will not go on one sheet: ask for fewer frames or less zoom`);
   const rows = Math.ceil(frames / cols);
   const sheet = document.createElement('canvas');
   sheet.width = W * cols;
@@ -197,22 +305,39 @@ export function spellSheet(o: SheetOpts): HTMLCanvasElement {
     c.stroke();
   };
 
-  const times = Array.from({ length: frames }, (_, i) => (frames === 1 ? 0 : (total * i) / (frames - 1)));
+  // Frames evenly through the time, but a long hold squeezed to a second of it, so a held stance does not take every
+  // frame there is and leave the wind-up and the letting go with one each.
+  const holdAt = vis.cast.hold ? timing.secs * Math.max(0, Math.min(1, vis.cast.hold.at)) : 0;
+  const squeeze = o.secs === undefined && held > 1 ? held - 1 : 0;
+  const real = (v: number): number => (v <= holdAt ? v : v <= holdAt + 1 && squeeze ? holdAt + (v - holdAt) * held : v + squeeze);
+  const times = Array.from({ length: frames }, (_, i) => (frames === 1 ? 0 : real(((total - squeeze) * i) / (frames - 1))));
   const labels: string[] = [];
   const dt = 1 / 60;
   let now = 0;
-  stage.update({ eye: cam, now, dt, fast: !!o.fast });
+  const night01 = o.night ? 1 : 0;
+  stage.update({ eye: cam, now, dt, fast: !!o.fast, night: night01 });
   stage.play(o.spell, by, at, { mine: true, now: 0, companion: pet ? PET_ID : undefined, from });
   const night = document.createElement('canvas');
   night.width = W;
   night.height = H;
   for (let f = 0; f < frames; f++) {
+    // The world as it is at a moment: the companion where the island has it, and the stride as far on as the walk is.
+    const at = (s: number): void => {
+      const q = s >= petSnap ? pet1 : pet0;
+      px = q.x;
+      py = q.y;
+      phase = walking ? s * 11 * (1 + 0.6 * gait) : 0;
+    };
     while (now + dt <= times[f] + 1e-9) {
       now += dt;
-      stage.update({ eye: cam, now, dt, fast: !!o.fast });
+      at(now);
+      stage.update({ eye: cam, now, dt, fast: !!o.fast, night: night01 });
     }
-    stage.update({ eye: cam, now: times[f], dt: Math.max(1e-4, times[f] - now), fast: !!o.fast });
+    at(times[f]);
+    stage.update({ eye: cam, now: times[f], dt: Math.max(1e-4, times[f] - now), fast: !!o.fast, night: night01 });
     now = times[f];
+    // What went over budget in this frame, or tinted the screen, said in its label.
+    const warn = [...stage.over, ...(stage.out.screen.length ? ['FLASH'] : [])];
     const ox = (f % cols) * W, oy = Math.floor(f / cols) * H;
     g.save();
     g.translate(ox, oy);
@@ -224,8 +349,10 @@ export function spellSheet(o: SheetOpts): HTMLCanvasElement {
     // Everything standing, the bodies among the spell's own, nearest last; the caster where a move has carried them to.
     const shift = stage.shiftOf(by);
     const casterAt = { sx: cam.worldToScreenX(cx + (shift?.x ?? 0), cy + (shift?.y ?? 0)), sy: cam.worldToScreenY(cx + (shift?.x ?? 0), cy + (shift?.y ?? 0), 0) };
-    const targetAt = { sx: cam.worldToScreenX(tx, ty), sy: cam.worldToScreenY(tx, ty, 0) };
-    const petAt = { sx: cam.worldToScreenX(px, py), sy: cam.worldToScreenY(px, py, 0) };
+    const pull = stage.shiftOf(want === 'player' ? { kind: 'peer', id: 1 } : { kind: 'creature', id: 1 });
+    const targetAt = { sx: cam.worldToScreenX(tx + (pull?.x ?? 0), ty + (pull?.y ?? 0)), sy: cam.worldToScreenY(tx + (pull?.x ?? 0), ty + (pull?.y ?? 0), 0) };
+    const petShift = stage.shiftOf({ kind: 'creature', id: PET_ID });
+    const petPos = { sx: cam.worldToScreenX(px + (petShift?.x ?? 0), py + (petShift?.y ?? 0)), sy: cam.worldToScreenY(px + (petShift?.x ?? 0), py + (petShift?.y ?? 0), 0) };
     type Item = { sy: number; draw: () => void };
     const items: Item[] = stage.worldItems().map((rec) => ({ sy: rec.sy, draw: () => stage.drawItem(g, rec) }));
     const shadow = (x: number, y: number, rx: number): void => {
@@ -237,17 +364,21 @@ export function spellSheet(o: SheetOpts): HTMLCanvasElement {
     const pose = stage.poseOf(by);
     items.push({ sy: casterAt.sy, draw: () => {
       shadow(casterAt.sx, casterAt.sy, 8);
-      drawFigure(g, casterAt.sx, casterAt.sy, zoom, { ...casterPose(), cast: pose }, { ink: 1.4 });
+      drawFigure(g, casterAt.sx, casterAt.sy, zoom, { ...casterPose(), cast: pose, veil: stage.veilOf(by) }, { ink: 1.4 });
     } });
     if (want === 'player') items.push({ sy: targetAt.sy, draw: () => {
       shadow(targetAt.sx, targetAt.sy, 8);
-      drawFigure(g, targetAt.sx, targetAt.sy, zoom, targetPose, { ink: 1.4 });
+      drawFigure(g, targetAt.sx, targetAt.sy, zoom, { ...targetPose, veil: stage.veilOf({ kind: 'peer', id: 1 }) }, { ink: 1.4 });
     } });
     if (want === 'creature') items.push({ sy: targetAt.sy, draw: () => {
       drawCreature(g, targetAt.sx, targetAt.sy, zoom, { species: sp.id, facing: tFacing, phase: 0, moving: false, gait: 0, colors: sp.variants[0], health: 1, fleece: 1 });
     } });
-    if (pet) items.push({ sy: petAt.sy, draw: () => {
-      drawCreature(g, petAt.sx, petAt.sy, zoom, { species: pet.id, facing, phase: 0, moving: false, gait: 0, colors: pet.variants[0], health: 1, fleece: 1 });
+    for (const q of crowd) {
+      const qx = cam.worldToScreenX(q.x, q.y), qy = cam.worldToScreenY(q.x, q.y, 0);
+      items.push({ sy: qy, draw: () => drawCreature(g, qx, qy, zoom, { species: sp.id, facing: q.f, phase: 0, moving: false, gait: 0, colors: sp.variants[0], health: 1, fleece: 1 }) });
+    }
+    if (pet) items.push({ sy: petPos.sy, draw: () => {
+      drawCreature(g, petPos.sx, petPos.sy, zoom, { species: pet.id, facing, phase: 0, moving: false, gait: 0, colors: pet.variants[0], health: 1, fleece: 1 });
     } });
     items.sort((a, b) => a.sy - b.sy);
     for (const it of items) it.draw();
@@ -283,8 +414,8 @@ export function spellSheet(o: SheetOpts): HTMLCanvasElement {
     stage.glowPass(g);
     stage.screenPass(g, W, H);
     const castEnd = timing.secs + held;
-    const phase = now < timing.secs * timing.release ? 'cast' : now < castEnd ? 'release' : 'after';
-    labels.push(`${o.spell}  t=${now.toFixed(2)}s  ${phase}  f${facing}  ${want}`);
+    const part = now < timing.secs * timing.release ? 'cast' : now < castEnd ? 'release' : 'after';
+    labels.push(`${o.spell}  t=${now.toFixed(2)}s  ${part}  f${cf}  ${want}${warn.length ? '  ! ' + warn.join(', ') : ''}`);
     g.restore();
   }
 

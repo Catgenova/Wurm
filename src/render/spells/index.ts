@@ -78,7 +78,13 @@
  * (turn to the companion, or not at all), `cast.hold` (hold the pose past the
  * cast), `cast.move` (when a move the island made is travelled),
  * `linger.on` (what a linger ends with), the cue's `at` (what it was cast at)
- * and `held`.
+ * and `held`; `cast.mirror` (a shouldered weapon swung left-handed from the
+ * left shoulder, rather than changed into the right hand in a frame),
+ * `cast.close` (the body carried in to what it strikes for the blow, the
+ * island's blows being struck from up to 2.2 tiles), `cast.pull` and
+ * `cast.companion` (a target or a companion the island moved, carried from
+ * where it stood); the cue's `aim` (where the target stands and how tall it
+ * is), `moved`, `companion`, `lefty`, `look`.
  *
  * ## Seeing one
  *
@@ -96,7 +102,7 @@
  * SPELLS.md, in this folder, is the long form of all of this for
  * whoever draws the spells: the palettes, the conventions, the budgets.
  */
-import { castPosesBy, weaponCarry, type FigurePose, type Rig } from '../figure';
+import { castPosesBy, figureShoulder, mirrorRig, weaponCarry, type FigurePose, type HandGoal, type Rig, type V3 } from '../figure';
 import type { FxScene, SpellPalette } from './kit';
 import type { CastKind, SpellGroup, SpellInfo } from './info';
 import { BLADE } from './blade';
@@ -150,6 +156,63 @@ export interface PoseCue {
   moving: boolean;
   /** How what is in the right hand (or a bow, the left) is carried, or nothing. */
   carry: 'fist' | 'staff' | 'bow' | 'shoulder' | null;
+  /**
+   * Played left-handed (`cast.mirror`): the pose is written right-handed as ever, and mirrored onto the left side of
+   * the body after. `facing` is then the facing of the picture as a mirror shows it (`(8 - facing) % 8`), and `aim`
+   * mirrored with it, so a pose that does something by facing does it where it shows.
+   */
+  lefty?: boolean;
+  /**
+   * Where what it was cast at stands from the caster, for a blow that has to get there: see `CastAim`. Nothing for
+   * a cast on oneself. Given by the stage; a cue a pose builds for itself may leave it out.
+   */
+  aim?: CastAim;
+  /** The caster's look, for a pose that solves a hand or a foot for the caster's own build (`stepIn`, `reachHand`). */
+  look?: import('../../game/look').Look;
+  /**
+   * Tiles the island moved the caster for this cast (a Lunge's stride, a Parting Throw's leap), which the stage carries
+   * the body over (`cast.move`); nought when it did not -- already in reach, a Lunge has nothing to run.
+   */
+  moved?: number;
+  /**
+   * Where the caster's companion stands from the caster, in the body's frame and height units (`ahead`, `aside` to the
+   * right), for a pose that reaches to it or turns to it (a wound licked, a command pointed); nothing with none.
+   */
+  companion?: { ahead: number; aside: number };
+}
+
+/**
+ * Where a cast's target is from the caster, in the body's own frame and units (height units, a tenth of a metre;
+ * a tile is `UNITS_PER_TILE` = 40; a person about 18 tall): `ahead` along the way the caster faces to the middle of
+ * the target, `aside` to the caster's right of that line (the body is turned to the nearest of eight ways, so up to
+ * a little under half `ahead`), `near` ahead to its near side (its middle less its half-width), and `head`,
+ * `chest`, `top` how high its head, its chest and the top of it stand over the caster's feet. For a spot on the
+ * ground the three heights are the ground's there. All from where the caster stands, before any closing in: `close`
+ * is how far the stage carries the body in toward it for the blow (`cast.close`), nought without.
+ */
+export interface CastAim {
+  ahead: number;
+  aside: number;
+  near: number;
+  head: number;
+  chest: number;
+  top: number;
+  close: number;
+}
+
+/**
+ * A melee cast closing in on what it strikes: the body drawn carried toward the target over the wind-up, from `from`
+ * to `to` of the way through the cast (nought to the release), by as much as the blow falls short of its near side
+ * -- the blow reaching `reach` height units ahead of the feet (six, and the weapon's length) -- and no further than
+ * `most` tiles (two); and back from `back` (the follow-through, a third of the way from the release to the end) to the
+ * end. The island has not moved the body, so it is put back where it stands. Not while it walks.
+ */
+export interface CastClose {
+  from?: number;
+  to?: number;
+  back?: number;
+  reach?: number;
+  most?: number;
 }
 
 /** A cast's pose: write `r` as the body is `t` (nought to one) of the way through the cast. */
@@ -198,18 +261,48 @@ export interface CastMove {
   to?: number;
 }
 
+/**
+ * The caster's companion moved by the spell: the island has already put it where it ends up, and the stage draws it
+ * carried from where it stood as the cast was made, between `from` and `to` of the way through (nought to the
+ * release). Put on its master's own spot (`beside`, the default), it is drawn a step off to its master's left
+ * instead of inside the body.
+ */
+export interface CastCompanion {
+  from?: number;
+  to?: number;
+  beside?: boolean;
+}
+
 /** The cast laid on a figure (`FigurePose.cast`): its id and how far through, and what the pose is told besides. */
 export interface CastNow {
   id: string;
   t: number;
   at?: CastTarget;
   held?: number;
+  aim?: CastAim;
+  moved?: number;
+  companion?: { ahead: number; aside: number };
 }
 
 export interface SpellVisual {
   /** Whose colours. */
   palette: SpellPalette;
-  cast: { timing: CastTiming; pose: CastPose; blend?: boolean; face?: CastFace; hold?: CastHold; move?: CastMove };
+  /**
+   * `mirror`: played left-handed when what is in the hands is shouldered (a maul, a battle axe) and is on the left
+   * shoulder as the cast is drawn -- which the figure does from three of the eight ways (3, 6 and 7), to keep it off
+   * the head -- so the weapon is swung from the hand it is already in rather than changing hands in a frame. The
+   * pose is written right-handed; the framework mirrors it, its `reach` goals and its kneel, and tells the pose
+   * (`c.lefty`) and the effects (`k.lefty`, `k.side`).
+   *
+   * `close`: a melee cast closing in on what it strikes (`CastClose`; `true` for the defaults).
+   *
+   * `pull`: the target moved by the spell (a Hook dragging a creature in): the island has already put it where it
+   * ends up, and the stage draws it carried from where it stood as the cast was made, between `from` and `to` of
+   * the way through (nought to the release), as `move` carries the caster.
+   *
+   * `companion`: the caster's companion moved by the spell (`CastCompanion`): a Pounce's leap, a Guard Me's step in.
+   */
+  cast: { timing: CastTiming; pose: CastPose; blend?: boolean; face?: CastFace; hold?: CastHold; move?: CastMove; mirror?: boolean; close?: boolean | CastClose; pull?: boolean | CastMove; companion?: boolean | CastCompanion };
   fx: SpellFx;
   /** A stand-in, until somebody draws it properly. */
   placeholder?: boolean;
@@ -253,6 +346,32 @@ export function castWeight(t: number, timing: CastTiming): number {
   return smooth(a > 0 ? t / a : 1) * smooth(b > 0 ? (1 - t) / b : 1);
 }
 
+/**
+ * Whether a cast on a body posed as `pose` is played left-handed (`cast.mirror`): it asks to be, and what is in the
+ * hands is on the left shoulder -- as the body drawn has it, between frames as well (`figureShoulder`). The stage
+ * asks this for the effects (`k.lefty`); `castOver` asks the pose itself, which comes to the same.
+ */
+export function castLefty(pose: FigurePose): boolean {
+  const v = pose.cast && SPELL_VISUALS.get(pose.cast.id);
+  return !!v?.cast.mirror && !pose.swimming && !pose.driving && !pose.working && figureShoulder(pose) === 0;
+}
+
+/**
+ * The pose the other way about, left for right, for a cast played left-handed: the figure's own mirror (the joints,
+ * the hands' shapes), and what a cast adds to it -- each hand's goal (`reach`) put on the other hand at the mirror
+ * place, the knee it kneels on, and the shoulder carried over. Its own undoing.
+ */
+function flip(r: Rig): void {
+  mirrorRig(r);
+  const m = (v: V3 | undefined): V3 | undefined => v && [-v[0], v[1], v[2]];
+  if (r.reach) {
+    const g = (h: HandGoal | undefined): HandGoal | undefined => h && { ...h, at: m(h.at) as V3, pole: m(h.pole), haft: m(h.haft) };
+    r.reach = [g(r.reach[1]), g(r.reach[0])];
+  }
+  if (r.kneel !== undefined || r.kneelLeft !== undefined) r.kneelLeft = !r.kneelLeft;
+  r.carried = 1 - r.carried;
+}
+
 /** Lay the cast in `p.cast` over the pose the body was going to be in. Registered with the figure below. */
 export function castOver(r: Rig, p: FigurePose): void {
   const cast = p.cast as CastNow | undefined;
@@ -261,7 +380,16 @@ export function castOver(r: Rig, p: FigurePose): void {
   const t = Math.max(0, Math.min(1, cast.t));
   const base = v.cast.blend === false ? null : (copy(r as unknown as Deep) as unknown as Rig);
   const carry = p.gear?.weapon ? weaponCarry(p.gear.weapon.id)?.carry ?? null : null;
-  v.cast.pose(r, t, { timing: v.cast.timing, facing: p.facing, moving: p.moving || p.swimming || !!p.driving, carry, at: cast.at ?? 'creature', held: cast.held ?? 0 });
+  // Played left-handed: the weapon is on the left shoulder, so the cast is made with the left hand, which already has it.
+  const lefty = !!v.cast.mirror && carry === 'shoulder' && r.carried === 0 && !r.swapping && !r.stowed;
+  const aim = cast.aim && (lefty ? { ...cast.aim, aside: -cast.aim.aside } : cast.aim);
+  if (lefty) flip(r);
+  v.cast.pose(r, t, {
+    timing: v.cast.timing, facing: lefty ? (8 - p.facing) % 8 : p.facing, moving: p.moving || p.swimming || !!p.driving, carry,
+    at: cast.at ?? 'creature', held: cast.held ?? 0, lefty, aim, look: p.look, moved: cast.moved ?? 0,
+    companion: cast.companion && (lefty ? { ...cast.companion, aside: -cast.companion.aside } : cast.companion),
+  });
+  if (lefty) flip(r);
   if (!base) return;
   const w = castWeight(t, v.cast.timing);
   const mixed = mixDeep(base as unknown as Deep, r as unknown as Deep, w) as unknown as Rig;
@@ -269,6 +397,8 @@ export function castOver(r: Rig, p: FigurePose): void {
   // the shoulders is no shoulder at all, and a wrist looked up by it is not there.
   const switched = w < 0.5 ? base : r;
   mixed.carried = switched.carried; mixed.spin = switched.spin; mixed.swapping = switched.swapping;
+  // Arrows on the string are counted, not a share: one or two, as a switch is (from none, at once).
+  mixed.nocked = w < 0.5 && base.nocked !== undefined ? base.nocked : r.nocked;
   Object.assign(r, mixed);
 }
 

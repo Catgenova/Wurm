@@ -19,10 +19,10 @@
  * Nothing here is the island's. A cast is drawn when the island said yes to
  * it, on this browser and on everybody else's watching (`Island.castSeen`).
  */
-import { FIGURE_TOP, figureJoint, type FigurePose } from '../figure';
-import { HALF_H, HEIGHT_SCALE, TILE_W } from '../iso';
+import { FIGURE_TOP, figureJoint, weaponSpan, type FigurePose } from '../figure';
+import { HALF_H, HEIGHT_SCALE, TILE_W, UNITS_PER_TILE } from '../iso';
 import { depthOf, type View } from '../view';
-import { lingerSecs, visualOf, type CastNow, type CastTarget, type SpellVisual } from './index';
+import { castLefty, lingerSecs, visualOf, type CastAim, type CastNow, type CastTarget, type SpellVisual } from './index';
 import { spellInfo, type SpellInfo } from './info';
 import { clamp, drawParticle, FxFrame, FxScene, isLightKind, MOST_PARTICLES, paintGroundLayer, Particles, rngOf, seg, smooth, type Body, type Eye, type GroundLayer, type P3, type Who, type WorldRec } from './kit';
 
@@ -54,7 +54,24 @@ export interface PlayOpts {
   companion?: number;
   /** Where the caster stood before a move the island made for this cast (a Lunge), to be carried from. */
   from?: { x: number; y: number };
+  /**
+   * Where the creature it was cast at stood before the cast, for a spell the island moves it with (a Hook): with
+   * `cast.pull`, the creature is drawn carried from there to wherever the island put it. Where it stood as the cast
+   * began when not given.
+   */
+  targetFrom?: { x: number; y: number };
+  /** Where the caster's companion stood before the cast, for a spell the island moves it with (`cast.companion`); where it stood as the cast began when not given. */
+  companionFrom?: { x: number; y: number };
 }
+
+/** How far ahead of the feet a standing blow lands with nothing in the hand, in height units; a weapon's length is added to it (`cast.close`). */
+const CLOSE_ARM = 6;
+/** The furthest a melee cast closes in by default, in tiles (`CastClose.most`). */
+const CLOSE_MOST = 2;
+/** Nearer its master than this, in tiles, a companion is drawn beside them rather than in them (`cast.companion`). */
+const BESIDE = 0.35;
+/** Shapes a cast may record in a frame (SPELLS.md's budget), past which the preview says so. */
+const SHAPES_MOST = 15;
 
 /** The most casts kept going at once; past it, the oldest one that has finished casting goes. */
 const MOST_PLAYING = 32;
@@ -95,6 +112,22 @@ interface Playing {
   from: P3 | null;
   shiftX: number;
   shiftY: number;
+  /** Where the target stood from the caster last frame, for the pose (`CastAim`); and whether it was played left-handed. */
+  aim: CastAim | null;
+  lefty: boolean;
+  /** How far the body is drawn closed in on the target this frame (`cast.close`), in tiles. */
+  closeX: number;
+  closeY: number;
+  /** Where the target stood as the cast was made (`cast.pull`), and how far off where it is it is drawn this frame, in tiles. */
+  targetFrom: { x: number; y: number } | null;
+  pullX: number;
+  pullY: number;
+  /** Where the companion stood as the cast was made (`cast.companion`), and how far off where it is it is drawn this frame. */
+  petFrom: { x: number; y: number } | null;
+  petX: number;
+  petY: number;
+  /** The companion as found last frame, for the pose (`PoseCue.companion`). */
+  pet: Body | null;
 }
 
 /**
@@ -248,8 +281,14 @@ export class SpellStage {
       caster, target, spot: { x: target?.x ?? caster.x, y: target?.y ?? caster.y, z: target?.z ?? caster.z }, lostAt: -1, state: {},
       aimed: at.kind === 'self' || (at.kind === 'player' && by.kind === 'player') ? 'self' : at.kind === 'spot' ? 'spot' : at.kind === 'creature' ? 'creature' : 'person',
       companion, holdAt, holdEnd: hold ? holdAt + Math.max(0, hold.secs ?? lingers) : Infinity,
-      from, shiftX: from ? from.x - caster.x : 0, shiftY: from ? from.y - caster.y : 0,
+      from, shiftX: from ? from.x - caster.x : 0, shiftY: from ? from.y - caster.y : 0, aim: null, lefty: false, closeX: 0, closeY: 0,
+      targetFrom: vis.cast.pull && target && target !== caster && target.kind !== 'spot' ? opts.targetFrom ?? { x: target.x, y: target.y } : null, pullX: 0, pullY: 0,
+      petFrom: null, petX: 0, petY: 0, pet: null,
     };
+    if (vis.cast.companion) {
+      const pet = companion ? this.bodyOf(companion) : this.where.companion?.(by) ?? null;
+      if (pet) p.petFrom = opts.companionFrom ?? { x: pet.x, y: pet.y };
+    }
     // A second cast by the same caster takes the body over from the first; the first's effects play on.
     this.playing.push(p);
     if (this.playing.length > MOST_PLAYING) {
@@ -278,11 +317,41 @@ export class SpellStage {
   shiftOf(w: Who): { x: number; y: number } | null {
     for (let i = this.playing.length - 1; i >= 0; i--) {
       const p = this.playing[i];
-      if (!sameWho(p.by, w) || !p.from) continue;
+      // The companion a spell moved (`cast.companion`): carried from where it stood, or put beside its master.
+      if ((p.petX || p.petY) && p.pet?.who && sameWho(p.pet.who, w)) return { x: p.petX, y: p.petY };
+      // A creature (or a person) a spell moved, carried from where it stood (`cast.pull`).
+      if (p.targetFrom && p.at.kind !== 'spot' && p.at.kind !== 'self' && sameWho(p.at, w)) {
+        if (p.pullX || p.pullY) return { x: p.pullX, y: p.pullY };
+        continue;
+      }
+      if (!sameWho(p.by, w) || (!p.from && !p.vis.cast.close)) continue;
       const left = this.shiftLeft(p, this.now - p.start);
-      return left > 0 ? { x: p.shiftX * left, y: p.shiftY * left } : null;
+      const x = p.shiftX * left + p.closeX, y = p.shiftY * left + p.closeY;
+      return x || y ? { x, y } : null;
     }
     return null;
+  }
+
+  /**
+   * How far in a melee cast closes (`cast.close`), nought to one, `e` seconds in: in over the wind-up to the blow,
+   * held through a hold, and back over the recovery.
+   */
+  private closeShare(p: Playing, e: number): number {
+    const cl = p.vis.cast.close;
+    if (!cl || e < 0 || e >= poseEnd(p)) return 0;
+    const o = cl === true ? {} : cl, timing = p.vis.cast.timing, rel = timing.release;
+    const u = poseClock(p, e) / timing.secs;
+    return smooth(seg(u, o.from ?? 0, o.to ?? rel)) * (1 - smooth(seg(u, o.back ?? rel + (1 - rel) * 0.3, 1)));
+  }
+
+  /** How far a melee cast carries its body in at the blow, in height units: what its blow is short of the target by, and no further than it may go. */
+  private closeBy(p: Playing, c: Body, aim: CastAim | null): number {
+    const cl = p.vis.cast.close;
+    if (!cl || !aim || c.figure?.moving || c.figure?.swimming || c.figure?.driving) return 0;
+    const o = cl === true ? {} : cl;
+    const id = c.figure?.gear?.weapon?.id, span = id ? weaponSpan(id) : null;
+    const reach = o.reach ?? CLOSE_ARM + (span ? span.to : 0);
+    return clamp(aim.near - reach, 0, (o.most ?? CLOSE_MOST) * UNITS_PER_TILE);
   }
 
   /** How much of the way back to where it stood a cast's caster still is, `e` seconds in: one at the start, nought once moved. */
@@ -295,7 +364,48 @@ export class SpellStage {
   }
 
   private castNow(p: Playing, e: number): CastNow {
-    return { id: p.id, t: Math.min(0.9999, poseClock(p, e) / p.vis.cast.timing.secs), at: p.aimed, held: heldShare(p, e) };
+    return {
+      id: p.id, t: Math.min(0.9999, poseClock(p, e) / p.vis.cast.timing.secs), at: p.aimed, held: heldShare(p, e), aim: p.aim ?? undefined,
+      moved: p.from ? Math.hypot(p.shiftX, p.shiftY) : 0, companion: p.pet && p.caster ? this.offsetOf(p.caster, p.pet) : undefined,
+    };
+  }
+
+  /** Where `b` stands from `c` in `c`'s own frame: height units ahead along the way it faces, and to its right. */
+  private offsetOf(c: Body, b: { x: number; y: number }): { ahead: number; aside: number } {
+    const k = this.k, f = k.facingDir(c), right = k.local(c, UNITS_PER_TILE, 0, 0);
+    const dx = b.x - c.x, dy = b.y - c.y;
+    return { ahead: (dx * f.x + dy * f.y) * UNITS_PER_TILE, aside: (dx * (right.x - c.x) + dy * (right.y - c.y)) * UNITS_PER_TILE };
+  }
+
+  /** What the frame's casts asked for over their budgets (`SPELLS.md`): shapes, lights; for the preview to say. */
+  readonly over: string[] = [];
+
+  /**
+   * How somebody is veiled by the spells on them this frame (`FxScene.veil`), for their figure (`FigurePose.veil`):
+   * the strongest of what they were given. Nothing when nothing veils them.
+   */
+  veilOf(w: Who): { colour: string; tint: number; fade: number } | undefined {
+    let best: { colour: string; tint: number; fade: number } | undefined;
+    for (const v of this.out.veils) {
+      if (!sameWho(v.who, w)) continue;
+      if (!best || v.tint + v.fade > best.tint + best.fade) best = { colour: v.colour, tint: v.tint, fade: v.fade };
+    }
+    return best;
+  }
+
+  /** Where `p`'s target stands from its caster `c` (see `CastAim`), in the caster's own frame and units; nothing for a cast on oneself. */
+  private aimOf(c: Body, p: Playing, t: Body | null): CastAim | null {
+    if (!t || t === c || p.aimed === 'self') return null;
+    const k = this.k;
+    const f = k.facingDir(c), right = k.local(c, UNITS_PER_TILE, 0, 0);
+    const rx = right.x - c.x, ry = right.y - c.y;
+    const dx = t.x - c.x, dy = t.y - c.y;
+    const ahead = (dx * f.x + dy * f.y) * UNITS_PER_TILE, aside = (dx * rx + dy * ry) * UNITS_PER_TILE;
+    if (t.kind === 'spot') {
+      const z = t.z - c.z;
+      return { ahead, aside, near: ahead, head: z, chest: z, top: z, close: 0 };
+    }
+    return { ahead, aside, near: ahead - t.wide, head: k.muzzle(t).z - c.z, chest: k.heart(t).z - c.z, top: t.z + t.tall - c.z, close: 0 };
   }
 
   /** Forget everything: a new island, a new body. */
@@ -348,7 +458,7 @@ export class SpellStage {
    * Run every cast for this frame, `now` seconds on the drawing clock: their
    * bodies found where they are, their moments passed, their effects recorded.
    */
-  update(env: { eye: Eye; now: number; dt: number; fast: boolean }): void {
+  update(env: { eye: Eye; now: number; dt: number; fast: boolean; night?: number }): void {
     this.now = env.now;
     this.eye = env.eye;
     this.out.reset();
@@ -361,7 +471,9 @@ export class SpellStage {
     k.now = env.now;
     k.dt = Math.min(0.1, env.dt);
     k.fast = env.fast;
+    k.night = clamp(env.night ?? 0);
     k.partCap = env.fast ? Math.round(MOST_PARTICLES / 3) : MOST_PARTICLES;
+    this.over.length = 0;
     let keep = 0;
     for (const p of this.playing) {
       if (this.run(p)) this.playing[keep++] = p;
@@ -396,10 +508,64 @@ export class SpellStage {
         c = { ...c, x, y, z: c.z + this.where.ground(x, y) - this.where.ground(c.x, c.y) };
       }
     }
+    // Where the target stands from where the caster stands (before any closing in), for the pose and the effects.
+    p.aim = this.aimOf(c, p, p.at.kind === 'self' ? null : this.targetOf(p.at, c, p.target));
+    // A melee cast closing in on what it strikes (`cast.close`): the body drawn carried toward it over the wind-up by as
+    // much as its blow falls short, and back over the recovery. Where it is drawn, and so where its effects come from.
+    const by = this.closeBy(p, c, p.aim), share = by > 0 ? this.closeShare(p, t) : 0;
+    p.closeX = p.closeY = 0;
+    if (p.aim) p.aim.close = by;
+    if (share > 0 && p.target) {
+      const dx = p.target.x - c.x, dy = p.target.y - c.y, l = Math.hypot(dx, dy) || 1, go = (by * share) / UNITS_PER_TILE;
+      p.closeX = (dx / l) * go;
+      p.closeY = (dy / l) * go;
+      const x = c.x + p.closeX, y = c.y + p.closeY;
+      c = { ...c, x, y, z: c.z + this.where.ground(x, y) - this.where.ground(c.x, c.y) };
+    }
+    // The companion, and where it is drawn: carried from where it stood over a leap the island made (`cast.companion`), or
+    // put beside its master when the island has put it on the master's own spot.
+    let pet = p.companion ? this.bodyOf(p.companion) : this.where.companion?.(p.by) ?? null;
+    p.petX = p.petY = 0;
+    const cm = p.vis.cast.companion;
+    if (pet && cm) {
+      const o = cm === true ? {} : cm;
+      let dx = 0, dy = 0;
+      if (p.petFrom) {
+        const left = 1 - smooth(seg(ct / timing.secs, o.from ?? 0, o.to ?? timing.release));
+        dx = (p.petFrom.x - pet.x) * left;
+        dy = (p.petFrom.y - pet.y) * left;
+      }
+      if ((o.beside ?? true) && Math.hypot(pet.x + dx - c.x, pet.y + dy - c.y) < BESIDE) {
+        // On top of its master: drawn a step off to the left and a little behind instead.
+        const at = this.k.local(c, -0.75 * UNITS_PER_TILE, -0.2 * UNITS_PER_TILE, 0);
+        dx = at.x - pet.x;
+        dy = at.y - pet.y;
+      }
+      if (dx || dy) {
+        p.petX = dx;
+        p.petY = dy;
+        const x = pet.x + dx, y = pet.y + dy;
+        pet = { ...pet, x, y, z: pet.z + this.where.ground(x, y) - this.where.ground(pet.x, pet.y) };
+      }
+    }
+    p.pet = pet;
     // While it is being cast, the figure is the cast: its hands are where the pose has them.
     if (c.figure && t < castEnd) c.figure = { ...c.figure, cast: this.castNow(p, t) };
-    const target = this.targetOf(p.at, c, p.target);
+    let target = this.targetOf(p.at, c, p.target);
     const gone = p.at.kind !== 'self' && p.at.kind !== 'spot' && !this.where.body(p.at);
+    // Moved by the spell (`cast.pull`): drawn carried from where it stood to where the island put it.
+    p.pullX = p.pullY = 0;
+    if (p.targetFrom && target && target !== c && !gone) {
+      const m = typeof p.vis.cast.pull === 'object' ? p.vis.cast.pull : {};
+      const left = 1 - smooth(seg(ct / timing.secs, m.from ?? 0, m.to ?? timing.release));
+      const dx = p.targetFrom.x - target.x, dy = p.targetFrom.y - target.y;
+      if (left > 0 && Math.hypot(dx, dy) > 0.05) {
+        p.pullX = dx * left;
+        p.pullY = dy * left;
+        const x = target.x + p.pullX, y = target.y + p.pullY;
+        target = { ...target, x, y, z: target.z + this.where.ground(x, y) - this.where.ground(target.x, target.y) };
+      }
+    }
     p.target = target ?? c;
     // What it lands on: followed until it lands, then where it landed for anything on the ground.
     if (!p.landed || p.at.kind !== 'spot') p.spot = { x: p.target.x, y: p.target.y, z: p.target.z };
@@ -409,6 +575,12 @@ export class SpellStage {
     k.fx = p.info?.fx ?? {};
     k.caster = c;
     k.target = p.target;
+    // Whether the cast is played left-handed, decided while it is cast and kept after.
+    if (c.figure?.cast) p.lefty = castLefty(c.figure);
+    k.aim = p.aim;
+    k.lefty = p.lefty;
+    k.side = p.lefty ? -1 : 1;
+    k.timing = timing;
     k.spot = p.spot;
     k.dist = Math.hypot(p.spot.x - c.x, p.spot.y - c.y);
     k.state = p.state;
@@ -416,7 +588,11 @@ export class SpellStage {
     k.mine = p.mine;
     k.from = p.from;
     k.rand = rngOf((p.seed ^ Math.imul(Math.floor(this.now * 60), 2654435761)) >>> 0);
-    k.companion = p.companion ? this.bodyOf(p.companion) : this.where.companion?.(p.by) ?? null;
+    k.companion = pet;
+    k.lightsLeft = 2;
+    k.released = p.released ? t - p.releasedAt : -1;
+    k.castLeft = Math.max(0, castEnd - t);
+    const shapes0 = this.out.world.length + this.out.ground.length;
 
     const fx = p.vis.fx;
     if (t < castEnd && fx.charge) fx.charge(k, Math.min(1, ct / timing.secs));
@@ -434,12 +610,20 @@ export class SpellStage {
       fx.hit?.(k);
     }
     if (p.landed && fx.impact && t - p.arrive < fx.impact.secs) fx.impact.draw(k, (t - p.arrive) / fx.impact.secs);
+    let on = true;
     if (p.landed && fx.linger && p.lingers > 0) {
       // What it lingered on is gone: over now. A linger on the caster or on the spot plays on.
-      if (gone && (fx.linger.on ?? 'target') === 'target') return t < Math.max(castEnd, p.arrive + (fx.impact?.secs ?? 0));
-      const age = t - p.arrive;
-      if (age < p.lingers) fx.linger.draw(k, age, p.lingers - age);
+      if (gone && (fx.linger.on ?? 'target') === 'target') on = false;
+      else {
+        const age = t - p.arrive;
+        if (age < p.lingers) fx.linger.draw(k, age, p.lingers - age);
+      }
     }
+    // Over its budgets this frame: said, for the preview.
+    const shapes = this.out.world.length + this.out.ground.length - shapes0;
+    if (shapes > SHAPES_MOST) this.over.push(`${p.id} ${shapes} shapes`);
+    if (k.lightsLeft < 0) this.over.push(`${p.id} lights`);
+    if (!on) return t < Math.max(castEnd, p.arrive + (fx.impact?.secs ?? 0));
     return !p.released || t < Math.max(castEnd, p.end);
   }
 
@@ -883,7 +1067,13 @@ export class SpellStage {
     }
     if (ps.n && this.eye) {
       ctx.lineCap = 'round';
-      for (let i = 0; i < ps.span; i++) if (ps.life[i] > 0 && isLightKind(ps.kind[i])) drawParticle(ctx, ps, i, this.eye, this.now);
+      for (let i = 0; i < ps.span; i++) {
+        if (ps.life[i] <= 0 || !isLightKind(ps.kind[i])) continue;
+        // Over rather than added, for a spark that has to keep its colour (`BurstOpts.over`).
+        if (ps.flags[i] & 1) ctx.globalCompositeOperation = 'source-over';
+        drawParticle(ctx, ps, i, this.eye, this.now);
+        if (ps.flags[i] & 1) ctx.globalCompositeOperation = 'lighter';
+      }
     }
     ctx.restore();
   }

@@ -2157,8 +2157,24 @@ export interface Rig {
   slide?: number;
   /** A bow's string drawn back to the right hand's fingers, this share of the way from straight. */
   draw?: number;
-  /** An arrow on the string, its nock where the string is drawn to and its shaft over the bow hand. */
-  nocked?: boolean;
+  /**
+   * An arrow on the string, its nock where the string is drawn to and its shaft over the bow hand; two (`2`), the
+   * second nocked beside the first along the string and fanned a little up the stave from it, for two loosed at once.
+   */
+  nocked?: boolean | number;
+  /**
+   * An arrow held in the right fist, closed on its shaft a fifth of the way up from the nock and pointing out past
+   * the knuckles as a haft does (turned toward the forearm by `haft`): one fetched from the quiver, or carried to the
+   * string. As long as the bow's own arrows, or seven units with no bow.
+   */
+  arrowHand?: boolean;
+  /**
+   * What is in the hands put away for the cast, from where it is half way in (0.5) to where it is half way out
+   * again: a knife sheathed to dress a wound, a maul slung to lay both hands on somebody. Blended in and out with the
+   * cast like the rest, so it goes as the cast takes the hands and comes back as it gives them back; a pose that
+   * wants it seen going brings the hand to the hip (or over the shoulder) first, with `reach`.
+   */
+  stow?: number;
   /** The right hand emptied -- what was in it thrown -- without putting anything away: the weapon is not drawn, the shield stays on. */
   thrown?: boolean;
   /**
@@ -2308,6 +2324,19 @@ export interface FigurePose {
    * over the arms and the trunk only while it walks, swims or drives.
    */
   cast?: { id: string; t: number };
+  /**
+   * The body veiled by a spell (`FxScene.veil` in ./spells/kit): `tint` of the way to `colour` over all of it, and
+   * drawn `fade` of the way to nothing -- a shroud, a body gone to smoke. Laid over the picture as it is put down,
+   * so the picture itself is kept as it is.
+   */
+  veil?: FigureVeil;
+}
+
+/** A body veiled: see `FigurePose.veil`. `colour` is '#rrggbb'; `tint` and `fade` nought to one. */
+export interface FigureVeil {
+  colour: string;
+  tint: number;
+  fade: number;
 }
 
 /*
@@ -3988,6 +4017,8 @@ function rigOf(p: FigurePose, fr: Frame, left = lefty(p.facing), kept: Kept = {}
     // Each hand's goal, seeded where the hand is before the cast, so a goal the cast sets is blended in from there (see `Rig.reach`).
     seedReach(r, fr);
     castOver(r, p, castPoser);
+    // Put away for the cast, once it has the hands (`Rig.stow`).
+    if ((r.stow ?? 0) >= 0.5) r.stowed = true;
   }
   if (r.kneel || r.reach || r.both) castExtras(r, p, fr);
   return r;
@@ -4098,15 +4129,52 @@ export function castPosesBy(fn: ((r: Rig, p: FigurePose) => void) | null): void 
 }
 
 /**
+ * A pose the other way about, left for right (`mirror`), for a cast played left-handed (`cast.mirror` in
+ * ./spells/index): the pose under it mirrored, the cast's own written over that, and the two mirrored back, so
+ * whatever the cast leaves alone comes back as it was.
+ */
+export const mirrorRig = (r: Rig): void => mirror(r);
+
+/**
+ * Which shoulder something heavy is over for `pose`, nought the left and one the right, between while it goes from
+ * one to the other: as the body drawn as `pose.id` has it now (see `settle`), or as its facing puts it. Nothing when
+ * nothing heavy is carried. What a cast played left-handed is decided by, alike for the body drawn and its effects.
+ */
+export function figureShoulder(pose: FigurePose): number | null {
+  const w = pose.gear?.weapon && weaponOf(pose.gear.weapon.id);
+  if (!w || w.carry !== 'shoulder') return null;
+  const side = pose.id ? keptSide(pose.id) : undefined;
+  return side ?? (overLeft(pose.facing) ? 0 : 1);
+}
+
+/** Where the ankles stand at rest for a look, in the body's frame from the middle of its feet: for a pose that steps (`stepIn` in ./spells/poses). */
+export function figureStance(look: Look = DEFAULT_LOOK): [V3, V3] {
+  return stance(frameOf(look));
+}
+
+/**
+ * Both feet of a pose being written put down at `feet` (in the body's frame from the middle of its feet, as
+ * `figureStance` gives them), the legs solved to them from the hips as the pose has them, and the hips let down as
+ * far as leaves the leg taking the weight -- the right at `on` one, the left at minus one -- bent `bend` degrees.
+ */
+export function standFeet(r: Rig, feet: [V3, V3], o: { on?: number; bend?: number; look?: Look } = {}): void {
+  standOn(r, frameOf(o.look ?? DEFAULT_LOOK), feet, o.on ?? 0, o.bend ?? 6);
+}
+
+/**
  * The cast over the pose. On the move -- walking, swimming, driving -- only the arms and the trunk are the
  * spell's: the legs, the hips and the body's height are put back as the motion had them, so a spell cast on the
  * run neither stops the feet nor lifts them off the ground.
  */
 function castOver(r: Rig, p: FigurePose, poser: (r: Rig, p: FigurePose) => void): void {
   const moving = p.moving || p.swimming || !!p.driving;
+  // Copied, not kept by reference: a pose writes into the arrays it is handed (`r.leg[0] = ...`, `r.at[1] += ...`), and
+  // kept by reference the walk's own legs were the cast's -- the feet jumped on the first frame of a cast on the move,
+  // slid while it lasted and jumped back at its end.
   const keep = moving ? {
-    at: r.at, pelvis: r.pelvis, leg: r.leg, knee: r.knee, foot: r.foot, flat: r.flat, lift: r.lift, sink: r.sink,
-    hover: r.hover, plant: r.plant, tail: r.tail,
+    at: [...r.at] as V3, pelvis: [...r.pelvis] as Euler, leg: [[...r.leg[0]], [...r.leg[1]]] as [Euler, Euler], knee: [...r.knee] as [number, number],
+    foot: [...r.foot] as [number, number], flat: [...r.flat] as [boolean, boolean], lift: r.lift, sink: r.sink,
+    hover: r.hover && { ...r.hover }, plant: r.plant && ([...r.plant] as [number, number]), tail: [...r.tail] as Euler,
   } : null;
   poser(r, p);
   if (keep) Object.assign(r, keep);
@@ -4312,7 +4380,10 @@ function kneelDown(r: Rig, fr: Frame, w: number): void {
 /** The bones and the weapon's frame for one pose, found once for however many points are asked of them. */
 function posedFor(pose: FigurePose): { b: Bones; r: Rig; held: () => { xf: Xf; hand: number; arm: Weapon } | null } {
   const kit = kitFor(pose.look ?? DEFAULT_LOOK, 0.5);
-  const r = rigOf(pose, kit.fr);
+  // A body drawn as `pose.id` with something heavy on its way between the shoulders, or kept on the one it was on while a
+  // spell is cast: on that shoulder here too, so a spell's effects find the weapon where it is drawn.
+  const side = pose.id ? keptSide(pose.id) : undefined;
+  const r = rigOf(pose, kit.fr, undefined, side === undefined ? {} : { side });
   const b = skeleton(kit.fr, r);
   let held: { xf: Xf; hand: number; arm: Weapon } | null | undefined;
   return {
@@ -4504,6 +4575,7 @@ function mixRig(a: Rig, b: Rig, w: number): Rig {
     both: some(a.both, b.both, n), bothAt: some(a.bothAt, b.bothAt, n), haft: some(a.haft, b.haft, n), slide: some(a.slide, b.slide, n),
     draw: some(a.draw, b.draw, n), mouth: some(a.mouth, b.mouth, n), kneel: some(a.kneel, b.kneel, n),
     nocked: w < 0.5 ? a.nocked : b.nocked, thrown: w < 0.5 ? a.thrown : b.thrown, kneelLeft: w < 0.5 ? a.kneelLeft : b.kneelLeft,
+    arrowHand: w < 0.5 ? a.arrowHand : b.arrowHand, stow: some(a.stow, b.stow, n),
     shape: a.shape || b.shape ? [0, 1].map((k) => {
       const x = a.shape?.[k], y = b.shape?.[k];
       return x || y ? Object.fromEntries(HAND_SHAPES.map((s) => [s, n(x?.[s] ?? 0, y?.[s] ?? 0)])) : undefined;
@@ -4611,6 +4683,8 @@ interface Held {
 }
 
 const held = new Map<string, Held>();
+/** Where something heavy is between the shoulders for a body drawn as `id`, as `settle` keeps it; nothing for a body not drawn lately. */
+const keptSide = (id: string): number | undefined => held.get(id)?.side;
 const ease = (x: number): number => x * x * (3 - 2 * x);
 
 /**
@@ -4670,8 +4744,11 @@ function settle(id: string, p: FigurePose, rigAt: (facing: number, left: boolean
   // Caught half way by one, it goes on to where it was going, and the emote is made with the hand that will be free there: frozen
   // there, the wave or the hop was made holding the maul out in front in both hands; and sent back to the shoulder it was nearer,
   // it was carried through the wave on the shoulder staged for the other side, its head over the face.
+  // Nor while a spell is cast, which has the weapon in a hand from its first frame: turned to face what it is cast at, the
+  // body set off on the swap with the cast, and the weapon was carried along it at arm's length while the arms struck, and
+  // went over to the other hand half way through the blow. It goes over once the cast is done.
   if (p.working || p.swimming || p.driving) h.side = over;
-  else if (!p.emote || (h.side > 0 && h.side < 1)) h.side += Math.max(-dt / SWAP, Math.min(dt / SWAP, over - h.side));
+  else if (!(p.emote || p.cast) || (h.side > 0 && h.side < 1)) h.side += Math.max(-dt / SWAP, Math.min(dt / SWAP, over - h.side));
   const kept: Kept = { wave: h.wave, side: h.side, bound: p.emote ? bound : undefined };
   const what = doingAt(p, h.left, h.wave);
   if (what !== h.doing) {
@@ -8849,6 +8926,13 @@ function wield(out: Part[], named: Map<string, Part[]>, r: Rig, b: Bones, gear: 
     };
     const c = cutsOf(arm);
     const held = r.stowed ? null : heldFrame(r, b, arm, facing);
+    // An arrow in the free right hand, with a bow in the left (`Rig.arrowHand`): through the fist as a haft is held, a fifth of
+    // the way up from its nock, and the hand closed over it.
+    if (r.arrowHand && !r.stowed && arm.carry === 'bow') {
+      const len = arm.arrow ?? 7;
+      const shaft = bit(arrowOf(len), joint(joint(b.wrist1, [0, 0, GRIP], -90 - (r.haft ?? 0)), [0, 0, -0.2 * len]), 0.04);
+      for (const h of named.get('hand1') ?? []) h.after = shaft;
+    }
     if (!r.stowed && arm.carry === 'shoulder' && r.swapping) {
       // On its way from one shoulder to the other in both hands, in front of the body and nowhere behind it (see `shoulder`): over
       // the body from whichever side the middle of it is out to.
@@ -8897,6 +8981,14 @@ function wield(out: Part[], named: Map<string, Part[]>, r: Rig, b: Bones, gear: 
         if (r.nocked && arm.rest && arm.arrow) {
           const rest = place(xf, arm.rest);
           bit(arrowOf(arm.arrow), aimed(ROOT, nock, [rest[0] - nock[0], rest[1] - nock[1], rest[2] - nock[2]], mv(xf.m, [1, 0, 0])), 0.04);
+          // A second beside it: nocked a little further up the string, and over the bow hand a little further up the stave,
+          // so the two shafts fan apart toward their points rather than lying one in the other.
+          if (+r.nocked >= 2) {
+            const up = unit([hi[0] - lo[0], hi[1] - lo[1], hi[2] - lo[2]]);
+            const n2: V3 = [nock[0] + up[0] * 0.3, nock[1] + up[1] * 0.3, nock[2] + up[2] * 0.3];
+            const r2: V3 = [rest[0] + up[0] * 0.75, rest[1] + up[1] * 0.75, rest[2] + up[2] * 0.75];
+            bit(arrowOf(arm.arrow), aimed(ROOT, n2, [r2[0] - n2[0], r2[1] - n2[1], r2[2] - n2[2]], mv(xf.m, [1, 0, 0])), 0.04);
+          }
         }
       }
       for (const h of named.get(`hand${hand}`) ?? []) h.after = grip;
@@ -10195,6 +10287,11 @@ export const onScreen = (view: View, p: V3): Pt => [p[0] * view.ex[0] + p[1] * v
 const gearLod = (zoom: number): number => (zoom < 1.5 ? 0.5 : zoom < STILL_BELOW ? 0.75 : 1);
 
 export function drawFigure(ctx: CanvasRenderingContext2D, sx: number, sy: number, zoom: number, pose: FigurePose, opts: { ink?: number } = {}): void {
+  const veil = pose.veil;
+  if (veil && (veil.tint > 0.004 || veil.fade > 0.004)) {
+    drawVeiled(ctx, sx, sy, zoom, veil, pose.id, (g) => drawFigure(g, 0, 0, zoom, { ...pose, veil: undefined }, opts));
+    return;
+  }
   const look = pose.look ?? DEFAULT_LOOK;
   // Cut coarser at the sizes the island is played at: under one and a half, a lock of hair is a pixel or two.
   const kit = kitFor(look, zoom < 1.5 ? 0.5 : 1);
@@ -11216,6 +11313,56 @@ function drawStill(ctx: CanvasRenderingContext2D, sx: number, sy: number, zoom: 
   const px = close ? Math.round(x * st.dev) / st.dev : x, py = close ? Math.round(y * st.dev) / st.dev : y;
   ctx.drawImage(st.canvas, px, py, st.canvas.width / st.dev, st.canvas.height / st.dev);
   st.put = { ctx, x: px, y: py, w: st.canvas.width / st.dev, h: st.canvas.height / st.dev };
+}
+
+/** The layer a veiled body is drawn into before it is tinted and put down (see `drawVeiled`): one, kept, for every veiled body in turn. */
+let veilLayer: { canvas: HTMLCanvasElement; g: CanvasRenderingContext2D } | null = null;
+
+/**
+ * A body under a spell's veil (`FigurePose.veil`): drawn as it would be into a
+ * layer of its own, the size of a still's picture, `tint` of the way to the
+ * veil's colour over every pixel of it and nothing round it, and put down
+ * `fade` of the way to nothing. Laid over the picture as it goes down rather
+ * than into it, so a kept picture or a stride's is the same picture veiled or
+ * not, and only a veiled body pays for the layer.
+ */
+function drawVeiled(ctx: CanvasRenderingContext2D, sx: number, sy: number, zoom: number, veil: FigureVeil, id: string | undefined, draw: (g: CanvasRenderingContext2D) => void): void {
+  const t = ctx.getTransform();
+  const dev = Math.hypot(t.a, t.b) || 1, k = zoom * dev;
+  const w = Math.ceil((STILL_BOX.right - STILL_BOX.left) * k), h = Math.ceil((STILL_BOX.bottom - STILL_BOX.top) * k);
+  if (!veilLayer) {
+    const canvas = document.createElement('canvas');
+    veilLayer = { canvas, g: canvas.getContext('2d') as CanvasRenderingContext2D };
+  }
+  const { canvas, g } = veilLayer;
+  if (canvas.width < w || canvas.height < h) {
+    canvas.width = Math.max(canvas.width, w);
+    canvas.height = Math.max(canvas.height, h);
+  }
+  const ox = Math.round(-STILL_BOX.left * k), oy = Math.round(-STILL_BOX.top * k);
+  g.setTransform(1, 0, 0, 1, 0, 0);
+  g.globalAlpha = 1;
+  g.globalCompositeOperation = 'source-over';
+  g.clearRect(0, 0, w, h);
+  g.setTransform(dev, 0, 0, dev, ox, oy);
+  draw(g);
+  g.setTransform(1, 0, 0, 1, 0, 0);
+  if (veil.tint > 0.004) {
+    g.globalCompositeOperation = 'source-atop';
+    g.globalAlpha = Math.min(1, veil.tint);
+    g.fillStyle = veil.colour;
+    g.fillRect(0, 0, w, h);
+    g.globalCompositeOperation = 'source-over';
+    g.globalAlpha = 1;
+  }
+  const x = sx - ox / dev, y = sy - oy / dev;
+  const was = ctx.globalAlpha;
+  ctx.globalAlpha = was * Math.max(0, 1 - veil.fade);
+  ctx.drawImage(canvas, 0, 0, w, h, x, y, w / dev, h / dev);
+  ctx.globalAlpha = was;
+  // The picture as last put down is where it went on the screen, not in the layer (see `figurePicture`).
+  const st = id ? stills.get(id) : undefined;
+  if (st?.put && st.put.ctx === g) st.put = { ...st.put, ctx, x: st.put.x + sx, y: st.put.y + sy };
 }
 
 /*

@@ -198,6 +198,9 @@ export class SpellBar {
     // Where you stood, for a spell the island moves you with (a Lunge): drawn carried from here rather than jumping.
     const p = this.game.player;
     const from = { x: p.x, y: p.y };
+    // And where the creature it is cast at stood, for a spell the island moves it with (a Hook).
+    const foe = aim.kind === 'creature' ? this.game.creatures.get(aim.id) : undefined;
+    const foeFrom = foe ? { x: foe.x, y: foe.y } : undefined;
     const why = await this.book.cast(i, aim);
     if (why) {
       this.game.logMsg(why, 'error');
@@ -206,7 +209,8 @@ export class SpellBar {
     if (!spell) return;
     const moved = Math.hypot(p.x - from.x, p.y - from.y) > MOVED_BY_CAST;
     const pet = this.game.creatures.active();
-    this.game.events.emit('cast', { spell, by: null, at: castAtOf(this.game, aim), companion: pet?.id, from: moved ? from : undefined });
+    // Given whether or not it has been moved yet: the island's word of where it went may come after this.
+    this.game.events.emit('cast', { spell, by: null, at: castAtOf(this.game, aim), companion: pet?.id, from: moved ? from : undefined, targetFrom: foeFrom });
   }
 
   /** "Cast ..." for every spell on the bar that takes this, for the menu of whatever it is. */

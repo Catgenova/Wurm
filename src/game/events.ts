@@ -29,6 +29,11 @@ export interface CastSeen {
    * carried from there rather than jumping.
    */
   from?: { x: number; y: number };
+  /**
+   * Where the creature it was cast at stood before the cast, when the island moved it for it (a Hook drags it in):
+   * drawn carried from there over the cast (`cast.pull`) rather than jumping. Your own casts only.
+   */
+  targetFrom?: { x: number; y: number };
 }
 /** What a spell was cast at, as it is drawn: the caster, you, somebody else, a creature, or a spot on the ground. */
 export type CastAt =
