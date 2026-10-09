@@ -20,7 +20,7 @@ import { wildermonTop } from '../wildermon';
 import { lingerSecs, visualOf } from './index';
 import { spellInfo } from './info';
 import { guessTold, type Standing } from './guess';
-import { creatureWide, type Body, type Told } from './kit';
+import { creatureWide, fallGradient, lightHole, type Body, type Told } from './kit';
 import { personBody, SpellStage, type Aim, type Who } from './stage';
 
 export interface SheetOpts {
@@ -444,6 +444,8 @@ export function spellSheet(o: SheetOpts): HTMLCanvasElement {
     g.rect(0, 0, W, H);
     g.clip();
     ground(g);
+    // The lights' colour on the ground at night, under the spell's marks and everybody standing (`SpellStage.layLight`).
+    stage.drawGroundLight(g);
     stage.drawGroundAll(g);
     // Everything standing, the bodies among the spell's own, nearest last; the caster where a move has carried them to.
     const shift = stage.shiftOf(by);
@@ -512,7 +514,8 @@ export function spellSheet(o: SheetOpts): HTMLCanvasElement {
     items.sort((a, b) => a.sy - b.sy);
     for (const it of items) it.draw();
     if (o.night) {
-      // The night as the island lays it: a cold wash, with every light's circle taken out of it and its colour laid in.
+      // The night as the island lays it: a cold wash, with every light's circle taken out of it and its cast added, a
+      // spell's falling off smoothly and weakened for its size (`Renderer.lightLayers`).
       const n = night.getContext('2d') as CanvasRenderingContext2D;
       n.globalCompositeOperation = 'source-over';
       n.clearRect(0, 0, W, H);
@@ -521,21 +524,16 @@ export function spellSheet(o: SheetOpts): HTMLCanvasElement {
       n.globalCompositeOperation = 'destination-out';
       for (const l of stage.lights) {
         const x = cam.worldToScreenX(l.x, l.y), y = cam.worldToScreenY(l.x, l.y, 0), r = l.radius * HALF_W * zoom;
-        const grad = n.createRadialGradient(x, y, 0, x, y, r);
-        grad.addColorStop(0, `rgba(0,0,0,${l.strength})`);
-        grad.addColorStop(0.55, `rgba(0,0,0,${l.strength * 0.55})`);
-        grad.addColorStop(1, 'rgba(0,0,0,0)');
-        n.fillStyle = grad;
+        const a = l.strength * lightHole(l.radius);
+        n.fillStyle = fallGradient(n, x, y, r, (f) => `rgba(0,0,0,${(a * f).toFixed(3)})`);
         n.fillRect(0, 0, W, H);
       }
       g.drawImage(night, 0, 0);
       g.globalCompositeOperation = 'lighter';
       for (const l of stage.lights) {
         const x = cam.worldToScreenX(l.x, l.y), y = cam.worldToScreenY(l.x, l.y, 0), r = l.radius * HALF_W * zoom;
-        const grad = g.createRadialGradient(x, y, 0, x, y, r);
-        grad.addColorStop(0, `rgba(${l.cast}, ${l.castAlpha * 0.6})`);
-        grad.addColorStop(1, `rgba(${l.cast}, 0)`);
-        g.fillStyle = grad;
+        const a = l.castAlpha * 0.6 * lightHole(l.radius);
+        g.fillStyle = fallGradient(g, x, y, r, (f) => `rgba(${l.cast}, ${(a * f).toFixed(3)})`);
         g.fillRect(0, 0, W, H);
       }
       g.globalCompositeOperation = 'source-over';

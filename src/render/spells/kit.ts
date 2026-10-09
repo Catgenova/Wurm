@@ -493,7 +493,7 @@ export class Particles {
 }
 
 /**
- * The colour a light lays over what it falls on at night (`SpellStage.glowPass`): its own hue, saturated, so it goes
+ * The colour a light lays over the ground it falls on at night (`SpellStage.layLight`): its own hue, saturated, so it goes
  * over the grass as a colour rather than added to it as a brightness. The night takes the cold off a light's circle,
  * which uncovers the grass as green as it is by day, and a warm white added to that is mostly the green brought up --
  * the olive pool a 1.4-tile `#fff1d6` made. Laid as a colour, warm reads warm; a white or a grey light lays grey, which
@@ -508,6 +508,51 @@ export function lightTint(cast: string): string {
   const [r1, g1, b1] = h < 1 ? [C, X, 0] : h < 2 ? [X, C, 0] : h < 3 ? [0, C, X] : h < 4 ? [0, X, C] : h < 5 ? [X, 0, C] : [C, 0, X];
   const hex = (v: number): string => Math.round((v + m) * 255).toString(16).padStart(2, '0');
   return `#${hex(r1)}${hex(g1)}${hex(b1)}`;
+}
+
+/*
+ * How a spell's light falls off at night, shared by the island's night (`Renderer.lightLayers`), the preview's and the
+ * stage's colour on the ground (`SpellStage.layout`), so the dark cut back, the colour added and the hue laid all fall
+ * together.
+ */
+
+/**
+ * A spell light's share at `t` of the way from its middle (0) to its edge (1): (1 - t²)², flat at the heart and
+ * falling to nothing at the edge with no ring, about half at halfway and a fifth at three quarters.
+ */
+export function lightFall(t: number): number {
+  const u = 1 - t * t;
+  return u <= 0 ? 0 : u * u;
+}
+/**
+ * Where a light's gradients are stopped, and `lightFall` at each: drawn as straight runs between them. Evenly spaced,
+ * which a canvas fills about a third faster than the same number of stops unevenly spaced.
+ */
+export const LIGHT_STOPS: readonly number[] = [0, 1, 2, 3, 4, 5, 6].map((i) => i / 6);
+export const LIGHT_FALLS: readonly number[] = LIGHT_STOPS.map(lightFall);
+/** Tiles of radius up to which a spell light is at its full strength; a wider one is weakened for its size. */
+export const LIGHT_FULL = 2;
+/**
+ * How much of a spell light's strength cuts the night, and adds its cast, at its middle, for its radius: all of it up to
+ * `LIGHT_FULL` tiles, then (`LIGHT_FULL` / r)^0.8, so a light twice as wide covers about three times the ground for
+ * the same light in all: a 4-tile light 57%, a 7-tile 37%.
+ */
+export function lightHole(radius: number): number {
+  return radius <= LIGHT_FULL ? 1 : (LIGHT_FULL / radius) ** 0.8;
+}
+/**
+ * How much of a spell light's colour it lays on the ground at its middle, for its radius (`SpellStage`): all of it up to
+ * `LIGHT_FULL` tiles, then (`LIGHT_FULL` / r)^0.7: a 4-tile light 62%, a 7-tile 42%. A wide light is a glow over the
+ * ground rather than a sheet of its colour.
+ */
+export function lightHue(radius: number): number {
+  return radius <= LIGHT_FULL ? 1 : (LIGHT_FULL / radius) ** 0.7;
+}
+/** A radial gradient falling as `lightFall` from `x`, `y` out to `r`, its colour at each stop `at(fall)`. */
+export function fallGradient(g: CanvasRenderingContext2D, x: number, y: number, r: number, at: (fall: number, i: number) => string): CanvasGradient {
+  const grad = g.createRadialGradient(x, y, 0, x, y, r);
+  for (let i = 0; i < LIGHT_STOPS.length; i++) grad.addColorStop(LIGHT_STOPS[i], at(LIGHT_FALLS[i], i));
+  return grad;
 }
 
 /* ---- glow pictures ------------------------------------------------------------- */
@@ -672,6 +717,8 @@ export interface LightRec {
   strength: number;
   cast: string;
   castAlpha: number;
+  /** A spell's: falls off smoothly and is weakened for its size where it cuts the night (`lightFall`, `lightHole`). */
+  soft: true;
 }
 
 /** What a frame of every spell on the screen came to, pass by pass. Filled by `FxScene`, drawn by the stage. */
@@ -1330,7 +1377,7 @@ export class FxScene {
     if (strength <= 0.01) return;
     // Counted asked for, so a cast over its two shows as over (`SpellStage.over`), and refused past them.
     if (this.lightsLeft-- <= 0 || this.out.lights.length >= MOST_LIGHTS) return;
-    this.out.lights.push({ x: p.x, y: p.y, radius, strength: clamp(strength), cast: channelsOf(colour), castAlpha: 0.32 * clamp(strength) });
+    this.out.lights.push({ x: p.x, y: p.y, radius, strength: clamp(strength), cast: channelsOf(colour), castAlpha: 0.32 * clamp(strength), soft: true });
   }
 
   /* ---- glow -------------------------------------------------------------------------- */

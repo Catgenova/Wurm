@@ -184,7 +184,7 @@ import { bridgeDone, type Bridge } from '../game/bridges';
 import { SmallLife, type Mote } from './life';
 import { personBody, SpellStage, type Aim, type Told, type Who } from './spells/stage';
 import { guessTold, type Standing } from './spells/guess';
-import { creatureWide } from './spells/kit';
+import { creatureWide, fallGradient, lightHole } from './spells/kit';
 import { spellInfo } from './spells/info';
 import type { Body as SpellBody, WorldRec as SpellRec } from './spells/kit';
 import type { CastAt, CastTold } from '../game/events';
@@ -1559,10 +1559,17 @@ export class Renderer {
       for (const l of ls) {
         const p = placed(l, pad);
         if (!p) continue;
-        const grad = g.createRadialGradient(p.sx, p.sy, 0, p.sx, p.sy, p.r);
-        grad.addColorStop(0, `rgba(0,0,0,${l.strength.toFixed(2)})`);
-        grad.addColorStop(0.55, `rgba(0,0,0,${(l.strength * 0.55).toFixed(2)})`);
-        grad.addColorStop(1, 'rgba(0,0,0,0)');
+        let grad: CanvasGradient;
+        if (l.soft) {
+          // A spell's: falling smoothly to nothing at its edge, and less at its middle the wider it is.
+          const a = l.strength * lightHole(l.radius);
+          grad = fallGradient(g, p.sx, p.sy, p.r, (f) => `rgba(0,0,0,${(a * f).toFixed(3)})`);
+        } else {
+          grad = g.createRadialGradient(p.sx, p.sy, 0, p.sx, p.sy, p.r);
+          grad.addColorStop(0, `rgba(0,0,0,${l.strength.toFixed(2)})`);
+          grad.addColorStop(0.55, `rgba(0,0,0,${(l.strength * 0.55).toFixed(2)})`);
+          grad.addColorStop(1, 'rgba(0,0,0,0)');
+        }
         g.fillStyle = grad;
         g.beginPath();
         g.arc(p.sx, p.sy, p.r, 0, Math.PI * 2);
@@ -1589,11 +1596,15 @@ export class Renderer {
       for (const l of ls) {
         const p = placed(l, pad);
         if (!p) continue;
-        const a = l.castAlpha ?? 0.16 * l.strength;
-        const [r0, g0, b0] = (l.cast ?? '255, 186, 92').split(',').map((v) => Math.round(Number(v) * a));
-        const grad = g.createRadialGradient(p.sx, p.sy, 0, p.sx, p.sy, p.r);
-        grad.addColorStop(0, `rgb(${r0}, ${g0}, ${b0})`);
-        grad.addColorStop(1, 'rgb(0, 0, 0)');
+        const a = (l.castAlpha ?? 0.16 * l.strength) * (l.soft ? lightHole(l.radius) : 1);
+        const [r0, g0, b0] = (l.cast ?? '255, 186, 92').split(',').map((v) => Number(v) * a);
+        let grad: CanvasGradient;
+        if (l.soft) grad = fallGradient(g, p.sx, p.sy, p.r, (f) => `rgb(${Math.round(r0 * f)}, ${Math.round(g0 * f)}, ${Math.round(b0 * f)})`);
+        else {
+          grad = g.createRadialGradient(p.sx, p.sy, 0, p.sx, p.sy, p.r);
+          grad.addColorStop(0, `rgb(${Math.round(r0)}, ${Math.round(g0)}, ${Math.round(b0)})`);
+          grad.addColorStop(1, 'rgb(0, 0, 0)');
+        }
         g.fillStyle = grad;
         g.beginPath();
         g.arc(p.sx, p.sy, p.r, 0, Math.PI * 2);
