@@ -169,6 +169,7 @@ export const MINOR_SKILLS: string[] = [
   'smelting', 'blacksmithing', 'weaponsmithing', 'armorsmithing', 'farming', 'taming', 'animal_husbandry', 'butchering',
   'alchemy', 'prayer', 'meditation', 'repair', 'first_aid', 'chirurgy', 'papyrusmaking', 'archaeology', 'restoration',
   'leatherworking', 'chainsmithing', 'platesmithing', 'jewellery', 'bowyery', 'fletching', 'glassblowing', 'praying',
+  'elementalism',
 ];
 
 /**
