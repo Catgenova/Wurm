@@ -39,7 +39,7 @@ import { foundationDone } from '../game/foundations';
 import { DYE_BY_ID } from '../game/dyestuffs';
 import { hash2 } from '../world/noise';
 import { bareRock, DAMP_SAND, dustiness, FLAT, growth, oreWash, PAVED, ROCK_VARIANTS, SLAB_VARIANTS, STREWN, TileType, TILE_DEFS, COVERED, bushSpecies, slabVariant, trailGround, stonesBed, treeSpecies, treeVariant } from '../world/tiles';
-import { RunestoneNight } from './runestone';
+import { RunestoneNight, type OccluderClip } from './runestone';
 import { HALF_H, HALF_W, HEIGHT_SCALE, UNITS_PER_TILE } from './iso';
 import { beastReach, HUNT_REACH, inFightReach, isFightJob, WIND_UP } from '../game/fight';
 import { depthOf, type View } from './view';
@@ -1180,6 +1180,65 @@ export class Renderer {
    * it with `cut`.
    */
   private runeNight = new RunestoneNight();
+  /** The clips in force on the screen while the entity being drawn is drawn: under a jetty's floor, a flight's cut (`clipTo`). */
+  private occClips: OccluderClip[] = [];
+
+  /**
+   * Something drawn now on the line pass that cannot be handed over as one
+   * picture -- a wall not kept, a roof with a lamp under it, a pilaster, a
+   * drawbridge's gallows -- drawn again by the same drawing onto the
+   * runestones' keeping wherever its box (left, top, right, bottom on the
+   * screen; everywhere, without one) falls on a stone after dark: the
+   * drawing reads `this.canvas.ctx`, so for the length of it that is the
+   * keeping, as `baked` makes it the picture.
+   */
+  private occludeLine(box: [number, number, number, number] | null, draw: () => void): void {
+    if (!this.runeNight.active) return;
+    const ctx = this.canvas.ctx;
+    const [x0, y0, x1, y1] = box ?? [-1e5, -1e5, 1e5, 1e5];
+    this.runeNight.occludeDraw(ctx, x0, y0, x1 - x0, y1 - y0, (g) => {
+      // What the screen's pen was left holding, which the drawing reads without setting.
+      g.lineCap = ctx.lineCap;
+      g.lineJoin = ctx.lineJoin;
+      g.miterLimit = ctx.miterLimit;
+      g.lineWidth = ctx.lineWidth;
+      g.strokeStyle = ctx.strokeStyle;
+      g.fillStyle = ctx.fillStyle;
+      g.font = ctx.font;
+      g.setLineDash(ctx.getLineDash());
+      const canvas = this.canvas as { ctx: CanvasRenderingContext2D };
+      canvas.ctx = g;
+      try {
+        draw();
+      } finally {
+        canvas.ctx = ctx;
+      }
+    });
+  }
+
+  /**
+   * A tile of ground just laid on the line pass, as the four corners in
+   * `pts`: on the runestones' keeping wherever it falls on one. Ground in
+   * front of a stone is a bank between it and the eye -- a stone at the foot
+   * of a rise seen from over it -- and covers it as any wall does. Its quad
+   * is the whole of what it covers; what is strewn on it stands inside it
+   * but for the tips of the grass.
+   */
+  private occludeGround(ctx: CanvasRenderingContext2D, pts: ArrayLike<number>, minY: number, maxY: number): void {
+    const minX = Math.min(pts[0], pts[2], pts[4], pts[6]);
+    const maxX = Math.max(pts[0], pts[2], pts[4], pts[6]);
+    if (!this.runeNight.falls(ctx, minX, minY, maxX - minX, maxY - minY)) return;
+    this.runeNight.occludeDraw(ctx, minX, minY, maxX - minX, maxY - minY, (g) => {
+      g.beginPath();
+      g.moveTo(pts[0], pts[1]);
+      g.lineTo(pts[2], pts[3]);
+      g.lineTo(pts[4], pts[5]);
+      g.lineTo(pts[6], pts[7]);
+      g.closePath();
+      g.fillStyle = '#000';
+      g.fill();
+    });
+  }
   private anvilHits: HitRect[] = [];
   private postHits: HitRect[] = [];
   private trapHits: HitRect[] = [];
@@ -3281,6 +3340,8 @@ export class Renderer {
       if (this.wetPierLines?.has(d)) this.layWater(ctx, zoom);
       this.ents.length = 0;
       this.entN = 0;
+      // Whether a runestone drawn on a line before this one is lit for the night, so this line's ground is kept off it.
+      const stoneLit = this.runeNight.active;
       if (grain) {
         this.grainN = 0;
         this.grainM = 0;
@@ -3325,6 +3386,7 @@ export class Renderer {
           ctx.closePath();
           ctx.fillStyle = voidInk;
           ctx.fill();
+          if (stoneLit) this.occludeGround(ctx, pts, minY, maxY);
           continue;
         }
         const lit = fog === VISIBLE;
@@ -3337,6 +3399,7 @@ export class Renderer {
         ctx.closePath();
         ctx.fillStyle = color;
         ctx.fill();
+        if (stoneLit) this.occludeGround(ctx, pts, minY, maxY);
         // Remembered ground's wash comes this far down the screen; ground in sight that comes up past it takes it off what it covers.
         this.wallLift = null;
         if (!lit) {
@@ -3744,7 +3807,10 @@ export class Renderer {
       if (!this.fast) this.life.ground(ctx, d);
       // The line's pilasters, over every wall of it and under its roofs (`drawColumnsAt`).
       if (this.linePilasters.length) {
-        for (const lay of this.linePilasters) lay();
+        for (const lay of this.linePilasters) {
+          lay();
+          this.occludeLine(null, lay);
+        }
         this.linePilasters.length = 0;
       }
       // The roofs of the buildings whose last walls this line drew, before
@@ -3766,7 +3832,10 @@ export class Renderer {
       }
       // A drawbridge's gallows and a deck off the bank stand in front of any roof this line laid (`drawGateAt`).
       if (this.gateLate.length) {
-        for (const draw of this.gateLate) draw();
+        for (const draw of this.gateLate) {
+          draw();
+          this.occludeLine(null, draw);
+        }
         this.gateLate.length = 0;
       }
       // And whatever small thing is in the air over it, sorted in with everything standing on it.
@@ -4366,9 +4435,35 @@ export class Renderer {
     sy: number,
     draw: (g: CanvasRenderingContext2D, px: number, py: number) => void,
     colour = '#ffffff',
+    box?: [number, number, number, number],
   ): void {
-    // After dark, past a runestone: kept where it falls on the stone's runes, drawn again in its own shape (`RunestoneNight`).
-    if (this.runeNight.active) this.runeNight.occludeDraw(sx - 90 * zoom, sy - 230 * zoom, 180 * zoom, 250 * zoom, (g) => draw(g, sx, sy));
+    /*
+     * After dark, drawn after a runestone and falling on its runes (its own
+     * box, left, top, width and height on the screen, when the caller knows
+     * it): kept off them (`RunestoneNight`). Plainly drawn and small enough,
+     * it is drawn once onto the pad and laid from there on the screen and on
+     * the stone's keeping both; otherwise drawn again onto the keeping by
+     * the same drawing, under the same transform and clips.
+     */
+    if (this.runeNight.active) {
+      const [bx, by, bw, bh] = box ?? [sx - 90 * zoom, sy - 230 * zoom, 180 * zoom, 250 * zoom];
+      if (this.runeNight.falls(ctx, bx, by, bw, bh)) {
+        if (effect === 'none') {
+          const { pad, g, ox, oy, side } = this.scratch(zoom);
+          const m = ctx.getTransform();
+          if (m.b === 0 && m.c === 0 && bx >= sx - ox && by >= sy - oy && bx + bw <= sx - ox + side && by + bh <= sy - oy + side) {
+            // Its corner on a whole pixel of the screen, so it is laid down sharp, as it would have been drawn there.
+            const fx = (((sx - ox) * m.a + m.e) % 1 + 1) % 1, fy = (((sy - oy) * m.d + m.f) % 1 + 1) % 1;
+            const px = ox + fx / m.a, py = oy + fy / m.d;
+            draw(g, px, py);
+            ctx.drawImage(pad, sx - px, sy - py, side, side);
+            this.runeNight.occlude(ctx, pad, sx - px, sy - py, side, side, this.occClips);
+            return;
+          }
+        }
+        this.runeNight.occludeDraw(ctx, bx, by, bw, bh, (g) => draw(g, sx, sy), this.occClips);
+      }
+    }
     if (effect === 'none') {
       draw(ctx, sx, sy);
       return;
@@ -4431,6 +4526,13 @@ export class Renderer {
   /** Save the context and clip it to `clip`, when there is one: the caller restores it after drawing. */
   private clipTo(ctx: CanvasRenderingContext2D, clip: Array<[number, number]> | undefined): void {
     if (!clip) return;
+    if (this.runeNight.active) {
+      // And on whatever keeps it off a runestone's runes (`paint`).
+      const path = new Path2D();
+      clip.forEach(([cx, cy], i) => (i ? path.lineTo(cx, cy) : path.moveTo(cx, cy)));
+      path.closePath();
+      this.occClips.push({ path, m: ctx.getTransform() });
+    }
     ctx.save();
     ctx.beginPath();
     clip.forEach(([cx, cy], i) => (i ? ctx.lineTo(cx, cy) : ctx.moveTo(cx, cy)));
@@ -4597,11 +4699,13 @@ export class Renderer {
         ctx.restore();
         behind = false;
       }
+      this.occClips.length = 0;
       const under = ent.kind === 'life' || ent.kind === 'spell' || ent.kind === 'player' || ent.kind === 'peer' || ent.kind === 'creature' ? null : this.underJetty(ent);
       if (under) {
         ctx.save();
         ctx.clip(under, 'evenodd');
         behind = true;
+        if (this.runeNight.active) this.occClips.push({ path: under, m: ctx.getTransform(), rule: 'evenodd' });
       }
       // A boat on the water, and whoever is aboard her, drawn as she rolls and pitches (`swayOf`).
       if (ent.sway) {
@@ -4627,6 +4731,7 @@ export class Renderer {
         // Where your feet are on the screen, for the ring the swing in hand is drawn as (`drawFight`).
         this.feetAt = { x: ex, y: ey - (ent.lift ?? 0) };
         this.clipTo(ctx, ent.clip);
+        const figBox: [number, number, number, number] = [ex - 34 * zoom, ey - (ent.lift ?? 0) - (FIGURE_TOP + 14) * zoom, 68 * zoom, (FIGURE_TOP + 22) * zoom];
         this.paint(ctx, zoom, struck > 0 ? 'flash' : 'none', struck * 0.75, ex, ey - (ent.lift ?? 0), (g, px, py) =>
           drawPlayer(g, px, py, zoom, {
             id: 'player',
@@ -4649,6 +4754,8 @@ export class Renderer {
             cast: this.spells.poseOf(PLAYER_CASTS),
             veil: this.spells.veilOf(PLAYER_CASTS),
           }),
+          undefined,
+          figBox,
         );
         if (ent.clip) ctx.restore();
         // What this body last said, over its own head. No name drawn under it,
@@ -4671,6 +4778,7 @@ export class Renderer {
         }
         peer.facing = this.facingOnScreen(peer.dirX, peer.dirY, peer.facing);
         this.clipTo(ctx, ent.clip);
+        const peerBox: [number, number, number, number] = [ex - 34 * zoom, ey - (FIGURE_TOP + 14) * zoom, 68 * zoom, (FIGURE_TOP + 22) * zoom];
         this.paint(ctx, zoom, hovering ? 'hover' : 'none', 0, ex, ey, (g, px, py) =>
           drawPlayer(g, px, py, zoom, {
             id: 'o' + peer.id,
@@ -4692,6 +4800,8 @@ export class Renderer {
             cast: this.spells.poseOf({ kind: 'peer', id: peer.id }),
             veil: this.spells.veilOf({ kind: 'peer', id: peer.id }),
           }),
+          undefined,
+          peerBox,
         );
         if (ent.clip) ctx.restore();
         // Somebody else is only somebody else if you can tell which one.
@@ -4757,6 +4867,13 @@ export class Renderer {
         const [csx, csy] = this.spellShift({ kind: 'creature', id: cr.id });
         // Tinted by a spell on it (sick, marked: `FxScene.tint`), on the creature itself, as a blow's flash is but in its colour.
         const tint = hit > 0 || hovering ? undefined : this.spells.tintOf({ kind: 'creature', id: cr.id });
+        // As tall and as wide as it is drawn: a big one, or a rare one, is clicked by its head as well as its feet.
+        const size = rarityOf(cr).size;
+        const tall = Math.max(22 * size, (wildermonTop(def.id) ?? 0) * big);
+        const wide = 10 * size;
+        // And the box it is drawn in, a long beast's length either way and a little over its head, for keeping it off a runestone's runes.
+        const reach = Math.max(32 * big, wide * 3);
+        const beastBox: [number, number, number, number] = [ent.sx + csx - reach * zoom, ent.sy + csy - (tall * 1.25 + 10) * zoom, 2 * reach * zoom, (tall * 1.25 + 18) * zoom];
         this.paint(ctx, zoom, hit > 0 || tint ? 'flash' : hovering ? 'hover' : 'none', tint ? tint.share : hit * 0.92, ent.sx + csx, ent.sy + csy, (g, px, py) =>
           drawCreature(g, px, py, zoom, {
             species: def.id,
@@ -4774,13 +4891,10 @@ export class Renderer {
             rare: cr.rare,
           }),
           tint?.colour,
+          beastBox,
         );
         // In the traces: the reins back from its head to the box of what it pulls.
         if (cr.hitchedTo !== null) this.drawReins(ctx, cr, ent.sx, ent.sy, turned, big, zoom);
-        // As tall and as wide as it is drawn: a big one, or a rare one, is clicked by its head as well as its feet.
-        const size = rarityOf(cr).size;
-        const tall = Math.max(22 * size, (wildermonTop(def.id) ?? 0) * big);
-        const wide = 10 * size;
         // And a mark over it, for the second it has to be seen in.
         if (cr.windup > 0) this.drawWindupMark(ctx, ent.sx, ent.sy - (tall + 16) * zoom, zoom);
         this.creatureHits.push({ x: ent.x, y: ent.y, left: ent.sx - wide * zoom, top: ent.sy - tall * zoom, w: 2 * wide * zoom, h: (tall + 2) * zoom, creature: cr.id });
@@ -4794,7 +4908,7 @@ export class Renderer {
         const hb = drawFurniture(ctx, ent.sx, ent.sy + (ent.drawDy ?? 0), zoom, piece.kind, !!piece.lit, dyeOf(piece) ?? undefined, this.pieceTrim(piece), ent.view, piece.material, crewOf(piece.kind) ?? undefined, ent.layer, true,
           helm ? figurePicture(helm === 'player' ? helm : 'o' + helm.id) : null, this.manned(piece));
         // A hull is drawn in layers round her crew, not to be drawn again: in front of a runestone's runes, her box is kept off them.
-        if (this.runeNight.active) this.runeNight.occludeRect(ent.sx + hb[0], ent.sy + (ent.drawDy ?? 0) + hb[1], hb[2] - hb[0], hb[3] - hb[1]);
+        if (this.runeNight.active) this.runeNight.occludeRect(ctx, ent.sx + hb[0], ent.sy + (ent.drawDy ?? 0) + hb[1], hb[2] - hb[0], hb[3] - hb[1], this.occClips);
         continue;
       }
       if (ent.kind === 'furniture' && ent.piece) {
@@ -4804,6 +4918,8 @@ export class Renderer {
         // What it covered when it was drawn, from its floor contact, for the box it is clicked by.
         let drawn: [number, number, number, number] | null = null;
         const h = FURNITURE_HEIGHT[piece.kind] ?? 14;
+        // The box it stands in, and a margin for what it is drawn as past that, for keeping it off a runestone's runes (`paint`).
+        const pieceBox: [number, number, number, number] = [ent.sx - W * 1.3 * zoom, ent.sy - (h + D + 8) * zoom, W * 2.6 * zoom, (h + 2 * D + 14) * zoom];
         /*
          * A creature crate with somebody in it: its far half, the wildermon
          * standing on its floor facing the door, and its near half and lid
@@ -4832,7 +4948,7 @@ export class Renderer {
               rare: inside.rare,
             });
             drawFurniture(g, px, py, zoom, piece.kind, false, tint, 1, view, piece.material);
-          });
+          }, undefined, pieceBox);
           if (zoom >= 0.6) {
             ctx.font = `${Math.max(9, 10 * zoom)}px "Segoe UI", system-ui, sans-serif`;
             ctx.textAlign = 'center';
@@ -4865,7 +4981,7 @@ export class Renderer {
               const b = drawFurniture(g, px, py, zoom, piece.kind, false, undefined, layer, view, piece.material, undefined, 'all', false);
               box = box ? [Math.min(box[0], b[0]), Math.min(box[1], b[1]), Math.max(box[2], b[2]), Math.max(box[3], b[3])] : b;
             });
-          });
+          }, undefined, pieceBox);
           drawn = box;
         } else {
           /*
@@ -4877,7 +4993,7 @@ export class Renderer {
           const crew = ent.layer === 0 ? crewOf(piece.kind) ?? undefined : undefined;
           this.paint(ctx, zoom, hovering ? 'hover' : 'none', 0, ent.sx, ent.sy, (g, px, py) => {
             drawn = drawFurniture(g, px, py, zoom, piece.kind, !!piece.lit, dyeOf(piece) ?? undefined, this.pieceTrim(piece), view, piece.material, crew, crew && !hovering ? 0 : 'all', false, null, this.manned(piece));
-          });
+          }, undefined, pieceBox);
           // What on it moves -- an altar's stars, a banner's cloth -- over it, and outside the
           // ring under the pointer: a ring round a bloom of light is a blot.
           drawFurnitureLive(ctx, ent.sx, ent.sy, zoom, piece.kind, view, this.game.darkness(), clothInWind(piece.kind) ? this.airOf(piece) : undefined);
@@ -4957,14 +5073,20 @@ export class Renderer {
       }
       if (ent.kind === 'deck' && ent.aq) {
         const box = this.aqueducts.draw(ctx, ent.aq);
+        // An aqueduct's bays are laid in pieces round what stands under them: in front of a runestone's runes, its box is kept off them.
+        if (box && this.runeNight.active) this.runeNight.occludeRect(ctx, box.left, box.top, box.w, box.h, this.occClips);
         if (box) this.deckHits.push({ x: ent.x, y: ent.y, left: box.left, top: box.top, w: box.w, h: box.h, bridge: ent.aq.b.id, aq: box.shape });
         continue;
       }
       if (ent.kind === 'deck' && ent.deck?.kind === 'draw') {
         const b = this.game.bridges.get(ent.deck.id);
         // Its chains go up to a gallows, which there is none of on a building's floor (`drawGateAt`).
-        if (b) drawDrawbridgeSpan(ctx, this.project, this.drawbridgeGeom(b), ent.deck.span ?? 0, zoom, this.deckLit(b), ent.deck.done,
-          bridgeDone(b) && !this.game.buildings.buildingAt(b.ax, b.ay));
+        if (b) {
+          const span = (g: CanvasRenderingContext2D): void => drawDrawbridgeSpan(g, this.project, this.drawbridgeGeom(b), ent.deck!.span ?? 0, zoom, this.deckLit(b), ent.deck!.done,
+            bridgeDone(b) && !this.game.buildings.buildingAt(b.ax, b.ay));
+          span(ctx);
+          if (this.runeNight.active) this.runeNight.occludeDraw(ctx, ent.sx - 120 * zoom, ent.sy - 160 * zoom, 240 * zoom, 220 * zoom, span, this.occClips);
+        }
         this.deckHits.push({ x: ent.x, y: ent.y, left: ent.sx - 40 * zoom, top: ent.sy - 22 * zoom, w: 80 * zoom, h: 44 * zoom, bridge: ent.deck.id });
         continue;
       }
@@ -5035,7 +5157,8 @@ export class Renderer {
       }
       if (this.shadow.alpha > 0.012) this.castShadow(ctx, ent.sx, ent.sy, (spr.ay - (spr.h - spr.ay)) * 0.5 * zoom + dh * 0.12);
       const ready = this.atSize(spr.canvas, dw, dh);
-      this.paint(ctx, zoom, hovering ? 'hover' : 'none', 0, ent.sx, ent.sy, (g, px, py) => g.drawImage(ready, px - spr.ax * zoom, py - spr.ay * zoom, dw, dh));
+      this.paint(ctx, zoom, hovering ? 'hover' : 'none', 0, ent.sx, ent.sy, (g, px, py) => g.drawImage(ready, px - spr.ax * zoom, py - spr.ay * zoom, dw, dh), undefined,
+        [ent.sx - spr.ax * zoom, ent.sy - spr.ay * zoom, dw, dh]);
       /*
        * And the shine, over the top of whatever it is, because the light comes
        * off the thing rather than out from behind it. The seed is the tile, so
@@ -5071,8 +5194,6 @@ export class Renderer {
     const dh = spr.h * zoom * grew;
     const left = ent.sx - spr.ax * zoom * grew;
     const top = ent.sy - spr.ay * zoom * grew;
-    // In front of a runestone's runes after dark: its picture, as it stands without the wind, kept off them (`RunestoneNight`).
-    if (this.runeNight.active) this.runeNight.occlude(spr.canvas, left, top, dw, dh);
     if (this.shadow.alpha > 0.012) this.castShadow(ctx, ent.sx, ent.sy, (spr.ay - (spr.h - spr.ay)) * 0.5 * zoom + dh * 0.12);
     /*
      * Air between here and the back of the wood.
@@ -5136,10 +5257,12 @@ export class Renderer {
         const x = Math.round(t.a * ent.sx + t.e - pic.footX);
         const y = Math.round(t.d * ent.sy + t.f - pic.footY);
         const cv = pic.cv;
-        ctx.save();
-        ctx.setTransform(1, 0, 0, 1, 0, 0);
-        if (Math.abs(sway) * hDev < 0.5) ctx.drawImage(cv, x, y);
-        else {
+        /** Its picture onto `g`, whose transform is the screen's own pixels: whole, or in bands each shifted by the wind at its height. */
+        const lay = (g: CanvasRenderingContext2D): void => {
+          if (Math.abs(sway) * hDev < 0.5) {
+            g.drawImage(cv, x, y);
+            return;
+          }
           /*
            * Cut at the same heights whatever the wind is doing, counted up
            * from the foot, so a band moves only when its own lean crosses a
@@ -5150,14 +5273,22 @@ export class Renderer {
            * than `TREE_BANDS` of them.
            */
           const band = Math.max(Math.ceil(2 / SWAY_MAX), Math.ceil(hDev / TREE_BANDS));
-          const lay = (y0: number, y1: number): void => {
+          const strip = (y0: number, y1: number): void => {
             if (y1 <= y0) return;
             const off = Math.round(sway * ((y0 + y1) / 2 - pic.footY));
-            ctx.drawImage(cv, 0, y0, cv.width, y1 - y0, x + off, y + y0, cv.width, y1 - y0);
+            g.drawImage(cv, 0, y0, cv.width, y1 - y0, x + off, y + y0, cv.width, y1 - y0);
           };
           const foot = Math.max(0, Math.min(hDev, Math.round(pic.footY)));
-          lay(foot, hDev);
-          for (let y1 = foot; y1 > 0; y1 -= band) lay(Math.max(0, y1 - band), y1);
+          strip(foot, hDev);
+          for (let y1 = foot; y1 > 0; y1 -= band) strip(Math.max(0, y1 - band), y1);
+        };
+        ctx.save();
+        ctx.setTransform(1, 0, 0, 1, 0, 0);
+        lay(ctx);
+        // In front of a runestone's runes after dark: the same picture, leaned and banded as it was laid, kept off them (`RunestoneNight`).
+        if (this.runeNight.active) {
+          const reach = Math.ceil(Math.abs(sway) * hDev) + 1;
+          this.runeNight.occludeDraw(ctx, x - reach, y, cv.width + 2 * reach, cv.height, lay, this.occClips);
         }
         ctx.restore();
         return;
@@ -5168,12 +5299,15 @@ export class Renderer {
     const shear = stand + sway;
     if (Math.abs(shear) * dh < 1.5) {
       ctx.drawImage(shown, left, top, dw, dh);
+      if (this.runeNight.active) this.runeNight.occlude(ctx, shown, left, top, dw, dh, this.occClips);
       return;
     }
     ctx.save();
     ctx.translate(ent.sx, ent.sy);
     ctx.transform(1, 0, shear, 1, 0, 0);
     ctx.drawImage(shown, left - ent.sx, top - ent.sy, dw, dh);
+    // Under the same shear: what is kept off a runestone's runes is the tree as it leans.
+    if (this.runeNight.active) this.runeNight.occlude(ctx, shown, left - ent.sx, top - ent.sy, dw, dh, this.occClips);
     ctx.restore();
   }
 
@@ -7161,6 +7295,7 @@ export class Renderer {
     const roofTiles = bld.roofTiles(b);
     if ((this.game.darkness() >= LAMP_DARK && this.lightsUnder(b).length) || (this.roomTiles && roofTiles.some(([x, y]) => this.roomTiles?.has(`${x},${y}`)))) {
       this.drawPitchedRoofNow(b);
+      this.occludeLine(null, () => this.drawPitchedRoofNow(b));
       return;
     }
     const cam = this.camera;
@@ -9214,6 +9349,7 @@ export class Renderer {
   private baked(key: string, ax: number, ay: number, box: [number, number, number, number], draw: () => void): void {
     if (!this.hemSteady) {
       draw();
+      this.occludeLine(box, draw);
       return;
     }
     const ctx = this.canvas.ctx;
@@ -9224,6 +9360,8 @@ export class Renderer {
       const rx = Math.round(dx), ry = Math.round(dy);
       if (Math.abs(dx - rx) < 0.02 && Math.abs(dy - ry) < 0.02) {
         ctx.drawImage(had.cv, had.bx + rx / dpr, had.by + ry / dpr, had.cv.width / dpr, had.cv.height / dpr);
+        // In front of a runestone's runes after dark: the same picture kept off them (`RunestoneNight`).
+        if (this.runeNight.active) this.runeNight.occlude(ctx, had.cv, had.bx + rx / dpr, had.by + ry / dpr, had.cv.width / dpr, had.cv.height / dpr);
         return;
       }
     }
@@ -9233,6 +9371,7 @@ export class Renderer {
     const W = this.canvas.el.width, H = this.canvas.el.height;
     if (w <= 0 || h <= 0 || w * h > BAKE_MOST || bx > W || by > H || bx + w < 0 || by + h < 0) {
       draw();
+      this.occludeLine(box, draw);
       return;
     }
     let cv = had?.cv;
@@ -9276,6 +9415,7 @@ export class Renderer {
     this.bakes.set(key, { cv, ax, ay, bx: bx / dpr, by: by / dpr, at: this.time, life: BAKE_LIFE * (0.75 + (spread % 1000) / 2000) });
     this.bakePixels += w * h;
     ctx.drawImage(cv, bx / dpr, by / dpr, w / dpr, h / dpr);
+    if (this.runeNight.active) this.runeNight.occlude(ctx, cv, bx / dpr, by / dpr, w / dpr, h / dpr);
   }
 
   private bearsJoists(id: number, border: Border): boolean {
@@ -9316,11 +9456,6 @@ export class Renderer {
    * that is the right amount of a wall.
    */
   private drawWall(wall: Wall, border: Border, base: number, alpha: number): void {
-    // Seen through, half built, taking the wash off remembered ground, or with a lamp behind it at night: as it always was.
-    if (alpha < 1 || this.wallLift || !isDone(wall) || this.lampBehind(wall, border) > 0) {
-      this.drawWallNow(wall, border, base, alpha);
-      return;
-    }
     const cam = this.camera;
     const [ax, ay, bx, by] = borderPoints(border);
     const dx = bx - ax, dy = by - ay;
@@ -9331,6 +9466,13 @@ export class Renderer {
       const wx = ax + dx * t - dy * s, wy = ay + dy * t + dx * s;
       const sx = cam.worldToScreenX(wx, wy), sy = cam.worldToScreenY(wx, wy, z);
       x0 = Math.min(x0, sx); x1 = Math.max(x1, sx); y0 = Math.min(y0, sy); y1 = Math.max(y1, sy);
+    }
+    // Seen through, half built, taking the wash off remembered ground, or with a lamp behind it at night: as it always was.
+    if (alpha < 1 || this.wallLift || !isDone(wall) || this.lampBehind(wall, border) > 0) {
+      this.drawWallNow(wall, border, base, alpha);
+      // Kept off a runestone's runes in front of it too -- all but one seen through, which the runes show through.
+      if (alpha >= 1) this.occludeLine([x0, y0, x1, y1], () => this.drawWallNow(wall, border, base, alpha));
+      return;
     }
     const key = `w|${wall.level}|${border.dir}${border.x},${border.y}|${wall.type}|${wall.material}|${wall.dye ?? ''}|${wall.building}|${base}`;
     this.baked(key, cam.worldToScreenX(ax, ay), cam.worldToScreenY(ax, ay, base), [x0, y0, x1, y1],
@@ -11026,7 +11168,6 @@ export class Renderer {
       if (landing) this.drawLandingAt(landing);
       const b = this.drawbridges.get(key);
       if (!b) continue;
-      const ctx = this.canvas.ctx;
       const zoom = this.camera.zoom;
       const g = this.drawbridgeGeom(b);
       const P = this.project;
@@ -11041,13 +11182,14 @@ export class Renderer {
       const open = !this.game.buildings.buildingAt(b.ax, b.ay);
       const deck = (): void => {
         if (!done || g.up <= 0) return;
-        drawStandingDeck(ctx, P, g, zoom, lit, faceLit);
+        drawStandingDeck(this.canvas.ctx, P, g, zoom, lit, faceLit);
       };
       const crib = (): void => {
-        if (open && isDone(b.spans[0])) drawHingeCrib(ctx, P, g, zoom, near, faceLit, lit);
+        if (open && isDone(b.spans[0])) drawHingeCrib(this.canvas.ctx, P, g, zoom, near, faceLit, lit);
       };
       const gallows = (): void => {
         if (!done || !open) return;
+        const ctx = this.canvas.ctx;
         drawGallows(ctx, P, g, zoom, near, faceLit);
         // The chains: whole when it is off the bank, and the length over the winch end when it lies on it.
         if (g.up > 0) drawChains(ctx, P, g, zoom, lit);
@@ -13033,9 +13175,14 @@ export class Renderer {
          * The wash is one colour, so the night is mixed at the size its holes
          * were worked out at and laid over the screen scaled up -- unless
          * something with a light of its own is in view, whose holes are fine
-         * work (an altar's stars and lines), and then at full size.
+         * work (an altar's stars and lines), and then at full size. A
+         * runestone's runes are as fine, but they are cut out of a copy of
+         * their own box at the screen's pixels as the night goes down
+         * (`RunestoneNight.lay`), so they ask for the full size only when
+         * two stones' boxes overlap.
          */
-        const res = this.glows.length || this.runeNight.active ? 1 : LIGHT_RES;
+        const patch = this.runeNight.active && this.runeNight.separate;
+        const res = this.glows.length || (this.runeNight.active && !patch) ? 1 : LIGHT_RES;
         const night = this.nightLayer(res);
         const nc = night.getContext('2d') as CanvasRenderingContext2D;
         nc.setTransform(1, 0, 0, 1, 0, 0);
@@ -13064,9 +13211,10 @@ export class Renderer {
           }
         }
         // And off the runestones' runes, in their own shapes, less whatever stands in front of them.
-        this.runeNight.cut(nc);
+        if (!patch) this.runeNight.cut(nc);
         nc.globalCompositeOperation = 'source-over';
-        ctx.drawImage(night, 0, 0, night.width / res, night.height / res);
+        if (patch) this.runeNight.lay(ctx, night, night.width / res, night.height / res);
+        else ctx.drawImage(night, 0, 0, night.width / res, night.height / res);
         // A warm cast where the firelight actually falls, over the cold: the warmest light's at each spot, as dark as
         // it is, and only over the part of the screen any light reaches -- the rest of the layer is black.
         const [bx, by, bw, bh] = lit.box;

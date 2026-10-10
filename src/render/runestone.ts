@@ -2498,7 +2498,14 @@ const keep = (had: Kept | undefined, w: number, h: number): Kept => {
   return k;
 };
 
-/** A runestone drawn this frame: where, what its night shapes cover on the screen, and what has been drawn over them since. */
+/** A clip in force on the screen while something is drawn: its path, the transform it was laid with, and its rule. */
+export interface OccluderClip {
+  path: Path2D;
+  m: DOMMatrix;
+  rule?: CanvasFillRule;
+}
+
+/** A runestone drawn this frame: where, what its night shapes cover, and what has been drawn over them since. */
 interface Lit {
   sx: number;
   sy: number;
@@ -2506,11 +2513,11 @@ interface Lit {
   id: RunestoneId;
   rotation: number;
   t: number;
-  /** What its shapes cover, in the context's units: left, top, right, bottom. */
-  box: [number, number, number, number];
-  /** Device pixels to a unit of the context it was drawn on. */
-  scale: number;
-  /** What has been drawn over it since, as alpha, `scale` pixels to a unit, from the box's corner. */
+  /** The context's transform when it was drawn: its units to the canvas's pixels. */
+  m: DOMMatrix;
+  /** What its shapes cover in the canvas's own pixels, whole: left, top, right, bottom. */
+  dev: [number, number, number, number];
+  /** What has been drawn over it since, as alpha, a canvas pixel to a pixel from `dev`'s corner. */
   over: Kept;
   /** Whether anything has been; until it has, its canvas is not even cleared. */
   touched: boolean;
@@ -2523,14 +2530,18 @@ interface Lit {
  * A rune's light is the night taken away in its shape (`runestoneMasks`)
  * and softly round it (`runestoneHoles`). Laid straight on the night layer
  * that would take the night off a tree or a body standing in front of the
- * stone as well. So each stone drawn this frame keeps a small canvas the
- * size of what its shapes cover, and everything drawn after it in the depth
- * order that falls on that box is drawn into it too -- a tree's picture, a
- * body or a piece through the same drawing it was put on the screen with --
- * and at the night pass its shapes are laid less that, exactly, with
- * nothing read back off the screen. What is laid over the whole scene after
- * the entities -- haze, smoke, the swell -- is not in front of anything and
- * is never drawn into it.
+ * stone as well. So each stone drawn this frame keeps a small canvas, the
+ * size of what its shapes cover in the screen's own pixels, and everything
+ * drawn after it in the depth order that falls on that box is drawn into it
+ * too, exactly as it went onto the screen: the same picture or the same
+ * drawing, under the transform and inside the clip that were in force on
+ * the screen when it was drawn. At the night pass the shapes go down less
+ * that: cut out of a stone-sized copy of the night as it is laid
+ * (`lay`), so the night itself can stay at the small size the lights are
+ * mixed at, or straight out of a full-size night (`cut`) where two stones'
+ * boxes overlap. Nothing is read back off the screen, and what is laid over the whole
+ * scene after the entities -- haze, smoke, the swell -- is not in front of
+ * anything and never comes here.
  *
  * By day it does nothing: `begin` with no dark leaves it shut, and every
  * other call is a test of an empty list. Its canvases are kept and reused.
@@ -2539,6 +2550,7 @@ export class RunestoneNight {
   private lit: Lit[] = [];
   private pool: Kept[] = [];
   private scratch: Kept | undefined;
+  private patch: Kept | undefined;
   private open = false;
 
   /** A new frame: forget the last one's stones, and open only after dark. */
@@ -2547,7 +2559,7 @@ export class RunestoneNight {
     this.lit.length = 0;
   }
 
-  /** Whether any stone this frame has its night shapes to lay. */
+  /** Whether any stone this frame has its night shapes to lay: false by day, and before the first stone is drawn. */
   get active(): boolean {
     return this.lit.length > 0;
   }
@@ -2562,116 +2574,212 @@ export class RunestoneNight {
       L = Math.min(L, sx + x * zoom, sx + (gl.cx - gl.r * 1.5) * zoom); T = Math.min(T, sy + y * zoom, sy + (gl.cy - gl.r * 1.5) * zoom);
       R = Math.max(R, sx + (x + w) * zoom, sx + (gl.cx + gl.r * 1.5) * zoom); B = Math.max(B, sy + (y + h) * zoom, sy + (gl.cy + gl.r * 1.5) * zoom);
     }
-    if (b.motes) {
-      // The motes rise past the head of the panel: room for them over it.
-      T -= 12 * zoom;
-    }
+    // The motes rise past the head of the panel: room for them over it.
+    if (b.motes) T -= 12 * zoom;
     if (!(R > L && B > T)) return;
     const m = ctx.getTransform();
-    const scale = Math.sqrt(Math.abs(m.a * m.d - m.b * m.c)) || 1;
+    const dev = devBox(m, L, T, R - L, B - T);
     const i = this.lit.length;
-    const over = (this.pool[i] = keep(this.pool[i], (R - L) * scale + 2, (B - T) * scale + 2));
-    this.lit.push({ sx, sy, zoom, id, rotation, t, box: [L, T, R, B], scale, over, touched: false });
+    const over = (this.pool[i] = keep(this.pool[i], dev[2] - dev[0], dev[3] - dev[1]));
+    this.lit.push({ sx, sy, zoom, id, rotation, t, m, dev, over, touched: false });
   }
 
-  /** The stones whose shapes the box (x, y, w, h) falls on. */
-  private under(x: number, y: number, w: number, h: number): Lit[] | null {
+  /** The stones a box in the canvas's pixels falls on. */
+  private under(dev: [number, number, number, number]): Lit[] | null {
     let out: Lit[] | null = null;
     for (const s of this.lit) {
-      const [L, T, R, B] = s.box;
-      if (x < R && x + w > L && y < B && y + h > T) (out ??= []).push(s);
+      const [L, T, R, B] = s.dev;
+      if (dev[0] < R && dev[2] > L && dev[1] < B && dev[3] > T) (out ??= []).push(s);
     }
     return out;
   }
 
-  /** Set a stone's canvas to draw on in the context's own units, as `ctx` is: cleared the first time anything falls on it this frame. */
-  private onto(s: Lit): CanvasRenderingContext2D {
+  /**
+   * A stone's canvas, cleared the first time anything falls on it this
+   * frame, saved, with `clips` laid on it and its transform set to `m` --
+   * the screen's, at the moment -- less the corner of its box, so whatever
+   * is drawn on it lands where it landed on the screen. The caller restores.
+   */
+  private onto(s: Lit, m: DOMMatrix, clips?: readonly OccluderClip[]): CanvasRenderingContext2D {
     const g = s.over[1];
+    const [L, T, R, B] = s.dev;
     if (!s.touched) {
       s.touched = true;
       g.setTransform(1, 0, 0, 1, 0, 0);
       g.globalCompositeOperation = 'source-over';
       g.globalAlpha = 1;
-      g.clearRect(0, 0, Math.ceil((s.box[2] - s.box[0]) * s.scale) + 2, Math.ceil((s.box[3] - s.box[1]) * s.scale) + 2);
+      g.clearRect(0, 0, R - L, B - T);
     }
-    g.setTransform(s.scale, 0, 0, s.scale, -s.box[0] * s.scale, -s.box[1] * s.scale);
+    g.save();
+    for (const c of clips ?? []) {
+      g.setTransform(c.m.a, c.m.b, c.m.c, c.m.d, c.m.e - L, c.m.f - T);
+      g.clip(c.path, c.rule);
+    }
+    g.setTransform(m.a, m.b, m.c, m.d, m.e - L, m.f - T);
     return g;
   }
 
-  /** A picture drawn after the stones, at (dx, dy) and (dw, dh) in the context's units, as `drawImage` takes them: kept wherever it falls on one. */
-  occlude(img: CanvasImageSource, dx: number, dy: number, dw: number, dh: number): void {
+  /** Whether a box in `ctx`'s units, under its transform now, falls on any stone's shapes: for a caller choosing how to hand it over. */
+  falls(ctx: Ctx, x: number, y: number, w: number, h: number): boolean {
+    return !!this.lit.length && !!this.under(devBox(ctx.getTransform(), x, y, w, h));
+  }
+
+  /** A picture drawn after the stones, as `drawImage` took it on `ctx` just now: kept wherever it falls on one. */
+  occlude(ctx: Ctx, img: CanvasImageSource, dx: number, dy: number, dw: number, dh: number, clips?: readonly OccluderClip[]): void {
     if (!this.lit.length) return;
-    const hit = this.under(dx, dy, dw, dh);
+    const m = ctx.getTransform();
+    const hit = this.under(devBox(m, dx, dy, dw, dh));
     if (!hit) return;
-    for (const s of hit) this.onto(s).drawImage(img, dx, dy, dw, dh);
+    for (const s of hit) {
+      const g = this.onto(s, m, clips);
+      g.drawImage(img, dx, dy, dw, dh);
+      g.restore();
+    }
   }
 
   /**
-   * Something drawn after the stones by a drawing of its own, somewhere in
-   * the box (x, y, w, h): drawn again onto each stone's canvas it may fall
-   * on, by the same drawing, so what is kept is its own shape.
+   * Something drawn after the stones on `ctx` by a drawing of its own,
+   * within the box (x, y, w, h) in its units: drawn again by the same
+   * drawing onto each stone's canvas it may fall on, under the same
+   * transform and clips, so what is kept is exactly its own shape.
    */
-  occludeDraw(x: number, y: number, w: number, h: number, draw: (g: CanvasRenderingContext2D) => void): void {
+  occludeDraw(ctx: Ctx, x: number, y: number, w: number, h: number, draw: (g: CanvasRenderingContext2D) => void, clips?: readonly OccluderClip[]): void {
     if (!this.lit.length) return;
-    const hit = this.under(x, y, w, h);
+    const m = ctx.getTransform();
+    const hit = this.under(devBox(m, x, y, w, h));
     if (!hit) return;
     for (const s of hit) {
-      const g = this.onto(s);
-      g.save();
+      const g = this.onto(s, m, clips);
       draw(g);
       g.restore();
     }
   }
 
   /** Something drawn after the stones that cannot be drawn again: its whole box is kept, so the night is left on all of it. */
-  occludeRect(x: number, y: number, w: number, h: number): void {
+  occludeRect(ctx: Ctx, x: number, y: number, w: number, h: number, clips?: readonly OccluderClip[]): void {
     if (!this.lit.length) return;
-    const hit = this.under(x, y, w, h);
+    const m = ctx.getTransform();
+    const hit = this.under(devBox(m, x, y, w, h));
     if (!hit) return;
     for (const s of hit) {
-      const g = this.onto(s);
+      const g = this.onto(s, m, clips);
       g.fillStyle = '#000';
       g.fillRect(x, y, w, h);
+      g.restore();
     }
   }
 
   /**
-   * At the night pass: take the night off `night`, a layer laid in the
-   * context's units less (ox, oy), for every stone this frame -- its runes'
-   * shapes and the soft light round them, less whatever was drawn over them.
-   * Lays `destination-out` itself and leaves `night` as it found it.
+   * Whether no two stones' boxes overlap, so the night can go down with
+   * `lay`: mixed small and the runes cut out of it at the screen's own
+   * pixels. When two do -- stones stood shoulder to shoulder -- the caller
+   * mixes the night at full size and uses `cut`.
+   */
+  get separate(): boolean {
+    const l = this.lit;
+    for (let i = 0; i < l.length; i++) {
+      for (let j = i + 1; j < l.length; j++) {
+        const a = l[i].dev, b = l[j].dev;
+        if (a[0] < b[2] && a[2] > b[0] && a[1] < b[3] && a[3] > b[1]) return false;
+      }
+    }
+    return true;
+  }
+
+  /**
+   * At the night pass: lay `night` on `ctx` at (0, 0, dw, dh) in its units,
+   * as the renderer lays it, with the runes taken out of it. Everywhere but
+   * the stones' boxes it goes down as it is. Inside each box, a copy of it
+   * resampled exactly as the screen resamples it (the same drawing, moved by
+   * whole pixels), less the stone's shapes at the screen's own pixels, less
+   * whatever stands in front of them. So the night can be mixed at the
+   * small size the lights are worked out at and the runes still come out
+   * sharp, at the cost of a stone-sized copy. Needs `separate`.
+   */
+  lay(ctx: Ctx, night: CanvasImageSource, dw: number, dh: number): void {
+    const m = ctx.getTransform();
+    ctx.save();
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    const out = new Path2D();
+    out.rect(0, 0, ctx.canvas.width, ctx.canvas.height);
+    for (const s of this.lit) out.rect(s.dev[0], s.dev[1], s.dev[2] - s.dev[0], s.dev[3] - s.dev[1]);
+    ctx.clip(out, 'evenodd');
+    ctx.setTransform(m);
+    ctx.drawImage(night, 0, 0, dw, dh);
+    ctx.restore();
+    for (const s of this.lit) {
+      const [L, T, R, B] = s.dev;
+      const w = R - L, h = B - T;
+      const pk = (this.patch = keep(this.patch, w, h));
+      const pg = pk[1];
+      pg.setTransform(1, 0, 0, 1, 0, 0);
+      pg.globalCompositeOperation = 'source-over';
+      pg.globalAlpha = 1;
+      pg.clearRect(0, 0, w, h);
+      pg.imageSmoothingEnabled = ctx.imageSmoothingEnabled;
+      pg.imageSmoothingQuality = ctx.imageSmoothingQuality;
+      pg.setTransform(m.a, m.b, m.c, m.d, m.e - L, m.f - T);
+      pg.drawImage(night, 0, 0, dw, dh);
+      pg.globalCompositeOperation = 'destination-out';
+      if (!s.touched) {
+        pg.setTransform(s.m.a, s.m.b, s.m.c, s.m.d, s.m.e - L, s.m.f - T);
+        this.shapes(pg, s, 0, 0);
+      } else {
+        pg.setTransform(1, 0, 0, 1, 0, 0);
+        pg.drawImage(this.carved(s), 0, 0, w, h, 0, 0, w, h);
+      }
+      pg.globalCompositeOperation = 'source-over';
+      ctx.save();
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      ctx.drawImage(pk[0], 0, 0, w, h, L, T, w, h);
+      ctx.restore();
+    }
+  }
+
+  /**
+   * At the night pass, when the night is mixed at full size: take the night
+   * off `night`, a layer laid in the units of the context the stones were
+   * drawn on, less (ox, oy) -- its runes' shapes and the soft light round
+   * them, less whatever was drawn over them. Lays `destination-out` itself
+   * and leaves `night` as it was.
    */
   cut(night: CanvasRenderingContext2D, ox = 0, oy = 0): void {
     for (const s of this.lit) {
-      if (!s.touched) {
-        // Nothing in front of it: its shapes straight onto the night.
-        const was = night.globalCompositeOperation;
-        night.globalCompositeOperation = 'destination-out';
-        this.shapes(night, s, -ox, -oy);
-        night.globalCompositeOperation = was;
-        continue;
-      }
-      const [L, T, R, B] = s.box;
-      const w = Math.ceil((R - L) * s.scale) + 2, h = Math.ceil((B - T) * s.scale) + 2;
-      const sc = (this.scratch = keep(this.scratch, w, h));
-      const g = sc[1];
-      g.setTransform(1, 0, 0, 1, 0, 0);
-      g.globalCompositeOperation = 'source-over';
-      g.globalAlpha = 1;
-      g.clearRect(0, 0, w, h);
-      g.setTransform(s.scale, 0, 0, s.scale, -L * s.scale, -T * s.scale);
-      this.shapes(g, s, 0, 0);
-      g.setTransform(1, 0, 0, 1, 0, 0);
-      g.globalCompositeOperation = 'destination-out';
-      g.drawImage(s.over[0], 0, 0, w, h, 0, 0, w, h);
-      g.globalCompositeOperation = 'source-over';
       const was = night.globalCompositeOperation;
       night.globalCompositeOperation = 'destination-out';
-      night.drawImage(sc[0], 0, 0, w, h, L - ox, T - oy, w / s.scale, h / s.scale);
+      if (!s.touched) {
+        // Nothing in front of it: its shapes straight onto the night.
+        this.shapes(night, s, -ox, -oy);
+      } else {
+        // Back from the canvas's pixels to the units the night is laid in.
+        const m = s.m;
+        const [L, T, R, B] = s.dev;
+        const w = R - L, h = B - T;
+        night.drawImage(this.carved(s), 0, 0, w, h, (L - m.e) / m.a - ox, (T - m.f) / m.d - oy, w / m.a, h / m.d);
+      }
       night.globalCompositeOperation = was;
     }
   }
 
+  /** A stone's shapes less what was drawn over them, in its box's pixels from the corner, on the scratch canvas. */
+  private carved(s: Lit): HTMLCanvasElement {
+    const m = s.m;
+    const [L, T, R, B] = s.dev;
+    const w = R - L, h = B - T;
+    const sc = (this.scratch = keep(this.scratch, w, h));
+    const g = sc[1];
+    g.setTransform(1, 0, 0, 1, 0, 0);
+    g.globalCompositeOperation = 'source-over';
+    g.globalAlpha = 1;
+    g.clearRect(0, 0, w, h);
+    g.setTransform(m.a, m.b, m.c, m.d, m.e - L, m.f - T);
+    this.shapes(g, s, 0, 0);
+    g.setTransform(1, 0, 0, 1, 0, 0);
+    g.globalCompositeOperation = 'destination-out';
+    g.drawImage(s.over[0], 0, 0, w, h, 0, 0, w, h);
+    g.globalCompositeOperation = 'source-over';
+    return sc[0];
+  }
   /** A stone's shapes onto `g` in the context's units moved by (dx, dy): the soft light round its runes, then the runes. */
   private shapes(g: CanvasRenderingContext2D, s: Lit, dx: number, dy: number): void {
     for (const hole of runestoneHoles(s.sx + dx, s.sy + dy, s.zoom, s.id, s.rotation, s.t)) {
@@ -2684,12 +2792,22 @@ export class RunestoneNight {
       g.arc(hole.x, hole.y, hole.r, 0, TAU);
       g.fill();
     }
-    for (const m of runestoneMasks(s.sx + dx, s.sy + dy, s.zoom, s.id, s.rotation, s.t)) {
-      g.globalAlpha = m.a;
-      g.drawImage(m.canvas, m.x, m.y, m.w, m.h);
+    for (const mk of runestoneMasks(s.sx + dx, s.sy + dy, s.zoom, s.id, s.rotation, s.t)) {
+      g.globalAlpha = mk.a;
+      g.drawImage(mk.canvas, mk.x, mk.y, mk.w, mk.h);
     }
     g.globalAlpha = 1;
   }
+}
+
+/** A box in a context's units, under transform `m`, as the whole canvas pixels it covers: left, top, right, bottom. */
+function devBox(m: DOMMatrix, x: number, y: number, w: number, h: number): [number, number, number, number] {
+  let L = Infinity, T = Infinity, R = -Infinity, B = -Infinity;
+  for (const [px, py] of [[x, y], [x + w, y], [x, y + h], [x + w, y + h]]) {
+    const X = m.a * px + m.c * py + m.e, Y = m.b * px + m.d * py + m.f;
+    L = Math.min(L, X); T = Math.min(T, Y); R = Math.max(R, X); B = Math.max(B, Y);
+  }
+  return [Math.floor(L) - 1, Math.floor(T) - 1, Math.ceil(R) + 1, Math.ceil(B) + 1];
 }
 
 /** What a runestone covers on the screen from its footprint's middle, in pixels at zoom one: for where it is clicked. */
