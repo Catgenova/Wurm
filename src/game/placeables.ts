@@ -28,6 +28,7 @@ import {
 import type { Game } from './game';
 import { itemDef, markOf, type Item } from './items';
 import { world } from './pace';
+import { DYE_BUCKET, dyeIn, dyeSays, dyeText, mixDye, readDye, type DyeLiquid } from './dyestuffs';
 
 /**
  * The placed things that do something of their own: an oven that burns, a well
@@ -129,6 +130,87 @@ export function barrelFor(g: Game, kind: LiquidKind): PlacedFurniture | undefine
   return best;
 }
 
+/**
+ * Why one liquid will not go in with another: dye goes in with nothing but
+ * dye, and nothing but dye goes in with dye. The island says the same
+ * (`no_mixing`).
+ */
+export const noMixing = (from: LiquidKind, into: LiquidKind, vessel: string): string =>
+  `${LIQUID_NAME[from][0].toUpperCase()}${LIQUID_NAME[from].slice(1)} will not mix with ${LIQUID_NAME[into]}. The ${vessel} holds ${LIQUID_NAME[into]}: `
+  + `empty it, or use one that is empty or holds ${LIQUID_NAME[from]}.`;
+
+/**
+ * Why a bucket of `kind` has no barrel beside you to go into, where the
+ * reason is that dye and something else would mix: the emptiest barrel
+ * within reach holding the other. Null where that is not the reason.
+ */
+export function mixRefusal(g: Game, kind: LiquidKind): string | null {
+  let best: PlacedFurniture | undefined;
+  for (const f of g.furnitureWithin(4)) {
+    if (!holdsLiquid(f) || isWell(f) || litresIn(f) <= 0 || !f.liquid || f.liquid === kind) continue;
+    if (kind !== 'dye' && f.liquid !== 'dye') continue;
+    if (!nearPiece(g, f, 2.6)) continue;
+    if (!best || litresIn(f) < litresIn(best) || (litresIn(f) === litresIn(best) && f.id < best.id)) best = f;
+  }
+  return best && best.liquid ? noMixing(kind, best.liquid, furnitureName(best).toLowerCase()) : null;
+}
+
+/** The dye in a vessel standing about, if it holds dye. */
+export const dyeInPiece = (f: PlacedFurniture): DyeLiquid | null => (f.liquid === 'dye' ? readDye(f.dye)?.liquid ?? null : null);
+
+/**
+ * Where a bucket of dye that is not full is topped up from: a vessel of dye
+ * beside you, the fullest first; or why not, which is that what is beside
+ * you is not dye or that nothing is.
+ */
+export function dyeSourceFor(g: Game, bucket: Item): { from: PlacedFurniture } | { refusal: string } {
+  const d = dyeIn(bucket);
+  if (!d) return { refusal: 'That is not a bucket of dye.' };
+  if (d.litres >= BUCKET_LITRES) return { refusal: 'It is already full.' };
+  const from = vesselsNear(g, 'dye').find((v) => !isWorking(v));
+  if (from) return { from };
+  const other = vesselsNear(g).find((v) => !isWorking(v) && v.liquid);
+  if (other?.liquid) return { refusal: noMixing(other.liquid, 'dye', 'bucket') };
+  if (g.nearWater()) return { refusal: noMixing('water', 'dye', 'bucket') };
+  return { refusal: 'There is no barrel of dye beside you to fill it from.' };
+}
+
+/**
+ * Draw up to a bucket's room of dye out of a vessel into a bucket, mixed with
+ * what is in the bucket already: the litres drawn and the bucket of dye that
+ * took them (off the top of a pile of empty ones), or null.
+ */
+export function drawDye(g: Game, f: PlacedFurniture, bucket: Item): { n: number; bucket: Item } | null {
+  const had = dyeIn(bucket);
+  const there = dyeInPiece(f);
+  if (!there) return null;
+  const room = BUCKET_LITRES - (had?.litres ?? 0);
+  const n = Math.min(room, Math.floor(litresIn(f)));
+  if (n <= 0 || !drawFrom(g, f, n)) return null;
+  const mixed = had ? mixDye(had.liquid, had.litres, there, n) : there;
+  // An empty bucket becomes a bucket of dye, the one off the top of a pile of them.
+  const one = bucket.id === DYE_BUCKET ? bucket : vesselBecame(g, bucket, DYE_BUCKET);
+  if (!one) return null;
+  one.dye = dyeText(mixed, (had?.litres ?? 0) + n);
+  g.inventory.onChange?.();
+  g.events.emit('inventory');
+  return { n, bucket: one };
+}
+
+/**
+ * What Examine says of a vessel standing about: its quality, and what is in
+ * it -- for dye, its colour, hex, QL and mix (`dyeSays`). The island says the
+ * same (`vessel_says`).
+ */
+export function vesselSays(f: PlacedFurniture): string {
+  const litres = litresIn(f);
+  const dye = dyeInPiece(f);
+  const held = litres <= 0 || !f.liquid ? 'It is empty.'
+    : dye ? `It holds ${dyeSays(dye, litres)}`
+      : `It holds ${litres.toFixed(0)} litres of ${LIQUID_NAME[f.liquid]}.`;
+  return `${furnitureName(f)}: QL ${f.ql.toFixed(2)}, ${litres.toFixed(0)} of ${liquidCapacity(f)} litres. ${held}`;
+}
+
 /** Whether there is water at hand at all: a shore, a well or a barrel of it. */
 export const waterNear = (g: Game): boolean => g.nearWater() || vesselsNear(g, 'water').length > 0;
 
@@ -150,6 +232,7 @@ function drawFrom(g: Game, f: PlacedFurniture, litres: number): boolean {
   if (f.litres <= 0 && !isWell(f)) {
     f.liquid = undefined;
     delete f.knack;
+    delete f.dye;
   }
   g.events.emit('crate');
   g.events.emit('world', f.x, f.y);
@@ -536,6 +619,27 @@ export const PLACEABLE_ACTIONS: ActionDef[] = [
     },
   },
   {
+    id: 'examine_vessel',
+    label: 'Examine',
+    verb: 'examining',
+    instant: true,
+    stamina: 0,
+    baseTime: 0,
+    applies: (t, g) => {
+      const f = pieceOf(g, t);
+      return !!f && holdsLiquid(f);
+    },
+    check: (t, g) => {
+      const f = pieceOf(g, t);
+      if (!f) return 'It is gone.';
+      return nearPiece(g, f) ? null : 'Stand next to it.';
+    },
+    perform: (t, g) => {
+      const f = pieceOf(g, t);
+      if (f) g.logMsg(vesselSays(f), 'event');
+    },
+  },
+  {
     id: 'empty_vessel',
     label: 'Empty it out',
     verb: 'emptying it',
@@ -558,6 +662,7 @@ export const PLACEABLE_ACTIONS: ActionDef[] = [
       f.litres = 0;
       f.liquid = undefined;
       delete f.knack;
+      delete f.dye;
       g.events.emit('crate');
       g.events.emit('world', f.x, f.y);
       g.logMsg(`You tip the ${what} out of the ${furnitureName(f).toLowerCase()}.`, 'event');
@@ -575,7 +680,8 @@ export const PLACEABLE_ACTIONS: ActionDef[] = [
       if (t.kind !== 'item') return false;
       const item = g.inventory.held(t.uid);
       const vessel = item && VESSELS[item.id];
-      return !!vessel && barrelFor(g, vessel.liquid) !== undefined;
+      // And where the only barrel beside you holds what it will not mix with, so that it says so.
+      return !!vessel && (barrelFor(g, vessel.liquid) !== undefined || mixRefusal(g, vessel.liquid) !== null);
     },
     check: (t, g) => {
       if (t.kind !== 'item') return null;
@@ -583,7 +689,7 @@ export const PLACEABLE_ACTIONS: ActionDef[] = [
       const vessel = item && VESSELS[item.id];
       if (!vessel) return 'That is not a bucket of anything.';
       const barrel = barrelFor(g, vessel.liquid);
-      if (!barrel) return `There is no barrel beside you with room for ${LIQUID_NAME[vessel.liquid]}.`;
+      if (!barrel) return mixRefusal(g, vessel.liquid) ?? `There is no barrel beside you with room for ${LIQUID_NAME[vessel.liquid]}.`;
       return null;
     },
     maxRepeat: (t, g) => {
@@ -598,6 +704,32 @@ export const PLACEABLE_ACTIONS: ActionDef[] = [
       const barrel = barrelFor(g, vessel.liquid);
       if (!barrel) return;
       const room = liquidCapacity(barrel) - litresIn(barrel);
+      // Dye: as much of the bucket as there is room for, mixed into what is there (`mixDye`); what does not fit stays in the bucket.
+      const dye = dyeIn(item);
+      if (dye) {
+        const poured = Math.min(dye.litres, Math.floor(room));
+        if (poured <= 0) return;
+        const there = dyeInPiece(barrel);
+        const had = litresIn(barrel);
+        const mixed = there && had > 0 ? mixDye(there, had, dye.liquid, poured) : dye.liquid;
+        if (dye.litres - poured <= 0) {
+          if (!vesselBecomes(g, item, vessel.empty)) return;
+        } else {
+          item.dye = dyeText(dye.liquid, dye.litres - poured);
+          g.inventory.onChange?.();
+          g.events.emit('inventory');
+        }
+        barrel.litres = had + poured;
+        barrel.liquid = 'dye';
+        barrel.dye = dyeText(mixed);
+        delete barrel.knack;
+        g.events.emit('crate');
+        g.events.emit('world', barrel.x, barrel.y);
+        g.logMsg(`You pour ${poured} ${poured === 1 ? 'litre' : 'litres'} of dye into the ${furnitureName(barrel).toLowerCase()}. It holds ${dyeSays(mixed, had + poured)}`, 'event');
+        if (t.count !== undefined && t.count <= 1) return false;
+        if (t.count !== undefined) t.count -= 1;
+        return nextVessel(g, t.uid) !== undefined;
+      }
       const poured = Math.min(BUCKET_LITRES, room);
       // What is poured in is only as good as the worst of what it goes into
       // (a Cook's Strong Brew): nothing plain is made better by the barrel.
@@ -773,8 +905,10 @@ export function shoreNear(g: Game, range = 2, from?: [number, number]): { x: num
 /** The liquid a bucket filled here would come up with, and where from. */
 export function sourceFor(g: Game): { from: PlacedFurniture | null; liquid: LiquidKind } | null {
   // A barrel still working is not drawn off; whatever is in it is not ready.
-  const vessel = vesselsNear(g).find((v) => !isWorking(v));
-  if (vessel && litresIn(vessel) >= BUCKET_LITRES && vessel.liquid) return { from: vessel, liquid: vessel.liquid };
+  // The fullest with a bucket's worth in it; dye however little there is of it, up to a bucket's worth (`drawDye`).
+  const vessel = vesselsNear(g).find((v) => !isWorking(v) && !!v.liquid
+    && (litresIn(v) >= BUCKET_LITRES || (v.liquid === 'dye' && litresIn(v) >= 1)));
+  if (vessel?.liquid) return { from: vessel, liquid: vessel.liquid };
   if (g.nearWater()) return { from: null, liquid: 'water' };
   return null;
 }
@@ -783,6 +917,7 @@ export function sourceFor(g: Game): { from: PlacedFurniture | null; liquid: Liqu
 export function fillFromSource(g: Game, item: Item): LiquidKind | null {
   const source = sourceFor(g);
   if (!source) return null;
+  if (source.liquid === 'dye') return source.from && drawDye(g, source.from, item) ? 'dye' : null;
   // What the barrel's brewer put into it goes into the bucket (a Cook's Strong Brew).
   const knack = source.from?.knack;
   if (source.from && !drawFrom(g, source.from, BUCKET_LITRES)) return null;
@@ -807,7 +942,12 @@ export function fillFromSource(g: Game, item: Item): LiquidKind | null {
  * or the same bag, as the island does it (`vessel_becomes`).
  */
 export function vesselBecomes(g: Game, item: Item, id: string, knack?: number): boolean {
-  if (item.count < 1) return false;
+  return vesselBecame(g, item, id, knack) !== null;
+}
+
+/** The same, handing back the one that changed: the item itself, or the one taken off the top of its pile. */
+export function vesselBecame(g: Game, item: Item, id: string, knack?: number): Item | null {
+  if (item.count < 1) return null;
   let one = item;
   if (item.count > 1) {
     item.count -= 1;
@@ -820,11 +960,13 @@ export function vesselBecomes(g: Game, item: Item, id: string, knack?: number): 
   const charges = itemDef(id).charges;
   if (charges) one.charges = charges;
   else delete one.charges;
+  // What it holds goes with what it holds: the dye in a bucket of dye is the dye's, and out with it.
+  if (id !== DYE_BUCKET) delete one.dye;
   // The knack of what it holds goes with what it holds, and out with it.
   const { knack: _was, ...rest } = one.mark ?? {};
   one.mark = knack !== undefined && knack !== 1 ? { ...rest, knack } : Object.keys(rest).length ? rest : undefined;
   if (!one.mark) delete one.mark;
   g.inventory.onChange?.();
   g.events.emit('inventory');
-  return true;
+  return one;
 }

@@ -86,8 +86,9 @@ export const EYES: Swatch[] = [
 
 /**
  * What you washed ashore in. Undyed cloth at the top, and below it the colours
- * this island can actually strike — the same family as the dyes in
- * `dyestuffs.ts`, so that nobody starts wearing something no dyer could make.
+ * this island can actually strike — the same family as the dyes there were
+ * before dye was mixed (`LEGACY_DYES` in `dyestuffs.ts`), every one of which
+ * a dyer can mix near enough now.
  */
 export const CLOTH: Swatch[] = [
   s('unbleached', 'Unbleached linen', '#d9cbae'),

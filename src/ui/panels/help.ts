@@ -40,7 +40,10 @@ import {
   MONSTER_SHARE, MONSTERS, OLD_AT, PULL_DEFAULT, RANGE_PER_STEP, rangeSteps, SKILL_STEP, SPECIES, trainedHit, YOUNG_FOR,
 } from '../../game/creatures';
 import { DEED_UPGRADES } from '../../game/deed';
-import { DYE_BY_ID, DYES } from '../../game/dyestuffs';
+import {
+  colourWord, DYE_BOIL_LITRES, DYE_LITRES, DYE_PARTS, DYE_QL_BLACK, DYE_QL_PURE, DYE_QL_WHITE, DYESTUFF_OF, DYESTUFFS, dyeHex, dyeRecipeId, mixDye, PRIMARIES, pureDye,
+  type DyeLiquid, type Primary,
+} from '../../game/dyestuffs';
 import { CROP_BY_SEED, CROPS, cropYield, growthWords, PATCH_TIME, RIPE, STAGE_NAMES } from '../../game/farming';
 import { GLASSHOUSE_GROWTH, PLANTER_GROWTH, SEASON_GROWTH, SEASON_SECONDS, YEAR_SECONDS, YEARLESS_GROWTH } from '../../game/growth';
 import { CASTS, FAVOUR_TRICKLE, favourCap, PRAYER_BASE, PRAYER_GAIN, PRAYER_LIFT, PRAYER_PEAKS, PRAYER_REST, PRAYER_TAPER, prayerWorth } from '../../game/faith';
@@ -300,8 +303,19 @@ const AQUEDUCT_PULL = ACTION_BY_ID.get('demolish_aqueduct');
 const coveredBy = (pace: number): number => Math.ceil(GREEN_DAYS / pace);
 /** A name as the middle of a sentence has it, with its article: "a statue". */
 const aOrAn = (name: string): string => `${article(name)} ${name.toLowerCase()}`;
-/** The dyes, easiest first. */
-const DYES_EASIEST = [...DYES].sort((a, b) => a.difficulty - b.difficulty);
+/** A mix of dye as its hex and plain word, at QL 50 where it is the mix itself. */
+const mixSaid = (l: DyeLiquid): string => `${colourWord(dyeHex(l))} (${dyeHex(l)})`;
+/** Equal parts of the primaries named, at the QL a dye is the mix itself at; the first takes what does not divide. */
+const equalParts = (ps: readonly Primary[]): DyeLiquid => {
+  const each = Math.floor(DYE_PARTS / ps.length);
+  const l: DyeLiquid = { red: 0, yellow: 0, blue: 0, ql: DYE_QL_PURE };
+  ps.forEach((p, i) => { l[p] = i === 0 ? DYE_PARTS - each * (ps.length - 1) : each; });
+  return l;
+};
+/** The litres of each that the help pours together to show a mix. */
+const MIX_SHOWN = 2;
+/** The QLs the help shows red at, a quarter of the way up and three quarters. */
+const DARK_SHOWN = Math.round((DYE_QL_BLACK + DYE_QL_PURE) / 2), LIGHT_SHOWN = Math.round((DYE_QL_PURE + DYE_QL_WHITE) / 2);
 
 /** Where armour is worn, and the classes of it anybody can make: all but the one riveted from a dragon. */
 const ARMOUR_SLOTS = [...new Set(ARMOUR.map((a) => a.slot))];
@@ -1593,8 +1607,8 @@ export function helpText(): string {
     <p>Choose <b>Pick flowers</b> on a tile in flower, with bare hands: you get a <b>wildflower</b> for each clump
     on it, at your foraging quality, and foraging rises. The tile is bare of them for everybody until the
     first day of the next ${SEASONS[0]}, when every picked tile flowers again.</p>
-    <p>Wildflowers are for <b>dye</b>: ${bill('make_wildflowers')} boil into ${numberWord(made('make_wildflowers'))} pots of
-    ${DYES.find((d) => d.id === 'wildflowers')?.word ?? 'orange'}, at ${workedAt('make_wildflowers')}.</p>
+    <p>Wildflowers are for <b>${DYESTUFF_OF.get('wildflowers')?.primary} dye</b>: ${bill(dyeRecipeId('wildflowers'))} boil into
+    ${numberWord(DYE_BOIL_LITRES)} litres of it, at ${workedAt(dyeRecipeId('wildflowers'))}.</p>
     <h3>Mote swirls and elementalism</h3>
     <p>At each turn of the woods, at dawn, the day's <b>mote swirls</b> go and ${numberWord(SWIRLS_A_DAY)} new ones are put down,
     each on a tile drawn anywhere on the map, land or water &mdash; never where a tree stands, never inside a building, and
@@ -2143,15 +2157,33 @@ export function helpText(): string {
     the other is eaten and spent. They stack, as does a night's rest.</p>
     <h3>Dye</h3>
     <p>Everything made here comes out the colour of what it was made from: cloth the grey-white of the
-    wool, leather the brown of the hide. A <b>dye</b> changes that, and it is the first thing in the
-    game that is yours rather than the island's.</p>
-    <p>A dye is boiled out of something that grows with a bucket of <b>lye</b> to bite the colour in and
-    hold it &mdash; without the lye it washes straight out. ${NumberWord(DYES.length)} of them, easiest first:
-    ${listed(DYES_EASIEST.map((d) => `<b>${d.name.toLowerCase()}</b> (${d.word}, from ${countOf(d.from, d.count)}, alchemy ${d.difficulty})`))}.
-    One boil gives ${numberWord(made(`make_${DYES[0].id}`))} pots and hands the bucket back.</p>
-    <p>One pot colours one thing. Cloth and leather take dye and metal does not, so that is cloth and
+    wool, leather the brown of the hide. A <b>dye</b> changes that.</p>
+    <p>Dye is <b>${listed(PRIMARIES.map((p) => p))}</b> and nothing else as it is boiled. Boil a dyestuff in a bucket of <b>lye</b>
+    and the bucket comes off the bench holding <b>${numberWord(DYE_BOIL_LITRES)} litres</b> of one of them, pure, at the QL
+    the alchemy gives it: ${listed(PRIMARIES.map((p) => `${p} from ${listedOr(DYESTUFFS.filter((d) => d.primary === p)
+      .map((d) => `${countOf(d.from, d.count)} (alchemy ${d.difficulty})`))}`))}.</p>
+    <p>Every other colour is <b>mixed</b>, by pouring. Pour a bucket of dye into a barrel that is empty or holds dye and the
+    dyes mix: the parts of red, yellow and blue and the QL each come out the average of both, by the litres of each &mdash;
+    ${numberWord(MIX_SHOWN)} litres of red and ${numberWord(MIX_SHOWN)} of blue, both at QL ${DYE_QL_PURE}, are ${numberWord(MIX_SHOWN * 2)} litres of
+    ${mixSaid(mixDye(pureDye('red', DYE_QL_PURE), MIX_SHOWN, pureDye('blue', DYE_QL_PURE), MIX_SHOWN))}, half of each, at QL ${DYE_QL_PURE}.
+    Fill a bucket from a barrel of dye to take some of the mix out, as much as there is up to a bucket's worth; a bucket of
+    dye with room in it fills from a barrel of dye the same way and mixes what it draws into what it holds. Dye will not
+    go into a barrel holding anything else, and nothing else goes into dye. At QL ${DYE_QL_PURE} red is ${mixSaid(pureDye('red', DYE_QL_PURE))},
+    yellow ${mixSaid(pureDye('yellow', DYE_QL_PURE))} and blue ${mixSaid(pureDye('blue', DYE_QL_PURE))}; red and yellow make ${mixSaid(equalParts(['red', 'yellow']))},
+    yellow and blue ${mixSaid(equalParts(['yellow', 'blue']))}, red and blue ${mixSaid(equalParts(['red', 'blue']))}, and all ${numberWord(PRIMARIES.length)}
+    ${mixSaid(equalParts(['red', 'yellow', 'blue']))}.</p>
+    <p><b>A dye's QL is its brightness</b>, and nothing else: black at QL ${DYE_QL_BLACK}, the mix itself at ${DYE_QL_PURE} and white at ${DYE_QL_WHITE}, in a
+    straight line either side &mdash; red at QL ${DARK_SHOWN} is ${mixSaid(pureDye('red', DARK_SHOWN))} and at QL ${LIGHT_SHOWN} ${mixSaid(pureDye('red', LIGHT_SHOWN))}.
+    A boil comes out at the QL your alchemy makes it, so a beginner's dye is dark; pour in a brighter one to bring it up.
+    <b>Examine</b> a bucket or a barrel of dye and it says its colour as a hex code, its QL, its litres and its mix.</p>
+    <p>A dyeing takes dye by the size of the thing: <b>${numberWord(DYE_LITRES.garment)}</b> litre for a garment, cloth, a bag,
+    a saddle or a bridle; <b>${numberWord(DYE_LITRES.banner)}</b> for a banner or a flag; <b>${numberWord(DYE_LITRES.sail)}</b> for a sailing
+    boat; <b>${numberWord(DYE_LITRES.ship)}</b> for a caravel; and <b>${numberWord(DYE_LITRES.wall)}</b> for a side of a wall or a tile of
+    floor. It comes out of a bucket of dye loose in your pack, not in a bag: of those holding enough, the one longest in
+    your pack. The thing takes exactly the dye's colour and is called by the plain colour word nearest it; Examine says the
+    hex. Cloth and leather take dye and metal does not, so that is cloth and
     leather armour, cloth itself, sacks, satchels, backpacks, a saddle, a bridle, a <b>banner</b>, a
-    <b>flagpole</b>'s flag and a <b>sailing boat</b>'s sail. A dyed chest or leg piece is worn where it shows: your own figure walks
+    <b>flagpole</b>'s flag and a <b>sailing boat</b>'s or a <b>caravel</b>'s sail. A dyed chest or leg piece is worn where it shows: your own figure walks
     about in it. A banner is cloth on a staff &mdash; ${bill('make_banner')} &mdash; planted
     anywhere, and it flies whatever colour you dyed it. Boil it out again in lye if you change your
     mind.</p>
@@ -2860,12 +2892,7 @@ export function helpText(): string {
 function waterGarden(): string {
   const lily = WATER_PLANT_BY_ID.get('lily') as WaterPlantDef;
   const lotus = WATER_PLANT_BY_ID.get('lotus') as WaterPlantDef;
-  const dyeOf = (item: string): { id: string; count: number; word: string } => {
-    const d = [...DYE_BY_ID.values()].find((x) => x.from === item);
-    return { id: d?.id ?? '', count: d?.count ?? 0, word: d?.word ?? '' };
-  };
-  const lilyDye = dyeOf(lily.flower);
-  const lotusDye = dyeOf(lotus.flower);
+  const lotusDye = DYESTUFF_OF.get(lotus.flower);
   const reach = WATER_GARDEN_ACTIONS.find((a) => a.id === `plant_${lily.id}`)?.range ?? 1;
   const perMinute = (litres: number): string => (litres * 60).toFixed(1);
   const stones = SLAB_VARIANTS.map((v) => v.name.replace(/ slabs$/, '').toLowerCase());
@@ -2892,9 +2919,8 @@ function waterGarden(): string {
     stepping stones. Its leaves are up at once, in their seasons, and it <b>roots in ${spanWords(WATER_ROOTING)}</b>; from then on it keeps the island's year,
     the same for everybody. A water lily ${yearSays(lily)}; a lotus ${yearSays(lotus)}. In ${listed(SEASONS.filter((sn) => !lily.leaves.includes(sn) && !lotus.leaves.includes(sn)))}
     only the root of either is left, under the water, and its leaves come up again in ${SEASONS.find((sn) => lily.leaves.includes(sn) && lotus.leaves.includes(sn))}.</p>
-    <p><b>Pick</b> a flower or a seed head and it is gone until the season turns. ${NumberWord(lilyDye.count)} water lily flowers and a bucket of
-    lye boil into ${numberWord(made(`make_${lilyDye.id}`))} pots of <b>${lilyDye.word}</b> dye, and ${numberWord(lotusDye.count)} lotus flowers into
-    ${numberWord(made(`make_${lotusDye.id}`))} of <b>${lotusDye.word}</b>. A seed head gives
+    <p><b>Pick</b> a flower or a seed head and it is gone until the season turns. ${NumberWord(lotusDye?.count ?? 0)} lotus flowers and a bucket of
+    lye boil into ${numberWord(DYE_BOIL_LITRES)} litres of <b>${lotusDye?.primary}</b> dye; a water lily flower is for nothing but looking at. A seed head gives
     <b>${numberWord(lotus.seedCount ?? 0)} ${itemDef(lotus.seed ?? '').name.toLowerCase()}</b>: plant them, or eat them &mdash; raw they fill
     ${percent(itemDef(lotus.seed ?? '').food ?? 0)} of the food bar, roasted at a campfire (${numberWord(need('roast_lotus_seeds', lotus.seed ?? ''))} a handful)
     ${percent(itemDef('roast_lotus_seeds').food ?? 0)}. <b>Pull it up</b> gives the root or the seed back.</p>

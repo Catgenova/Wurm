@@ -10,7 +10,7 @@
  *   * a look over the ground: Keen Eye's one more pass, Sure Find's none empty
  *     by chance, and Rare Find's rare find, foraging and botanizing alike;
  *   * a cut: Hay Cutter's grass and Reed Cutter's reeds;
- *   * the pot: Quick Lye's time, Double Boil's pots, Thrifty Dyer's dyestuff,
+ *   * the pot: Quick Lye's time, Double Boil's litres, Thrifty Dyer's dyestuff,
  *     Sure Boil's fewer failures and Ink Maker's ink; Cover Maker's covers;
  *   * a dressing: Quick Dressing's time, Sure Hands' fewer slips, Quick Mend's
  *     faster closing, somebody else dressed by anybody, and Field Medic's more on them;
@@ -37,6 +37,7 @@ import { salveRefusal, TINCTURE_NAMES } from '../../src/game/remedies';
 import { festerChance, woundClose, type Wound } from '../../src/game/wounds';
 import { percent } from '../../src/game/words';
 import { TileType } from '../../src/world/tiles';
+import { DYE_BOIL_LITRES, dyeRecipeId } from '../../src/game/dyestuffs';
 
 const psql = (sql: string): string =>
   execFileSync('psql', ['-v', 'ON_ERROR_STOP=1', '-X', '-q', '-t', '-A', '-f', '-'], {
@@ -110,7 +111,9 @@ const RARE_BELOW = fx('Rare Find', 'rare:forage') / 2;
 const RARE_ABOVE = fx('Rare Find', 'rare:forage') * 2;
 const SLIP = fx('Sure Hands', 'fail:bind_wound');
 const BOIL = fx('Sure Boil', 'fail:make_ink');
-const DYE = 'make_woad';
+const DYE = dyeRecipeId('blueberry');
+/** The litres of dye in the bucket a boil leaves. */
+const dyeLitres = `(select coalesce(sum((dye_in(i)).litres), 0) from item i where i.world_id = w and i.holder = 'player' and i.holder_uid = u and i.def = 'dye_bucket')`;
 const HIVE_QL = 50;
 const HIVE_AGO = 600;
 
@@ -276,7 +279,7 @@ begin
   insert into said values ('CUT', v_t || ':' || ${count('reed')} || ':' || coalesce(${last('You cut % reeds%')}, 'unsaid'));
   ${clearAll};
 
-  /* ---- The pot: Quick Lye's time; Double Boil's pots; Thrifty Dyer's dyestuff; Ink Maker; Cover Maker. ---- */
+  /* ---- The pot: Quick Lye's time; Double Boil's litres; Thrifty Dyer's dyestuff; Ink Maker; Cover Maker. ---- */
   ${inputs('make_lye')}
   perform pg_temp.hold(w, u, '{}');
   v_t := pg_temp.secs(w, u, 'make_lye', jsonb_build_object('kind', 'item', 'uid', null));
@@ -286,12 +289,12 @@ begin
   ${inputs(DYE)}
   perform pg_temp.hold(w, u, '{}');
   ${craft(DYE)};
-  v_t := ${count('dye')}::text;
+  v_t := ${dyeLitres}::text;
   ${clearAll};
   ${inputs(DYE)}
   ${hold('Double Boil')};
   ${craft(DYE)};
-  v_t := v_t || ':' || ${count('dye')};
+  v_t := v_t || ':' || ${dyeLitres};
   ${clearAll};
   perform pg_temp.hold(w, u, '{}');
   v_t := v_t || '|' || recipe_need(w, u, '${DYE}', ${RECIPE_BY_ID.get(DYE)?.inputs[0].count ?? 0});
@@ -568,8 +571,8 @@ check(`${P('Quick Lye').name}: making lye is started with ${fx('Quick Lye', 'tim
   lyePlain > 0 && near(lyePerk / lyePlain, fx('Quick Lye', 'time:make_lye'), 1e-4), say('LYE'));
 const [dyeMade, dyeNeed] = say('DYE').split('|');
 const dyeRecipe = RECIPE_BY_ID.get(DYE)!;
-check(`${P('Double Boil').name}: a boil makes ${fx('Double Boil', 'count:dye')} pots where it made ${dyeRecipe.count}`,
-  dyeMade === `${dyeRecipe.count}:${fx('Double Boil', 'count:dye')}`, dyeMade);
+check(`${P('Double Boil').name}: a boil leaves ${fx('Double Boil', 'litres:dye')} litres of dye in the bucket where it left ${DYE_BOIL_LITRES}`,
+  dyeMade === `${DYE_BOIL_LITRES}:${fx('Double Boil', 'litres:dye')}`, dyeMade);
 const thrifty = Math.ceil((dyeRecipe.inputs[0].count ?? 0) * fx('Thrifty Dyer', `need:${DYE}`));
 const [needPlain, needPerk, dyeYes, ...dyeNo] = dyeNeed.split(':');
 check(`${P('Thrifty Dyer').name}: a boil wants ${thrifty} of its dyestuff where it wanted ${dyeRecipe.inputs[0].count}, and ${thrifty} is enough with it and not without`,

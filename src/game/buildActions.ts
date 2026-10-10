@@ -27,7 +27,8 @@ import {
   jobLevel,
 } from './building';
 import type { PlacedCrate } from './crates';
-import { pickDye } from './dyes';
+import { dyedAlready, dyeRefusal, litresWord, pickDye, spendDye } from './dyes';
+import { colourWord, DYE_LITRES } from './dyestuffs';
 import type { Game } from './game';
 import { gatePlanRefusal, gateRemoveRefusal, planGate, planLine } from './gates';
 import { greenNow } from './greening';
@@ -530,9 +531,9 @@ export const BUILD_ACTIONS: ActionDef[] = [
    * Everything on this island comes out the colour of what it was made of, so
    * a street of twelve materials is a street of twelve colours and no more:
    * the builder chooses what a wall is *of* and never what it looks like. A
-   * pot of the same dye the tailoring uses, worked into a limewash and
-   * brushed over finished work, is the first thing a builder gets to choose —
-   * and it is cheap, which is the point of offering it at all.
+   * litre of the same dye the tailoring uses (`DYE_LITRES`), worked into a
+   * limewash and brushed over finished work, is the first thing a builder gets
+   * to choose — and it is cheap, which is the point of offering it at all.
    */
   {
     id: 'paint_wall',
@@ -544,27 +545,27 @@ export const BUILD_ACTIONS: ActionDef[] = [
     baseTime: 6,
     applies: (t, g) => isTile(t) && !!wallAt(g, t),
     labelFor: (t, g) => {
-      const d = pickDye(g);
-      return d ? `Paint it ${d.def.word}` : 'Paint the wall';
+      const d = pickDye(g, DYE_LITRES.wall);
+      return d ? `Paint it ${colourWord(d.hex)}` : 'Paint the wall';
     },
     check: (t, g) => {
       if (!isTile(t) || !t.side) return 'Choose a side.';
       const wall = wallAt(g, t);
       if (!wall) return 'There is no wall there.';
       if (!isDone(wall)) return 'Finish it before you paint it.';
-      const d = pickDye(g);
-      if (!d) return 'You have no dye. Boil one out of berries, acorns or herbs with a bucket of lye.';
-      if (wall.dye === d.def.id) return `It is ${d.def.word} already.`;
+      const d = pickDye(g, DYE_LITRES.wall);
+      if (!d) return dyeRefusal(g, DYE_LITRES.wall);
+      if (wall.dye === d.hex) return dyedAlready(d.hex);
       return null;
     },
     perform: (t, g) => {
       if (!isTile(t) || !t.side) return;
       const wall = wallAt(g, t);
-      const d = pickDye(g);
-      if (!wall || !d || !g.inventory.remove(d.item.uid, 1)) return;
-      wall.dye = d.def.id;
+      const d = pickDye(g, DYE_LITRES.wall);
+      if (!wall || !d || !spendDye(g, d.item, DYE_LITRES.wall)) return;
+      wall.dye = d.hex;
       g.gainSkill('alchemy', 0.3);
-      g.logMsg(`You brush the ${d.def.name.toLowerCase()} over the wall on the ${SIDE_NAMES[t.side]} side. It comes up ${d.def.word}.`, 'event');
+      g.logMsg(`You brush ${litresWord(DYE_LITRES.wall)} of ${colourWord(d.hex)} dye over the wall on the ${SIDE_NAMES[t.side]} side. It comes up ${colourWord(d.hex)}, ${d.hex}.`, 'event');
       g.events.emit('world', t.x, t.y);
     },
   },
@@ -650,8 +651,8 @@ export const BUILD_ACTIONS: ActionDef[] = [
       return !!b && !!g.buildings.floor(topLevel(b, t), t.x, t.y);
     },
     labelFor: (t, g) => {
-      const d = pickDye(g);
-      return d ? `Paint the floor ${d.def.word}` : 'Paint the floor';
+      const d = pickDye(g, DYE_LITRES.floor);
+      return d ? `Paint the floor ${colourWord(d.hex)}` : 'Paint the floor';
     },
     check: (t, g) => {
       if (!isTile(t)) return null;
@@ -659,20 +660,20 @@ export const BUILD_ACTIONS: ActionDef[] = [
       const floor = b && g.buildings.floor(topLevel(b, t), t.x, t.y);
       if (!floor) return 'There is no floor here.';
       if (!isDone(floor)) return 'Finish it before you paint it.';
-      const d = pickDye(g);
-      if (!d) return 'You have no dye. Boil one out of berries, acorns or herbs with a bucket of lye.';
-      if (floor.dye === d.def.id) return `It is ${d.def.word} already.`;
+      const d = pickDye(g, DYE_LITRES.floor);
+      if (!d) return dyeRefusal(g, DYE_LITRES.floor);
+      if (floor.dye === d.hex) return dyedAlready(d.hex);
       return null;
     },
     perform: (t, g) => {
       if (!isTile(t)) return;
       const b = storeyOf(g, t);
       const floor = b && g.buildings.floor(topLevel(b, t), t.x, t.y);
-      const d = pickDye(g);
-      if (!floor || !d || !g.inventory.remove(d.item.uid, 1)) return;
-      floor.dye = d.def.id;
+      const d = pickDye(g, DYE_LITRES.floor);
+      if (!floor || !d || !spendDye(g, d.item, DYE_LITRES.floor)) return;
+      floor.dye = d.hex;
       g.gainSkill('alchemy', 0.3);
-      g.logMsg(`You work the ${d.def.name.toLowerCase()} into the boards. The floor comes up ${d.def.word}.`, 'event');
+      g.logMsg(`You work ${litresWord(DYE_LITRES.floor)} of ${colourWord(d.hex)} dye into the boards. The floor comes up ${colourWord(d.hex)}, ${d.hex}.`, 'event');
       g.events.emit('world', t.x, t.y);
     },
   },

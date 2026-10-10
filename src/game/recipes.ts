@@ -10,7 +10,8 @@ import { countSaid, fill, listed, numberWord } from './words';
 import { FURNITURE, ONE_ALTAR, VESSELS } from './furniture';
 import { castWhole, INGOT_LUMPS, ingotOf, METAL_BY_LUMP, MOULD_BY_MAKES, MOULDS } from './metal';
 import { FISH } from './fishing';
-import { DYES } from './dyes';
+import { boiledDye } from './dyes';
+import { DYE_BUCKET, DYESTUFFS, dyeRecipeId } from './dyestuffs';
 import { HERBS, WOUND_KINDS } from './wounds';
 import { TRAPS } from './traps';
 import { BREWS } from './brewing';
@@ -125,8 +126,8 @@ export interface Recipe {
   wood?: string;
   /**
    * A fixed qualifier stamped on the product instead of the material it was
-   * made from: the dyestuff on a pot of dye, which is what tells eight
-   * colours apart when they are all one item.
+   * made from: the herb on a healing cover, which is what tells five covers
+   * apart when they are all one item.
    */
   extra?: string;
   /** Things handed back when it succeeds, such as the bucket the lye was in. */
@@ -609,26 +610,24 @@ RECIPES.push(
 );
 
 /**
- * Every dye is boiled the same way: a quantity of something that grows, a
- * bucket of lye to bite it into the fibre, and a long simmer. The dyestuff
- * is written on the pot, so one item id carries all eight colours.
+ * Every dye is boiled the same way: a quantity of something that grows, in a
+ * bucket of lye to bite it into the fibre, and a long simmer. What comes off
+ * is the bucket itself, with dye in it where the lye was: one primary, pure,
+ * at the boil's QL (`boiledDye`). Nothing boils into any other colour.
  */
-const DYE_RECIPES: Recipe[] = DYES.map((d) => ({
-  id: `make_${d.id}`,
+const DYE_RECIPES: Recipe[] = DYESTUFFS.map((d) => ({
+  id: dyeRecipeId(d.from),
   category: 'Alchemy' as RecipeCategory,
-  result: 'dye',
-  count: 2,
+  result: DYE_BUCKET,
   inputs: [{ item: d.from, count: d.count }, { item: 'lye_bucket' }],
   skill: 'alchemy',
-  returns: [['bucket', 1]] as Array<[string, number]>,
   salvage: [['bucket', 1]] as Array<[string, number]>,
-  label: `Boil ${d.name.toLowerCase()}`,
-  verb: `boiling ${d.name.toLowerCase()}`,
+  label: `Boil ${itemDef(d.from).name.toLowerCase()} for ${d.primary} dye`,
+  verb: `boiling ${d.primary} dye`,
   baseTime: 12,
   stamina: 0.04,
   difficulty: d.difficulty,
-  extra: d.name,
-  done: `${d.note} {count:W} pots of it, and the bucket is empty.`,
+  done: `You boil the ${itemDef(d.from).name.toLowerCase()} down in the lye. The bucket holds ${d.primary} dye.`,
   fail: 'The colour breaks in the pot and goes out grey and streaky. The lot is wasted.',
   consumeOnFail: true,
 }));
@@ -1247,6 +1246,8 @@ export function recipeAction(r: Recipe): ActionDef {
         count, ql, extra: r.extra ?? mat, ...(stackable && marked ? { mark: marked } : {}), ...(rare ? { rare, maker: g.player.name } : {}),
       });
       if (!stackable && marked) item.mark = marked;
+      // A boil leaves its dye in the bucket it was boiled in (`dyes.ts`).
+      if (r.result === DYE_BUCKET) boiledDye(g, item, r.inputs[0].item);
       if (rare) {
         g.note(['', 'rare', 'supreme', 'fantastic'][rare]);
         g.logMsg(RARITY_WORD[rare], 'skill');

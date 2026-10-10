@@ -3,6 +3,7 @@ import { DAMAGE_WARN, type Game } from '../game/game';
 /** Damage past which the pack calls a thing about to go to pieces. */
 export const DAMAGE_BREAKING = 90;
 import { itemDef, itemName, type Item, rarityOf } from '../game/items';
+import { dyeHexOf } from '../game/dyestuffs';
 
 /**
  * The three cells a list of things is made of.
@@ -39,6 +40,15 @@ export function nameCell(item: Item, opts: { worn?: boolean; occupant?: string }
   name.textContent = full;
   // The column is narrow and some of these names are long.
   name.title = item.locked ? `${full}. Kept back: nothing will spend, drop or feed it away.` : full;
+  // A swatch of its colour, for a thing dyed and a bucket of dye, and the hex beside the name on hover.
+  const hex = dyeHexOf(item.dye);
+  if (hex) {
+    const swatch = document.createElement('span');
+    swatch.className = 'inv-swatch';
+    swatch.style.backgroundColor = hex;
+    name.prepend(swatch);
+    name.title += ` · ${hex}`;
+  }
   const rare = rarityOf(item);
   if (rare.colour) name.style.color = rare.colour;
   if (worn) name.classList.add('inv-worn');

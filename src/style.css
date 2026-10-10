@@ -1623,6 +1623,17 @@ kbd {
   white-space: nowrap;
 }
 
+/* The colour a thing was dyed, or of the dye in a bucket, beside its name. */
+.inv-swatch {
+  display: inline-block;
+  width: 0.8em;
+  height: 0.8em;
+  margin-right: 4px;
+  vertical-align: -0.05em;
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  border-radius: 2px;
+}
+
 .inv-empty {
   padding: 12px 8px;
   color: var(--ui-dim);

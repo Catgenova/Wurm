@@ -1,6 +1,6 @@
 import { matOfItem, workingQl } from './materials';
 import { COINS_PER_LUMP, INGOT_LUMPS, INGOT_WEIGHT, ingotOf, METALS, MOULDS, RARE_LUMP_FACTOR } from './metal';
-import { DYES, dyeWord } from './dyestuffs';
+import { DYE_BOIL_LITRES, DYESTUFFS, dyeIn, dyeHex, colourWord, dyeWord, type Dyestuff } from './dyestuffs';
 import { MATERIAL_BY_ID, WALL_TYPES } from './building';
 import { candleBurn, lanternReach, torchBurn, torchReach } from './light';
 import { CLOSE_CLOTH, CLOSE_RIGHT } from './wounds';
@@ -95,11 +95,9 @@ export const CATEGORY_DECAY: Record<ItemCategory, number> = { food: 200, plant: 
 /** What a settlement does to the rot of everything lying on its land: a tenth of the pace in the wild. */
 export const DEED_DECAY = 0.1;
 
-/** What wildflowers are for, off the dye boiled from them, so the card says what the recipe does. */
-function wildflowerUse(): string {
-  const d = DYES.find((y) => y.from === 'wildflowers');
-  return `Picked off grass in flower, a wildflower for every clump. ${d ? `${capital(numberWord(d.count))} of them and a bucket of lye boil into ${d.word} dye, for cloth, leather, a banner or a sail.` : ''}`;
-}
+/** What a dyestuff is for, off the boil that takes it, so the card says what the recipe does. */
+const dyestuffUse = (d: Dyestuff): string =>
+  `${capital(numberWord(d.count))} of them boiled in a bucket of lye make ${numberWord(DYE_BOIL_LITRES)} litres of ${d.primary} dye.`;
 
 export const ITEM_DEFS: Record<string, ItemDef> = {
   shovel: { name: 'Shovel', category: 'tool', weight: 3, description: 'A shovel for digging, flattening and packing dirt.' },
@@ -309,14 +307,14 @@ export const ITEM_DEFS: Record<string, ItemDef> = {
   shovel_head: { name: 'Shovel head', category: 'material', weight: 1.2, stackable: true, decay: 1 },
   hatchet_head: { name: 'Hatchet head', category: 'material', weight: 1.2, stackable: true, decay: 1 },
   sickle_blade: { name: 'Sickle blade', category: 'material', weight: 1, stackable: true, decay: 1 },
-  // What a sickle cuts off a bush. Dyestuffs, both of them.
-  rose_petals: { name: 'Rose petals', category: 'material', weight: 0.05, stackable: true, raw: true, decay: 6, description: 'Cut off a rose bush with a sickle. Boiled, they give a pink that nothing else on the island gives.' },
-  lavender: { name: 'Lavender', category: 'material', weight: 0.05, stackable: true, raw: true, decay: 6, description: 'Cut off a lavender bush with a sickle. Boiled, it gives a violet.' },
-  // Picked off grass in flower (`world/flowers.ts`), and boiled for the dye that is theirs.
-  wildflowers: { name: 'Wildflowers', category: 'material', weight: 0.05, stackable: true, raw: true, decay: 6, description: wildflowerUse() },
-  // Off a planted water lily and a lotus: see `watergarden.ts`. Their dyes are `lily` and `lotus` (`dyestuffs.ts`).
-  water_lily: { name: 'Water lily', category: 'material', weight: 0.05, stackable: true, raw: true, decay: 6, description: 'A water lily flower, picked off one planted in still water. Boiled, it gives the only white there is.' },
-  lotus_flower: { name: 'Lotus flower', category: 'material', weight: 0.08, stackable: true, raw: true, decay: 6, description: 'A lotus flower, picked off one planted in still water. Boiled, it gives a magenta.' },
+  // What a sickle cuts off a bush. Dyestuffs, both of them: what each boils into is said after (`DYESTUFFS`).
+  rose_petals: { name: 'Rose petals', category: 'material', weight: 0.05, stackable: true, raw: true, decay: 6, description: 'Cut off a rose bush with a sickle.' },
+  lavender: { name: 'Lavender', category: 'material', weight: 0.05, stackable: true, raw: true, decay: 6, description: 'Cut off a lavender bush with a sickle.' },
+  // Picked off grass in flower (`world/flowers.ts`), and boiled for dye.
+  wildflowers: { name: 'Wildflowers', category: 'material', weight: 0.05, stackable: true, raw: true, decay: 6, description: 'Picked off grass in flower, a wildflower for every clump.' },
+  // Off a planted water lily and a lotus: see `watergarden.ts`. The lotus is a dyestuff; the water lily no longer is.
+  water_lily: { name: 'Water lily', category: 'material', weight: 0.05, stackable: true, raw: true, decay: 6, description: 'A water lily flower, picked off one planted in still water.' },
+  lotus_flower: { name: 'Lotus flower', category: 'material', weight: 0.08, stackable: true, raw: true, decay: 6, description: 'A lotus flower, picked off one planted in still water.' },
   // What is planted in still water to grow them: found by botanizing at the water's edge, and a lotus's own seed heads.
   lily_root: { name: 'Water lily root', category: 'plant', weight: 0.2, stackable: true, decay: 20,
     description: 'Found by botanizing at the water\'s edge. Plant it in still water {shallow} to {deep} m deep -- a pond, a pool or the shallows of the sea, never where water runs -- and it lays its pads on the water at once. It roots in {rooting} and then {year}, white or pink, open by day and shut at night; in winter only the root is left under the water, and the pads come up again in spring. A flower picked is gone until the season turns.' },
@@ -444,7 +442,8 @@ export const ITEM_DEFS: Record<string, ItemDef> = {
   salve: { name: 'Salve', category: 'misc', weight: 0.1, stackable: true, decay: 6, description: 'Herbs worked into beeswax. Rubbed in over a dressing, it keeps the wound under it from going bad until it closes.' },
   tincture: { name: 'Tincture', category: 'misc', weight: 0.1, stackable: true, decay: 3, description: 'Herbs steeped down to a few bitter drops. Taken, {skills} each go in {bonus:pct} faster for {span:span}.' },
   cover: { name: 'Healing cover', category: 'tool', weight: 0.2, stackable: true, decay: 12, description: 'Herbs worked into cotton. Laid on the wound it suits, it stops the bleeding, keeps the dirt out and closes it {cover.overCloth} times as fast as cloth.' },
-  dye: { name: 'Dye', category: 'material', weight: 0.8, stackable: true, decay: 5, description: 'A pot of colour, struck with lye so it bites and holds. One pot does one thing.' },
+  dye_bucket: { name: 'Bucket of dye', category: 'tool', weight: 6, decay: 10,
+    description: 'Dye, in the bucket of lye it was boiled in: up to {bucketLitres} litres of one mix of red, yellow and blue at one QL, and a boil makes {dyeBoil} litres of one of them. Pour it into a barrel that is empty or holds dye and they mix: the parts of each primary and the QL are each the average of both, by the litres of each. Its QL is its brightness: black at {qlBlack}, the mix itself at {qlPure} and white at {qlWhite}. A dyeing takes, in litres: {dye.garment} for a garment, cloth, a bag, a saddle or a bridle; {dye.banner} for a banner or a flag; {dye.sail} for a sailing boat; {dye.ship} for a caravel; {dye.wall} for a side of a wall or a tile of floor.' },
   banner: { name: 'Banner', category: 'misc', weight: 4, decay: 5, description: 'Cloth on a staff. Plant it on the deed and fly your colour over it.' },
   flagpole: { name: 'Flagpole', category: 'misc', weight: 8, decay: 5, description: 'A flag on a tall pole. Set it up and the flag flies down the wind, out straight in a gale and hanging in a calm; dye it first and it flies your colour, and on a settlement it carries the settlement\'s device.' },
   rose_arch: { name: 'Rose arch', category: 'misc', weight: 30, decay: 5, description: 'A timber arch a tile across with a climbing rose at each foot. Set it over a path and walk through it. {rule}' },
@@ -653,6 +652,12 @@ for (const d of Object.values(ITEM_DEFS)) {
     },
     cover: { overCloth: (CLOSE_RIGHT / CLOSE_CLOTH).toFixed(1) },
   });
+}
+
+// What each dyestuff boils into, off the boil itself (`DYESTUFFS`).
+for (const s of DYESTUFFS) {
+  const d = ITEM_DEFS[s.from];
+  if (d) d.description = [d.description, dyestuffUse(s)].filter(Boolean).join(' ');
 }
 
 // What a stone set in a piece gives, off the rule that gives it (`jewelGain`).
@@ -1231,12 +1236,16 @@ export function itemName(item: Item): string {
   const rare = rarityOf(item).name;
   // Colour comes first, then rarity, then the thing itself: a Blue supreme
   // cloth tunic reads the way somebody would actually say it.
-  const colour = dyeWord(item.dye);
+  // A bucket of dye is called by the colour of what is in it and how much: a Bucket of purple dye (3 litres).
+  const held = dyeIn(item);
+  const colour = held ? null : dyeWord(item.dye);
   const words = [colour, rare].filter(Boolean).join(' ');
   // A casting is named for the piece it is of: a shovel head casting, not a casting.
-  const plain = item.piece ? `${itemDef(item.piece).name} casting` : def.name;
+  const plain = item.piece ? `${itemDef(item.piece).name} casting`
+    : held ? `${def.name.replace(/ dye$/, '')} ${colourWord(dyeHex(held.liquid))} dye` : def.name;
   const base = words ? `${words.charAt(0).toUpperCase()}${words.slice(1)} ${plain.toLowerCase()}` : plain;
   let name = item.extra ? `${base} (${item.extra.toLowerCase()})` : base;
+  if (held) name += ` (${held.litres} ${held.litres === 1 ? 'litre' : 'litres'})`;
   if (def.charges) name += ` (${item.charges ?? 0}/${def.charges})`;
   return name;
 }

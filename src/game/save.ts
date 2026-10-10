@@ -28,6 +28,8 @@ import type { GuideBook } from './guide';
 import type { Crop } from './farming';
 import type { WaterPlant } from '../world/waterplants';
 import type { Swirl } from './motes';
+import { upgradeDyes } from './dyestuffs';
+import { BUCKET_LITRES } from './furniture';
 import { keyX, keyY } from './tileindex';
 import type { PlacedCrate } from './crates';
 import type { CreatureJSON } from './creatures';
@@ -583,6 +585,8 @@ export async function loadGame(): Promise<Game | null> {
  * did not exist when it was written down.
  */
 function finish(world: World, m: SaveMeta): Game {
+  // Dye from before it was mixed: what was dyed keeps its colour, and a pot of it is a bucket of the nearest mix (`upgradeDyes`).
+  upgradeDyes(m as unknown as Record<string, unknown>, BUCKET_LITRES);
   // Tree bytes from before the age had all four bits carry the notch in the
   // top two, which would read as ages that do not exist.
   if (m.trees !== TREE_DATA_LAYOUT) {

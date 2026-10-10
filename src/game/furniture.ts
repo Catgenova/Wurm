@@ -8,6 +8,7 @@ import { fill, numberWord } from './words';
 import { matOf } from './materials';
 import { roseSays, ROSES_RULE } from './roses';
 import type { Lamp } from './lamps';
+import { colourWord, dyeHex, readDye } from './dyestuffs';
 
 /**
  * What a store takes, for the five that take one sort of thing: raw materials,
@@ -557,7 +558,10 @@ export interface PlacedFurniture {
   knack?: number;
   /** The wood it was built of, for the pieces a carpenter builds. */
   material?: string;
-  /** The colour it was dyed, for a banner, a flag and a sail. */
+  /**
+   * The colour it was dyed, `#rrggbb`, for a banner, a flag and a sail; and
+   * for a barrel of dye, the dye in it (`dyeText`), its litres being `litres`.
+   */
   dye?: string;
   /**
    * When it was set down, in epoch seconds, for a piece with roses on it: the
@@ -619,8 +623,8 @@ export const PLANTER_GROWING = 'Something is growing in it. Harvest it, or pull 
 export const LAMP_TAKE_FIRST = 'Take the lantern down first.';
 
 /** The two liquids worth keeping a barrel for. */
-export type LiquidKind = 'water' | 'lye' | 'milk' | 'ale' | 'cider' | 'mead' | 'wine' | 'juice' | 'spirit';
-export const LIQUID_NAME: Record<LiquidKind, string> = { water: 'water', lye: 'lye', milk: 'milk', ale: 'ale', cider: 'cider', mead: 'mead', wine: 'wine', juice: 'juice', spirit: 'spirit' };
+export type LiquidKind = 'water' | 'lye' | 'milk' | 'ale' | 'cider' | 'mead' | 'wine' | 'juice' | 'spirit' | 'dye';
+export const LIQUID_NAME: Record<LiquidKind, string> = { water: 'water', lye: 'lye', milk: 'milk', ale: 'ale', cider: 'cider', mead: 'mead', wine: 'wine', juice: 'juice', spirit: 'spirit', dye: 'dye' };
 /** A bucket holds five litres, whichever way it is going. */
 export const BUCKET_LITRES = 5;
 /** Which liquid a full vessel is carrying, and which empty vessel it leaves. */
@@ -634,9 +638,11 @@ export const VESSELS: Record<string, { liquid: LiquidKind; empty: string }> = {
   wine_bucket: { liquid: 'wine', empty: 'bucket' },
   juice_bucket: { liquid: 'juice', empty: 'bucket' },
   spirit_bucket: { liquid: 'spirit', empty: 'bucket' },
+  // Dye, which says what is in it on the bucket itself (`dyestuffs.ts`).
+  dye_bucket: { liquid: 'dye', empty: 'bucket' },
 };
 /** Which full vessel a litre of each liquid fills an empty bucket into. */
-export const BUCKET_OF: Record<LiquidKind, string> = { water: 'water_bucket', lye: 'lye_bucket', milk: 'milk_bucket', ale: 'ale_bucket', cider: 'cider_bucket', mead: 'mead_bucket', wine: 'wine_bucket', juice: 'juice_bucket', spirit: 'spirit_bucket' };
+export const BUCKET_OF: Record<LiquidKind, string> = { water: 'water_bucket', lye: 'lye_bucket', milk: 'milk_bucket', ale: 'ale_bucket', cider: 'cider_bucket', mead: 'mead_bucket', wine: 'wine_bucket', juice: 'juice_bucket', spirit: 'spirit_bucket', dye: 'dye_bucket' };
 
 /*
  * What a piece says about itself, off the piece: what it holds and how much,
@@ -913,7 +919,9 @@ export function furnitureState(f: PlacedFurniture): string {
   const ql = `QL ${f.ql.toFixed(0)}`;
   if (holdsLiquid(f)) {
     const litres = litresIn(f);
-    const what = f.liquid ? LIQUID_NAME[f.liquid] : 'empty';
+    // Dye says its colour, its hex and its QL (`dyeSays` in full, on Examine).
+    const dye = f.liquid === 'dye' ? readDye(f.dye) : null;
+    const what = dye ? `${colourWord(dyeHex(dye.liquid))} dye, ${dyeHex(dye.liquid)} at QL ${dye.liquid.ql.toFixed(2)}` : f.liquid ? LIQUID_NAME[f.liquid] : 'empty';
     // A barrel that is working says so, and how long it has to go.
     const left = f.ferment ?? 0;
     const working = left > 0 ? ` · working, ${left >= 60 ? `${Math.ceil(left / 60)}m` : `${Math.ceil(left)}s`} to go` : '';

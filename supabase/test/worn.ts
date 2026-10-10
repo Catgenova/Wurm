@@ -94,7 +94,7 @@ update player set equipped = (select jsonb_object_agg(case def when 'helm' then 
     JSON.stringify(drawn));
   const junk = gearFrom({
     head: ['sword', 1, 'Iron', null], chest: ['no_such_thing', 0, null, null], weapon: ['sword', 7, 'Unobtainium', 'blood'],
-    legs: 'plate_legs', feet: ['plate_boots', 1.5, 'Steel', '#ff0000'], offhand: [42], belt: ['toolbelt', -2, null, null],
+    legs: 'plate_legs', feet: ['plate_boots', 1.5, 'Steel', '#ff00'], offhand: [42], belt: ['toolbelt', -2, null, null],
   });
   check('and nothing it does not know: a thing in the wrong slot, a thing, a material or a dye it has never heard of',
     JSON.stringify(junk) === JSON.stringify({ feet: { id: 'plate_boots', material: 'steel' }, weapon: { id: 'sword', rare: 3 }, belt: { id: 'toolbelt' } }),
