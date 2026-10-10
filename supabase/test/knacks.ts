@@ -72,7 +72,7 @@ check('and never more than a go', KNACK_BY_LEARNING.every((s) => near(knackChanc
 const raise = psql(`select pg_get_functiondef('skill_raise(uuid, uuid, text, double precision)'::regprocedure);`);
 check('the island\'s raise rolls the knack with its base', /earn_knacks\(p_world, p_uid, p_id, p_base\)/.test(raise));
 const earn = psql(`select pg_get_functiondef('earn_knacks(uuid, uuid, text, double precision)'::regprocedure);`);
-check('and the knack asks knack_chance for it', /knack_chance\(p_id, p_base\)/.test(earn));
+check('and the knack asks knack_chance for it, and a Polymath\'s more (meditation.ts)', /knack_chance\(p_id, p_base, path_fx\(p_world, p_uid, 'knack', 1\)\)/.test(earn));
 
 /* ---- the browser's raise rolls at the chance ------------------------------ */
 // Dice held just under and just over the chance: under, a knack; over, none.

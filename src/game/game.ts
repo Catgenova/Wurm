@@ -3,7 +3,7 @@ import { generateWorld } from '../world/generate';
 import { EMOTES, EMOTE_BY_ID } from './emotes';
 import { rankAtLeast, type DeedRole } from './ranks';
 import { defaultKey } from './keybinds';
-import { listed, numberWord, percent, share, spanWords } from './words';
+import { listed, percent, share, spanWords } from './words';
 import { brazierBurn, shoreNear } from './placeables';
 import type { Hoard } from './treasure';
 import { packTreeData, TILE_DEFS, TileType, TREE_DEFS, TREE_AGES, TREE_ROOM_ONE, TREE_ROOM_TWO, TREE_SEED_BOTH, TREE_SEED_NONE, TREE_SEED_REACH, TREE_SEEDS, lastDawn, treeAge, treeSpecies, LAWN_AFTER, mownDays, mownToday, FLOWERS_PICKED, WEAR_FALL, WEAR_MOST, WEAR_TRAIL, trailGround, wears } from '../world/tiles';
@@ -76,7 +76,10 @@ import { DRIVING, DRIVING_LEARN, drivingPace, SAILING, SAILING_LEARN, sailingPac
 import { laySwirls, swirlLight, type Swirl } from './motes';
 import { AWARENESS, Vision } from './vision';
 import { blessBonus, favourCap, FAITH, FAVOUR_TRICKLE } from './faith';
-import { ATTENTIVE, FURY_MULT, FURY_SECS, GREEN_THUMB, hasStep, IRONHIDE, MEDITATION, MEND_FLESH, SENSE_REACH, STRONG_BACK, type PathId } from './meditation';
+import {
+  calmCap, calmRefusal, claritySaid, foreknowSaid, FURY_MULT, FURY_SECS, GREEN_THUMB, hasStep, IRONHIDE, MEDITATION, MEND_FLESH, PATH_PICK_BY_ID, PATH_PICKS,
+  pathPickRefusal, PATHS, satSince, seekNone, seekSaid, skySaid, STRONG_BACK, STRUCK_SAID, TECHNIQUE_GAIN, tookSaid, traceNone, traceSaid, type PathBeat, type PathId, type PathSaid,
+} from './meditation';
 import { ledgerTotals, record, type Ledger } from './ledger';
 import { ALTAR_CAST, ALTAR_CAST_ALPHA, ALTAR_GLOW, ALTAR_REACH, FIRE_REACH, heldReach, HELD_LIGHTS, lanternReach, OVEN_REACH, type LightSource } from './light';
 import { counterFinished, counterInto, counterMiddle, Counters, type CountersJSON, type CounterWire } from './counters';
@@ -937,6 +940,8 @@ export class Game {
   level: number | null = null;
 
   private swingMissed = false;
+  /** Whether the go in hand had its roll taken by a Foreknow, which spends one of its goes when the go is done. */
+  private foreknown = false;
 
   /** Said by a `perform` whose swing found nothing. */
   missed(): void {
@@ -1460,7 +1465,8 @@ export class Game {
 
   /** The wind at this hour, worked out from the clock rather than stored. */
   wind(): Wind {
-    const w = windAt(this.seed, this.time);
+    // The island's clock when there is one, so the wind Read the Sky says is the wind a sail gets.
+    const w = windAt(this.seed, this.islandClock ? this.islandClock() : this.time);
     // A fair wind is still the weather; it has only been asked to oblige.
     if (this.time < this.favourWind) return { dir: this.heading(), force: Math.max(0.62, w.force) };
     return w;
@@ -1501,6 +1507,198 @@ export class Game {
     return this.player.way === way && hasStep(this.player.way, this.skills.get(MEDITATION), step);
   }
 
+  /**
+   * Whether a pick of a moved path is yours (`meditation.ts`): taken, and of
+   * the path you walk. On an island the island says which you hold
+   * (`setPath`); by yourself they are in your save.
+   */
+  holds(pick: string): boolean {
+    const p = PATH_PICK_BY_ID.get(pick);
+    return !!p && this.player.way === p.path && PATHS[p.path].moved && this.player.picks.includes(pick);
+  }
+
+  /** One number off the disciplines you hold, by its key, or the rule's own when none of them has it. */
+  pathFx(key: string, otherwise: number): number {
+    for (const id of this.player.picks) {
+      const p = PATH_PICK_BY_ID.get(id);
+      if (p?.kind === 'discipline' && key in p.fx && this.holds(id)) return p.fx[key];
+    }
+    return otherwise;
+  }
+
+  /** The most Calm you can hold, with a Deep Calm's more. */
+  calmCap(): number {
+    return calmCap(this.skills.get(MEDITATION), this.pathFx('calm', 1));
+  }
+
+  /** Note where you sat, for the next sitting near it (`SIT_WORTH.stale`): the spots kept until the woods turn. */
+  satHere(): void {
+    const dawn = lastDawn(Date.now() / 1000);
+    const p = this.player;
+    p.satSpots = [...satSince(p.satSpots, p.satDawn, dawn).map(([x, y]): [number, number] => [x, y]), [p.tileX, p.tileY]];
+    p.satDawn = dawn;
+  }
+
+  /**
+   * What a technique leaves on the map: the swirl Seek found and the hoard
+   * Trace found, until the one is collected and the other dug up. On an island
+   * the island says where they are on every beat (`setPath`); by yourself they
+   * are looked for again each time they are drawn.
+   */
+  pathMarks: { seek?: { x: number; y: number }; trace?: { x: number; y: number } } = {};
+  /** Whether the island says what the marks are. */
+  islandMarks = false;
+  /** Seek's swirl and Trace's hoard by the id they were found by, playing by yourself. */
+  private pathFound: { seek?: number; trace?: number } = {};
+
+  /** The marks as they stand: by yourself, only the ones whose swirl or hoard is still there. */
+  marksNow(): Array<{ kind: 'seek' | 'trace'; x: number; y: number }> {
+    if (!this.islandMarks) {
+      const s = this.pathFound.seek !== undefined ? this.swirls.get(this.pathFound.seek) : undefined;
+      this.pathMarks.seek = s ? { x: s.x, y: s.y } : undefined;
+      const h = this.pathFound.trace !== undefined ? this.hoards.find((k) => k.uid === this.pathFound.trace) : undefined;
+      this.pathMarks.trace = h ? { x: h.x, y: h.y } : undefined;
+    }
+    const out: Array<{ kind: 'seek' | 'trace'; x: number; y: number }> = [];
+    if (this.pathMarks.seek) out.push({ kind: 'seek', ...this.pathMarks.seek });
+    if (this.pathMarks.trace) out.push({ kind: 'trace', ...this.pathMarks.trace });
+    return out;
+  }
+
+  /** Your path as the Faith window draws it, worked out here: the island's `faith_said` `path` when there is one. */
+  pathSaid(): PathSaid {
+    const p = this.player;
+    const med = this.skills.get(MEDITATION);
+    const mine = p.way ? PATH_PICKS.filter((k) => k.path === p.way) : [];
+    return {
+      way: p.way,
+      meditation: med,
+      calm: Math.floor(p.calm),
+      cap: Math.floor(this.calmCap()),
+      taken: [...p.picks],
+      picks: Object.fromEntries(mine.map((k) => [k.id, pathPickRefusal(k, p.way, p.picks, med)])),
+    };
+  }
+
+  /** Take a pick of your path, playing by yourself: refused in the island's words, or null. */
+  takePathPick(id: string): string | null {
+    const k = PATH_PICK_BY_ID.get(id);
+    if (!k) return 'There is no such pick.';
+    const why = pathPickRefusal(k, this.player.way, this.player.picks, this.skills.get(MEDITATION));
+    if (why) return why;
+    this.player.picks = [...this.player.picks, id];
+    this.note('path');
+    this.logMsg(tookSaid(k), 'system');
+    this.events.emit('skill', '', 0);
+    return null;
+  }
+
+  /** Seconds before a technique can be called again, playing by yourself. */
+  techniqueRest(id: string): number {
+    const k = PATH_PICK_BY_ID.get(id);
+    return k ? Math.max(0, (this.player.usedAt[`spell:${id}`] ?? -1e9) + k.rest - this.time) : 0;
+  }
+
+  /**
+   * Why a technique cannot be called now, or null: not yours, resting, or
+   * short of Calm, in the island's words (`spell_cast_refusal`).
+   */
+  techniqueRefusal(id: string): string | null {
+    const k = PATH_PICK_BY_ID.get(id);
+    if (!k || k.kind !== 'technique' || !this.holds(id)) return 'You do not have that spell.';
+    const left = Math.ceil(this.techniqueRest(id));
+    if (left > 0) return `${k.name} can be called again in ${left} seconds.`;
+    if (this.player.calm < k.cost) return calmRefusal(k.name, k.cost, this.player.calm);
+    return null;
+  }
+
+  /**
+   * Call a technique, playing by yourself: on an island it is the spell bar's
+   * (`rpc_cast_spell`). Null, or why it did nothing -- a Seek or a Trace that
+   * finds nothing is refused, and costs nothing.
+   */
+  castTechnique(id: string): string | null {
+    const why = this.techniqueRefusal(id);
+    if (why) return why;
+    const k = PATH_PICK_BY_ID.get(id);
+    if (!k) return 'You do not have that spell.';
+    const done = this.workTechnique(k.id, k.fx);
+    if ('why' in done) return done.why;
+    this.player.calm = Math.max(0, this.player.calm - k.cost);
+    this.player.usedAt[`spell:${id}`] = this.time;
+    // And meditation, as an ability of a path on its steps teaches it.
+    this.gainSkill(MEDITATION, TECHNIQUE_GAIN);
+    this.note(`cast:${id}`);
+    this.logMsg(done.said, 'system');
+    this.events.emit('skill', '', 0);
+    return null;
+  }
+
+  /** What a technique does, playing by yourself. The island's `path_technique_cast` does the same. */
+  private workTechnique(id: string, fx: Readonly<Record<string, number>>): { said: string } | { why: string } {
+    const p = this.player;
+    switch (id) {
+      case 'knowledge_seek': {
+        let best: { id: number; element: string; d: number } | null = null;
+        for (const s of this.swirls.values()) {
+          const d = Math.hypot(s.x - p.tileX, s.y - p.tileY);
+          if (d <= fx.reach && (!best || d < best.d || (d === best.d && s.id < best.id))) best = { id: s.id, element: s.element, d };
+        }
+        if (!best) return { why: seekNone(fx.reach) };
+        this.pathFound.seek = best.id;
+        return { said: seekSaid(best.element, Math.round(best.d)) };
+      }
+      case 'knowledge_sky':
+        return { said: skySaid(this.seed, this.islandClock ? this.islandClock() : this.time, fx.hours) };
+      case 'knowledge_trace': {
+        const carried = new Set(this.inventory.items.filter((it) => it.id === 'treasure_map').map((it) => it.uid));
+        let best: { uid: number; d: number } | null = null;
+        for (const h of this.hoards) {
+          if (!carried.has(h.uid)) continue;
+          const d = Math.hypot(h.x - p.tileX, h.y - p.tileY);
+          if (d <= fx.reach && (!best || d < best.d || (d === best.d && h.uid < best.uid))) best = { uid: h.uid, d };
+        }
+        if (!best) return { why: traceNone(fx.reach) };
+        this.pathFound.trace = best.uid;
+        return { said: traceSaid(Math.round(best.d)) };
+      }
+      case 'knowledge_foreknow':
+        p.foreknow = fx.goes;
+        return { said: foreknowSaid(fx.goes) };
+      case 'knowledge_clarity':
+        p.clarityUntil = this.time + fx.secs;
+        return { said: claritySaid(fx.secs, fx.more) };
+      default:
+        return { why: 'Nothing is written behind that spell yet.' };
+    }
+  }
+
+  /**
+   * What the island says of your path on the beat (`rpc_settle`'s `path`):
+   * the picks you hold, Calm, a Foreknow's goes and a Clarity's seconds left,
+   * the spots you have sat at since the woods turned, and the marks.
+   */
+  setPath(said: PathBeat): void {
+    const p = this.player;
+    /*
+     * The path only when it has moved. A path still on its steps is the
+     * island's to work out, and always was: the browser on an island never
+     * knew it, and the steps it reads here -- a back that carries more, a hide
+     * that turns more -- would be a second opinion the island does not share.
+     */
+    p.way = said.way && PATHS[said.way]?.moved ? said.way : null;
+    p.picks = said.picks ?? [];
+    p.calm = said.calm ?? 0;
+    p.foreknow = said.foreknow ?? 0;
+    p.clarityUntil = this.time + (said.clarity ?? 0);
+    p.satSpots = said.sat ?? [];
+    p.satDawn = lastDawn(Date.now() / 1000);
+    p.studied = said.studied ?? {};
+    this.islandMarks = true;
+    this.pathMarks = { seek: said.seek ?? undefined, trace: said.trace ?? undefined };
+    this.events.emit('skill', '', 0);
+  }
+
   /** Work one of the abilities a path opens. Returns what it did, for the log. */
   workAbility(id: string): string {
     const p = this.player;
@@ -1514,16 +1712,6 @@ export class Game {
         p.wounds = [];
         p.stats.health = Math.min(1, p.stats.health + MEND_FLESH);
         return n === 1 ? 'The wound closes and the ache goes with it.' : n ? `All ${n} of them close and the ache goes with them.` : 'There was nothing to mend, and you feel better anyway.';
-      }
-      case 'sense': {
-        const found = this.senseRock(SENSE_REACH);
-        return found ? `The ground gives up what is in it: ${found} seams within ${numberWord(SENSE_REACH)} tiles, marked.` : 'There is nothing under this ground but rock.';
-      }
-      case 'recall': {
-        if (!this.deed) return 'You have nowhere to be recalled to.';
-        // On the ground at the token, from down in a cellar or up a storey as from anywhere else (`work_ability`).
-        this.putBody(this.deed.x + 0.5, this.deed.y + 1.5, 0);
-        return `You are standing at the token of ${this.deed.name}, and the walk is simply not in your legs.`;
       }
       case 'secondwind':
         p.stats.stamina = 1;
@@ -1541,22 +1729,6 @@ export class Game {
   /** What everything you hit takes, over what it would take. */
   furyMult(): number {
     return this.time < this.furyUntil ? FURY_MULT : 1;
-  }
-
-  /** Mark every seam within a radius as read, as a prospector would. */
-  private senseRock(radius: number): number {
-    const px = this.player.tileX;
-    const py = this.player.tileY;
-    const tiles: number[] = [];
-    for (let y = py - radius; y <= py + radius; y++) {
-      for (let x = px - radius; x <= px + radius; x++) {
-        if (!this.world.inBounds(x, y) || Math.hypot(x - px, y - py) > radius) continue;
-        if (oreAt(this.world, x, y)) tiles.push(y * this.world.w + x);
-      }
-    }
-    this.markProspected(tiles);
-    if (tiles.length) this.events.emit('world', px, py);
-    return tiles.length;
   }
 
   /**
@@ -3118,14 +3290,30 @@ export class Game {
     // And the stone you wear, worth a knack on the one trade it favours.
     // A jewel worn, and a circlet on the head, for each stone of theirs that favours it.
     mult += jewelGain(this.worn('jewel'), id) + jewelGain(this.worn('head'), id);
-    // And the reader's path is a tenth on everything, for good.
-    if (this.walks('knowledge', 1)) mult += ATTENTIVE;
+    // And a reader's Attentive, for good, and a Clarity while it lasts (`meditation.ts`).
+    mult += this.pathFx('learn', 0);
+    if (this.player.clarityUntil > this.time) mult += PATH_PICK_BY_ID.get('knowledge_clarity')?.fx.more ?? 0;
     // A table with all four things on it is worth a fifth more on everything.
     // It reads off the worst of the four, so bread alone buys nothing.
     mult *= tableMul(this.player.nutrition, this.tableBest());
     for (const b of this.player.boons) if (b.skill === id && b.until > this.time) mult += b.bonus;
     // And a bauble for the trade in the altar of the settlement you are working on.
     return mult * baubleLearn(this.baubleHere(), id);
+  }
+
+  /**
+   * What a reader's Quick Study makes of a gain: the first in each skill on
+   * each day of the island's clock is worth `first` times what it would be,
+   * and the day is written down against the skill. The island's `skill_raise`
+   * does the same.
+   */
+  private firstOfDay(id: string): number {
+    const first = this.pathFx('first', 1);
+    if (first === 1) return 1;
+    const day = Math.floor((this.islandClock ? this.islandClock() : this.time) / DAY_SECONDS);
+    if (this.player.studied[id] === day) return 1;
+    this.player.studied[id] = day;
+    return first;
   }
 
   /**
@@ -3137,7 +3325,7 @@ export class Game {
    * teaches you.
    */
   private earnKnacks(skill: string, base: number): void {
-    if (this.rand() >= knackChance(skill, base)) return;
+    if (this.rand() >= knackChance(skill, base, this.pathFx('knack', 1))) return;
     const id = knackLands(skill, this.rand);
     const had = this.player.knacks[id] ?? 0;
     if (had >= KNACK_CAP) return;
@@ -3381,7 +3569,7 @@ export class Game {
   gainSkill(id: string, base = ORDINARY_GAIN): number {
     const def = SKILL_DEFS.find((d) => d.id === id);
     const before = this.skills.get(id);
-    const gain = this.skills.gain(id, base * this.skillMult(id), this.rand);
+    const gain = this.skills.gain(id, base * this.skillMult(id) * this.firstOfDay(id), this.rand);
     // The last stretch of a skill moves in ten-thousandths, and a player at
     // ninety-nine deserves to see that it is moving at all.
     if (gain <= 0.000005 || !def) return gain;
@@ -3981,6 +4169,14 @@ export class Game {
       this.cancelAction();
       return;
     }
+    // Stillness: a blow that lands in the middle of a sitting ends it, with nothing come of it.
+    if (a.def.id === 'meditate' && p.attackedAt > this.time - a.elapsed) {
+      this.logMsg(STRUCK_SAID, 'error');
+      this.action = null;
+      this.nextInQueue();
+      this.events.emit('action');
+      return;
+    }
     a.elapsed += dt;
     if (a.elapsed >= a.duration) this.completeAction();
   }
@@ -4058,7 +4254,10 @@ export class Game {
     }
     this.soundOfWork(a.def, a.target);
     this.baubleGo = { job: a.def, made: [] };
+    this.foreknown = false;
     const again = a.def.perform(a.target, this) === true;
+    if (this.foreknown) this.player.foreknow = Math.max(0, this.player.foreknow - 1);
+    this.foreknown = false;
     this.sayBaubleGo();
     if (a.def.tool) this.wearTool(a.def.tool, a.def.wear ?? 1);
     // A swing costs what is swung: more for every kilogram in the hand (`fightWind`).
@@ -5024,6 +5223,11 @@ export class Game {
   }
 
   skillCheck(skill: string, difficulty = 10, toolQl = 0, ease = 0): boolean {
+    // A Foreknow's goes cannot fail: the roll is taken as a success, and the go is spent when it is done (`completeAction`).
+    if (this.player.foreknow > 0) {
+      this.foreknown = true;
+      return true;
+    }
     const s = this.skills.get(skill);
     // A clear head makes a hard piece of work easier, but never simple.
     const d = ease > 0 ? Math.max(difficulty * 0.5, difficulty - ease) : difficulty;

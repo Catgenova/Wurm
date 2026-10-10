@@ -795,18 +795,30 @@ in world time.
   on it and warns you that you will not get it back.
 - **Meditation, and the three paths.** Weave a **rug**, sit on it once every
   twelve minutes, and where you sit decides what it is worth — your own yard
-  is the worst place, high thin air is worth half again. At five meditation
-  you choose one of three ways, once and for good. **Love** is the
-  gardener's: crops on your deed come on a fifth faster, wild things are a
-  quarter readier to trust you, harvests give a third more, plus **Refresh**
-  and **Mend the flesh**. **Knowledge** is the reader's: everything teaches
-  you a tenth faster for good, you read any wildermon's blood at a glance,
-  you see a quarter further, plus **Sense the rock** and **Recall the way**.
-  **Power** is the plain one: armour burdens you a fifth less, you hit a
-  sixth harder, and what you wear turns a tenth more — a full plate suit
-  goes from turning 70% of a blow to 78% — plus **Second wind** and
-  **Fury**, half a minute of double damage. Each path opens five things:
-  two called on with a long rest between, three simply true from then on.
+  is the worst place, high thin air is worth half again, a mote swirl near
+  a quarter more, and a spot you have sat at since the woods turned half.
+  Every sitting banks **Calm**, held to favour's curve off meditation. At
+  twenty meditation you choose one of three ways, once and for good.
+  **Knowledge**, the reader's, has moved onto tiers: at 20, 40, 60, 80 and 99
+  meditation it offers a technique and two disciplines, and you take one of
+  the three in the Faith window's Path tab. Its techniques go in the spell
+  bar's path slot and cost Calm — **Seek** marks the nearest mote swirl,
+  **Read the Sky** says the wind of the next three hours, **Trace** marks the
+  hoard of a map you carry, **Foreknow** makes your next five goes certain,
+  **Clarity** puts half again on every gain for ten minutes — and its
+  disciplines are simply true: more out of every gain, any wildermon's blood
+  at a glance, further sight, a deeper well of Calm, a day's first gain
+  doubled, a mote more a swirl, a map that remembers twice as far, a
+  prospector's reach, sight the dark leaves alone, and knacks half again as
+  often. **Love** and **Power** keep their steps until they move too. **Love**
+  is the gardener's: crops on your deed come on a fifth faster, wild things
+  are a quarter readier to trust you, harvests give a third more, plus
+  **Refresh** and **Mend the flesh**. **Power** is the plain one: armour
+  burdens you a fifth less, you hit a sixth harder, and what you wear turns
+  a tenth more — a full plate suit goes from turning 70% of a blow to 78% —
+  plus **Second wind** and **Fury**, half a minute of double damage. Each
+  opens five things: two called on with a long rest between, three simply
+  true from then on.
 - **An altar, and favour.** No god with a name; a stone table, the hour
   before the sun is properly up, and the plain fact that a thing knelt over
   at dawn comes out better. An **altar** is sixteen bricks, eight mortar,

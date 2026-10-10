@@ -86,7 +86,11 @@ import { isBrew, drinkable } from '../src/game/brewing';
 import { TACK } from '../src/game/creatureActions';
 import { CASTS, FAVOUR_TRICKLE, PRAYER, PRAYER_FAVOUR, PRAYER_GAIN, PRAYER_REST, FAVOUR_CEILING, BLESS_CAP, BLESS_STEP } from '../src/game/faith';
 import { DRIVING, DRIVING_LEARN, DRIVING_TOP, SAILING, SAILING_LEARN, SAILING_TOP, TRAVEL_TOP_AT } from '../src/game/travel';
-import { PATH_LIST, CHOOSE_AT, SIT_REST } from '../src/game/meditation';
+import {
+  CHOOSE_AT, PATH_LIST, PATH_PICKS, PATH_TIER_AT, PICKS_PER_TIER, SIT_CALM, SIT_GAIN, SIT_REST, SIT_WORTH, SIT_STALE_SAID, SIT_SWIRL_SAID, STRUCK_SAID, TECHNIQUE_GAIN,
+} from '../src/game/meditation';
+import { WELL_BASE, WELL_PER } from '../src/game/wells';
+import { GUST_PERIOD, TURN_PERIOD } from '../src/game/wind';
 import {
   CLASSES, CLASS_AT, CLASS_CHANGE_COST, CLASS_NODES, CHANNELS as CLASS_CHANNELS, RITES,
   CLASS_POINT_FLOOR, CLASS_POINT_STEP, CLASS_TIER_AT, PERK_TIER_AT,
@@ -678,6 +682,21 @@ out.push(`create table if not exists rite_def (
 out.push(`create table if not exists path_def (
   id text primary key, name text not null, note text not null
 );`);
+/* Moved onto tiers: no steps, and the picks below instead (`PathDef.moved`). */
+out.push(`alter table path_def add column if not exists moved boolean not null default false;`);
+/*
+ * And a moved path's tiers: the meditation each opens at, and the three picks
+ * offered at each -- a technique, cast off the spell bar's path slot for Calm,
+ * and two disciplines, simply true -- one of which is taken. `num` is the order
+ * `PATH_PICKS` writes them in; `fx` is what each does, key by key.
+ */
+out.push(`create table if not exists path_tier (
+  tier int primary key, at int not null
+);`);
+out.push(`create table if not exists path_pick (
+  id text primary key, path text not null, tier int not null, num int not null, kind text not null, name text not null,
+  note text not null, cost double precision not null, rest double precision not null, fx jsonb not null
+);`);
 out.push(`create table if not exists path_step (
   path text not null, n int not null, at real not null, name text not null, note text not null,
   ability text, rest real, said text, primary key (path, n)
@@ -1153,7 +1172,7 @@ out.push(emptied(['melt_def', 'wall_fitting', 'recipe', 'recipe_input', 'recipe_
   'pottery_def', 'mould_def', 'improve_material_def', 'improve_tool', 'improve_stock',
   'improvable_def', 'item_feeds', 'boon_skill', 'plantable', 'buryable', 'flower_octave', 'flower_season', 'stone_bed', 'title_def',
   'knack_kin', 'category_decay', 'vehicle_def', 'boat_def', 'tack_def', 'cast_def', 'path_def',
-  'path_step', 'class_def', 'class_skill', 'class_channel', 'class_node', 'class_perk',
+  'path_step', 'path_tier', 'path_pick', 'class_def', 'class_skill', 'class_channel', 'class_node', 'class_perk',
   'perk_fx_rule', 'perk_tier', 'class_tier', 'class_spell', 'patron_def', 'faith_tier', 'faith_spell', 'spell_on_def', 'spell_slot', 'pan_ore', 'rite_def',
   'school_def', 'school_stone', 'spell_def', 'bridge_def', 'bridge_bill', 'bridge_winch', 'brew_def',
   'dyeable_item', 'dyeable_class', 'dye_legacy', 'dyestuff_def', 'dye_word_def', 'dye_litres_def', 'dye_size_def']));
@@ -1806,11 +1825,23 @@ for (const [fn, v] of [
   ['favour_trickle', FAVOUR_TRICKLE], ['prayer_favour', PRAYER_FAVOUR], ['prayer_rest', PRAYER_REST], ['prayer_gain', PRAYER_GAIN],
   ['favour_ceiling', FAVOUR_CEILING], ['bless_cap', BLESS_CAP], ['bless_step', BLESS_STEP],
   ['choose_at', CHOOSE_AT], ['sit_rest', SIT_REST],
+  /* The curve favour and Calm are both held to (`wells.ts`), and a moved path's picks to a tier. */
+  ['well_base', WELL_BASE], ['well_per', WELL_PER], ['picks_per_tier', PICKS_PER_TIER], ['technique_gain', TECHNIQUE_GAIN],
+  /* A sitting's meditation and Calm before the spot is counted, and what the spot multiplies them by (`SIT_WORTH`). */
+  ['sit_gain', SIT_GAIN], ['sit_calm', SIT_CALM],
+  ...Object.entries(SIT_WORTH).map(([k, v]): [string, number] => [`sit_${k.replace(/[A-Z]/g, (c) => `_${c.toLowerCase()}`)}`, v]),
+  /* How long the wind takes to box the compass, and a squall (`windAt`), which Read the Sky reads ahead. */
+  ['wind_turn', TURN_PERIOD], ['wind_gust', GUST_PERIOD],
 ] as Array<[string, number]>) {
   out.push(`create or replace function ${fn}() returns double precision language sql immutable as $fn$ select ${q(v)}::double precision $fn$;`);
 }
 /* The skill a prayer is said with (`PRAYER`), beside faith's own `faith_skill`. */
 out.push(`create or replace function praying_skill() returns text language sql immutable as $fn$ select ${q(PRAYER)} $fn$;`);
+/* What a sitting says when a blow lands in it, which ends it (`STRUCK_SAID`). */
+out.push(`create or replace function struck_said() returns text language sql immutable as $fn$ select ${q(STRUCK_SAID)} $fn$;`);
+/* And what one says beside a mote swirl, and near where you have sat since the woods turned (`sitPlace`). */
+out.push(`create or replace function sit_swirl_said() returns text language sql immutable as $fn$ select ${q(SIT_SWIRL_SAID)} $fn$;`);
+out.push(`create or replace function sit_stale_said() returns text language sql immutable as $fn$ select ${q(SIT_STALE_SAID)} $fn$;`);
 /* What every gain is worth against the curve, for everybody (`GAIN_RATE`): `skill_gain_of` reads it. */
 out.push(`create or replace function gain_rate() returns double precision language sql immutable as $fn$ select ${q(GAIN_RATE)}::double precision $fn$;`);
 /* Driving and sailing (`travel.ts`): the skills, what each adds to the pace at 100, and what a tile gone into teaches. */
@@ -1840,6 +1871,8 @@ out.push(`create or replace function ryb_cube() returns double precision[] langu
 /* The chance one raise leaves a knack behind: the browser's `knackChance`. A
    tick of a trade taught on the move rolls at the share of a go it teaches. */
 out.push(`create or replace function knack_chance(p_id text, p_base double precision) returns double precision language sql immutable as $fn$ select (case when p_id = any (array[${KNACK_BY_LEARNING.map(q).join(', ')}]::text[]) then least(1, p_base / ${KNACK_GO}) else 1 end) / ${KNACK_ODDS}::double precision $fn$;`);
+/* And `mul` times that, for somebody whose chance is better: a Polymath's (`knackChance`'s third). */
+out.push(`create or replace function knack_chance(p_id text, p_base double precision, p_mul double precision) returns double precision language sql immutable as $fn$ select knack_chance(p_id, p_base) * p_mul $fn$;`);
 out.push(`create or replace function elementalism_skill() returns text language sql immutable as $fn$ select ${q(ELEMENTALISM)} $fn$;`);
 for (const [fn, v] of [
   ['swirls_a_day', SWIRLS_A_DAY], ['swirl_tries', SWIRL_TRIES], ['swirl_draws', SWIRL_DRAWS], ['swirl_dark', SWIRL_DARK], ['swirl_light', SWIRL_LIGHT],
@@ -2032,11 +2065,16 @@ for (const r of RITES) {
     q(r.level), q(r.secs), q(r.rest), q(JSON.stringify(r.muls)), q(r.said), q(r.note)].join(', ') + `);`);
 }
 for (const path of PATH_LIST) {
-  out.push(`insert into path_def values (${q(path.id)}, ${q(path.name)}, ${q(path.note)});`);
+  out.push(`insert into path_def (id, name, note, moved) values (${q(path.id)}, ${q(path.name)}, ${q(path.note)}, ${q(path.moved)});`);
   path.steps.forEach((step, n) => out.push(`insert into path_step values (` + [
     q(path.id), q(n + 1), q(step.at), q(step.name), q(step.note),
     q(step.ability?.id ?? null), q(step.ability?.rest ?? null), q(step.ability?.note ?? null)].join(', ') + `);`));
 }
+PATH_TIER_AT.forEach((at, i) => out.push(`insert into path_tier values (${q(i + 1)}, ${q(at)});`));
+PATH_PICKS.forEach((k, num) => {
+  out.push(`insert into path_pick values (` + [q(k.id), q(k.path), q(k.tier), q(num), q(k.kind), q(k.name), q(k.note),
+    q(k.cost), q(k.rest), q(JSON.stringify(k.fx))].join(', ') + `);`);
+});
 for (const r of RECIPES) {
   out.push(`insert into recipe (id, result, count, tool, station, skill, label, verb, base_time, stamina, difficulty, consume_on_fail, ql_from_inputs, material, wood, extra, done, fail) values (` +
     [q(r.id), q(r.result), q(r.count ?? 1), q(r.tool), q(r.station), q(r.skill), q(r.label), q(r.verb),

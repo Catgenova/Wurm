@@ -233,7 +233,7 @@ export const MOTE_ACTIONS: ActionDef[] = [
     // What it gives you, before the go trains you: "Collect three fire motes".
     labelFor: (t, g) => {
       const s = t.kind === 'tile' ? g.swirlAt(t.x, t.y) : undefined;
-      return s ? `Collect ${motesWord(motesFor(g.skills.get(ELEMENTALISM)), s.element)}` : 'Collect motes';
+      return s ? `Collect ${motesWord(motesFor(g.skills.get(ELEMENTALISM)) + g.pathFx('motes', 0), s.element)}` : 'Collect motes';
     },
     verb: 'collecting motes',
     skill: ELEMENTALISM,
@@ -249,7 +249,8 @@ export const MOTE_ACTIONS: ActionDef[] = [
         g.logMsg(SWIRL_SAID.gone, 'error');
         return;
       }
-      const n = motesFor(g.skills.get(ELEMENTALISM));
+      // And another for a reader's Elemental Lore (`knowledge_lore`).
+      const n = motesFor(g.skills.get(ELEMENTALISM)) + g.pathFx('motes', 0);
       g.takeSwirl(s.id);
       g.gather(moteItem(s.element), { count: n, ql: g.productQl(ELEMENTALISM) });
       g.logMsg(collectedSays(n, s.element), 'event');

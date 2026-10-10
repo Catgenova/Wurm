@@ -1610,6 +1610,19 @@ jobs:
             --outfile=node_modules/.cache/faith.mjs --log-level=error
           node node_modules/.cache/faith.mjs
 
+      - name: Meditation's tiers, Calm, and the Knowledge path
+        run: |
+          # A path is chosen at twenty and kept by whoever chose before; a moved
+          # path's pick is refused in the browser's words and taken one a tier,
+          # a technique onto the bar's path slot. A sitting banks Calm off its
+          # place, up to favour's curve; a swirl near is worth more, a spot sat
+          # at since the woods turned half, and a blow ends it. Every Knowledge
+          # technique and discipline does what it says on both sides, and Love
+          # and Power keep their steps. Seeded throughout.
+          npx esbuild supabase/test/meditation.ts --bundle --platform=node --format=esm \
+            --outfile=node_modules/.cache/meditation.mjs --log-level=error
+          node node_modules/.cache/meditation.mjs
+
       - name: The Blessing's spells
         run: |
           # Every one of the fifteen pointed and cast as the door does it, and

@@ -146,9 +146,13 @@ export const KNACK_BY_LEARNING: readonly string[] = ['swimming', 'climbing', 'dr
 /** What a go at a trade teaches as its base, done well (`tryGain(true)`). */
 export const KNACK_GO = 1;
 
-/** The chance one raise of this trade, at this base, leaves a knack behind. */
-export const knackChance = (skill: string, base: number): number =>
-  (KNACK_BY_LEARNING.includes(skill) ? Math.min(1, base / KNACK_GO) : 1) / KNACK_ODDS;
+/**
+ * The chance one raise of this trade, at this base, leaves a knack behind:
+ * `mul` times it for somebody whose chance is better (a Polymath's,
+ * `knowledge_polymath`). The island's `knack_chance` is generated from this.
+ */
+export const knackChance = (skill: string, base: number, mul = 1): number =>
+  ((KNACK_BY_LEARNING.includes(skill) ? Math.min(1, base / KNACK_GO) : 1) / KNACK_ODDS) * mul;
 
 /** Where a knack earned at this trade lands. */
 export function knackLands(skill: string, rand: () => number): string {

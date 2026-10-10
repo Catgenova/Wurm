@@ -51,7 +51,7 @@ simplification rather than a problem:
 | **3** | what the old people left in the ground: investigated, put back together, and a book worked through |
 | **6** | traps: a snare set, baited, emptied and lifted; a creel sunk and turned out; and whatever is in one let go |
 | **11** | a saddle and a set of traces: tack fitted and stripped, a rider up and down, a beast into the yokes and out, the shafts of a cart taken up and let go, a seat boarded and left, and the whole team unhitched at once |
-| **5** | an altar and the three paths: a prayer knelt, six things favour buys, a sitting, a path chosen once, and six abilities called on |
+| **5** | an altar and the three paths: a prayer knelt, six things favour buys, a sitting, a path chosen once, and four abilities of Love's and Power's steps called on (Knowledge's techniques are cast off the spell bar) |
 | **3** | bridges: thrown across, decked a plank at a time, and pulled down for half of what went into them |
 | **2** | a bed: a night slept through, and a place to wake |
 | **2** | a herd: two of them put together, and the blood read off one of them |

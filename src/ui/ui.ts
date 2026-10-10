@@ -54,7 +54,7 @@ import { foundationState } from '../game/foundations';
 import { BLESS_CAP, CASTS, FAITH, favourCap } from '../game/faith';
 import { BAUBLE_SAID, BAUBLE_TIER_BY_ID, BAUBLE_TIERS, readBauble, socketsOf, socketText, TARNISHED } from '../game/baubles';
 import { FED_SAID, SACRIFICE_SAID, sacrificeable } from '../game/sacrifice';
-import { abilitiesOf, CHOOSE_AT, MEDITATION, nextStep, PATHS, PATH_LIST, sittingWorth } from '../game/meditation';
+import { abilitiesOf, CHOOSE_AT, MEDITATION, nextStep, PATH_PICK_BY_ID, PATH_TIER_AT, PATHS, PATH_LIST, picksOf, sittingWorth } from '../game/meditation';
 import { canImprove } from '../game/improve';
 import { BREWS } from '../game/brewing';
 import { fireAnchor, fireState, FIRE_COST, isFuel, type PlacedCampfire } from '../game/campfire';
@@ -420,7 +420,7 @@ export class UI {
      */
     this.faithBook = new FaithBook(this.island);
     const faithWin = this.windows.create({ id: 'faith', title: 'Faith', x: 12, y: 56, width: 460, height: 560, anchor: 'tl', open: false });
-    this.faith = new FaithPanel(faithWin, this.faithBook);
+    this.faith = new FaithPanel(faithWin, this.faithBook, game);
     this.spellBar = new SpellBar(root, game, this.faithBook, (x, y, title, items) => this.menu.show(x, y, title, items),
       () => this.windows.get('faith')?.open(), () => this.windows.get('trades')?.open());
     void this.faithBook.ask();
@@ -1181,7 +1181,7 @@ export class UI {
       const worth = sittingWorth(g);
       entries.push({
         label: 'Sit and think about nothing',
-        note: why ? undefined : `meditation ${med.toFixed(1)} · this spot is worth ${(worth.gain / 1.5).toFixed(2)}×`,
+        note: why ? undefined : `meditation ${med.toFixed(1)} · this spot is worth ${worth.place.toFixed(2)}× · ${Math.floor(worth.calm)} Calm`,
         hint: why ?? undefined,
         disabled: !!why,
         onSelect: () => g.requestAction(sit, target),
@@ -1196,14 +1196,43 @@ export class UI {
           children: ready
             ? PATH_LIST.map((path) => ({
                 label: path.name,
-                note: path.steps.map((st) => `${st.at}: ${st.name}`).join(' · '),
+                note: path.moved
+                  ? PATH_TIER_AT.map((at, i) => `${at}: ${picksOf(path.id, i + 1).map((k) => k.name).join(' / ')}`).join(' · ')
+                  : path.steps.map((st) => `${st.at}: ${st.name}`).join(' · '),
                 hint: path.note,
                 onSelect: () => g.requestAction(choose, { ...target, material: path.id }),
               }))
             : undefined,
         });
       }
-      if (g.player.way) {
+      if (g.player.way && PATHS[g.player.way].moved) {
+        // A path moved onto tiers: its picks are taken in the Faith window, and its techniques cast off the bar.
+        const way = PATHS[g.player.way];
+        const next = PATH_TIER_AT.find((at) => med < at);
+        entries.push({
+          label: `The path of ${way.name}`,
+          note: `Calm ${Math.floor(g.player.calm)} of ${Math.floor(g.calmCap())} · ${next !== undefined ? `next tier at ${next}` : 'every tier open'}`,
+          onSelect: () => this.windows.get('faith')?.open(),
+        });
+        // Playing by yourself there is no spell bar, so the techniques you hold are called from here.
+        const mine = g.player.picks.filter((id) => PATH_PICK_BY_ID.get(id)?.kind === 'technique' && g.holds(id));
+        if (!this.island && mine.length) {
+          entries.push({
+            label: 'Call on what you know',
+            children: mine.map((id) => {
+              const k = PATH_PICK_BY_ID.get(id);
+              const reason = g.techniqueRefusal(id);
+              return {
+                label: k?.name ?? id, note: `${k?.cost ?? 0} Calm`, hint: reason ?? undefined, disabled: !!reason,
+                onSelect: () => {
+                  const why = g.castTechnique(id);
+                  if (why) g.logMsg(why, 'error');
+                },
+              };
+            }),
+          });
+        }
+      } else if (g.player.way) {
         const way = PATHS[g.player.way];
         const next = nextStep(g.player.way, med);
         entries.push({ label: `The path of ${way.name}`, note: next ? `next: ${next.name} at ${next.at}` : 'walked to the end', disabled: true });

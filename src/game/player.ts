@@ -179,6 +179,18 @@ export class Player {
   /** The path chosen at the rug, once and for good, and when you last sat. */
   way: PathId | null = null;
   satAt = -1e9;
+  /** The picks of a moved path taken, one a tier (`meditation.ts`). */
+  picks: string[] = [];
+  /** Calm banked by sitting, spent on a path's techniques. */
+  calm = 0;
+  /** Where you have sat since the woods last turned, and the dawn that was (`SIT_WORTH.stale`). */
+  satSpots: Array<[number, number]> = [];
+  satDawn = 0;
+  /** A Foreknow's goes left, and when a Clarity runs out, in game seconds. */
+  foreknow = 0;
+  clarityUntil = -1e9;
+  /** The day of the island's clock each skill last had a Quick Study's doubled gain. */
+  studied: Record<string, number> = {};
   /** Game time each path ability was last called on. */
   usedAt: Record<string, number> = {};
   /** Banked favour, and the hour you last had anything to say. */
@@ -546,6 +558,13 @@ export interface PlayerSave {
   way?: PathId | null;
   satAt?: number;
   usedAt?: Record<string, number>;
+  picks?: string[];
+  calm?: number;
+  satSpots?: Array<[number, number]>;
+  satDawn?: number;
+  foreknow?: number;
+  clarityUntil?: number;
+  studied?: Record<string, number>;
   belt?: Array<BeltPin | null>;
   /** Absent in every save written before there was a creator; those get the default. */
   look?: Look;
@@ -573,6 +592,13 @@ export function writePlayer(p: Player): PlayerSave {
     way: p.way,
     satAt: p.satAt,
     usedAt: p.usedAt,
+    picks: p.picks,
+    calm: p.calm,
+    satSpots: p.satSpots,
+    satDawn: p.satDawn,
+    foreknow: p.foreknow,
+    clarityUntil: p.clarityUntil,
+    studied: p.studied,
     belt: p.belt,
   };
 }
@@ -599,6 +625,13 @@ export function readPlayer(p: Player, saved: PlayerSave): void {
   p.way = saved.way ?? null;
   p.satAt = saved.satAt ?? -1e9;
   p.usedAt = saved.usedAt ?? {};
+  p.picks = saved.picks ?? [];
+  p.calm = saved.calm ?? 0;
+  p.satSpots = saved.satSpots ?? [];
+  p.satDawn = saved.satDawn ?? 0;
+  p.foreknow = saved.foreknow ?? 0;
+  p.clarityUntil = saved.clarityUntil ?? -1e9;
+  p.studied = saved.studied ?? {};
   // Cleaned rather than trusted: a save is a file on somebody's own machine,
   // and this is the same value that ends up in `fillStyle`.
   if (saved.look) p.look = cleanLook(saved.look);

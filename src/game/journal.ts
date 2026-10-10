@@ -7,11 +7,11 @@ import { canImprove } from './improve';
 import { traitTier } from './traits';
 import { FIRE_COST } from './campfire';
 import { billWords, DEED_DECAY, rarityChance } from './items';
-import { CHOOSE_AT, PATH_LIST } from './meditation';
+import { CHOOSE_AT, PATH_LIST, PATH_PICK_BY_ID, PATH_TIER_AT, PATHS, type PathId } from './meditation';
 import { KNACK_CAP, KNACK_ODDS, TITLE_STEPS } from './titles';
 import { BLESS_CAP } from './faith';
 import { FURNITURE_BY_ID } from './furniture';
-import { capital, fill, NumberWord, numberWord, times } from './words';
+import { capital, fill, listed, NumberWord, numberWord, times } from './words';
 
 /**
  * A journal of goals. There is a great deal to do on this island and nothing
@@ -64,8 +64,14 @@ export function describeGoals(values: object): void {
     }
   }
 }
-/** The highest step of any path, which is where one is walked to its end. */
-const PATH_END = Math.max(...PATH_LIST.flatMap((p) => p.steps.map((s) => s.at)));
+/** Where a path is walked to its end: the last tier of one moved onto tiers, the highest step of one still on its steps. */
+const pathEnd = (way: PathId): number =>
+  (PATHS[way].moved ? PATH_TIER_AT[PATH_TIER_AT.length - 1] : Math.max(...PATHS[way].steps.map((s) => s.at)));
+/** The tier a pick is at, or nought. */
+const PATH_PICK_TIER = (id: string): number => PATH_PICK_BY_ID.get(id)?.tier ?? 0;
+/** Each end, and the paths walked to it: "99 on Knowledge, 70 on Love and Power". */
+const PATH_ENDS = [...new Set(PATH_LIST.map((p) => pathEnd(p.id)))].sort((a, b) => b - a)
+  .map((end) => `${end} on ${listed(PATH_LIST.filter((p) => pathEnd(p.id) === end).map((p) => p.name))}`);
 /** The team a wagon will not roll without. */
 const wagonTeam = (): number => FURNITURE_BY_ID.get('wagon')?.vehicle?.needs ?? 1;
 /** The titles past the first two: master and legendary. */
@@ -158,7 +164,12 @@ export const JOURNAL: Chapter[] = [
       { id: 'worms', text: 'Dig up worms with a shovel', met: did('worms') },
       { id: 'sat', text: 'Sit on a rug and meditate', hint: 'Weave a rug on a loom', met: did('sat') },
       { id: 'path', text: 'Choose a meditation path', hint: `Offered at meditation ${CHOOSE_AT}, at the rug; the choice is for good`, met: (g) => !!g.player.way },
-      { id: 'walked', text: `Reach meditation ${PATH_END} on your path`, met: (g) => !!g.player.way && g.skills.get('meditation') >= PATH_END },
+      { id: 'walked', text: `Walk your path to its end: meditation ${listed(PATH_ENDS)}`, met: (g) => !!g.player.way && g.skills.get('meditation') >= pathEnd(g.player.way) },
+      {
+        id: 'tiered', text: 'Take a pick at every tier of your path',
+        hint: `A technique or a discipline at each of ${listed(PATH_TIER_AT.map(String))} meditation, in the Faith window's Path tab, on a path moved onto tiers`,
+        met: (g) => !!g.player.way && PATHS[g.player.way].moved && PATH_TIER_AT.every((_, i) => g.player.picks.some((id) => id.startsWith(`${g.player.way}_`) && PATH_PICK_TIER(id) === i + 1)),
+      },
       {
         id: 'altar',
         text: 'Build an altar',

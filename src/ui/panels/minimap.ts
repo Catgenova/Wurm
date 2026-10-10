@@ -489,6 +489,38 @@ export class MinimapPanel {
       ctx.fillStyle = css;
       ctx.fillText(m.name, bx + 3, my - 11);
     }
+    /*
+     * What a path's technique found (`Game.marksNow`): the swirl a Seek found
+     * until somebody collects it, and the hoard a Trace found until it is dug
+     * up. A ring in the reader's lamp colour, pinned to the edge when it is
+     * off the drawn window, as a person is: a mark worth walking to is the
+     * one you cannot see from here.
+     */
+    for (const m of this.game.marksNow()) {
+      const tx = (m.x + 0.5 - ox) * scale;
+      const ty = (m.y + 0.5 - oy) * scale;
+      const off = tx < 6 || ty < 6 || tx > this.view.width - 6 || ty > this.view.height - 6;
+      const kx = Math.max(7, Math.min(this.view.width - 7, tx));
+      const ky = Math.max(7, Math.min(this.view.height - 7, ty));
+      ctx.strokeStyle = 'rgba(0,0,0,0.85)';
+      ctx.lineWidth = 4;
+      ctx.beginPath();
+      ctx.arc(kx, ky, off ? 4 : 6, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.strokeStyle = m.kind === 'seek' ? '#f2d79a' : '#ffb35c';
+      ctx.lineWidth = 2;
+      ctx.stroke();
+      ctx.lineWidth = 1;
+      if (!this.names) continue;
+      const label = m.kind === 'seek' ? 'Seek: a mote swirl' : 'Trace: a hoard';
+      const w = ctx.measureText(label).width;
+      const right = kx + 9 + w + 6 <= this.view.width;
+      const bx = right ? kx + 9 : Math.max(0, kx - 9 - w - 6);
+      ctx.fillStyle = 'rgba(0,0,0,0.65)';
+      ctx.fillRect(bx, ky - 9, w + 6, 17);
+      ctx.fillStyle = m.kind === 'seek' ? '#f2d79a' : '#ffb35c';
+      ctx.fillText(label, bx + 3, ky);
+    }
     // Landmarks: a statue is on the map from the day it is set up, a stone
     // diamond with its name, drawn under the people and over the marks.
     for (const f of this.game.furniture.values()) {

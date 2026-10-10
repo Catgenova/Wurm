@@ -6,6 +6,7 @@ import {
   FAITH_SPELL_BY_ID, PATRON_AT, SCHOOL_NAMES, SPELL_BAR, SPELL_REACH, spellOnText, type SpellOn, type SpellSchool,
 } from '../game/patrons';
 import { CLASS_SPELL_BY_ID } from '../game/talents';
+import { CHOOSE_AT, PATH_PICK_BY_ID } from '../game/meditation';
 import { percent } from '../game/words';
 import type { MenuItem } from './contextmenu';
 import type { FaithBook } from './faithbook';
@@ -40,6 +41,9 @@ const barSpell = (id: string | null | undefined): BarSpell | undefined => {
   if (f) return { id, name: f.name, note: f.note, on: f.on, radius: f.radius, rest: f.rest, costs: `${f.cost} favour` };
   const c = CLASS_SPELL_BY_ID.get(id);
   if (c) return { id, name: c.name, note: c.note, on: c.on, rest: c.rest, costs: c.cost > 0 ? `${percent(c.cost)} stamina` : 'no stamina' };
+  // A path's technique, cast on yourself and paid for in Calm (`meditation.ts`).
+  const k = PATH_PICK_BY_ID.get(id);
+  if (k?.kind === 'technique') return { id, name: k.name, note: k.note, on: ['self'], rest: k.rest, costs: `${k.cost} Calm` };
   return undefined;
 };
 
@@ -326,7 +330,10 @@ export class SpellBar {
       if (!this.book.said?.classSpells?.length) return 'Take a spell of your fighting trade’s in the Trades window, and it goes here.';
       return 'Right-click to put one of your trade’s spells here.';
     }
-    if (school !== 'faith') return `No ${SCHOOL_NAMES[school].toLowerCase()} spells are written yet.`;
+    if (school === 'path') {
+      if (!this.book.said?.pathSpells?.length) return `A path’s techniques are taken in the Faith window, under Path, from ${CHOOSE_AT} meditation, and go here.`;
+      return 'Right-click to put one of your path’s techniques here.';
+    }
     if (!this.book.said?.patron) return `Faith spells come from a patron, taken at ${PATRON_AT} faith in the Faith window.`;
     if (!this.book.said.taken.length) return 'Take a spell of your patron’s in the Faith window, and it goes here.';
     return 'Right-click to put one of your patron’s spells here.';
@@ -340,7 +347,7 @@ export class SpellBar {
     const now = barSpell(s?.bar[i]);
     if (now) items.push({ label: `Cast ${now.name} on…`, children: this.aimItems(i, now) });
     // The spells of this slot's school you have: a patron's taken, or your trade's (`classSpells`).
-    const mine = school === 'faith' ? s?.taken ?? [] : school === 'class' ? s?.classSpells ?? [] : [];
+    const mine = school === 'faith' ? s?.taken ?? [] : school === 'class' ? s?.classSpells ?? [] : s?.pathSpells ?? [];
     if (s && mine.length) {
       for (const id of mine) {
         const def = barSpell(id);
