@@ -74,12 +74,12 @@ import { TileIndex, Tally, keyX, keyY, tileKey } from './tileindex';
 import { DARK_HIT, NIGHT_EYES_FROM, WORK_HAND, WORK_WIND, WORK_WIND_SPENT, HEAVY_SKILLS, WORK_BACK } from './learn';
 import { DRIVING, DRIVING_LEARN, drivingPace, SAILING, SAILING_LEARN, sailingPace, vehicleQlPace } from './travel';
 import { laySwirls, swirlLight, type Swirl } from './motes';
-import { runestoneAt, stoneTiles } from './runestones';
+import { hasRunestones, runestoneAt, RUNESTONES, stonePoint, stoneTiles } from './runestones';
 import { AWARENESS, Vision } from './vision';
 import { blessBonus, favourCap, FAITH, FAVOUR_TRICKLE } from './faith';
 import { ATTENTIVE, FURY_MULT, FURY_SECS, GREEN_THUMB, hasStep, IRONHIDE, MEDITATION, MEND_FLESH, SENSE_REACH, STRONG_BACK, type PathId } from './meditation';
 import { ledgerTotals, record, type Ledger } from './ledger';
-import { ALTAR_CAST, ALTAR_CAST_ALPHA, ALTAR_GLOW, ALTAR_REACH, FIRE_REACH, heldReach, HELD_LIGHTS, lanternReach, OVEN_REACH, type LightSource } from './light';
+import { ALTAR_CAST, ALTAR_CAST_ALPHA, ALTAR_GLOW, ALTAR_REACH, FIRE_REACH, heldReach, HELD_LIGHTS, lanternReach, OVEN_REACH, runestoneLight, type LightSource } from './light';
 import { counterFinished, counterInto, counterMiddle, Counters, type CountersJSON, type CounterWire } from './counters';
 import { burnLamps, isLampPiece, lampArmRefusal, lampBurning, lampFrom, lampLight, lampTurnsTo } from './lamps';
 import { helpingOf, NUTRIENTS, NUTRIENT_DECAY, NUTRIENT_NAMES, TABLE_BEST, tableMul, upkeepMul, type Nutrient } from './nutrition';
@@ -2954,6 +2954,13 @@ export class Game {
     for (const l of this.spellLights) out.push(l);
     // A mote swirl's own small glow, soft as a spell's (`swirlLight`).
     if (this.swirls.size) for (const s of this.swirls.values()) if (near(s.x, s.y)) out.push(swirlLight(s));
+    // The runestones' runes, round the middle of each (`runestoneLight`).
+    if (hasRunestones(this.world.w)) {
+      for (const s of RUNESTONES) {
+        const p = stonePoint(s, this.world.w);
+        if (near(p.x, p.y)) out.push(runestoneLight(p.x, p.y));
+      }
+    }
     return out;
   }
 

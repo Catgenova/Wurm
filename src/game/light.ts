@@ -98,6 +98,24 @@ export const ALTAR_CAST = '184, 160, 240';
 export const ALTAR_CAST_ALPHA = 0.18;
 
 /**
+ * And a runestone's runes: a pool of pale gold reaching two tiles from the
+ * middle of its middle tile, just past its outcrop, steady and soft-edged as
+ * a spell's light is -- enough to light the outcrop and whoever stands at its
+ * foot, faint enough that the runes and not the ground are the brightest
+ * thing there. Drawn only, as an altar's is: no rule asks how far it reaches.
+ * The runes themselves shine through the wash in their own shapes
+ * (`RunestoneNight` in the renderer).
+ */
+export const RUNESTONE_REACH = 2.1;
+export const RUNESTONE_GLOW = 0.28;
+export const RUNESTONE_CAST = '255, 204, 128';
+export const RUNESTONE_CAST_ALPHA = 0.28;
+/** The light of a runestone whose middle is at world (x, y). */
+export const runestoneLight = (x: number, y: number): LightSource => ({
+  x, y, radius: RUNESTONE_REACH, strength: RUNESTONE_GLOW, steady: true, soft: true, cast: RUNESTONE_CAST, castAlpha: RUNESTONE_CAST_ALPHA,
+});
+
+/**
  * What the night is worth over a point, given everything burning near it: 1
  * where nothing reaches and 0 in the middle of a good fire. The falloff is
  * square rather than linear, so a light has a bright heart and a soft edge
