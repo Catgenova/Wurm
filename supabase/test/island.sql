@@ -3740,8 +3740,9 @@ update player set x = 5.5, y = 7.5, favour = 0, favour_at = now(), prayed_at = n
 delete from skill where world_id = :'world2' and uid = :'ivar' and id in ('prayer', 'meditation');
 select '486. what a prayer buys: ' || (select string_agg(name || ' (' || cost || ' favour at prayer '
        || level || ', on ' || on_what || ')', ', ' order by level) from cast_def);
+-- Every path on tiers now: what each offers at its first, a technique and two disciplines.
 select '487. and the three ways: ' || (select string_agg(d.name || ' — ' ||
-       (select string_agg(s.name, ', ' order by s.n) from path_step s where s.path = d.id),
+       (select string_agg(k.name, ', ' order by k.num) from path_pick k where k.path = d.id and k.tier = 1),
        ' | ' order by d.id) from path_def d);
 select '488. nothing to kneel at: ' || coalesce(act_refusal(:'world2', :'ivar', 'pray',
        '{"kind":"furniture","id":0}'::jsonb), 'allowed');
@@ -3828,44 +3829,49 @@ select act_perform(:'world2', :'ivar', 'choose_path', '{"kind":"tile","material"
 select '501. ' || (select text from event where uid = :'ivar' order by n desc limit 1);
 select '502. and choosing again: ' || coalesce(act_refusal(:'world2', :'ivar', 'choose_path',
        '{"kind":"tile","material":"power"}'::jsonb), 'allowed');
--- Sitting until the path opens out. Each step announces itself as it arrives.
+-- Sitting until the path opens out: the second tier announces itself as it opens.
 update player set sat_at = null where world_id = :'world2' and uid = :'ivar';
-insert into skill (world_id, uid, id, value) values (:'world2', :'ivar', 'meditation', 11.6)
-  on conflict (world_id, uid, id) do update set value = 11.6;
+insert into skill (world_id, uid, id, value) values (:'world2', :'ivar', 'meditation', 39.99)
+  on conflict (world_id, uid, id) do update set value = 39.99;
 delete from event where uid = :'ivar';
 select act_perform(:'world2', :'ivar', 'meditate', '{"kind":"tile","x":5,"y":7}'::jsonb) \g /dev/null
 select '503. ' || coalesce((select string_agg(text, ' | ' order by n) from event
        where uid = :'ivar' and kind = 'system'), 'nothing opened out');
 select '504. calling on something nobody taught us: ' || coalesce(act_refusal(:'world2', :'ivar',
        'use_ability', '{"kind":"tile","material":"fury"}'::jsonb), 'allowed');
-update player set stats = jsonb_set(jsonb_set(stats, '{hunger}', '0.2'), '{thirst}', '0.1')
+-- Refresh is a technique now, taken at the first tier and cast off the bar's path slot for Calm.
+update player set stats = jsonb_set(jsonb_set(stats, '{hunger}', '0.2'), '{thirst}', '0.1'), calm = 40
   where world_id = :'world2' and uid = :'ivar';
-delete from event where uid = :'ivar';
-select act_perform(:'world2', :'ivar', 'use_ability', '{"kind":"tile","material":"refresh"}'::jsonb) \g /dev/null
-select '505. ' || (select text from event where uid = :'ivar' and kind = 'event' order by n desc limit 1)
+select coalesce(current_setting('request.jwt.claims', true), '') as claims_was \gset
+select set_config('request.jwt.claims', json_build_object('sub', :'ivar')::text, false) \g /dev/null
+delete from caller where uid = :'ivar';
+select rpc_take_path_pick(:'world2', 'love_refresh') \g /dev/null
+delete from caller where uid = :'ivar';
+-- Cast, and then read: one statement reads the rows as they stood when it began.
+select coalesce(rpc_cast_spell(:'world2', 5, '{}'::jsonb)->>'said', 'nothing said') as said505 \gset
+select '505. ' || :'said505'
      || ' — hunger ' || (select round((stats->>'hunger')::numeric, 1) from player
         where world_id = :'world2' and uid = :'ivar')
-     || ', and again: ' || coalesce(act_refusal(:'world2', :'ivar', 'use_ability',
+     || ', and the old way: ' || coalesce(act_refusal(:'world2', :'ivar', 'use_ability',
         '{"kind":"tile","material":"refresh"}'::jsonb), 'allowed');
+select set_config('request.jwt.claims', :'claims_was', false) \g /dev/null
 /*
- * And what a path is worth where the island already does the arithmetic. Two
- * of the paths' steps are a row and nothing else — carrying weight and what
- * armour turns — because neither is computed anywhere down here to multiply.
+ * And what a path is worth where the island already does the arithmetic: a
+ * discipline taken, read where its rule is (Gentle Hand on a tame).
  */
 select creature_spawn(:'world2', 'rabba', 5.7, 7.7, 'wild', now() - interval '1 day') as bun \gset
 insert into skill (world_id, uid, id, value) values (:'world2', :'ivar', 'meditation', 25)
   on conflict (world_id, uid, id) do update set value = 25;
 select round((tame_chance(:'world2', :'ivar', (select c from creature c where c.id = :'bun')) * 100)::numeric)
-  as with_love \gset
-update player set way = null where world_id = :'world2' and uid = :'ivar';
-select round((tame_chance(:'world2', :'ivar', (select c from creature c where c.id = :'bun')) * 100)::numeric)
   as without \gset
-update player set way = 'love' where world_id = :'world2' and uid = :'ivar';
+delete from path_taken where world_id = :'world2' and uid = :'ivar';
+insert into path_taken (world_id, uid, pick) values (:'world2', :'ivar', 'love_gentle_hand');
+select round((tame_chance(:'world2', :'ivar', (select c from creature c where c.id = :'bun')) * 100)::numeric)
+  as with_love \gset
 select '506. what the path is worth, the same body either way: a rabba would trust him '
-     || :'with_love' || ' times in a hundred with Gentle hand behind him and '
+     || :'with_love' || ' times in a hundred with Gentle Hand taken and '
      || :'without' || ' without it'
-     || ' — and ' || (select count(*) from path_step where ability is not null)
-     || ' of the ' || (select count(*) from path_step) || ' steps of the paths still on them are called on rather than simply true, the rest being true all the time';
+     || ' — and ' || (select count(*) from path_step) || ' steps are left on any path, every one of the three on tiers';
 select '507. the five that came with it: '
      || (select string_agg(id, ', ' order by id) from action_def where faith_action(id))
      || ' — of 374 the island now does ' || (select count(*) from action_def where act_ported(id));

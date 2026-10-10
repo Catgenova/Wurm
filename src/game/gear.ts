@@ -3,7 +3,6 @@ import type { Game } from './game';
 import { CIRCLET, JEWEL_PIECES } from './gems';
 import { describeFrom, itemDef, markOf, rarityOf, type Item } from './items';
 import { matOf } from './materials';
-import { HARD_HANDS } from './meditation';
 
 /**
  * What you wear and what you swing. Armour is worn a piece to a slot and only
@@ -234,13 +233,11 @@ export function weaponDamage(g: Game, def: WeaponDef, item: Item | null): number
   const wear = item ? Math.max(0.4, 1 - item.dmg / 150) : 1;
   const body = 0.7 + g.skills.get('body_strength') / 90;
   const edge = item ? matOf(item.extra).edge * rarityOf(item).boost : 1;
-  // The plain path hits harder, and a fury harder again.
-  const might = (g.walks('power', 3) ? HARD_HANDS : 1) * g.furyMult();
   // And what its maker put into it: a Carpenter's Bowyer's Draw.
   const made = item ? markOf(item, 'damage') : 1;
   // And a fighting trade's mastery of this kind of weapon (a Berserker's Axe Mastery: `dmg:axes`).
   const mastery = g.perk(`dmg:${def.kind}`, 1);
-  return def.damage * edge * (0.55 + ql / 180) * wear * body * (1 + (skill + fighting) / 260) * might * made * mastery;
+  return def.damage * edge * (0.55 + ql / 180) * wear * body * (1 + (skill + fighting) / 260) * made * mastery;
 }
 
 /** How far a bow in these hands throws, in tiles: its own range, and further for its maker's mark (a Carpenter's True Bow). */

@@ -51,7 +51,7 @@ simplification rather than a problem:
 | **3** | what the old people left in the ground: investigated, put back together, and a book worked through |
 | **6** | traps: a snare set, baited, emptied and lifted; a creel sunk and turned out; and whatever is in one let go |
 | **11** | a saddle and a set of traces: tack fitted and stripped, a rider up and down, a beast into the yokes and out, the shafts of a cart taken up and let go, a seat boarded and left, and the whole team unhitched at once |
-| **5** | an altar and the three paths: a prayer knelt, six things favour buys, a sitting, a path chosen once, and four abilities of Love's and Power's steps called on (Knowledge's techniques are cast off the spell bar) |
+| **5** | an altar and the three paths: a prayer knelt, six things favour buys, a sitting, a path chosen once, and a pick taken at its tier (every path's techniques are cast off the spell bar) |
 | **3** | bridges: thrown across, decked a plank at a time, and pulled down for half of what went into them |
 | **2** | a bed: a night slept through, and a place to wake |
 | **2** | a herd: two of them put together, and the blood read off one of them |
@@ -241,20 +241,22 @@ rolled forward, and the whole of the mechanism is a column.
 
 ### A path with no effect behind it is a path nobody walks
 
-`walks(path, n)` answers whether somebody has the nth step of a path behind
-them, and five of the passive effects are wired to it: what a wild thing will
-trust, how fast a field comes on, what a harvest gives, how quickly work
-teaches, and what a blow lands.
+Every path is on tiers now, and nothing walks a step: `walks(path, n)` is
+false for everybody. A discipline is read where its rule is, through
+`path_fx` (`path_holds` for one with no number) — a tame's chance, a field's
+pace, a harvest, a walk, a step, a load, a blow, a knack, a breeding, a body's
+upkeep — and a technique is a spell of the path school (`path_technique_cast`).
 
-Three are not, and are named rather than quietly skipped — carrying weight
-(`power 1`), the reach of sight (`knowledge 5`), and how much of a blow armour
-turns (`power 5`). None of the three is computed anywhere on this island: not
-half-computed, not approximated, absent. There is nothing to multiply.
+Three are the browser's alone and are named rather than quietly skipped —
+Strong Back on a burden, and Keen Sight and Night Eyes on sight. None of them
+is computed anywhere on this island. Ironhide was a fourth until Power moved:
+`hurt_player` counts it now.
 
-The field is the odd one of the five. A crop grows for whoever founded the
-ground it is in, not for whoever is looking at it, so `crop_settle` asks the
-*deed's founder* whether they walk love — the one effect of a path that belongs
-to somebody who is not here.
+The field is the odd one. A crop grows for whoever founded the ground it is
+in, not for whoever is looking at it, so `crops_settle` asks the *deed's
+founder* for their Green Thumb — the one effect of a path that belongs to
+somebody who is not here. A Season's Hand is the sower's, stamped on the crop
+as it is sown (`crop.hand`).
 
 ### A migration can be appended out of order
 

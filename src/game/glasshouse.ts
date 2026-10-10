@@ -211,7 +211,7 @@ export function glassResync(g: Game): number {
     if (!!c.glass === glass) continue;
     // Read off the clock it was on, then the one it goes onto.
     const from = g.growNow(c);
-    const to = glass ? g.glassNow() : g.fieldNow();
+    const to = glass ? g.glassNow() : c.hand ? g.handNow() : g.fieldNow();
     c.stageAt = rebaseStage(c.stageAt, from, to);
     if (glass) c.glass = true;
     else delete c.glass;

@@ -217,7 +217,7 @@ interface SaveData {
   player: { x: number; y: number; name: string; stats: Stats; level?: number; equipped?: Record<string, number | null>; rested?: number; boons?: Boon[]; knacks?: Record<string, number>; nutrition?: Record<Nutrient, number>;
   /** What knacks were called before they were called knacks. */
   affinities?: Record<string, number>; titles?: string[]; title?: string | null; wounds?: Wound[]; nextWound?: number; favour?: number; prayedAt?: number; way?: PathId | null; satAt?: number; usedAt?: Record<string, number>; picks?: string[]; calm?: number;
-  satSpots?: Array<[number, number]>; satDawn?: number; foreknow?: number; clarityUntil?: number; studied?: Record<string, number>; belt?: Array<BeltPin | null>; look?: Look };
+  satSpots?: Array<[number, number]>; satDawn?: number; foreknow?: number; clarityUntil?: number; studied?: Record<string, number>; pathTimes?: Record<string, number>; belt?: Array<BeltPin | null>; look?: Look };
   inventory: Item[];
   nextUid?: number;
   ground?: Record<string, Item[]>;
@@ -271,6 +271,8 @@ interface SaveData {
   planted?: Crop[];
   /** The field clock (`Game.fieldTime`). A save from before the year has none, and starts it at the game clock. */
   fieldTime?: number;
+  /** And a Season's Hand's (`Game.handTime`). */
+  handTime?: number;
   /** The water lilies and lotus planted here. A save from before them has none. */
   waterPlants?: WaterPlant[];
   /** The day's mote swirls and the dawn they were put down for. A save from before them has none, and is given the day's. */
@@ -318,7 +320,7 @@ function meta(game: Game): SaveMeta {
     spawn: game.spawn,
     marks: game.marks,
     hoards: game.hoards,
-    player: { x: game.player.x, y: game.player.y, name: game.player.name, look: game.player.look, stats: game.player.stats, level: game.player.level, equipped: game.player.equipped, rested: game.player.rested, boons: game.player.boons, knacks: game.player.knacks, nutrition: game.player.nutrition, titles: game.player.titles, title: game.player.title, wounds: game.player.wounds, nextWound: game.player.nextWound, favour: game.player.favour, prayedAt: game.player.prayedAt, way: game.player.way, satAt: game.player.satAt, usedAt: game.player.usedAt, picks: game.player.picks, calm: game.player.calm, satSpots: game.player.satSpots, satDawn: game.player.satDawn, foreknow: game.player.foreknow, clarityUntil: game.player.clarityUntil, studied: game.player.studied, belt: game.player.belt },
+    player: { x: game.player.x, y: game.player.y, name: game.player.name, look: game.player.look, stats: game.player.stats, level: game.player.level, equipped: game.player.equipped, rested: game.player.rested, boons: game.player.boons, knacks: game.player.knacks, nutrition: game.player.nutrition, titles: game.player.titles, title: game.player.title, wounds: game.player.wounds, nextWound: game.player.nextWound, favour: game.player.favour, prayedAt: game.player.prayedAt, way: game.player.way, satAt: game.player.satAt, usedAt: game.player.usedAt, picks: game.player.picks, calm: game.player.calm, satSpots: game.player.satSpots, satDawn: game.player.satDawn, foreknow: game.player.foreknow, clarityUntil: game.player.clarityUntil, studied: game.player.studied, pathTimes: game.player.pathTimes, belt: game.player.belt },
     inventory: game.inventory.items,
     nextUid: game.inventory.nextUid,
     ground: game.groundToJSON(),
@@ -367,6 +369,7 @@ function meta(game: Game): SaveMeta {
     sown: [...game.sown].map(([k, id]): [number, number, string] => [keyX(k), keyY(k), id]),
     planted: [...game.planted.values()],
     fieldTime: game.fieldTime,
+    handTime: game.handTime,
     waterPlants: [...game.waterPlants.values()],
     swirls: game.swirlDawn === null ? undefined : [...game.swirls.values()],
     swirlDawn: game.swirlDawn ?? undefined,
@@ -638,6 +641,7 @@ function finish(world: World, m: SaveMeta): Game {
     sown: m.sown,
     planted: m.planted,
     fieldTime: m.fieldTime,
+    handTime: m.handTime,
     waterPlants: m.waterPlants,
     swirls: m.swirls,
     swirlDawn: m.swirlDawn,

@@ -17,7 +17,7 @@ import { WORLD_PACE } from '../../game/pace';
 import { GAIN_RATE, MIN_GAIN, SKILL_BY_ID, skillGain } from '../../game/skills';
 import { favourCap, PRAYER_GAIN, PRAYER_PEAKS, PRAYER_REST, prayerWorth } from '../../game/faith';
 import {
-  calmCap, CHOOSE_AT, PATH_LIST, PATH_TIER_AT, PICKS_PER_TIER, picksOf, SIT_CALM, SIT_WORTH, TECHNIQUES,
+  calmCap, CHOOSE_AT, PATH_PICK_BY_ID, PATH_TIER_AT, PATHS, PICKS_PER_TIER, picksOf, SIT_CALM, SIT_WORTH, TECHNIQUES,
 } from '../../game/meditation';
 import { tryGain } from '../../game/learn';
 import { DRIVING_LEARN, DRIVING_TOP, drivingPace, SAILING_LEARN, SAILING_TOP, sailingPace, TRAVEL_TOP_AT, VEHICLE_QL_TOP, vehicleQlPace } from '../../game/travel';
@@ -1551,8 +1551,8 @@ export const NEWS: News[] = [
     n: 114,
     day: '2026-10-10',
     lines: () => {
-      const moved = PATH_LIST.filter((p) => p.moved);
-      const kept = PATH_LIST.filter((p) => !p.moved);
+      // What this entry was about, which later entries moved past: Knowledge alone, with Love and Power still on their steps (115).
+      const moved = [PATHS.knowledge];
       return [
         `A meditation path is chosen at ${CHOOSE_AT} meditation, which is also where its first tier opens. Whoever has chosen already keeps their path, whatever their meditation.`,
         `Every sitting banks Calm: ${SIT_CALM} times what the spot multiplies a sitting by. Calm is held to favour's curve off meditation, `
@@ -1564,7 +1564,25 @@ export const NEWS: News[] = [
           + `A technique goes in the spell bar's path slot and costs Calm: ${listed(TECHNIQUES.filter((k) => moved.some((p) => p.id === k.path)).map((k) => `${k.name} ${k.cost}`))}. `
           + `Its old steps are gone, Sense the Rock and Recall the Way with them; Attentive (now ${percent(picksOf('knowledge', 1).find((k) => k.name === 'Attentive')?.fx.learn ?? 0)}), `
           + 'Reader and Keen Sight are disciplines to take.',
-        `${listed(kept.map((p) => p.name))} keep their steps and abilities exactly as they were, until they move too.`,
+        'Love and Power keep their steps and abilities exactly as they were, until they move too.',
+      ];
+    },
+  },
+  {
+    n: 115,
+    day: '2026-10-10',
+    lines: () => {
+      const fx = (id: string, key: string): number => PATH_PICK_BY_ID.get(id)?.fx[key] ?? 0;
+      const tiers = (path: 'love' | 'power'): string => PATH_TIER_AT.map((at, i) => `${at}: ${listedOr(picksOf(path, i + 1).map((k) => k.name))}`).join('; ');
+      return [
+        `Love and Power have moved onto tiers, as Knowledge did: ${numberWord(PICKS_PER_TIER)} picks at each tier, one taken, in the Faith window's Path tab. `
+          + 'Whoever walks either keeps their path and takes a pick at each tier their meditation has reached; the old steps stop.',
+        `Love, the living island: ${tiers('love')}.`,
+        `Power, the body: ${tiers('power')}.`,
+        `Green Thumb and Gentle Hand are as they were. Abundance is ${percent(fx('love_abundance', 'harvest') - 1)} more now, on fruit as well as crops. `
+          + `Strong Back is as it was, and Ironhide turns its ${percent(fx('power_ironhide', 'hide') - 1)} more on the island too, where it was not counted before.`,
+        'Fury, Hard Hands and Mend the Flesh are gone: damage is a fighting trade\'s, and healing the Blessing\'s.',
+        `Every technique costs Calm: ${listed(TECHNIQUES.filter((k) => k.path !== 'knowledge').map((k) => `${k.name} ${k.cost}`))}.`,
       ];
     },
   },

@@ -87,7 +87,7 @@ import { TACK } from '../src/game/creatureActions';
 import { CASTS, FAVOUR_TRICKLE, PRAYER, PRAYER_FAVOUR, PRAYER_GAIN, PRAYER_REST, FAVOUR_CEILING, BLESS_CAP, BLESS_STEP } from '../src/game/faith';
 import { DRIVING, DRIVING_LEARN, DRIVING_TOP, SAILING, SAILING_LEARN, SAILING_TOP, TRAVEL_TOP_AT } from '../src/game/travel';
 import {
-  CHOOSE_AT, PATH_LIST, PATH_PICKS, PATH_TIER_AT, PICKS_PER_TIER, SIT_CALM, SIT_GAIN, SIT_REST, SIT_WORTH, SIT_STALE_SAID, SIT_SWIRL_SAID, STRUCK_SAID, TECHNIQUE_GAIN,
+  CHOOSE_AT, GATHER_RING, PATH_LIST, PATH_PICKS, PATH_TIER_AT, PICKS_PER_TIER, SIT_CALM, SIT_GAIN, SIT_REST, SIT_WORTH, SIT_STALE_SAID, SIT_SWIRL_SAID, STRUCK_SAID, TECHNIQUE_GAIN,
 } from '../src/game/meditation';
 import { WELL_BASE, WELL_PER } from '../src/game/wells';
 import { GUST_PERIOD, TURN_PERIOD } from '../src/game/wind';
@@ -135,7 +135,7 @@ import { spanWords } from '../src/game/words';
 import { DARK_HIT, DARK_SHOT, DARK_SWING, HEAVY_SKILLS, NIGHT_EYES_FROM, WORK_BACK, WORK_HAND, WORK_WIND, WORK_WIND_SPENT } from '../src/game/learn';
 import { ANCIENT_EFFECTS, ANCIENT_PLUS, BAUBLE_HIGH, BAUBLE_KINDS, BAUBLE_LOW, BAUBLE_SHARE, BAUBLE_TIERS, MAJOR_SKILLS, MINOR_SKILLS, REGRET_SHARE, YIELD_TIMES } from '../src/game/baubles';
 import { MOTE_CHANCE } from '../src/game/sacrifice';
-import { GLASSHOUSE_GROWTH, PLANTER_GROWTH, SEASON_GROWTH, SEASON_SECONDS, YEAR_GROWTH, YEAR_SECONDS, YEARLESS_GROWTH } from '../src/game/growth';
+import { GLASSHOUSE_GROWTH, HAND_WINTER, PLANTER_GROWTH, SEASON_GROWTH, SEASON_SECONDS, YEAR_GROWTH, YEAR_SECONDS, YEARLESS_GROWTH } from '../src/game/growth';
 import { SEASON_DAYS, SEASONS, YEAR_DAYS, YEAR_FROM } from '../src/world/calendar';
 import { PLANTER_GROWING } from '../src/game/furniture';
 import { FIELD_GLASS_ONLY, FIELD_NO_STOREY, FIELD_PACKED, GLASS, GLASS_FLOORED, GLASS_PITCHED, GLASS_ROOF_ONLY, GLASS_SLAB, FIELD_UNFLOORED, NOT_A_GLASSHOUSE, NOT_TILLABLE } from '../src/game/glasshouse';
@@ -1832,6 +1832,8 @@ for (const [fn, v] of [
   ...Object.entries(SIT_WORTH).map(([k, v]): [string, number] => [`sit_${k.replace(/[A-Z]/g, (c) => `_${c.toLowerCase()}`)}`, v]),
   /* How long the wind takes to box the compass, and a squall (`windAt`), which Read the Sky reads ahead. */
   ['wind_turn', TURN_PERIOD], ['wind_gust', GUST_PERIOD],
+  /* A Season's Hand's field in winter (Love's), as a share of a crop's pace (`HAND_WINTER`, `hand_clock`). */
+  ['hand_winter', HAND_WINTER], ['gather_ring', GATHER_RING],
 ] as Array<[string, number]>) {
   out.push(`create or replace function ${fn}() returns double precision language sql immutable as $fn$ select ${q(v)}::double precision $fn$;`);
 }

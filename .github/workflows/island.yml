@@ -1617,11 +1617,33 @@ jobs:
           # a technique onto the bar's path slot. A sitting banks Calm off its
           # place, up to favour's curve; a swirl near is worth more, a spot sat
           # at since the woods turned half, and a blow ends it. Every Knowledge
-          # technique and discipline does what it says on both sides, and Love
-          # and Power keep their steps. Seeded throughout.
+          # technique and discipline does what it says on both sides, and no
+          # path keeps a step. Seeded throughout.
           npx esbuild supabase/test/meditation.ts --bundle --platform=node --format=esm \
             --outfile=node_modules/.cache/meditation.mjs --log-level=error
           node node_modules/.cache/meditation.mjs
+
+      - name: The Love path on its tiers
+        run: |
+          # Every one of Love's fifteen picks, on the island and in the browser:
+          # an old walker keeps the path and none of its steps; each technique
+          # costs its Calm, rests and does what it says (and one that finds
+          # nothing costs nothing); each discipline where its rule is -- a
+          # founder's ground, a tame, an age, a harvest, a fight, a knack, a
+          # breeding, a field in winter, the trees round a sitting. Seeded.
+          npx esbuild supabase/test/love.ts --bundle --platform=node --format=esm \
+            --outfile=node_modules/.cache/love.mjs --log-level=error
+          node node_modules/.cache/love.mjs
+
+      - name: The Power path on its tiers
+        run: |
+          # Every one of Power's fifteen picks, on the island and in the
+          # browser: wind, deep water, wounds, a walk and a load, a step up and
+          # a drop, a blow on chain, a heavy blow, a killing blow once an hour,
+          # hunger and thirst. Seeded.
+          npx esbuild supabase/test/power.ts --bundle --platform=node --format=esm \
+            --outfile=node_modules/.cache/power.mjs --log-level=error
+          node node_modules/.cache/power.mjs
 
       - name: The Blessing's spells
         run: |

@@ -3,10 +3,10 @@ import { generateWorld } from '../world/generate';
 import { EMOTES, EMOTE_BY_ID } from './emotes';
 import { rankAtLeast, type DeedRole } from './ranks';
 import { defaultKey } from './keybinds';
-import { listed, percent, share, spanWords } from './words';
+import { listed, percent, share } from './words';
 import { brazierBurn, shoreNear } from './placeables';
 import type { Hoard } from './treasure';
-import { packTreeData, TILE_DEFS, TileType, TREE_DEFS, TREE_AGES, TREE_ROOM_ONE, TREE_ROOM_TWO, TREE_SEED_BOTH, TREE_SEED_NONE, TREE_SEED_REACH, TREE_SEEDS, lastDawn, treeAge, treeSpecies, LAWN_AFTER, mownDays, mownToday, FLOWERS_PICKED, WEAR_FALL, WEAR_MOST, WEAR_TRAIL, trailGround, wears } from '../world/tiles';
+import { packTreeData, TILE_DEFS, TileType, TREE_DEFS, TREE_AGES, TREE_ROOM_ONE, TREE_ROOM_TWO, TREE_SEED_BOTH, TREE_SEED_NONE, TREE_SEED_REACH, TREE_SEEDS, lastDawn, treeAge, treeSpecies, treeVariant, LAWN_AFTER, mownDays, mownToday, FLOWERS_PICKED, WEAR_FALL, WEAR_MOST, WEAR_TRAIL, trailGround, wears } from '../world/tiles';
 import { yearOf } from '../world/calendar';
 import { oreAt } from '../world/ore';
 import { World } from '../world/world';
@@ -30,7 +30,7 @@ import { WELL_TRICKLE, WELL_TRICKLE_AT, WELL_TRICKLE_QL, ACROSS_OF, DEED_PLACE, 
 import { emptyCrate, occupiedRefusal, shutIn } from './creaturecrate';
 import { bury, crumble, graveAt, graveRefusal, graveSays, GRAVE_MARK } from './graves';
 import { cropStageSeconds, RIPE, settleCrop, type Crop } from './farming';
-import { fieldClock, fieldRate, GLASSHOUSE_GROWTH, PLANTER_GROWTH } from './growth';
+import { fieldClock, fieldRate, GLASSHOUSE_GROWTH, handClock, handRate, PLANTER_GROWTH } from './growth';
 import { underGlass } from './glasshouse';
 import { ageDef, attackOf, bloodMul, BLOW_SHARE, CALL_WINDOW, Creatures, setLocalKept, FIGHT_BACK_GOES, HAUL_SKILL, isBaitFor, isShod, maxHealth, PLAYER_ATTACKER, PULL_DEFAULT, SHOE_PACE, SHOE_STEP, SPECIES, tackSpeed, type Creature, type CreatureJSON, type Stance } from './creatures';
 import { CRAFT_REACH, knackable, type CraftStock, type Station } from './recipes';
@@ -77,8 +77,9 @@ import { laySwirls, swirlLight, type Swirl } from './motes';
 import { AWARENESS, Vision } from './vision';
 import { blessBonus, favourCap, FAITH, FAVOUR_TRICKLE } from './faith';
 import {
-  calmCap, calmRefusal, claritySaid, foreknowSaid, FURY_MULT, FURY_SECS, GREEN_THUMB, hasStep, IRONHIDE, MEDITATION, MEND_FLESH, PATH_PICK_BY_ID, PATH_PICKS,
-  pathPickRefusal, PATHS, satSince, seekNone, seekSaid, skySaid, STRONG_BACK, STRUCK_SAID, TECHNIQUE_GAIN, tookSaid, traceNone, traceSaid, type PathBeat, type PathId, type PathSaid,
+  bondNone, bondSaid, bondWhole, calmCap, calmRefusal, claritySaid, deepLungsSaid, foreknowSaid, gatherNone, gatherSaid, hardToKillSaid, HERD_NONE, herdSaid,
+  lullNone, lullSaid, MEDITATION, PATH_PICK_BY_ID, PATH_PICKS, pathPickRefusal, PATHS, REFRESH_SAID, LAND_GROWS, satSince, SECOND_WIND_SAID, seekNone, seekSaid, SHRUG_NONE,
+  SHRUG_SAID, gatherSpot, skySaid, STRUCK_SAID, surgeSaid, TECHNIQUE_GAIN, tookSaid, traceNone, traceSaid, unbrokenSaid, type PathBeat, type PathId, type PathSaid,
 } from './meditation';
 import { ledgerTotals, record, type Ledger } from './ledger';
 import { ALTAR_CAST, ALTAR_CAST_ALPHA, ALTAR_GLOW, ALTAR_REACH, FIRE_REACH, heldReach, HELD_LIGHTS, lanternReach, OVEN_REACH, type LightSource } from './light';
@@ -298,6 +299,8 @@ export interface GameInit {
   planted?: Crop[];
   /** The field clock, in growing seconds (`Game.fieldTime`). */
   fieldTime?: number;
+  /** And a Season's Hand's (`Game.handTime`). */
+  handTime?: number;
   /** The water lilies and lotus planted here. */
   waterPlants?: WaterPlant[];
   /** The day's mote swirls, and the dawn they were put down for (`motes.ts`). */
@@ -843,6 +846,8 @@ export class Game {
    * game clock, which is where every crop in it was stamped.
    */
   fieldTime = 0;
+  /** A Season's Hand's field clock by yourself, as `fieldTime` (`handClock`'s rates). */
+  handTime = 0;
   /** Seconds the island's wall clock is ahead of this machine's, as the last ground read that carried it said. */
   wallSkew = 0;
   /**
@@ -1003,7 +1008,7 @@ export class Game {
       .map((t) => [t, this.perk(walkKey(t), 1)] as const).filter(([, v]) => v !== 1));
     this.inventory.weightMul = (id: string): number => this.perk(`weight:${id}`, 1);
     // What keeping a beast comes to under your perks, for every one of yours offline (a Herdsman's).
-    setLocalKept(this.perkFx);
+    this.refreshKept();
     this.events.emit('inventory');
   }
   rand: () => number = Math.random;
@@ -1060,6 +1065,7 @@ export class Game {
     this.spawn = init.spawn;
     this.player = new Player(init.player?.x ?? init.spawn.x + 0.5, init.player?.y ?? init.spawn.y + 0.5);
     if (init.player) readPlayer(this.player, init.player);
+    this.refreshKept();
     this.hoards = init.hoards ?? [];
     for (const m of init.marks ?? []) {
       this.marks.push(m);
@@ -1125,6 +1131,7 @@ export class Game {
     for (const c of init.crops ?? []) this.crops.set(tileKey(c.x, c.y), c);
     // A save from before the year has no field clock: it starts where the game clock stands, so nothing growing jumps.
     this.fieldTime = init.fieldTime ?? this.time;
+    this.handTime = init.handTime ?? this.fieldTime;
     for (const c of init.planted ?? []) if (c.planter !== undefined) this.planted.set(c.planter, c);
     for (const [x, y, id] of init.sown ?? []) this.sown.set(tileKey(x, y), id);
     for (const w of init.waterPlants ?? []) this.waterPlants.set(tileKey(w.x, w.y), { ...w });
@@ -1279,7 +1286,7 @@ export class Game {
         if (deck !== null) return deck ? 0 : null;
         const slab = this.slabStep(x0, y0, x1, y1);
         if (slab !== null) return slab ? 0 : null;
-        if (!groundStep(this.world, x0, y0, x1, y1, this.climbStep()) || !standsOn(this.world, x1, y1, this.standSlope())) return null;
+        if (!groundStep(this.world, x0, y0, x1, y1, this.climbStep(), this.dropStep()) || !standsOn(this.world, x1, y1, this.standSlope())) return null;
       }
       return level;
     }
@@ -1500,14 +1507,6 @@ export class Game {
   }
 
   /**
-   * Whether a step of the chosen path is behind you. Everything the paths give
-   * is asked for here, so nothing else has to know how they are counted.
-   */
-  walks(way: 'love' | 'knowledge' | 'power', step: number): boolean {
-    return this.player.way === way && hasStep(this.player.way, this.skills.get(MEDITATION), step);
-  }
-
-  /**
    * Whether a pick of a moved path is yours (`meditation.ts`): taken, and of
    * the path you walk. On an island the island says which you hold
    * (`setPath`); by yourself they are in your save.
@@ -1524,6 +1523,39 @@ export class Game {
       if (p?.kind === 'discipline' && key in p.fx && this.holds(id)) return p.fx[key];
     }
     return otherwise;
+  }
+
+  /**
+   * What keeping a beast comes to offline: your perks' (a Herdsman's), and
+   * your path's `kept:` disciplines (Love's Kin), as the island's `kept_of`
+   * puts them together.
+   */
+  refreshKept(): void {
+    const path: Record<string, number> = {};
+    for (const id of this.player.picks) {
+      const k = PATH_PICK_BY_ID.get(id);
+      if (k?.kind !== 'discipline' || !this.holds(id)) continue;
+      for (const [key, v] of Object.entries(k.fx)) if (key.startsWith('kept:') && !(key in path)) path[key] = v;
+    }
+    setLocalKept({ ...this.perkFx, ...path });
+  }
+
+  /** Whether a technique's spell is still running on you: `herd`, `lungs`, `surge` or `unbroken` (`Player.pathTimes`). */
+  pathHolds(what: 'herd' | 'lungs' | 'surge' | 'unbroken'): boolean {
+    return (this.player.pathTimes[what] ?? -1e9) > this.time;
+  }
+
+  /**
+   * What a Heart of the Herd makes of a blow on or by a creature: `taken` the
+   * share of one on it that lands, `dealt` what one it strikes is worth. Your
+   * companion only, within the technique's reach of you, while it holds; one
+   * everywhere else. The island's `herd_heart`.
+   */
+  herdMul(c: Creature, way: 'taken' | 'dealt'): number {
+    if (c.mode !== 'active' || c.mine === false || !this.pathHolds('herd')) return 1;
+    const k = PATH_PICK_BY_ID.get('love_herd_heart');
+    if (!k || Math.hypot(c.x - this.player.x, c.y - this.player.y) > k.fx.reach) return 1;
+    return way === 'taken' ? 1 - k.fx.cut : 1 + k.fx.more;
   }
 
   /** The most Calm you can hold, with a Deep Calm's more. */
@@ -1587,6 +1619,7 @@ export class Game {
     const why = pathPickRefusal(k, this.player.way, this.player.picks, this.skills.get(MEDITATION));
     if (why) return why;
     this.player.picks = [...this.player.picks, id];
+    this.refreshKept();
     this.note('path');
     this.logMsg(tookSaid(k), 'system');
     this.events.emit('skill', '', 0);
@@ -1668,6 +1701,79 @@ export class Game {
       case 'knowledge_clarity':
         p.clarityUntil = this.time + fx.secs;
         return { said: claritySaid(fx.secs, fx.more) };
+      case 'love_refresh':
+        p.stats.hunger = 1;
+        p.stats.thirst = 1;
+        return { said: REFRESH_SAID };
+      case 'love_bond': {
+        const c = this.creatures.yours().find((k) => k.mode === 'active');
+        if (!c || Math.hypot(c.x - p.x, c.y - p.y) > fx.reach) return { why: bondNone(fx.reach) };
+        const most = maxHealth(c, this.creatures.species(c));
+        if (c.health >= most) return { why: bondWhole(c.name) };
+        c.health = Math.min(most, c.health + most * fx.heal);
+        this.events.emit('creature');
+        return { said: bondSaid(c.name, fx.heal) };
+      }
+      case 'love_gather': {
+        // Yours that can come: not in the traces, not under you, not held in a trap; nearest id first, as the island orders them.
+        const near = this.creatures.yours()
+          .filter((c) => (c.mode === 'active' || c.mode === 'deed') && c.hitchedTo === null && !c.ridden && c.trapped === null
+            && Math.hypot(c.x - p.x, c.y - p.y) <= fx.reach)
+          .sort((a, b) => a.id - b.id);
+        if (!near.length) return { why: gatherNone(fx.reach) };
+        near.forEach((c, i) => {
+          const [x, y] = gatherSpot(p.x, p.y, i, near.length);
+          c.x = x;
+          c.y = y;
+          c.tx = x;
+          c.ty = y;
+          c.state = 'idle';
+          c.until = this.time;
+          c.enemy = null;
+        });
+        this.events.emit('creature');
+        return { said: gatherSaid(near.length, near[0].name) };
+      }
+      case 'love_lull': {
+        const on = [...this.creatures.list.values()].filter((c) => c.mode === 'wild' && c.health > 0 && c.enemy === PLAYER_ATTACKER
+          && Math.hypot(c.x - p.x, c.y - p.y) <= fx.reach);
+        if (!on.length) return { why: lullNone(fx.reach) };
+        for (const c of on) {
+          c.enemy = null;
+          c.windup = 0;
+          c.huntRest = this.time + fx.secs;
+          c.state = 'idle';
+          c.until = this.time;
+        }
+        return { said: lullSaid(on.length, fx.secs) };
+      }
+      case 'love_herd_heart': {
+        const c = this.creatures.yours().find((k) => k.mode === 'active');
+        if (!c) return { why: HERD_NONE };
+        p.pathTimes.herd = this.time + fx.secs;
+        return { said: herdSaid(c.name, fx.secs, fx.cut, fx.more, fx.reach) };
+      }
+      case 'power_second_wind':
+        p.stats.stamina = 1;
+        return { said: SECOND_WIND_SAID };
+      case 'power_deep_lungs':
+        p.pathTimes.lungs = this.time + fx.secs;
+        return { said: deepLungsSaid(fx.secs) };
+      case 'power_shrug': {
+        const on = p.wounds.filter((w) => w.bleeding || (w.venom ?? 0) > 0);
+        if (!on.length) return { why: SHRUG_NONE };
+        for (const w of on) {
+          w.bleeding = false;
+          delete w.venom;
+        }
+        return { said: SHRUG_SAID };
+      }
+      case 'power_surge':
+        p.pathTimes.surge = this.time + fx.secs;
+        return { said: surgeSaid(fx.secs, fx.pace) };
+      case 'power_unbroken':
+        p.pathTimes.unbroken = this.time + fx.secs;
+        return { said: unbrokenSaid(fx.secs) };
       default:
         return { why: 'Nothing is written behind that spell yet.' };
     }
@@ -1694,41 +1800,21 @@ export class Game {
     p.satSpots = said.sat ?? [];
     p.satDawn = lastDawn(Date.now() / 1000);
     p.studied = said.studied ?? {};
+    // What Love's and Power's techniques left running, and when a Hard to Kill is ready again, as seconds from now.
+    const until = (secs: number | undefined): number => this.time + (secs ?? 0);
+    p.pathTimes = {
+      ...p.pathTimes,
+      herd: until(said.herd), lungs: until(said.lungs), surge: until(said.surge), unbroken: until(said.unbroken),
+      killed: said.hardToKill ? this.time + said.hardToKill - (PATH_PICK_BY_ID.get('power_hard_to_kill')?.fx.every ?? 0) : -1e9,
+    };
     this.islandMarks = true;
     this.pathMarks = { seek: said.seek ?? undefined, trace: said.trace ?? undefined };
     this.events.emit('skill', '', 0);
   }
 
-  /** Work one of the abilities a path opens. Returns what it did, for the log. */
-  workAbility(id: string): string {
-    const p = this.player;
-    switch (id) {
-      case 'refresh':
-        p.stats.hunger = 1;
-        p.stats.thirst = 1;
-        return 'You are neither hungry nor thirsty, and cannot say when that happened.';
-      case 'mendflesh': {
-        const n = p.wounds.length;
-        p.wounds = [];
-        p.stats.health = Math.min(1, p.stats.health + MEND_FLESH);
-        return n === 1 ? 'The wound closes and the ache goes with it.' : n ? `All ${n} of them close and the ache goes with them.` : 'There was nothing to mend, and you feel better anyway.';
-      }
-      case 'secondwind':
-        p.stats.stamina = 1;
-        return 'Your wind comes back all at once.';
-      case 'fury':
-        this.furyUntil = this.time + FURY_SECS;
-        return `For ${spanWords(FURY_SECS)} nothing you swing at is going to enjoy it.`;
-      default:
-        return 'Nothing happens.';
-    }
-  }
-
-  /** Game time the fury runs out at. */
-  furyUntil = -1e9;
-  /** What everything you hit takes, over what it would take. */
-  furyMult(): number {
-    return this.time < this.furyUntil ? FURY_MULT : 1;
+  /** Work one of the abilities a path on its steps opens: none now, every path having moved onto tiers. */
+  workAbility(_id: string): string {
+    return 'Nothing happens.';
   }
 
   /**
@@ -2136,8 +2222,20 @@ export class Game {
     return Math.max(0.6, 1 - (this.skills.get('body_control') - CHAR_START) * 0.003);
   }
 
+  /**
+   * What a second of deep water costs your wind: less for a strong swimmer and
+   * for Power's Hard Breath, and nothing in a Deep Lungs or an Unbroken. The
+   * island's `body_settle`.
+   */
+  swimWind(): number {
+    if (this.pathHolds('lungs') || this.pathHolds('unbroken')) return 0;
+    return SWIM_WIND * Math.max(0.4, 1 - this.skills.get('swimming') / 200) * this.pathFx('swim', 1);
+  }
+
   /** Body stamina makes the same work cost less wind; armour makes it dearer. */
   staminaCost(cost: number): number {
+    // Nothing at all while Power's Unbroken holds.
+    if (this.pathHolds('unbroken')) return 0;
     const body = Math.max(0.45, 1 - (this.skills.get('body_stamina') - CHAR_START) * 0.0045);
     return cost * body * (1 + this.burden());
   }
@@ -2529,7 +2627,8 @@ export class Game {
    */
   carryLimit(): number {
     // And whatever a trade's perks add to it: a Terraformer's Strong Back.
-    return CARRY_BASE + this.skills.get('body_strength') * CARRY_PER_STRENGTH + this.perk('carry', 0);
+    // And Power's Pack Mule.
+    return CARRY_BASE + this.skills.get('body_strength') * CARRY_PER_STRENGTH + this.perk('carry', 0) + this.pathFx('mule', 0);
   }
 
   /** How far past the limit you are, 0 when you are inside it. */
@@ -2564,8 +2663,8 @@ export class Game {
     // Everything past what your back will take is carried at a price, and the
     // price climbs: twice your limit is not twice as bad, it is worse.
     sum += overDrag(this.overloaded(), this.carryLimit());
-    // A strong back carries the same steel, and the same load, for a fifth less.
-    return this.walks('power', 1) ? sum * STRONG_BACK : sum;
+    // Power's Strong Back carries the same steel, and the same load, for less.
+    return sum * this.pathFx('burden', 1);
   }
 
   /**
@@ -2616,7 +2715,8 @@ export class Game {
       this.logMsg(`Your ${itemName(item).toLowerCase()} is beaten to pieces and falls away.`, 'fight');
     }
     this.events.emit('inventory');
-    const hide = this.walks('power', 5) ? IRONHIDE : 1;
+    // And more for Power's Ironhide, as the island's `hurt_player` has it.
+    const hide = this.pathFx('hide', 1);
     // And what this class of armour makes of this kind of blow (`ARMOUR_VS`).
     return { taken: raw * (1 - Math.min(0.92, soak * hide * ARMOUR_VS[def.cls][kind])), part, worn: item, blocked: false };
   }
@@ -2650,7 +2750,7 @@ export class Game {
       const item = this.worn(slot);
       const def = item && ARMOUR_BY_ID.get(item.id);
       if (!item || !def) continue;
-      const soak = pieceSoak(def, item, this.skills.get(ARMOUR_CLASSES[def.cls].skill)) * (this.walks('power', 5) ? IRONHIDE : 1);
+      const soak = pieceSoak(def, item, this.skills.get(ARMOUR_CLASSES[def.cls].skill)) * this.pathFx('hide', 1);
       soaked += share * Math.min(0.92, soak * ARMOUR_VS[def.cls][kind]);
     }
     return through * (1 - soaked);
@@ -2719,6 +2819,13 @@ export class Game {
     // Less of it on you while your companion beside you takes its share, for a Beastmaster's Shared Wounds (`class_bond_take`).
     const lost = this.bondTake(hit.taken, from);
     this.player.stats.health = Math.max(0, this.player.stats.health - lost);
+    // A blow that would kill you leaves you standing, once in so long, for Power's Hard to Kill (`path_hard_to_kill`).
+    const hard = PATH_PICK_BY_ID.get('power_hard_to_kill');
+    if (this.player.stats.health <= 0 && hard && this.holds(hard.id) && this.time - (this.player.pathTimes.killed ?? -1e9) >= hard.fx.every) {
+      this.player.stats.health = hard.fx.kill;
+      this.player.pathTimes.killed = this.time;
+      this.logMsg(hardToKillSaid(hard.fx.kill), 'fight');
+    }
     this.player.attackedAt = this.time;
     this.events.emit('hit', this.player.x, this.player.y, lost, 'taken');
     // Less of a wound than of a blow for a Sworn Blade's Battle-Hardened, and less of a fresh one for a
@@ -3227,6 +3334,7 @@ export class Game {
       this.time += seconds;
       // A night in the fields at the season's share, as every waking second is (`update`).
       this.fieldTime += seconds * fieldRate(this.wallNow());
+      this.handTime += seconds * handRate(this.wallNow());
       // Everything that works by itself carries on working while you are under.
       if (this.campfires.size) this.burnFires(seconds);
       if (this.smelters.size) this.runSmelters(seconds);
@@ -3262,9 +3370,14 @@ export class Game {
     return Math.max(0, (this.skills.get('soul_strength') - CHAR_START) * 0.002);
   }
 
-  /** Steepest step the player can take, which climbing raises. */
+  /** Steepest step the player can take, which climbing raises, and Power's Sure Feet on top of it. */
   climbStep(): number {
-    return MAX_STEP + this.skills.get('climbing') * CLIMB_PER_LEVEL;
+    return (MAX_STEP + this.skills.get('climbing') * CLIMB_PER_LEVEL) * this.pathFx('climb', 1);
+  }
+
+  /** Steepest drop the player can step down on foot: the step up, or any at all for Power's Sure Fall. */
+  dropStep(): number {
+    return this.pathFx('drop', 0) > 0 ? Infinity : this.climbStep();
   }
 
   /** Steepest tile the player can stand on, which climbing raises at the rate it raises the step. */
@@ -3307,6 +3420,34 @@ export class Game {
    * and the day is written down against the skill. The island's `skill_raise`
    * does the same.
    */
+  /**
+   * Love's Bloom, at the end of a sitting: every tree within its reach of you
+   * a stage on (`LAND_GROWS`), once a day of the island's clock -- the first
+   * sitting that finds one to grow. How many grew. The island's `path_bloom`.
+   */
+  bloomSitting(): number {
+    const r = this.pathFx('bloom', 0);
+    if (r <= 0) return 0;
+    const day = Math.floor((this.islandClock ? this.islandClock() : this.time) / DAY_SECONDS);
+    if (this.player.pathTimes.bloom === day) return 0;
+    const next = new Map(LAND_GROWS);
+    const { x: px, y: py } = this.player;
+    let n = 0;
+    for (let ty = Math.max(0, Math.floor(py - r)); ty <= Math.min(this.world.h - 1, Math.floor(py + r)); ty++) {
+      for (let tx = Math.max(0, Math.floor(px - r)); tx <= Math.min(this.world.w - 1, Math.floor(px + r)); tx++) {
+        if ((tx + 0.5 - px) ** 2 + (ty + 0.5 - py) ** 2 > r * r || this.world.getTile(tx, ty) !== TileType.Tree) continue;
+        const data = this.world.getData(tx, ty);
+        const to = next.get(treeVariant(data));
+        if (to === undefined) continue;
+        this.world.setTile(tx, ty, TileType.Tree, packTreeData(treeSpecies(data), to));
+        this.events.emit('world', tx, ty);
+        n++;
+      }
+    }
+    if (n) this.player.pathTimes.bloom = day;
+    return n;
+  }
+
   private firstOfDay(id: string): number {
     const first = this.pathFx('first', 1);
     if (first === 1) return 1;
@@ -3504,8 +3645,8 @@ export class Game {
     if (!knackable(itemId)) return null;
     const skill = boonOf(this.seed, itemId);
     if (!skill) return null;
-    // And lasts longer for its maker's hand in it (a Cook's Flavoursome, Strong Brew).
-    const seconds = boonTime(itemId, ql, knack);
+    // And lasts longer for its maker's hand in it (a Cook's Flavoursome, Strong Brew), and for Love's Long Table.
+    const seconds = boonTime(itemId, ql, knack) * this.pathFx('table', 1);
     const def = SKILL_DEFS.find((d) => d.id === skill);
     // A dish's own, never a tincture's: the two stand side by side.
     const already = this.player.boons.find((b) => b.skill === skill && !b.kind && b.until > this.time);
@@ -3733,7 +3874,10 @@ export class Game {
   update(dt: number): void {
     this.time += dt;
     // The fields' clock runs at the share of it the season gives them; on an island it is read off the year instead (`fieldNow`).
-    if (!this.islandClock) this.fieldTime += dt * fieldRate(this.wallNow());
+    if (!this.islandClock) {
+      this.fieldTime += dt * fieldRate(this.wallNow());
+      this.handTime += dt * handRate(this.wallNow());
+    }
     // A slice of the woods, which keep a real day rather than the world's own.
     this.growTrees(Date.now() / 1000);
     // The fog is the one thing that stays on the machine it belongs to, so it
@@ -3775,6 +3919,10 @@ export class Game {
     p.drawPace = this.drawingBow() ? this.perk('pace:draw', DRAW_WALK) : 1;
     // And quicker while a spell's walk holds, as the island's `travel_speed` lets it be.
     p.spellPace = this.time < this.paceUntil ? this.paceMul : 1;
+    // And Power's Long Stride, and a Surge while it holds, which nothing slows (`travel_speed`).
+    const surge = this.pathHolds('surge');
+    p.pathPace = this.pathFx('stride', 1) * (surge ? PATH_PICK_BY_ID.get('power_surge')?.fx.pace ?? 1 : 1);
+    p.unslowed = surge;
     // Only wheels feel the ground: a boat is on water and feet are feet.
     p.wheelLoad = driven ? this.vehicleLoad(driven) : 0;
     // And whether your own feet are in the water at all, which is the whole of
@@ -3836,8 +3984,10 @@ export class Game {
     const keep = upkeepMul(p.nutrition);
     for (const k of NUTRIENTS) p.nutrition[k] = Math.max(0, p.nutrition[k] - dt * NUTRIENT_DECAY);
     if (!this.bodyFromIsland) {
-      s.hunger = Math.max(0, s.hunger - dt * HUNGER_RATE * keep);
-      s.thirst = Math.max(0, s.thirst - dt * THIRST_RATE * keep);
+      // And slower for Power's Enduring.
+      const upkeep = this.pathFx('upkeep', 1);
+      s.hunger = Math.max(0, s.hunger - dt * HUNGER_RATE * keep * upkeep);
+      s.thirst = Math.max(0, s.thirst - dt * THIRST_RATE * keep * upkeep);
     } else {
       /*
        * The island's body, drawn forward between one answer and the next.
@@ -3870,10 +4020,11 @@ export class Game {
       const a = this.action;
       const doing = a?.state === 'performing';
       const body = Math.max(0.45, 1 - Math.max(0, this.skills.get('body_stamina') - CHAR_START) * 0.0045);
-      const spend = doing && a.def.stamina > 0
+      // And nothing while Power's Unbroken holds (`spend_wind`).
+      const spend = doing && a.def.stamina > 0 && !this.pathHolds('unbroken')
         ? (a.def.stamina * body) / Math.max(0.001, a.duration)
         : 0;
-      const now = bodyForward(s, dt, { acting: doing, wind, drain, spend });
+      const now = bodyForward(s, dt, { acting: doing, wind, drain, spend, upkeep: this.pathFx('upkeep', 1) });
       s.hunger = now.hunger;
       s.thirst = now.thirst;
       s.stamina = now.stamina;
@@ -3894,6 +4045,7 @@ export class Game {
       else this.logMsg('You can walk properly again.', 'event');
     }
     p.maxStep = this.climbStep();
+    p.maxDrop = this.dropStep();
     p.maxStand = this.standSlope();
     p.swimSpeed = Math.min(0.85, SWIM_SPEED + this.skills.get('swimming') * 0.0033);
     if (p.lastClimb > 0) {
@@ -3941,7 +4093,7 @@ export class Game {
         if (!this.bodyFromIsland) this.gainSkill('swimming', SWIM_LEARN);
       }
       if (!this.bodyFromIsland) {
-        s.stamina = Math.max(0, s.stamina - dt * SWIM_WIND * Math.max(0.4, 1 - this.skills.get('swimming') / 200));
+        s.stamina = Math.max(0, s.stamina - dt * this.swimWind());
         if (s.stamina <= 0) {
           s.health = Math.max(0, s.health - dt * DROWN_RATE);
           if (this.time - this.acting.drownWarning > DROWN_WARN) {
@@ -7665,13 +7817,16 @@ export class Game {
       const field = this.fieldNow();
       // A crop in a glasshouse, on the glass clock: the island says which it is on (`glass`).
       const glass = this.glassNow();
+      const hand = this.handNow();
       for (const c of ground.crops) {
         this.crops.set(tileKey(c.x, c.y), {
           x: c.x, y: c.y, id: c.id, stage: c.stage,
-          stageAt: (c.glass ? glass : field) - into(c),
+          stageAt: (c.glass ? glass : c.hand ? hand : field) - into(c),
           tended: c.tended, tendedNow: c.tendedNow, ql: c.ql,
           ...(c.pace !== undefined && c.pace !== 1 ? { pace: c.pace } : {}),
           ...(c.glass ? { glass: true } : {}),
+          // And a Season's Hand's, on its clock (`hand`).
+          ...(c.hand ? { hand: true } : {}),
         });
       }
     }
@@ -8405,9 +8560,12 @@ export class Game {
   plantCrop(x: number, y: number, id: string, seedQl: number, pace = 1): Crop {
     // Under glass it begins on the glass clock, and anywhere else on the field's (`glasshouse.ts`).
     const glass = underGlass(this.buildings, x, y);
-    const c: Crop = { x, y, id, stage: 0, stageAt: glass ? this.glassNow() : this.fieldNow(), tended: 0, tendedNow: false, ql: seedQl };
+    // And on a Season's Hand's clock for a sower with Love's Season's Hand (`hand_sown`).
+    const hand = this.pathFx('winter', 0) > 0;
+    const c: Crop = { x, y, id, stage: 0, stageAt: glass ? this.glassNow() : hand ? this.handNow() : this.fieldNow(), tended: 0, tendedNow: false, ql: seedQl };
     if (pace !== 1) c.pace = pace;
     if (glass) c.glass = true;
+    if (hand) c.hand = true;
     this.crops.set(tileKey(x, y), c);
     this.sown.set(tileKey(x, y), id);
     this.events.emit('world', x, y);
@@ -8458,6 +8616,11 @@ export class Game {
     return this.islandClock ? fieldClock(this.wallNow()) : this.fieldTime;
   }
 
+  /** A Season's Hand's field clock now: on an island read off the year (`handClock`), by yourself the one kept in the save. */
+  handNow(): number {
+    return this.islandClock ? handClock(this.wallNow()) : this.handTime;
+  }
+
   /** A planter's clock now: `PLANTER_GROWTH` of the plain one -- the wall clock on an island, the game's own by yourself. */
   planterNow(): number {
     return PLANTER_GROWTH * (this.islandClock ? this.wallNow() : this.time);
@@ -8469,8 +8632,8 @@ export class Game {
   }
 
   /** The clock a crop grows on, read now: a planter's, a glasshouse's or a field's. */
-  growNow(c: { planter?: number; glass?: boolean }): number {
-    return c.planter !== undefined ? this.planterNow() : c.glass ? this.glassNow() : this.fieldNow();
+  growNow(c: { planter?: number; glass?: boolean; hand?: boolean }): number {
+    return c.planter !== undefined ? this.planterNow() : c.glass ? this.glassNow() : c.hand ? this.handNow() : this.fieldNow();
   }
 
   /**
@@ -8479,7 +8642,7 @@ export class Game {
    * ground of whoever walks it.
    */
   cropPer(c: Crop): number {
-    const green = this.walks('love', 1) && this.deed && this.onDeed(c.x, c.y) ? GREEN_THUMB : 1;
+    const green = this.deed && this.onDeed(c.x, c.y) ? this.pathFx('grow', 1) : 1;
     return cropStageSeconds(c) * green;
   }
 
@@ -8507,9 +8670,10 @@ export class Game {
   private growCrops(): void {
     const field = this.fieldNow();
     const glass = this.glassNow();
+    const hand = this.handNow();
     const box = this.planterNow();
     for (const c of this.crops.values()) {
-      if (c.stage < RIPE && settleCrop(c, this.cropPer(c), c.glass ? glass : field)) this.events.emit('world', c.x, c.y);
+      if (c.stage < RIPE && settleCrop(c, this.cropPer(c), c.glass ? glass : c.hand ? hand : field)) this.events.emit('world', c.x, c.y);
     }
     for (const c of this.planted.values()) {
       if (c.stage < RIPE && settleCrop(c, this.cropPer(c), box)) this.events.emit('world', c.x, c.y);
@@ -9214,7 +9378,7 @@ export interface IslandGround {
    * hour somewhere a field clock never stood. `ago` is the wall seconds since
    * it began, which is all an island from before the year sent.
    */
-  crops?: Array<{ x: number; y: number; id: string; stage: number; ago?: number; grown?: number; tended: number; tendedNow: boolean; ql: number; pace?: number; glass?: boolean }>;
+  crops?: Array<{ x: number; y: number; id: string; stage: number; ago?: number; grown?: number; tended: number; tendedNow: boolean; ql: number; pace?: number; glass?: boolean; hand?: boolean }>;
   /** What grows in the planters within reach, by the planter's id and tile, on the slow half beside `crops`. */
   planted?: Array<{ planter: number; x: number; y: number; id: string; stage: number; ago?: number; grown?: number; tended: number; tendedNow: boolean; ql: number; pace?: number }>;
   /** The island's wall clock as it answered, in epoch seconds: what `wallSkew` is set by. */

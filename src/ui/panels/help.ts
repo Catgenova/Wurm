@@ -2592,19 +2592,13 @@ export function helpText(): string {
     offers ${numberWord(PICKS_PER_TIER)} picks at each of ${listed(PATH_TIER_AT.map(String))} meditation: a <b>technique</b> and
     ${numberWord(PICKS_PER_TIER - 1)} <b>disciplines</b>, one of which you take, for good, in the <b>Faith</b> window's Path tab. A technique goes in the
     spell bar's path slot, costs Calm and rests between calls; a discipline is true from the moment it is taken.
-    ${listed(PATH_LIST.filter((p) => p.moved).map((p) => p.name))} ${PATH_LIST.filter((p) => p.moved).length === 1 ? 'has' : 'have'} moved:</p>
+    What each path offers, tier by tier:</p>
     <table>
       ${PATH_LIST.filter((p) => p.moved).flatMap((p) => PATH_TIER_AT.map((at, i) => `<tr><td><b>${p.name}</b> ${at}</td><td>${picksOf(p.id, i + 1).map((k) => (k.kind === 'technique'
         ? `<b>${k.name}</b> (${k.cost} Calm, then ${spanWords(k.rest)} before it again): ${lowerFirst(k.note)}`
         : `<i>${k.name}</i>: ${lowerFirst(k.note)}`)).join(' ')}</td></tr>`)).join('\n      ')}
     </table>
-    <p>${listed(PATH_LIST.filter((p) => !p.moved).map((p) => p.name))} keep their steps until they move: each opens ${numberWord(PATH_LIST.filter((p) => !p.moved)[0]?.steps.length ?? 0)} things as the sitting goes on,
-    ${numberWord(PATH_LIST.filter((p) => !p.moved)[0]?.steps.filter((st) => st.ability).length ?? 0)} of them abilities called on at the rug with a rest between, and the rest simply true from then on.</p>
-    <table>
-      ${PATH_LIST.filter((p) => !p.moved).map((p) => `<tr><td><b>${p.name}</b></td><td>${p.note} ${p.steps.map((st) => (st.ability
-        ? `<b>${st.name}</b> (${st.at}, then ${spanWords(st.ability.rest)} before it again): ${lowerFirst(st.note)}`
-        : `<i>${st.name}</i> (${st.at}): ${lowerFirst(st.note)}`)).join(' ')}</td></tr>`).join('\n      ')}
-    </table>
+    ${PATH_LIST.every((p) => p.moved) ? '' : `<p>${listed(PATH_LIST.filter((p) => !p.moved).map((p) => p.name))} keep their steps until they move.</p>`}
     <h3>An altar, and what kneeling at one buys</h3>
     <p>There is no god on this island with a name and nobody here would claim to know one. There is a
     stone table, there are the hours the clock favours, and there is the plain fact that a thing knelt

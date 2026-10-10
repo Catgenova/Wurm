@@ -1743,17 +1743,21 @@ export const companionMul = (c: { mode: CreatureMode; kept?: Record<string, numb
   return key !== undefined && c.mode === 'active' ? keptOf(c, key, 1) : 1;
 };
 
-/** How old a creature is now. Its keeper's Long-lived keeps it grown longer. */
+/**
+ * How old a creature is now. Its keeper's Long-lived keeps it grown longer,
+ * and their Kin (Love's) ages it slower through all of it: the time it has
+ * lived counts at `kept:age` of itself.
+ */
 export const ageOf = (c: Creature, now: number): Age => {
   // Nothing born before the clock started has an age worth working out: what
   // was already walking about when the island was raised is simply grown.
   if (c.born <= 0) return 'grown';
-  const lived = Math.max(0, now - c.born);
+  const lived = Math.max(0, now - c.born) * keptOf(c, 'kept:age', 1);
   return lived < YOUNG_FOR ? 'young' : lived < keptOf(c, 'kept:old_at', OLD_AT) ? 'grown' : 'old';
 };
 export const ageDef = (c: Creature, now: number): AgeDef => AGES[ageOf(c, now)];
 /** How long until it is grown, in seconds; zero once it is. */
-export const growsAt = (c: Creature, now: number): number => Math.max(0, c.born + YOUNG_FOR - now);
+export const growsAt = (c: Creature, now: number): number => Math.max(0, c.born + YOUNG_FOR / keptOf(c, 'kept:age', 1) - now);
 
 /**
  * Care. A wildermon that is brushed and looked over works better and learns
@@ -4345,7 +4349,8 @@ export class Creatures {
     const care = (dam.care + sire.care) / 2;
     // More of the pair in it, and more of it a tier better, for a Herdsman's True Blood and Bred Up.
     const keepPlus = game.perk('breed:inherit', 0);
-    const upPlus = game.perk('breed:upgrade', 0);
+    // And more for Love's Good Stock.
+    const upPlus = game.perk('breed:upgrade', 0) + game.pathFx('up', 0);
     const young = (): { traits: string[]; sex: Sex; from: Record<string, TraitSource> } => {
       const bred = breedTraits(sire.traits, dam.traits, husbandry, care, game.rand, keepPlus, upPlus);
       // The one the breeder asked for (a Herdsman's Choose the Sex), or even odds.
@@ -4615,7 +4620,8 @@ export class Creatures {
       if (d <= HUNT_REACH) {
         p.attackedBy = c.id;
         p.attackedAt = game.time;
-        game.hurtPlayer(attackOf(c, def) * BLOW_SHARE * HEAVY_HIT, `The ${name}'s heavy blow lands`, def.wound ?? 'bite');
+        // With less of its extra weight on Power's Unshaken (`heavy_on`).
+        game.hurtPlayer(attackOf(c, def) * BLOW_SHARE * (1 + (HEAVY_HIT - 1) * game.pathFx('heavy', 1)), `The ${name}'s heavy blow lands`, def.wound ?? 'bite');
       } else game.logMsg(`The ${name}'s heavy blow falls short.`, 'fight');
       return true;
     }
@@ -4839,7 +4845,9 @@ export class Creatures {
     }
     if (c.enemy !== null) {
       const e = c.enemy === PLAYER_ATTACKER ? undefined : this.list.get(c.enemy);
-      if (!e || !quarry(e) || Math.hypot(e.x - p.x, e.y - p.y) > (c.stance === 'guard' ? GUARD_RANGE : leash)) {
+      // However far it has gone for Love's Steady Herd (`companion_target`).
+      const steady = game.pathFx('steady', 0) > 0;
+      if (!e || !quarry(e) || (!steady && Math.hypot(e.x - p.x, e.y - p.y) > (c.stance === 'guard' ? GUARD_RANGE : leash))) {
         c.enemy = null;
       } else {
         const d = Math.hypot(e.x - c.x, e.y - c.y);
@@ -5150,7 +5158,8 @@ export class Creatures {
   attack(game: Game, a: Creature, t: Creature): void {
     const trained = trainedHit(a.skills[FIGHT_SKILL] ?? 0);
     // Its blood has a say in what it lands for, as it does in what it bites you for.
-    const dmg = this.species(a).attack * this.mul(a, 'tough') * trained * (0.7 + game.rand() * 0.6);
+    // And more by your companion inside a Heart of the Herd (`herd_heart`).
+    const dmg = this.species(a).attack * this.mul(a, 'tough') * trained * (0.7 + game.rand() * 0.6) * game.herdMul(a, 'dealt');
     this.hurt(game, t, dmg, a);
     if (a.skills[FIGHT_SKILL] !== undefined) this.gainSkill(game, a, FIGHT_SKILL, 0.05);
   }
@@ -5177,7 +5186,8 @@ export class Creatures {
     const from = by === 'player' ? game.player : by;
     const before = t.health;
     // What a blow costs it is its blood's to say, and its herd's.
-    t.health -= dmg * this.mul(t, 'soak');
+    // And less on your companion inside a Heart of the Herd (`herd_heart`).
+    t.health -= dmg * this.mul(t, 'soak') * game.herdMul(t, 'taken');
     t.attackedBy = by === 'player' ? PLAYER_ATTACKER : by.id;
     t.attackedAt = game.time;
     game.events.emit('hit', t.x, t.y, Math.max(0, before - Math.max(0, t.health)), crit ? 'crit' : 'dealt');

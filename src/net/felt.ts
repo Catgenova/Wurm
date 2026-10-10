@@ -91,12 +91,13 @@ export const BODY_GAP = 180;
 export function bodyForward(
   was: Body,
   secs: number,
-  at: { acting: boolean; wind: number; drain?: number; spend?: number },
+  at: { acting: boolean; wind: number; drain?: number; spend?: number; upkeep?: number },
 ): Body {
   const gone = Math.max(0, Math.min(BODY_GAP, secs));
   if (gone <= 0) return was;
-  const hunger = Math.max(0, was.hunger - gone * HUNGER_RATE);
-  const thirst = Math.max(0, was.thirst - gone * THIRST_RATE);
+  // Slower for Power's Enduring (`upkeep`), as `body_settle` has it.
+  const hunger = Math.max(0, was.hunger - gone * HUNGER_RATE * (at.upkeep ?? 1));
+  const thirst = Math.max(0, was.thirst - gone * THIRST_RATE * (at.upkeep ?? 1));
   // What is running out of you, which is `wounds_settle` rather than
   // `body_settle` but lands on the same number and so has to be drawn with it.
   const bled = Math.max(0, was.health - gone * (at.drain ?? 0));

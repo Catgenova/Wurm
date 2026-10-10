@@ -1,10 +1,9 @@
-import { TREE_AGES } from '../world/tiles';
 import { FAITH } from './faith';
 import { TARGET_RANGE } from './fight';
-import { PATH_PICK_BY_ID, PATH_TIER_AT } from './meditation';
+import { LAND_GROWS, LAND_GROWS_SAID, PATH_PICK_BY_ID, PATH_TIER_AT } from './meditation';
 import { SKILL_BY_ID } from './skills';
 import { CLASS_SPELL_BY_ID } from './talents';
-import { listed, listedOr, percent } from './words';
+import { listedOr, percent } from './words';
 
 /**
  * Patrons, and the spells they give.
@@ -112,29 +111,8 @@ export interface FaithSpellDef {
 /** A stretch of time as the spell notes say it: seconds up to two minutes, then minutes. */
 const span = (secs: number): string => (secs < 120 ? `${secs} s` : `${secs / 60} minutes`);
 
-/**
- * The stages Bless the Land moves a tree on by, in the order a tree grows:
- * each living stage to the next, so long as the next is alive and not the
- * same stage over again -- nothing is grown into dying, and a clipped tree
- * stays clipped.
- */
-export const LAND_GROWS: ReadonlyArray<readonly [number, number]> = (() => {
-  const by = new Map(TREE_AGES.map((a) => [a.id, a]));
-  const grows = (id: number): boolean => {
-    const a = by.get(id);
-    const n = a?.next ?? null;
-    return !!a && a.alive && n !== null && n !== id && !!by.get(n)?.alive;
-  };
-  const into = new Set(TREE_AGES.filter((a) => grows(a.id)).map((a) => a.next as number));
-  const out: Array<readonly [number, number]> = [];
-  for (let at = TREE_AGES.find((a) => grows(a.id) && !into.has(a.id))?.id ?? -1; at >= 0 && grows(at);) {
-    const next = by.get(at)?.next as number;
-    out.push([at, next]);
-    at = next;
-  }
-  return out;
-})();
-const ageName = (id: number): string => (TREE_AGES.find((a) => a.id === id)?.name ?? '').toLowerCase();
+/** The stages Bless the Land moves a tree on by, which Love's Bloom shares (`meditation.ts`). */
+export { LAND_GROWS };
 
 /** One of a patron's spells, its note written from its own numbers. */
 const spellOf = (patron: PatronId) => (
@@ -193,7 +171,7 @@ export const FAITH_SPELLS: FaithSpellDef[] = [
   blessing(5, 'radiance', 'Radiance', 60, 600, ['area'], { each: 0.02, secs: 30 },
     (fx, r) => `For ${span(fx.secs)}, every creature within ${r} tiles of the spot that is hunting somebody loses ${percent(fx.each)} of its health a second, ${percent(fx.each * fx.secs)} in all; it is never killed by it.`, 8),
   blessing(5, 'land', 'Bless the Land', 50, 3600, ['area'], {},
-    (_fx, r) => `Every tree within ${r} tiles of the spot grows a stage: ${listed(LAND_GROWS.map(([a, b]) => `${ageName(a)} to ${ageName(b)}`))}. One that would grow into dying, and one that is clipped, stays as it is.`, 10),
+    (_fx, r) => `Every tree within ${r} tiles of the spot grows a stage: ${LAND_GROWS_SAID}. One that would grow into dying, and one that is clipped, stays as it is.`, 10),
 
   justice(1, 'mark', 'Mark of Judgment', 10, 30, ['enemy'], { more: 0.15, secs: 30 },
     (fx) => `For ${span(fx.secs)} the creature takes ${percent(fx.more)} more damage from every blow, whoever or whatever strikes it.`),

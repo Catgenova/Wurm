@@ -1333,7 +1333,8 @@ export class UI {
     if (sowDef && sowDef.applies(target, this.game) && !this.game.cropAt(pick.x, pick.y)) {
       // At the pace this sowing would grow at: a Farmer's Fast Growth and Crop Rotation.
       // Under glass at the glasshouse's share in any season, and in the open at the season's (`glasshouse.ts`).
-      const clock = underGlass(this.game.buildings, pick.x, pick.y) ? 'glass' : 'field';
+      // And on a Season's Hand's clock for a sower with Love's Season's Hand, which a winter does not stop.
+      const clock = underGlass(this.game.buildings, pick.x, pick.y) ? 'glass' : this.game.pathFx('winter', 0) > 0 ? 'hand' : 'field';
       sowMenu(sowDef, 'Sow', (crop) => stageNote(crop.name, crop.stageSeconds * sownPace(this.game, pick.x, pick.y, crop.id), clock, this.game.wallNow()));
     }
     const patchDef = ACTION_BY_ID.get('sow_patch');

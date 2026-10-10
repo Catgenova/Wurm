@@ -3,7 +3,6 @@ import type { ActionDef, Target } from './actions';
 import { isShod, SHOES_PER_MOUNT, TACK, AGES, ageDef, ageOf, attackOf, bloodMul, careWord, PLAYER_ATTACKER, coaxBonus, COAX_STEP, creatureLevel, forgetCoaxing, isBaitFor, maxHealth, raritySays, SEX_NAMES, SPECIES, STANCE_NAMES, COMPANION_LEASH, workRangeOf, type Creature, type Stance, type GatherKind } from './creatures';
 import { studBook } from './husbandry';
 import { numberWord } from './words';
-import { GENTLE_HAND } from './meditation';
 import { bestTier, traitList } from './traits';
 import type { Game } from './game';
 import { furnitureCentre, furnitureName, tracesStoreyRefusal, vehicleOf } from './furniture';
@@ -66,8 +65,10 @@ export const baitHint = (c: Creature): string => SPECIES[c.species].baitHint;
  * The odds of winning a wild thing over with one offering, as they stand: its
  * own wariness, how far your taming is past what it asks, whether it is
  * hungry, what a run of offerings has already bought you, your soul, its age,
- * and the love path if you walk it. The tooltip and the attempt itself read
- * the same number, so what you are told is what you get.
+ * and Love's Gentle Hand if you took it -- and Love's Old Friend, which makes
+ * any kind you have tamed before certain, past the ceiling everybody else is
+ * held to. The tooltip and the attempt itself read the same number, so what
+ * you are told is what you get.
  */
 /** The most any one offering is ever worth: patience buys a hard tame rather than guaranteeing it. */
 export const TAME_MOST = 0.95;
@@ -75,12 +76,13 @@ export const TAME_MOST = 0.95;
 export function tameChance(g: Game, c: Creature): number {
   const def = SPECIES[c.species];
   if (!def || def.monster) return 0;
+  if (g.pathFx('sure', 0) > 0 && g.guide.has(c.species, 'tamed')) return 1;
   const skill = g.skills.get('taming');
   const raw = def.tameChance + (skill - def.tameLevel) / 200 + (c.hunger < 0.5 ? 0.1 : 0) + coaxBonus(c, g.time, coaxStep(g)) + g.soulBonus();
   // A young one easier still for a Herdsman's Young Trust.
   const age = ageOf(c, g.time) === 'young' ? g.perk('tame:young', AGES.young.tame) : ageDef(c, g.time).tame;
   // And every offering so many points likelier for a Herdsman's Soft Hand, over all the rest of it.
-  return Math.max(0, Math.min(TAME_MOST, raw * age * (g.walks('love', 3) ? GENTLE_HAND : 1) + g.perk('tame:offer', 0)));
+  return Math.max(0, Math.min(TAME_MOST, raw * age * g.pathFx('tame', 1) + g.perk('tame:offer', 0)));
 }
 
 function nearPlayer(g: Game, c: Creature): boolean {

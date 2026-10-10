@@ -191,6 +191,14 @@ export class Player {
   clarityUntil = -1e9;
   /** The day of the island's clock each skill last had a Quick Study's doubled gain. */
   studied: Record<string, number> = {};
+  /**
+   * What Love's and Power's techniques and disciplines leave running, in game
+   * seconds: `herd`, `lungs`, `surge` and `unbroken` until when a Heart of the
+   * Herd, a Deep Lungs, a Surge and an Unbroken hold; `killed` when a Hard to
+   * Kill last took a killing blow; and `bloom` the day of the island's clock a
+   * Bloom last grew the trees round a sitting.
+   */
+  pathTimes: Record<string, number> = {};
   /** Game time each path ability was last called on. */
   usedAt: Record<string, number> = {};
   /** Banked favour, and the hour you last had anything to say. */
@@ -247,6 +255,8 @@ export class Player {
   stalled = false;
   /** Steepest step allowed, raised by the climbing skill. */
   maxStep = MAX_STEP;
+  /** Steepest drop that can be stepped down: the step, or any for Power's Sure Fall (`Game.dropStep`). */
+  maxDrop = MAX_STEP;
   /** Steepest tile that can be stood on, raised by the climbing skill. */
   maxStand = MAX_STAND;
   /** Share of walking speed kept in deep water, raised by the swimming skill. */
@@ -277,6 +287,10 @@ export class Player {
   drawPace = 1;
   /** What a spell adds to your pace on foot while it holds: a Skirmisher's Hit and Run. One otherwise. */
   spellPace = 1;
+  /** What your path adds to your pace on foot: Power's Long Stride, and a Surge while it holds. One otherwise. */
+  pathPace = 1;
+  /** Nothing slows you on foot, while a Surge holds: not a load, the ground, a slope, a wounded leg or being out of wind. */
+  unslowed = false;
   /**
    * And what a Forester's Woodsman's Stride is worth on ground that slows a
    * walker, tile by tile (`walk:` and the tile's name), on foot: nothing, so
@@ -329,7 +343,7 @@ export class Player {
     this.visualLevel += (this.level - this.visualLevel) * Math.min(1, dt * 7);
     if (Math.abs(this.level - this.visualLevel) < 0.01) this.visualLevel = this.level;
     const step = (x0: number, y0: number, x1: number, y1: number): number | null =>
-      rule ? rule(x0, y0, this.level, x1, y1) : groundStep(world, x0, y0, x1, y1, this.maxStep) && standsOn(world, x1, y1, this.maxStand) ? this.level : null;
+      rule ? rule(x0, y0, this.level, x1, y1) : groundStep(world, x0, y0, x1, y1, this.maxStep, this.maxDrop) && standsOn(world, x1, y1, this.maxStand) ? this.level : null;
     let vx = 0;
     let vy = 0;
     let distanceLimit = Infinity;
@@ -379,14 +393,18 @@ export class Player {
     const tileDef = TILE_DEFS[under];
     // Feet hardly care what is under them. A laden wheel cares about little
     // else, and that is what makes a paved road worth the stone in it.
-    let speed = BASE_SPEED * tileDef.speed * this.speedMul * groundRoll(tileDef.roll, this.wheelLoad);
+    // On foot in a Surge the ground slows nothing; where it quickens, it still does.
+    const free = this.unslowed && this.speedMul === 1;
+    let speed = BASE_SPEED * (free ? Math.max(1, tileDef.speed) : tileDef.speed) * this.speedMul * groundRoll(tileDef.roll, this.wheelLoad);
     // Your own legs on a made road, if a trade has taught them one.
     if (this.speedMul === 1 && this.roadPace !== 1 && ROAD_TILES.includes(under)) speed *= this.roadPace;
     // And through brush, if a trade has taught them that.
-    if (this.speedMul === 1) speed *= (this.tilePace[under] ?? 1) * this.legPace * this.drawPace * this.spellPace;
+    if (this.speedMul === 1) {
+      speed *= (free ? Math.max(1, this.tilePace[under] ?? 1) : (this.tilePace[under] ?? 1) * this.legPace) * this.drawPace * this.spellPace * this.pathPace;
+    }
     if (this.swimming) speed *= this.swimSpeed;
-    if (this.stats.stamina < 0.1) speed *= 0.5;
-    if (this.burden > 0) speed /= 1 + this.burden;
+    if (this.stats.stamina < 0.1 && !free) speed *= 0.5;
+    if (this.burden > 0 && !free) speed /= 1 + this.burden;
     /*
      * And a load half again over the limit leaves you a twentieth of your
      * pace. The walk is no longer dropped: at five per cent you are still
@@ -394,16 +412,16 @@ export class Player {
      * island allows the same fraction on the same sum, so the few inches
      * taken here are inches it will let you keep.
      */
-    if (this.stalled) speed *= CARRY_CRAWL;
+    if (this.stalled && !free) speed *= CARRY_CRAWL;
     // Uphill slows you down; a deck is level, whatever the ground under it does.
     const ahead = world.heightAt(this.x + vx * 0.15, this.y + vy * 0.15);
     const grade = deck ? 0 : (ahead - h) / (0.15 * UNITS_PER_TILE);
-    if (grade > 0) speed /= 1 + grade * 1.6;
+    if (grade > 0 && !free) speed /= 1 + grade * 1.6;
     // And a steep tile is slow going whichever way it is crossed — on your
     // own feet. A hull floats over whatever the bottom does, and a seat has
     // legs or wheels under it that answer for their own pace.
     const steep = this.carried || deck ? 0 : world.slope(this.tileX, this.tileY);
-    if (steep > SLOW_SLOPE) speed *= SLOW_SLOPE / steep;
+    if (steep > SLOW_SLOPE && !free) speed *= SLOW_SLOPE / steep;
 
     const len = Math.min(speed * dt, distanceLimit);
     const nx = this.x + vx * len;
@@ -471,9 +489,11 @@ export class Player {
  * tile being stepped onto is asked whether it can be stood on (`standsOn`).
  * The island asks the same in `walk_share`.
  */
-export function groundStep(world: World, x0: number, y0: number, x1: number, y1: number, maxStep = MAX_STEP): boolean {
+export function groundStep(world: World, x0: number, y0: number, x1: number, y1: number, maxStep = MAX_STEP, maxDrop = maxStep): boolean {
   if (world.getTile(x0, y0) === TileType.Steps || world.getTile(x1, y1) === TileType.Steps) return true;
-  return Math.abs(world.centerHeight(x1, y1) - world.centerHeight(x0, y0)) <= maxStep;
+  // Down as far as `maxDrop`, which is the step up but for Power's Sure Fall, and up as far as `maxStep`.
+  const rise = world.centerHeight(x1, y1) - world.centerHeight(x0, y0);
+  return rise >= 0 ? rise <= maxStep : -rise <= maxDrop;
 }
 
 /**
@@ -565,6 +585,7 @@ export interface PlayerSave {
   foreknow?: number;
   clarityUntil?: number;
   studied?: Record<string, number>;
+  pathTimes?: Record<string, number>;
   belt?: Array<BeltPin | null>;
   /** Absent in every save written before there was a creator; those get the default. */
   look?: Look;
@@ -599,6 +620,7 @@ export function writePlayer(p: Player): PlayerSave {
     foreknow: p.foreknow,
     clarityUntil: p.clarityUntil,
     studied: p.studied,
+    pathTimes: p.pathTimes,
     belt: p.belt,
   };
 }
@@ -632,6 +654,7 @@ export function readPlayer(p: Player, saved: PlayerSave): void {
   p.foreknow = saved.foreknow ?? 0;
   p.clarityUntil = saved.clarityUntil ?? -1e9;
   p.studied = saved.studied ?? {};
+  p.pathTimes = saved.pathTimes ?? {};
   // Cleaned rather than trusted: a save is a file on somebody's own machine,
   // and this is the same value that ends up in `fillStyle`.
   if (saved.look) p.look = cleanLook(saved.look);
