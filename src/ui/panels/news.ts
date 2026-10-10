@@ -16,6 +16,9 @@ import { flameSources } from '../../game/lantern';
 import { WORLD_PACE } from '../../game/pace';
 import { GAIN_RATE, MIN_GAIN, SKILL_BY_ID, skillGain } from '../../game/skills';
 import { favourCap, PRAYER_GAIN, PRAYER_PEAKS, PRAYER_REST, prayerWorth } from '../../game/faith';
+import {
+  calmCap, CHOOSE_AT, PATH_LIST, PATH_TIER_AT, PICKS_PER_TIER, picksOf, SIT_CALM, SIT_WORTH, TECHNIQUES,
+} from '../../game/meditation';
 import { tryGain } from '../../game/learn';
 import { DRIVING_LEARN, DRIVING_TOP, drivingPace, SAILING_LEARN, SAILING_TOP, sailingPace, TRAVEL_TOP_AT, VEHICLE_QL_TOP, vehicleQlPace } from '../../game/travel';
 import { deckBill, metres, PIER_CLEAR, PIER_DROP, PIER_WALL_DROP, PIER_WATER } from '../../game/piers';
@@ -1543,6 +1546,27 @@ export const NEWS: News[] = [
       'When the stack the last job used is gone, another of the same kind in your pack stands in. A name or a yes the job asked for the first time is asked for again. '
         + 'The key can be changed in Settings, under Keys.',
     ],
+  },
+  {
+    n: 114,
+    day: '2026-10-10',
+    lines: () => {
+      const moved = PATH_LIST.filter((p) => p.moved);
+      const kept = PATH_LIST.filter((p) => !p.moved);
+      return [
+        `A meditation path is chosen at ${CHOOSE_AT} meditation, which is also where its first tier opens. Whoever has chosen already keeps their path, whatever their meditation.`,
+        `Every sitting banks Calm: ${SIT_CALM} times what the spot multiplies a sitting by. Calm is held to favour's curve off meditation, `
+          + `${listed(PATH_TIER_AT.filter((_, i) => i % 2 === 0).map((m) => `${Math.floor(calmCap(m))} at ${m}`))}, and does not come back on its own.`,
+        `A sitting within ${numberWord(SIT_WORTH.swirlReach)} tiles of a mote swirl is worth ${percent(SIT_WORTH.swirl - 1)} more, and one within ${numberWord(SIT_WORTH.staleReach)} tiles `
+          + `of anywhere you have sat since the woods last turned ${percent(SIT_WORTH.stale)} as much. A blow that lands on you while you sit ends the sitting with nothing come of it.`,
+        `${listed(moved.map((p) => p.name))} has moved onto tiers: ${numberWord(PICKS_PER_TIER)} picks at each of ${listed(PATH_TIER_AT.map(String))} meditation, `
+          + `a technique and ${numberWord(PICKS_PER_TIER - 1)} disciplines, one of which you take in the Faith window's new Path tab. `
+          + `A technique goes in the spell bar's path slot and costs Calm: ${listed(TECHNIQUES.filter((k) => moved.some((p) => p.id === k.path)).map((k) => `${k.name} ${k.cost}`))}. `
+          + `Its old steps are gone, Sense the Rock and Recall the Way with them; Attentive (now ${percent(picksOf('knowledge', 1).find((k) => k.name === 'Attentive')?.fx.learn ?? 0)}), `
+          + 'Reader and Keen Sight are disciplines to take.',
+        `${listed(kept.map((p) => p.name))} keep their steps and abilities exactly as they were, until they move too.`,
+      ];
+    },
   },
 ];
 

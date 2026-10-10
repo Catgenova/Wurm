@@ -3820,8 +3820,9 @@ select '499. ' || (select text from event where uid = :'ivar' order by n desc li
         '{"kind":"tile","x":5,"y":7}'::jsonb), 'allowed');
 select '500. choosing before it is clear: ' || coalesce(act_refusal(:'world2', :'ivar', 'choose_path',
        '{"kind":"tile","material":"love"}'::jsonb), 'allowed');
-insert into skill (world_id, uid, id, value) values (:'world2', :'ivar', 'meditation', 5)
-  on conflict (world_id, uid, id) do update set value = 5;
+-- Chosen once the first tier opens (`choose_at`, twenty since the paths took tiers).
+insert into skill (world_id, uid, id, value) values (:'world2', :'ivar', 'meditation', choose_at())
+  on conflict (world_id, uid, id) do update set value = choose_at();
 delete from event where uid = :'ivar';
 select act_perform(:'world2', :'ivar', 'choose_path', '{"kind":"tile","material":"love"}'::jsonb) \g /dev/null
 select '501. ' || (select text from event where uid = :'ivar' order by n desc limit 1);
@@ -3847,10 +3848,9 @@ select '505. ' || (select text from event where uid = :'ivar' and kind = 'event'
      || ', and again: ' || coalesce(act_refusal(:'world2', :'ivar', 'use_ability',
         '{"kind":"tile","material":"refresh"}'::jsonb), 'allowed');
 /*
- * And what a path is worth where the island already does the arithmetic. Three
- * of the fifteen steps are a row and nothing else — carrying weight, the reach
- * of sight, and what armour turns — because none of the three is computed
- * anywhere down here to multiply.
+ * And what a path is worth where the island already does the arithmetic. Two
+ * of the paths' steps are a row and nothing else — carrying weight and what
+ * armour turns — because neither is computed anywhere down here to multiply.
  */
 select creature_spawn(:'world2', 'rabba', 5.7, 7.7, 'wild', now() - interval '1 day') as bun \gset
 insert into skill (world_id, uid, id, value) values (:'world2', :'ivar', 'meditation', 25)
@@ -3865,7 +3865,7 @@ select '506. what the path is worth, the same body either way: a rabba would tru
      || :'with_love' || ' times in a hundred with Gentle hand behind him and '
      || :'without' || ' without it'
      || ' — and ' || (select count(*) from path_step where ability is not null)
-     || ' of the fifteen steps are called on rather than simply true, the rest being true all the time';
+     || ' of the ' || (select count(*) from path_step) || ' steps of the paths still on them are called on rather than simply true, the rest being true all the time';
 select '507. the five that came with it: '
      || (select string_agg(id, ', ' order by id) from action_def where faith_action(id))
      || ' — of 374 the island now does ' || (select count(*) from action_def where act_ported(id));

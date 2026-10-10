@@ -76,7 +76,7 @@ import { KILN_CAPACITY } from '../../game/kiln';
 import { candleBurn, FIRE_REACH, HELD_LIGHTS, lanternReach, OVEN_REACH, torchBurn, torchReach } from '../../game/light';
 import { MARK_CAP } from '../../game/marks';
 import { MATERIAL_BY_ID, type MaterialDef } from '../../game/materials';
-import { CHOOSE_AT, PATH_LIST, SIT_REST, SIT_WORTH } from '../../game/meditation';
+import { calmCap, CHOOSE_AT, PATH_LIST, PATH_TIER_AT, PICKS_PER_TIER, picksOf, SIT_CALM, SIT_REST, SIT_WORTH } from '../../game/meditation';
 import { COIN_METALS, COIN_QL_WEIGHT, COINS_PER_LUMP, coinPurity, INGOT_LUMPS, INGOT_WEIGHT, METALS, MOULDS, NAILS_PER_LUMP, PRECIOUS_METALS, RARE_METALS } from '../../game/metal';
 import { COIN_WORTH } from '../../game/money';
 import { ORDER_LIFE } from '../../game/orders';
@@ -2580,14 +2580,30 @@ export function helpText(): string {
     sit, and choose <b>Sit and think about nothing</b>. You may sit once every ${spanWords(SIT_REST)}, and
     <b>where</b> you sit decides what it is worth: your own yard ${percent(SIT_WORTH.yard)} of a sitting anywhere else,
     high ground off your settlement ${times(SIT_WORTH.high)} as much, and where the ground runs out and the air is thin
-    <b>${times(SIT_WORTH.thin)}</b> as much; and your feet in the water add ${percent(SIT_WORTH.water - 1)} to wherever that is.</p>
+    <b>${times(SIT_WORTH.thin)}</b> as much; your feet in the water add ${percent(SIT_WORTH.water - 1)} to wherever that is, and a mote
+    swirl within ${numberWord(SIT_WORTH.swirlReach)} tiles adds ${percent(SIT_WORTH.swirl - 1)}. A spot within ${numberWord(SIT_WORTH.staleReach)} tiles of
+    anywhere you have sat since the woods last turned is worth ${percent(SIT_WORTH.stale)} of itself, so the best sitting is somewhere new.
+    A blow that lands on you while you sit ends the sitting, and nothing comes of it.</p>
+    <p>Every sitting banks <b>Calm</b>: ${SIT_CALM} times what the spot multiplies a sitting by. Calm is held to the same curve
+    favour is, off meditation instead of faith: ${listed(PATH_TIER_AT.filter((_, i) => i % 2 === 0).map((m) => `${Math.floor(calmCap(m))} at ${m}`))}.
+    It does not come back on its own: it is sat for, and spent on a path's techniques.</p>
     <p>At ${numberWord(CHOOSE_AT)} meditation ${numberWord(PATH_LIST.length)} ways of looking at the island become clear and you may walk exactly
-    <b>one</b>, chosen at the rug and never changed. Each opens ${numberWord(PATH_LIST[0].steps.length)} things as the sitting goes on:
-    ${numberWord(PATH_LIST[0].steps.filter((s) => s.ability).length)} of them are abilities you call on with a rest between, and ${numberWord(PATH_LIST[0].steps.filter((s) => !s.ability).length)} are simply true from then on.</p>
+    <b>one</b>, chosen at the rug and never changed; whoever chose before keeps their path. A path that has moved onto <b>tiers</b>
+    offers ${numberWord(PICKS_PER_TIER)} picks at each of ${listed(PATH_TIER_AT.map(String))} meditation: a <b>technique</b> and
+    ${numberWord(PICKS_PER_TIER - 1)} <b>disciplines</b>, one of which you take, for good, in the <b>Faith</b> window's Path tab. A technique goes in the
+    spell bar's path slot, costs Calm and rests between calls; a discipline is true from the moment it is taken.
+    ${listed(PATH_LIST.filter((p) => p.moved).map((p) => p.name))} ${PATH_LIST.filter((p) => p.moved).length === 1 ? 'has' : 'have'} moved:</p>
     <table>
-      ${PATH_LIST.map((p) => `<tr><td><b>${p.name}</b></td><td>${p.note} ${p.steps.map((s) => (s.ability
-        ? `<b>${s.name}</b> (${s.at}, then ${spanWords(s.ability.rest)} before it again): ${lowerFirst(s.note)}`
-        : `<i>${s.name}</i> (${s.at}): ${lowerFirst(s.note)}`)).join(' ')}</td></tr>`).join('\n      ')}
+      ${PATH_LIST.filter((p) => p.moved).flatMap((p) => PATH_TIER_AT.map((at, i) => `<tr><td><b>${p.name}</b> ${at}</td><td>${picksOf(p.id, i + 1).map((k) => (k.kind === 'technique'
+        ? `<b>${k.name}</b> (${k.cost} Calm, then ${spanWords(k.rest)} before it again): ${lowerFirst(k.note)}`
+        : `<i>${k.name}</i>: ${lowerFirst(k.note)}`)).join(' ')}</td></tr>`)).join('\n      ')}
+    </table>
+    <p>${listed(PATH_LIST.filter((p) => !p.moved).map((p) => p.name))} keep their steps until they move: each opens ${numberWord(PATH_LIST.filter((p) => !p.moved)[0]?.steps.length ?? 0)} things as the sitting goes on,
+    ${numberWord(PATH_LIST.filter((p) => !p.moved)[0]?.steps.filter((st) => st.ability).length ?? 0)} of them abilities called on at the rug with a rest between, and the rest simply true from then on.</p>
+    <table>
+      ${PATH_LIST.filter((p) => !p.moved).map((p) => `<tr><td><b>${p.name}</b></td><td>${p.note} ${p.steps.map((st) => (st.ability
+        ? `<b>${st.name}</b> (${st.at}, then ${spanWords(st.ability.rest)} before it again): ${lowerFirst(st.note)}`
+        : `<i>${st.name}</i> (${st.at}): ${lowerFirst(st.note)}`)).join(' ')}</td></tr>`).join('\n      ')}
     </table>
     <h3>An altar, and what kneeling at one buys</h3>
     <p>There is no god on this island with a name and nobody here would claim to know one. There is a
@@ -2624,9 +2640,9 @@ export function helpText(): string {
     before you take one. Taking a patron or a spell waits for you to confirm it in the window. A spell is paid for in favour and rests a number of
     seconds of its own after each call.</p>
     <p>The <b>spell bar</b> along the bottom has ${numberWord(BAR_SLOTS)} slots: ${listed((['class', 'faith', 'path'] as const).map((s) => `${numberWord(slotsFor(s))} for ${SCHOOL_NAMES[s].toLowerCase()} spells`))}.
-    A patron's spell you take goes in the first empty faith slot and a fighting trade's in the first empty class slot; right-click a
+    A patron's spell you take goes in the first empty faith slot, a fighting trade's in the first empty class slot and a path's technique in the path slot; right-click a
     slot to put another of yours there or to empty it. A dark shade over a slot is the rest that spell has left. On an island only:
-    playing by yourself in the browser there is nobody to keep a patron or a trade.</p>
+    playing by yourself in the browser there is nobody to keep a patron or a trade, and a path's techniques are called from the Path tab or the rug.</p>
     <p>Every spell says what it can be cast on: ${listedOr(SPELL_ONS.map((o) => `<b>${SPELL_ON_WORDS[o]}</b>`))}. A
     wildermon is any creature that is not after you; an enemy is any wild creature, so one minding its own business is both.
     A thing is anything in your pack or set down in the world, and a spell on the ground reaches everything within its own

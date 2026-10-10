@@ -9,12 +9,13 @@
 import { SPELLS, spellDef, spellSecs } from '../../game/arcane';
 import { FAITH_SPELL_BY_ID, FAITH_SPELLS, type SpellOn } from '../../game/patrons';
 import { CLASS_SPELL_BY_ID, CLASS_SPELLS } from '../../game/talents';
+import { PATH_PICK_BY_ID, TECHNIQUES } from '../../game/meditation';
 
-/** The thirteen groups of spells, one file each in this folder: the ten fighting trades and the three patrons. */
+/** The groups of spells, one file each in this folder: the ten fighting trades, the three patrons, and the Knowledge path's techniques. */
 export type SpellGroup = 'blade' | 'berserker' | 'pikeman' | 'archer' | 'skirmisher' | 'chirurgeon' | 'beastmaster'
-  | 'kindler' | 'binder' | 'warder' | 'blessing' | 'justice' | 'chaos';
+  | 'kindler' | 'binder' | 'warder' | 'blessing' | 'justice' | 'chaos' | 'knowledge';
 export const SPELL_GROUPS: readonly SpellGroup[] = ['blade', 'berserker', 'pikeman', 'archer', 'skirmisher', 'chirurgeon', 'beastmaster',
-  'kindler', 'binder', 'warder', 'blessing', 'justice', 'chaos'];
+  'kindler', 'binder', 'warder', 'blessing', 'justice', 'chaos', 'knowledge'];
 
 /**
  * How a spell is cast, which is what its stand-in pose and effect are picked
@@ -121,11 +122,17 @@ for (const s of SPELLS) {
   });
 }
 
-/** What a spell is, by id: a trade's, a patron's or one of the six arcane. */
+// A path's techniques, every one cast on oneself and over when it lands: what it finds is said, not drawn.
+for (const k of TECHNIQUES) {
+  infos.set(k.id, { id: k.id, name: k.name, group: k.path as SpellGroup, kind: 'pray', on: ['self'], fx: k.fx, radius: 0, lasts: null });
+}
+
+/** What a spell is, by id: a trade's, a patron's, one of the six arcane, or a path's technique. */
 export const spellInfo = (id: string): SpellInfo | undefined => infos.get(id);
 /** Every spell there is, by group, in the order the tables write them. */
 export const spellsIn = (group: SpellGroup): SpellInfo[] => [...infos.values()].filter((s) => s.group === group);
 /** Every spell id there is. */
 export const ALL_SPELL_IDS: readonly string[] = [...infos.keys()];
 /** Whether an id is a spell at all, as a broadcast from somebody else's browser is checked. */
-export const isSpell = (id: string): boolean => infos.has(id) && (CLASS_SPELL_BY_ID.has(id) || FAITH_SPELL_BY_ID.has(id) || !!spellDef(id));
+export const isSpell = (id: string): boolean =>
+  infos.has(id) && (CLASS_SPELL_BY_ID.has(id) || FAITH_SPELL_BY_ID.has(id) || !!spellDef(id) || PATH_PICK_BY_ID.get(id)?.kind === 'technique');

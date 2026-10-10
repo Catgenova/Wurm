@@ -26,6 +26,7 @@ import { LIQUID_NAME, type LiquidKind } from '../../src/game/furniture';
 import { drinkable } from '../../src/game/brewing';
 import { BRIDGES } from '../../src/game/bridges';
 import { numberWord } from '../../src/game/words';
+import { PATH_LIST } from '../../src/game/meditation';
 import { findPath } from '../../src/world/pathfinding';
 import type { World } from '../../src/world/world';
 
@@ -489,7 +490,8 @@ async function main(): Promise<void> {
       castErr ? castErr.message : spells.map((c) => `${c.name} ${c.cost}@${c.level}`).join(', '));
     const { data: steps, error: stepErr } = await supabase().from('path_step').select('path,n,at,ability');
     const rungs = (steps ?? []) as Array<{ path: string; ability: string | null }>;
-    check('and the three ways of looking at it', !stepErr && rungs.length === 15,
+    // The steps of the paths still on them: a path moved onto tiers has none (`meditation.ts`).
+    check('and the three ways of looking at it', !stepErr && rungs.length === PATH_LIST.reduce((n, p) => n + p.steps.length, 0),
       stepErr ? stepErr.message
         : `${new Set(rungs.map((w) => w.path)).size} paths, ${rungs.length} steps, ${rungs.filter((w) => w.ability).length} of them called on`);
     const noAltar = await island.act('pray', { kind: 'furniture', id: 1 }, 1);

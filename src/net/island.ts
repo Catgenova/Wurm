@@ -12,6 +12,7 @@ import type { IslandSpring } from '../game/springs';
 import { cleanLook, type Look } from '../game/look';
 import type { IslandCrate, IslandGround } from '../game/game';
 import type { Mark } from '../game/items';
+import type { PathBeat, PathSaid } from '../game/meditation';
 import { AWAY_SLOWER, BODY_EVERY, BODY_FRESH, SPRINGS_EVERY, SWIRLS_EVERY, CHANGE_PAGE, FOG_EVERY, FOUND_MAX, GROUND_EVERY, GROUND_IDLE, GROUND_RANGE, GUIDE_BATCH, GUIDE_EVERY, HEARTBEAT, LAND_ASK, LAND_NEAR, MOBS_EVERY, MOBS_RANGE, RECONCILE_EVERY, REGION, SNAP_GAP } from '../game/keep';
 import type { GuideBook } from '../game/guide';
 import { packFog, unpackFog } from './fogpack';
@@ -568,6 +569,10 @@ export interface FaithSaid extends Partial<ToldWire> {
   rest: Record<string, number>;
   /** Your fighting trade's spells that you know, lowest tier first, for its slots on the bar. */
   classSpells?: string[];
+  /** Your path's techniques that you have taken, lowest tier first, for its slot on the bar. */
+  pathSpells?: string[];
+  /** Your path, Calm and the picks of its tiers, as the Faith window draws them (`path_said`). */
+  path?: PathSaid;
   /** Your stamina, a share of a full bar, which a trade's spells are paid in. */
   stamina?: number;
   /** Where a spell put your body (a Sworn Blade's Lunge), for the browser to go to. */
@@ -788,6 +793,8 @@ export interface IslandHooks {
     /** What you are carrying, which the island keeps and had never said. */
     wounds?: unknown[];
     marks?: { tiles: number[]; secs: number } | null;
+    /** Your path: its picks, Calm, a Foreknow's goes and a Clarity's seconds, where you have sat, and a technique's marks. */
+    path?: PathBeat | null;
     /**
      * And the rest of what you are, which the row kept and never sent: the
      * rest banked by sleeping, the dishes favouring a trade, the knacks, the
@@ -1806,6 +1813,7 @@ export class Island {
         stats?: Record<string, number> | null; skills?: Record<string, number> | null;
         wounds?: unknown[] | null;
         marks?: { tiles?: number[]; secs?: number } | null;
+        path?: PathBeat | null;
         rested?: number; boons?: unknown[]; knacks?: Record<string, number>;
         titles?: string[]; title?: string | null; nutrition?: Record<string, number>;
         equipped?: Record<string, number | null>;
@@ -1851,6 +1859,7 @@ export class Island {
         skills: said.skills ?? null,
         wounds: Array.isArray(said.wounds) ? said.wounds : undefined,
         marks: said.marks?.tiles ? { tiles: rowsIn<number>(said.marks.tiles), secs: said.marks.secs ?? 0 } : null,
+        path: said.path && typeof said.path === 'object' ? said.path : undefined,
         rested: said.rested, boons: said.boons, knacks: said.knacks,
         titles: said.titles, title: said.title, nutrition: said.nutrition,
         equipped: said.equipped,
@@ -2944,6 +2953,11 @@ export class Island {
   /** Take one spell of a tier: one of the three, for good. */
   async takeFaithSpell(id: string): Promise<FaithSaid | null> {
     return this.faithDoor('rpc_take_faith_spell', { p_spell: id });
+  }
+
+  /** Take one pick of a tier of your path: one of the three, for good. */
+  async takePathPick(id: string): Promise<FaithSaid | null> {
+    return this.faithDoor('rpc_take_path_pick', { p_pick: id });
   }
 
   /** Put a spell you have in a slot of the bar, or empty the slot with null. */

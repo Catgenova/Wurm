@@ -4,6 +4,7 @@ import { furnitureCentre, furnitureDef, type PlacedFurniture } from './furniture
 import { itemName, NOT_RESTORED, unrestored, type Item } from './items';
 import { worldRate } from './pace';
 import { capital, spanWords, times } from './words';
+import { WELL_CEILING, wellCap } from './wells';
 
 /**
  * An altar, and what it is worth to have one.
@@ -51,10 +52,10 @@ export const PRAYER_GAIN = 1.4;
 export const prayerRestWords = (rest: number): string =>
   `You prayed less than ${PRAYER_REST / 60} minutes ago. ${Math.ceil(rest / 60)} minutes to go.`;
 /** The most favour anybody holds, whatever their faith. */
-export const FAVOUR_CEILING = 120;
+export const FAVOUR_CEILING = WELL_CEILING;
 
-/** How much favour this much faith will carry at once. */
-export const favourCap = (faith: number): number => Math.min(FAVOUR_CEILING, 25 + faith * 0.95);
+/** How much favour this much faith will carry at once: the curve Calm is held to as well (`wells.ts`). */
+export const favourCap = (faith: number): number => wellCap(faith);
 
 /**
  * The two hours of the clock a prayer is worth most at, how many hours either

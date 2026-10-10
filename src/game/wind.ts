@@ -23,11 +23,18 @@ export interface Wind {
 /** The eight points, for saying where it is coming from. */
 const POINTS = ['north', 'north-east', 'east', 'south-east', 'south', 'south-west', 'west', 'north-west'];
 
-/** How long the wind takes to box the compass, and how long a squall lasts. */
-const TURN_PERIOD = 40 * 60;
-const GUST_PERIOD = 7 * 60;
+/**
+ * How long the wind takes to box the compass, and how long a squall lasts.
+ * The island's `wind_at` turns on the same two (`wind_turn`, `wind_gust`).
+ */
+export const TURN_PERIOD = 40 * 60;
+export const GUST_PERIOD = 7 * 60;
 
-/** The wind at this hour on this island. */
+/**
+ * The wind at this hour on this island: a sum of slow sines of the clock and
+ * the seed, and nothing else, so the wind of any hour to come is known now.
+ * The island's `wind_at` is the same sum.
+ */
 export function windAt(seed: number, time: number): Wind {
   const s = (seed % 1000) / 1000;
   // Two slow turns laid over each other, so it wanders rather than sweeps.
@@ -47,9 +54,11 @@ export function windAt(seed: number, time: number): Wind {
 
 /** Where it is blowing from, which is how a sailor says it. */
 export function windFrom(w: Wind): string {
-  const from = (w.dir + Math.PI) % (Math.PI * 2);
-  return POINTS[Math.round(from / (Math.PI / 4)) % 8];
+  return POINTS[windPoint(w)];
 }
+
+/** Where it is blowing from, as a share of the eight points: what `windFrom` names. */
+export const windPoint = (w: Wind): number => Math.round(((w.dir + Math.PI) % (Math.PI * 2)) / (Math.PI / 4)) % 8;
 
 /** What that much wind is called. */
 export function windWord(force: number): string {

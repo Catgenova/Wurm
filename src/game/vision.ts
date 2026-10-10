@@ -5,7 +5,6 @@ import { bloodMul } from './creatures';
 import type { Game } from './game';
 import { heldReach } from './light';
 import { isLampPiece, lampAt, lampBurning, lampReach } from './lamps';
-import { KEEN_SIGHT } from './meditation';
 
 /**
  * What can be seen from where you are standing.
@@ -196,9 +195,10 @@ export class Vision {
      * as the thing you are carrying throws.
      */
     const lamp = g.heldLight();
-    const day = 1 - NIGHT_LOSS * (down ? 1 : g.darkness()) * (lamp ? 1 - LIGHT_GIVES_BACK : 1);
-    // The reader's path sees further than anybody else.
-    const keen = g.walks('knowledge', 5) ? KEEN_SIGHT : 1;
+    // A reader's Night Eyes keep none of what the dark would take (`knowledge_night_eyes`).
+    const day = 1 - NIGHT_LOSS * g.pathFx('dark', 1) * (down ? 1 : g.darkness()) * (lamp ? 1 - LIGHT_GIVES_BACK : 1);
+    // And a reader's Keen Sight sees further, and further than the furthest anybody else does (`knowledge_keen`).
+    const keen = g.pathFx('sight', 1);
     const seen = Math.max(3, Math.min(MAX_SIGHT * keen, open * day * keen));
     return lamp ? Math.max(seen, heldReach(lamp.id, lamp.ql)) : seen;
   }
@@ -315,6 +315,46 @@ export class Vision {
     } else {
       this.dirty = null;
     }
+    this.chart();
+  }
+
+  /** The tile a Cartographer's disc was last remembered round. */
+  private chartedAt = -1;
+
+  /**
+   * A reader's Cartographer (`knowledge_cartographer`): the map remembers the
+   * ground in a disc round you out to `reveal` times your sight, without your
+   * seeing any of it. The browser's alone, because the remembered map is: it
+   * is kept here and handed to the island (`rpc_fog`), and no rule on the
+   * island reads it. Once a tile walked onto, not once a look.
+   */
+  private chart(): void {
+    const g = this.game;
+    const reveal = g.pathFx('reveal', 0);
+    if (reveal <= 0 || g.player.level < 0) return;
+    const px = g.player.tileX;
+    const py = g.player.tileY;
+    const at = py * this.w + px;
+    if (at === this.chartedAt) return;
+    this.chartedAt = at;
+    const r = Math.floor(this.sightRange() * reveal);
+    let x0 = this.w;
+    let y0 = this.h;
+    let x1 = -1;
+    let y1 = -1;
+    for (let y = Math.max(0, py - r); y <= Math.min(this.h - 1, py + r); y++) {
+      for (let x = Math.max(0, px - r); x <= Math.min(this.w - 1, px + r); x++) {
+        if (Math.hypot(x - px, y - py) > r || !g.world.remember(x, y)) continue;
+        x0 = Math.min(x0, x);
+        y0 = Math.min(y0, y);
+        x1 = Math.max(x1, x);
+        y1 = Math.max(y1, y);
+      }
+    }
+    if (x1 < 0) return;
+    const d = this.dirty;
+    this.dirty = d ? { x0: Math.min(d.x0, x0), y0: Math.min(d.y0, y0), x1: Math.max(d.x1, x1), y1: Math.max(d.y1, y1) } : { x0, y0, x1, y1 };
+    this.revision++;
   }
 
   /**

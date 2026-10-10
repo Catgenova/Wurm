@@ -216,7 +216,8 @@ interface SaveData {
   hoards?: Hoard[];
   player: { x: number; y: number; name: string; stats: Stats; level?: number; equipped?: Record<string, number | null>; rested?: number; boons?: Boon[]; knacks?: Record<string, number>; nutrition?: Record<Nutrient, number>;
   /** What knacks were called before they were called knacks. */
-  affinities?: Record<string, number>; titles?: string[]; title?: string | null; wounds?: Wound[]; nextWound?: number; favour?: number; prayedAt?: number; way?: PathId | null; satAt?: number; usedAt?: Record<string, number>; belt?: Array<BeltPin | null>; look?: Look };
+  affinities?: Record<string, number>; titles?: string[]; title?: string | null; wounds?: Wound[]; nextWound?: number; favour?: number; prayedAt?: number; way?: PathId | null; satAt?: number; usedAt?: Record<string, number>; picks?: string[]; calm?: number;
+  satSpots?: Array<[number, number]>; satDawn?: number; foreknow?: number; clarityUntil?: number; studied?: Record<string, number>; belt?: Array<BeltPin | null>; look?: Look };
   inventory: Item[];
   nextUid?: number;
   ground?: Record<string, Item[]>;
@@ -317,7 +318,7 @@ function meta(game: Game): SaveMeta {
     spawn: game.spawn,
     marks: game.marks,
     hoards: game.hoards,
-    player: { x: game.player.x, y: game.player.y, name: game.player.name, look: game.player.look, stats: game.player.stats, level: game.player.level, equipped: game.player.equipped, rested: game.player.rested, boons: game.player.boons, knacks: game.player.knacks, nutrition: game.player.nutrition, titles: game.player.titles, title: game.player.title, wounds: game.player.wounds, nextWound: game.player.nextWound, favour: game.player.favour, prayedAt: game.player.prayedAt, way: game.player.way, satAt: game.player.satAt, usedAt: game.player.usedAt, belt: game.player.belt },
+    player: { x: game.player.x, y: game.player.y, name: game.player.name, look: game.player.look, stats: game.player.stats, level: game.player.level, equipped: game.player.equipped, rested: game.player.rested, boons: game.player.boons, knacks: game.player.knacks, nutrition: game.player.nutrition, titles: game.player.titles, title: game.player.title, wounds: game.player.wounds, nextWound: game.player.nextWound, favour: game.player.favour, prayedAt: game.player.prayedAt, way: game.player.way, satAt: game.player.satAt, usedAt: game.player.usedAt, picks: game.player.picks, calm: game.player.calm, satSpots: game.player.satSpots, satDawn: game.player.satDawn, foreknow: game.player.foreknow, clarityUntil: game.player.clarityUntil, studied: game.player.studied, belt: game.player.belt },
     inventory: game.inventory.items,
     nextUid: game.inventory.nextUid,
     ground: game.groundToJSON(),

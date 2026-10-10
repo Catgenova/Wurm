@@ -28,7 +28,7 @@
  * whole and nothing for a creature with none, and somebody else's saying where
  * a trait came from only for the traits they can read: a common one at any
  * husbandry, a rare one at one past its tier's level and not a point under,
- * and all of them on the third step of the way of knowledge.
+ * and all of them to a reader who took the Knowledge path's Reader.
  */
 import { execFileSync } from 'node:child_process';
 // `game` first: the root of the module graph, so nothing below comes out half-built.
@@ -291,7 +291,7 @@ begin
   insert into said values ('MINE|' || coalesce((select e->>'pedigree' from jsonb_array_elements(v_seen) e where (e->>'id')::int = v_known), 'not sent'));
   insert into said values ('BARE|' || coalesce((select (e ? 'pedigree')::text from jsonb_array_elements(v_seen) e where (e->>'id')::int = v_dam), 'not sent'));
 
-  -- Somebody else, at one husbandry under a rare trait, at one past it, and on the third step of knowledge with none.
+  -- Somebody else, at one husbandry under a rare trait, at one past it, and a reader with Reader and none.
   perform set_config('request.jwt.claims', json_build_object('sub', them)::text, true);
   insert into skill (world_id, uid, id, value) values (w, them, 'animal_husbandry', ${TIER_LEVEL.rare})
     on conflict (world_id, uid, id) do update set value = ${TIER_LEVEL.rare};
@@ -302,10 +302,12 @@ begin
   v_seen := rpc_creatures(w, 40);
   insert into said values ('PAST|' || coalesce((select e->>'pedigree' from jsonb_array_elements(v_seen) e where (e->>'id')::int = v_known), 'not sent'));
   update skill set value = 1 where world_id = w and uid = them and id = 'animal_husbandry';
+  -- A reader's Reader: the Knowledge path's discipline, taken at its tier (meditation.ts).
   update player set way = 'knowledge' where world_id = w and uid = them;
   insert into skill (world_id, uid, id, value)
-    values (w, them, meditation_skill(), (select s.at from path_step s where s.path = 'knowledge' order by s.at offset 2 limit 1))
+    values (w, them, meditation_skill(), (select t.at from path_tier t join path_pick k on k.tier = t.tier where k.id = 'knowledge_reader'))
     on conflict (world_id, uid, id) do update set value = excluded.value;
+  insert into path_taken (world_id, uid, pick) values (w, them, 'knowledge_reader') on conflict do nothing;
   v_seen := rpc_creatures(w, 40);
   insert into said values ('KNOWING|' || coalesce((select e->>'pedigree' from jsonb_array_elements(v_seen) e where (e->>'id')::int = v_known), 'not sent'));
 end $b$;
@@ -359,7 +361,7 @@ check(`island: at ${TIER_LEVEL.rare} husbandry, where a trait came from only for
   fromOf('UNDER') === sorted(readable(TIER_LEVEL.rare)) && readable(TIER_LEVEL.rare).length === 1, `${fromOf('UNDER')} of ${sorted(KNOWN.traits)}`);
 check(`island: at ${1 + TIER_LEVEL.rare}, for the rare one as well, and not yet the supreme`,
   fromOf('PAST') === sorted(readable(1 + TIER_LEVEL.rare)) && readable(1 + TIER_LEVEL.rare).length === 2, `${fromOf('PAST')}`);
-check('island: and on the third step of the way of knowledge, for all of them', fromOf('KNOWING') === sorted(KNOWN.traits), fromOf('KNOWING'));
+check('island: and to a reader who took Reader, all of them', fromOf('KNOWING') === sorted(KNOWN.traits), fromOf('KNOWING'));
 check('island: in the words the record was written in', same(parsed<Pedigree>('PAST')?.from, Object.fromEntries(readable(1 + TIER_LEVEL.rare).map((id) => [id, KNOWN.from[id]]))),
   JSON.stringify(parsed<Pedigree>('PAST')?.from));
 

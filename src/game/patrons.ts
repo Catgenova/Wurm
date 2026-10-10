@@ -1,6 +1,7 @@
 import { TREE_AGES } from '../world/tiles';
 import { FAITH } from './faith';
 import { TARGET_RANGE } from './fight';
+import { PATH_PICK_BY_ID, PATH_TIER_AT } from './meditation';
 import { SKILL_BY_ID } from './skills';
 import { CLASS_SPELL_BY_ID } from './talents';
 import { listed, listedOr, percent } from './words';
@@ -46,10 +47,14 @@ export const PATRONS: PatronDef[] = [
 export const PATRON_BY_ID = new Map(PATRONS.map((p) => [p.id, p]));
 export const ALIGNMENT_NAMES: Record<Alignment, string> = { good: 'Good', neutral: 'Neutral', evil: 'Evil' };
 
+/**
+ * The faith each tier of spells opens at: the patron's own, then every twenty
+ * to eighty, and the last at ninety-nine -- the same five numbers a path's
+ * tiers open at in meditation (`PATH_TIER_AT`).
+ */
+export const FAITH_TIER_AT = PATH_TIER_AT;
 /** The faith a patron is taken at, which is also where its first tier of spells opens. */
-export const PATRON_AT = 20;
-/** The faith each tier of spells opens at: the patron's own, then every twenty to eighty, and the last at ninety-nine. */
-export const FAITH_TIER_AT = [PATRON_AT, 40, 60, 80, 99] as const;
+export const PATRON_AT = FAITH_TIER_AT[0];
 /** How many spells each tier offers, of which one is taken. */
 export const SPELLS_PER_TIER = 3;
 
@@ -376,9 +381,10 @@ export const BAR_SLOTS = SPELL_BAR.length;
 /** How many slots each school has. */
 export const slotsFor = (school: SpellSchool): number => SPELL_BAR.filter((s) => s === school).length;
 
-/** Which school a spell id belongs to: a patron's, or a fighting trade's (`talents.ts`). No path's are written yet. */
+/** Which school a spell id belongs to: a patron's, a fighting trade's (`talents.ts`), or a path's technique (`meditation.ts`). */
 export const schoolOf = (id: string): SpellSchool | null =>
-  (FAITH_SPELL_BY_ID.has(id) ? 'faith' : CLASS_SPELL_BY_ID.has(id) ? 'class' : null);
+  (FAITH_SPELL_BY_ID.has(id) ? 'faith' : CLASS_SPELL_BY_ID.has(id) ? 'class'
+    : PATH_PICK_BY_ID.get(id)?.kind === 'technique' ? 'path' : null);
 
 /**
  * Why this spell cannot go in this slot, or nothing: the same as the island's

@@ -446,6 +446,8 @@ export async function startIsland(params: URLSearchParams, tell: Telling): Promi
       for (const [k, v] of Object.entries(what.nutrition)) if (typeof v === 'number') n[k] = v;
     }
     if (what.marks !== undefined) game.showProspected(what.marks?.tiles ?? [], what.marks?.secs ?? 0);
+    // And your path, which sight, the map and a wildermon's blood are worked out from here (`setPath`).
+    if (what.path) game.setPath(what.path);
     /*
      * And the journal, which had nothing to read and nowhere to keep it.
      *

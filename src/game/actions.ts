@@ -620,8 +620,9 @@ export const CHIP_CHANCE = 0.25;
 export const PROSPECT_REACH = 3;
 export const PROSPECT_STEP = 10;
 export const prospectRadius = (skill: number): number => PROSPECT_REACH + Math.floor(skill / PROSPECT_STEP);
-/** How far this body reads the ground: a Miner's Far Reader reads further (`further:prospect`). */
-export const prospectReach = (g: Game): number => prospectRadius(g.skills.get('prospecting')) + g.perk('further:prospect', 0);
+/** How far this body reads the ground: a Miner's Far Reader reads further (`further:prospect`), and so does a reader's Deep Reading (`knowledge_deep_reading`). */
+export const prospectReach = (g: Game): number =>
+  prospectRadius(g.skills.get('prospecting')) + g.perk('further:prospect', 0) + g.pathFx('further', 0);
 
 /** How deep a pick works through water, for this body: a Miner's Wet Work works deeper (`depth:mine`). */
 export const mineDepth = (g: Game): number => g.perk('depth:mine', MINE_DEPTH);
