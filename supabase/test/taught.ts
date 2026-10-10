@@ -133,15 +133,17 @@ game.skills.values.set('smelting', 1);
  * doing — which is right, and is not what is being measured here.
  */
 let dry: [number, number] | null = null;
+// From where the body came ashore: the island is not in the corner of the map.
+const [hx, hy] = [Math.floor(game.player.x), Math.floor(game.player.y)];
 for (let r = 0; r < 60 && !dry; r++) {
   for (let dx = -r; dx <= r && !dry; dx++) {
     for (const dy of [-r, r]) {
-      const [x, y] = [64 + dx, 64 + dy];
+      const [x, y] = [hx + dx, hy + dy];
       if (game.world.isPassable(x, y) && !game.world.hasWater(x, y) && game.world.slope(x, y) < 20) { dry = [x, y]; break; }
     }
   }
 }
-const [sx, sy] = dry ?? [64, 64];
+const [sx, sy] = dry ?? [hx, hy];
 game.player.x = sx + 0.5;
 game.player.y = sy + 0.5;
 // An alloy is mixed at a hot furnace, so there has to be one to stand at.
