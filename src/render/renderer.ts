@@ -39,6 +39,7 @@ import { foundationDone } from '../game/foundations';
 import { DYE_BY_ID } from '../game/dyestuffs';
 import { hash2 } from '../world/noise';
 import { bareRock, DAMP_SAND, dustiness, FLAT, growth, oreWash, PAVED, ROCK_VARIANTS, SLAB_VARIANTS, STREWN, TileType, TILE_DEFS, COVERED, bushSpecies, slabVariant, trailGround, stonesBed, treeSpecies, treeVariant } from '../world/tiles';
+import type { NightMask } from './runestone';
 import { HALF_H, HALF_W, HEIGHT_SCALE, UNITS_PER_TILE } from './iso';
 import { beastReach, HUNT_REACH, inFightReach, isFightJob, WIND_UP } from '../game/fight';
 import { depthOf, type View } from './view';
@@ -1170,13 +1171,16 @@ export class Renderer {
    */
   private glows: Array<{ sx: number; sy: number; kind: string; view: PieceView }> = [];
   /**
-   * Shapes to take the night back off with, where they were drawn this frame:
-   * a runestone's runes, each in its own shape (`runestoneMasks`), so what
-   * shows through the dark is the glyph and not a round spot of light. Laid
-   * `destination-out` on the night layer beside the glows' round holes; each
-   * picture's alpha is how much of the wash it takes, at strength `a`.
+   * Shapes to take the night back off with, from what was drawn this frame:
+   * a runestone's runes, each in its own shape, and the soft light round
+   * them. Each is what `runestoneNight` handed back when the stone was drawn,
+   * called at the night pass for the shapes less whatever has been drawn over
+   * the stone since, so the night is taken off the runes and not off a tree
+   * or a body standing in front of them. Laid `destination-out` on the night
+   * layer beside the glows' round holes; each picture's alpha is how much of
+   * the wash it takes, at strength `a`.
    */
-  private nightMasks: Array<{ canvas: HTMLCanvasElement; x: number; y: number; w: number; h: number; a: number }> = [];
+  private nightMasks: Array<() => NightMask[]> = [];
   private anvilHits: HitRect[] = [];
   private postHits: HitRect[] = [];
   private trapHits: HitRect[] = [];
@@ -13055,9 +13059,11 @@ export class Renderer {
           }
         }
         // And off whatever lit shapes were drawn, in their own shapes.
-        for (const m of this.nightMasks) {
-          nc.globalAlpha = m.a;
-          nc.drawImage(m.canvas, m.x, m.y, m.w, m.h);
+        for (const shapes of this.nightMasks) {
+          for (const m of shapes()) {
+            nc.globalAlpha = m.a;
+            nc.drawImage(m.canvas, m.x, m.y, m.w, m.h);
+          }
         }
         nc.globalAlpha = 1;
         nc.globalCompositeOperation = 'source-over';

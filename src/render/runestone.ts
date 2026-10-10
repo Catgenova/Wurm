@@ -109,7 +109,7 @@ const area2 = (p: readonly Pt[]): number => p.reduce((s, a, i) => {
   return s + a[0] * b[1] - b[0] * a[1];
 }, 0);
 
-/** An anticlockwise outline drawn in by `d` all round, its corners mitred and the sharp ones kept short. */
+/** An anticlockwise outline drawn in by `d` all round (out, for less than nought), its corners mitred and the sharp ones kept short. */
 function inset(poly: readonly Pt[], d: number): Pt[] {
   const n = poly.length;
   return poly.map((p, i) => {
@@ -119,7 +119,7 @@ function inset(poly: readonly Pt[], d: number): Pt[] {
     const m: Pt = [n1[0] + n2[0], n1[1] + n2[1]];
     const ml = Math.hypot(m[0], m[1]);
     if (ml < 1e-6) return [p[0], p[1]] as Pt;
-    const k = Math.min(d / (ml / 2), d * 2.2);
+    const k = Math.sign(d) * Math.min(Math.abs(d) / (ml / 2), Math.abs(d) * 2.2);
     return [p[0] - (m[0] / ml) * k, p[1] - (m[1] / ml) * k] as Pt;
   });
 }
@@ -431,7 +431,7 @@ function mossOver(top: Pt[], hz: number, bands: Array<{ pts: V3[]; k: number; n:
     }
     g.save();
     g.setTransform(k.base);
-    pads(g, ps);
+    drawPads(g, ps);
     g.restore();
   };
 }
@@ -452,7 +452,7 @@ const cushion = (R: () => number, share = 1): number => (0.6 + 1.8 * R() * R()) 
  * one on an upright face stands up.
  */
 type Pad = [number, number, number, number];
-function pads(g: Ctx, ps: readonly Pad[]): void {
+function drawPads(g: Ctx, ps: readonly Pad[]): void {
   const pass = (fill: string, k: number, dx: number, dy: number, min = 0, every = 1): void => {
     g.beginPath();
     for (let i = 0; i < ps.length; i++) {
@@ -833,7 +833,7 @@ const SPECS: Record<RunestoneId, Spec> = {
     flowers: [['lilac', 5], ['blue', 3], ['white', 3]],
     rocks: { foot: 6, outer: 6, size: 1.1 },
     fallen: [
-      { kind: 'disc', x: -28, y: 28, r: 15, lean: 1.05, face: 1.97, carve: 'moon', sink: 0.45 },
+      { kind: 'disc', x: -30, y: 27, r: 13, lean: 1.18, face: 1.97, carve: 'moon', sink: 0.5 },
     ],
     lichen: ['#d3dcb4', '#e2e0b4'],
     seed: 23,
@@ -869,13 +869,16 @@ const SPECS: Record<RunestoneId, Spec> = {
       roundel: { x: 0, z: 70, r: 8, kind: 'hourglass' },
     },
     mossSide: 1,
-    moss: 0.42,
+    moss: 0.55,
     ivy: [
       { face: 'front', x: 16.4, kind: 'climb', v: 3, k: 1.3 },
-      { face: 'front', x: 15.8, kind: 'vine', v: 1, k: 1.45, z: 40 },
-      { face: 'front', x: 13, kind: 'hang', v: 1, k: 1.1, z: 104 },
+      { face: 'front', x: 16, kind: 'vine', v: 2, k: 1.5, z: 28 },
+      { face: 'front', x: 15.6, kind: 'vine', v: 0, k: 1.3, z: 58 },
+      { face: 'front', x: 12, kind: 'hang', v: 2, k: 1.2 },
       { face: 'side', x: 0, kind: 'climb', v: 2, k: 1.5 },
       { face: 'back', x: -15.5, kind: 'climb', v: 3, k: 1.2 },
+      { face: 'back', x: -15.6, kind: 'vine', v: 2, k: 1.4, z: 30 },
+      { face: 'back', x: -11.5, kind: 'hang', v: 2, k: 1.2 },
     ],
     cracks: [
       { x: 1.4, z: 82, a: -1.62, len: 12 }, { x: -19, z: 52, a: -0.35, len: 9 }, { x: 18.4, z: 64, a: 3.4, len: 8 },
@@ -982,11 +985,13 @@ const SPECS: Record<RunestoneId, Spec> = {
     ivy: [
       { face: 'front', x: 13.8, kind: 'climb', v: 3, k: 1.4 },
       { face: 'front', x: 13.2, kind: 'vine', v: 1, k: 1.3, z: 30 },
+      { face: 'front', x: 12, kind: 'vine', v: 2, k: 1.5, z: 56 },
       { face: 'front', x: 7, kind: 'hang', v: 2, k: 1.2, z: 122 },
       { face: 'side', x: 0, kind: 'climb', v: 2, k: 1.4 },
       { face: 'side', x: 1, kind: 'vine', v: 1, k: 1.2, z: 30 },
       { face: 'back', x: -13.8, kind: 'climb', v: 4, k: 1.3 },
       { face: 'back', x: -13.2, kind: 'vine', v: 1, k: 1.2, z: 34 },
+      { face: 'back', x: -12, kind: 'vine', v: 2, k: 1.4, z: 58 },
       { face: 'back', x: -7, kind: 'hang', v: 1, k: 1.1, z: 121 },
     ],
     cracks: [{ x: -16, z: 70, a: -0.4, len: 7 }, { x: 16, z: 40, a: 3.0, len: 6 }],
@@ -1442,9 +1447,10 @@ function modelOf(id: RunestoneId): Model {
         g.closePath();
         g.fillStyle = css(mix(fill, hex('#3f3b52'), 0.55), 0.7);
         g.fill();
-        pad(cleftX + 0.3, c.z + 1.2, 1.9);
-        pad(cleftX - 1.1, c.z - 0.8, 1.3);
-        pad(cleftX + 0.9, c.z - 2.6, 0.9);
+        pad(cleftX + 0.2, c.z + 1.4, 2.9);
+        pad(cleftX - 1.6, c.z + 0.2, 1.6);
+        pad(cleftX - 0.4, c.z - 2.2, 1.3);
+        pad(cleftX + 0.6, c.z - 3.8, 0.8);
       }
       const nseed = seed * 13 + 5;
       const [fa, fb] = xs(0);
@@ -1476,7 +1482,7 @@ function modelOf(id: RunestoneId): Model {
       }
       g.save();
       g.setTransform(k.base);
-      pads(g, ps);
+      drawPads(g, ps);
       g.restore();
     };
     const over: Painter = (g, k) => {
@@ -1487,11 +1493,33 @@ function modelOf(id: RunestoneId): Model {
        * root off the stone is it trimmed, along a ragged line, never a ruled
        * one. Leaves let run over the stone's edge.
        */
+      /*
+       * The stone's outline grown by about a leaf, along a ragged line: no
+       * leaf is let further off the stone than that, so ivy hangs over an
+       * edge and never floats clear of it.
+       */
+      const halo: Pt[] = [];
+      {
+        const grown = inset(area2(outline) < 0 ? outline.slice().reverse() : outline, -1.4);
+        const H = rand(seed * 7 + 5);
+        for (let i = 0; i < grown.length; i++) {
+          const a = grown[i], b = grown[(i + 1) % grown.length];
+          const l = Math.hypot(b[0] - a[0], b[1] - a[1]), n = Math.max(1, Math.round(l / 1.6));
+          const nx = (b[1] - a[1]) / (l || 1), nz = -(b[0] - a[0]) / (l || 1);
+          for (let j = 0; j < n; j++) {
+            const u = j / n, w = (H() - 0.5) * 1.1;
+            halo.push([a[0] + (b[0] - a[0]) * u + nx * w, a[1] + (b[1] - a[1]) * u + nz * w]);
+          }
+        }
+      }
+      const pads: Pad[] = [];
       for (const iv of spec.ivy) {
         if (iv.face !== which) continue;
         const pic = strandPic(iv.kind, iv.v, STAGES, true);
         if (!pic) continue;
-        const z0 = iv.z ?? 0.5;
+        const hang = iv.kind === 'hang';
+        // A hanging strand roots on the head of the stone where it is, a little down the face.
+        let z0 = hang ? headAt(iv.x) - 1 : iv.z ?? 0.5;
         const sc = (iv.k * 10) / PPM;
         const left = (iv.flip ? pic.img.width - pic.ax : pic.ax) * sc, right = (iv.flip ? pic.ax : pic.img.width - pic.ax) * sc;
         const zLo = z0 - (pic.img.height - pic.ay) * sc, zHi = z0 + pic.ay * sc;
@@ -1510,7 +1538,26 @@ function modelOf(id: RunestoneId): Model {
           x = sideK > 0 ? Math.max(x, Math.min(want, limit)) : Math.min(x, Math.max(want, limit));
           if (sideK > 0 ? x - left >= carved : x + right <= carved) carved = null;
         }
+        if (hang) z0 = headAt(x) - 1;
         g.save();
+        g.beginPath();
+        halo.forEach(([hx, hz], i) => (i ? g.lineTo(hx, hz) : g.moveTo(hx, hz)));
+        g.closePath();
+        g.clip();
+        if (hang) {
+          // Its stem, up from where it roots and over the head, where a cushion of moss holds it.
+          const top = headAt(x);
+          g.beginPath();
+          g.moveTo(x - 0.4, z0 - 1);
+          g.quadraticCurveTo(x - 0.6, top + 0.4, x + 0.6, top + 1.1);
+          g.strokeStyle = '#5d6b4c';
+          g.lineWidth = 0.55;
+          g.lineCap = 'round';
+          g.stroke();
+          const q = k.base.inverse().transformPoint(g.getTransform().transformPoint(new DOMPoint(x + 0.4, top + 0.5)));
+          const across = Math.hypot(k.e.ux, k.e.uy);
+          pads.push([q.x, q.y, 2 * across, 1.3 * across], [q.x + 1.6 * across, q.y + 0.6 * across, 1.2 * across, 0.8 * across]);
+        }
         if (carved !== null) {
           const cv = carved;
           g.beginPath();
@@ -1540,6 +1587,12 @@ function modelOf(id: RunestoneId): Model {
         g.save();
         g.setTransform(k.base);
         for (const [x, y, c] of sprays) blossom(g, x, y, c, B);
+        g.restore();
+      }
+      if (pads.length) {
+        g.save();
+        g.setTransform(k.base);
+        drawPads(g, pads);
         g.restore();
       }
     };
@@ -1637,7 +1690,7 @@ function modelOf(id: RunestoneId): Model {
       }
       g.save();
       g.setTransform(k.base);
-      pads(g, ps);
+      drawPads(g, ps);
       g.restore();
     };
     // Ivy up the strip at the foot of the mossy side, let run on up past it.
@@ -1717,24 +1770,59 @@ function modelOf(id: RunestoneId): Model {
           faces: plate({
             o, U: side, W: Wv, A, outline: ring, half: [1.6, 1.6], tTop: 1, bevel: 0.7, tone: spec.rock,
             front: (g, k) => {
-              cut(g, k.fill, 0.55, () => strokesPath(g, roundelStrokes(carve), 0, 0, r * 0.82));
+              const fill = k.fill;
               const T = rand(spec.seed + n);
+              /*
+               * Shaded as the boulders are, in flat fields: the lower half a
+               * step darker where it goes into the turf, a lit rim along its
+               * upper left, the carving, lichen, and moss on its upper rim.
+               */
+              g.beginPath();
+              g.ellipse(0, -r * 0.62, r * 1.15, r * 0.72, 0, 0, TAU);
+              g.fillStyle = css(mix(fill, hex('#6f6d7e'), 0.3), 0.42);
+              g.fill();
+              g.beginPath();
+              g.arc(0, 0, r * 0.93, Math.PI * 0.55, Math.PI * 1.12);
+              g.strokeStyle = css(mix(fill, [255, 252, 240], 0.55), 0.8);
+              g.lineWidth = 1.1;
+              g.stroke();
+              cut(g, fill, 0.55, () => strokesPath(g, roundelStrokes(carve), 0, 0, r * 0.82));
+              for (let i = 0; i < 4; i++) lichen(g, T, (T() - 0.5) * r * 1.1, (T() - 0.3) * r * 0.9, 0.9 + T() * 1.2, spec.lichen);
               const tr = g.getTransform();
               const inv = k.base.inverse();
               const across = Math.hypot(k.e.ux, k.e.uy);
               const ps: Pad[] = [];
-              for (let i = 0; i < 24 * spec.moss + 6; i++) {
-                const a = Math.PI + (T() - 0.5) * 2.4, d = r * (0.55 + 0.45 * T());
-                const q = inv.transformPoint(tr.transformPoint(new DOMPoint(Math.cos(a) * d * 0.4, -r + Math.abs(Math.sin(a)) * d * 0.5)));
-                ps.push([q.x, q.y, (1 + T() * 1.4) * across, (1 + T() * 1.4) * across * 0.85]);
+              for (let i = 0; i < 26; i++) {
+                const a = Math.PI * (0.12 + 0.5 * T()), d = r * (0.78 + 0.22 * T());
+                const q = inv.transformPoint(tr.transformPoint(new DOMPoint(Math.cos(a) * d, Math.sin(a) * d)));
+                const rr = cushion(T) + 0.5;
+                ps.push([q.x, q.y, rr * across, rr * across * 0.8]);
               }
               g.save();
               g.setTransform(k.base);
-              pads(g, ps);
+              drawPads(g, ps);
               g.restore();
             },
           }),
         });
+        // Grass and a clump of flowers grown up across the line where it goes into the turf.
+        const t0 = -o[2] / Math.max(0.05, Wv[2]);
+        const reach = Math.sqrt(Math.max(0, r * r - t0 * t0));
+        const bed = at([o[0], o[1], 0], [t0, [Wv[0], Wv[1], 0]], [1.2, out]);
+        const B = rand(spec.seed * 13 + n);
+        for (const [u, kind] of [[-0.62, 0], [-0.1, 0], [0.5, 0], [0.22, 1], [-0.38, 1]] as Array<[number, number]>) {
+          const p = at(bed, [u * reach, side]);
+          const seed = spec.seed * 500 + n * 10 + Math.round(u * 10);
+          const colour = spec.flowers[Math.floor(B() * spec.flowers.length)][0];
+          things.push({
+            x: p[0], y: p[1], reach: [[p[0], p[1], 14]],
+            draw: (g, e) => {
+              const [px, py] = proj(e, p);
+              if (kind) flowerClump(g, px, py, colour, seed, 1.1);
+              else grassTuft(g, px, py, seed, 1.2);
+            },
+          });
+        }
       } else {
         // A drum on its side: its round ends face along it.
         const len = fl.len;
@@ -1760,7 +1848,7 @@ function modelOf(id: RunestoneId): Model {
               }
               g.save();
               g.setTransform(k.base);
-              pads(g, ps);
+              drawPads(g, ps);
               g.restore();
             } } : undefined),
           }),
@@ -2315,8 +2403,9 @@ export function drawRunestone(ctx: Ctx, sx: number, sy: number, zoom: number, id
  * Where a runestone drawn at (sx, sy) takes the night back off itself this
  * frame: a soft hole at each rune its eye can see, as strong as the rune is
  * lit, one round the roundel, and a wide faint one over the panel, so the
- * face the runes are on is lit by them -- in screen pixels, for the renderer
- * to cut out of the wash as it does an altar's (`furnitureHoles`).
+ * face the runes are on is lit by them -- in screen pixels. Cut straight out
+ * of the wash they would light whatever stands in front of the stone too, so
+ * the renderer takes them through `runestoneNight` with the runes' shapes.
  */
 export function runestoneHoles(sx: number, sy: number, zoom: number, id: RunestoneId, rotation: number, t = performance.now() / 1000): Array<{ x: number; y: number; r: number; a: number }> {
   const b = bakedFor(id, rotation, zoom);
@@ -2334,17 +2423,126 @@ export function runestoneHoles(sx: number, sy: number, zoom: number, id: Runesto
  * The runes of a runestone drawn at (sx, sy), in their own shapes, to take
  * the night back off with this frame: each a picture whose alpha is how much
  * of the wash to take away, where to lay it on the screen in pixels, and how
- * strongly, as it breathes. The renderer lays them `destination-out` on its
- * night layer beside the round holes (`runestoneHoles`), so a lit rune shows
- * through the dark as a rune and anybody in front of it is still in front.
+ * strongly, as it breathes. Laid `destination-out` on the night layer, they
+ * would take the night off whatever stands in front of the stone as well:
+ * the renderer takes them through `runestoneNight`, which trims them where
+ * anything has been drawn over the stone since.
  */
-export function runestoneMasks(sx: number, sy: number, zoom: number, id: RunestoneId, rotation: number, t = performance.now() / 1000): Array<{ canvas: HTMLCanvasElement; x: number; y: number; w: number; h: number; a: number }> {
+export function runestoneMasks(sx: number, sy: number, zoom: number, id: RunestoneId, rotation: number, t = performance.now() / 1000): NightMask[] {
   const b = bakedFor(id, rotation, zoom);
   return b.glows.map((gl) => {
     const p = breath(gl, t);
     const [x, y, w, h] = gl.box;
     return { canvas: gl.mask, x: sx + x * zoom, y: sy + y * zoom, w: w * zoom, h: h * zoom, a: gl.roundel ? 0.72 + 0.18 * p : 0.68 + 0.27 * p };
   });
+}
+
+/** A shape to take the night off with: a picture whose alpha is how much, where it goes on the screen, and how strongly. */
+export interface NightMask {
+  canvas: HTMLCanvasElement;
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  a: number;
+}
+
+/** A small canvas that is read back from, kept from one call to the next by its use. */
+const readers = new Map<string, [HTMLCanvasElement, CanvasRenderingContext2D]>();
+function reader(name: string, w: number, h: number): [HTMLCanvasElement, CanvasRenderingContext2D] {
+  let r = readers.get(name);
+  if (!r) {
+    const c = document.createElement('canvas');
+    r = [c, c.getContext('2d', { willReadFrequently: true }) as CanvasRenderingContext2D];
+    readers.set(name, r);
+  }
+  if (r[0].width !== w || r[0].height !== h) { r[0].width = w; r[0].height = h; }
+  return r;
+}
+
+/** The most pixels a side of what is compared is read back at: finer than the masks' own soft edges need. */
+const GUARD_SIDE = 360;
+
+/**
+ * Take a runestone's night shapes -- its runes (`runestoneMasks`) and the
+ * soft holes round them (`runestoneHoles`) -- right after it has been drawn
+ * on `ctx` at (sx, sy), and remember what the screen holds under them. Call
+ * what comes back at the night pass, before the wash goes on: it hands back
+ * the shapes less wherever anything has been drawn over the stone since --
+ * a tree, somebody walking past in front of it -- so the night is taken off
+ * the runes and never off what stands in front of them.
+ *
+ * The screen under the shapes is read back twice, at most `GUARD_SIDE`
+ * pixels a side, and compared: a millisecond or two, after dark, while a
+ * runestone is in view. When nothing has been drawn over it the shapes come
+ * back as they went in.
+ */
+export function runestoneNight(ctx: Ctx, sx: number, sy: number, zoom: number, id: RunestoneId, rotation: number, t = performance.now() / 1000): () => NightMask[] {
+  const masks = runestoneMasks(sx, sy, zoom, id, rotation, t);
+  const holes = runestoneHoles(sx, sy, zoom, id, rotation, t);
+  // The holes laid onto a picture of their own over the box they cover, so they are trimmed as the runes are.
+  if (holes.length) {
+    let a = Infinity, b = Infinity, c = -Infinity, d = -Infinity;
+    for (const h of holes) { a = Math.min(a, h.x - h.r); b = Math.min(b, h.y - h.r); c = Math.max(c, h.x + h.r); d = Math.max(d, h.y + h.r); }
+    const k = Math.min(1, GUARD_SIDE / Math.max(1, c - a, d - b));
+    const [cv, g] = canvasOf((c - a) * k + 2, (d - b) * k + 2);
+    for (const h of holes) {
+      const x = (h.x - a) * k, y = (h.y - b) * k, rr = h.r * k;
+      const grad = g.createRadialGradient(x, y, 0, x, y, rr);
+      grad.addColorStop(0, `rgba(0,0,0,${h.a.toFixed(2)})`);
+      grad.addColorStop(0.5, `rgba(0,0,0,${(h.a * 0.45).toFixed(2)})`);
+      grad.addColorStop(1, 'rgba(0,0,0,0)');
+      g.fillStyle = grad;
+      g.beginPath();
+      g.arc(x, y, rr, 0, TAU);
+      g.fill();
+    }
+    masks.push({ canvas: cv, x: a, y: b, w: cv.width / k, h: cv.height / k, a: 1 });
+  }
+  if (!masks.length) return () => [];
+  // The box they all cover, on the screen and on the canvas behind it.
+  let L = Infinity, T = Infinity, R = -Infinity, B = -Infinity;
+  for (const m of masks) { L = Math.min(L, m.x); T = Math.min(T, m.y); R = Math.max(R, m.x + m.w); B = Math.max(B, m.y + m.h); }
+  const M = ctx.getTransform();
+  const p0 = M.transformPoint(new DOMPoint(L, T)), p1 = M.transformPoint(new DOMPoint(R, B));
+  const dx = Math.max(0, Math.floor(Math.min(p0.x, p1.x))), dy = Math.max(0, Math.floor(Math.min(p0.y, p1.y)));
+  const dw = Math.min(ctx.canvas.width, Math.ceil(Math.max(p0.x, p1.x))) - dx, dh = Math.min(ctx.canvas.height, Math.ceil(Math.max(p0.y, p1.y))) - dy;
+  if (dw <= 0 || dh <= 0) return () => masks;
+  const q = Math.min(1, GUARD_SIDE / Math.max(dw, dh));
+  const gw = Math.max(1, Math.round(dw * q)), gh = Math.max(1, Math.round(dh * q));
+  const grab = (name: string): Uint8ClampedArray => {
+    const [, g] = reader(name, gw, gh);
+    g.clearRect(0, 0, gw, gh);
+    g.drawImage(ctx.canvas, dx, dy, dw, dh, 0, 0, gw, gh);
+    return g.getImageData(0, 0, gw, gh).data;
+  };
+  const before = grab('before').slice();
+  // Where the box lies on the screen, in the masks' own pixels: the read-back box less any of it off the canvas.
+  const inv = M.inverse();
+  const s0 = inv.transformPoint(new DOMPoint(dx, dy)), s1 = inv.transformPoint(new DOMPoint(dx + dw, dy + dh));
+  return () => {
+    const after = grab('after');
+    const [oc, og] = reader('over', gw, gh);
+    const img = og.createImageData(gw, gh);
+    let any = false;
+    for (let i = 0; i < after.length; i += 4) {
+      if (Math.abs(after[i] - before[i]) + Math.abs(after[i + 1] - before[i + 1]) + Math.abs(after[i + 2] - before[i + 2]) > 18) {
+        img.data[i + 3] = 255;
+        any = true;
+      }
+    }
+    if (!any) return masks;
+    og.putImageData(img, 0, 0);
+    // Each shape less what is now over it: the read-back laid over the shape's own picture where the two meet.
+    return masks.map((m) => {
+      const [cv, g] = canvasOf(m.canvas.width, m.canvas.height);
+      g.drawImage(m.canvas, 0, 0);
+      g.globalCompositeOperation = 'destination-out';
+      const kx = m.canvas.width / m.w, ky = m.canvas.height / m.h;
+      g.drawImage(oc, (s0.x - m.x) * kx, (s0.y - m.y) * ky, (s1.x - s0.x) * kx, (s1.y - s0.y) * ky);
+      return { ...m, canvas: cv };
+    });
+  };
 }
 
 /** What a runestone covers on the screen from its footprint's middle, in pixels at zoom one: for where it is clicked. */
