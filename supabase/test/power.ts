@@ -140,7 +140,11 @@ end $f$;
 do $b$
 declare w uuid; u uuid; tx int; ty int; v_t text; v_a double precision; v_b double precision; i int; j int; r jsonb; v_x double precision;
 begin
-  select wd.id, wd.spawn_x + ${AT[0]}, wd.spawn_y + ${AT[1]} into w, tx, ty from world wd order by wd.size desc, wd.id limit 1;
+  select wd.id, wd.spawn_x + ${AT[0]}, wd.spawn_y + ${AT[1]} into w, tx, ty from world wd
+   -- An island with land and somebody on it: the biggest row is not always one.
+   where exists (select 1 from land_tile lt where lt.world_id = wd.id)
+     and exists (select 1 from player p where p.world_id = wd.id)
+   order by wd.size desc, wd.id limit 1;
   select p.uid into u from player p where p.world_id = w order by p.uid limit 1;
   for i in tx - 12 .. tx + 25 loop for j in ty - 12 .. ty + 25 loop
     perform land_set_tile(w, i, j, tile_id('Grass')); perform land_set_data(w, i, j, 0);
