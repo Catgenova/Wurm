@@ -32,7 +32,7 @@ import { CONCRETE_PER_STEP } from '../src/game/foundations';
 import { PIER_CLEAR, PIER_DROP, PIER_SHOO, PIER_WALL_DROP, PIER_WATER } from '../src/game/piers';
 import { COAX_LAPSE, COAX_STEP, HERD_REACH, HUNT_HOME, HUNT_LEASH, HUNT_REST, OLD_AT, YOUNG_FOR, SITE_LOOKS, WILD_RANGE, WILD_REACH, WILD_REST, WILD_REST_SPREAD, SHOE_DAYS, SHOE_PACE, SHOE_STEP, SHOES_PER_MOUNT,
          COMPANION_SIGHT, COMPANION_LEASH, COMPANION_REACH, COMPANION_BLOW, COMPANION_PACE, BLOW_MEMORY, FIGHT_BACK_GOES } from '../src/game/creatures';
-import { FAMILY_OF, KNACK_BONUS, KNACK_CAP, KNACK_HOME, KNACK_ODDS, TITLES } from '../src/game/titles';
+import { FAMILY_OF, KNACK_BONUS, KNACK_BY_LEARNING, KNACK_CAP, KNACK_GO, KNACK_HOME, KNACK_ODDS, TITLES } from '../src/game/titles';
 import { KEPT_BEST, NUTRIENT_DECAY, TABLE_BEST } from '../src/game/nutrition';
 import { SPECIES, WILD_SPECIES, MONSTERS, MONSTER_CAP, MONSTER_SHARE, AGES,
          GATHER_SKILL, GATHER_VERB, GATHER_DO } from '../src/game/creatures';
@@ -1837,6 +1837,9 @@ for (const [fn, v] of [
   out.push(`create or replace function ${fn}() returns double precision language sql immutable as $fn$ select ${q(v)}::double precision $fn$;`);
 }
 out.push(`create or replace function ryb_cube() returns double precision[] language sql immutable as $fn$ select array[${RYB_CUBE.map((v) => q(v)).join(', ')}]::double precision[] $fn$;`);
+/* The chance one raise leaves a knack behind: the browser's `knackChance`. A
+   tick of a trade taught on the move rolls at the share of a go it teaches. */
+out.push(`create or replace function knack_chance(p_id text, p_base double precision) returns double precision language sql immutable as $fn$ select (case when p_id = any (array[${KNACK_BY_LEARNING.map(q).join(', ')}]::text[]) then least(1, p_base / ${KNACK_GO}) else 1 end) / ${KNACK_ODDS}::double precision $fn$;`);
 out.push(`create or replace function elementalism_skill() returns text language sql immutable as $fn$ select ${q(ELEMENTALISM)} $fn$;`);
 for (const [fn, v] of [
   ['swirls_a_day', SWIRLS_A_DAY], ['swirl_tries', SWIRL_TRIES], ['swirl_draws', SWIRL_DRAWS], ['swirl_dark', SWIRL_DARK], ['swirl_light', SWIRL_LIGHT],

@@ -69,7 +69,7 @@ import { considerSays } from './consider';
 import { ARMOUR_VS, armsRefusal, blockChance, BURN_WEAR, CROWD_BLOCK, DODGE_GAIN, dodgeChance, DRAW_WALK, FIGHT_QUIET, VENOM_DRAIN, VENOM_SECS, skillLine, type FightRecord, FIGHT_BACK_STILL, FIGHT_STANCE_NAMES, FLANK_HIT, legPace, FIGHT_TRIES, fightBase, fightWind, FOLLOW_RANGE, inFightReach, isFightJob, nextStance, stanceSays, stanceTaken, TARGET_RANGE } from './fight';
 import { Skills, SKILL_DEFS, isQuiet } from './skills';
 import { jewelGain } from './gems';
-import { earnedBy, knackBonus, knackLands, KNACK_CAP, KNACK_ODDS, TITLE_BY_ID } from './titles';
+import { earnedBy, knackBonus, knackChance, knackLands, KNACK_CAP, TITLE_BY_ID } from './titles';
 import { TileIndex, Tally, keyX, keyY, tileKey } from './tileindex';
 import { DARK_HIT, NIGHT_EYES_FROM, WORK_HAND, WORK_WIND, WORK_WIND_SPENT, HEAVY_SKILLS, WORK_BACK } from './learn';
 import { DRIVING, DRIVING_LEARN, drivingPace, SAILING, SAILING_LEARN, sailingPace, vehicleQlPace } from './travel';
@@ -3130,12 +3130,14 @@ export class Game {
 
   /**
    * A knack from a go at a trade: one in five thousand, whatever the level and
-   * whatever the go. It lands usually in that trade and sometimes in one
-   * beside it. They are permanent and they stack, up to five to a trade, which
-   * is half again on everything that trade teaches you.
+   * whatever the go -- and for the trades taught a tick at a time on the move,
+   * the share of a go the tick teaches (`knackChance`). It lands usually in
+   * that trade and sometimes in one beside it. They are permanent and they
+   * stack, up to five to a trade, which is half again on everything that trade
+   * teaches you.
    */
-  private earnKnacks(skill: string): void {
-    if (this.rand() >= 1 / KNACK_ODDS) return;
+  private earnKnacks(skill: string, base: number): void {
+    if (this.rand() >= knackChance(skill, base)) return;
     const id = knackLands(skill, this.rand);
     const had = this.player.knacks[id] ?? 0;
     if (had >= KNACK_CAP) return;
@@ -3403,7 +3405,7 @@ export class Game {
      * them wrote last.
      */
     if (!this.bodyFromIsland) {
-      this.earnKnacks(id);
+      this.earnKnacks(id, base);
       this.earnTitles(id, before, now);
     }
     this.events.emit('skill', id, gain);

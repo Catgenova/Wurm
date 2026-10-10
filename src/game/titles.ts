@@ -134,6 +134,22 @@ export const KNACK_HOME = 0.6;
  */
 export const KNACK_ODDS = 5000;
 
+/**
+ * The trades taught a little at a time on the move rather than by the go: a
+ * second in deep water, a tile driven or sailed, a steep step climbed. Each of
+ * those is a raise of its own, and when every one of them rolled a go's odds a
+ * swim across the bay or a cart down the coast handed out knacks many times
+ * faster than a day at the bench. So a tick of these rolls at the share of a go
+ * it teaches: what the tick's base is of `KNACK_GO`.
+ */
+export const KNACK_BY_LEARNING: readonly string[] = ['swimming', 'climbing', 'driving', 'sailing'];
+/** What a go at a trade teaches as its base, done well (`tryGain(true)`). */
+export const KNACK_GO = 1;
+
+/** The chance one raise of this trade, at this base, leaves a knack behind. */
+export const knackChance = (skill: string, base: number): number =>
+  (KNACK_BY_LEARNING.includes(skill) ? Math.min(1, base / KNACK_GO) : 1) / KNACK_ODDS;
+
 /** Where a knack earned at this trade lands. */
 export function knackLands(skill: string, rand: () => number): string {
   if (rand() < KNACK_HOME) return skill;

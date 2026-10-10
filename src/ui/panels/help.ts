@@ -6,7 +6,7 @@ import { CIRCLET_SHARE, CIRCLET_STONES, GEM_ODDS, GEMS, JEWEL_BONUS, tradeName }
 import { ANVIL_SUBTILES } from '../../game/anvil';
 import { ARCHAEOLOGY_ACTION_BY_ID, FIND_DAMAGE, FIND_DAMAGE_SPREAD, LECTERN_GAIN, RELICS, RESTORE_AGE, RESTORE_HARM, RESTORE_HARM_SPREAD } from '../../game/archaeology';
 import { BELT_MAX, QL_PER_LOOP } from '../../game/belt';
-import { HUNGER_RATE } from '../../game/body';
+import { HUNGER_RATE, SWIM_LEARN } from '../../game/body';
 import { BOON_BONUS, BOON_FOODS, boonTime, REST_CAP, REST_MULT, REST_PER_SECOND, TINCTURE_BONUS, TINCTURE_SECONDS } from '../../game/boons';
 import { TINCTURE_NAMES } from '../../game/remedies';
 import { BREW_BY_ID, BREWS } from '../../game/brewing';
@@ -48,7 +48,7 @@ import { CROP_BY_SEED, CROPS, cropYield, growthWords, PATCH_TIME, RIPE, STAGE_NA
 import { GLASSHOUSE_GROWTH, PLANTER_GROWTH, SEASON_GROWTH, SEASON_SECONDS, YEAR_SECONDS, YEARLESS_GROWTH } from '../../game/growth';
 import { CASTS, FAVOUR_TRICKLE, favourCap, PRAYER_BASE, PRAYER_GAIN, PRAYER_LIFT, PRAYER_PEAKS, PRAYER_REST, PRAYER_TAPER, prayerWorth } from '../../game/faith';
 import { tryGain } from '../../game/learn';
-import { DRIVING_TOP, drivingPace, SAILING_TOP, sailingPace, TRAVEL_TOP_AT, VEHICLE_QL_TOP, vehicleQlPace } from '../../game/travel';
+import { DRIVING_LEARN, DRIVING_TOP, drivingPace, SAILING_LEARN, SAILING_TOP, sailingPace, TRAVEL_TOP_AT, VEHICLE_QL_TOP, vehicleQlPace } from '../../game/travel';
 import { ANCIENT_EFFECTS, ANCIENT_PLUS, BAUBLE_HIGH, BAUBLE_KINDS, BAUBLE_LOW, BAUBLE_SHARE, BAUBLE_TIERS, baubleTimes, MAJOR_SKILLS, MINOR_SKILLS, REGRET_SHARE, YIELD_TIMES } from '../../game/baubles';
 import { MOTE_CHANCE } from '../../game/sacrifice';
 import { HERB_HEAL, healAmount, SUITS_HEAL } from '../../game/firstaid';
@@ -82,13 +82,13 @@ import { COIN_WORTH } from '../../game/money';
 import { ORDER_LIFE } from '../../game/orders';
 import { KEPT_BEST, NUTRIENT_HOURS, NUTRIENT_NAMES, NUTRIENTS, TABLE_BEST } from '../../game/nutrition';
 import { OVEN_CAPACITY } from '../../game/placeables';
-import { BASE_SPEED, CARRY_CRAWL, CLIMB_LEARN_FROM, CLIMB_PER_LEVEL, MAX_STAND, MAX_STEP, SWIM_DEPTH } from '../../game/player';
+import { BASE_SPEED, CARRY_CRAWL, CLIMB_LEARN, CLIMB_LEARN_FROM, CLIMB_LEARN_STEEP, CLIMB_PER_LEVEL, MAX_STAND, MAX_STEP, SWIM_DEPTH } from '../../game/player';
 import { deckBill, PIER_CLEAR, PIER_DROP, PIER_WALL_DROP, PIER_WATER } from '../../game/piers';
 import { POST_LIFE_MAX, POST_LIFE_MIN, postRadius } from '../../game/posts';
 import { CRAFT_REACH, RECIPE_BY_ID, RECIPES, TRADE_BOOK_AT, TRADE_BOOK_SKILLS } from '../../game/recipes';
 import { GAIN_RATE, MIN_GAIN, SKILL_BY_ID, skillGain } from '../../game/skills';
 import { SMELTER_H, SMELTER_W } from '../../game/smelter';
-import { KNACK_BONUS, KNACK_CAP, KNACK_HOME, KNACK_ODDS, TITLE_STEPS, titlesFor } from '../../game/titles';
+import { KNACK_BONUS, KNACK_CAP, KNACK_GO, KNACK_HOME, KNACK_ODDS, TITLE_STEPS, titlesFor } from '../../game/titles';
 import { CHECK_EVERY, CREEL_BAIT_LOSS, creelOdds, HUNTER_TRAPPED, TIMID_TRAPPED, TRAPS } from '../../game/traps';
 import {
   betterThanCommon, CHANNELS as BLOOD, FIGHT_SHARE, FIGHTING, GRADE_STEP, husbandryOdds, inheritChance, pct as cardPct, TIERS, TRAIT_SLOTS,
@@ -2149,6 +2149,12 @@ export function helpText(): string {
     everything that trade teaches you from then on, it never wears off, and a trade holds
     <b>${numberWord(KNACK_CAP)}</b> of them: ${times(1 + KNACK_CAP * KNACK_BONUS)} on every gain, for good. They stack with a night's rest
     and with what you have eaten, and the Skills window shows how many each trade has.</p>
+    <p>Swimming, climbing, driving and sailing are taught a little at a time on the move, and each of those
+    counts for a knack as the share of a go it teaches: a second in deep water ${percent(SWIM_LEARN / KNACK_GO)} of a go, a tile
+    driven or sailed ${percent(DRIVING_LEARN / KNACK_GO)}${SAILING_LEARN === DRIVING_LEARN ? '' : ` and ${percent(SAILING_LEARN / KNACK_GO)}`}, a steep step climbed
+    ${percent((CLIMB_LEARN + CLIMB_LEARN_FROM * CLIMB_LEARN_STEEP) / KNACK_GO)} to ${percent((CLIMB_LEARN + CLIMB_LEARN_STEEP) / KNACK_GO)}, the steeper the more:
+    one knack in ${Math.round(KNACK_ODDS * KNACK_GO / SWIM_LEARN).toLocaleString('en')} seconds of swimming, and one in
+    ${Math.round(KNACK_ODDS * KNACK_GO / DRIVING_LEARN).toLocaleString('en')} tiles driven.</p>
     <p>Because it is luck rather than levels, a knack can land at any moment and the well never runs
     dry: the last hour at a trade is as likely to leave one as the first. Nothing is owed to
     you at a round number, and nothing stops coming once the early levels are behind you.</p>

@@ -17,7 +17,7 @@ import { WORLD_PACE } from '../../game/pace';
 import { GAIN_RATE, MIN_GAIN, SKILL_BY_ID, skillGain } from '../../game/skills';
 import { favourCap, PRAYER_GAIN, PRAYER_PEAKS, PRAYER_REST, prayerWorth } from '../../game/faith';
 import { tryGain } from '../../game/learn';
-import { DRIVING_TOP, drivingPace, SAILING_TOP, sailingPace, TRAVEL_TOP_AT, VEHICLE_QL_TOP, vehicleQlPace } from '../../game/travel';
+import { DRIVING_LEARN, DRIVING_TOP, drivingPace, SAILING_LEARN, SAILING_TOP, sailingPace, TRAVEL_TOP_AT, VEHICLE_QL_TOP, vehicleQlPace } from '../../game/travel';
 import { deckBill, metres, PIER_CLEAR, PIER_DROP, PIER_WALL_DROP, PIER_WATER } from '../../game/piers';
 import { COIN_FIND_ONE_IN, COIN_FINDS_A_DAY } from '../../game/forage';
 import { ROCK_VARIANTS, TILE_DEFS, TileType, TREE_AGES, TREE_DAWN_UTC, TREE_DEFS } from '../../world/tiles';
@@ -68,7 +68,9 @@ import { JEWEL_PIECES } from '../../game/gems';
 import { itemDef, RARITIES, rarityChance } from '../../game/items';
 import { weaponCarry } from '../../render/figure';
 import { TRY_LEARN } from '../../game/learn';
-import { BASE_SPEED, CLIMB_LEARN_FROM, CLIMB_PER_LEVEL, MAX_STEP, strideAt } from '../../game/player';
+import { BASE_SPEED, CLIMB_LEARN, CLIMB_LEARN_FROM, CLIMB_LEARN_STEEP, CLIMB_PER_LEVEL, MAX_STEP, strideAt } from '../../game/player';
+import { SWIM_LEARN } from '../../game/body';
+import { KNACK_BY_LEARNING, KNACK_GO, KNACK_ODDS } from '../../game/titles';
 import { ALL_GOALS } from '../../game/journal';
 import { COMPANION_SIGHT, MONSTER_CAP, MONSTERS, SPECIES } from '../../game/creatures';
 import { betterThanCommon, CHANNELS, husbandryOdds, pct as cardPct } from '../../game/traits';
@@ -1519,6 +1521,18 @@ export const NEWS: News[] = [
           }).join('; ')}.`,
       ];
     },
+  },
+  {
+    n: 112,
+    day: '2026-10-10',
+    lines: () => [
+      `${capital(listed(KNACK_BY_LEARNING.map((k) => SKILL_BY_ID.get(k)?.name.toLowerCase() ?? k)))} are raised a little at a time on the move, and every one of those raises `
+        + `rolled for a knack at a whole go's odds, one in ${numberWord(KNACK_ODDS)}. Each now rolls at the share of a go it teaches: `
+        + `a second in deep water ${percent(SWIM_LEARN / KNACK_GO)} of a go, a tile driven ${percent(DRIVING_LEARN / KNACK_GO)}, a tile sailed ${percent(SAILING_LEARN / KNACK_GO)}, `
+        + `a steep step climbed ${percent((CLIMB_LEARN + CLIMB_LEARN_FROM * CLIMB_LEARN_STEEP) / KNACK_GO)} to ${percent((CLIMB_LEARN + CLIMB_LEARN_STEEP) / KNACK_GO)}.`,
+      `That is one knack in ${Math.round(KNACK_ODDS * KNACK_GO / SWIM_LEARN).toLocaleString('en')} seconds of swimming, where it was one in ${numberWord(KNACK_ODDS)}, `
+        + `and one in ${Math.round(KNACK_ODDS * KNACK_GO / DRIVING_LEARN).toLocaleString('en')} tiles driven or sailed. Every other trade is as it was. Knacks already earned are kept.`,
+    ],
   },
 ];
 

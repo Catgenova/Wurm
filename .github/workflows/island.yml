@@ -651,6 +651,15 @@ jobs:
           npx esbuild supabase/test/taught.ts --bundle --platform=node --format=esm \
             --outfile=node_modules/.cache/taught.mjs --log-level=error
           node node_modules/.cache/taught.mjs
+      - name: Knacks on the move roll at the share of a go they teach
+        run: |
+          # Asked for: less knack gain for driving, swimming and the like,
+          # because they are raised a tick at a time -- a second, a tile, a
+          # step -- and every tick rolled a whole go's odds. Both sides now roll
+          # at the tick's base over a go's, and every other trade as before.
+          npx esbuild supabase/test/knacks.ts --bundle --platform=node --format=esm \
+            --outfile=node_modules/.cache/knacks.mjs --log-level=error
+          node node_modules/.cache/knacks.mjs
       - name: A foundation is the same slab on both sides
         run: |
           # Concrete foundations: level ground poured into a slope, leaving the

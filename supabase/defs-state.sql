@@ -4558,6 +4558,7 @@ create or replace function dye_ql_black() returns double precision language sql 
 create or replace function dye_ql_pure() returns double precision language sql immutable as $fn$ select 50::double precision $fn$;
 create or replace function dye_ql_white() returns double precision language sql immutable as $fn$ select 100::double precision $fn$;
 create or replace function ryb_cube() returns double precision[] language sql immutable as $fn$ select array[1, 1, 1, 1, 0, 0, 1, 1, 0, 1, 0.5, 0, 0.163, 0.373, 0.6, 0.5, 0, 0.5, 0, 0.66, 0.2, 0.2, 0.094, 0]::double precision[] $fn$;
+create or replace function knack_chance(p_id text, p_base double precision) returns double precision language sql immutable as $fn$ select (case when p_id = any (array['swimming', 'climbing', 'driving', 'sailing']::text[]) then least(1, p_base / 1) else 1 end) / 5000::double precision $fn$;
 create or replace function elementalism_skill() returns text language sql immutable as $fn$ select 'elementalism' $fn$;
 create or replace function swirls_a_day() returns double precision language sql immutable as $fn$ select 500::double precision $fn$;
 create or replace function swirl_tries() returns double precision language sql immutable as $fn$ select 4::double precision $fn$;
