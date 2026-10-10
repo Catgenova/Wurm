@@ -98,7 +98,7 @@ import { CHAIN_MOST, FALL_DROP, FILL_RATE, POND_MOST, POOL_DEPTH, POOL_LIP, RUN_
 import { CLEAR_OF_BUILDINGS, CONCRETE_PER_STEP, LIFT_PER_MASONRY, POOL_FILL } from '../../game/foundations';
 import { AWARENESS, awarenessReach, BASE_SIGHT, LIGHT_GIVES_BACK, NIGHT_LOSS, TREE_OPACITY } from '../../game/vision';
 import { NO_GO, pointAt, windWord, windWorth } from '../../game/wind';
-import { article, capital, finePercent, listed, listedOr, NumberWord, numberWord, percent, share, spanWords, times } from '../../game/words';
+import { article, capital, finePercent, listed, listedOr, NumberWord, numberWord, percent, share, spanWords, timeWords, times } from '../../game/words';
 import { BACK_PACE, BACK_SLACK, CIRCLE_ARC, CIRCLE_R, COWARD_AT, COWARD_DRAG, DRAW_WALK, FALL_BACK, FLEE_SECS, GUARD_RANGE, HUNTER_TURN, KEEP_OFF, MONSTER_TURN, PACK_CALL, PACK_MOST, PACK_RANGE, THROW_HIT, THROW_REACH } from '../../game/fight';
 import { FIGHT_QUIET, ARM_SLOW, ARM_SLOW_MOST, armourSays, BLINDSIDE, blowSays, CROWD_BLOCK, FLANK_HIT, HEAVY_EVERY, HEAVY_HIT, HIDE_NAMES, HIDES, hideSays, LEG_SLOW_MOST, sideOf, WIND_UP, BLOW_DEFENSIVE, BLOW_HUNTER, BLOW_PREY, FIGHT_BACK_STILL, FIGHT_GIVE_UP, FIGHT_LEASH, FIGHT_STANCE_NAMES, FIGHT_STANCES, FIST, FOLLOW_RANGE, stanceSays, SWING_WIND, SWING_WIND_KG, TARGET_RANGE, TIRED_AT, TIRED_SLOW } from '../../game/fight';
 import {
@@ -114,6 +114,7 @@ import { TURNS } from '../../render/view';
 import { ORE_DENSITY, seamShare } from '../../world/ore';
 import { REGIONS } from '../../world/regions';
 import { ISLAND_ELEMENT, MOTES_LEAST, MOTES_MOST, MOTES_STEP, SWIRL_DARK, SWIRL_LIGHT, SWIRLS_A_DAY } from '../../game/motes';
+import { LANDING_STAND, RUNESTONES, STONE_SPAN, TELE_FAR, TELE_FAST, TELE_NEAR, TELE_QL_HIGH, TELE_QL_LOW, TELE_RANGE_STEP, TELE_REST_STEP, TELE_SLOW, telestoneRange, telestoneRest } from '../../game/runestones';
 import {
   BUSH_DEFS, groundRoll, ROCK_VARIANTS, SLAB_VARIANTS, STEPS_BRICKS, STEPS_LEAST, STEPS_MOST, STEPS_PLANKS, STEPS_SLABS, STEPS_TWIST, TILE_DEFS, TileType,
   TREE_DAWN_UTC, TREE_DEFS, WEAR_FALL, WEAR_MOST, WEAR_TRAIL, WEARS,
@@ -1622,6 +1623,23 @@ export function helpText(): string {
     on your elementalism before the go, at your elementalism quality. The swirl is then gone for everybody: of everybody
     collecting the same swirl, whoever finishes first has it and the rest are told it is gone. Each collect trains <b>elementalism</b> by about
     ${listed([1, 20, 50].map((v) => `+${skillGain(v, 1, 1).toFixed(2)} at ${v}`))}, and nothing else trains it.</p>
+    <h3>Runestones and the Telestone</h3>
+    <p>${NumberWord(RUNESTONES.length)} <b>Runestones</b> stand on the shore of the Crescent's inner bay, each ${numberWord(STONE_SPAN)} tiles by ${numberWord(STONE_SPAN)}:
+    ${listed(RUNESTONES.map((r) => `<b>${r.name}</b> (${r.x}, ${r.y})`))}. They are on the map from the
+    start. Nothing walks through one, and nothing is dug, built, planted or set down on its ${numberWord(STONE_SPAN * STONE_SPAN)} tiles. Hovering over one,
+    or Examine on its ground, names it. A sitting on a rug within ${numberWord(SIT_WORTH.stoneReach)} tiles of one is worth ${times(SIT_WORTH.stone)} as much
+    (Meditation, below).</p>
+    <p>A <b>Telestone</b> is cut with ${bill('make_telestone')} at ${workedAt('make_telestone')}. Choose <b>Travel to a Runestone</b>
+    on it in your pack and pick a stone: you arrive at once on a free tile beside it &mdash; dry, under no building and no
+    more than ${LANDING_STAND} between its highest corner and its lowest, tried first on the middle of the stone's south side. Its reach, measured in a straight line from where you stand to the stone's middle, is
+    ${TELE_NEAR} tiles at QL ${TELE_QL_LOW} and ${TELE_FAR} at QL ${TELE_QL_HIGH}, ${TELE_RANGE_STEP.toFixed(1)} more for every point
+    of quality between. After a journey you wait ${spanWords(TELE_SLOW)} at QL ${TELE_QL_LOW} and ${spanWords(TELE_FAST)} at
+    QL ${TELE_QL_HIGH}, ${(TELE_REST_STEP / 60).toFixed(1)} minutes less for every point between (${[25, 50, 75].map((q) =>
+    `QL ${q}: ${Math.floor(telestoneRange(q) + 0.5)} tiles and ${timeWords(telestoneRest(q))}`).join('; ')}). The wait is yours,
+    set by the Telestone you used, so carrying more than one does not shorten it. The Telestone is not used up.</p>
+    <p>It will not take you while you are fighting or something is hunting you, while you drive, pull, ride or are aboard
+    anything, while you swim, while you carry too much to walk, while a wildermon follows you (it would be left behind), or
+    in the middle of another job.</p>
     <h3>Large carts and wagons</h3>
     <p>A small cart is a barrow you pull yourself. The ones that follow are <b>driven</b>: a wildermon
     goes in the traces, you sit on the seat, and what is on the back weighs nothing at all as far as the
@@ -2580,9 +2598,12 @@ export function helpText(): string {
     sit, and choose <b>Sit and think about nothing</b>. You may sit once every ${spanWords(SIT_REST)}, and
     <b>where</b> you sit decides what it is worth: your own yard ${percent(SIT_WORTH.yard)} of a sitting anywhere else,
     high ground off your settlement ${times(SIT_WORTH.high)} as much, and where the ground runs out and the air is thin
-    <b>${times(SIT_WORTH.thin)}</b> as much; your feet in the water add ${percent(SIT_WORTH.water - 1)} to wherever that is, and a mote
-    swirl within ${numberWord(SIT_WORTH.swirlReach)} tiles adds ${percent(SIT_WORTH.swirl - 1)}. A spot within ${numberWord(SIT_WORTH.staleReach)} tiles of
+    <b>${times(SIT_WORTH.thin)}</b> as much; your feet in the water add ${percent(SIT_WORTH.water - 1)} to wherever that is, a mote
+    swirl within ${numberWord(SIT_WORTH.swirlReach)} tiles adds ${percent(SIT_WORTH.swirl - 1)}, and a <b>Runestone</b> within ${numberWord(SIT_WORTH.stoneReach)} tiles,
+    counted to its nearest tile, makes it <b>${times(SIT_WORTH.stone)}</b> as much. A spot within ${numberWord(SIT_WORTH.staleReach)} tiles of
     anywhere you have sat since the woods last turned is worth ${percent(SIT_WORTH.stale)} of itself, so the best sitting is somewhere new.
+    Every one of these that applies multiplies the others: beside a Runestone with your feet in the water a sitting is worth
+    ${times(SIT_WORTH.stone * SIT_WORTH.water)} as much.
     A blow that lands on you while you sit ends the sitting, and nothing comes of it.</p>
     <p>Every sitting banks <b>Calm</b>: ${SIT_CALM} times what the spot multiplies a sitting by. Calm is held to the same curve
     favour is, off meditation instead of faith: ${listed(PATH_TIER_AT.filter((_, i) => i % 2 === 0).map((m) => `${Math.floor(calmCap(m))} at ${m}`))}.

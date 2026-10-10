@@ -7,6 +7,7 @@ import { article, listed, listedOr, NumberWord, numberWord, percent, share, span
 import { COMPANION_LEASH, GUARD_RANGE, HEAVY_HIT } from './fight';
 import { HAND_WINTER, SPRING_GROWTH } from './growth';
 import { lastDawn, TREE_AGES } from '../world/tiles';
+import { runestoneWithin } from './runestones';
 
 /**
  * Meditation, and the three paths.
@@ -176,6 +177,9 @@ export const SIT_WORTH = {
   /** Within `staleReach` tiles of anywhere you have sat since the woods last turned. */
   stale: 0.5,
   staleReach: 2,
+  /** A Runestone within `stoneReach` tiles: of its nearest tile, centre to centre (`runestoneWithin`). */
+  stone: 2,
+  stoneReach: 5,
 };
 
 /** What is true of a spot, for what a sitting there is worth. */
@@ -188,14 +192,18 @@ export interface SitFacts {
   swirl: boolean;
   /** Sat within `SIT_WORTH.staleReach` tiles of here since the woods last turned. */
   stale: boolean;
+  /** A Runestone within `SIT_WORTH.stoneReach` tiles. */
+  stone: boolean;
 }
 
 /**
  * What a spot multiplies a sitting by, and what sitting there says: every
- * multiplier in one place, so a new one (a Runestone's) goes in here and
- * nowhere else. Somewhere quiet and out of the way is worth more than the
- * middle of your own yard. The island's `sitting_worth` is the same sum in
- * the same order, and says the same words.
+ * multiplier in one place, so a new one goes in here and nowhere else.
+ * Somewhere quiet and out of the way is worth more than the middle of your
+ * own yard. Every multiplier that applies multiplies the others: a sitting
+ * beside a Runestone with your feet in the water is worth `SIT_WORTH.stone`
+ * times `SIT_WORTH.water`. The island's `sit_place` is the same sum in the
+ * same order, and says the same words.
  */
 export function sitPlace(f: SitFacts): { place: number; where: string } {
   let place = 1;
@@ -220,6 +228,10 @@ export function sitPlace(f: SitFacts): { place: number; where: string } {
     place *= SIT_WORTH.swirl;
     where += ` ${SIT_SWIRL_SAID}`;
   }
+  if (f.stone) {
+    place *= SIT_WORTH.stone;
+    where += ` ${SIT_STONE_SAID}`;
+  }
   if (f.stale) {
     place *= SIT_WORTH.stale;
     where += ` ${SIT_STALE_SAID}`;
@@ -229,8 +241,21 @@ export function sitPlace(f: SitFacts): { place: number; where: string } {
 
 /** What a sitting beside a swirl says, after where it was sat. The island's `sit_swirl_said`. */
 export const SIT_SWIRL_SAID = `A mote swirl turns within ${numberWord(SIT_WORTH.swirlReach)} tiles: ${share(SIT_WORTH.swirl - 1)} more.`;
+/** And one beside a Runestone. The island's `sit_stone_said`. */
+export const SIT_STONE_SAID = `A Runestone stands within ${numberWord(SIT_WORTH.stoneReach)} tiles: ${times(SIT_WORTH.stone)} as much.`;
 /** And one near where you have sat today. The island's `sit_stale_said`. */
 export const SIT_STALE_SAID = `You have sat within ${numberWord(SIT_WORTH.staleReach)} tiles of here since the woods last turned: ${share(SIT_WORTH.stale)} as much.`;
+
+/**
+ * Every place multiplier in one line, in `sitPlace`'s order, for the Faith
+ * window's Path tab.
+ */
+export const SIT_PLACES_SAID = 'Where you sit multiplies the meditation and Calm a sitting gives: '
+  + `your own yard ×${SIT_WORTH.yard}; ground over ${SIT_WORTH.highAt} high, off your settlement, ×${SIT_WORTH.high}, and over ${SIT_WORTH.thinAt} anywhere ×${SIT_WORTH.thin} instead; `
+  + `your feet in the water ×${SIT_WORTH.water}; a mote swirl within ${numberWord(SIT_WORTH.swirlReach)} tiles ×${SIT_WORTH.swirl}; `
+  + `a Runestone within ${numberWord(SIT_WORTH.stoneReach)} tiles ×${SIT_WORTH.stone}; `
+  + `within ${numberWord(SIT_WORTH.staleReach)} tiles of anywhere you have sat since the woods last turned ×${SIT_WORTH.stale}. `
+  + 'Every one that applies multiplies the others.';
 
 /** Whether a spot is within `SIT_WORTH.staleReach` of any of these. */
 export const satNear = (spots: ReadonlyArray<readonly [number, number]>, x: number, y: number): boolean =>
@@ -259,6 +284,7 @@ export function sitFacts(g: Game): SitFacts {
     height: g.world.centerHeight(x, y),
     water: g.world.hasWater(x, y),
     swirl,
+    stone: !!runestoneWithin(x, y, g.world.w, SIT_WORTH.stoneReach),
     stale: satNear(satSince(g.player.satSpots, g.player.satDawn, lastDawn(Date.now() / 1000)), x, y),
   };
 }

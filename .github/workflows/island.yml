@@ -2180,6 +2180,22 @@ jobs:
           npx esbuild supabase/test/dyes.ts --bundle --platform=node --format=esm \
             --outfile=node_modules/.cache/dyes.mjs --log-level=error
           node node_modules/.cache/dyes.mjs
+      - name: Five Runestones stand on the shore, and a Telestone takes you to them
+        run: |
+          # The stones stand on the shore of the island's inner bay, on its
+          # generated ground, laid over a test's smaller world by scale, and
+          # their nine tiles refuse every job that changes the ground or puts
+          # something on it; nothing walks into one. What was made on those
+          # tiles before is taken back, the ground put back to the generated
+          # ground, and whoever stood there is put beside the stone. A Telestone is cut from five earth motes and a stone brick and
+          # reaches 300 tiles and makes you wait a day at QL 1, 5000 tiles and
+          # an hour at QL 100, on a straight line between; the wait is the
+          # traveller's. Every refusal, the landing tile and the words, on both
+          # sides; a word about walking from before a journey does not pull the
+          # body back. Every roll is seeded.
+          npx esbuild supabase/test/telestone.ts --bundle --platform=node --format=esm \
+            --outfile=node_modules/.cache/telestone.mjs --log-level=error
+          node node_modules/.cache/telestone.mjs
 
       - name: An altar goes up on your own ground
         run: |

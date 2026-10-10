@@ -2,6 +2,7 @@ export { TRY_LEARN, tryGain } from './learn';
 import { BURYABLE, BUSH_DEFS, SLAB_BY_ITEM, SLAB_VARIANTS, TILE_DEFS, TREE_AGES, TREE_DEFS, TileType, bushSpecies, packTreeData, slabVariant, treeAge, treeSpecies, treeVariant, lastDawn, nextDawn, type TreeAge, LAWN_AFTER, MOWN_TODAY, MOWING, mownDays, mownToday } from '../world/tiles';
 import { FLOWER_ACTIONS, groundSays } from './wildflowers';
 import { MOTE_ACTIONS } from './motes';
+import { STONE_GUARDED, stoneGroundRefusal, TELESTONE, TELESTONE_ACTIONS, telestoneSays } from './runestones';
 import { isSeam } from '../world/tiles';
 import type { World } from '../world/world';
 import { bedrockAt, oreAt } from '../world/ore';
@@ -161,6 +162,8 @@ export type Target =
       upto?: number;
       /** The mote going into this thing, for `absorb_mote`: the thing is the target, and the mote this. */
       mote?: number;
+      /** The Runestone a Telestone is to take you to, for `travel_runestone` (`runestones.ts`). */
+      stone?: string;
     }
   /** What is lying on a tile; `down` for what lies on the cellar's floor under it. */
   | { kind: 'ground'; x: number; y: number; uid: number | null; down?: boolean }
@@ -2250,7 +2253,9 @@ export const ACTIONS: ActionDef[] = [
       const skill = knackable(item.id) ? boonOf(g.seed, item.id) : null;
       const favours = (skill ? ` It favours ${(SKILL_DEFS.find((d) => d.id === skill)?.name ?? skill).toLowerCase()}.` : '')
         // And what an Artisan's circlet has in it.
-        + (item.id === CIRCLET ? circletSays(item) : '');
+        + (item.id === CIRCLET ? circletSays(item) : '')
+        // And how far a Telestone reaches and how long a journey on it makes you wait, at its own quality.
+        + (item.id === TELESTONE ? telestoneSays(item.ql) : '');
       // What it is worth at the work now, which is rarely the number stamped on it.
       const worth = g.toolWorth(item);
       const at = itemDef(item.id).category === 'tool' && Math.abs(worth - item.ql) >= 0.05 ? ` It works as a ${worth.toFixed(1)} today.` : '';
@@ -3084,6 +3089,7 @@ export const ACTIONS: ActionDef[] = [
   ...SPRING_ACTIONS,
   ...FLOWER_ACTIONS,
   ...MOTE_ACTIONS,
+  ...TELESTONE_ACTIONS,
   ...WATER_GARDEN_ACTIONS,
   ...FOUNDATION_ACTIONS,
   ...STEPS_ACTIONS,
@@ -3164,6 +3170,17 @@ for (const def of ACTIONS) {
   if (!SHAPES_GROUND.has(def.id)) continue;
   const was = def.check;
   def.check = (t, g) => foreignGround(g, def, t) ?? was?.(t, g) ?? null;
+}
+/*
+ * And a Runestone's nine tiles, which no job that changes the ground or puts
+ * something on it will touch (`runestones.ts`): asked before anything else,
+ * so it is the stone that is named rather than whatever the ground under it
+ * would have said. The island asks the same in `stone_ground_refusal`.
+ */
+for (const def of ACTIONS) {
+  if (!STONE_GUARDED.has(def.id)) continue;
+  const was = def.check;
+  def.check = (t, g) => stoneGroundRefusal(g, def, t) ?? was?.(t, g) ?? null;
 }
 
 export const ACTION_BY_ID = new Map(ACTIONS.map((a) => [a.id, a]));

@@ -16,8 +16,10 @@
  *   * a sitting banks ten Calm times its place, up to favour's curve off
  *     meditation, and a Deep Calm's more; the place is the same sum on both
  *     sides for every spot, a swirl within three tiles is worth a quarter more,
- *     a spot within two of one sat at since the woods turned half, and a blow
- *     that lands in a sitting ends it with nothing come of it;
+ *     a spot within two of one sat at since the woods turned half, a
+ *     Runestone within five twice, multiplying the rest (and which tiles are
+ *     within five of one is the same on both sides), and a blow that lands in
+ *     a sitting ends it with nothing come of it;
  *   * each technique costs its Calm and rests, is refused short of Calm, and
  *     does what it says: Seek marks the nearest swirl until it is collected,
  *     Read the Sky says the wind the island's clock will bring, Trace marks a
@@ -43,7 +45,7 @@ import type { ActionDef, Target } from '../../src/game/actions';
 import { ACTION_BY_ID, prospectRadius } from '../../src/game/actions';
 import {
   CHOOSE_AT, calmCap, calmRefusal, MEDITATION, PATH_LIST, PATH_PICK_BY_ID, PATH_PICKS, PATH_TIER_AT, PATHS, PICKS_PER_TIER, pathPickRefusal,
-  SIT_CALM, SIT_GAIN, SIT_STALE_SAID, SIT_SWIRL_SAID, SIT_WORTH, sitPlace, sittingWorth, skySaid, stepsOf, STRUCK_SAID, TECHNIQUE_GAIN, tierSaid, tookSaid, type PathPickDef,
+  SIT_CALM, SIT_GAIN, SIT_STALE_SAID, SIT_STONE_SAID, SIT_SWIRL_SAID, SIT_WORTH, sitPlace, sittingWorth, skySaid, stepsOf, STRUCK_SAID, TECHNIQUE_GAIN, tierSaid, tookSaid, type PathPickDef,
 } from '../../src/game/meditation';
 import { FAITH_TIER_AT, slotRefusal } from '../../src/game/patrons';
 import { favourCap } from '../../src/game/faith';
@@ -51,6 +53,7 @@ import { knackChance } from '../../src/game/titles';
 import { motesFor } from '../../src/game/motes';
 import { mulberry32 } from '../../src/world/noise';
 import { DAY_SECONDS } from '../../src/game/pace';
+import { RUNESTONE_BY_ID, RUNESTONES, runestoneWithin, stoneCentre, STONE_CHART, STONE_HALF } from '../../src/game/runestones';
 
 const psql = (sql: string): string =>
   execFileSync('psql', ['-v', 'ON_ERROR_STOP=1', '-X', '-q', '-t', '-A', '-f', '-'], {
@@ -82,11 +85,25 @@ const P = (id: string): PathPickDef => {
 /* ---- The numbers, the words and the rulebook, on both sides ------------------ */
 
 /** Every kind of spot: the heights either side of high and thin ground, and every yes and no. */
-const SPOTS: Array<[boolean, number, boolean, boolean, boolean]> = [];
+const SPOTS: Array<[boolean, number, boolean, boolean, boolean, boolean]> = [];
 for (const deed of [false, true]) for (const h of [0, SIT_WORTH.highAt + 5, SIT_WORTH.thinAt + 5]) {
-  for (const water of [false, true]) for (const swirl of [false, true]) for (const stale of [false, true]) SPOTS.push([deed, h, water, swirl, stale]);
+  for (const water of [false, true]) for (const swirl of [false, true]) for (const stale of [false, true]) {
+    for (const stone of [false, true]) SPOTS.push([deed, h, water, swirl, stale, stone]);
+  }
+}
+/** Tiles round each stone, out past a sitting's reach of it, on the island and on a test's smaller world. */
+const NEAR_STONES: Array<[number, number, number]> = [];
+for (const size of [STONE_CHART, 1024]) {
+  for (const st of RUNESTONES) {
+    const c = stoneCentre(st, size);
+    const r = STONE_HALF + SIT_WORTH.stoneReach + 2;
+    for (let dy = -r; dy <= r; dy += 1) for (let dx = -r; dx <= r; dx += 2) NEAR_STONES.push([size, c.x + dx, c.y + dy]);
+  }
 }
 const MEDS = [1, 19.5, 20, 50, 99, 100];
+/** The Crownstone's centre on the suite's 4096 island, which is the biggest and the one the island half plays on. */
+const STONE_X = RUNESTONE_BY_ID.get('crownstone')?.x ?? 0;
+const STONE_Y = RUNESTONE_BY_ID.get('crownstone')?.y ?? 0;
 /** Seeds and island hours to read the sky at. */
 const SKIES: Array<[number, number]> = [[7, 0], [7, 12345.678], [1234567, 99999.5], [4243, 3600 * 24 * 3 + 17], [42, 777777.25]];
 const KNACKS: Array<[string, number]> = [['carpentry', 1], ['swimming', 0.05], ['mining', 0.4]];
@@ -101,10 +118,15 @@ insert into said select 'PICKS', jsonb_agg(jsonb_build_object('id', id, 'path', 
   'note', note, 'cost', cost, 'rest', rest, 'fx', fx) order by num)::text from path_pick;
 insert into said select 'STEPS', string_agg(path || ':' || at || ':' || name || ':' || coalesce(ability, '-') || ':' || coalesce(rest::text, '-'), ',' order by path, n) from path_step;
 insert into said select 'PLACE' || o, (s).place || '|' || (s).said
-  from (select o, sit_place(d, h, w, sw, st) as s
+  from (select o, sit_place(d, h, w, sw, st, sn) as s
           from unnest(array[${SPOTS.map((x) => x[0]).join(',')}]::boolean[], array[${SPOTS.map((x) => x[1]).join(',')}]::double precision[],
                       array[${SPOTS.map((x) => x[2]).join(',')}]::boolean[], array[${SPOTS.map((x) => x[3]).join(',')}]::boolean[],
-                      array[${SPOTS.map((x) => x[4]).join(',')}]::boolean[]) with ordinality u(d, h, w, sw, st, o)) z;
+                      array[${SPOTS.map((x) => x[4]).join(',')}]::boolean[], array[${SPOTS.map((x) => x[5]).join(',')}]::boolean[])
+                 with ordinality u(d, h, w, sw, st, sn, o)) z;
+insert into said select 'WITHIN', string_agg(coalesce(runestone_within(s, x, y, sit_stone_reach()), '-'), ' ' order by o)
+  from unnest(array[${NEAR_STONES.map((x) => x[0]).join(',')}], array[${NEAR_STONES.map((x) => x[1]).join(',')}],
+              array[${NEAR_STONES.map((x) => x[2]).join(',')}]) with ordinality u(s, x, y, o);
+insert into said values ('STONENUMS', sit_stone() || '|' || sit_stone_reach());
 insert into said select 'CAP', string_agg(calm_cap(m) || ':' || calm_cap(m, ${P('deep_calm').fx.calm}) || ':' || favour_cap(m), ',' order by o)
   from unnest(array[${MEDS.join(',')}]::double precision[]) with ordinality u(m, o);
 insert into said select 'SKY' || o, sky_said(s, t, ${P('sky').fx.hours})
@@ -112,7 +134,7 @@ insert into said select 'SKY' || o, sky_said(s, t, ${P('sky').fx.hours})
 insert into said select 'KNACK', string_agg(knack_chance(s, b, ${P('polymath').fx.knack}) || ':' || knack_chance(s, b), ',' order by o)
   from unnest(array[${KNACKS.map((x) => q(x[0])).join(',')}]::text[], array[${KNACKS.map((x) => x[1]).join(',')}]::double precision[]) with ordinality u(s, b, o);
 insert into said values ('STEPSOF', path_steps('love', 25) || '|' || path_steps('power', 70) || '|' || path_steps('knowledge', 99) || '|' || path_steps(null, 99));
-insert into said values ('SAYS', struck_said() || '|' || sit_swirl_said() || '|' || sit_stale_said());
+insert into said values ('SAYS', struck_said() || '|' || sit_swirl_said() || '|' || sit_stale_said() || '|' || sit_stone_said());
 select k || '=' || v from said order by k;
 rollback;
 `);
@@ -153,18 +175,29 @@ check('the steps behind you: three of Love at 25, five of Power at 70, none of K
   rule('STEPSOF') === `${stepsOf('love', 25)}|${stepsOf('power', 70)}|${stepsOf('knowledge', 99)}|0` && rule('STEPSOF') === '0|0|0|0', rule('STEPSOF'));
 {
   const wrong = SPOTS.map((s, i) => {
-    const b = sitPlace({ onDeed: s[0], height: s[1], water: s[2], swirl: s[3], stale: s[4] });
+    const b = sitPlace({ onDeed: s[0], height: s[1], water: s[2], swirl: s[3], stale: s[4], stone: s[5] });
     const [place, ...rest] = rule(`PLACE${i + 1}`).split('|');
     return near(Number(place), b.place, 1e-9) && rest.join('|') === b.where ? null : `${s.join(',')}: island ${rule(`PLACE${i + 1}`)}, browser ${b.place}|${b.where}`;
   }).filter((x) => x);
   check(`what a spot is worth and what sitting there says, the same on both sides for every one of ${SPOTS.length} kinds of spot`, !wrong.length, wrong.slice(0, 2).join('; '));
-  const swirlOnly = sitPlace({ onDeed: false, height: 0, water: false, swirl: true, stale: false });
-  const staleOnly = sitPlace({ onDeed: false, height: 0, water: false, swirl: false, stale: true });
+  const swirlOnly = sitPlace({ onDeed: false, height: 0, water: false, swirl: true, stale: false, stone: false });
+  const staleOnly = sitPlace({ onDeed: false, height: 0, water: false, swirl: false, stale: true, stone: false });
+  const stoneOnly = sitPlace({ onDeed: false, height: 0, water: false, swirl: false, stale: false, stone: true });
+  const stoneWet = sitPlace({ onDeed: false, height: 0, water: true, swirl: true, stale: true, stone: true });
   check(`a swirl within reach is ${SIT_WORTH.swirl} times a sitting and one within reach of a spot sat at is ${SIT_WORTH.stale}, and both say so`,
     near(swirlOnly.place, SIT_WORTH.swirl) && near(staleOnly.place, SIT_WORTH.stale) && swirlOnly.where.endsWith(SIT_SWIRL_SAID) && staleOnly.where.endsWith(SIT_STALE_SAID));
+  check(`a Runestone within ${SIT_WORTH.stoneReach} tiles is ${SIT_WORTH.stone} times a sitting (${rule('STONENUMS')} on the island), says so, `
+    + 'and multiplies every other place multiplier, a swirl, the water and a spot sat at with it',
+    SIT_WORTH.stone === 2 && SIT_WORTH.stoneReach === 5 && rule('STONENUMS') === `${SIT_WORTH.stone}|${SIT_WORTH.stoneReach}`
+      && near(stoneOnly.place, SIT_WORTH.stone) && stoneOnly.where.endsWith(SIT_STONE_SAID)
+      && near(stoneWet.place, SIT_WORTH.water * SIT_WORTH.swirl * SIT_WORTH.stone * SIT_WORTH.stale)
+      && stoneWet.where.endsWith(` ${SIT_SWIRL_SAID} ${SIT_STONE_SAID} ${SIT_STALE_SAID}`), `${stoneOnly.place} / ${stoneWet.place}: ${stoneWet.where}`);
+  const within = NEAR_STONES.map(([n, x, y]) => runestoneWithin(x, y, n, SIT_WORTH.stoneReach)?.id ?? '-').join(' ');
+  check(`which tiles are within ${SIT_WORTH.stoneReach} of a Runestone is the same on both sides, ${NEAR_STONES.length} tiles round the stones on the island and on a 1024 world`,
+    within === rule('WITHIN') && within.includes('-') && RUNESTONES.every((st) => within.includes(st.id)), within === rule('WITHIN') ? '' : rule('WITHIN').slice(0, 200));
 }
-check('what a blow in a sitting says, and what a swirl and a spot sat at add, in the same words on both sides',
-  rule('SAYS') === `${STRUCK_SAID}|${SIT_SWIRL_SAID}|${SIT_STALE_SAID}`, rule('SAYS'));
+check('what a blow in a sitting says, and what a swirl, a spot sat at and a Runestone add, in the same words on both sides',
+  rule('SAYS') === `${STRUCK_SAID}|${SIT_SWIRL_SAID}|${SIT_STALE_SAID}|${SIT_STONE_SAID}`, rule('SAYS'));
 {
   const caps = rule('CAP').split(',').map((c) => c.split(':').map(Number));
   check(`Calm holds what favour holds at the same level, and a Deep Calm ${P('deep_calm').fx.calm} times that, on both sides`,
@@ -294,6 +327,14 @@ begin
   select * into s from sitting_worth(w.world_id, u);
   insert into said values ('SWIRL', s.place || '|' || s.said);
   delete from mote_swirl where world_id = w.world_id;
+  -- Beside the Crownstone, ${SIT_WORTH.stoneReach} tiles south of its nearest tile, and one further.
+  update player set x = ${STONE_X} + 0.5, y = ${STONE_Y} + ${STONE_HALF + SIT_WORTH.stoneReach} + 0.5, sat_spots = '[]'::jsonb where world_id = w.world_id and uid = u;
+  select * into s from sitting_worth(w.world_id, u);
+  insert into said values ('STONE', s.place || '|' || s.said);
+  update player set y = y + 1 where world_id = w.world_id and uid = u;
+  select * into s from sitting_worth(w.world_id, u);
+  insert into said values ('STONEOFF', s.place || '|' || s.said);
+  update player set x = tx + 0.5, y = ty + 0.5 where world_id = w.world_id and uid = u;
   update player set calm = player_calm_cap(w.world_id, u) - 1, sat_spots = '[]'::jsonb where world_id = w.world_id and uid = u;
   perform perform_faith(w.world_id, u, 'meditate', jsonb_build_object('kind', 'tile', 'x', tx, 'y', ty));
   insert into said select 'CAPPED', calm || '|' || player_calm_cap(w.world_id, u) from player where world_id = w.world_id and uid = u;
@@ -538,6 +579,11 @@ check('a technique will not go in a class slot, in the same words on both sides'
   check('and once the woods have turned the spot is fresh again', near(Number(at('TURNED')), place0), at('TURNED'));
   check(`a mote swirl ${SIT_WORTH.swirlReach} tiles off is worth ${SIT_WORTH.swirl} times a sitting, and the sitting says so`,
     near(Number(part('SWIRL', 0)), place0 * SIT_WORTH.swirl) && at('SWIRL').endsWith(SIT_SWIRL_SAID), at('SWIRL'));
+  check(`on the island, a sitting ${SIT_WORTH.stoneReach} tiles from the Crownstone is worth ${SIT_WORTH.stone} times one a tile further off, and says so`,
+    near(Number(part('STONE', 0)), Number(part('STONEOFF', 0)) * SIT_WORTH.stone) && at('STONE').endsWith(SIT_STONE_SAID) && !at('STONEOFF').includes(SIT_STONE_SAID)
+      && runestoneWithin(STONE_X, STONE_Y + STONE_HALF + SIT_WORTH.stoneReach, STONE_CHART, SIT_WORTH.stoneReach)?.id === 'crownstone'
+      && !runestoneWithin(STONE_X, STONE_Y + STONE_HALF + SIT_WORTH.stoneReach + 1, STONE_CHART, SIT_WORTH.stoneReach),
+    `${at('STONE')} / ${at('STONEOFF')}`);
   const [held, cap] = at('CAPPED').split('|').map(Number);
   check('Calm stops at the cap however much a sitting is worth', near(held, cap, 1e-3), at('CAPPED'));
 }

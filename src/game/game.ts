@@ -74,6 +74,7 @@ import { TileIndex, Tally, keyX, keyY, tileKey } from './tileindex';
 import { DARK_HIT, NIGHT_EYES_FROM, WORK_HAND, WORK_WIND, WORK_WIND_SPENT, HEAVY_SKILLS, WORK_BACK } from './learn';
 import { DRIVING, DRIVING_LEARN, drivingPace, SAILING, SAILING_LEARN, sailingPace, vehicleQlPace } from './travel';
 import { laySwirls, swirlLight, type Swirl } from './motes';
+import { hasRunestones, runestoneAt, RUNESTONES, stonePoint, stoneTiles } from './runestones';
 import { AWARENESS, Vision } from './vision';
 import { blessBonus, favourCap, FAITH, FAVOUR_TRICKLE } from './faith';
 import {
@@ -82,7 +83,7 @@ import {
   SHRUG_SAID, gatherSpot, skySaid, STRUCK_SAID, surgeSaid, TECHNIQUE_GAIN, tookSaid, traceNone, traceSaid, unbrokenSaid, type PathBeat, type PathId, type PathSaid,
 } from './meditation';
 import { ledgerTotals, record, type Ledger } from './ledger';
-import { ALTAR_CAST, ALTAR_CAST_ALPHA, ALTAR_GLOW, ALTAR_REACH, FIRE_REACH, heldReach, HELD_LIGHTS, lanternReach, OVEN_REACH, type LightSource } from './light';
+import { ALTAR_CAST, ALTAR_CAST_ALPHA, ALTAR_GLOW, ALTAR_REACH, FIRE_REACH, heldReach, HELD_LIGHTS, lanternReach, OVEN_REACH, runestoneLight, type LightSource } from './light';
 import { counterFinished, counterInto, counterMiddle, Counters, type CountersJSON, type CounterWire } from './counters';
 import { burnLamps, isLampPiece, lampArmRefusal, lampBurning, lampFrom, lampLight, lampTurnsTo } from './lamps';
 import { helpingOf, NUTRIENTS, NUTRIENT_DECAY, NUTRIENT_NAMES, TABLE_BEST, tableMul, upkeepMul, type Nutrient } from './nutrition';
@@ -1062,6 +1063,8 @@ export class Game {
   constructor(init: GameInit) {
     this.seed = init.seed;
     this.world = init.world;
+    // The Runestones stand on this world, laid over it by scale, and nothing walks through them (`runestones.ts`).
+    this.world.solid = stoneTiles(this.world.w);
     this.spawn = init.spawn;
     this.player = new Player(init.player?.x ?? init.spawn.x + 0.5, init.player?.y ?? init.spawn.y + 0.5);
     if (init.player) readPlayer(this.player, init.player);
@@ -3230,6 +3233,13 @@ export class Game {
     for (const l of this.spellLights) out.push(l);
     // A mote swirl's own small glow, soft as a spell's (`swirlLight`).
     if (this.swirls.size) for (const s of this.swirls.values()) if (near(s.x, s.y)) out.push(swirlLight(s));
+    // The runestones' runes, round the middle of each (`runestoneLight`).
+    if (hasRunestones(this.world.w)) {
+      for (const s of RUNESTONES) {
+        const p = stonePoint(s, this.world.w);
+        if (near(p.x, p.y)) out.push(runestoneLight(p.x, p.y));
+      }
+    }
     return out;
   }
 
@@ -3565,6 +3575,16 @@ export class Game {
   drawingBow(): boolean {
     const a = this.action;
     return !!a && a.def.id === 'shoot_creature' && a.state === 'performing';
+  }
+
+  /**
+   * Whether you are in a fight: a fight is the job in hand, or something wild
+   * and alive is hunting you. The island asks the same in `telestone_refusal`.
+   */
+  inAFight(): boolean {
+    if (isFightJob(this.action?.def.id)) return true;
+    for (const c of this.creatures.list.values()) if (c.mode === 'wild' && c.enemy === PLAYER_ATTACKER && c.health > 0) return true;
+    return false;
   }
 
   /** What follows you, when anything does: on an island, only one the island says is yours. */
@@ -7072,6 +7092,8 @@ export class Game {
   plantableTile(x: number, y: number): boolean {
     if (!this.world.inBounds(x, y) || this.world.hasWater(x, y)) return false;
     if (this.buildings.buildingAt(x, y) || this.isToken(x, y)) return false;
+    // Nor a Runestone's ground (`runestones.ts`), as the island's `plantable_tile` has it.
+    if (runestoneAt(x, y, this.world.w)) return false;
     if (this.cratesOnTile(x, y).length || this.furnitureOnTile(x, y).length) return false;
     return PLANTABLE.has(this.world.getTile(x, y));
   }

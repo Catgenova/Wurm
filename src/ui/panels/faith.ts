@@ -4,7 +4,7 @@ import {
 } from '../../game/patrons';
 import type { Game } from '../../game/game';
 import {
-  calmCap, CHOOSE_AT, PATH_LIST, PATH_TIER_AT, PATHS, PICKS_PER_TIER, picksOf, type PathDef, type PathId, type PathPickDef, type PathSaid,
+  calmCap, CHOOSE_AT, PATH_LIST, PATH_TIER_AT, PATHS, PICKS_PER_TIER, picksOf, SIT_PLACES_SAID, type PathDef, type PathId, type PathPickDef, type PathSaid,
 } from '../../game/meditation';
 import { listed, NumberWord, numberWord, spanWords } from '../../game/words';
 import type { FaithBook } from '../faithbook';
@@ -274,6 +274,7 @@ export class FaithPanel {
     if (this.why) this.page.append(whyEl(this.why));
     this.page.append(note(`Calm is banked by sitting on a rug, and spent on a path’s techniques. It holds as much as favour does at the same level: `
       + `${listed(PATH_TIER_AT.filter((_, i) => i % 2 === 0).map((m) => `${Math.floor(calmCap(m))} at ${m} meditation`))}.`));
+    this.page.append(note(SIT_PLACES_SAID));
     const own = ps?.way ? PATHS[ps.way] : null;
     if (own && !own.moved) this.page.append(this.stepsCard(own, ps?.meditation ?? 0));
     for (const path of PATH_LIST.filter((p) => p.moved)) {

@@ -26,6 +26,7 @@ import { COIN_FIND_ONE_IN, COIN_FINDS_A_DAY } from '../../game/forage';
 import { ROCK_VARIANTS, TILE_DEFS, TileType, TREE_AGES, TREE_DAWN_UTC, TREE_DEFS } from '../../world/tiles';
 import { REGIONS } from '../../world/regions';
 import { ISLAND_ELEMENT, MOTES_LEAST, MOTES_MOST, MOTES_MOST_AT, MOTES_STEP, SWIRL_DARK, SWIRL_LIGHT, SWIRLS_A_DAY } from '../../game/motes';
+import { RUNESTONES, STONE_SPAN, TELE_FAR, TELE_FAST, TELE_NEAR, TELE_QL_HIGH, TELE_QL_LOW, TELE_SLOW } from '../../game/runestones';
 import { SEASON_DAYS, seasonLine, YEAR_DAYS, YEAR_FROM } from '../../world/calendar';
 import { BLOOMS, BUSH_FLOWER_FROM, evergreen, LEAF_DAYS, SHED_DAYS, TURN_DAYS } from '../../render/foliage';
 import { lifeSeasons } from '../../render/life';
@@ -1583,6 +1584,24 @@ export const NEWS: News[] = [
           + `Strong Back is as it was, and Ironhide turns its ${percent(fx('power_ironhide', 'hide') - 1)} more on the island too, where it was not counted before.`,
         'Fury, Hard Hands and Mend the Flesh are gone: damage is a fighting trade\'s, and healing the Blessing\'s.',
         `Every technique costs Calm: ${listed(TECHNIQUES.filter((k) => k.path !== 'knowledge').map((k) => `${k.name} ${k.cost}`))}.`,
+      ];
+    },
+  },
+  {
+    n: 116,
+    day: '2026-10-10',
+    lines: () => {
+      const bill = recipeBill('make_telestone');
+      return [
+        `${NumberWord(RUNESTONES.length)} Runestones stand on the shore of the Crescent's inner bay, ${numberWord(STONE_SPAN)} tiles by ${numberWord(STONE_SPAN)}, and on the map: `
+          + `${listed(RUNESTONES.map((s) => `${s.name} (${s.x}, ${s.y})`))}. Nothing walks through one, and nothing is dug, built, planted or set down on its tiles; `
+          + 'whatever stood on those tiles before is gone, and whoever stood there was moved beside the stone.',
+        `A sitting within ${numberWord(SIT_WORTH.stoneReach)} tiles of a Runestone is worth ${times(SIT_WORTH.stone)} as much, meditation and Calm, `
+          + 'multiplying whatever else the spot is worth.',
+        `A Telestone is cut with ${skillOf('make_telestone')} from ${bill}. Travel to a Runestone on it puts you beside any Runestone within its reach: `
+          + `${TELE_NEAR} tiles at QL ${TELE_QL_LOW} up to ${TELE_FAR} at QL ${TELE_QL_HIGH}.`,
+        `After a journey you wait ${spanWords(TELE_SLOW)} at QL ${TELE_QL_LOW} down to ${spanWords(TELE_FAST)} at QL ${TELE_QL_HIGH}, `
+          + 'set by the Telestone you used. The wait is yours, not the stone\'s, and the Telestone is not used up.',
       ];
     },
   },

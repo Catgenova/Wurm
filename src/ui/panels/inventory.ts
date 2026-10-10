@@ -10,6 +10,7 @@ import { COUNTS, pinEntry, pinnable } from '../beltmenu';
 import { orderBy, sortSelect, type SortKey } from '../sorting';
 import { ACTION_BY_ID, type ActionDef } from '../../game/actions';
 import { ABSORB_SAID, absorbable, MOTE } from '../../game/sacrifice';
+import { hasRunestones, RUNESTONES, stoneChoice, stoneDistance, TELESTONE, TELESTONE_SAID, telestoneRange, telestoneWait, timeLeftNote, TRAVEL } from '../../game/runestones';
 import { improvable, improveCeiling } from '../../game/improve';
 
 const CATEGORY_ORDER: Array<[ItemCategory, string]> = [
@@ -229,6 +230,27 @@ export class InventoryPanel {
           const t = { kind: 'item' as const, uid: it.uid, mote: item.uid };
           const why = absorb.check?.(t, this.game) ?? null;
           return { label: itemName(it), note: it.count > 1 ? `one of ${it.count}` : undefined, hint: why ?? undefined, disabled: !!why, onSelect: () => this.game.requestAction(absorb, t) };
+        }),
+      });
+    }
+    /*
+     * A Telestone takes you to a Runestone, chosen here: those within its
+     * reach of where you stand by name and distance, and the rest shown out of
+     * reach. The wait after a journey is said on the entry while it lasts.
+     */
+    const travel = item.id === TELESTONE ? ACTION_BY_ID.get(TRAVEL) : undefined;
+    if (travel && !hasRunestones(this.game.world.w)) {
+      entries.push({ label: travel.label, hint: TELESTONE_SAID.nowhere, disabled: true });
+    } else if (travel) {
+      const reach = telestoneRange(item.ql);
+      const wait = telestoneWait(this.game);
+      entries.push({
+        label: travel.label,
+        note: wait > 0 ? timeLeftNote(wait) : `reaches ${Math.floor(reach + 0.5)} tiles`,
+        children: RUNESTONES.map((s) => ({ s, d: stoneDistance(this.game, s) })).sort((a, b) => a.d - b.d).map(({ s, d }) => {
+          const t = { kind: 'item' as const, uid: item.uid, stone: s.id };
+          const why = travel.check?.(t, this.game) ?? null;
+          return { label: stoneChoice(s, d), hint: why ?? undefined, disabled: d > reach, onSelect: () => this.game.requestAction(travel, t) };
         }),
       });
     }

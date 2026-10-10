@@ -12,6 +12,7 @@ import { generateAtlasWorld, loadAtlas } from '../world/atlas-world';
 import { ACTION_BY_ID, type ActionDef, type Target } from '../game/actions';
 import { hiddenAsk } from '../game/gates';
 import { swirlIn, type Swirl } from '../game/motes';
+import { TELESTONE_KEY } from '../game/runestones';
 import { isFightJob, isFightStance } from '../game/fight';
 import { FIGHT_BACK_GOES } from '../game/creatures';
 import { saidWords } from '../game/roster';
@@ -335,6 +336,10 @@ export async function startIsland(params: URLSearchParams, tell: Telling): Promi
   island.hooks.moved = (x, y, level, letGo) => {
     if (letGo) game.letGoOfAll();
     game.putBody(x, y, level);
+  };
+  // And a journey by Telestone, which says when the next may be made (`runestones.ts`).
+  island.hooks.travelled = (until) => {
+    game.player.usedAt[TELESTONE_KEY] = until;
   };
   /*
    * And the crates our own ask touched, which come back with the answer to it.

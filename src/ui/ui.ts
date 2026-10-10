@@ -68,6 +68,7 @@ import { CROP_BY_SEED, cropDef, describeCrop, emptyFields, growthWords, planterP
 import { PLANTER_GROWTH } from '../game/growth';
 import { describeWaterPlant } from '../game/watergarden';
 import { swirlName } from '../game/motes';
+import { runestoneAt } from '../game/runestones';
 import { cornerReading, groundReading } from './tileinfo';
 import { deedWorkersAt, MAX_DEED_LEVEL, rankAtLeast, type Deed } from '../game/game';
 import { CRAFT_REACH, reachFor, recipeNeeds, recipeReason, recipeStatus, RECIPES, type CraftStock, type Recipe } from '../game/recipes';
@@ -922,6 +923,9 @@ export class UI {
     // A mote swirl over it, by its element (`motes.ts`).
     const swirl = this.game.swirlAt(pick.x, pick.y);
     if (swirl) lines.push(swirlName(swirl.element));
+    // A Runestone standing on it, by name (`runestones.ts`).
+    const stone = runestoneAt(pick.x, pick.y, w.w);
+    if (stone) lines.push(`${stone.name}, a Runestone`);
     lines.push(`${pick.x}, ${pick.y} · slope ${w.slope(pick.x, pick.y)}`);
     lines.push(cornerReading(this.game, pick.cx, pick.cy));
     const reading = groundReading(this.game, pick.x, pick.y);
