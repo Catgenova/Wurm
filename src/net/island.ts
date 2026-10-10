@@ -141,10 +141,12 @@ interface HeardBody {
   gates?: unknown;
   /** A mote swirl in this block was collected (`{ gone: [id] }`), or the day's swirls were put down (`'day'`). */
   swirls?: unknown;
-  /** Where a keeper of the island has put this body. */
+  /** Where a keeper of the island, or a Telestone, has put this body. */
   x?: unknown;
   y?: unknown;
   level?: unknown;
+  /** And after a journey by Telestone, the wall-clock second its traveller may make another (`perform_telestone`). */
+  until?: unknown;
 }
 
 /** The body of a Broadcast message, as `supabase-js` hands it over. */
@@ -870,6 +872,8 @@ export interface IslandHooks {
    * whatever it rode, drove, pulled or was aboard as well.
    */
   moved?: (x: number, y: number, level: number, letGo?: boolean) => void;
+  /** A journey by Telestone made, and the wall-clock second the traveller may make another (`runestones.ts`). */
+  travelled?: (until: number) => void;
   /** A spell made your walk on foot this many times as quick for so many seconds. */
   paced?: (mul: number, secs: number) => void;
   /**
@@ -2266,7 +2270,8 @@ export class Island {
   }
 
   /**
-   * Put somewhere by a keeper of the island (`rpc_owner_move`).
+   * Put somewhere by a keeper of the island (`rpc_owner_move`), or by a
+   * journey on a Telestone (`perform_telestone`).
    *
    * The body goes there now. Otherwise it would learn of it only on its next
    * step, which claims the old ground, and the island's pull-back measures a
@@ -2285,6 +2290,8 @@ export class Island {
     this.stairsSaid = null;
     this.crossed = null;
     this.hooks.moved?.(x, y, lvl, true);
+    // A Telestone's journey says when the next may be made.
+    if (typeof body.until === 'number') this.hooks.travelled?.(body.until);
     // What was in hand and what was queued are gone too, which the beat says.
     this.armBeat(0.5);
   }

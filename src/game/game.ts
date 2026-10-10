@@ -74,6 +74,7 @@ import { TileIndex, Tally, keyX, keyY, tileKey } from './tileindex';
 import { DARK_HIT, NIGHT_EYES_FROM, WORK_HAND, WORK_WIND, WORK_WIND_SPENT, HEAVY_SKILLS, WORK_BACK } from './learn';
 import { DRIVING, DRIVING_LEARN, drivingPace, SAILING, SAILING_LEARN, sailingPace, vehicleQlPace } from './travel';
 import { laySwirls, swirlLight, type Swirl } from './motes';
+import { runestoneAt, stoneTiles } from './runestones';
 import { AWARENESS, Vision } from './vision';
 import { blessBonus, favourCap, FAITH, FAVOUR_TRICKLE } from './faith';
 import { ATTENTIVE, FURY_MULT, FURY_SECS, GREEN_THUMB, hasStep, IRONHIDE, MEDITATION, MEND_FLESH, SENSE_REACH, STRONG_BACK, type PathId } from './meditation';
@@ -1052,6 +1053,8 @@ export class Game {
   constructor(init: GameInit) {
     this.seed = init.seed;
     this.world = init.world;
+    // The Runestones stand on this world, laid over it by scale, and nothing walks through them (`runestones.ts`).
+    this.world.solid = stoneTiles(this.world.w);
     this.spawn = init.spawn;
     this.player = new Player(init.player?.x ?? init.spawn.x + 0.5, init.player?.y ?? init.spawn.y + 0.5);
     if (init.player) readPlayer(this.player, init.player);
@@ -3236,6 +3239,16 @@ export class Game {
   drawingBow(): boolean {
     const a = this.action;
     return !!a && a.def.id === 'shoot_creature' && a.state === 'performing';
+  }
+
+  /**
+   * Whether you are in a fight: a fight is the job in hand, or something wild
+   * and alive is hunting you. The island asks the same in `telestone_refusal`.
+   */
+  inAFight(): boolean {
+    if (isFightJob(this.action?.def.id)) return true;
+    for (const c of this.creatures.list.values()) if (c.mode === 'wild' && c.enemy === PLAYER_ATTACKER && c.health > 0) return true;
+    return false;
   }
 
   /** What follows you, when anything does: on an island, only one the island says is yours. */
@@ -6716,6 +6729,8 @@ export class Game {
   plantableTile(x: number, y: number): boolean {
     if (!this.world.inBounds(x, y) || this.world.hasWater(x, y)) return false;
     if (this.buildings.buildingAt(x, y) || this.isToken(x, y)) return false;
+    // Nor a Runestone's ground (`runestones.ts`), as the island's `plantable_tile` has it.
+    if (runestoneAt(x, y, this.world.w)) return false;
     if (this.cratesOnTile(x, y).length || this.furnitureOnTile(x, y).length) return false;
     return PLANTABLE.has(this.world.getTile(x, y));
   }

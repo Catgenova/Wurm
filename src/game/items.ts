@@ -4,8 +4,9 @@ import { DYE_BOIL_LITRES, DYESTUFFS, dyeIn, dyeHex, colourWord, dyeWord, type Dy
 import { MATERIAL_BY_ID, WALL_TYPES } from './building';
 import { candleBurn, lanternReach, torchBurn, torchReach } from './light';
 import { CLOSE_CLOTH, CLOSE_RIGHT } from './wounds';
-import { article, capital, fill, listed, numberWord, percent, share, times } from './words';
+import { article, capital, fill, listed, numberWord, percent, share, spanWords, times } from './words';
 import { CIRCLET_SHARE, CIRCLET_STONES, JEWEL_BONUS } from './gems';
+import { TELE_FAR, TELE_FAST, TELE_NEAR, TELE_QL_HIGH, TELE_QL_LOW, TELE_RANGE_STEP, TELE_REST_STEP, TELE_SLOW, TELESTONE } from './runestones';
 import { elementIslands, MOTE_ELEMENTS, moteItem, moteName, MOTES_LEAST, MOTES_MOST, MOTES_MOST_AT, MOTES_STEP, SWIRL_DARK, SWIRL_LIGHT } from './motes';
 
 export type ItemCategory = 'tool' | 'material' | 'food' | 'plant' | 'misc';
@@ -614,6 +615,21 @@ for (const e of MOTE_ELEMENTS) {
       + `and ${numberWord(MOTES_MOST)} from ${MOTES_MOST_AT}.`,
   };
 }
+
+/*
+ * A Telestone (`runestones.ts`): cut with stonecutting out of earth motes and a
+ * stone brick, and carried. What it does at either end of its quality is said
+ * off the rule, and Examine says what this one does.
+ */
+ITEM_DEFS[TELESTONE] ??= {
+  name: 'Telestone',
+  category: 'misc',
+  weight: 2,
+  description: `Travel to a Runestone on it takes you to a free tile beside any Runestone within its reach of where you stand: `
+    + `${TELE_NEAR} tiles at QL ${TELE_QL_LOW} and ${TELE_FAR} at QL ${TELE_QL_HIGH}, ${TELE_RANGE_STEP.toFixed(1)} tiles more for every point of quality between. `
+    + `After a journey you wait ${spanWords(TELE_SLOW)} at QL ${TELE_QL_LOW} and ${spanWords(TELE_FAST)} at QL ${TELE_QL_HIGH} before travelling by Telestone again, `
+    + `${(TELE_REST_STEP / 60).toFixed(1)} minutes less for every point between. The wait is yours whichever Telestone you carry, and a journey does not use it up.`,
+};
 
 /**
  * Put numbers into every item's text from the module that holds them.

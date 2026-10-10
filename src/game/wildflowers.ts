@@ -15,6 +15,7 @@ import { SEASONS } from '../world/calendar';
 import { FLOWERS_PICKED, TILE_DEFS, TileType, trailGround, WEAR_FALL, WEAR_MOST, WEAR_TRAIL, WEARS } from '../world/tiles';
 import { listed, numberWord } from './words';
 import { swirlSays } from './motes';
+import { runestoneAt, stoneSays } from './runestones';
 
 /** The clumps of wildflowers on a tile now, as it stands and under whatever stands on it. */
 export function flowersHere(g: Game, x: number, y: number, now = Date.now() / 1000): number {
@@ -64,6 +65,9 @@ export function groundSays(g: Game, x: number, y: number, now = Date.now() / 100
   // And a mote swirl turning over it (`motes.ts`).
   const swirl = g.swirlAt(x, y);
   if (swirl) said += swirlSays(swirl.element);
+  // And a Runestone standing on it (`runestones.ts`).
+  const stone = runestoneAt(x, y, w.w);
+  if (stone) said += stoneSays(stone);
   return said;
 }
 
