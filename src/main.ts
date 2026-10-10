@@ -235,6 +235,7 @@ const asker = new Asker(uiRoot);
 game.hooks = {
   prompt: (question, fallback) => asker.name(question, fallback),
   confirm: (question) => asker.sure(question),
+  choose: (question, choices) => asker.choose(question, choices),
 };
 
 const player = game.player;

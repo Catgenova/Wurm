@@ -89,7 +89,7 @@ import { TINCTURE_NAMES } from './remedies';
 import { FESTER_CLOTH, FESTER_WRONG } from './wounds';
 import { BAIT_BY_ID, BAIT_PULL, BAITS, biteShare, CAST, FISH, HOOK_BAIT, HOOK_MOST, NET_HAUL, NET_LEAST, NET_REACH } from './fishing';
 import { POND_EVERY } from './furniture';
-import { DYE_BOIL_LITRES, DYE_BUCKET } from './dyestuffs';
+import { DYE_BUCKET, DYE_LITRES_PER_KG, dyeGrams, kgSaid as dyeKg } from './dyestuffs';
 import { TRAPS } from './traps';
 import { BUTCHER_BAIT } from './butcher';
 import { SHEAR_FROM, SHEAR_WOOL, TAME_MOST } from './creatureActions';
@@ -1573,14 +1573,18 @@ const NATURALIST: Seed[] = [
   },
   {
     num: 15, name: 'Double Boil',
-    fx: { 'litres:dye': BUCKET_LITRES },
-    note: (fx) => `A dye boil leaves ${numberWord(fx['litres:dye'])} litres of dye in the bucket (now ${numberWord(DYE_BOIL_LITRES)}).`,
+    // Litres of dye a kilo of dyestuff makes, which is the weight a boil takes for the lye in its bucket.
+    fx: { 'litres:dye': 2 * DYE_LITRES_PER_KG },
+    note: (fx) => `Each kilo of dyestuff makes ${numberWord(fx['litres:dye'])} litres of dye, so a dye boil takes ${share(DYE_LITRES_PER_KG / fx['litres:dye'])} `
+      + `the weight: ${dyeKg(dyeGrams(BUCKET_LITRES, fx['litres:dye']))} kg for the ${numberWord(BUCKET_LITRES)} litres in a bucket of lye `
+      + `(now ${numberWord(DYE_LITRES_PER_KG)} litre a kilo, ${dyeKg(dyeGrams(BUCKET_LITRES, DYE_LITRES_PER_KG))} kg). It still makes ${numberWord(BUCKET_LITRES)} litres.`,
   },
   {
     num: 16, name: 'Thrifty Dyer',
     fx: onEach('need', DYE_BOILS.map((r) => r.id), 0.75),
-    note: (fx) => `A dye boil takes ${range(DYE_BOILS.map((r) => needFor(r, fx[`need:${r.id}`])))} of its dyestuff `
-      + `(now ${range(DYE_BOILS.map((r) => needFor(r, 1)))}), and the one bucket of lye.`,
+    note: (fx) => `A dye boil takes ${percent(fx[`need:${DYE_BOILS[0].id}`])} of the weight of dyestuff: `
+      + `${dyeKg(dyeGrams(BUCKET_LITRES, DYE_LITRES_PER_KG, fx[`need:${DYE_BOILS[0].id}`]))} kg for the ${numberWord(BUCKET_LITRES)} litres in a bucket of lye `
+      + `(now ${dyeKg(dyeGrams(BUCKET_LITRES, DYE_LITRES_PER_KG))} kg), and the one bucket of lye.`,
   },
   {
     num: 17, name: 'Sure Boil',

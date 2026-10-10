@@ -5,6 +5,7 @@ import { rankAtLeast, type DeedRole } from './ranks';
 import { defaultKey } from './keybinds';
 import { listed, percent, share } from './words';
 import { brazierBurn, shoreNear } from './placeables';
+import { dyeChoice, dyeEnough, pickDyeAsks, sourceSays, type DyeSource } from './dyes';
 import type { Hoard } from './treasure';
 import { packTreeData, TILE_DEFS, TileType, TREE_DEFS, TREE_AGES, TREE_ROOM_ONE, TREE_ROOM_TWO, TREE_SEED_BOTH, TREE_SEED_NONE, TREE_SEED_REACH, TREE_SEEDS, lastDawn, treeAge, treeSpecies, treeVariant, LAWN_AFTER, mownDays, mownToday, FLOWERS_PICKED, WEAR_FALL, WEAR_MOST, WEAR_TRAIL, trailGround, wears } from '../world/tiles';
 import { yearOf } from '../world/calendar';
@@ -26,7 +27,7 @@ import { anvilAnchor, anvilCovers, ANVIL_SUBTILES, type PlacedAnvil } from './an
 import { fireAnchor, fireCentre, fireCovers, FIRE_SUBTILES, type PlacedCampfire } from './campfire';
 import { smelterAnchor, smelterCentre, smelterCovers, SMELTER_H, SMELTER_W, type PlacedSmelter, type SmeltJob } from './smelter';
 import { kilnAnchor, kilnCovers, KILN_SUBTILES, type PlacedKiln } from './kiln';
-import { WELL_TRICKLE, WELL_TRICKLE_AT, WELL_TRICKLE_QL, ACROSS_OF, DEED_PLACE, FURNITURE, ONE_ALTAR, deckSpot, isPlanter, furnitureAnchor, furnitureCapacity, furnitureCentre, furnitureCovers, furnitureDef, furnitureHeft, furnitureHolds, furnitureKg, furnitureRefuses, furnitureRoom, furnitureUnits, hiveRate, hiveRoom, HIVE_SWARMS, HIVE_WAX, POND_EVERY, rackDeck, rackSpots, teamOf, vehicleOf, type LiquidKind, type PlacedFurniture, furnitureName, LIQUID_NAME, isBoat, furnitureFootprint, type BoatDef } from './furniture';
+import { WELL_TRICKLE, WELL_TRICKLE_AT, WELL_TRICKLE_QL, ACROSS_OF, DEED_PLACE, FURNITURE, ONE_ALTAR, deckSpot, isPlanter, furnitureAnchor, furnitureCapacity, furnitureCentre, furnitureCovers, furnitureDef, furnitureHeft, furnitureHolds, furnitureKg, furnitureRefuses, furnitureRoom, furnitureUnits, hiveRate, hiveRoom, HIVE_SWARMS, HIVE_WAX, POND_EVERY, rackDeck, rackSpots, teamOf, vehicleOf, type LiquidKind, type PlacedFurniture, furnitureName, LIQUID_NAME, isBoat, furnitureFootprint, holdsLiquid, type BoatDef } from './furniture';
 import { emptyCrate, occupiedRefusal, shutIn } from './creaturecrate';
 import { bury, crumble, graveAt, graveRefusal, graveSays, GRAVE_MARK } from './graves';
 import { cropStageSeconds, RIPE, settleCrop, type Crop } from './farming';
@@ -257,6 +258,8 @@ export const deedWorkersAt = (level: number): number => DEED_WORKERS_AT_LEVEL_ON
 export interface GameHooks {
   prompt: (question: string, fallback: string) => Promise<string | null>;
   confirm: (question: string) => Promise<boolean>;
+  /** Choose one of several: each with a colour to show beside it and what it says. Resolves with the key chosen, or null. */
+  choose: (question: string, choices: ReadonlyArray<{ key: string; colour?: string; text: string }>) => Promise<string | null>;
 }
 
 export interface GameInit {
@@ -875,7 +878,7 @@ export class Game {
   swirlDawn: number | null = null;
   /** Tiles a prospector has marked, and when the marks fade. */
   prospected: { tiles: Set<number>; until: number } | null = null;
-  hooks: GameHooks = { prompt: async (_q, fallback) => fallback, confirm: async () => true };
+  hooks: GameHooks = { prompt: async (_q, fallback) => fallback, confirm: async () => true, choose: async (_q, choices) => choices[0]?.key ?? null };
   /** What the acting person is in the middle of, and what is behind it. */
   get action(): ActiveAction | null {
     return this.acting.action;
@@ -2446,6 +2449,16 @@ export class Game {
       return;
     }
     this.requestAction(def, { ...target, name } as unknown as Target, goes);
+  }
+
+  /**
+   * Ask which bucket or barrel of dye a dyeing draws from, then start it again
+   * with the one chosen on it (`dyeFrom`), as the island takes it.
+   */
+  private async askDye(def: ActionDef, target: Target, goes: number | undefined, litres: number, from: readonly DyeSource[]): Promise<void> {
+    const key = await this.hooks.choose(pickDyeAsks(litres), from.map((s) => ({ key: s.key, colour: s.hex, text: sourceSays(s) })));
+    if (key === null || !from.some((s) => s.key === key)) return;
+    this.requestAction(def, { ...target, dyeFrom: key } as unknown as Target, goes);
   }
 
   /** Ask whether to go ahead, then start it again with the answer on it. */
@@ -4741,7 +4754,8 @@ export class Game {
       this.logMsg('There is nothing to do again yet.', 'info');
       return;
     }
-    const { name: _name, sure: _sure, ...rest } = last.target as Target & { name?: string; sure?: boolean };
+    // And the dye a dyeing drew from: that bucket may be empty now, so it is chosen again.
+    const { name: _name, sure: _sure, dyeFrom: _dyeFrom, ...rest } = last.target as Target & { name?: string; sure?: boolean; dyeFrom?: string };
     const target = this.retarget({ target: rest as Target, was: last.was });
     if (!last.def.applies(target, this)) {
       this.logMsg(`There is nothing here to ${last.def.label.toLowerCase()} now.`, 'error');
@@ -4797,6 +4811,21 @@ export class Game {
         void this.askSure(def, target, goes, question);
         return;
       }
+    }
+    /*
+     * Which dye, for a dyeing: of the buckets of dye in the pack and the
+     * barrels of it within reach, the one it draws from. Where only one holds
+     * enough it is that one, unasked; where none does the job is refused in
+     * its own words. Either way the island is told which (`dyeFrom`).
+     */
+    const litres = def.dyeLitres?.(target, this) ?? null;
+    if (litres !== null && dyeChoice(target) === undefined && !def.check?.(target, this)) {
+      const from = dyeEnough(this, litres);
+      if (from.length > 1) {
+        void this.askDye(def, target, goes, litres, from);
+        return;
+      }
+      if (from.length === 1) target = { ...target, dyeFrom: from[0].key } as unknown as Target;
     }
     if (this.ask) {
       /*
@@ -6382,6 +6411,32 @@ export class Game {
       found.push({ items: f.items, name: furnitureName(f), d: far(cx, cy), order: 1e9 + f.id });
     }, this.player.level);
     return found.sort((a, b) => a.d - b.d || a.order - b.order);
+  }
+
+  /**
+   * The pieces holding a liquid that work may draw from, within `reach`
+   * tiles: by the rule `storesWithin` keeps for the stores a craft reaches --
+   * on your side of the ground floor, yours or on a settlement of yours, not
+   * locked against you, and none at all with `fromStores` off. A dyeing draws
+   * its dye from a barrel of these (`dyeBarrels`); the island's `dye_barrels`.
+   */
+  liquidStoresWithin(reach = CRAFT_REACH): PlacedFurniture[] {
+    if (!this.settings.fromStores) return [];
+    const tx = this.player.tileX;
+    const ty = this.player.tileY;
+    const out: PlacedFurniture[] = [];
+    this.placed.furniture.around(tx + 0.5, ty + 0.5, reach, (f) => {
+      if (Math.max(Math.abs(f.x - tx), Math.abs(f.y - ty)) > reach || !holdsLiquid(f)) return;
+      if (f.mine === false && !this.onDeed(f.x, f.y)) return;
+      if (this.lockRefusal(f)) return;
+      out.push(f);
+    }, this.player.level);
+    return out;
+  }
+
+  /** How far a dyeing reaches for a barrel of dye: as far as a craft reaches into your stores. */
+  dyeReach(): number {
+    return CRAFT_REACH;
   }
 
   /**

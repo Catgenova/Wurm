@@ -1,6 +1,6 @@
 import { matOfItem, workingQl } from './materials';
 import { COINS_PER_LUMP, INGOT_LUMPS, INGOT_WEIGHT, ingotOf, METALS, MOULDS, RARE_LUMP_FACTOR } from './metal';
-import { DYE_BOIL_LITRES, DYESTUFFS, dyeIn, dyeHex, colourWord, dyeWord, type Dyestuff } from './dyestuffs';
+import { dyeIn, dyeHex, colourWord, dyeWord } from './dyestuffs';
 import { MATERIAL_BY_ID, WALL_TYPES } from './building';
 import { candleBurn, lanternReach, torchBurn, torchReach } from './light';
 import { CLOSE_CLOTH, CLOSE_RIGHT } from './wounds';
@@ -95,10 +95,6 @@ export const isWorked = (id: string): boolean => {
 export const CATEGORY_DECAY: Record<ItemCategory, number> = { food: 200, plant: 100, material: 25, tool: 12, misc: 12 };
 /** What a settlement does to the rot of everything lying on its land: a tenth of the pace in the wild. */
 export const DEED_DECAY = 0.1;
-
-/** What a dyestuff is for, off the boil that takes it, so the card says what the recipe does. */
-const dyestuffUse = (d: Dyestuff): string =>
-  `${capital(numberWord(d.count))} of them boiled in a bucket of lye make ${numberWord(DYE_BOIL_LITRES)} litres of ${d.primary} dye.`;
 
 export const ITEM_DEFS: Record<string, ItemDef> = {
   shovel: { name: 'Shovel', category: 'tool', weight: 3, description: 'A shovel for digging, flattening and packing dirt.' },
@@ -308,7 +304,7 @@ export const ITEM_DEFS: Record<string, ItemDef> = {
   shovel_head: { name: 'Shovel head', category: 'material', weight: 1.2, stackable: true, decay: 1 },
   hatchet_head: { name: 'Hatchet head', category: 'material', weight: 1.2, stackable: true, decay: 1 },
   sickle_blade: { name: 'Sickle blade', category: 'material', weight: 1, stackable: true, decay: 1 },
-  // What a sickle cuts off a bush. Dyestuffs, both of them: what each boils into is said after (`DYESTUFFS`).
+  // What a sickle cuts off a bush. Dyestuffs, both of them: what each boils into is said after (`dyestuffUse`).
   rose_petals: { name: 'Rose petals', category: 'material', weight: 0.05, stackable: true, raw: true, decay: 6, description: 'Cut off a rose bush with a sickle.' },
   lavender: { name: 'Lavender', category: 'material', weight: 0.05, stackable: true, raw: true, decay: 6, description: 'Cut off a lavender bush with a sickle.' },
   // Picked off grass in flower (`world/flowers.ts`), and boiled for dye.
@@ -444,7 +440,7 @@ export const ITEM_DEFS: Record<string, ItemDef> = {
   tincture: { name: 'Tincture', category: 'misc', weight: 0.1, stackable: true, decay: 3, description: 'Herbs steeped down to a few bitter drops. Taken, {skills} each go in {bonus:pct} faster for {span:span}.' },
   cover: { name: 'Healing cover', category: 'tool', weight: 0.2, stackable: true, decay: 12, description: 'Herbs worked into cotton. Laid on the wound it suits, it stops the bleeding, keeps the dirt out and closes it {cover.overCloth} times as fast as cloth.' },
   dye_bucket: { name: 'Bucket of dye', category: 'tool', weight: 6, decay: 10,
-    description: 'Dye, in the bucket of lye it was boiled in: up to {bucketLitres} litres of one mix of red, yellow and blue at one QL, and a boil makes {dyeBoil} litres of one of them. Pour it into a barrel that is empty or holds dye and they mix: the parts of each primary and the QL are each the average of both, by the litres of each. Its QL is its brightness: black at {qlBlack}, the mix itself at {qlPure} and white at {qlWhite}. A dyeing takes, in litres: {dye.garment} for a garment, cloth, a bag, a saddle or a bridle; {dye.banner} for a banner or a flag; {dye.sail} for a sailing boat; {dye.ship} for a caravel; {dye.wall} for a side of a wall or a tile of floor.' },
+    description: 'Dye, in the bucket of lye it was boiled in: up to {bucketLitres} litres of one mix of red, yellow and blue at one QL, and a boil makes {dyeBoil} litres of one of them, {perKg} litre for each kilo of dyestuff. Pour it into a barrel that is empty or holds dye and they mix: the parts of each primary and the QL are each the average of both, by the litres of each. Its QL is its brightness: black at {qlBlack}, the mix itself at {qlPure} and white at {qlWhite}. A dyeing takes, in litres: {dye.garment} for a garment, cloth, a bag, a saddle or a bridle; {dye.banner} for a banner or a flag; {dye.sail} for a sailing boat; {dye.ship} for a caravel; {dye.wall} for a side of a wall or a tile of floor, out of one bucket in your pack or one barrel of dye within reach.' },
   banner: { name: 'Banner', category: 'misc', weight: 4, decay: 5, description: 'Cloth on a staff. Plant it on the deed and fly your colour over it.' },
   flagpole: { name: 'Flagpole', category: 'misc', weight: 8, decay: 5, description: 'A flag on a tall pole. Set it up and the flag flies down the wind, out straight in a gale and hanging in a calm; dye it first and it flies your colour, and on a settlement it carries the settlement\'s device.' },
   rose_arch: { name: 'Rose arch', category: 'misc', weight: 30, decay: 5, description: 'A timber arch a tile across with a climbing rose at each foot. Set it over a path and walk through it. {rule}' },
@@ -670,11 +666,6 @@ for (const d of Object.values(ITEM_DEFS)) {
   });
 }
 
-// What each dyestuff boils into, off the boil itself (`DYESTUFFS`).
-for (const s of DYESTUFFS) {
-  const d = ITEM_DEFS[s.from];
-  if (d) d.description = [d.description, dyestuffUse(s)].filter(Boolean).join(' ');
-}
 
 // What a stone set in a piece gives, off the rule that gives it (`jewelGain`).
 describeFrom('jewelled_ring', { bonus: JEWEL_BONUS });

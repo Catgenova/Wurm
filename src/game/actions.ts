@@ -236,6 +236,13 @@ export interface ActionDef {
   /** A name to be typed before this can start. Asked once, by `requestAction`. */
   asks?: AsksName;
   /**
+   * The litres of dye this takes, for a dyeing: which bucket or barrel it
+   * draws from is chosen before it starts, by `requestAction`, where more
+   * than one holds enough (`dyes.ts`), and goes to the island on the target
+   * as `dyeFrom`. Null where it takes none.
+   */
+  dyeLitres?(t: Target, g: Game): number | null;
+  /**
    * Something to be sure about first, in these words, or null if not.
    *
    * Same reason as `asks`: the confirmation used to live inside `perform`, so

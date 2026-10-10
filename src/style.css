@@ -2770,6 +2770,27 @@ kbd {
   border-color: var(--ui-accent);
   color: var(--ui-accent);
 }
+/* Which of several: one button a line, its swatch first. */
+.ask-choices {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+.ask-choice {
+  display: block;
+  width: 100%;
+  min-height: 34px;
+  padding: 6px 8px;
+  text-align: left;
+  white-space: normal;
+  line-height: 1.35;
+  height: auto;
+}
+.ask-choice:focus {
+  outline: none;
+  border-color: var(--ui-accent);
+}
 
 /* Social: who is waiting on you, who you know, and what has been written ---- */
 

@@ -66,8 +66,8 @@ import { CROWD_HIDES, DEEDS_JOINED, PLANTABLE } from '../src/game/game';
 import { FAITH_SPELLS, FAITH_TIER_AT, PATRON_AT, PATRONS, SPELL_BAR, SPELL_ON_WORDS, SPELL_ONS, SPELL_REACH, SPELLS_PER_TIER } from '../src/game/patrons';
 import { RARITIES, RARITY_LIFT, RARITY_ODDS, RARITY_WORD } from '../src/game/items';
 import {
-  DYE_BOIL_LITRES, DYE_LITRES, DYE_PARTS, DYE_QL_BLACK, DYE_QL_PURE, DYE_QL_WHITE, DYE_SIZE_OF, DYE_WORDS, DYESTUFFS, dyeRecipeId, dyeText,
-  LEGACY_DYES, legacyLiquid, RYB_CUBE,
+  DYE_LITRES, DYE_LITRES_PER_KG, DYE_PARTS, DYE_QL_BLACK, DYE_QL_PURE, DYE_QL_WHITE, DYE_SIZE_OF, DYE_WORDS, DYESTUFFS, dyeRecipeId, dyeText,
+  LEGACY_DYES, LEGACY_POT_LITRES, legacyLiquid, RYB_CUBE,
 } from '../src/game/dyestuffs';
 import { SLAB_VARIANTS } from '../src/world/tiles';
 import { FLOWERS_PICKED, WEAR_FALL, WEAR_MOST, WEAR_TRAIL, WEARS } from '../src/world/tiles';
@@ -99,7 +99,7 @@ import { FX_RULE, PERKS } from '../src/game/perks';
 import { SCHOOLS, SPELLS } from '../src/game/arcane';
 import { BRIDGES, CLEARANCE, END_SLOP } from '../src/game/bridges';
 import { BREWS } from '../src/game/brewing';
-import { DYEABLE_ITEMS } from '../src/game/dyes';
+import { BOIL_IN, BOIL_LITRES, DYEABLE_ITEMS } from '../src/game/dyes';
 import { PAIR_RANGE, GROOM_CAP, GROOM_HEAL, TIER_LEVEL } from '../src/game/husbandry';
 import { BLOW_SHARE, BREED_REST, GESTATION } from '../src/game/creatures';
 import { REST_CAP, REST_MULT, REST_PER_SECOND } from '../src/game/boons';
@@ -1868,12 +1868,18 @@ for (const [fn, v] of [
  * every island of the chart by its index in REGIONS (`ISLAND_ELEMENT`; null
  * for a byte that is no island's), and what a refused collect says.
  */
-/* Dye (`dyestuffs.ts`): what its parts are counted out of, what a boil makes, the QLs it is black, itself and white at, and the RYB cube. */
+/*
+ * Dye (`dyestuffs.ts`, `dyes.ts`): what its parts are counted out of, the litres of lye a boil is done in and
+ * so makes, the litres a kilo of dyestuff makes, what a pot from before became, the QLs it is black, itself and
+ * white at, and the RYB cube; and what a boil is done in.
+ */
 for (const [fn, v] of [
-  ['dye_parts', DYE_PARTS], ['dye_boil_litres', DYE_BOIL_LITRES], ['dye_ql_black', DYE_QL_BLACK], ['dye_ql_pure', DYE_QL_PURE], ['dye_ql_white', DYE_QL_WHITE],
+  ['dye_parts', DYE_PARTS], ['dye_boil_litres', BOIL_LITRES], ['dye_litres_per_kg', DYE_LITRES_PER_KG], ['dye_pot_litres', LEGACY_POT_LITRES],
+  ['dye_ql_black', DYE_QL_BLACK], ['dye_ql_pure', DYE_QL_PURE], ['dye_ql_white', DYE_QL_WHITE],
 ] as Array<[string, number]>) {
   out.push(`create or replace function ${fn}() returns double precision language sql immutable as $fn$ select ${q(v)}::double precision $fn$;`);
 }
+out.push(`create or replace function dye_boil_in() returns text language sql immutable as $fn$ select ${q(BOIL_IN)} $fn$;`);
 out.push(`create or replace function ryb_cube() returns double precision[] language sql immutable as $fn$ select array[${RYB_CUBE.map((v) => q(v)).join(', ')}]::double precision[] $fn$;`);
 /* The chance one raise leaves a knack behind: the browser's `knackChance`. A
    tick of a trade taught on the move rolls at the share of a go it teaches. */

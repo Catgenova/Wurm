@@ -44,7 +44,7 @@ import { ORDER_LIFE } from '../../game/orders';
 import { POST_LIFE_MIN } from '../../game/posts';
 import { ACTION_BY_ID, GLAZE_ASH, GRASS_PER_CUT, GRASS_PLANT, KIT_MEND, MOSS_PER_CUT, MOSS_PLANT } from '../../game/actions';
 import { CIRCLET_SHARE, CIRCLET_STONES, GEMS } from '../../game/gems';
-import { RECIPE_BY_ID, RECIPES, TRADE_BOOK_AT } from '../../game/recipes';
+import { CRAFT_REACH, RECIPE_BY_ID, RECIPES, TRADE_BOOK_AT } from '../../game/recipes';
 import { BOARD_TOP } from '../../game/boards';
 import { IDLE_LOGOUT, WORKER_REST_EVERY, WORKER_REST_FIRST, WORKER_REST_MOST } from '../../game/keep';
 import { REPORTS_A_SESSION } from '../../net/errors';
@@ -90,9 +90,10 @@ import { ROSE_BUD, ROSE_FLOWER, ROSE_LEAFY, ROSES_RULE } from '../../game/roses'
 import { DEVICE_COUNT } from '../../render/furniture';
 import { FLOWER_MOST, FLOWER_SEASONS } from '../../world/flowers';
 import {
-  colourWord, DYE_BOIL_LITRES, DYE_LITRES, DYE_QL_BLACK, DYE_QL_PURE, DYE_QL_WHITE, DYESTUFFS, dyeHex, LEGACY_DYES, LEGACY_POTS, legacyLiquid,
-  PRIMARIES, pureDye, mixDye, sharesSaid,
+  colourWord, DYE_LITRES, DYE_LITRES_PER_KG, DYE_QL_BLACK, DYE_QL_PURE, DYE_QL_WHITE, dyeGrams, DYESTUFFS, dyeHex, kgSaid, LEGACY_DYES, LEGACY_POT_LITRES,
+  LEGACY_POTS, legacyLiquid, PRIMARIES, pureDye, mixDye, sharesSaid,
 } from '../../game/dyestuffs';
+import { BOIL_LITRES, boilCountPlain, gramsOf } from '../../game/dyes';
 import { GREEN_ACTIONS, GREEN_DAYS, GREEN_SHADE, GREEN_SUN, GREEN_WET } from '../../game/greening';
 import { BUCKET_LITRES, FURNITURE, WELL_TRICKLE, WELL_TRICKLE_QL } from '../../game/furniture';
 import { BRIDGES, CLEARANCE, PULL_REACH } from '../../game/bridges';
@@ -151,6 +152,9 @@ const either = (parts: string[]): string =>
 const counterType = () => WALL_TYPE_BY_ID.get(COUNTER_WALL);
 /** The skill a recipe is worked at, by name. */
 const skillOf = (id: string): string => (SKILL_BY_ID.get(RECIPE_BY_ID.get(id)?.skill ?? '')?.name ?? '').toLowerCase();
+
+/** What a boil made and a dyeing took the day dye became a liquid (111), before it went by weight (117). */
+const WAS_DYE = { boil: 3, garment: 1, banner: 2, sail: 3, ship: 5, wall: 1, floor: 1 } as const;
 
 export const NEWS: News[] = [
   {
@@ -1506,19 +1510,21 @@ export const NEWS: News[] = [
       const from = (p: string): string => listed(DYESTUFFS.filter((d) => d.primary === p).map((d) => itemDef(d.from).name.toLowerCase()));
       const gone = [...new Set(LEGACY_DYES.filter((d) => !DYESTUFFS.some((x) => x.from === d.from)).map((d) => itemDef(d.from).name.toLowerCase()))];
       const purple = mixDye(pureDye('red', DYE_QL_PURE), 1, pureDye('blue', DYE_QL_PURE), 1);
+      // What this entry announced, which 117 changed: the litres a boil made and a dyeing took that day.
+      const was = WAS_DYE;
       return [
         `Dye is a liquid, kept in a bucket or a barrel, and is boiled in three colours only: ${listed(PRIMARIES.map((p) => `${p} from ${from(p)}`))}. `
-          + `A boil turns its bucket of lye into a bucket holding ${numberWord(DYE_BOIL_LITRES)} litres of dye, at the QL the alchemy gives it, `
+          + `A boil turns its bucket of lye into a bucket holding ${numberWord(was.boil)} litres of dye, at the QL the alchemy gives it, `
           + `where it made ${numberWord(LEGACY_POTS)} pots of one of ${numberWord(LEGACY_DYES.length)} colours. ${capital(listed(gone))} no longer make dye, and do everything else they did.`,
         'Every other colour is mixed by pouring: dye poured into a barrel that holds dye mixes with it, the share of each primary and the QL each the average of the two by litres. '
           + 'Dye goes in with nothing but dye, and nothing else goes in with dye. A bucket fills from a barrel of dye, with less than a bucket if that is all there is, '
           + 'and a bucket of dye with room in it tops up from one, mixing as it goes.',
         `A dye's QL is its brightness: black at QL ${DYE_QL_BLACK}, the mix itself at ${DYE_QL_PURE} and white at ${DYE_QL_WHITE}, in a straight line either side. `
           + `Red at QL ${DYE_QL_PURE} is ${dyeHex(pureDye('red', DYE_QL_PURE))}, and red and blue half and half is ${colourWord(dyeHex(purple))}, ${dyeHex(purple)}.`,
-        `A dyeing takes litres by the size of the thing: ${DYE_LITRES.garment} for a garment, cloth, a bag, a saddle or a bridle; ${DYE_LITRES.banner} for a banner or a flag; `
-          + `${DYE_LITRES.sail} for a sailing boat; ${DYE_LITRES.ship} for a caravel; ${DYE_LITRES.wall} for a side of a wall or a tile of floor. `
+        `A dyeing takes litres by the size of the thing: ${was.garment} for a garment, cloth, a bag, a saddle or a bridle; ${was.banner} for a banner or a flag; `
+          + `${was.sail} for a sailing boat; ${was.ship} for a caravel; ${was.wall} for a side of a wall or a tile of floor. `
           + 'The thing takes exactly the dye\'s colour and is called by the nearest plain colour word. Examine on a dyed thing says its hex, and on a bucket or a barrel of dye its hex, QL, litres and mix.',
-        `Everything dyed before keeps the colour it had. Every pot of dye is now ${DYE_LITRES.garment} litre, in a bucket of dye of up to ${BUCKET_LITRES}, `
+        `Everything dyed before keeps the colour it had. Every pot of dye is now ${LEGACY_POT_LITRES} litre, in a bucket of dye of up to ${BUCKET_LITRES}, `
           + `of the mix and QL whose colour comes nearest the pot's: ${LEGACY_DYES.map((d) => {
             const l = legacyLiquid(d.id) ?? pureDye('red', DYE_QL_PURE);
             return `${d.name.toLowerCase()} ${sharesSaid(l)} at QL ${l.ql}, ${dyeHex(l)}`;
@@ -1605,7 +1611,36 @@ export const NEWS: News[] = [
       ];
     },
   },
+  {
+    n: 117,
+    day: '2026-10-10',
+    lines: () => {
+      const was = WAS_DYE;
+      const kg = kgSaid(dyeGrams(BOIL_LITRES, DYE_LITRES_PER_KG));
+      const double = PERK_BY_ID.get('naturalist_double_boil');
+      const thrifty = PERK_BY_ID.get('naturalist_thrifty_dyer');
+      const perKg = double?.fx['litres:dye'] ?? DYE_LITRES_PER_KG;
+      const thrift = thrifty ? Object.values(thrifty.fx)[0] : 1;
+      const size = (k: keyof typeof DYE_LITRES): string => `${DYE_LITRES[k]} (was ${was[k]})`;
+      return [
+        `A dye boil takes ${kgSaid(dyeGrams(1, DYE_LITRES_PER_KG))} kg of its dyestuff for every litre of lye in the bucket, by weight, and the bucket comes off holding as many litres `
+          + `of dye as it held of lye: ${numberWord(BOIL_LITRES)} litres from ${kg} kg, where it made ${numberWord(was.boil)} litres from a count of eight or ten. `
+          + `That is ${listed(DYESTUFFS.map((d) => `${countOf(d.from, boilCountPlain(d.from), true)} (${kgSaid(gramsOf(d.from))} kg each)`))}: `
+          + 'the fewest whole ones that weigh enough, and the boil says what it used. Short of the weight, it says how many kilos it takes and how many you have.',
+        `${double?.name ?? 'Double Boil'} (Naturalist): each kilo of dyestuff makes ${numberWord(perKg)} litres of dye, so a boil takes `
+          + `${kgSaid(dyeGrams(BOIL_LITRES, perKg))} kg and still makes ${numberWord(BOIL_LITRES)} litres; it used to leave ${numberWord(BUCKET_LITRES)} litres where a boil left ${numberWord(was.boil)}. `
+          + `${thrifty?.name ?? 'Thrifty Dyer'} takes ${percent(thrift)} of the weight: ${kgSaid(dyeGrams(BOIL_LITRES, DYE_LITRES_PER_KG, thrift))} kg, `
+          + `or ${kgSaid(dyeGrams(BOIL_LITRES, perKg, thrift))} kg with both. A bauble on alchemy adds nothing to a boil, whose bucket is full.`,
+        `A dyeing takes, in litres, a kilo each: ${size('garment')} for a garment, cloth, a bag, a saddle or a bridle; ${size('banner')} for a banner or a flag; `
+          + `${size('sail')} for a sailing boat; ${size('ship')} for a caravel; ${size('wall')} for a side of a wall or a tile of floor.`,
+        `It draws from one bucket of dye in your pack or one barrel of dye within ${CRAFT_REACH} tiles that is yours or on a settlement of yours, never from several at once. `
+          + 'Where more than one holds enough you choose which, from a list of each one\'s colour, hex, QL and litres; where one does, it is used. '
+          + 'The repeat key asks again. Where none holds enough, it says how many litres it takes and the most any one of them holds.',
+      ];
+    },
+  },
 ];
+
 
 /** The highest entry this browser has shown. */
 const SEEN = 'wurm.news.seen';

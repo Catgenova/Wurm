@@ -1,5 +1,5 @@
 /**
- * Asking for a name, and asking whether you are sure.
+ * Asking for a name, asking whether you are sure, and asking which of several.
  *
  * These were `window.prompt` and `window.confirm`, which is fine on a desktop
  * and is not a dialogue at all on a phone. Chrome on Android suppresses them
@@ -50,13 +50,23 @@ export class Asker {
   }
 
   /**
+   * Ask which of several: one button each, a swatch of its colour beside what
+   * it says. Resolves with the key of the one pressed, or null if waved off.
+   * Which bucket or barrel of dye a dyeing draws from is asked this way.
+   */
+  choose(question: string, choices: ReadonlyArray<{ key: string; colour?: string; text: string }>): Promise<string | null> {
+    return this.ask(question, null, choices);
+  }
+
+  /**
    * One question at a time.
    *
    * A second one waved off the first rather than queueing behind it: two
    * dialogues on the screen at once is a way to answer the wrong one, and
    * nothing here asks twice in a row on purpose.
    */
-  private ask(question: string, field: { text: string; max: number } | null): Promise<string | null> {
+  private ask(question: string, field: { text: string; max: number } | null,
+    choices?: ReadonlyArray<{ key: string; colour?: string; text: string }>): Promise<string | null> {
     this.close(null);
     return new Promise<string | null>((settle) => {
       const el = document.createElement('div');
@@ -84,6 +94,29 @@ export class Asker {
         box.append(input);
       }
 
+      // One button a choice, the first ready for Enter.
+      const picks: HTMLButtonElement[] = [];
+      if (choices?.length) {
+        const list = document.createElement('div');
+        list.className = 'ask-choices';
+        for (const c of choices) {
+          const b = document.createElement('button');
+          b.type = 'button';
+          b.className = 'tb-btn ask-choice';
+          if (c.colour) {
+            const sw = document.createElement('span');
+            sw.className = 'inv-swatch';
+            sw.style.background = c.colour;
+            b.append(sw);
+          }
+          b.append(document.createTextNode(c.text));
+          b.addEventListener('click', () => this.close(c.key));
+          picks.push(b);
+          list.append(b);
+        }
+        box.append(list);
+      }
+
       const buttons = document.createElement('div');
       buttons.className = 'ask-buttons';
       const no = document.createElement('button');
@@ -94,7 +127,8 @@ export class Asker {
       yes.type = 'button';
       yes.className = 'tb-btn tb-small ask-ok';
       yes.textContent = field ? 'Name it' : 'Yes';
-      buttons.append(no, yes);
+      // A choice is made by pressing it: there is nothing for a yes to say.
+      buttons.append(...(picks.length ? [no] : [no, yes]));
       box.append(buttons);
       el.append(box);
 
@@ -113,7 +147,11 @@ export class Asker {
         } else if (e.key === 'Enter') {
           e.preventDefault();
           e.stopPropagation();
-          done(input ? input.value : '');
+          // On a list of choices, Enter presses the one with the focus.
+          const at = picks.find((b) => b === document.activeElement);
+          if (picks.length) {
+            if (at) at.click();
+          } else done(input ? input.value : '');
         }
       });
       // Typing a name must not also walk the body across the island.
@@ -125,6 +163,8 @@ export class Asker {
       if (input) {
         input.focus();
         input.select();
+      } else if (picks.length) {
+        picks[0].focus();
       } else {
         yes.focus();
       }

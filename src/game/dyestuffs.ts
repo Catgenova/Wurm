@@ -52,14 +52,29 @@ export const DYE_QL_BLACK = 1;
 export const DYE_QL_PURE = 50;
 export const DYE_QL_WHITE = 100;
 
-/** Litres of dye a boil leaves in the bucket of lye it was boiled in. */
-export const DYE_BOIL_LITRES = 3;
+/**
+ * Litres of dye a kilo of dyestuff makes. A boil takes a kilo of its dyestuff,
+ * by the items' own weights, for every litre of water in what it is boiled in,
+ * and leaves as many litres of dye as there was water; a Naturalist's Double
+ * Boil makes it more (`litres:dye`), so the same litres take less weight.
+ */
+export const DYE_LITRES_PER_KG = 1;
+
+/**
+ * Grams of dyestuff a boil of `litres` of water takes, at `perKg` litres of dye
+ * to the kilo and `need` of the weight (a Naturalist's Thrifty Dyer). Whole
+ * grams, rounded up, so both sides count the same.
+ */
+export const dyeGrams = (litres: number, perKg: number, need = 1): number =>
+  Math.ceil((litres * 1000 / perKg) * need - 1e-6);
+/** Kilos to the gram, as few figures as it takes: "5", "2.5", "1.875". */
+export const kgSaid = (grams: number): string => (grams / 1000).toFixed(3).replace(/\.?0+$/, '');
 
 /**
  * Litres a dyeing takes, by the size of the thing. A wall is one side of one
- * wall and a floor one tile of it.
+ * wall and a floor one tile of it. A litre of dye weighs a kilo.
  */
-export const DYE_LITRES = { garment: 1, banner: 2, sail: 3, ship: 5, wall: 1, floor: 1 } as const;
+export const DYE_LITRES = { garment: 3, banner: 6, sail: 30, ship: 100, wall: 3, floor: 3 } as const;
 export type DyeSize = keyof typeof DYE_LITRES;
 /** The things that are not a garment, by size. Every piece of cloth or leather armour is a garment. */
 export const DYE_SIZE_OF: Record<string, DyeSize> = {
@@ -69,27 +84,29 @@ export const DYE_SIZE_OF: Record<string, DyeSize> = {
 /** Litres it takes to dye one of these. */
 export const dyeLitresFor = (id: string): number => DYE_LITRES[DYE_SIZE_OF[id] ?? 'garment'];
 
-/** What is boiled for a primary: the dyestuff, how much of it, and how hard the boil is. */
+/**
+ * What is boiled for a primary: the dyestuff and how hard the boil is. How
+ * much of it a boil takes is by its weight (`DYE_LITRES_PER_KG`).
+ */
 export interface Dyestuff {
   from: string;
   primary: Primary;
-  count: number;
   difficulty: number;
 }
 
-const stuff = (from: string, primary: Primary, count: number, difficulty: number): Dyestuff => ({ from, primary, count, difficulty });
+const stuff = (from: string, primary: Primary, difficulty: number): Dyestuff => ({ from, primary, difficulty });
 
 /** Every dyestuff on the island, by primary. Nothing else boils into dye. */
 export const DYESTUFFS: Dyestuff[] = [
-  stuff('raspberry', 'red', 8, 12),
-  stuff('strawberry', 'red', 10, 22),
-  stuff('lingonberry', 'red', 10, 20),
-  stuff('rose_petals', 'red', 8, 15),
-  stuff('lotus_flower', 'red', 8, 18),
-  stuff('sage', 'yellow', 8, 16),
-  stuff('wildflowers', 'yellow', 8, 12),
-  stuff('blueberry', 'blue', 8, 14),
-  stuff('lavender', 'blue', 8, 16),
+  stuff('raspberry', 'red', 12),
+  stuff('strawberry', 'red', 22),
+  stuff('lingonberry', 'red', 20),
+  stuff('rose_petals', 'red', 15),
+  stuff('lotus_flower', 'red', 18),
+  stuff('sage', 'yellow', 16),
+  stuff('wildflowers', 'yellow', 12),
+  stuff('blueberry', 'blue', 14),
+  stuff('lavender', 'blue', 16),
 ];
 export const DYESTUFF_OF = new Map(DYESTUFFS.map((d) => [d.from, d]));
 /** The recipe that boils a dyestuff. */
@@ -317,6 +334,13 @@ export const LEGACY_BY_ID = new Map(LEGACY_DYES.map((d) => [d.id, d]));
 export const LEGACY_BY_NAME = new Map(LEGACY_DYES.map((d) => [d.name, d]));
 /** How many pots a boil made, and what was boiled for them. */
 export const LEGACY_POTS = 2;
+/**
+ * The litres of dye a pot became when dye became a liquid: one dyeing of a
+ * garment as dyeing was then. The island turned every pot into this much in
+ * its migration, so a save from before is brought up to the same, whatever a
+ * dyeing takes now (`DYE_LITRES`).
+ */
+export const LEGACY_POT_LITRES = 1;
 
 /**
  * The dye that comes nearest an old one's colour: every mix in whole
@@ -390,8 +414,8 @@ export const potLiquid = (extra: string | null | undefined): DyeLiquid => {
  * A thing dyed with one of the old dyes keeps its colour: every `dye` that is
  * an old dye's id becomes that dye's `#rrggbb`, on items, pieces, walls,
  * floors and anything else that carries one. A pot of old dye becomes
- * `DYE_LITRES.garment` litres -- one dyeing of a garment, which is what a pot
- * did -- of the dye nearest its colour (`legacyLiquid`), poured into buckets of
+ * `LEGACY_POT_LITRES` -- what the island turned every pot into the day dye
+ * became a liquid -- of the dye nearest its colour (`legacyLiquid`), poured into buckets of
  * dye `bucket` litres at a time: the first takes the pot's place and number,
  * any more come after it with numbers off the save's well. Nothing is lost.
  * The island does the same in its migration.
@@ -410,7 +434,7 @@ export function upgradeDyes(data: Loose, bucket: number): void {
   let next = Math.max(well, most + 1);
   const potInto = (pot: Loose & { uid: number; count: number }): Loose[] => {
     const liquid = potLiquid(typeof pot.extra === 'string' ? pot.extra : null);
-    let left = Math.max(1, pot.count) * DYE_LITRES.garment;
+    let left = Math.max(1, pot.count) * LEGACY_POT_LITRES;
     const out: Loose[] = [];
     while (left > 0) {
       const litres = Math.min(bucket, left);

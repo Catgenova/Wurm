@@ -226,7 +226,7 @@ export function nextVessel(g: Game, uid: number): Item | undefined {
 }
 
 /** Draw `litres` out of a vessel, saying so when it runs dry. */
-function drawFrom(g: Game, f: PlacedFurniture, litres: number): boolean {
+export function drawFrom(g: Game, f: PlacedFurniture, litres: number): boolean {
   if (litresIn(f) < litres) return false;
   f.litres = litresIn(f) - litres;
   if (f.litres <= 0 && !isWell(f)) {

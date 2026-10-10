@@ -10,7 +10,7 @@ import { countSaid, fill, listed, numberWord } from './words';
 import { FURNITURE, ONE_ALTAR, VESSELS } from './furniture';
 import { castWhole, INGOT_LUMPS, ingotOf, METAL_BY_LUMP, MOULD_BY_MAKES, MOULDS } from './metal';
 import { FISH } from './fishing';
-import { boiledDye } from './dyes';
+import { BOIL_IN, boilCount, boilCountPlain, boiledDye, boilRefusal, BOIL_LITRES, isBoilStuff } from './dyes';
 import { DYE_BUCKET, DYESTUFFS, dyeRecipeId } from './dyestuffs';
 import { HERBS, WOUND_KINDS } from './wounds';
 import { TRAPS } from './traps';
@@ -612,16 +612,19 @@ RECIPES.push(
 );
 
 /**
- * Every dye is boiled the same way: a quantity of something that grows, in a
- * bucket of lye to bite it into the fibre, and a long simmer. What comes off
- * is the bucket itself, with dye in it where the lye was: one primary, pure,
- * at the boil's QL (`boiledDye`). Nothing boils into any other colour.
+ * Every dye is boiled the same way: something that grows, a kilo of it by
+ * weight for every litre of lye in the bucket, and a long simmer. What comes
+ * off is the bucket itself, with as many litres of dye in it as there was lye:
+ * one primary, pure, at the boil's QL (`boiledDye`). Nothing boils into any
+ * other colour. The count written here is the fewest whole items over the
+ * weight with no perk; what a go takes is worked out from the weight under
+ * your perks (`needOf`, `boilCount`).
  */
 const DYE_RECIPES: Recipe[] = DYESTUFFS.map((d) => ({
   id: dyeRecipeId(d.from),
   category: 'Alchemy' as RecipeCategory,
   result: DYE_BUCKET,
-  inputs: [{ item: d.from, count: d.count }, { item: 'lye_bucket' }],
+  inputs: [{ item: d.from, count: boilCountPlain(d.from) }, { item: BOIL_IN }],
   skill: 'alchemy',
   salvage: [['bucket', 1]] as Array<[string, number]>,
   label: `Boil ${itemDef(d.from).name.toLowerCase()} for ${d.primary} dye`,
@@ -629,7 +632,7 @@ const DYE_RECIPES: Recipe[] = DYESTUFFS.map((d) => ({
   baseTime: 12,
   stamina: 0.04,
   difficulty: d.difficulty,
-  done: `You boil the ${itemDef(d.from).name.toLowerCase()} down in the lye. The bucket holds ${d.primary} dye.`,
+  done: `The bucket holds ${numberWord(BOIL_LITRES)} litres of ${d.primary} dye.`,
   fail: 'The colour breaks in the pot and goes out grey and streaky. The lot is wasted.',
   consumeOnFail: true,
 }));
@@ -870,8 +873,10 @@ export function prospect(r: Recipe, g: Game, stock: readonly CraftStock[] = g.cr
  * for a perk on the recipe (a Carpenter's String Maker), and never under one,
  * as `recipe_need` has it on the island.
  */
-export const needOf = (g: Game, r: Recipe, i: { count?: number }): number =>
-  Math.max(1, Math.ceil((i.count ?? 1) * g.perk(`need:${r.id}`, 1)));
+export const needOf = (g: Game, r: Recipe, i: { item?: string; count?: number }): number =>
+  // A boil's dyestuff by its weight, the fewest whole items over it (`boilCount`); the island's `recipe_need` the same.
+  (i.item && isBoilStuff(r.id, i.item) ? boilCount(g, r.id, i.item)
+    : Math.max(1, Math.ceil((i.count ?? 1) * g.perk(`need:${r.id}`, 1))));
 
 /**
  * What a recipe needs against what is at hand.
@@ -1010,6 +1015,9 @@ export function recipeReason(r: Recipe, g: Game, preferUid?: number, stock: read
   }
   for (const i of r.inputs) {
     const need = needOf(g, r, i);
+    // A boil says the weight it takes and the weight there is (`boilRefusal`).
+    const short = isBoilStuff(r.id, i.item) ? boilRefusal(g, r.id, i.item, countFor(stock, r, i.item, mat)) : null;
+    if (short) return short;
     if (countFor(stock, r, i.item, mat) < need) {
       const of = mat && strictInput(stock, r, i.item) ? ` of ${mat.toLowerCase()}` : '';
       return `${itemDef(r.result).name} takes ${need} ${plural(i.item, need)}${of}${r.inputs.length > 1 ? ` (${r.inputs.map((x) => `${needOf(g, r, x)} ${plural(x.item, needOf(g, r, x))}`).join(', ')})` : ''}.`;
@@ -1200,6 +1208,8 @@ export function recipeAction(r: Recipe): ActionDef {
       const vessel = r.tool ? g.inventory.tool(r.tool) : undefined;
       const served = isDish(r.result) ? serveOf(vessel) : 0;
       const keeps = vessel ? markOf(vessel, 'keeps') : 1;
+      // What a boil takes of its dyestuff, to say so when it comes off (`boiledDye`).
+      const boiled = r.result === DYE_BUCKET ? needOf(g, r, r.inputs[0]) : 0;
       for (const i of r.inputs) {
         if (vesselKept && VESSELS[i.item]) continue;
         if (!consumeAcross(stock, i.item, needOf(g, r, i), t.uid, mat, strict.get(i.item))) return;
@@ -1229,7 +1239,8 @@ export function recipeAction(r: Recipe): ActionDef {
       // More, the go a bauble on the trade comes up in the altar of the settlement
       // you work on, and more again for a perk (a Carpenter's Clean Sawing).
       const goes = g.madeAGo(r) + served;
-      const count = g.baubleYield(r.result, goes);
+      // A boil fills the one bucket it is done in, so a bauble has no go to add to it (`boiledDye`).
+      const count = r.result === DYE_BUCKET ? goes : g.baubleYield(r.result, goes);
       // What the maker's perks put into it, which stays with it (a Carpenter's
       // Deep Drawers, a Smith's Temper Bath, a Cook's Hearty), over what its
       // parts carried. A pile of the same thing marked the same way is one
@@ -1249,7 +1260,7 @@ export function recipeAction(r: Recipe): ActionDef {
       });
       if (!stackable && marked) item.mark = marked;
       // A boil leaves its dye in the bucket it was boiled in (`dyes.ts`).
-      if (r.result === DYE_BUCKET) boiledDye(g, item, r.inputs[0].item);
+      if (r.result === DYE_BUCKET) boiledDye(g, item, r.inputs[0].item, boiled);
       if (rare) {
         g.note(['', 'rare', 'supreme', 'fantastic'][rare]);
         g.logMsg(RARITY_WORD[rare], 'skill');

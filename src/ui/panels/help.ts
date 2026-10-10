@@ -41,9 +41,10 @@ import {
 } from '../../game/creatures';
 import { DEED_UPGRADES } from '../../game/deed';
 import {
-  colourWord, DYE_BOIL_LITRES, DYE_LITRES, DYE_PARTS, DYE_QL_BLACK, DYE_QL_PURE, DYE_QL_WHITE, DYESTUFF_OF, DYESTUFFS, dyeHex, dyeRecipeId, mixDye, PRIMARIES, pureDye,
-  type DyeLiquid, type Primary,
+  colourWord, DYE_LITRES, DYE_LITRES_PER_KG, DYE_PARTS, DYE_QL_BLACK, DYE_QL_PURE, DYE_QL_WHITE, dyeGrams, DYESTUFF_OF, DYESTUFFS, dyeHex, dyeRecipeId, kgSaid, mixDye,
+  PRIMARIES, pureDye, type DyeLiquid, type Primary,
 } from '../../game/dyestuffs';
+import { BOIL_LITRES, boilCountPlain, gramsOf } from '../../game/dyes';
 import { CROP_BY_SEED, CROPS, cropYield, growthWords, PATCH_TIME, RIPE, STAGE_NAMES } from '../../game/farming';
 import { GLASSHOUSE_GROWTH, PLANTER_GROWTH, SEASON_GROWTH, SEASON_SECONDS, YEAR_SECONDS, YEARLESS_GROWTH } from '../../game/growth';
 import { CASTS, FAVOUR_TRICKLE, favourCap, PRAYER_BASE, PRAYER_GAIN, PRAYER_LIFT, PRAYER_PEAKS, PRAYER_REST, PRAYER_TAPER, prayerWorth } from '../../game/faith';
@@ -192,6 +193,8 @@ const recipe = (id: string) => {
   if (!r) throw new Error(`The help names a recipe there is not: ${id}`);
   return r;
 };
+/** Each size a dyeing goes by, as the help names it (`DYE_LITRES`). */
+const DYE_SIZE_SAID = { garment: 'a garment', banner: 'a banner', sail: 'a sailing boat', ship: 'a caravel', wall: 'a side of a wall', floor: 'a tile of floor' } as const;
 /** What a recipe takes, as it is read: "a shaft, two leathers and four nails", or in figures. */
 const bill = (id: string, figures = false): string =>
   billWords(recipe(id).inputs.map((i) => [i.item, i.count ?? 1] as const), figures);
@@ -1609,7 +1612,8 @@ export function helpText(): string {
     on it, at your foraging quality, and foraging rises. The tile is bare of them for everybody until the
     first day of the next ${SEASONS[0]}, when every picked tile flowers again.</p>
     <p>Wildflowers are for <b>${DYESTUFF_OF.get('wildflowers')?.primary} dye</b>: ${bill(dyeRecipeId('wildflowers'))} boil into
-    ${numberWord(DYE_BOIL_LITRES)} litres of it, at ${workedAt(dyeRecipeId('wildflowers'))}.</p>
+    ${numberWord(BOIL_LITRES)} litres of it, at ${workedAt(dyeRecipeId('wildflowers'))} &mdash; ${kgSaid(dyeGrams(BOIL_LITRES, DYE_LITRES_PER_KG))} kg
+    of them, ${kgSaid(dyeGrams(1, DYE_LITRES_PER_KG))} kg to every litre of lye.</p>
     <h3>Mote swirls and elementalism</h3>
     <p>At each turn of the woods, at dawn, the day's <b>mote swirls</b> go and ${numberWord(SWIRLS_A_DAY)} new ones are put down,
     each on a tile drawn anywhere on the map, land or water &mdash; never where a tree stands, never inside a building, and
@@ -2182,10 +2186,14 @@ export function helpText(): string {
     <h3>Dye</h3>
     <p>Everything made here comes out the colour of what it was made from: cloth the grey-white of the
     wool, leather the brown of the hide. A <b>dye</b> changes that.</p>
-    <p>Dye is <b>${listed(PRIMARIES.map((p) => p))}</b> and nothing else as it is boiled. Boil a dyestuff in a bucket of <b>lye</b>
-    and the bucket comes off the bench holding <b>${numberWord(DYE_BOIL_LITRES)} litres</b> of one of them, pure, at the QL
-    the alchemy gives it: ${listed(PRIMARIES.map((p) => `${p} from ${listedOr(DYESTUFFS.filter((d) => d.primary === p)
-      .map((d) => `${countOf(d.from, d.count)} (alchemy ${d.difficulty})`))}`))}.</p>
+    <p>Dye is <b>${listed(PRIMARIES.map((p) => p))}</b> and nothing else as it is boiled. Boil a dyestuff in a bucket of <b>lye</b>:
+    it takes <b>${kgSaid(dyeGrams(1, DYE_LITRES_PER_KG))} kg of the dyestuff for every litre of lye</b>, by the weight of what you
+    boil, and the bucket comes off the bench holding as many litres of dye as it held of lye &mdash; a bucket is
+    <b>${numberWord(BOIL_LITRES)} litres</b>, so ${kgSaid(dyeGrams(BOIL_LITRES, DYE_LITRES_PER_KG))} kg of dyestuff makes ${numberWord(BOIL_LITRES)} litres of one of them,
+    pure, at the QL the alchemy gives it. It uses the fewest whole ones that weigh enough, and says how many it used:
+    ${listed(PRIMARIES.map((p) => `${p} from ${listedOr(DYESTUFFS.filter((d) => d.primary === p)
+      .map((d) => `${countOf(d.from, boilCountPlain(d.from))} at ${kgSaid(gramsOf(d.from))} kg each (alchemy ${d.difficulty})`))}`))}.
+    Short of the weight, it says how much it takes and how much you have.</p>
     <p>Every other colour is <b>mixed</b>, by pouring. Pour a bucket of dye into a barrel that is empty or holds dye and the
     dyes mix: the parts of red, yellow and blue and the QL each come out the average of both, by the litres of each &mdash;
     ${numberWord(MIX_SHOWN)} litres of red and ${numberWord(MIX_SHOWN)} of blue, both at QL ${DYE_QL_PURE}, are ${numberWord(MIX_SHOWN * 2)} litres of
@@ -2200,12 +2208,16 @@ export function helpText(): string {
     straight line either side &mdash; red at QL ${DARK_SHOWN} is ${mixSaid(pureDye('red', DARK_SHOWN))} and at QL ${LIGHT_SHOWN} ${mixSaid(pureDye('red', LIGHT_SHOWN))}.
     A boil comes out at the QL your alchemy makes it, so a beginner's dye is dark; pour in a brighter one to bring it up.
     <b>Examine</b> a bucket or a barrel of dye and it says its colour as a hex code, its QL, its litres and its mix.</p>
-    <p>A dyeing takes dye by the size of the thing: <b>${numberWord(DYE_LITRES.garment)}</b> litre for a garment, cloth, a bag,
-    a saddle or a bridle; <b>${numberWord(DYE_LITRES.banner)}</b> for a banner or a flag; <b>${numberWord(DYE_LITRES.sail)}</b> for a sailing
-    boat; <b>${numberWord(DYE_LITRES.ship)}</b> for a caravel; and <b>${numberWord(DYE_LITRES.wall)}</b> for a side of a wall or a tile of
-    floor. It comes out of a bucket of dye loose in your pack, not in a bag: of those holding enough, the one longest in
-    your pack. The thing takes exactly the dye's colour and is called by the plain colour word nearest it; Examine says the
-    hex. Cloth and leather take dye and metal does not, so that is cloth and
+    <p>A dyeing takes dye by the size of the thing, in litres, a litre being a kilo of it: <b>${DYE_LITRES.garment}</b> for a garment, cloth, a bag,
+    a saddle or a bridle; <b>${DYE_LITRES.banner}</b> for a banner or a flag; <b>${DYE_LITRES.sail}</b> for a sailing
+    boat; <b>${DYE_LITRES.ship}</b> for a caravel; and <b>${DYE_LITRES.wall}</b> for a side of a wall or a tile of
+    floor. It comes out of <b>one</b> bucket of dye loose in your pack (not in a bag, and not kept back) or one barrel of dye
+    within <b>${CRAFT_REACH} tiles</b> that is yours or on a settlement of yours, and never from several at once. A bucket holds
+    ${numberWord(BUCKET_LITRES)} litres, so ${listed((Object.keys(DYE_LITRES) as Array<keyof typeof DYE_LITRES>).filter((k) => DYE_LITRES[k] > BUCKET_LITRES)
+      .map((k) => DYE_SIZE_SAID[k]))} ${(Object.keys(DYE_LITRES) as Array<keyof typeof DYE_LITRES>).filter((k) => DYE_LITRES[k] > BUCKET_LITRES).length === 1 ? 'is' : 'are'} dyed from a barrel. Where more than one holds
+    enough you are asked which, each listed with its colour, hex, QL and litres; where only one does, it is used. Short of
+    dye, it says how many litres it takes and the most any one of them holds. The thing takes exactly the dye's colour and
+    is called by the plain colour word nearest it; Examine says the hex. Cloth and leather take dye and metal does not, so that is cloth and
     leather armour, cloth itself, sacks, satchels, backpacks, a saddle, a bridle, a <b>banner</b>, a
     <b>flagpole</b>'s flag and a <b>sailing boat</b>'s or a <b>caravel</b>'s sail. A dyed chest or leg piece is worn where it shows: your own figure walks
     about in it. A banner is cloth on a staff &mdash; ${bill('make_banner')} &mdash; planted
@@ -2956,8 +2968,8 @@ function waterGarden(): string {
     stepping stones. Its leaves are up at once, in their seasons, and it <b>roots in ${spanWords(WATER_ROOTING)}</b>; from then on it keeps the island's year,
     the same for everybody. A water lily ${yearSays(lily)}; a lotus ${yearSays(lotus)}. In ${listed(SEASONS.filter((sn) => !lily.leaves.includes(sn) && !lotus.leaves.includes(sn)))}
     only the root of either is left, under the water, and its leaves come up again in ${SEASONS.find((sn) => lily.leaves.includes(sn) && lotus.leaves.includes(sn))}.</p>
-    <p><b>Pick</b> a flower or a seed head and it is gone until the season turns. ${NumberWord(lotusDye?.count ?? 0)} lotus flowers and a bucket of
-    lye boil into ${numberWord(DYE_BOIL_LITRES)} litres of <b>${lotusDye?.primary}</b> dye; a water lily flower is for nothing but looking at. A seed head gives
+    <p><b>Pick</b> a flower or a seed head and it is gone until the season turns. ${NumberWord(boilCountPlain(lotus.flower))} lotus flowers
+    (${kgSaid(dyeGrams(BOIL_LITRES, DYE_LITRES_PER_KG))} kg) and a bucket of lye boil into ${numberWord(BOIL_LITRES)} litres of <b>${lotusDye?.primary}</b> dye; a water lily flower is for nothing but looking at. A seed head gives
     <b>${numberWord(lotus.seedCount ?? 0)} ${itemDef(lotus.seed ?? '').name.toLowerCase()}</b>: plant them, or eat them &mdash; raw they fill
     ${percent(itemDef(lotus.seed ?? '').food ?? 0)} of the food bar, roasted at a campfire (${numberWord(need('roast_lotus_seeds', lotus.seed ?? ''))} a handful)
     ${percent(itemDef('roast_lotus_seeds').food ?? 0)}. <b>Pull it up</b> gives the root or the seed back.</p>
