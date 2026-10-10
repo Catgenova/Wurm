@@ -5,7 +5,8 @@
  *
  *   * the numbers are the same numbers: the meditation a path is chosen at,
  *     the five tiers (a patron's five), the picks to a tier, which paths have
- *     moved, every pick field for field, and the steps Love and Power keep;
+ *     moved (all three, since Love and Power did too), every pick field for
+ *     field, and no step left on any of them;
  *   * a path is chosen at twenty and not at nineteen, and somebody who chose
  *     before keeps their path whatever their meditation;
  *   * a pick is refused with no path, of another path, of a path still on its
@@ -29,7 +30,8 @@
  *     Lore on a collect, Deep Reading on a prospector's reach and Polymath on
  *     a knack's chance -- and Keen Sight, Night Eyes and Cartographer on the
  *     browser's sight and map, which are the browser's alone;
- *   * Love and Power keep their steps and their abilities; Knowledge has none;
+ *   * no path keeps a step or an old ability (Love's and Power's own picks are
+ *     held to the island in `love.ts` and `power.ts`);
  *   * and no door is open but the rpc ones.
  *
  * Every roll is seeded: `setseed` on the island and `mulberry32` here.
@@ -125,15 +127,17 @@ check('the meditation a path is chosen at, the picks to a tier, the Calm and med
   rule('NUMS') === `${CHOOSE_AT}|${PICKS_PER_TIER}|${SIT_CALM}|${SIT_GAIN}|${TECHNIQUE_GAIN}`, rule('NUMS'));
 check(`five tiers at ${PATH_TIER_AT.join(', ')} meditation, a patron's own five, chosen at the first`,
   rule('TIERS') === PATH_TIER_AT.join(',') && PATH_TIER_AT.join() === FAITH_TIER_AT.join() && CHOOSE_AT === PATH_TIER_AT[0], rule('TIERS'));
-check('Knowledge has moved and Love and Power have not, on both sides',
+check('every path has moved, Knowledge, Love and Power, on both sides',
   rule('MOVED') === [...PATH_LIST].sort((a, b) => a.id.localeCompare(b.id)).map((p) => `${p.id}:${p.moved}`).join(',')
-    && PATHS.knowledge.moved && !PATHS.love.moved && !PATHS.power.moved, rule('MOVED'));
+    && PATHS.knowledge.moved && PATHS.love.moved && PATHS.power.moved, rule('MOVED'));
 {
   const rows = JSON.parse(rule('PICKS')) as Array<Record<string, unknown>>;
   const same = rows.length === PATH_PICKS.length && rows.every((r, i) => {
     const k = PATH_PICKS[i];
     return r.id === k.id && r.path === k.path && r.tier === k.tier && r.kind === k.kind && r.name === k.name && r.note === k.note
-      && r.cost === k.cost && r.rest === k.rest && JSON.stringify(r.fx) === JSON.stringify(k.fx);
+      && r.cost === k.cost && r.rest === k.rest
+      // Key for key: the island's jsonb keeps its keys in its own order.
+      && Object.keys(k.fx).length === Object.keys(r.fx as object).length && Object.entries(k.fx).every(([key, v]) => (r.fx as Record<string, number>)[key] === v);
   });
   check(`the island holds the browser's ${PATH_PICKS.length} picks field for field`, same, same ? '' : rule('PICKS').slice(0, 300));
   const shape = PATH_LIST.filter((p) => p.moved).every((p) => PATH_TIER_AT.every((_, i) => {
@@ -142,12 +146,11 @@ check('Knowledge has moved and Love and Power have not, on both sides',
   }));
   check('a moved path offers a technique and two disciplines at every tier', shape);
 }
-check('Love and Power keep their steps, every one as it was, and Knowledge has none, on both sides',
-  rule('STEPS').split(',').sort().join(',') === PATH_LIST.flatMap((p) => p.steps.map((s) => `${p.id}:${s.at}:${s.name}:${s.ability?.id ?? '-'}:${s.ability?.rest ?? '-'}`)).sort().join(',')
-    && PATHS.love.steps.length === 5 && PATHS.power.steps.length === 5 && PATHS.knowledge.steps.length === 0,
+check('no path keeps a step, on both sides',
+  (rule('STEPS') === '(nothing)' || rule('STEPS') === '') && PATH_LIST.every((p) => p.steps.length === 0),
   rule('STEPS').slice(0, 200));
 check('the steps behind you: three of Love at 25, five of Power at 70, none of Knowledge however far, on both sides',
-  rule('STEPSOF') === `${stepsOf('love', 25)}|${stepsOf('power', 70)}|${stepsOf('knowledge', 99)}|0` && rule('STEPSOF') === '3|5|0|0', rule('STEPSOF'));
+  rule('STEPSOF') === `${stepsOf('love', 25)}|${stepsOf('power', 70)}|${stepsOf('knowledge', 99)}|0` && rule('STEPSOF') === '0|0|0|0', rule('STEPSOF'));
 {
   const wrong = SPOTS.map((s, i) => {
     const b = sitPlace({ onDeed: s[0], height: s[1], water: s[2], swirl: s[3], stale: s[4] });
@@ -250,7 +253,10 @@ begin
   insert into said values ('NOPATH', rpc_take_path_pick(w.world_id, 'knowledge_seek')->>'why');
   update player set way = 'love' where world_id = w.world_id and uid = u;
   insert into said values ('OTHERS', rpc_take_path_pick(w.world_id, 'knowledge_seek')->>'why');
+  -- Love has moved too: put back on its steps for this one question, and moved again.
+  update path_def set moved = false where id = 'love';
   insert into said values ('ONSTEPS', rpc_take_path_pick(w.world_id, '${LOVE_TEST.id}')->>'why');
+  update path_def set moved = true where id = 'love';
   update player set way = 'knowledge' where world_id = w.world_id and uid = u;
   perform pg_temp.med(w.world_id, u, ${PATH_TIER_AT[0] + 5});
   delete from caller where uid = u;
@@ -457,7 +463,7 @@ begin
     || '|' || (select foreknow from player where world_id = w.world_id and uid = u) from rolled;
   insert into said values ('FORESET', coalesce(current_setting('wurm.foreknow', true), '') || '|' || coalesce(current_setting('wurm.foreknown', true), ''));
 
-  -- Love and Power keep their steps and abilities; Knowledge has none.
+  -- No path keeps a step or an old ability: Love and Power moved as Knowledge did.
   update player set way = 'love' where world_id = w.world_id and uid = u;
   perform pg_temp.med(w.world_id, u, 25);
   insert into said values ('LOVE', walks(w.world_id, u, 'love', 3) || '|' || coalesce((ability_of(w.world_id, u, 'refresh')).name, 'none')
@@ -496,7 +502,13 @@ check('and a pick at a tier not open to them yet is refused, in the same words o
   at('TIER5') === pathPickRefusal(seek, 'knowledge', [], 5), at('TIER5'));
 check('a pick with no path is refused, ditto', at('NOPATH') === pathPickRefusal(seek, null, [], CHOOSE_AT + 5), at('NOPATH'));
 check('and another path’s, ditto', at('OTHERS') === pathPickRefusal(seek, 'love', [], CHOOSE_AT + 5), at('OTHERS'));
-check('and one of a path still on its steps, ditto', at('ONSTEPS') === pathPickRefusal(LOVE_TEST, 'love', [], CHOOSE_AT + 5, [...PATH_PICKS, LOVE_TEST]), at('ONSTEPS'));
+{
+  // Every path has moved, so Love is put back on its steps here as it was there, and moved again.
+  PATHS.love.moved = false;
+  const want = pathPickRefusal(LOVE_TEST, 'love', [], CHOOSE_AT + 5, [...PATH_PICKS, LOVE_TEST]);
+  PATHS.love.moved = true;
+  check('and one of a path still on its steps, ditto', at('ONSTEPS') === want, at('ONSTEPS'));
+}
 check('a pick at an open tier is taken, said in the browser\'s words, and a technique goes on the path slot of the bar',
   at('TOOK') === `${seek.id}|[null, null, null, null, null, "${seek.id}"]|["${seek.id}"]|["${seek.id}"]|${tookSaid(seek)}`, at('TOOK'));
 check('and the others of its tier close, ditto', at('SHUT') === pathPickRefusal(P('attentive'), 'knowledge', [seek.id], CHOOSE_AT + 5), at('SHUT'));
@@ -594,8 +606,9 @@ check('and with a job behind it, the sitting comes due at once and gives nothing
   check(`Deep Reading: prospecting at one reads ${reach} tiles round you, ${P('deep_reading').fx.further} further`,
     new RegExp(`\\b${reach} tiles`).test(at('READING')), at('READING'));
 }
-check('Love keeps its steps and its abilities: Gentle hand at 25, and Refresh', at('LOVE') === 'true|Refresh|ALLOWED', at('LOVE'));
-check('and Power its: Ironhide at 70, and Fury', at('POWER') === 'true|Fury', at('POWER'));
+check('Love keeps no step and no old ability: no Gentle hand at 25 by its steps, and Refresh is not called on the old way',
+  at('LOVE') === 'false|none|That is not something you know.', at('LOVE'));
+check('and Power none: no Ironhide at 70 by its steps, and no Fury', at('POWER') === 'false|none', at('POWER'));
 check('and Knowledge, moved, has no steps and no old abilities; Sense the Rock and Recall the Way are gone', at('KNOW') === 'false|none|none|Nothing happens.', at('KNOW'));
 check('no function is open to a player but the doors', at('OPEN') === '0', at('OPEN'));
 check('and the pick door is, running as its owner', at('DOOR') === '1', at('DOOR'));

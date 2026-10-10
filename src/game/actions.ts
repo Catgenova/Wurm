@@ -1807,7 +1807,8 @@ export const ACTIONS: ActionDef[] = [
       // very old one as much as an old one.
       const old = treeVariant(data) === 2 || treeVariant(data) === 4;
       const skill = g.skills.get('forestry');
-      const count = Math.max(1, Math.round((old ? FRUIT_OLD : FRUIT_MATURE) * (0.5 + skill / 130) * (0.7 + g.rand() * 0.6)));
+      // And more for Love's Abundance, as a field's harvest has.
+      const count = Math.max(1, Math.round((old ? FRUIT_OLD : FRUIT_MATURE) * (0.5 + skill / 130) * (0.7 + g.rand() * 0.6) * g.pathFx('harvest', 1)));
       const made = g.gather(def.fruit, { count, ql: g.productQl('forestry'), });
       g.markForaged(t.x, t.y, 'forage');
       g.gainSkill('forestry', 0.35);

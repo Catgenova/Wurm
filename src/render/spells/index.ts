@@ -125,6 +125,8 @@ import { BLESSING } from './blessing';
 import { JUSTICE } from './justice';
 import { CHAOS } from './chaos';
 import { KNOWLEDGE } from './knowledge';
+import { LOVE } from './love';
+import { POWER } from './power';
 
 export type { CastKind, SpellGroup, SpellInfo };
 export { ALL_SPELL_IDS, spellInfo, spellsIn, SPELL_GROUPS } from './info';
@@ -356,9 +358,9 @@ export interface SpellVisual {
   placeholder?: boolean;
 }
 
-/** Every spell's visual by id, the fourteen files' records together: the thirteen groups and a path's techniques. */
+/** Every spell's visual by id, the sixteen files' records together: the thirteen groups and the three paths' techniques. */
 export const SPELL_VISUALS = new Map<string, SpellVisual>();
-for (const group of [BLADE, BERSERKER, PIKEMAN, ARCHER, SKIRMISHER, CHIRURGEON, BEASTMASTER, KINDLER, BINDER, WARDER, BLESSING, JUSTICE, CHAOS, KNOWLEDGE]) {
+for (const group of [BLADE, BERSERKER, PIKEMAN, ARCHER, SKIRMISHER, CHIRURGEON, BEASTMASTER, KINDLER, BINDER, WARDER, BLESSING, JUSTICE, CHAOS, KNOWLEDGE, LOVE, POWER]) {
   for (const [id, v] of Object.entries(group)) SPELL_VISUALS.set(id, v);
 }
 export const visualOf = (id: string): SpellVisual | undefined => SPELL_VISUALS.get(id);

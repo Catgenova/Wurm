@@ -5,8 +5,7 @@ import type { Game } from './game';
 import type { PlacedFurniture } from './furniture';
 import { describeFrom, itemDef, itemName, type Item } from './items';
 import { world } from './pace';
-import { ABUNDANCE } from './meditation';
-import { clockNamed, cropClockOf, fieldClock, fieldMoment, fieldRate, fieldStops, fieldWakes, GLASSHOUSE_GROWTH, PLANTER_GROWTH, steadyRate, type CropClock } from './growth';
+import { clockNamed, cropClockOf, fieldClock, fieldMoment, fieldRate, fieldStops, fieldWakes, GLASSHOUSE_GROWTH, handClock, handMoment, handRate, PLANTER_GROWTH, steadyRate, type CropClock } from './growth';
 import { clearedSaid, clearedTo, glassTillRefusal, glazing, isGlasshouse } from './glasshouse';
 import type { Building, Buildings } from './building';
 import { capital, share, timeWords, times } from './words';
@@ -116,6 +115,12 @@ export interface Crop {
    * reading of that. Absent for a field in the open and for a planter.
    */
   glass?: boolean;
+  /**
+   * Sown by somebody with Love's Season's Hand: out of glass it grows on the
+   * Season's Hand's clock (`handClock`), through winter at `HAND_WINTER`.
+   * Stamped at sowing, as the island's `crop.hand` is.
+   */
+  hand?: boolean;
 }
 
 /** Tiles a field can be raked out of. */
@@ -184,6 +189,7 @@ export function cropTimeLeft(c: Crop, per: number, now: number, wall: number): n
   if (cropReady(c)) return null;
   const left = cropGrowthLeft(c, per, now);
   const clock = cropClockOf(c);
+  if (clock === 'hand') return left > 0 ? handMoment(handClock(wall) + left) - wall : 0;
   if (clock !== 'field') return left / steadyRate(clock);
   return left > 0 ? fieldMoment(fieldClock(wall) + left) - wall : 0;
 }
@@ -200,6 +206,8 @@ export function cropTimeLeft(c: Crop, per: number, now: number, wall: number): n
  */
 export function cropWhen(next: string, left: number, clock: boolean | CropClock, wall: number): string {
   const k = clockNamed(clock);
+  // A Season's Hand's field never stands still, so it never waits.
+  if (k === 'hand') return `${next} in ${timeWords(handMoment(handClock(wall) + left) - wall)}`;
   if (k !== 'field') return `${next} in ${timeWords(left / steadyRate(k))}`;
   const wakes = fieldWakes(wall);
   if (!Number.isFinite(wakes)) return `${next} when a field grows again`;
@@ -220,7 +228,7 @@ export function stageNote(name: string, per: number, clock: boolean | CropClock,
   const k = clockNamed(clock);
   if (k === 'planter') return `${name}, ${Math.round(per / PLANTER_GROWTH)}s a stage in any season`;
   if (k === 'glass') return `${name}, ${Math.round(per / steadyRate(k))}s a stage in any season`;
-  const rate = fieldRate(wall);
+  const rate = k === 'hand' ? handRate(wall) : fieldRate(wall);
   const season = seasonAt(wall).season;
   if (rate <= 0) return `${name}, nothing until ${seasonAt(fieldWakes(wall)).season}: a field does not grow in ${season}`;
   return `${name}, ${Math.round(per / rate)}s a stage${wall >= YEAR_FROM ? ` in ${season}` : ''}`;
@@ -367,8 +375,8 @@ function reapOne(g: Game, c: Crop): { produce: Item; got: number; seeds: number;
   const y = cropYield(c.tended, g.perk('bumper:harvest_crop', 0));
   // The field's own quality, lifted by the farmer's skill at harvest.
   const ql = Math.max(1, Math.min(100, (c.ql + g.productQl('farming')) / 2));
-  // The gardener's path takes more out of the same ground.
-  const more = g.walks('love', 5) ? ABUNDANCE : 1;
+  // Love's Abundance takes more out of the same ground.
+  const more = g.pathFx('harvest', 1);
   const got = Math.max(1, Math.round(y.produce * more)) + g.perk(`plus:${def.produce}`, 0);
   const produce = g.gather(def.produce, { count: got, ql });
   g.gather(def.seed, { count: y.seeds, ql });

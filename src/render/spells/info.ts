@@ -11,11 +11,11 @@ import { FAITH_SPELL_BY_ID, FAITH_SPELLS, type SpellOn } from '../../game/patron
 import { CLASS_SPELL_BY_ID, CLASS_SPELLS } from '../../game/talents';
 import { PATH_PICK_BY_ID, TECHNIQUES } from '../../game/meditation';
 
-/** The groups of spells, one file each in this folder: the ten fighting trades, the three patrons, and the Knowledge path's techniques. */
+/** The groups of spells, one file each in this folder: the ten fighting trades, the three patrons, and the three paths' techniques. */
 export type SpellGroup = 'blade' | 'berserker' | 'pikeman' | 'archer' | 'skirmisher' | 'chirurgeon' | 'beastmaster'
-  | 'kindler' | 'binder' | 'warder' | 'blessing' | 'justice' | 'chaos' | 'knowledge';
+  | 'kindler' | 'binder' | 'warder' | 'blessing' | 'justice' | 'chaos' | 'knowledge' | 'love' | 'power';
 export const SPELL_GROUPS: readonly SpellGroup[] = ['blade', 'berserker', 'pikeman', 'archer', 'skirmisher', 'chirurgeon', 'beastmaster',
-  'kindler', 'binder', 'warder', 'blessing', 'justice', 'chaos', 'knowledge'];
+  'kindler', 'binder', 'warder', 'blessing', 'justice', 'chaos', 'knowledge', 'love', 'power'];
 
 /**
  * How a spell is cast, which is what its stand-in pose and effect are picked

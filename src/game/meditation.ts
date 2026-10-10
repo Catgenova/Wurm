@@ -3,8 +3,10 @@ import type { Game } from './game';
 import { DAY_SECONDS, world } from './pace';
 import { wellCap } from './wells';
 import { windAt, windFrom, windWord } from './wind';
-import { article, listedOr, NumberWord, numberWord, percent, share, spanWords, times, timeWords } from './words';
-import { lastDawn } from '../world/tiles';
+import { article, listed, listedOr, NumberWord, numberWord, percent, share, spanWords, times, timeWords } from './words';
+import { COMPANION_LEASH, GUARD_RANGE, HEAVY_HIT } from './fight';
+import { HAND_WINTER, SPRING_GROWTH } from './growth';
+import { lastDawn, TREE_AGES } from '../world/tiles';
 
 /**
  * Meditation, and the three paths.
@@ -15,8 +17,10 @@ import { lastDawn } from '../world/tiles';
  * `CHOOSE_AT` meditation and never changed, and **Calm**, banked by every
  * sitting and spent on what the path teaches.
  *
- * **Love** is the gardener's path, **Knowledge** the reader's and **Power**
- * the plain one.
+ * **Love** is the living island's path -- companions, taming, breeding and
+ * growing -- **Knowledge** the reader's, of senses and information, and
+ * **Power** the body's own: endurance, carrying, moving and shrugging things
+ * off.
  *
  * ## Two shapes of path
  *
@@ -33,9 +37,9 @@ import { lastDawn } from '../world/tiles';
  *     Calm and rests;
  *   - a discipline is simply true from then on.
  *
- * Knowledge has moved. Love and Power keep their old steps until they do: for
- * either of them to move, write its picks into `PATH_PICKS`, set `moved`, and
- * empty its `steps` with whatever reads them (`walks`).
+ * All three have moved: Knowledge first, then Love and Power. The shape of a
+ * path on its steps is kept for a path that might be added on them, and
+ * nothing walks one now.
  *
  * The island keeps the path, the picks, Calm and the marks a technique leaves
  * (`path_def`, `path_pick`, `path_taken`, `player.calm`), and tells the browser
@@ -70,42 +74,13 @@ export interface PathDef {
   steps: PathStep[];
 }
 
-/*
- * What each step of a path is worth, where it is a number. The rule that
- * reads one reads it from here, and so does the step's note, so the card and
- * the game cannot say different things.
- */
-/** Green thumb: what a stage of anything sown on your settlement takes, of its usual time. */
-export const GREEN_THUMB = 0.8;
-/** Gentle hand: what your chance to tame is multiplied by. */
-export const GENTLE_HAND = 1.25;
-/** Mend the flesh: the share of your health it gives back. */
-export const MEND_FLESH = 0.4;
-/** Abundance: what a harvest is multiplied by. */
-export const ABUNDANCE = 1.34;
-/** Strong back: what armour and a load past your limit weigh on you, of what they would. */
-export const STRONG_BACK = 0.8;
-/** Hard hands: what everything you hit takes, over what it would. */
-export const HARD_HANDS = 1.16;
-/** Fury: how long it holds, in seconds, and what everything you hit takes while it does. */
-export const FURY_SECS = 30;
-export const FURY_MULT = 2;
-/** Ironhide: what the share of a blow your armour turns is multiplied by. */
-export const IRONHIDE = 1.1;
-
 export const PATHS: Record<PathId, PathDef> = {
   love: {
     id: 'love',
     name: 'Love',
-    note: 'The gardener’s way. Things grow for you, things trust you, and what is hurt mends.',
-    moved: false,
-    steps: [
-      { at: 3, name: 'Green thumb', note: `A stage of anything sown on your settlement takes ${share(1 - GREEN_THUMB)} less time.` },
-      { at: 12, name: 'Refresh', note: 'Hunger and thirst, both full, in a breath.', ability: { id: 'refresh', rest: 20 * 60, note: 'You are neither hungry nor thirsty.' } },
-      { at: 25, name: 'Gentle hand', note: `Your chance to tame anything is ${share(GENTLE_HAND - 1)} higher.` },
-      { at: 45, name: 'Mend the flesh', note: `Everything open on you closes, and ${share(MEND_FLESH)} of your health comes back.`, ability: { id: 'mendflesh', rest: 40 * 60, note: 'Wounds closed.' } },
-      { at: 70, name: 'Abundance', note: `A harvest gives ${share(ABUNDANCE - 1)} more than it did.` },
-    ],
+    note: 'The living island: companions, taming, breeding and growing.',
+    moved: true,
+    steps: [],
   },
   knowledge: {
     id: 'knowledge',
@@ -117,15 +92,9 @@ export const PATHS: Record<PathId, PathDef> = {
   power: {
     id: 'power',
     name: 'Power',
-    note: 'The plain way. You carry more, you hit harder, and less of what is aimed at you lands.',
-    moved: false,
-    steps: [
-      { at: 3, name: 'Strong back', note: `Armour, and a load past what your back will take, burden you ${share(1 - STRONG_BACK)} less.` },
-      { at: 12, name: 'Second wind', note: 'Your wind comes back all at once.', ability: { id: 'secondwind', rest: 12 * 60, note: 'Wind back.' } },
-      { at: 25, name: 'Hard hands', note: `You hit ${share(HARD_HANDS - 1)} harder with anything, or with nothing.` },
-      { at: 45, name: 'Fury', note: `For ${spanWords(FURY_SECS)} everything you hit takes ${times(FURY_MULT)} what it would.`, ability: { id: 'fury', rest: 40 * 60, note: 'Fury.' } },
-      { at: 70, name: 'Ironhide', note: `What you are wearing turns ${share(IRONHIDE - 1)} more of every blow.` },
-    ],
+    note: 'The body itself: endurance, carrying, moving and shrugging things off.',
+    moved: true,
+    steps: [],
   },
 };
 
@@ -336,6 +305,35 @@ const pickOf = (path: PathId) => (
   fx: Record<string, number>, note: (fx: Record<string, number>) => string,
 ): PathPickDef => ({ id: `${path}_${id}`, path, tier, kind, name, cost, rest, fx, note: note(fx) });
 const knowledge = pickOf('knowledge');
+const love = pickOf('love');
+const power = pickOf('power');
+
+/**
+ * The stages a tree is grown on by, in the order a tree grows: each living
+ * stage to the next, so long as the next is alive and not the same stage over
+ * again -- nothing is grown into dying, and a clipped tree stays clipped.
+ * Bless the Land grows a tree by these (`patrons.ts`), and so does Love's
+ * Bloom.
+ */
+export const LAND_GROWS: ReadonlyArray<readonly [number, number]> = (() => {
+  const by = new Map(TREE_AGES.map((a) => [a.id, a]));
+  const grows = (id: number): boolean => {
+    const a = by.get(id);
+    const n = a?.next ?? null;
+    return !!a && a.alive && n !== null && n !== id && !!by.get(n)?.alive;
+  };
+  const into = new Set(TREE_AGES.filter((a) => grows(a.id)).map((a) => a.next as number));
+  const out: Array<readonly [number, number]> = [];
+  for (let at = TREE_AGES.find((a) => grows(a.id) && !into.has(a.id))?.id ?? -1; at >= 0 && grows(at);) {
+    const next = by.get(at)?.next as number;
+    out.push([at, next]);
+    at = next;
+  }
+  return out;
+})();
+const ageName = (id: number): string => (TREE_AGES.find((a) => a.id === id)?.name ?? '').toLowerCase();
+/** "sapling to young, young to mature, ...": the stages a tree is grown on by, as a note says them. */
+export const LAND_GROWS_SAID = listed(LAND_GROWS.map(([a, b]) => `${ageName(a)} to ${ageName(b)}`));
 
 /**
  * Every pick a moved path offers, tier by tier: at each, the technique first
@@ -390,6 +388,94 @@ export const PATH_PICKS: PathPickDef[] = [
     () => 'The dark takes nothing off how far you see.'),
   knowledge(5, 'discipline', 'polymath', 'Polymath', 0, 0, { knack: 1.5 },
     (fx) => `The chance that a go leaves a knack behind is ${times(fx.knack)} what it would be.`),
+
+  /*
+   * Love's are the living island: what follows you and what you keep, what
+   * you tame and breed, and what grows. Its techniques see to hunger and
+   * thirst, mend a companion, bring your wildermon to you, lull what is after
+   * you and harden a companion for a fight; its disciplines quicken what is
+   * sown, tame, age and breed better, fill a harvest, hold a companion to its
+   * fight, make a knack last, grow a field through winter, make a tame of a
+   * kind already tamed certain and grow the trees round a sitting.
+   */
+  love(1, 'technique', 'refresh', 'Refresh', 15, 20 * 60, {},
+    () => 'Your hunger and thirst are both full at once.'),
+  love(1, 'discipline', 'green_thumb', 'Green Thumb', 0, 0, { grow: 0.8 },
+    (fx) => `A stage of anything sown on your settlement takes ${percent(1 - fx.grow)} less time.`),
+  love(1, 'discipline', 'gentle_hand', 'Gentle Hand', 0, 0, { tame: 1.25 },
+    (fx) => `Your chance to tame a wildermon is ${percent(fx.tame - 1)} higher: ${times(fx.tame)} what it would be.`),
+
+  love(2, 'technique', 'bond', 'Bond', 20, 10 * 60, { reach: 10, heal: 0.4 },
+    (fx) => `Your companion, the wildermon following you, regains ${percent(fx.heal)} of its health, if it is within ${fx.reach} tiles of you.`),
+  love(2, 'discipline', 'kin', 'Kin', 0, 0, { 'kept:age': 0.75 },
+    (fx) => `Wildermon you keep age ${percent(1 - fx['kept:age'])} slower: they stay young, and then grown, ${share(1 / fx['kept:age'] - 1)} longer.`),
+  love(2, 'discipline', 'abundance', 'Abundance', 0, 0, { harvest: 1.25 },
+    (fx) => `A crop harvested off a field or a planter, and fruit picked off a tree, comes to ${percent(fx.harvest - 1)} more.`),
+
+  love(3, 'technique', 'gather', 'Gather', 15, 5 * 60, { reach: 30 },
+    (fx) => `Every wildermon of yours within ${fx.reach} tiles of you, the one following you and those working your settlement, is beside you at once, as a call brings one. Those at work go back to it.`),
+  love(3, 'discipline', 'steady_herd', 'Steady Herd', 0, 0, { steady: 1 },
+    () => `Your companion never gives up a fight for how far from you it has gone: another gives one up ${COMPANION_LEASH} tiles from its keeper, or ${GUARD_RANGE} when it is guarding.`),
+  love(3, 'discipline', 'long_table', 'Long Table', 0, 0, { table: 1.25 },
+    (fx) => `A knack from food or drink lasts ${percent(fx.table - 1)} longer.`),
+
+  love(4, 'technique', 'lull', 'Lull', 40, 30 * 60, { reach: 8, secs: 60 },
+    (fx) => `Every creature within ${fx.reach} tiles of you that is hunting you stops, and starts no hunt for ${fx.secs} seconds unless you strike it.`),
+  love(4, 'discipline', 'good_stock', 'Good Stock', 0, 0, { up: 0.1 },
+    (fx) => `A young one you breed has ${Math.round(fx.up * 100)} points more chance, on each of its traits, to come out a grade better than it went in.`),
+  love(4, 'discipline', 'seasons_hand', 'Season’s Hand', 0, 0, { winter: HAND_WINTER },
+    (fx) => `A field you sow grows through winter at ${percent(fx.winter / SPRING_GROWTH)} of a spring field’s pace, where any other stands still until spring.`),
+
+  love(5, 'technique', 'herd_heart', 'Heart of the Herd', 60, 3600, { secs: 600, reach: 10, cut: 0.3, more: 0.2 },
+    (fx) => `For ${spanWords(fx.secs)}, your companion takes ${percent(fx.cut)} less damage and deals ${percent(fx.more)} more while it is within ${fx.reach} tiles of you.`),
+  love(5, 'discipline', 'old_friend', 'Old Friend', 0, 0, { sure: 1 },
+    () => 'Taming a kind of wildermon you have tamed before never fails: the first offering is taken.'),
+  love(5, 'discipline', 'bloom', 'Bloom', 0, 0, { bloom: 5 },
+    (fx) => `Once a day of the island’s clock, the first sitting you finish with a tree within ${fx.bloom} tiles of you grows every tree there a stage: ${LAND_GROWS_SAID}. One that would grow into dying, and one that is clipped, stays as it is. A day of the island’s clock is ${spanWords(DAY_SECONDS)}.`),
+
+  /*
+   * Power's are the body itself. Its techniques bring the wind back, make
+   * deep water free, stop what is running out of you, put a turn of speed on
+   * you and make wind free; its disciplines lighten a burden, lengthen a
+   * stride, climb steeper and swim longer, turn more of a blow and more of a
+   * heavy one, carry more, live through a killing blow, step down any drop
+   * and keep hunger and thirst off longer. No damage: that is a fighting
+   * trade's.
+   */
+  power(1, 'technique', 'second_wind', 'Second Wind', 15, 12 * 60, {},
+    () => 'Your stamina is full at once.'),
+  power(1, 'discipline', 'strong_back', 'Strong Back', 0, 0, { burden: 0.8 },
+    (fx) => `Armour, and a load past what your back will take, burden you ${percent(1 - fx.burden)} less.`),
+  power(1, 'discipline', 'long_stride', 'Long Stride', 0, 0, { stride: 1.05 },
+    (fx) => `You walk ${percent(fx.stride - 1)} faster on your own feet.`),
+
+  power(2, 'technique', 'deep_lungs', 'Deep Lungs', 20, 20 * 60, { secs: 300 },
+    (fx) => `For ${spanWords(fx.secs)} swimming costs you no stamina.`),
+  power(2, 'discipline', 'sure_feet', 'Sure Feet', 0, 0, { climb: 1.25 },
+    (fx) => `The steepest step between tiles you can take on your own feet, up or down, is ${percent(fx.climb - 1)} higher, whatever your climbing.`),
+  power(2, 'discipline', 'hard_breath', 'Hard Breath', 0, 0, { swim: 0.7 },
+    (fx) => `Swimming costs you ${percent(1 - fx.swim)} less stamina.`),
+
+  power(3, 'technique', 'shrug', 'Shrug', 25, 15 * 60, {},
+    () => 'Every wound on you stops bleeding, a burn stops weeping, and the venom in any of them is gone. The wounds stay open until they are seen to.'),
+  power(3, 'discipline', 'ironhide', 'Ironhide', 0, 0, { hide: 1.1 },
+    (fx) => `What you wear turns ${percent(fx.hide - 1)} more of every blow.`),
+  power(3, 'discipline', 'unshaken', 'Unshaken', 0, 0, { heavy: 0.5 },
+    (fx) => `A creature’s heavy blow lands on you with ${share(fx.heavy)} its extra weight: ${1 + (HEAVY_HIT - 1) * fx.heavy} times an ordinary blow rather than ${HEAVY_HIT} times.`),
+
+  power(4, 'technique', 'surge', 'Surge', 40, 30 * 60, { secs: 60, pace: 1.3 },
+    (fx) => `For ${spanWords(fx.secs)} you walk ${percent(fx.pace - 1)} faster on your own feet, and nothing slows you: not a load, not the ground, a slope or a wounded leg, and not being out of wind.`),
+  power(4, 'discipline', 'pack_mule', 'Pack Mule', 0, 0, { mule: 15 },
+    (fx) => `You can carry ${fx.mule} kg more before a load weighs on you.`),
+  power(4, 'discipline', 'hard_to_kill', 'Hard to Kill', 0, 0, { kill: 0.1, every: 3600 },
+    (fx) => `At most once in ${spanWords(fx.every)}, a blow that would kill you leaves you at ${percent(fx.kill)} of your health instead.`),
+
+  power(5, 'technique', 'unbroken', 'Unbroken', 60, 3600, { secs: 300 },
+    (fx) => `For ${spanWords(fx.secs)} nothing costs you stamina: not work, a fight, swimming or a fighting trade’s spell.`),
+  power(5, 'discipline', 'sure_fall', 'Sure Fall', 0, 0, { drop: 1 },
+    () => 'On your own feet you can step down a drop of any height. A step up is still held to how steep you can climb.'),
+  power(5, 'discipline', 'enduring', 'Enduring', 0, 0, { upkeep: 0.75 },
+    (fx) => `Your hunger and thirst fall ${percent(1 - fx.upkeep)} slower.`),
 ];
 export const PATH_PICK_BY_ID = new Map(PATH_PICKS.map((p) => [p.id, p]));
 export const picksOf = (path: PathId, tier: number): PathPickDef[] => PATH_PICKS.filter((p) => p.path === path && p.tier === tier);
@@ -443,6 +529,52 @@ export const foreknowSaid = (goes: number): string => `Your next ${numberWord(go
 /** Clarity. */
 export const claritySaid = (secs: number, more: number): string => `For ${timeWords(secs)} every skill gain you make is ${percent(more)} larger.`;
 
+/*
+ * Love's and Power's, each said the same by the island's
+ * `path_technique_cast`. A technique that finds nothing to work on is refused
+ * and costs nothing, as a Seek that finds no swirl is.
+ */
+/** Refresh. */
+export const REFRESH_SAID = 'You are neither hungry nor thirsty.';
+/** Bond, mending a companion. */
+export const bondSaid = (name: string, heal: number): string => `${name} regains ${percent(heal)} of its health.`;
+/** And with none near, or one that is whole. */
+export const bondNone = (reach: number): string => `No companion of yours is within ${reach} tiles of you.`;
+export const bondWhole = (name: string): string => `${name} is not hurt.`;
+/** How far from you Gather sets your wildermon down, round you in a ring. */
+export const GATHER_RING = 0.8;
+/** Where the `i`th of `n` wildermon a Gather brings stands, round (`x`, `y`): the island's `gather_spot`. */
+export const gatherSpot = (x: number, y: number, i: number, n: number): [number, number] =>
+  [x + Math.cos((2 * Math.PI * i) / n) * GATHER_RING, y + Math.sin((2 * Math.PI * i) / n) * GATHER_RING];
+/** Gather. */
+export const gatherSaid = (n: number, name: string): string =>
+  (n === 1 ? `${name} is beside you.` : `${NumberWord(n)} of your wildermon are beside you.`);
+export const gatherNone = (reach: number): string => `No wildermon of yours is within ${reach} tiles of you.`;
+/** Lull. */
+export const lullSaid = (n: number, secs: number): string =>
+  (n === 1 ? `The one creature hunting you stops, and starts no hunt for ${secs} seconds unless you strike it.`
+    : `The ${numberWord(n)} creatures hunting you stop, and start no hunt for ${secs} seconds unless you strike them.`);
+export const lullNone = (reach: number): string => `Nothing within ${reach} tiles of you is hunting you.`;
+/** Heart of the Herd. */
+export const herdSaid = (name: string, secs: number, cut: number, more: number, reach: number): string =>
+  `For ${timeWords(secs)} ${name} takes ${percent(cut)} less damage and deals ${percent(more)} more while it is within ${reach} tiles of you.`;
+export const HERD_NONE = 'No companion follows you.';
+/** Second Wind. */
+export const SECOND_WIND_SAID = 'Your wind comes back all at once.';
+/** Deep Lungs. */
+export const deepLungsSaid = (secs: number): string => `For ${timeWords(secs)} swimming costs you no stamina.`;
+/** Shrug, and with nothing to shrug off. */
+export const SHRUG_SAID = 'Nothing on you is bleeding, weeping or carrying venom now.';
+export const SHRUG_NONE = 'Nothing on you is bleeding, weeping or carrying venom.';
+/** Surge. */
+export const surgeSaid = (secs: number, pace: number): string => `For ${secs} seconds you walk ${percent(pace - 1)} faster, and nothing slows you.`;
+/** Unbroken. */
+export const unbrokenSaid = (secs: number): string => `For ${timeWords(secs)} nothing costs you stamina.`;
+/** Hard to Kill, taking a killing blow. */
+export const hardToKillSaid = (heal: number): string => `You should be dead. You are not: you stand at ${percent(heal)} of your health.`;
+/** Bloom, after a sitting. */
+export const bloomSaid = (n: number): string => `The trees round you grow while you sit: ${n} of them, a stage each.`;
+
 /**
  * Read the Sky: the wind at each of the next `hours` game-hours from `time`,
  * as `windAt` will make it then, from where it comes and how hard as a share
@@ -491,6 +623,13 @@ export interface PathBeat {
   studied?: Record<string, number>;
   seek?: { x: number; y: number } | null;
   trace?: { x: number; y: number } | null;
+  /** Seconds left of a Heart of the Herd, a Deep Lungs, a Surge and an Unbroken. */
+  herd?: number;
+  lungs?: number;
+  surge?: number;
+  unbroken?: number;
+  /** Seconds before a Hard to Kill is ready again; nought when it is. */
+  hardToKill?: number;
 }
 
 /* ---- The rug ------------------------------------------------------------------ */
@@ -523,6 +662,9 @@ export const MEDITATION_ACTIONS: ActionDef[] = [
       const cap = g.calmCap();
       g.player.calm = Math.min(cap, g.player.calm + calm);
       g.logMsg(`${where} Calm ${Math.floor(g.player.calm)} of ${Math.floor(cap)}.`, 'event');
+      // And the trees round you, once a day, for Love's Bloom.
+      const bloomed = g.bloomSitting();
+      if (bloomed) g.logMsg(bloomSaid(bloomed), 'event');
       if (!g.player.way && now >= CHOOSE_AT && before < CHOOSE_AT) {
         g.logMsg(`Something settles. ${NumberWord(PATH_LIST.length)} ways of looking at all this have become clear, and you may walk exactly one of them. Choose from the rug.`, 'system');
       }

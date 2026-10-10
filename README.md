@@ -798,11 +798,11 @@ in world time.
   is the worst place, high thin air is worth half again, a mote swirl near
   a quarter more, and a spot you have sat at since the woods turned half.
   Every sitting banks **Calm**, held to favour's curve off meditation. At
-  twenty meditation you choose one of three ways, once and for good.
-  **Knowledge**, the reader's, has moved onto tiers: at 20, 40, 60, 80 and 99
-  meditation it offers a technique and two disciplines, and you take one of
-  the three in the Faith window's Path tab. Its techniques go in the spell
-  bar's path slot and cost Calm — **Seek** marks the nearest mote swirl,
+  twenty meditation you choose one of three ways, once and for good. Each is
+  on tiers: at 20, 40, 60, 80 and 99 meditation it offers a technique and two
+  disciplines, and you take one of the three in the Faith window's Path tab.
+  Techniques go in the spell bar's path slot and cost Calm; disciplines are
+  simply true. **Knowledge**, the reader's: **Seek** marks the nearest mote swirl,
   **Read the Sky** says the wind of the next three hours, **Trace** marks the
   hoard of a map you carry, **Foreknow** makes your next five goes certain,
   **Clarity** puts half again on every gain for ten minutes — and its
@@ -810,15 +810,26 @@ in world time.
   at a glance, further sight, a deeper well of Calm, a day's first gain
   doubled, a mote more a swirl, a map that remembers twice as far, a
   prospector's reach, sight the dark leaves alone, and knacks half again as
-  often. **Love** and **Power** keep their steps until they move too. **Love**
-  is the gardener's: crops on your deed come on a fifth faster, wild things
-  are a quarter readier to trust you, harvests give a third more, plus
-  **Refresh** and **Mend the flesh**. **Power** is the plain one: armour
-  burdens you a fifth less, you hit a sixth harder, and what you wear turns
-  a tenth more — a full plate suit goes from turning 70% of a blow to 78% —
-  plus **Second wind** and **Fury**, half a minute of double damage. Each
-  opens five things: two called on with a long rest between, three simply
-  true from then on.
+  often. **Love**, the living island's: **Refresh** fills hunger and thirst,
+  **Bond** mends your companion, **Gather** brings every wildermon of yours
+  within thirty tiles to you, **Lull** stops what is hunting you, **Heart of
+  the Herd** hardens your companion for ten minutes; and crops on your deed
+  come on a fifth faster, a tame is a quarter likelier, your wildermon age a
+  quarter slower, harvests and fruit give a quarter more, a companion never
+  leaves a fight for distance, a knack lasts a quarter longer, a young one
+  you breed comes out better more often, a field you sow grows through
+  winter at half pace, a kind you have tamed before never refuses you, and a
+  sitting grows the trees round it once a day. **Power**, the body's:
+  **Second Wind** fills your wind, **Deep Lungs** makes swimming free,
+  **Shrug** stops every wound bleeding and takes the venom out, **Surge** is a
+  minute of a faster walk nothing slows, **Unbroken** five minutes of nothing
+  costing stamina; and armour and a load burden you a fifth less, you walk a
+  twentieth faster, climb a quarter steeper, swim on less wind, what you wear
+  turns a tenth more, a heavy blow lands with half its extra, you carry
+  fifteen kilos more, a killing blow leaves you standing once an hour, you
+  can step down any drop, and hunger and thirst fall a quarter slower. Fury,
+  Hard Hands and Mend the Flesh are gone: damage is a fighting trade's and
+  healing the Blessing's.
 - **An altar, and favour.** No god with a name; a stone table, the hour
   before the sun is properly up, and the plain fact that a thing knelt over
   at dawn comes out better. An **altar** is sixteen bricks, eight mortar,

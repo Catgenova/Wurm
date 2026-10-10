@@ -44,6 +44,12 @@ export const SUMMER_GROWTH = 1.5;
 export const AUTUMN_GROWTH = 0.5;
 /** A field's growth in winter, as a share of the crop's own pace: none, so a crop in a field keeps its stage until spring. */
 export const WINTER_GROWTH = 0;
+/**
+ * A field sown by somebody with Love's Season's Hand, in winter, as a share of
+ * the crop's own pace: half a spring field's, where any other stands still
+ * (`meditation.ts`). In every other season it grows as any field does.
+ */
+export const HAND_WINTER = 0.5;
 /** A field's growth before the first spring, when there were no seasons: the whole of its pace, so nothing then growing changed. */
 export const YEARLESS_GROWTH = 1;
 /** A planter's growth, in every season and wherever it stands, as a share of the crop's own pace. */
@@ -59,10 +65,10 @@ export const GLASSHOUSE_GROWTH = SPRING_GROWTH;
  * (`PLANTER_GROWTH` of the plain clock) or a glasshouse's (`GLASSHOUSE_GROWTH`
  * of it). A crop keeps its stage start on its own clock.
  */
-export type CropClock = 'field' | 'planter' | 'glass';
-/** The clock a crop grows on: in a planter, under glass, or in a field. */
-export const cropClockOf = (c: { planter?: number; glass?: boolean }): CropClock =>
-  c.planter !== undefined ? 'planter' : c.glass ? 'glass' : 'field';
+export type CropClock = 'field' | 'planter' | 'glass' | 'hand';
+/** The clock a crop grows on: in a planter, under glass, or in a field -- a Season's Hand's (`handClock`) for one sown by somebody with it. */
+export const cropClockOf = (c: { planter?: number; glass?: boolean; hand?: boolean }): CropClock =>
+  c.planter !== undefined ? 'planter' : c.glass ? 'glass' : c.hand ? 'hand' : 'field';
 /** A clock named the old way, a planter's or not, or by name. */
 export const clockNamed = (k: boolean | CropClock): CropClock => (k === true ? 'planter' : k === false ? 'field' : k);
 /** A share of the plain clock a clock runs at, for the two that run steadily; a field's has none. */
@@ -147,6 +153,54 @@ export function fieldMoment(g: number): number {
 export function turnsAfter(t: number, n: number): number[] {
   const first = t < YEAR_FROM ? YEAR_FROM : YEAR_FROM + (Math.floor((t - YEAR_FROM) / SEASON_SECONDS) + 1) * SEASON_SECONDS;
   return Array.from({ length: n }, (_, i) => first + i * SEASON_SECONDS);
+}
+
+/** Each season's growth in a Season's Hand's field: a field's, and `HAND_WINTER` in winter. */
+export const HAND_GROWTH: Record<Season, number> = { ...SEASON_GROWTH, winter: HAND_WINTER };
+/** The growing seconds a Season's Hand's field has in a whole year: a field's, and its winter. */
+export const HAND_YEAR = YEAR_GROWTH + HAND_WINTER * SEASON_SECONDS;
+
+/** How fast a Season's Hand's field grows at a moment, as `fieldRate`. */
+export function handRate(t: number): number {
+  return t < YEAR_FROM ? YEARLESS_GROWTH : HAND_GROWTH[seasonAt(t).season];
+}
+
+/**
+ * The field clock of a Season's Hand (Love's): `fieldClock` with its winter
+ * at `HAND_WINTER` rather than standing still, worked out step for step as
+ * the island's `hand_clock` takes them.
+ */
+export function handClock(t: number): number {
+  if (t < YEAR_FROM) return YEAR_FROM + (t - YEAR_FROM) * YEARLESS_GROWTH;
+  const d = t - YEAR_FROM;
+  const k = Math.floor(d / YEAR_SECONDS);
+  const w = d - k * YEAR_SECONDS;
+  let g = YEAR_FROM + k * HAND_YEAR;
+  for (let i = 0; i < SEASONS.length; i++) {
+    g = g + HAND_GROWTH[SEASONS[i]] * Math.min(Math.max(w - i * SEASON_SECONDS, 0), SEASON_SECONDS);
+  }
+  return g;
+}
+
+/** And back: the moment a Season's Hand's clock reads `g`, as `fieldMoment`; it never stands still, so there is one. */
+export function handMoment(g: number): number {
+  if (g <= YEAR_FROM) return YEAR_FROM + (g - YEAR_FROM) / YEARLESS_GROWTH;
+  const e = g - YEAR_FROM;
+  let k = Math.floor(e / HAND_YEAR);
+  let rem = e - k * HAND_YEAR;
+  if (rem <= 0) {
+    k = k - 1;
+    rem = rem + HAND_YEAR;
+  }
+  const t0 = YEAR_FROM + k * YEAR_SECONDS;
+  for (let i = 0; i < SEASONS.length; i++) {
+    const r = HAND_GROWTH[SEASONS[i]];
+    if (r <= 0) continue;
+    const most = r * SEASON_SECONDS;
+    if (rem <= most) return t0 + i * SEASON_SECONDS + rem / r;
+    rem = rem - most;
+  }
+  return t0 + YEAR_SECONDS;
 }
 
 /** The first moment from `t` on at which a field grows: `t` itself when one is growing then, Infinity if one never will. */
