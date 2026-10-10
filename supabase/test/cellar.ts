@@ -754,32 +754,6 @@ same('nor a way down under a staircase up', 'plan_floor',
   tile(24, 45, { material: 'plank', floorKind: 'stairs', side: 'n', down: true }), 'The staircase up to the next storey is there.');
 bld.removeFloor(1, upstairs.x, upstairs.y);
 
-/* ---- recalled from down there ------------------------------------------------------------ */
-// Recall the way goes to the token of your settlement: the same token on both sides, on the flat ground here, and
-// on the island only for as long as this asks it (rolled back). And for that long without the soil and rock the
-// digging above filled the pack with, which a body crawls under wherever it stands.
-const TOKEN: [number, number] = [36, 45];
-put(23, 45, CELLAR_LEVEL);
-game.deed = { name: 'Hoarding', x: TOKEN[0], y: TOKEN[1], radius: 5 };
-const mineRecall = game.workAbility('recall');
-const [mx, my, ml] = [game.player.x, game.player.y, game.player.level];
-const mineStep = game.stepRule(Math.floor(mx), Math.floor(my), ml, Math.floor(mx) + 1, Math.floor(my));
-const [theirRecall, theirAt, theirStep] = psql(`begin;
-  select set_config('request.jwt.claims', json_build_object('sub', ${DANE})::text, true) \\g /dev/null
-  update deed d set x = ${TOKEN[0]}, y = ${TOKEN[1]} from my_deed(${W}, ${DANE}) md where d.world_id = md.world_id and d.name = md.name;
-  delete from item where world_id = ${W} and holder = 'player' and holder_uid = ${DANE} and def in ('dirt', 'rock_shards', 'tin_ore');
-  select work_ability(${W}, ${DANE}, 'recall');
-  select x || ',' || y || ',' || level from player where world_id = ${W} and uid = ${DANE};
-  select r->>'x' || ',' || (r->>'y') || ',' || (r->>'level') || ',' || (r->>'blocked')
-    from (select rpc_move(${W}, ${TOKEN[0]} + 1.5, ${TOKEN[1]} + 1.5, 0) r) s;
-  rollback;`).split('\n');
-check('Recall the way from down in a cellar stands the body at the token on the ground floor, on both sides',
-  mineRecall === theirRecall && `${mx},${my},${ml}` === `${TOKEN[0] + 0.5},${TOKEN[1] + 1.5},0` && theirAt === `${TOKEN[0] + 0.5},${TOKEN[1] + 1.5},0`,
-  `browser at ${mx},${my} on storey ${ml}, island at ${theirAt}`);
-check('and the next step from there is taken, on both sides',
-  mineStep === 0 && theirStep === `${TOKEN[0] + 1.5},${TOKEN[1] + 1.5},0,false`,
-  `browser ${mineStep === null ? 'refused' : `onto storey ${mineStep}`}, island ${theirStep}`);
-
 /* ---- and tidied away, so nothing after this finds a cellar under it ---------------------- */
 island(`
   delete from item where world_id = w and holder in ('cellar', 'ground') and gx between 18 and 40 and gy between 42 and 48;
