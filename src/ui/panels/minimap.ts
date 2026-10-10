@@ -1,6 +1,7 @@
 import type { Game } from '../../game/game';
 import { MARK_COLOURS, MARK_CSS } from '../../game/marks';
 import { furnitureDef, furnitureName } from '../../game/furniture';
+import { hasRunestones, RUNESTONES, stoneCentre } from '../../game/runestones';
 import type { Renderer } from '../../render/renderer';
 import { ROCK_VARIANTS, TileType, TILE_DEFS } from '../../world/tiles';
 import { UNSEEN, VISIBLE } from '../../game/vision';
@@ -491,8 +492,13 @@ export class MinimapPanel {
     }
     // Landmarks: a statue is on the map from the day it is set up, a stone
     // diamond with its name, drawn under the people and over the marks.
-    for (const f of this.game.furniture.values()) {
-      if (!furnitureDef(f.kind).landmark) continue;
+    // And the Runestones, which are on every map from the start, a stone diamond each like a statue's (`runestones.ts`).
+    const marks: Array<{ x: number; y: number; label: string }> = (hasRunestones(this.game.world.w) ? RUNESTONES : []).map((s) => {
+      const c = stoneCentre(s, this.game.world.w);
+      return { x: c.x, y: c.y, label: s.name };
+    });
+    for (const f of this.game.furniture.values()) if (furnitureDef(f.kind).landmark) marks.push({ x: f.x, y: f.y, label: furnitureName(f) });
+    for (const f of marks) {
       const lx = (f.x + 0.5 - ox) * scale;
       const ly = (f.y + 0.5 - oy) * scale;
       if (lx < -20 || ly < -20 || lx > this.view.width + 20 || ly > this.view.height + 20) continue;
@@ -508,7 +514,7 @@ export class MinimapPanel {
       ctx.fill();
       ctx.stroke();
       if (!this.names) continue;
-      const label = furnitureName(f);
+      const label = f.label;
       const w = ctx.measureText(label).width;
       const right = lx + 8 + w + 6 <= this.view.width;
       const bx = right ? lx + 8 : Math.max(0, lx - 8 - w - 6);

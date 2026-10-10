@@ -23,6 +23,7 @@ import { COIN_FIND_ONE_IN, COIN_FINDS_A_DAY } from '../../game/forage';
 import { ROCK_VARIANTS, TILE_DEFS, TileType, TREE_AGES, TREE_DAWN_UTC, TREE_DEFS } from '../../world/tiles';
 import { REGIONS } from '../../world/regions';
 import { ISLAND_ELEMENT, MOTES_LEAST, MOTES_MOST, MOTES_MOST_AT, MOTES_STEP, SWIRL_DARK, SWIRL_LIGHT, SWIRLS_A_DAY } from '../../game/motes';
+import { RUNESTONES, STONE_SPAN, TELE_FAR, TELE_FAST, TELE_NEAR, TELE_QL_HIGH, TELE_QL_LOW, TELE_SLOW } from '../../game/runestones';
 import { SEASON_DAYS, seasonLine, YEAR_DAYS, YEAR_FROM } from '../../world/calendar';
 import { BLOOMS, BUSH_FLOWER_FROM, evergreen, LEAF_DAYS, SHED_DAYS, TURN_DAYS } from '../../render/foliage';
 import { lifeSeasons } from '../../render/life';
@@ -1489,6 +1490,21 @@ export const NEWS: News[] = [
         + `one more for every ${MOTES_STEP} points and ${numberWord(MOTES_MOST)} from ${MOTES_MOST_AT}, and the swirl is gone for everybody. `
         + 'Each collect trains Elementalism, and nothing else does.',
     ],
+  },
+  {
+    n: 111,
+    day: '2026-10-10',
+    lines: () => {
+      const bill = recipeBill('make_telestone');
+      return [
+        `${NumberWord(RUNESTONES.length)} Runestones stand around the Crescent's inner bay, ${numberWord(STONE_SPAN)} tiles by ${numberWord(STONE_SPAN)}, on every island and on the map: `
+          + `${listed(RUNESTONES.map((s) => s.name))}. Nothing walks through one, and nothing is dug, built, planted or set down on its tiles.`,
+        `A Telestone is cut with ${skillOf('make_telestone')} from ${bill}. Travel to a Runestone on it puts you beside any Runestone within its reach: `
+          + `${TELE_NEAR} tiles at QL ${TELE_QL_LOW} up to ${TELE_FAR} at QL ${TELE_QL_HIGH}.`,
+        `After a journey you wait ${spanWords(TELE_SLOW)} at QL ${TELE_QL_LOW} down to ${spanWords(TELE_FAST)} at QL ${TELE_QL_HIGH}, `
+          + 'set by the Telestone you used. The wait is yours, not the stone\'s, and the Telestone is not used up.',
+      ];
+    },
   },
 ];
 

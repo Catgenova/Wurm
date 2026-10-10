@@ -35,6 +35,7 @@ import { REGIONS } from '../world/regions';
 import { chartRegion } from '../world/chart';
 import { TILE_DEFS } from '../world/tiles';
 import { article, capital, listed, numberWord } from './words';
+import { runestoneAt } from './runestones';
 
 /** The skill a mote swirl is collected with, and the only thing that trains it. */
 export const ELEMENTALISM = 'elementalism';
@@ -160,13 +161,15 @@ export const swirlIn = (r: unknown): Swirl | null => {
 
 /**
  * Whether a swirl can be put down on a tile: on the map, not where a tree
- * stands (a tile that blocks), and not inside a building. The island's
+ * stands (a tile that blocks), not on a Runestone, and not inside a building. The island's
  * `swirl_day` asks the same.
  */
 export function swirlRoom(g: Game, x: number, y: number): boolean {
   const w = g.world;
   if (!w.inBounds(x, y)) return false;
   if (TILE_DEFS[w.getTile(x, y)]?.blocks) return false;
+  // Nor on a Runestone's ground (`runestones.ts`), which the island's `swirl_day` passes over too.
+  if (runestoneAt(x, y, w.w)) return false;
   return !g.buildings.buildingAt(x, y);
 }
 

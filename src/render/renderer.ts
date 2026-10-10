@@ -95,6 +95,8 @@ import { drawPlantsFlat, drawPlantUpright, plantFoot, standsUp, type PlantFrame 
 import type { WaterPlant } from '../world/waterplants';
 import type { Swirl } from '../game/motes';
 import { drawSwirl, glowSwirl } from './swirls';
+import { runestoneAt, stoneCentre, type Runestone } from '../game/runestones';
+import { drawRunestonePiece } from './runestones';
 import type { WaterField } from '../world/springs';
 import { Dust } from './dust';
 import { BEAST_WALK, Gaits } from './gait';
@@ -284,7 +286,7 @@ const swayedAt = (w: Swayed | undefined, x: number, y: number): [number, number]
   w ? [w.ox + w.a * (x - w.ox) + w.c * (y - w.oy), w.oy - w.up + w.b * (x - w.ox) + w.d * (y - w.oy)] : [x, y];
 
 interface Entity {
-  kind: 'tree' | 'bush' | 'stump' | 'player' | 'peer' | 'pile' | 'token' | 'crate' | 'creature' | 'campfire' | 'crop' | 'smelter' | 'kiln' | 'furniture' | 'hull' | 'anvil' | 'post' | 'trap' | 'deck' | 'life' | 'waterplant' | 'spell' | 'swirl';
+  kind: 'tree' | 'bush' | 'stump' | 'player' | 'peer' | 'pile' | 'token' | 'crate' | 'creature' | 'campfire' | 'crop' | 'smelter' | 'kiln' | 'furniture' | 'hull' | 'anvil' | 'post' | 'trap' | 'deck' | 'life' | 'waterplant' | 'spell' | 'swirl' | 'runestone';
   x: number;
   y: number;
   sx: number;
@@ -305,6 +307,8 @@ interface Entity {
   plant?: WaterPlant;
   /** A mote swirl turning over the tile (`./swirls`). */
   swirl?: Swirl;
+  /** A Runestone, taken on its front tile and drawn over its whole three by three (`./runestones`). */
+  stone?: Runestone;
   /** 1 rare, 2 supreme, 3 fantastic, for the shine over it; absent for the ordinary run of things. */
   rare?: number;
   /**
@@ -947,6 +951,27 @@ export class Renderer {
   private entPool: Entity[] = [];
   private entN = 0;
 
+  /**
+   * A Runestone on one of its nine tiles: taken once, on the tile of the nine
+   * on the line nearest the viewer (the middle one of those, at a turn where
+   * three share it), at the middle of its centre tile, so that it is drawn
+   * after everything behind it and before everything in front.
+   */
+  private takeStone(s: Runestone, x: number, y: number, V: View): void {
+    const c = stoneCentre(s, this.game.world.w);
+    const depth = (tx: number, ty: number): number => V.d[0] + V.d[1] * tx + V.d[2] * ty;
+    let front = -Infinity;
+    for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) front = Math.max(front, depth(c.x + dx, c.y + dy));
+    if (depth(x, y) !== front) return;
+    const along: number[] = [];
+    for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) if (depth(c.x + dx, c.y + dy) === front) along.push(V.e[0] + V.e[1] * (c.x + dx) + V.e[2] * (c.y + dy));
+    along.sort((a, b) => a - b);
+    if (V.e[0] + V.e[1] * x + V.e[2] * y !== along[(along.length - 1) >> 1]) return;
+    const cam = this.camera;
+    const h = this.game.world.centerHeight(c.x, c.y);
+    this.take('runestone', x, y, cam.worldToScreenX(c.x + 0.5, c.y + 0.5), cam.worldToScreenY(c.x + 0.5, c.y + 0.5, h), null).stone = s;
+  }
+
   private take(kind: Entity['kind'], x: number, y: number, sx: number, sy: number, spr: Sprite | null): Entity {
     let e = this.entPool[this.entN];
     if (!e) {
@@ -974,6 +999,7 @@ export class Renderer {
     e.deck = undefined;
     e.plant = undefined;
     e.swirl = undefined;
+    e.stone = undefined;
     e.lift = undefined;
     e.drawDx = undefined;
     e.drawDy = undefined;
@@ -1177,6 +1203,8 @@ export class Renderer {
   /** The mote swirls drawn this frame and where, for their light to be added over the night (`glowSwirl`). */
   private swirlsSeen: Array<{ s: Swirl; x: number; y: number }> = [];
   private anvilHits: HitRect[] = [];
+  /** The Runestones drawn this frame, each the box its standing stone covers, picked as its centre tile. */
+  private stoneHits: HitRect[] = [];
   private postHits: HitRect[] = [];
   private trapHits: HitRect[] = [];
   private deckHits: HitRect[] = [];
@@ -3205,6 +3233,7 @@ export class Renderer {
     this.glows.length = 0;
     this.swirlsSeen.length = 0;
     this.anvilHits.length = 0;
+    this.stoneHits.length = 0;
     this.postHits.length = 0;
     this.trapHits.length = 0;
     this.deckHits.length = 0;
@@ -3462,7 +3491,10 @@ export class Renderer {
         if (!lit) {
           // Remembered ground keeps its shape and its trees and nothing else:
           // no creatures, no piles, no detail, and a cold wash over the lot.
-          if (t === TileType.Tree || t === TileType.Bush || t === TileType.Stump) {
+          // A Runestone stands in memory as it stands in sight: it is the landmark, and is drawn from its front tile.
+          const stoneMem = world.solid !== null && world.solid.has(y * world.w + x) ? runestoneAt(x, y, world.w) : null;
+          if (stoneMem) this.takeStone(stoneMem, x, y, V);
+          if (!stoneMem && (t === TileType.Tree || t === TileType.Bush || t === TileType.Stump)) {
             const data = world.viewData(x, y, false);
             const spr = t === TileType.Tree ? treeSprite(treeSpecies(data), treeVariant(data), this.year.season, this.year.day) : t === TileType.Bush ? bushSprite(bushSpecies(data), this.year.season, this.year.day) : stumpSprite(treeSpecies(data));
             const avg = (c[0] + c[1] + c[2] + c[3]) / 4;
@@ -3476,7 +3508,10 @@ export class Renderer {
           if (this.lifted && !lineOver && this.over(this.liftFloor, e + washAt, pts, c, wet ? Math.max(top ?? -Infinity, pond ? this.pondTop : 0) : top, hs)) lineOver = true;
           continue;
         }
-        if (t === TileType.Tree || t === TileType.Bush || t === TileType.Stump) {
+        // A Runestone's nine tiles: the stone is taken on its front one, and nothing that grows there is drawn under it.
+        const stone = world.solid !== null && world.solid.has(y * world.w + x) ? runestoneAt(x, y, world.w) : null;
+        if (stone) this.takeStone(stone, x, y, V);
+        if (!stone && (t === TileType.Tree || t === TileType.Bush || t === TileType.Stump)) {
           const data = world.getData(x, y);
           const spr = t === TileType.Tree ? treeSprite(treeSpecies(data), treeVariant(data), this.year.season, this.year.day) : t === TileType.Bush ? bushSprite(bushSpecies(data), this.year.season, this.year.day) : stumpSprite(treeSpecies(data));
           const avg = (c[0] + c[1] + c[2] + c[3]) / 4;
@@ -4954,6 +4989,12 @@ export class Renderer {
       }
       if (ent.kind === 'waterplant' && ent.plant && this.plantFrame) {
         drawPlantUpright(ctx, ent.plant, this.plantFrame);
+        continue;
+      }
+      if (ent.kind === 'runestone' && ent.stone) {
+        const box = drawRunestonePiece(ent.stone.id, ctx, ent.sx, ent.sy, zoom, this.camera.rotation, this.time, this.game.darkness());
+        const c = stoneCentre(ent.stone, this.game.world.w);
+        this.stoneHits.push({ x: c.x, y: c.y, left: box.left, top: box.top, w: box.w, h: box.h });
         continue;
       }
       if (ent.kind === 'swirl' && ent.swirl) {
@@ -13359,6 +13400,11 @@ export class Renderer {
     for (let i = this.fireHits.length - 1; i >= 0; i--) {
       const h = this.fireHits[i];
       if (sx >= h.left && sx <= h.left + h.w && sy >= h.top && sy <= h.top + h.h) return { ...this.makePick(h.x, h.y, sx, sy), fire: h.fire };
+    }
+    // A Runestone, by the stone standing up off its footprint: its centre tile, whose hover and Examine name it.
+    for (let i = this.stoneHits.length - 1; i >= 0; i--) {
+      const h = this.stoneHits[i];
+      if (sx >= h.left && sx <= h.left + h.w && sy >= h.top && sy <= h.top + h.h) return this.makePick(h.x, h.y, sx, sy);
     }
     // Looking into a cellar: its floor, nearest first; and a side of the dig is nothing to click on.
     if (this.cellarHulls.length) {

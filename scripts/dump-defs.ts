@@ -143,6 +143,10 @@ import { CANDLE_BURN } from '../src/game/light';
 import {
   ELEMENTALISM, ISLAND_ELEMENT, LAND_ELEMENTS, MOTE_ELEMENTS, MOTES_LEAST, MOTES_MOST, MOTES_STEP, SWIRL_DARK, SWIRL_LIGHT, SWIRL_DRAWS, SWIRL_SAID, SWIRL_TRIES, SWIRLS_A_DAY,
 } from '../src/game/motes';
+import {
+  LANDING, LANDING_STAND, RUNESTONES, STONE_CHART, STONE_GUARDED, STONE_HALF, STONE_LEAST, TELE_FAR, TELE_FAST, TELE_GRACE, TELE_NEAR, TELE_QL_HIGH, TELE_QL_LOW, TELE_SLOW,
+  TELESTONE, TELESTONE_SAID, TRAVEL,
+} from '../src/game/runestones';
 
 const q = (v: unknown): string => {
   if (v === undefined || v === null) return 'null';
@@ -1821,6 +1825,26 @@ out.push(`create or replace function mote_elements() returns text[] language sql
 out.push(`create or replace function land_elements() returns text[] language sql immutable as $fn$ select array[${LAND_ELEMENTS.map(q).join(', ')}]::text[] $fn$;`);
 out.push(`create or replace function region_element(p_region int) returns text language sql immutable as $fn$ select case p_region ${REGIONS.map((R, i) => (ISLAND_ELEMENT[R.key] ? `when ${i} then ${q(ISLAND_ELEMENT[R.key])} ` : '')).join('')}end $fn$;`);
 out.push(`create or replace function swirl_said(p_key text) returns text language sql immutable as $fn$ select case p_key ${Object.entries(SWIRL_SAID).map(([k, v]) => `when ${q(k)} then ${q(v)} `).join('')}end $fn$;`);
+/*
+ * The Runestones and the Telestone (`runestones.ts`): where each stone stands
+ * on the chart's own island, how far a stone reaches from its centre, the
+ * tiles a traveller may arrive on in the order they are tried, the jobs a
+ * stone's ground refuses, the Telestone's reach and wait at either end of its
+ * quality, and what a refused journey says.
+ */
+out.push(`create or replace function runestones() returns table (ord int, id text, name text, x int, y int) language sql immutable as $fn$ values ${RUNESTONES.map((r, i) => `(${i}, ${q(r.id)}, ${q(r.name)}, ${r.x}, ${r.y})`).join(', ')} $fn$;`);
+out.push(`create or replace function landing_ring() returns table (k int, dx int, dy int) language sql immutable as $fn$ values ${LANDING.map(([dx, dy], i) => `(${i}, ${dx}, ${dy})`).join(', ')} $fn$;`);
+out.push(`create or replace function stone_guarded(p_action text) returns boolean language sql immutable as $fn$ select p_action = any (array[${[...STONE_GUARDED].sort().map(q).join(', ')}]::text[]) $fn$;`);
+out.push(`create or replace function telestone_item() returns text language sql immutable as $fn$ select ${q(TELESTONE)} $fn$;`);
+out.push(`create or replace function telestone_action() returns text language sql immutable as $fn$ select ${q(TRAVEL)} $fn$;`);
+for (const [fn, v] of [
+  ['stone_chart', STONE_CHART], ['stone_half', STONE_HALF], ['stone_least', STONE_LEAST], ['landing_stand', LANDING_STAND],
+  ['tele_ql_low', TELE_QL_LOW], ['tele_ql_high', TELE_QL_HIGH], ['telestone_near', TELE_NEAR], ['telestone_far', TELE_FAR],
+  ['telestone_slow', TELE_SLOW], ['telestone_fast', TELE_FAST], ['telestone_grace', TELE_GRACE],
+] as Array<[string, number]>) {
+  out.push(`create or replace function ${fn}() returns double precision language sql immutable as $fn$ select ${q(v)}::double precision $fn$;`);
+}
+out.push(`create or replace function telestone_said(p_key text) returns text language sql immutable as $fn$ select case p_key ${Object.entries(TELESTONE_SAID).map(([k, v]) => `when ${q(k)} then ${q(v)} `).join('')}end $fn$;`);
 for (const w of WALL_TYPES) {
   out.push(`insert into wall_type_def values (${q(w.id)}, ${q(w.name)}, ${q(w.factor)}, ${q(w.passable)}, ${q(w.height ?? null)}, ${q(!!w.low)}, ${q(!!w.railed)}, ${q(!!w.standalone)});`);
   if (w.beastProof) out.push(`update wall_type_def set beast_proof = true where id = ${q(w.id)};`);

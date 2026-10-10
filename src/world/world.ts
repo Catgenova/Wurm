@@ -64,6 +64,14 @@ export class World {
   groundTouched = true;
   fogTouched = true;
   /**
+   * Tiles something fixed stands on that nobody can stand on, by
+   * `y * w + x`, whatever the ground under them is: the Runestones'
+   * (`runestones.ts`). Set by the game for the world it plays on, and empty
+   * for a window of ground generated on its own, which has no place on the
+   * chart to put them.
+   */
+  solid: ReadonlyMap<number, unknown> | null = null;
+  /**
    * Squares whose remembered picture still has to be taken from the ground.
    *
    * A fog restored from the island says where somebody has been and nothing
@@ -853,6 +861,8 @@ export class World {
   /** Whether an entity can stand on the tile at all. */
   isPassable(x: number, y: number): boolean {
     if (!this.inBounds(x, y)) return false;
+    // A Runestone's nine tiles, which are its and not the ground's (`solid`).
+    if (this.solid !== null && this.solid.has(y * this.w + x)) return false;
     return !TILE_DEFS[this.getTile(x, y)].blocks;
   }
 
