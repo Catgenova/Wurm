@@ -76,9 +76,11 @@ game.player.x = 30.5;
 game.player.y = 30.5;
 const wall = game.buildings.setWall(b, 0, 30, 30, 'n', 'solid', 'log');
 for (const k of Object.keys(wall.needed)) wall.needed[k] = 0;
-// A bucket of blue dye, five litres at QL 50: enough for the wall twice over.
+// Two buckets of blue dye, five litres each at QL 50: a wall side takes three, so the second still holds
+// enough when the wall is asked to be painted again, and what refuses that is its colour, not the dye.
 const BLUE = dyeText(pureDye('blue', 50), 5);
 const BLUE_HEX = dyeHex(pureDye('blue', 50));
+game.inventory.add('dye_bucket', { ql: 60 }).dye = BLUE;
 game.inventory.add('dye_bucket', { ql: 60 }).dye = BLUE;
 game.inventory.add('lye_bucket', { ql: 40 });
 
@@ -92,7 +94,7 @@ begin
   delete from building_tile where world_id = w; delete from building where world_id = w;
   delete from item where world_id = w and holder = 'player' and holder_uid = u and def in ('dye_bucket', 'lye_bucket', 'bucket');
   insert into item (world_id, holder, holder_uid, def, ql, count, dye) values
-    (w, 'player', u, 'dye_bucket', 60, 1, '${BLUE}');
+    (w, 'player', u, 'dye_bucket', 60, 1, '${BLUE}'), (w, 'player', u, 'dye_bucket', 60, 1, '${BLUE}');
   insert into item (world_id, holder, holder_uid, def, ql, count) values (w, 'player', u, 'lye_bucket', 40, 1);
   insert into building (world_id, id, name, levels, work_level, planned_by) values (w, 4, 'Painted house', 1, 0, u);
   insert into building_tile (world_id, building, x, y) values (w, 4, 30, 30);
@@ -126,7 +128,7 @@ commit;
 
 const browserBrush = mineSaid();
 const islandBrush = theirSaid('paint_wall');
-check('a litre of blue dye goes onto the wall in the same sentence on both sides',
+check('blue dye goes onto the wall in the same sentence on both sides',
   browserBrush === islandBrush && browserBrush.includes('blue'),
   `browser "${browserBrush}", island "${islandBrush}"`);
 check('and the wall is the colour it was painted, on both sides',
