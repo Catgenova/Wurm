@@ -65,3 +65,7 @@ begin
   perform skill_said(p_world, p_uid, p_id, now_v - was);
   return now_v - was;
 end $fn$;
+
+-- Everything above is the island's own, and no door: shut to players again, the
+-- dye functions before it among them.
+select private.lock_doors();
