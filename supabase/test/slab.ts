@@ -393,12 +393,14 @@ check('the island stands you on the slab, not on what is under it',
   Number(slabTop) === 10 && Number(groundTop) < 10, `${slabTop} against ${groundTop}`);
 
 /* ---- and nothing takes one away again ------------------------------------ */
+// Bar the one clearing of a Runestone's nine tiles (`runestone_clear`), which takes
+// everything a player made there, a foundation with the rest, so the stone can stand.
 const swept = psql(`
   select count(*) from pg_proc p join pg_namespace n on n.oid = p.pronamespace
    where n.nspname in ('public', 'private') and p.prokind = 'f'
-     and p.prosrc like '%delete from foundation%' and p.proname <> 'perform_foundation';
+     and p.prosrc like '%delete from foundation%' and p.proname not in ('perform_foundation', 'runestone_clear');
 `);
-check('foundations do not decay: nothing but striking the shuttering ever deletes one', swept === '0',
+check('foundations do not decay: nothing but striking the shuttering, or a Runestone clearing its ground, ever deletes one', swept === '0',
   `${swept} other functions delete from foundation`);
 
 for (const line of [...ok, ...bad]) console.log(line);
