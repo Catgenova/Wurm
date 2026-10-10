@@ -28,9 +28,10 @@ import { VIEWS } from './view';
  * It is drawn once for each way it is seen and each scale (`BAKE_STEPS`) and
  * kept; a frame after that is one blit and the runes' light over it, which is
  * a small picture of each rune laid at its own strength (`drawRunestone`).
- * After dark the runes take the night back off themselves (`runestoneHoles`)
- * and the stone throws a small pool of pale gold round itself
- * (`runestoneLight`), as an altar's stars do.
+ * After dark the runes take the night back off themselves in their own
+ * shapes, kept off whatever stands in front of them (`RunestoneNight`), and
+ * the stone throws a small pool of pale gold round itself (`runestoneLight`),
+ * as an altar's stars do.
  *
  * The whole of it sorts as one thing, at the middle of its middle tile: the
  * outcrop fills the footprint, so nothing stands inside it, and whatever
@@ -851,7 +852,7 @@ const SPECS: Record<RunestoneId, Spec> = {
     yaw: 1.96,
     outline: [
       [-19, 0], [19, 0], [19.4, 30], [18.2, 66], [17.6, 94], [17, 102], [15, 105.4], [8.6, 106.6], [4.2, 105.2],
-      [2.6, 96], [1.4, 82], [0.4, 97], [-0.6, 112.8],
+      [3.4, 99.5], [1.6, 90], [-0.2, 100.5], [-0.6, 112.8],
       [-4.4, 116.6], [-12.6, 117.4], [-16.8, 114], [-18, 104], [-18.8, 62], [-19.6, 28],
     ],
     depth: [20, 17],
@@ -881,7 +882,7 @@ const SPECS: Record<RunestoneId, Spec> = {
       { face: 'back', x: -11.5, kind: 'hang', v: 2, k: 1.2 },
     ],
     cracks: [
-      { x: 1.4, z: 82, a: -1.62, len: 12 }, { x: -19, z: 52, a: -0.35, len: 9 }, { x: 18.4, z: 64, a: 3.4, len: 8 },
+      { x: 1.2, z: 89.5, a: -2.3, len: 5 }, { x: -19, z: 52, a: -0.35, len: 9 }, { x: 18.4, z: 64, a: 3.4, len: 8 },
       { x: -12, z: 116, a: -1.2, len: 9 }, { x: 10, z: 4, a: 1.9, len: 7 },
     ],
     flowers: [['white', 4], ['pink', 3], ['yellow', 2]],
@@ -892,12 +893,12 @@ const SPECS: Record<RunestoneId, Spec> = {
     ],
     lichen: ['#b7c79b', '#d4dbb0'],
     lichenN: 11,
-    cleft: { x: 1.4, z: 82, w: 3.4 },
+    cleft: { x: 1.6, z: 90, w: 3.4 },
     backCracks: [{ x: 19.2, z: 46, a: 2.9, len: 10 }, { x: -18.6, z: 70, a: 0.2, len: 9 }, { x: 6, z: 2, a: 1.4, len: 8 }],
     // The split halves: the left forward, the right back, apart through the thickness above the foot of the cleft.
     depthAt: (s, t, h) => {
-      if (t < 80) return [0, h];
-      const k = Math.min(1, (t - 80) / 10), u = Math.max(0, Math.min(1, (s - 0.2) / 2.4));
+      if (t < 88) return [0, h];
+      const k = Math.min(1, (t - 88) / 8), u = Math.max(0, Math.min(1, (s - 0.4) / 2.4));
       return [(2.4 * (1 - u) - 2.8 * u) * k, h - 0.8 * k];
     },
     sideRunes: ['harrow', 'tiwaz', 'cross', 'sowilo', 'tri', 'harrow'],
@@ -1438,19 +1439,27 @@ function modelOf(id: RunestoneId): Model {
       const reach = tTop * (0.35 + 0.55 * m);
       const cleftX = spec.cleft ? (which === 'front' ? spec.cleft.x : -spec.cleft.x) : null;
       if (cleftX !== null) {
-        // The cleft: a dark shadow down into it, and a few cushions caught in its foot, the lowest spilling onto the face.
+        /*
+         * The cleft: a wedge opening up from its foot, its walls in shadow
+         * (`edgePaint`) and the face along its lips a step darker, so it reads
+         * as a V cut down into the head; and a strip of moss caught in its
+         * crotch, uneven, spilling out sideways along both lips.
+         */
         const c = spec.cleft!;
         g.beginPath();
-        g.moveTo(cleftX - 0.5, c.z + 14);
-        g.lineTo(cleftX, c.z - 0.5);
-        g.lineTo(cleftX + 0.5, c.z + 14);
+        g.moveTo(cleftX - c.w * 1.3, c.z + 18);
+        g.lineTo(cleftX, c.z - 0.6);
+        g.lineTo(cleftX + c.w * 1.3, c.z + 18);
         g.closePath();
-        g.fillStyle = css(mix(fill, hex('#3f3b52'), 0.55), 0.7);
+        g.fillStyle = css(mix(fill, hex('#4a4660'), 0.4), 0.32);
         g.fill();
-        pad(cleftX + 0.2, c.z + 1.4, 2.9);
-        pad(cleftX - 1.6, c.z + 0.2, 1.6);
-        pad(cleftX - 0.4, c.z - 2.2, 1.3);
-        pad(cleftX + 0.6, c.z - 3.8, 0.8);
+        const C = rand(seed * 3 + 41);
+        for (let u = -3.6; u <= 3.6; u += 0.5) {
+          const lip = Math.abs(u);
+          // Down the lips of the V and across its foot, on the face: thickest in the crotch, ragged along the lips.
+          if (lip > 1.4 && C() < 0.3) continue;
+          pad(cleftX + u + (C() - 0.5) * 0.5, c.z - 0.9 + lip * 1.7 + (C() - 0.5) * 1.2, (0.9 + 1.4 * (1 - lip / 3.6)) * (0.7 + 0.6 * C()));
+        }
       }
       const nseed = seed * 13 + 5;
       const [fa, fb] = xs(0);
@@ -1612,7 +1621,38 @@ function modelOf(id: RunestoneId): Model {
     const onSide = Math.sign(mx) === sideK && up < 0.5;
     const ivy = spec.ivy.filter((v) => v.face === 'side');
     const G = half0 + f * mz - spec.bevel;
+    // A wall of the cleft down into the head: in shadow, its moss and skin left off.
+    const cl = spec.cleft;
+    const inCleft = !!cl && Math.abs(p[0] - cl.x) < cl.w * 1.5 && Math.abs(q[0] - cl.x) < cl.w * 1.5 && Math.min(p[1], q[1]) >= cl.z - 0.5 && up < 0.35;
     const paint: Painter = (g, k) => {
+      if (inCleft) {
+        // A step into shade all up it, and deep shade down near the foot, where the light does not reach.
+        g.fillStyle = css(mix(k.fill, hex('#3c3850'), 0.4), 0.3);
+        g.fillRect(-2, -40, len + 4, 80);
+        const deep = 4.5, foot = Math.min(p[1], q[1]);
+        if (foot < cl!.z + deep) {
+          const reach = (Math.min(cl!.z + deep, Math.max(p[1], q[1])) - foot) / Math.max(0.5, Math.abs(dz)) * len;
+          const s0 = dz >= 0 ? -2 : len - reach;
+          g.fillStyle = css(mix(k.fill, hex('#34304a'), 0.5), 0.5);
+          g.fillRect(s0, -40, reach + 2, 80);
+          // And the moss in the crotch, carried a little way up the wall.
+          const T = rand(spec.seed * 211 + i);
+          const tr = g.getTransform(), inv = k.base.inverse();
+          const across = Math.hypot(k.e.ux, k.e.uy);
+          const ps: Pad[] = [];
+          for (let j = 0; j < 14; j++) {
+            const sj = dz >= 0 ? T() * reach * 0.8 : len - T() * reach * 0.8, y = (T() - 0.5) * 2 * (half0 - 1);
+            const q0 = inv.transformPoint(tr.transformPoint(new DOMPoint(sj, y)));
+            const rr = cushion(T) + 0.3;
+            ps.push([q0.x, q0.y, rr * across, rr * across * 0.85]);
+          }
+          g.save();
+          g.setTransform(k.base);
+          drawPads(g, ps);
+          g.restore();
+        }
+        return;
+      }
       const T = rand(spec.seed * 101 + i);
       const ps: Pad[] = [];
       const tr = g.getTransform(), inv = k.base.inverse();
@@ -2336,7 +2376,7 @@ function motesAt(b: Baked, t: number, zoom: number): Array<{ x: number; y: numbe
  * By day the runes are lit gold in their grooves with a warm glow round them
  * laid on as colour, which pale stone takes as gold where added light would
  * not show at all; after dark the glow is light, added, and stronger, and the
- * night is taken back off them by `runestoneHoles`.
+ * night is taken back off them in their own shapes (`RunestoneNight`).
  */
 export function drawRunestone(ctx: Ctx, sx: number, sy: number, zoom: number, id: RunestoneId, rotation: number, night = 0, t = performance.now() / 1000): [number, number, number, number] {
   const b = bakedFor(id, rotation, zoom);
@@ -2405,7 +2445,7 @@ export function drawRunestone(ctx: Ctx, sx: number, sy: number, zoom: number, id
  * lit, one round the roundel, and a wide faint one over the panel, so the
  * face the runes are on is lit by them -- in screen pixels. Cut straight out
  * of the wash they would light whatever stands in front of the stone too, so
- * the renderer takes them through `runestoneNight` with the runes' shapes.
+ * the renderer lays them through `RunestoneNight` with the runes' shapes.
  */
 export function runestoneHoles(sx: number, sy: number, zoom: number, id: RunestoneId, rotation: number, t = performance.now() / 1000): Array<{ x: number; y: number; r: number; a: number }> {
   const b = bakedFor(id, rotation, zoom);
@@ -2425,8 +2465,8 @@ export function runestoneHoles(sx: number, sy: number, zoom: number, id: Runesto
  * of the wash to take away, where to lay it on the screen in pixels, and how
  * strongly, as it breathes. Laid `destination-out` on the night layer, they
  * would take the night off whatever stands in front of the stone as well:
- * the renderer takes them through `runestoneNight`, which trims them where
- * anything has been drawn over the stone since.
+ * the renderer lays them through `RunestoneNight`, which keeps them off
+ * whatever is drawn over the stone after it.
  */
 export function runestoneMasks(sx: number, sy: number, zoom: number, id: RunestoneId, rotation: number, t = performance.now() / 1000): NightMask[] {
   const b = bakedFor(id, rotation, zoom);
@@ -2447,102 +2487,209 @@ export interface NightMask {
   a: number;
 }
 
-/** A small canvas that is read back from, kept from one call to the next by its use. */
-const readers = new Map<string, [HTMLCanvasElement, CanvasRenderingContext2D]>();
-function reader(name: string, w: number, h: number): [HTMLCanvasElement, CanvasRenderingContext2D] {
-  let r = readers.get(name);
-  if (!r) {
-    const c = document.createElement('canvas');
-    r = [c, c.getContext('2d', { willReadFrequently: true }) as CanvasRenderingContext2D];
-    readers.set(name, r);
+/** A canvas kept from one frame to the next: grown when it must be, never made afresh. */
+type Kept = [HTMLCanvasElement, CanvasRenderingContext2D];
+const keep = (had: Kept | undefined, w: number, h: number): Kept => {
+  const k = had ?? canvasOf(1, 1);
+  if (k[0].width < w || k[0].height < h) {
+    k[0].width = Math.max(k[0].width, Math.ceil(w));
+    k[0].height = Math.max(k[0].height, Math.ceil(h));
   }
-  if (r[0].width !== w || r[0].height !== h) { r[0].width = w; r[0].height = h; }
-  return r;
+  return k;
+};
+
+/** A runestone drawn this frame: where, what its night shapes cover on the screen, and what has been drawn over them since. */
+interface Lit {
+  sx: number;
+  sy: number;
+  zoom: number;
+  id: RunestoneId;
+  rotation: number;
+  t: number;
+  /** What its shapes cover, in the context's units: left, top, right, bottom. */
+  box: [number, number, number, number];
+  /** Device pixels to a unit of the context it was drawn on. */
+  scale: number;
+  /** What has been drawn over it since, as alpha, `scale` pixels to a unit, from the box's corner. */
+  over: Kept;
+  /** Whether anything has been; until it has, its canvas is not even cleared. */
+  touched: boolean;
 }
 
-/** The most pixels a side of what is compared is read back at: finer than the masks' own soft edges need. */
-const GUARD_SIDE = 360;
-
 /**
- * Take a runestone's night shapes -- its runes (`runestoneMasks`) and the
- * soft holes round them (`runestoneHoles`) -- right after it has been drawn
- * on `ctx` at (sx, sy), and remember what the screen holds under them. Call
- * what comes back at the night pass, before the wash goes on: it hands back
- * the shapes less wherever anything has been drawn over the stone since --
- * a tree, somebody walking past in front of it -- so the night is taken off
- * the runes and never off what stands in front of them.
+ * The night taken off the runestones in view, and kept off whatever stands
+ * in front of them.
  *
- * The screen under the shapes is read back twice, at most `GUARD_SIDE`
- * pixels a side, and compared: a millisecond or two, after dark, while a
- * runestone is in view. When nothing has been drawn over it the shapes come
- * back as they went in.
+ * A rune's light is the night taken away in its shape (`runestoneMasks`)
+ * and softly round it (`runestoneHoles`). Laid straight on the night layer
+ * that would take the night off a tree or a body standing in front of the
+ * stone as well. So each stone drawn this frame keeps a small canvas the
+ * size of what its shapes cover, and everything drawn after it in the depth
+ * order that falls on that box is drawn into it too -- a tree's picture, a
+ * body or a piece through the same drawing it was put on the screen with --
+ * and at the night pass its shapes are laid less that, exactly, with
+ * nothing read back off the screen. What is laid over the whole scene after
+ * the entities -- haze, smoke, the swell -- is not in front of anything and
+ * is never drawn into it.
+ *
+ * By day it does nothing: `begin` with no dark leaves it shut, and every
+ * other call is a test of an empty list. Its canvases are kept and reused.
  */
-export function runestoneNight(ctx: Ctx, sx: number, sy: number, zoom: number, id: RunestoneId, rotation: number, t = performance.now() / 1000): () => NightMask[] {
-  const masks = runestoneMasks(sx, sy, zoom, id, rotation, t);
-  const holes = runestoneHoles(sx, sy, zoom, id, rotation, t);
-  // The holes laid onto a picture of their own over the box they cover, so they are trimmed as the runes are.
-  if (holes.length) {
-    let a = Infinity, b = Infinity, c = -Infinity, d = -Infinity;
-    for (const h of holes) { a = Math.min(a, h.x - h.r); b = Math.min(b, h.y - h.r); c = Math.max(c, h.x + h.r); d = Math.max(d, h.y + h.r); }
-    const k = Math.min(1, GUARD_SIDE / Math.max(1, c - a, d - b));
-    const [cv, g] = canvasOf((c - a) * k + 2, (d - b) * k + 2);
-    for (const h of holes) {
-      const x = (h.x - a) * k, y = (h.y - b) * k, rr = h.r * k;
-      const grad = g.createRadialGradient(x, y, 0, x, y, rr);
-      grad.addColorStop(0, `rgba(0,0,0,${h.a.toFixed(2)})`);
-      grad.addColorStop(0.5, `rgba(0,0,0,${(h.a * 0.45).toFixed(2)})`);
+export class RunestoneNight {
+  private lit: Lit[] = [];
+  private pool: Kept[] = [];
+  private scratch: Kept | undefined;
+  private open = false;
+
+  /** A new frame: forget the last one's stones, and open only after dark. */
+  begin(dark: boolean): void {
+    this.open = dark;
+    this.lit.length = 0;
+  }
+
+  /** Whether any stone this frame has its night shapes to lay. */
+  get active(): boolean {
+    return this.lit.length > 0;
+  }
+
+  /** A runestone has just been drawn on `ctx` with its footprint's middle at (sx, sy): from now on, what falls on its shapes is kept. */
+  stone(ctx: Ctx, sx: number, sy: number, zoom: number, id: RunestoneId, rotation: number, t = performance.now() / 1000): void {
+    if (!this.open) return;
+    const b = bakedFor(id, rotation, zoom);
+    let L = Infinity, T = Infinity, R = -Infinity, B = -Infinity;
+    for (const gl of b.glows) {
+      const [x, y, w, h] = gl.box;
+      L = Math.min(L, sx + x * zoom, sx + (gl.cx - gl.r * 1.5) * zoom); T = Math.min(T, sy + y * zoom, sy + (gl.cy - gl.r * 1.5) * zoom);
+      R = Math.max(R, sx + (x + w) * zoom, sx + (gl.cx + gl.r * 1.5) * zoom); B = Math.max(B, sy + (y + h) * zoom, sy + (gl.cy + gl.r * 1.5) * zoom);
+    }
+    if (b.motes) {
+      // The motes rise past the head of the panel: room for them over it.
+      T -= 12 * zoom;
+    }
+    if (!(R > L && B > T)) return;
+    const m = ctx.getTransform();
+    const scale = Math.sqrt(Math.abs(m.a * m.d - m.b * m.c)) || 1;
+    const i = this.lit.length;
+    const over = (this.pool[i] = keep(this.pool[i], (R - L) * scale + 2, (B - T) * scale + 2));
+    this.lit.push({ sx, sy, zoom, id, rotation, t, box: [L, T, R, B], scale, over, touched: false });
+  }
+
+  /** The stones whose shapes the box (x, y, w, h) falls on. */
+  private under(x: number, y: number, w: number, h: number): Lit[] | null {
+    let out: Lit[] | null = null;
+    for (const s of this.lit) {
+      const [L, T, R, B] = s.box;
+      if (x < R && x + w > L && y < B && y + h > T) (out ??= []).push(s);
+    }
+    return out;
+  }
+
+  /** Set a stone's canvas to draw on in the context's own units, as `ctx` is: cleared the first time anything falls on it this frame. */
+  private onto(s: Lit): CanvasRenderingContext2D {
+    const g = s.over[1];
+    if (!s.touched) {
+      s.touched = true;
+      g.setTransform(1, 0, 0, 1, 0, 0);
+      g.globalCompositeOperation = 'source-over';
+      g.globalAlpha = 1;
+      g.clearRect(0, 0, Math.ceil((s.box[2] - s.box[0]) * s.scale) + 2, Math.ceil((s.box[3] - s.box[1]) * s.scale) + 2);
+    }
+    g.setTransform(s.scale, 0, 0, s.scale, -s.box[0] * s.scale, -s.box[1] * s.scale);
+    return g;
+  }
+
+  /** A picture drawn after the stones, at (dx, dy) and (dw, dh) in the context's units, as `drawImage` takes them: kept wherever it falls on one. */
+  occlude(img: CanvasImageSource, dx: number, dy: number, dw: number, dh: number): void {
+    if (!this.lit.length) return;
+    const hit = this.under(dx, dy, dw, dh);
+    if (!hit) return;
+    for (const s of hit) this.onto(s).drawImage(img, dx, dy, dw, dh);
+  }
+
+  /**
+   * Something drawn after the stones by a drawing of its own, somewhere in
+   * the box (x, y, w, h): drawn again onto each stone's canvas it may fall
+   * on, by the same drawing, so what is kept is its own shape.
+   */
+  occludeDraw(x: number, y: number, w: number, h: number, draw: (g: CanvasRenderingContext2D) => void): void {
+    if (!this.lit.length) return;
+    const hit = this.under(x, y, w, h);
+    if (!hit) return;
+    for (const s of hit) {
+      const g = this.onto(s);
+      g.save();
+      draw(g);
+      g.restore();
+    }
+  }
+
+  /** Something drawn after the stones that cannot be drawn again: its whole box is kept, so the night is left on all of it. */
+  occludeRect(x: number, y: number, w: number, h: number): void {
+    if (!this.lit.length) return;
+    const hit = this.under(x, y, w, h);
+    if (!hit) return;
+    for (const s of hit) {
+      const g = this.onto(s);
+      g.fillStyle = '#000';
+      g.fillRect(x, y, w, h);
+    }
+  }
+
+  /**
+   * At the night pass: take the night off `night`, a layer laid in the
+   * context's units less (ox, oy), for every stone this frame -- its runes'
+   * shapes and the soft light round them, less whatever was drawn over them.
+   * Lays `destination-out` itself and leaves `night` as it found it.
+   */
+  cut(night: CanvasRenderingContext2D, ox = 0, oy = 0): void {
+    for (const s of this.lit) {
+      if (!s.touched) {
+        // Nothing in front of it: its shapes straight onto the night.
+        const was = night.globalCompositeOperation;
+        night.globalCompositeOperation = 'destination-out';
+        this.shapes(night, s, -ox, -oy);
+        night.globalCompositeOperation = was;
+        continue;
+      }
+      const [L, T, R, B] = s.box;
+      const w = Math.ceil((R - L) * s.scale) + 2, h = Math.ceil((B - T) * s.scale) + 2;
+      const sc = (this.scratch = keep(this.scratch, w, h));
+      const g = sc[1];
+      g.setTransform(1, 0, 0, 1, 0, 0);
+      g.globalCompositeOperation = 'source-over';
+      g.globalAlpha = 1;
+      g.clearRect(0, 0, w, h);
+      g.setTransform(s.scale, 0, 0, s.scale, -L * s.scale, -T * s.scale);
+      this.shapes(g, s, 0, 0);
+      g.setTransform(1, 0, 0, 1, 0, 0);
+      g.globalCompositeOperation = 'destination-out';
+      g.drawImage(s.over[0], 0, 0, w, h, 0, 0, w, h);
+      g.globalCompositeOperation = 'source-over';
+      const was = night.globalCompositeOperation;
+      night.globalCompositeOperation = 'destination-out';
+      night.drawImage(sc[0], 0, 0, w, h, L - ox, T - oy, w / s.scale, h / s.scale);
+      night.globalCompositeOperation = was;
+    }
+  }
+
+  /** A stone's shapes onto `g` in the context's units moved by (dx, dy): the soft light round its runes, then the runes. */
+  private shapes(g: CanvasRenderingContext2D, s: Lit, dx: number, dy: number): void {
+    for (const hole of runestoneHoles(s.sx + dx, s.sy + dy, s.zoom, s.id, s.rotation, s.t)) {
+      const grad = g.createRadialGradient(hole.x, hole.y, 0, hole.x, hole.y, hole.r);
+      grad.addColorStop(0, `rgba(0,0,0,${hole.a.toFixed(2)})`);
+      grad.addColorStop(0.5, `rgba(0,0,0,${(hole.a * 0.45).toFixed(2)})`);
       grad.addColorStop(1, 'rgba(0,0,0,0)');
       g.fillStyle = grad;
       g.beginPath();
-      g.arc(x, y, rr, 0, TAU);
+      g.arc(hole.x, hole.y, hole.r, 0, TAU);
       g.fill();
     }
-    masks.push({ canvas: cv, x: a, y: b, w: cv.width / k, h: cv.height / k, a: 1 });
-  }
-  if (!masks.length) return () => [];
-  // The box they all cover, on the screen and on the canvas behind it.
-  let L = Infinity, T = Infinity, R = -Infinity, B = -Infinity;
-  for (const m of masks) { L = Math.min(L, m.x); T = Math.min(T, m.y); R = Math.max(R, m.x + m.w); B = Math.max(B, m.y + m.h); }
-  const M = ctx.getTransform();
-  const p0 = M.transformPoint(new DOMPoint(L, T)), p1 = M.transformPoint(new DOMPoint(R, B));
-  const dx = Math.max(0, Math.floor(Math.min(p0.x, p1.x))), dy = Math.max(0, Math.floor(Math.min(p0.y, p1.y)));
-  const dw = Math.min(ctx.canvas.width, Math.ceil(Math.max(p0.x, p1.x))) - dx, dh = Math.min(ctx.canvas.height, Math.ceil(Math.max(p0.y, p1.y))) - dy;
-  if (dw <= 0 || dh <= 0) return () => masks;
-  const q = Math.min(1, GUARD_SIDE / Math.max(dw, dh));
-  const gw = Math.max(1, Math.round(dw * q)), gh = Math.max(1, Math.round(dh * q));
-  const grab = (name: string): Uint8ClampedArray => {
-    const [, g] = reader(name, gw, gh);
-    g.clearRect(0, 0, gw, gh);
-    g.drawImage(ctx.canvas, dx, dy, dw, dh, 0, 0, gw, gh);
-    return g.getImageData(0, 0, gw, gh).data;
-  };
-  const before = grab('before').slice();
-  // Where the box lies on the screen, in the masks' own pixels: the read-back box less any of it off the canvas.
-  const inv = M.inverse();
-  const s0 = inv.transformPoint(new DOMPoint(dx, dy)), s1 = inv.transformPoint(new DOMPoint(dx + dw, dy + dh));
-  return () => {
-    const after = grab('after');
-    const [oc, og] = reader('over', gw, gh);
-    const img = og.createImageData(gw, gh);
-    let any = false;
-    for (let i = 0; i < after.length; i += 4) {
-      if (Math.abs(after[i] - before[i]) + Math.abs(after[i + 1] - before[i + 1]) + Math.abs(after[i + 2] - before[i + 2]) > 18) {
-        img.data[i + 3] = 255;
-        any = true;
-      }
+    for (const m of runestoneMasks(s.sx + dx, s.sy + dy, s.zoom, s.id, s.rotation, s.t)) {
+      g.globalAlpha = m.a;
+      g.drawImage(m.canvas, m.x, m.y, m.w, m.h);
     }
-    if (!any) return masks;
-    og.putImageData(img, 0, 0);
-    // Each shape less what is now over it: the read-back laid over the shape's own picture where the two meet.
-    return masks.map((m) => {
-      const [cv, g] = canvasOf(m.canvas.width, m.canvas.height);
-      g.drawImage(m.canvas, 0, 0);
-      g.globalCompositeOperation = 'destination-out';
-      const kx = m.canvas.width / m.w, ky = m.canvas.height / m.h;
-      g.drawImage(oc, (s0.x - m.x) * kx, (s0.y - m.y) * ky, (s1.x - s0.x) * kx, (s1.y - s0.y) * ky);
-      return { ...m, canvas: cv };
-    });
-  };
+    g.globalAlpha = 1;
+  }
 }
 
 /** What a runestone covers on the screen from its footprint's middle, in pixels at zoom one: for where it is clicked. */

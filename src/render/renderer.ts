@@ -39,7 +39,7 @@ import { foundationDone } from '../game/foundations';
 import { DYE_BY_ID } from '../game/dyestuffs';
 import { hash2 } from '../world/noise';
 import { bareRock, DAMP_SAND, dustiness, FLAT, growth, oreWash, PAVED, ROCK_VARIANTS, SLAB_VARIANTS, STREWN, TileType, TILE_DEFS, COVERED, bushSpecies, slabVariant, trailGround, stonesBed, treeSpecies, treeVariant } from '../world/tiles';
-import type { NightMask } from './runestone';
+import { RunestoneNight } from './runestone';
 import { HALF_H, HALF_W, HEIGHT_SCALE, UNITS_PER_TILE } from './iso';
 import { beastReach, HUNT_REACH, inFightReach, isFightJob, WIND_UP } from '../game/fight';
 import { depthOf, type View } from './view';
@@ -1171,16 +1171,15 @@ export class Renderer {
    */
   private glows: Array<{ sx: number; sy: number; kind: string; view: PieceView }> = [];
   /**
-   * Shapes to take the night back off with, from what was drawn this frame:
-   * a runestone's runes, each in its own shape, and the soft light round
-   * them. Each is what `runestoneNight` handed back when the stone was drawn,
-   * called at the night pass for the shapes less whatever has been drawn over
-   * the stone since, so the night is taken off the runes and not off a tree
-   * or a body standing in front of them. Laid `destination-out` on the night
-   * layer beside the glows' round holes; each picture's alpha is how much of
-   * the wash it takes, at strength `a`.
+   * The night taken off the runestones in view, in their runes' shapes and
+   * kept off whatever stands in front of them (`RunestoneNight`). Opened at
+   * the top of every frame after dark. Whatever draws a runestone in the
+   * entity pass calls `stone` on it right after; everything drawn after that
+   * in the depth order is kept by it where it falls on a stone -- through
+   * `paint`, and a tree's picture in `drawTree` -- and the night pass lays
+   * it with `cut`.
    */
-  private nightMasks: Array<() => NightMask[]> = [];
+  private runeNight = new RunestoneNight();
   private anvilHits: HitRect[] = [];
   private postHits: HitRect[] = [];
   private trapHits: HitRect[] = [];
@@ -3208,7 +3207,7 @@ export class Renderer {
     this.kilnHits.length = 0;
     this.furnitureHits.length = 0;
     this.glows.length = 0;
-    this.nightMasks.length = 0;
+    this.runeNight.begin(this.game.darkness() > 0.02);
     this.anvilHits.length = 0;
     this.postHits.length = 0;
     this.trapHits.length = 0;
@@ -4368,6 +4367,8 @@ export class Renderer {
     draw: (g: CanvasRenderingContext2D, px: number, py: number) => void,
     colour = '#ffffff',
   ): void {
+    // After dark, past a runestone: kept where it falls on the stone's runes, drawn again in its own shape (`RunestoneNight`).
+    if (this.runeNight.active) this.runeNight.occludeDraw(sx - 90 * zoom, sy - 230 * zoom, 180 * zoom, 250 * zoom, (g) => draw(g, sx, sy));
     if (effect === 'none') {
       draw(ctx, sx, sy);
       return;
@@ -4790,8 +4791,10 @@ export class Renderer {
       if (ent.kind === 'hull' && ent.piece && ent.view) {
         const piece = ent.piece;
         const helm = this.helming === piece ? 'player' : piece.helm ? this.game.roster.list().find((p) => p.uid === piece.helm) : undefined;
-        drawFurniture(ctx, ent.sx, ent.sy + (ent.drawDy ?? 0), zoom, piece.kind, !!piece.lit, dyeOf(piece) ?? undefined, this.pieceTrim(piece), ent.view, piece.material, crewOf(piece.kind) ?? undefined, ent.layer, true,
+        const hb = drawFurniture(ctx, ent.sx, ent.sy + (ent.drawDy ?? 0), zoom, piece.kind, !!piece.lit, dyeOf(piece) ?? undefined, this.pieceTrim(piece), ent.view, piece.material, crewOf(piece.kind) ?? undefined, ent.layer, true,
           helm ? figurePicture(helm === 'player' ? helm : 'o' + helm.id) : null, this.manned(piece));
+        // A hull is drawn in layers round her crew, not to be drawn again: in front of a runestone's runes, her box is kept off them.
+        if (this.runeNight.active) this.runeNight.occludeRect(ent.sx + hb[0], ent.sy + (ent.drawDy ?? 0) + hb[1], hb[2] - hb[0], hb[3] - hb[1]);
         continue;
       }
       if (ent.kind === 'furniture' && ent.piece) {
@@ -5068,6 +5071,8 @@ export class Renderer {
     const dh = spr.h * zoom * grew;
     const left = ent.sx - spr.ax * zoom * grew;
     const top = ent.sy - spr.ay * zoom * grew;
+    // In front of a runestone's runes after dark: its picture, as it stands without the wind, kept off them (`RunestoneNight`).
+    if (this.runeNight.active) this.runeNight.occlude(spr.canvas, left, top, dw, dh);
     if (this.shadow.alpha > 0.012) this.castShadow(ctx, ent.sx, ent.sy, (spr.ay - (spr.h - spr.ay)) * 0.5 * zoom + dh * 0.12);
     /*
      * Air between here and the back of the wood.
@@ -13016,7 +13021,7 @@ export class Renderer {
     if (washes.length) {
       // Gathered once at the top of the frame when it is dark enough to want them (`lightsNow`).
       const lights = dark > 0.02 ? this.lightsNow : game.lights();
-      if (!lights.length && !this.glows.length && !this.nightMasks.length) {
+      if (!lights.length && !this.glows.length && !this.runeNight.active) {
         for (const wash of washes) {
           ctx.fillStyle = `rgba(${wash.colour}, ${wash.alpha.toFixed(3)})`;
           ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
@@ -13030,7 +13035,7 @@ export class Renderer {
          * something with a light of its own is in view, whose holes are fine
          * work (an altar's stars and lines), and then at full size.
          */
-        const res = this.glows.length || this.nightMasks.length ? 1 : LIGHT_RES;
+        const res = this.glows.length || this.runeNight.active ? 1 : LIGHT_RES;
         const night = this.nightLayer(res);
         const nc = night.getContext('2d') as CanvasRenderingContext2D;
         nc.setTransform(1, 0, 0, 1, 0, 0);
@@ -13058,14 +13063,8 @@ export class Renderer {
             nc.fill();
           }
         }
-        // And off whatever lit shapes were drawn, in their own shapes.
-        for (const shapes of this.nightMasks) {
-          for (const m of shapes()) {
-            nc.globalAlpha = m.a;
-            nc.drawImage(m.canvas, m.x, m.y, m.w, m.h);
-          }
-        }
-        nc.globalAlpha = 1;
+        // And off the runestones' runes, in their own shapes, less whatever stands in front of them.
+        this.runeNight.cut(nc);
         nc.globalCompositeOperation = 'source-over';
         ctx.drawImage(night, 0, 0, night.width / res, night.height / res);
         // A warm cast where the firelight actually falls, over the cold: the warmest light's at each spot, as dark as
