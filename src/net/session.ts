@@ -178,7 +178,11 @@ export class HostSession {
             actor.hear(`You cannot ${def.label.toLowerCase()} that.`, 'error');
             return;
           }
+          // A guest's job is theirs to repeat, not the host's: the host's own
+          // last ask stays what the repeat key gives back.
+          const mine = this.game.lastAsked;
           this.game.requestAction(def, msg.target, msg.times);
+          this.game.lastAsked = mine;
         });
         return;
       }

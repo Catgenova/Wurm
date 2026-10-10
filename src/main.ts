@@ -379,6 +379,7 @@ const PRESSES: Record<string, () => void> = {
   carry_on: () => {
     if (!game.resumeQueue()) game.logMsg('There is nothing waiting to be taken up.', 'info');
   },
+  repeat: () => game.repeatLast(),
   emotes: () => ui.showEmotes(),
   stop: () => {
     if (ui.menu.isOpen) ui.menu.hide();

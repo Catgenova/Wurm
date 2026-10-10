@@ -1534,6 +1534,16 @@ export const NEWS: News[] = [
         + `and one in ${Math.round(KNACK_ODDS * KNACK_GO / DRIVING_LEARN).toLocaleString('en')} tiles driven or sailed. Every other trade is as it was. Knacks already earned are kept.`,
     ],
   },
+  {
+    n: 113,
+    day: '2026-10-10',
+    lines: () => [
+      `${defaultKey('repeat')} does the last job you asked for again: the same thing to the same target, as many times as you asked the first time. `
+        + 'It is asked for like any other job, so it lines up behind the one in hand, walks to its target, and is refused for the same reasons.',
+      'When the stack the last job used is gone, another of the same kind in your pack stands in. A name or a yes the job asked for the first time is asked for again. '
+        + 'The key can be changed in Settings, under Keys.',
+    ],
+  },
 ];
 
 /** The highest entry this browser has shown. */

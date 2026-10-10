@@ -660,6 +660,14 @@ jobs:
           npx esbuild supabase/test/knacks.ts --bundle --platform=node --format=esm \
             --outfile=node_modules/.cache/knacks.mjs --log-level=error
           node node_modules/.cache/knacks.mjs
+      - name: The last job asked for, asked for again
+        run: |
+          # Asked for: a repeat-last-action key for the tedious jobs, casting
+          # nails among them. The browser asks again through the same door
+          # every ask goes through, so this holds what it asks for and with what.
+          npx esbuild supabase/test/repeat.ts --bundle --platform=node --format=esm \
+            --outfile=node_modules/.cache/repeat.mjs --log-level=error
+          node node_modules/.cache/repeat.mjs
       - name: A foundation is the same slab on both sides
         run: |
           # Concrete foundations: level ground poured into a slope, leaving the

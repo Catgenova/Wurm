@@ -4346,7 +4346,42 @@ export class Game {
     }
   }
 
+  /**
+   * The last job asked for, for the repeat key (`repeatLast`), with what kind
+   * of thing it named so that another of the same can stand in once that one
+   * is used up.
+   */
+  lastAsked: { def: ActionDef; target: Target; goes?: number; was?: string } | null = null;
+
+  /**
+   * Ask for the last job again: the same thing done to the same target the
+   * same number of times. Asked for: "a repeat last action key ... for some of
+   * the more tedious actions like casting nails."
+   *
+   * It goes through `requestAction` like any other ask, so it is refused, lined
+   * up behind the job in hand or walked to exactly as the first one was. A
+   * stack the last one used up is stood in for by another of the same kind in
+   * the pack (`retarget`, as the queue does), and a name or a yes given the
+   * first time is asked for again rather than taken as read.
+   */
+  repeatLast(): void {
+    const last = this.lastAsked;
+    if (!last) {
+      this.logMsg('There is nothing to do again yet.', 'info');
+      return;
+    }
+    const { name: _name, sure: _sure, ...rest } = last.target as Target & { name?: string; sure?: boolean };
+    const target = this.retarget({ target: rest as Target, was: last.was });
+    if (!last.def.applies(target, this)) {
+      this.logMsg(`There is nothing here to ${last.def.label.toLowerCase()} now.`, 'error');
+      return;
+    }
+    this.requestAction(last.def, target, last.goes);
+  }
+
   requestAction(def: ActionDef, target: Target, goes?: number): void {
+    const named = target.kind === 'item' ? target.uid : 'itemUid' in target ? target.itemUid : undefined;
+    this.lastAsked = { def, target, goes, was: named !== undefined ? this.inventory.get(named)?.id : undefined };
     // gates: a hidden door asked for is kept only while a plan of a wall on its border is in hand or lined up (`keepHiddenAsks`).
     keepHiddenAsks(this);
     // Examining a wild thing says how a fight with it would go (`consider`), whoever answers the rest.
