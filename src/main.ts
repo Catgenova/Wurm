@@ -13,7 +13,7 @@ import { ACTIONS } from './game/actions';
 import { FURNITURE } from './game/furniture';
 import { MATERIALS } from './game/materials';
 import { TRAITS } from './game/traits';
-import { DYES } from './game/dyestuffs';
+import { DYESTUFFS as DYES } from './game/dyestuffs';
 import { WOUND_KINDS } from './game/wounds';
 import { TRAPS } from './game/traps';
 import { BRIDGES, bridgeDone } from './game/bridges';

@@ -36,7 +36,6 @@ import {
   type CellarTile,
 } from '../game/building';
 import { foundationDone } from '../game/foundations';
-import { DYE_BY_ID } from '../game/dyestuffs';
 import { hash2 } from '../world/noise';
 import { bareRock, DAMP_SAND, dustiness, FLAT, growth, oreWash, PAVED, ROCK_VARIANTS, SLAB_VARIANTS, STREWN, TileType, TILE_DEFS, COVERED, bushSpecies, slabVariant, trailGround, stonesBed, treeSpecies, treeVariant } from '../world/tiles';
 import { HALF_H, HALF_W, HEIGHT_SCALE, UNITS_PER_TILE } from './iso';
@@ -71,7 +70,7 @@ import { DAWN, DUSK } from '../game/game';
 import { boatSway, clothInWind, crewOrder, deviceOf, drawFurniture, drawFurnitureLive, driverOn, swayOnScreen, WHEELS, wheelBlur, wheelTrim, steeredByTiller, woodHex, furnitureHoles, helmSeat, reinsTo, rowedPiece, furnitureSpan, FURNITURE_HEIGHT, glowsAtNight, headingView, mossTrim, PIECE_STAGES, pieceView, planterTrim, roseTrim, type Air, type Crew, type PieceView } from './furniture';
 import { roseStage } from '../game/roses';
 import { fieldRate } from '../game/growth';
-import { dyeOf } from '../game/dyestuffs';
+import { dyeOf, dyeTint } from '../game/dyestuffs';
 import { sailTrim } from '../game/wind';
 import { FURNITURE_BY_ID, isPlanter, rackDeck, rackSpots } from '../game/furniture';
 import { isLampPiece, lampBurning } from '../game/lamps';
@@ -6353,7 +6352,7 @@ export class Renderer {
    */
   private painted(mat: MaterialDef, dye: string | undefined): MaterialDef {
     if (!dye) return mat;
-    const d = DYE_BY_ID.get(dye);
+    const d = dyeTint(dye);
     if (!d) return mat;
     const key = `${mat.id}:${dye}`;
     const had = this.paints.get(key);

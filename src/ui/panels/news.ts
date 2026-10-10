@@ -83,9 +83,12 @@ import { STEPS_BACK, stepsBack, STONE_STEPS_BILL, TIMBER_STEPS_BILL } from '../.
 import { ROSE_BUD, ROSE_FLOWER, ROSE_LEAFY, ROSES_RULE } from '../../game/roses';
 import { DEVICE_COUNT } from '../../render/furniture';
 import { FLOWER_MOST, FLOWER_SEASONS } from '../../world/flowers';
-import { DYES } from '../../game/dyestuffs';
+import {
+  colourWord, DYE_BOIL_LITRES, DYE_LITRES, DYE_QL_BLACK, DYE_QL_PURE, DYE_QL_WHITE, DYESTUFFS, dyeHex, LEGACY_DYES, LEGACY_POTS, legacyLiquid,
+  PRIMARIES, pureDye, mixDye, sharesSaid,
+} from '../../game/dyestuffs';
 import { GREEN_ACTIONS, GREEN_DAYS, GREEN_SHADE, GREEN_SUN, GREEN_WET } from '../../game/greening';
-import { FURNITURE, WELL_TRICKLE, WELL_TRICKLE_QL } from '../../game/furniture';
+import { BUCKET_LITRES, FURNITURE, WELL_TRICKLE, WELL_TRICKLE_QL } from '../../game/furniture';
 import { BRIDGES, CLEARANCE, PULL_REACH } from '../../game/bridges';
 import { AQUEDUCT } from '../../game/aqueducts';
 import { AQUEDUCT_FLOW, AQUEDUCT_LPS, CHANNEL_DEEP, CHANNEL_WIDE, TILE_METRES } from '../../world/aqueducts';
@@ -819,12 +822,12 @@ export const NEWS: News[] = [
     n: 58,
     day: '2026-09-28',
     lines: () => {
-      const dye = DYES.find((d) => d.id === 'wildflowers');
-      const boil = RECIPE_BY_ID.get('make_wildflowers');
+      // As it was then: a pot of orange, before dye was mixed (`LEGACY_DYES`).
+      const dye = LEGACY_DYES.find((d) => d.id === 'wildflowers');
       return [
         `${capital(listed([...WEARS].map((t) => GROUNDS[t as Ground].name.toLowerCase())))} wear where people walk: a step on your own feet puts one wear on a tile, up to ${WEAR_MOST}, and at ${WEAR_TRAIL} it is a trail of bare earth, walked and rolled like packed dirt. Each tile loses ${WEAR_FALL} at every turn of the woods, at ${TREE_DAWN_UTC}:00 UTC, and a trail with none left is what it was again. Paved, built on, tilled or planted ground never wears.`,
         `Grass flowers in ${listed(FLOWER_SEASONS)}, in drifts: up to ${numberWord(FLOWER_MOST.summer)} clumps a tile in summer and ${numberWord(FLOWER_MOST.spring)} in spring. Pick flowers gives a wildflower a clump, at your foraging quality, and the tile has none again until next spring.`,
-        `Wildflowers are for dye: ${billWords((boil?.inputs ?? []).map((i) => [i.item, i.count ?? 1] as const))} boil into ${numberWord(boil?.count ?? 1)} pots of ${dye?.word ?? 'orange'}, at alchemy ${boil?.difficulty ?? 0}.`,
+        `Wildflowers are for dye: ${billWords([[dye?.from ?? 'wildflowers', dye?.count ?? 1], ['lye_bucket', 1]])} boil into ${numberWord(LEGACY_POTS)} pots of ${dye?.word ?? 'orange'}, at alchemy ${dye?.difficulty ?? 0}.`,
         'Steep rock is drawn with the grass above it hanging over its top edge, moss down its upper face, ferns and tufts in its cracks and the damp dark over water at its foot. Drawing only: nothing about the ground changes.',
       ];
     },
@@ -862,7 +865,7 @@ export const NEWS: News[] = [
     lines: () => {
       const lily = WATER_PLANT_BY_ID.get('lily') as WaterPlantDef;
       const lotus = WATER_PLANT_BY_ID.get('lotus') as WaterPlantDef;
-      const dyeWord = (item: string): string => DYES.find((d) => d.from === item)?.word ?? '';
+      const dyeWord = (item: string): string => LEGACY_DYES.find((d) => d.from === item)?.word ?? '';
       const metres = (units: number): string => (units / 10).toFixed(1);
       return [
         `Lay stepping stones across shallow water — the sea's edge, a pond, or where a stream runs — with a trowel and ${numberWord(STONES_SLABS)} cut slab a tile, where the water is ${metres(STONES_DEPTH)} m deep or less (you swim from ${metres(SWIM_DEPTH)} m). On them you walk at ${percent(TILE_DEFS[TileType.SteppingStones].speed / TILE_DEFS[TileType.Grass].speed)} of your pace on grass and neither wade nor swim. Take up the stepping stones gives the slab back.`,
@@ -1489,6 +1492,33 @@ export const NEWS: News[] = [
         + `one more for every ${MOTES_STEP} points and ${numberWord(MOTES_MOST)} from ${MOTES_MOST_AT}, and the swirl is gone for everybody. `
         + 'Each collect trains Elementalism, and nothing else does.',
     ],
+  },
+  {
+    n: 111,
+    day: '2026-10-10',
+    lines: () => {
+      const from = (p: string): string => listed(DYESTUFFS.filter((d) => d.primary === p).map((d) => itemDef(d.from).name.toLowerCase()));
+      const gone = [...new Set(LEGACY_DYES.filter((d) => !DYESTUFFS.some((x) => x.from === d.from)).map((d) => itemDef(d.from).name.toLowerCase()))];
+      const purple = mixDye(pureDye('red', DYE_QL_PURE), 1, pureDye('blue', DYE_QL_PURE), 1);
+      return [
+        `Dye is a liquid, kept in a bucket or a barrel, and is boiled in three colours only: ${listed(PRIMARIES.map((p) => `${p} from ${from(p)}`))}. `
+          + `A boil turns its bucket of lye into a bucket holding ${numberWord(DYE_BOIL_LITRES)} litres of dye, at the QL the alchemy gives it, `
+          + `where it made ${numberWord(LEGACY_POTS)} pots of one of ${numberWord(LEGACY_DYES.length)} colours. ${capital(listed(gone))} no longer make dye, and do everything else they did.`,
+        'Every other colour is mixed by pouring: dye poured into a barrel that holds dye mixes with it, the share of each primary and the QL each the average of the two by litres. '
+          + 'Dye goes in with nothing but dye, and nothing else goes in with dye. A bucket fills from a barrel of dye, with less than a bucket if that is all there is, '
+          + 'and a bucket of dye with room in it tops up from one, mixing as it goes.',
+        `A dye's QL is its brightness: black at QL ${DYE_QL_BLACK}, the mix itself at ${DYE_QL_PURE} and white at ${DYE_QL_WHITE}, in a straight line either side. `
+          + `Red at QL ${DYE_QL_PURE} is ${dyeHex(pureDye('red', DYE_QL_PURE))}, and red and blue half and half is ${colourWord(dyeHex(purple))}, ${dyeHex(purple)}.`,
+        `A dyeing takes litres by the size of the thing: ${DYE_LITRES.garment} for a garment, cloth, a bag, a saddle or a bridle; ${DYE_LITRES.banner} for a banner or a flag; `
+          + `${DYE_LITRES.sail} for a sailing boat; ${DYE_LITRES.ship} for a caravel; ${DYE_LITRES.wall} for a side of a wall or a tile of floor. `
+          + 'The thing takes exactly the dye\'s colour and is called by the nearest plain colour word. Examine on a dyed thing says its hex, and on a bucket or a barrel of dye its hex, QL, litres and mix.',
+        `Everything dyed before keeps the colour it had. Every pot of dye is now ${DYE_LITRES.garment} litre, in a bucket of dye of up to ${BUCKET_LITRES}, `
+          + `of the mix and QL whose colour comes nearest the pot's: ${LEGACY_DYES.map((d) => {
+            const l = legacyLiquid(d.id) ?? pureDye('red', DYE_QL_PURE);
+            return `${d.name.toLowerCase()} ${sharesSaid(l)} at QL ${l.ql}, ${dyeHex(l)}`;
+          }).join('; ')}.`,
+      ];
+    },
   },
 ];
 

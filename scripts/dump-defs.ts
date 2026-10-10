@@ -65,7 +65,10 @@ import { GRASS_PER_CUT, MOSS_PER_CUT, REED_CUT, REED_EXTRA_AT } from '../src/gam
 import { CROWD_HIDES, DEEDS_JOINED, PLANTABLE } from '../src/game/game';
 import { FAITH_SPELLS, FAITH_TIER_AT, PATRON_AT, PATRONS, SPELL_BAR, SPELL_ON_WORDS, SPELL_ONS, SPELL_REACH, SPELLS_PER_TIER } from '../src/game/patrons';
 import { RARITIES, RARITY_LIFT, RARITY_ODDS, RARITY_WORD } from '../src/game/items';
-import { DYES } from '../src/game/dyestuffs';
+import {
+  DYE_BOIL_LITRES, DYE_LITRES, DYE_PARTS, DYE_QL_BLACK, DYE_QL_PURE, DYE_QL_WHITE, DYE_SIZE_OF, DYE_WORDS, DYESTUFFS, dyeRecipeId, dyeText,
+  LEGACY_DYES, legacyLiquid, RYB_CUBE,
+} from '../src/game/dyestuffs';
 import { SLAB_VARIANTS } from '../src/world/tiles';
 import { FLOWERS_PICKED, WEAR_FALL, WEAR_MOST, WEAR_TRAIL, WEARS } from '../src/world/tiles';
 import { FLOWER_FROM, FLOWER_MOST, FLOWER_OCTAVES, FLOWER_STEP } from '../src/world/flowers';
@@ -723,6 +726,23 @@ out.push(`alter table rarity_def add column if not exists blood real not null de
 out.push(`create table if not exists dye_def (
   id text primary key, name text not null, word text not null
 );`);
+/*
+ * Dye as a liquid (`dyestuffs.ts`). `dye_def` is the dyes there were before
+ * it was mixed, kept by id and name; `dye_legacy` is the same with the colour
+ * each was and the mix nearest it (`legacyLiquid`), which is what a thing dyed
+ * with one and a pot of one become. What each dyestuff boils into, by its
+ * recipe; the plain colour words, each at its colour; and the litres a dyeing
+ * takes, by the size of the thing.
+ */
+out.push(`create table if not exists dye_legacy (
+  id text primary key, ord int not null, name text not null, hex text not null, liquid text not null
+);`);
+out.push(`create table if not exists dyestuff_def (
+  recipe text primary key, item text not null, primary_colour text not null
+);`);
+out.push(`create table if not exists dye_word_def (ord int primary key, word text not null, hex text not null);`);
+out.push(`create table if not exists dye_litres_def (size text primary key, litres int not null);`);
+out.push(`create table if not exists dye_size_def (id text primary key, size text not null);`);
 out.push(`create table if not exists metal_def (
   id text primary key, name text not null, ore text, lump text not null,
   level real not null, work real not null
@@ -1136,7 +1156,7 @@ out.push(emptied(['melt_def', 'wall_fitting', 'recipe', 'recipe_input', 'recipe_
   'path_step', 'class_def', 'class_skill', 'class_channel', 'class_node', 'class_perk',
   'perk_fx_rule', 'perk_tier', 'class_tier', 'class_spell', 'patron_def', 'faith_tier', 'faith_spell', 'spell_on_def', 'spell_slot', 'pan_ore', 'rite_def',
   'school_def', 'school_stone', 'spell_def', 'bridge_def', 'bridge_bill', 'bridge_winch', 'brew_def',
-  'dyeable_item', 'dyeable_class']));
+  'dyeable_item', 'dyeable_class', 'dye_legacy', 'dyestuff_def', 'dye_word_def', 'dye_litres_def', 'dye_size_def']));
 
 /*
  * Every choice the character creator offers.
@@ -1214,7 +1234,7 @@ RARITIES.forEach((r, ord) => {
   if (!r.name) return;
   out.push(`insert into rarity_def values (${q(r.name)}, ${q(ord)}, ${q(r.boost)}, ${q(r.keep)}, ${q(r.ceiling)}, ${q(RARITY_ODDS[ord - 1])}, ${q(RARITY_WORD[ord])}, ${q(RARITY_LIFT[ord])}, ${q(r.size)}, ${q(r.blood)});`);
 });
-for (const d of DYES) out.push(`insert into dye_def values (${q(d.id)}, ${q(d.name)}, ${q(d.word)});`);
+for (const d of LEGACY_DYES) out.push(`insert into dye_def values (${q(d.id)}, ${q(d.name)}, ${q(d.word)});`);
 for (const m of Object.values(IMPROVE_MATERIALS)) {
   out.push(`insert into improve_material_def values (${q(m.id)}, ${q(m.name)}, ${q(m.skill)});`);
   m.tools.forEach((t, ord) => out.push(`insert into improve_tool values (${q(m.id)}, ${q(ord)}, ${q(t)});`));
@@ -1810,6 +1830,13 @@ for (const [fn, v] of [
  * every island of the chart by its index in REGIONS (`ISLAND_ELEMENT`; null
  * for a byte that is no island's), and what a refused collect says.
  */
+/* Dye (`dyestuffs.ts`): what its parts are counted out of, what a boil makes, the QLs it is black, itself and white at, and the RYB cube. */
+for (const [fn, v] of [
+  ['dye_parts', DYE_PARTS], ['dye_boil_litres', DYE_BOIL_LITRES], ['dye_ql_black', DYE_QL_BLACK], ['dye_ql_pure', DYE_QL_PURE], ['dye_ql_white', DYE_QL_WHITE],
+] as Array<[string, number]>) {
+  out.push(`create or replace function ${fn}() returns double precision language sql immutable as $fn$ select ${q(v)}::double precision $fn$;`);
+}
+out.push(`create or replace function ryb_cube() returns double precision[] language sql immutable as $fn$ select array[${RYB_CUBE.map((v) => q(v)).join(', ')}]::double precision[] $fn$;`);
 out.push(`create or replace function elementalism_skill() returns text language sql immutable as $fn$ select ${q(ELEMENTALISM)} $fn$;`);
 for (const [fn, v] of [
   ['swirls_a_day', SWIRLS_A_DAY], ['swirl_tries', SWIRL_TRIES], ['swirl_draws', SWIRL_DRAWS], ['swirl_dark', SWIRL_DARK], ['swirl_light', SWIRL_LIGHT],
@@ -1939,6 +1966,15 @@ for (const b of BREWS) {
     q(b.litres), q(b.time), q(b.difficulty), q(b.done)].join(', ') + `);`);
 }
 for (const id of [...DYEABLE_ITEMS].sort()) out.push(`insert into dyeable_item values (${q(id)});`);
+LEGACY_DYES.forEach((d, ord) => {
+  const l = legacyLiquid(d.id);
+  if (!l) throw new Error(`no mix comes near ${d.id}`);
+  out.push(`insert into dye_legacy values (${q(d.id)}, ${q(ord)}, ${q(d.name)}, ${q(d.colour)}, ${q(dyeText(l))});`);
+});
+for (const d of DYESTUFFS) out.push(`insert into dyestuff_def values (${q(dyeRecipeId(d.from))}, ${q(d.from)}, ${q(d.primary)});`);
+DYE_WORDS.forEach(([word, hex], ord) => out.push(`insert into dye_word_def values (${q(ord)}, ${q(word)}, ${q(hex)});`));
+for (const [size, litres] of Object.entries(DYE_LITRES)) out.push(`insert into dye_litres_def values (${q(size)}, ${q(litres)});`);
+for (const [id, size] of Object.entries(DYE_SIZE_OF).sort()) out.push(`insert into dye_size_def values (${q(id)}, ${q(size)});`);
 for (const cls of ['cloth', 'leather']) out.push(`insert into dyeable_class values (${q(cls)});`);
 for (const [tier, level] of Object.entries(TIER_LEVEL)) {
   out.push(`update tier_odds set level = ${q(level)} where tier = ${q(tier)};`);

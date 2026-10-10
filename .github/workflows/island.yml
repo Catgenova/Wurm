@@ -2117,6 +2117,19 @@ jobs:
             --outfile=node_modules/.cache/motes.mjs --log-level=error
           node node_modules/.cache/motes.mjs
 
+      - name: Dye is boiled red, yellow or blue and mixed by pouring, the same on both sides
+        run: |
+          # A boil of each dyestuff leaves a bucket of its one primary; dye
+          # poured into dye mixes by the litres of each, and goes in with
+          # nothing else; its QL is its brightness, black at 1 and white at
+          # 100; a thing dyed takes exactly the dye's hex. The hex, the colour
+          # word, a pour and Examine's words are held against the browser over
+          # thousands of seeded mixes, and a pot, a dyed tunic and a dyed
+          # banner from before come out as the browser's save loader makes them.
+          npx esbuild supabase/test/dyes.ts --bundle --platform=node --format=esm \
+            --outfile=node_modules/.cache/dyes.mjs --log-level=error
+          node node_modules/.cache/dyes.mjs
+
       - name: An altar goes up on your own ground
         run: |
           # Asked for: "Make the altar only craftable within deed perimeter".

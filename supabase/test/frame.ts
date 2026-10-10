@@ -19,6 +19,7 @@
  * (21,26, five tiles round), on both sides, and the ground, the settlement and
  * Dane are put back after.
  */
+import { dyeHex, dyeText, pureDye } from '../../src/game/dyestuffs';
 import { Game } from '../../src/game/game';
 import { execFileSync } from 'node:child_process';
 import { ACTION_BY_ID } from '../../src/game/actions';
@@ -765,15 +766,17 @@ same('while in a building of one storey they ask for another storey first', 'pla
     `browser "${mine}" on ${onMine}, island "${theirs}" on ${onTheirs}`);
 }
 // Paint brushed onto storey 1's wall, and onto no other.
-game.inventory.add('dye', { ql: 60, extra: 'Woad' });
-sql(`insert into item (world_id, holder, holder_uid, def, ql, count, extra) values (w, 'player', u, 'dye', 60, 1, 'Woad');`);
+// A bucket of blue dye, five litres at QL 50, on both sides.
+const BLUE = dyeText(pureDye('blue', 50), 5);
+game.inventory.add('dye_bucket', { ql: 60 }).dye = BLUE;
+sql(`insert into item (world_id, holder, holder_uid, def, ql, count, dye) values (w, 'player', u, 'dye_bucket', 60, 1, '${BLUE}');`);
 {
   const paint = { ...THREE, side: 'n', level: 0 };
   same('storey 1\'s north wall is painted from storey 3', 'paint_wall', paint, 'ALLOWED');
   const [mine, theirs] = both('paint_wall', paint, 'You brush');
   const dyedMine = [0, 1, 2].map((l) => bld.wall(l, 23, 31, 'n')?.dye ?? '-').join(',');
   const dyedTheirs = psql(`select string_agg(coalesce(dye, '-'), ',' order by level) from wall where world_id = ${W} and dir = 'h' and x = 23 and y = 31;`);
-  check('and the paint goes on storey 1\'s wall only, on both sides', mine === theirs && dyedMine === 'woad,-,-' && dyedTheirs === dyedMine,
+  check('and the paint goes on storey 1\'s wall only, on both sides', mine === theirs && dyedMine === `${dyeHex(pureDye('blue', 50))},-,-` && dyedTheirs === dyedMine,
     `browser "${mine}" ${dyedMine}, island "${theirs}" ${dyedTheirs}`);
 }
 // The storeys over a wall stand on it: taken down from the top, or carried on columns first.

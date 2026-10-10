@@ -3875,7 +3875,7 @@ select '507. the five that came with it: '
 -- goes with no wall-clock time between them, so nothing ever gets its wind
 -- back on its own and everybody would be face down by the third section.
 update player set stats = jsonb_set(coalesce(stats, '{}'::jsonb), '{stamina}', '1'), body_at = now() \g /dev/null
-\echo '--- a bridge, a bed, a herd, a pot of dye and a barrel of ale'
+\echo '--- a bridge, a bed, a herd, a bucket of dye and a barrel of ale'
 delete from placed where world_id = :'world2' and kind = 'furniture';
 delete from creature where world_id = :'world2';
 delete from bridge where world_id = :'world2';
@@ -4065,12 +4065,14 @@ select '524. ' || (select text from event where uid = :'ivar' order by n desc li
 
 -- Colour, and a barrel left alone.
 select give(:'world2', :'ivar', 'satchel', 1, 50) as bag \gset
-select '525. with no pot in the pack: ' || coalesce(act_refusal(:'world2', :'ivar', 'dye_item',
+select '525. with no dye in the pack: ' || coalesce(act_refusal(:'world2', :'ivar', 'dye_item',
        ('{"kind":"item","uid":' || :'bag' || '}')::jsonb), 'allowed')
      || ' — and a hatchet, which will take nothing: '
      || coalesce(act_refusal(:'world2', :'ivar', 'dye_item',
         ('{"kind":"item","uid":' || (select give(:'world2', :'ivar', 'hatchet', 1, 40)) || '}')::jsonb), 'allowed');
-select give(:'world2', :'ivar', 'dye', 1, 60, (select name from dye_def order by id limit 1)) \g /dev/null
+-- A bucket of blue dye, five litres at QL 50.
+select give(:'world2', :'ivar', 'dye_bucket', 1, 60) as dyebucket \gset
+update item set dye = 'r0y0b1000q5000l5' where id = :'dyebucket';
 delete from event where uid = :'ivar';
 select act_perform(:'world2', :'ivar', 'dye_item', ('{"kind":"item","uid":' || :'bag' || '}')::jsonb) \g /dev/null
 select '526. ' || (select text from event where uid = :'ivar' order by n desc limit 1)

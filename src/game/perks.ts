@@ -89,6 +89,7 @@ import { TINCTURE_NAMES } from './remedies';
 import { FESTER_CLOTH, FESTER_WRONG } from './wounds';
 import { BAIT_BY_ID, BAIT_PULL, BAITS, biteShare, CAST, FISH, HOOK_BAIT, HOOK_MOST, NET_HAUL, NET_LEAST, NET_REACH } from './fishing';
 import { POND_EVERY } from './furniture';
+import { DYE_BOIL_LITRES, DYE_BUCKET } from './dyestuffs';
 import { TRAPS } from './traps';
 import { BUTCHER_BAIT } from './butcher';
 import { SHEAR_FROM, SHEAR_WOOL, TAME_MOST } from './creatureActions';
@@ -1526,7 +1527,7 @@ const HERDSMAN: Seed[] = [
  * The Naturalist: foraging and botanizing, alchemy and first aid.
  * ---------------------------------------------------------------------------
  */
-const DYE_BOILS = RECIPES.filter((r) => r.result === 'dye');
+const DYE_BOILS = RECIPES.filter((r) => r.result === DYE_BUCKET);
 const ALCHEMY = RECIPES.filter((r) => r.skill === 'alchemy' && r.difficulty !== undefined);
 const COVER = recipeOf('make_cover_thyme');
 const TEA = recipeOf('brew_tea_thyme');
@@ -1572,8 +1573,8 @@ const NATURALIST: Seed[] = [
   },
   {
     num: 15, name: 'Double Boil',
-    fx: { 'count:dye': 3 },
-    note: (fx) => `A dye boil makes ${numberWord(fx['count:dye'])} pots (now ${numberWord(DYE_BOILS[0].count ?? 1)}).`,
+    fx: { 'litres:dye': BUCKET_LITRES },
+    note: (fx) => `A dye boil leaves ${numberWord(fx['litres:dye'])} litres of dye in the bucket (now ${numberWord(DYE_BOIL_LITRES)}).`,
   },
   {
     num: 16, name: 'Thrifty Dyer',

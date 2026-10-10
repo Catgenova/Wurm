@@ -16,7 +16,7 @@ import { BREWING_ACTIONS } from './brewing';
 import { CAMPFIRE_ACTIONS } from './campfire';
 import { SMELTER_ACTIONS } from './smelter';
 import { KILN_ACTIONS } from './kiln';
-import { FURNITURE_ACTIONS, furnitureCentre } from './furniture';
+import { BUCKET_LITRES, FURNITURE_ACTIONS, furnitureCentre, LIQUID_NAME } from './furniture';
 import { crateCentre } from './crates';
 import { GEAR_ACTIONS } from './gear';
 import { IMPROVE_ACTIONS, improvable } from './improve';
@@ -29,7 +29,8 @@ import { LOCK_ACTIONS } from './locks';
 import { GATE_ACTIONS } from './gates';
 import { FIRST_AID_ACTIONS } from './firstaid';
 import { REMEDY_ACTIONS } from './remedies';
-import { fillFromSource, PLACEABLE_ACTIONS, sourceFor, vesselBecomes, waterNear } from './placeables';
+import { drawDye, dyeSourceFor, fillFromSource, PLACEABLE_ACTIONS, sourceFor, vesselBecomes, waterNear } from './placeables';
+import { DYE_BUCKET, dyeIn, dyeSays, dyeHexOf } from './dyestuffs';
 import { DEED_ACTIONS } from './deed';
 import { CRATE_ACTIONS } from './crates';
 import { CREATURE_ACTIONS } from './creatureActions';
@@ -808,6 +809,13 @@ export function tasteSays(g: Game, item: Item): string {
   const skill = knackable(item.id) ? boonOf(g.seed, item.id) : null;
   if (skill) said.push(`gives a knack that lasts ${clockLeft(boonTime(item.id, item.ql, markOf(item, 'knack')))}`);
   return ` To your taste, a helping ${listed(said)}.`;
+}
+
+/** What is said of dye drawn into a bucket: how much, and what is in the bucket after. The island says the same. */
+function drewDye(g: Game, from: { kind: string }, drew: { n: number; bucket: Item } | null): void {
+  const now = dyeIn(drew?.bucket);
+  if (!drew || !now) return;
+  g.logMsg(`You draw ${drew.n} ${drew.n === 1 ? 'litre' : 'litres'} of dye out of the ${itemDef(from.kind).name.toLowerCase()}. The bucket holds ${dyeSays(now.liquid, now.litres)}`, 'event');
 }
 
 export const ACTIONS: ActionDef[] = [
@@ -2246,7 +2254,11 @@ export const ACTIONS: ActionDef[] = [
       const at = itemDef(item.id).category === 'tool' && Math.abs(worth - item.ql) >= 0.05 ? ` It works as a ${worth.toFixed(1)} today.` : '';
       // And to a Cook's tongue, what a helping of it does (a Cook's Taste).
       const taste = g.perk('taste', 0) > 0 ? tasteSays(g, item) : '';
-      g.logMsg(`${itemName(item)}: QL ${item.ql.toFixed(2)}, damage ${item.dmg.toFixed(2)}, weight ${itemWeight(item).toFixed(2)} kg.${at}${desc}${rare}${by}${favours}${stuff}${taste}`, 'event');
+      // What dye is in it, or what colour it was dyed (`dyestuffs.ts`): the island's `dye_item_says`.
+      const held = dyeIn(item);
+      const hex = held ? null : dyeHexOf(item.dye);
+      const dyed = held ? ` It holds ${dyeSays(held.liquid, held.litres)}` : hex ? ` It is dyed ${hex}.` : '';
+      g.logMsg(`${itemName(item)}: QL ${item.ql.toFixed(2)}, damage ${item.dmg.toFixed(2)}, weight ${itemWeight(item).toFixed(2)} kg.${at}${desc}${dyed}${rare}${by}${favours}${stuff}${taste}`, 'event');
     },
   },
   {
@@ -2625,17 +2637,45 @@ export const ACTIONS: ActionDef[] = [
     verb: 'filling the bucket',
     stamina: 0.01,
     baseTime: 2,
-    applies: (t, g) => t.kind === 'item' && g.inventory.held(t.uid)?.id === 'bucket',
+    // An empty bucket, or a bucket of dye with room in it, which tops up from dye and nothing else.
+    applies: (t, g) => {
+      if (t.kind !== 'item') return false;
+      const it = g.inventory.held(t.uid);
+      return it?.id === 'bucket' || (!!it && it.id === DYE_BUCKET && (dyeIn(it)?.litres ?? 0) < BUCKET_LITRES);
+    },
+    labelFor: (t, g) => {
+      const it = t.kind === 'item' ? g.inventory.held(t.uid) : undefined;
+      if (it?.id === DYE_BUCKET) return 'Fill with dye';
+      const source = sourceFor(g);
+      return source ? `Fill with ${LIQUID_NAME[source.liquid]}` : 'Fill with water';
+    },
     check: (t, g) => {
       if (t.kind !== 'item') return null;
-      if (g.inventory.held(t.uid)?.id !== 'bucket') return 'That is not an empty bucket.';
+      const it = g.inventory.held(t.uid);
+      if (it?.id === DYE_BUCKET) {
+        const src = dyeSourceFor(g, it);
+        return 'refusal' in src ? src.refusal : null;
+      }
+      if (it?.id !== 'bucket') return 'That is not an empty bucket.';
       return sourceFor(g) ? null : 'You need water: a shore, a well, or a barrel with something in it.';
     },
     perform: (t, g) => {
       if (t.kind !== 'item') return;
       const item = g.inventory.held(t.uid);
-      if (!item || item.id !== 'bucket') return;
+      if (!item) return;
+      if (item.id === DYE_BUCKET) {
+        const src = dyeSourceFor(g, item);
+        if ('refusal' in src) return;
+        drewDye(g, src.from, drawDye(g, src.from, item));
+        return;
+      }
+      if (item.id !== 'bucket') return;
       const source = sourceFor(g);
+      // Dye says what is in the bucket after: its colour, hex, QL and mix.
+      if (source?.liquid === 'dye' && source.from) {
+        drewDye(g, source.from, drawDye(g, source.from, item));
+        return;
+      }
       const got = fillFromSource(g, item);
       if (!got) return;
       g.logMsg(source?.from ? `You draw a bucket of ${got} out of the ${itemDef(source.from.kind).name.toLowerCase()}.` : 'You dip the bucket full of water.', 'event');
@@ -2651,7 +2691,7 @@ export const ACTIONS: ActionDef[] = [
     applies: (t, g) => {
       if (t.kind !== 'item') return false;
       const id = g.inventory.held(t.uid)?.id;
-      return id === 'water_bucket' || id === 'lye_bucket';
+      return id === 'water_bucket' || id === 'lye_bucket' || id === DYE_BUCKET;
     },
     perform: (t, g) => {
       if (t.kind !== 'item') return;

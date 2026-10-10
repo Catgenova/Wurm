@@ -19,7 +19,8 @@
 import { execFileSync } from 'node:child_process';
 import { ACTION_BY_ID, ACTIONS } from '../../src/game/actions';
 import { WALL_TYPE_BY_ID, wallBill, type Side } from '../../src/game/building';
-import { DYE_BY_ID } from '../../src/game/dyestuffs';
+import { dyeHex, dyeText, pureDye } from '../../src/game/dyestuffs';
+import { dyedAlready } from '../../src/game/dyes';
 import { Game } from '../../src/game/game';
 import { ITEM_DEFS } from '../../src/game/items';
 import { RECIPE_BY_ID } from '../../src/game/recipes';
@@ -75,8 +76,10 @@ game.player.x = 30.5;
 game.player.y = 30.5;
 const wall = game.buildings.setWall(b, 0, 30, 30, 'n', 'solid', 'log');
 for (const k of Object.keys(wall.needed)) wall.needed[k] = 0;
-game.inventory.add('dye', { ql: 60, extra: 'Woad' });
-game.inventory.add('dye', { ql: 60, extra: 'Woad' });
+// A bucket of blue dye, five litres at QL 50: enough for the wall twice over.
+const BLUE = dyeText(pureDye('blue', 50), 5);
+const BLUE_HEX = dyeHex(pureDye('blue', 50));
+game.inventory.add('dye_bucket', { ql: 60 }).dye = BLUE;
 game.inventory.add('lye_bucket', { ql: 40 });
 
 psql(`
@@ -87,9 +90,9 @@ begin
   select uid into u from player where world_id = w and name = 'Dane';
   delete from wall where world_id = w; delete from floor_tile where world_id = w;
   delete from building_tile where world_id = w; delete from building where world_id = w;
-  delete from item where world_id = w and holder = 'player' and holder_uid = u and def in ('dye', 'lye_bucket', 'bucket');
-  insert into item (world_id, holder, holder_uid, def, ql, count, extra) values
-    (w, 'player', u, 'dye', 60, 2, 'Woad');
+  delete from item where world_id = w and holder = 'player' and holder_uid = u and def in ('dye_bucket', 'lye_bucket', 'bucket');
+  insert into item (world_id, holder, holder_uid, def, ql, count, dye) values
+    (w, 'player', u, 'dye_bucket', 60, 1, '${BLUE}');
   insert into item (world_id, holder, holder_uid, def, ql, count) values (w, 'player', u, 'lye_bucket', 40, 1);
   insert into building (world_id, id, name, levels, work_level, planned_by) values (w, 4, 'Painted house', 1, 0, u);
   insert into building_tile (world_id, building, x, y) values (w, 4, 30, 30);
@@ -123,17 +126,17 @@ commit;
 
 const browserBrush = mineSaid();
 const islandBrush = theirSaid('paint_wall');
-check('a pot of woad goes onto the wall in the same sentence on both sides',
+check('a litre of blue dye goes onto the wall in the same sentence on both sides',
   browserBrush === islandBrush && browserBrush.includes('blue'),
   `browser "${browserBrush}", island "${islandBrush}"`);
 check('and the wall is the colour it was painted, on both sides',
-  wall.dye === 'woad' && psql(`select coalesce(dye, 'NONE') from wall where world_id = ${W} and dir = 'h' and x = 30 and y = 30;`) === 'woad',
+  wall.dye === BLUE_HEX && psql(`select coalesce(dye, 'NONE') from wall where world_id = ${W} and dir = 'h' and x = 30 and y = 30;`) === BLUE_HEX,
   `browser ${wall.dye}, island ${psql(`select coalesce(dye, 'NONE') from wall where world_id = ${W} and dir = 'h' and x = 30 and y = 30;`)}`);
 
 const mineAgain = ACTION_BY_ID.get('paint_wall')?.check?.(target as never, game) ?? 'ALLOWED';
 const theirAgain = psql(`select coalesce(build_refusal(${W}, ${U}, 'paint_wall', '${TJ}'::jsonb), 'ALLOWED');`);
 check('painting it the colour it already is is refused in the same words',
-  mineAgain === theirAgain && mineAgain === `It is ${DYE_BY_ID.get('woad')?.word} already.`,
+  mineAgain === theirAgain && mineAgain === dyedAlready(BLUE_HEX),
   `browser "${mineAgain}", island "${theirAgain}"`);
 
 /* And lye takes it back off, the bucket with it. */
