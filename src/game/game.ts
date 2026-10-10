@@ -73,6 +73,7 @@ import { earnedBy, knackBonus, knackLands, KNACK_CAP, KNACK_ODDS, TITLE_BY_ID } 
 import { TileIndex, Tally, keyX, keyY, tileKey } from './tileindex';
 import { DARK_HIT, NIGHT_EYES_FROM, WORK_HAND, WORK_WIND, WORK_WIND_SPENT, HEAVY_SKILLS, WORK_BACK } from './learn';
 import { DRIVING, DRIVING_LEARN, drivingPace, SAILING, SAILING_LEARN, sailingPace, vehicleQlPace } from './travel';
+import { laySwirls, swirlLight, type Swirl } from './motes';
 import { AWARENESS, Vision } from './vision';
 import { blessBonus, favourCap, FAITH, FAVOUR_TRICKLE } from './faith';
 import { ATTENTIVE, FURY_MULT, FURY_SECS, GREEN_THUMB, hasStep, IRONHIDE, MEDITATION, MEND_FLESH, SENSE_REACH, STRONG_BACK, type PathId } from './meditation';
@@ -296,6 +297,9 @@ export interface GameInit {
   fieldTime?: number;
   /** The water lilies and lotus planted here. */
   waterPlants?: WaterPlant[];
+  /** The day's mote swirls, and the dawn they were put down for (`motes.ts`). */
+  swirls?: Swirl[];
+  swirlDawn?: number;
   /** The stores behind the shop counters (`counters.ts`). */
   counters?: CountersJSON;
   marks?: Marker[];
@@ -850,6 +854,16 @@ export class Game {
    * is all that is kept of one. On an island the island's, off the slow ground read.
    */
   readonly waterPlants = new Map<number, WaterPlant>();
+  /**
+   * The mote swirls turning over the ground, by id (`motes.ts`), and the same
+   * by tile. In a game of your own the day's, put down at each turn of the
+   * woods; on an island the ones in the nine blocks round you, as the island
+   * last said (`rpc_swirls`, through `setSwirls`).
+   */
+  readonly swirls = new Map<number, Swirl>();
+  private readonly swirlTiles = new Map<number, Swirl>();
+  /** The dawn the swirls in a game of your own were put down for; null before the first. */
+  swirlDawn: number | null = null;
   /** Tiles a prospector has marked, and when the marks fade. */
   prospected: { tiles: Set<number>; until: number } | null = null;
   hooks: GameHooks = { prompt: async (_q, fallback) => fallback, confirm: async () => true };
@@ -1109,6 +1123,11 @@ export class Game {
     for (const c of init.planted ?? []) if (c.planter !== undefined) this.planted.set(c.planter, c);
     for (const [x, y, id] of init.sown ?? []) this.sown.set(tileKey(x, y), id);
     for (const w of init.waterPlants ?? []) this.waterPlants.set(tileKey(w.x, w.y), { ...w });
+    // A save from before the swirls has none, and puts the day's down on its first frame (`growTrees`).
+    if (init.swirls && init.swirlDawn !== undefined) {
+      this.setSwirls(init.swirls.filter((s) => this.world.inBounds(s.x, s.y)));
+      this.swirlDawn = init.swirlDawn;
+    }
     for (const k of init.kilns ?? []) {
       this.kilns.set(k.id, k);
       if (k.id >= this.nextKilnId) this.nextKilnId = k.id + 1;
@@ -2930,6 +2949,8 @@ export class Game {
       if (glow && near(c.x, c.y)) out.push({ x: c.x, y: c.y, radius: glow, strength: 0.7, steady: true });
     }
     for (const l of this.spellLights) out.push(l);
+    // A mote swirl's own small glow, soft as a spell's (`swirlLight`).
+    if (this.swirls.size) for (const s of this.swirls.values()) if (near(s.x, s.y)) out.push(swirlLight(s));
     return out;
   }
 
@@ -8105,6 +8126,41 @@ export class Game {
     if (this.waterPlants.delete(tileKey(x, y))) this.events.emit('world', x, y);
   }
 
+  /** The mote swirl turning over a tile, if there is one (`motes.ts`). */
+  swirlAt(x: number, y: number): Swirl | undefined {
+    return this.swirlTiles.size ? this.swirlTiles.get(tileKey(x, y)) : undefined;
+  }
+
+  /** These swirls and no others: a day's put down, or what the island says is in the blocks round you. */
+  setSwirls(list: readonly Swirl[]): void {
+    this.swirls.clear();
+    this.swirlTiles.clear();
+    for (const s of list) {
+      this.swirls.set(s.id, s);
+      this.swirlTiles.set(tileKey(s.x, s.y), s);
+    }
+  }
+
+  /** A swirl collected, here or by anybody on the island: gone for good. */
+  takeSwirl(id: number): void {
+    const s = this.swirls.get(id);
+    if (!s) return;
+    this.swirls.delete(id);
+    if (this.swirlTiles.get(tileKey(s.x, s.y)) === s) this.swirlTiles.delete(tileKey(s.x, s.y));
+    this.events.emit('world', s.x, s.y);
+  }
+
+  /**
+   * The day's swirls, in a game of your own: yesterday's gone and
+   * `SWIRLS_A_DAY` new ones put down (`laySwirls`), stamped with the dawn they
+   * are for. On an island the island does this, in `swirl_day`.
+   */
+  private laySwirlsFor(dawn: number): void {
+    const first = this.swirls.size ? Math.max(...this.swirls.keys()) + 1 : 1;
+    this.setSwirls(laySwirls(this, first, this.rand));
+    this.swirlDawn = dawn;
+  }
+
   plantCrop(x: number, y: number, id: string, seedQl: number, pace = 1): Crop {
     // Under glass it begins on the glass clock, and anywhere else on the field's (`glasshouse.ts`).
     const glass = underGlass(this.buildings, x, y);
@@ -8349,6 +8405,8 @@ export class Game {
   growTrees(nowSeconds: number): void {
     if (this.ask) return; // On a live island the woods are the island's.
     const w = this.world;
+    // A game that has never had its swirls has the day's now, rather than at the next dawn (`motes.ts`).
+    if (this.swirlDawn === null) this.laySwirlsFor(lastDawn(nowSeconds));
     /*
      * A day's growth, a strip of the island at a time.
      *
@@ -8428,6 +8486,8 @@ export class Game {
     gone.length = 0;
     // And the day's fall off every worn tile, after the seeding, as on the island.
     this.wearDay();
+    // And the day's mote swirls in place of yesterday's, after everything that moves the ground (`swirl_day`).
+    this.laySwirlsFor(lastDawn(this.treeTurn));
   }
 
   /** Whether the turn in progress is the first of a new year. */

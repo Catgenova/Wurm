@@ -22,6 +22,7 @@ import { deckBill, metres, PIER_CLEAR, PIER_DROP, PIER_WALL_DROP, PIER_WATER } f
 import { COIN_FIND_ONE_IN, COIN_FINDS_A_DAY } from '../../game/forage';
 import { ROCK_VARIANTS, TILE_DEFS, TileType, TREE_AGES, TREE_DAWN_UTC, TREE_DEFS } from '../../world/tiles';
 import { REGIONS } from '../../world/regions';
+import { ISLAND_ELEMENT, MOTES_LEAST, MOTES_MOST, MOTES_MOST_AT, MOTES_STEP, SWIRL_DARK, SWIRL_LIGHT, SWIRLS_A_DAY } from '../../game/motes';
 import { SEASON_DAYS, seasonLine, YEAR_DAYS, YEAR_FROM } from '../../world/calendar';
 import { BLOOMS, BUSH_FLOWER_FROM, evergreen, LEAF_DAYS, SHED_DAYS, TURN_DAYS } from '../../render/foliage';
 import { lifeSeasons } from '../../render/life';
@@ -1474,6 +1475,19 @@ export const NEWS: News[] = [
       `Going faster than a walk on foot, a jog or a run takes longer strides as well as quicker ones, up to ${times(strideAt(1) / strideAt(0))} `
         + 'a walking stride at a flat run, and its feet stay planted too.',
       'Mounts, carts, wagons and boats go exactly as fast as they did, and so do wildermon and monsters.',
+    ],
+  },
+  {
+    n: 110,
+    day: '2026-10-10',
+    lines: () => [
+      `Mote swirls: at each turn of the woods the day's swirls go and ${numberWord(SWIRLS_A_DAY)} new ones are put down anywhere on the map, `
+        + 'land or water, none where a tree stands or inside a building.',
+      `A swirl on water is water. On land it is dark ${percent(SWIRL_DARK)} of the time, light ${percent(SWIRL_LIGHT)}, and otherwise `
+        + `the island's own element: ${listed(REGIONS.map((R) => `${ISLAND_ELEMENT[R.key]} on ${R.name.replace(/^The /, 'the ')}`))}.`,
+      `Elementalism is a new skill. Collect motes on a swirl gives ${numberWord(MOTES_LEAST)} mote of its element under Elementalism ${MOTES_STEP}, `
+        + `one more for every ${MOTES_STEP} points and ${numberWord(MOTES_MOST)} from ${MOTES_MOST_AT}, and the swirl is gone for everybody. `
+        + 'Each collect trains Elementalism, and nothing else does.',
     ],
   },
 ];

@@ -2104,6 +2104,19 @@ jobs:
             --outfile=node_modules/.cache/travel.mjs --log-level=error
           node node_modules/.cache/travel.mjs
 
+      - name: Mote swirls turn over with the woods, and Elementalism collects them
+        run: |
+          # Every dawn the day's swirls go and five hundred new ones are put
+          # down: water on water, and on land the island of the chart's own
+          # element, or dark or light one time in a hundred each -- the same
+          # chart and the same rule in a game of your own. A collect gives one
+          # mote under Elementalism 20 and five from 80, trains it, and takes
+          # the swirl for everybody; the second of two at one swirl is told it
+          # is gone. Every roll is seeded.
+          npx esbuild supabase/test/motes.ts --bundle --platform=node --format=esm \
+            --outfile=node_modules/.cache/motes.mjs --log-level=error
+          node node_modules/.cache/motes.mjs
+
       - name: An altar goes up on your own ground
         run: |
           # Asked for: "Make the altar only craftable within deed perimeter".

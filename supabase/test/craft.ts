@@ -47,14 +47,14 @@ const check = (what: string, passed: boolean, detail = ''): void => {
  *
  * The craft side partitions cleanly -- every one of its forty skills is
  * in exactly one trade -- and the fighting side deliberately does not. These
- * eleven are the body and the soul, common to all twenty-one, and `fighting` in
+ * twelve are the body and the soul, common to all twenty-one, and `fighting` in
  * particular *could not* be owned even if it should be: it is the scope key
  * every melee swing carries, so a trade that held it would move everybody's
  * numbers rather than its own.
  */
 const NOBODY_OWNS = [
   'body_control', 'body_stamina', 'body_strength', 'fighting',
-  'meditation', 'mind_logic', 'prayer', 'praying', 'swimming', 'driving', 'sailing',
+  'meditation', 'mind_logic', 'prayer', 'praying', 'swimming', 'driving', 'sailing', 'elementalism',
 ].sort();
 
 const out = psql(`

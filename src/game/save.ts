@@ -27,6 +27,7 @@ import type { Ledger } from './ledger';
 import type { GuideBook } from './guide';
 import type { Crop } from './farming';
 import type { WaterPlant } from '../world/waterplants';
+import type { Swirl } from './motes';
 import { keyX, keyY } from './tileindex';
 import type { PlacedCrate } from './crates';
 import type { CreatureJSON } from './creatures';
@@ -269,6 +270,9 @@ interface SaveData {
   fieldTime?: number;
   /** The water lilies and lotus planted here. A save from before them has none. */
   waterPlants?: WaterPlant[];
+  /** The day's mote swirls and the dawn they were put down for. A save from before them has none, and is given the day's. */
+  swirls?: Swirl[];
+  swirlDawn?: number;
   /** What is set out on each shop counter. A save from before counters has none. */
   counters?: CountersJSON;
   crate?: { x: number; y: number; items: Item[] } | null;
@@ -361,6 +365,8 @@ function meta(game: Game): SaveMeta {
     planted: [...game.planted.values()],
     fieldTime: game.fieldTime,
     waterPlants: [...game.waterPlants.values()],
+    swirls: game.swirlDawn === null ? undefined : [...game.swirls.values()],
+    swirlDawn: game.swirlDawn ?? undefined,
     counters: game.counters.toJSON(),
     guests: game.guestRecords(),
   };
@@ -628,6 +634,8 @@ function finish(world: World, m: SaveMeta): Game {
     planted: m.planted,
     fieldTime: m.fieldTime,
     waterPlants: m.waterPlants,
+    swirls: m.swirls,
+    swirlDawn: m.swirlDawn,
     counters: m.counters,
     marks: m.marks,
     hoards: m.hoards,

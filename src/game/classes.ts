@@ -179,15 +179,16 @@ export const CRAFT_CLASSES = ([
 /**
  * The seven trades that are not magic.
  *
- * Drawn from the twenty-five skills the craft trades leave alone, plus two that
+ * Drawn from the twenty-six skills the craft trades leave alone, plus two that
  * had to be made: `throwing`, because three utility knives at five damage
  * cannot carry a ranged trade, and `chirurgy`, because closing a wound and
  * making the thing you close it with are two different pieces of knowledge and
  * only one of them belongs to a forager.
  *
- * Eleven of the twenty-five belong to nobody on purpose -- `fighting`,
+ * Twelve of the twenty-six belong to nobody on purpose -- `fighting`,
  * `body_control`, `body_stamina`, `body_strength`, `swimming`, `mind_logic`,
- * `prayer` (faith), `praying` (Prayer), `meditation`, `driving` and `sailing`.
+ * `prayer` (faith), `praying` (Prayer), `meditation`, `driving`, `sailing`
+ * and `elementalism`.
  * They are the body and the soul, common to all ten,
  * and `fighting` could not be owned even if it should be: it is the scope key
  * every melee swing already carries, so a trade that held it would move

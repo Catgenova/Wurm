@@ -4,8 +4,9 @@ import { DYES, dyeWord } from './dyestuffs';
 import { MATERIAL_BY_ID, WALL_TYPES } from './building';
 import { candleBurn, lanternReach, torchBurn, torchReach } from './light';
 import { CLOSE_CLOTH, CLOSE_RIGHT } from './wounds';
-import { article, capital, fill, listed, numberWord, share, times } from './words';
+import { article, capital, fill, listed, numberWord, percent, share, times } from './words';
 import { CIRCLET_SHARE, CIRCLET_STONES, JEWEL_BONUS } from './gems';
+import { elementIslands, MOTE_ELEMENTS, moteItem, moteName, MOTES_LEAST, MOTES_MOST, MOTES_MOST_AT, MOTES_STEP, SWIRL_DARK, SWIRL_LIGHT } from './motes';
 
 export type ItemCategory = 'tool' | 'material' | 'food' | 'plant' | 'misc';
 
@@ -591,6 +592,27 @@ for (const m of METALS) {
     decay: lump.decay,
     description: `Counts as ${numberWord(INGOT_LUMPS)} ${lump.name.toLowerCase()}s at the smelter, the anvil, the bench and the file, `
       + `and weighs ${share(INGOT_WEIGHT)} what they do: {grams} grams. What a job does not use of one comes back as lumps.`,
+  };
+}
+
+/*
+ * A mote of each element, off a mote swirl (`motes.ts`): `earth_mote` and the
+ * rest. Not the altar's `mote`, which is a rarity left by a sacrifice; these
+ * are named for their element so the two never share a name in a menu, a
+ * search or the ledger.
+ */
+for (const e of MOTE_ELEMENTS) {
+  const where = e === 'water' ? 'over water, on every island'
+    : e === 'dark' || e === 'light' ? `over land anywhere: ${percent(e === 'dark' ? SWIRL_DARK : SWIRL_LIGHT)} of the swirls on land`
+      : `over land on ${elementIslands(e)}`;
+  ITEM_DEFS[moteItem(e)] ??= {
+    name: moteName(e),
+    category: 'misc',
+    weight: 0.01,
+    stackable: true,
+    description: `Collected from ${article(e)} ${e} mote swirl with Collect motes; ${e} swirls turn ${where}. `
+      + `A swirl gives ${numberWord(MOTES_LEAST)} at Elementalism under ${MOTES_STEP}, one more for every ${MOTES_STEP} points, `
+      + `and ${numberWord(MOTES_MOST)} from ${MOTES_MOST_AT}.`,
   };
 }
 

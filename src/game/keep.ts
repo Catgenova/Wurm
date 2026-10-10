@@ -506,3 +506,12 @@ export const GROUND_RANGE = 40;
  * again at once, so this is how long somebody else's digging takes to show.
  */
 export const SPRINGS_EVERY = 4;
+
+/**
+ * Seconds between asking the island for the mote swirls in the nine blocks
+ * round you (`rpc_swirls`), when nothing has said to ask sooner. A swirl
+ * collected is said at once over the block's channel, and so is a new day's
+ * swirls; walking into another block asks at once too. This is how long a
+ * word that went astray takes to be put right.
+ */
+export const SWIRLS_EVERY = 60;

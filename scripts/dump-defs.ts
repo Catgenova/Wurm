@@ -140,6 +140,9 @@ import {
   LAMP_ARM_CROSSES, LAMP_ARM_REACH, LAMP_HAS_ONE, LAMP_INTO_WALL, LAMP_NO_LANTERN, LAMP_NONE, LAMP_TAKE_FIRST, lampTooFar, noCandleLine, noFlameLine,
 } from '../src/game/lamps';
 import { CANDLE_BURN } from '../src/game/light';
+import {
+  ELEMENTALISM, ISLAND_ELEMENT, LAND_ELEMENTS, MOTE_ELEMENTS, MOTES_LEAST, MOTES_MOST, MOTES_STEP, SWIRL_DARK, SWIRL_LIGHT, SWIRL_DRAWS, SWIRL_SAID, SWIRL_TRIES, SWIRLS_A_DAY,
+} from '../src/game/motes';
 
 const q = (v: unknown): string => {
   if (v === undefined || v === null) return 'null';
@@ -1800,6 +1803,24 @@ for (const [fn, v] of [
 ] as Array<[string, number]>) {
   out.push(`create or replace function ${fn}() returns double precision language sql immutable as $fn$ select ${q(v)}::double precision $fn$;`);
 }
+/*
+ * Elementalism and the mote swirls (`motes.ts`): the skill, how many swirls a
+ * day puts down and how hard it looks for room, the share of land swirls that
+ * are dark and light, what a swirl gives, each element and the land element of
+ * every island of the chart by its index in REGIONS (`ISLAND_ELEMENT`; null
+ * for a byte that is no island's), and what a refused collect says.
+ */
+out.push(`create or replace function elementalism_skill() returns text language sql immutable as $fn$ select ${q(ELEMENTALISM)} $fn$;`);
+for (const [fn, v] of [
+  ['swirls_a_day', SWIRLS_A_DAY], ['swirl_tries', SWIRL_TRIES], ['swirl_draws', SWIRL_DRAWS], ['swirl_dark', SWIRL_DARK], ['swirl_light', SWIRL_LIGHT],
+  ['motes_least', MOTES_LEAST], ['motes_step', MOTES_STEP], ['motes_most', MOTES_MOST],
+] as Array<[string, number]>) {
+  out.push(`create or replace function ${fn}() returns double precision language sql immutable as $fn$ select ${q(v)}::double precision $fn$;`);
+}
+out.push(`create or replace function mote_elements() returns text[] language sql immutable as $fn$ select array[${MOTE_ELEMENTS.map(q).join(', ')}]::text[] $fn$;`);
+out.push(`create or replace function land_elements() returns text[] language sql immutable as $fn$ select array[${LAND_ELEMENTS.map(q).join(', ')}]::text[] $fn$;`);
+out.push(`create or replace function region_element(p_region int) returns text language sql immutable as $fn$ select case p_region ${REGIONS.map((R, i) => (ISLAND_ELEMENT[R.key] ? `when ${i} then ${q(ISLAND_ELEMENT[R.key])} ` : '')).join('')}end $fn$;`);
+out.push(`create or replace function swirl_said(p_key text) returns text language sql immutable as $fn$ select case p_key ${Object.entries(SWIRL_SAID).map(([k, v]) => `when ${q(k)} then ${q(v)} `).join('')}end $fn$;`);
 for (const w of WALL_TYPES) {
   out.push(`insert into wall_type_def values (${q(w.id)}, ${q(w.name)}, ${q(w.factor)}, ${q(w.passable)}, ${q(w.height ?? null)}, ${q(!!w.low)}, ${q(!!w.railed)}, ${q(!!w.standalone)});`);
   if (w.beastProof) out.push(`update wall_type_def set beast_proof = true where id = ${q(w.id)};`);

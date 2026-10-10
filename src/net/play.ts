@@ -11,6 +11,7 @@ import type { CastAt } from '../game/events';
 import { generateAtlasWorld, loadAtlas } from '../world/atlas-world';
 import { ACTION_BY_ID, type ActionDef, type Target } from '../game/actions';
 import { hiddenAsk } from '../game/gates';
+import { swirlIn, type Swirl } from '../game/motes';
 import { isFightJob, isFightStance } from '../game/fight';
 import { FIGHT_BACK_GOES } from '../game/creatures';
 import { saidWords } from '../game/roster';
@@ -322,6 +323,11 @@ export async function startIsland(params: URLSearchParams, tell: Telling): Promi
   island.hooks.paved = (x, y, on) => game.sawPaving(x, y, on);
   island.hooks.springs = (near, chains) => game.springs.sawIsland(near, chains);
   island.hooks.knownSprings = () => Object.fromEntries([...game.springs.list.values()].map((s) => [String(s.id), s.ver]));
+  // And the mote swirls round us, which the island puts down at dawn and takes away as they are collected (`motes.ts`).
+  island.hooks.swirls = (rows) => game.setSwirls(rows.map(swirlIn).filter((s): s is Swirl => s !== null));
+  island.hooks.swirlsGone = (ids) => {
+    for (const id of ids) game.takeSwirl(id);
+  };
   // Where the island put the body, which is only ever somewhere we did not put
   // it ourselves: dying does, and so does a keeper of the island moving a
   // stuck body, which takes it off whatever it was on as well.

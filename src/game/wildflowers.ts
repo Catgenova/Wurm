@@ -14,6 +14,7 @@ import { flowerSeason, flowersOn, FLOWER_SEASONS } from '../world/flowers';
 import { SEASONS } from '../world/calendar';
 import { FLOWERS_PICKED, TILE_DEFS, TileType, trailGround, WEAR_FALL, WEAR_MOST, WEAR_TRAIL, WEARS } from '../world/tiles';
 import { listed, numberWord } from './words';
+import { swirlSays } from './motes';
 
 /** The clumps of wildflowers on a tile now, as it stands and under whatever stands on it. */
 export function flowersHere(g: Game, x: number, y: number, now = Date.now() / 1000): number {
@@ -60,6 +61,9 @@ export function groundSays(g: Game, x: number, y: number, now = Date.now() / 100
     if (n) said += ` In flower: ${n === 1 ? 'a clump' : `${numberWord(n)} clumps`} of wildflowers.`;
     else if (w.getData(x, y) & FLOWERS_PICKED) said += ` Its flowers have been picked: none until ${SEASONS[0]}.`;
   }
+  // And a mote swirl turning over it (`motes.ts`).
+  const swirl = g.swirlAt(x, y);
+  if (swirl) said += swirlSays(swirl.element);
   return said;
 }
 

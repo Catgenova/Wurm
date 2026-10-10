@@ -208,6 +208,8 @@ const BY_SKILL: Record<string, Stroke> = {
   tailoring: 'cloth', leatherworking: 'cloth', ropemaking: 'cloth', repair: 'cloth',
   first_aid: 'cloth', chirurgy: 'cloth', butchering: 'cloth', restoration: 'cloth',
   foraging: 'cloth', botanizing: 'cloth',
+  // Motes gathered out of a swirl by hand, as a forager gathers (`motes.ts`).
+  elementalism: 'cloth',
   fishing: 'water',
 };
 

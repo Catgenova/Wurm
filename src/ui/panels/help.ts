@@ -110,6 +110,7 @@ import {
 import { TURNS } from '../../render/view';
 import { ORE_DENSITY, seamShare } from '../../world/ore';
 import { REGIONS } from '../../world/regions';
+import { ISLAND_ELEMENT, MOTES_LEAST, MOTES_MOST, MOTES_STEP, SWIRL_DARK, SWIRL_LIGHT, SWIRLS_A_DAY } from '../../game/motes';
 import {
   BUSH_DEFS, groundRoll, ROCK_VARIANTS, SLAB_VARIANTS, STEPS_BRICKS, STEPS_LEAST, STEPS_MOST, STEPS_PLANKS, STEPS_SLABS, STEPS_TWIST, TILE_DEFS, TileType,
   TREE_DAWN_UTC, TREE_DEFS, WEAR_FALL, WEAR_MOST, WEAR_TRAIL, WEARS,
@@ -170,6 +171,8 @@ const glassJob = (id: string): string => {
 };
 /** What one prayer trains a skill by at `v`, for a gain of `base`, on the roll's mean: "+1.4". */
 const prayerTrains = (v: number, base: number): string => `+${skillGain(v, base, 1).toFixed(1)}`;
+/** Every count of motes a swirl can give, fewest first (`motesFor`). */
+const MOTE_COUNTS = Array.from({ length: MOTES_MOST - MOTES_LEAST + 1 }, (_, i) => MOTES_LEAST + i);
 /** Where the help reads a prayer off: the skill levels, and the altar's quality at either end and in the middle. */
 const PRAYER_SHOWN = [1, 50, 100];
 const ALTAR_QL = [0, 50, 100] as const;
@@ -1592,6 +1595,19 @@ export function helpText(): string {
     first day of the next ${SEASONS[0]}, when every picked tile flowers again.</p>
     <p>Wildflowers are for <b>dye</b>: ${bill('make_wildflowers')} boil into ${numberWord(made('make_wildflowers'))} pots of
     ${DYES.find((d) => d.id === 'wildflowers')?.word ?? 'orange'}, at ${workedAt('make_wildflowers')}.</p>
+    <h3>Mote swirls and elementalism</h3>
+    <p>At each turn of the woods, at dawn, the day's <b>mote swirls</b> go and ${numberWord(SWIRLS_A_DAY)} new ones are put down,
+    each on a tile drawn anywhere on the map, land or water &mdash; never where a tree stands, never inside a building, and
+    never on a tile that has one already. A swirl on water is <b>water</b>. A swirl on land is <b>dark</b> ${percent(SWIRL_DARK)} of the time,
+    <b>light</b> ${percent(SWIRL_LIGHT)}, and otherwise the element of the island it is on:
+    ${listed(REGIONS.map((R) => `<b>${ISLAND_ELEMENT[R.key]}</b> on ${islandName(R.name)}`))}. A game of your own is laid
+    over the same chart, so its land has the same elements in the same places.</p>
+    <p>Choose <b>Collect motes</b> on a swirl, with bare hands from beside it &mdash; from the bank, swimming or from a boat for
+    one on the water. It gives that many <b>motes</b> of its element: ${listed(MOTE_COUNTS.map((n) => `${numberWord(n)} at
+    elementalism ${n === MOTES_LEAST ? `under ${MOTES_STEP}` : `${(n - MOTES_LEAST) * MOTES_STEP}${n === MOTES_MOST ? ' and up' : ''}`}`))},
+    on your elementalism before the go, at your elementalism quality. The swirl is then gone for everybody: of everybody
+    collecting the same swirl, whoever finishes first has it and the rest are told it is gone. Each collect trains <b>elementalism</b> by about
+    ${listed([1, 20, 50].map((v) => `+${skillGain(v, 1, 1).toFixed(2)} at ${v}`))}, and nothing else trains it.</p>
     <h3>Large carts and wagons</h3>
     <p>A small cart is a barrow you pull yourself. The ones that follow are <b>driven</b>: a wildermon
     goes in the traces, you sit on the seat, and what is on the back weighs nothing at all as far as the

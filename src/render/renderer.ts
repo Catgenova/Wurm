@@ -93,6 +93,8 @@ import { drawStones, STONES_RISE } from './stones';
 import { drawPierFeet, drawPierTile, pierFeetOf, slabOutline, type PierFoot, type PierTile } from './piers';
 import { drawPlantsFlat, drawPlantUpright, plantFoot, standsUp, type PlantFrame } from './waterplants';
 import type { WaterPlant } from '../world/waterplants';
+import type { Swirl } from '../game/motes';
+import { drawSwirl, glowSwirl } from './swirls';
 import type { WaterField } from '../world/springs';
 import { Dust } from './dust';
 import { BEAST_WALK, Gaits } from './gait';
@@ -282,7 +284,7 @@ const swayedAt = (w: Swayed | undefined, x: number, y: number): [number, number]
   w ? [w.ox + w.a * (x - w.ox) + w.c * (y - w.oy), w.oy - w.up + w.b * (x - w.ox) + w.d * (y - w.oy)] : [x, y];
 
 interface Entity {
-  kind: 'tree' | 'bush' | 'stump' | 'player' | 'peer' | 'pile' | 'token' | 'crate' | 'creature' | 'campfire' | 'crop' | 'smelter' | 'kiln' | 'furniture' | 'hull' | 'anvil' | 'post' | 'trap' | 'deck' | 'life' | 'waterplant' | 'spell';
+  kind: 'tree' | 'bush' | 'stump' | 'player' | 'peer' | 'pile' | 'token' | 'crate' | 'creature' | 'campfire' | 'crop' | 'smelter' | 'kiln' | 'furniture' | 'hull' | 'anvil' | 'post' | 'trap' | 'deck' | 'life' | 'waterplant' | 'spell' | 'swirl';
   x: number;
   y: number;
   sx: number;
@@ -301,6 +303,8 @@ interface Entity {
   deck?: { kind: string; done: boolean; drop: number; id: number; shape?: DeckShape; green?: number; span?: number };
   /** A lotus standing up off the water: its raised leaves, flowers and seed heads, sorted among what else stands there. */
   plant?: WaterPlant;
+  /** A mote swirl turning over the tile (`./swirls`). */
+  swirl?: Swirl;
   /** 1 rare, 2 supreme, 3 fantastic, for the shine over it; absent for the ordinary run of things. */
   rare?: number;
   /**
@@ -969,6 +973,7 @@ export class Renderer {
     e.trap = undefined;
     e.deck = undefined;
     e.plant = undefined;
+    e.swirl = undefined;
     e.lift = undefined;
     e.drawDx = undefined;
     e.drawDy = undefined;
@@ -1169,6 +1174,8 @@ export class Renderer {
    * painted over it.
    */
   private glows: Array<{ sx: number; sy: number; kind: string; view: PieceView }> = [];
+  /** The mote swirls drawn this frame and where, for their light to be added over the night (`glowSwirl`). */
+  private swirlsSeen: Array<{ s: Swirl; x: number; y: number }> = [];
   private anvilHits: HitRect[] = [];
   private postHits: HitRect[] = [];
   private trapHits: HitRect[] = [];
@@ -3196,6 +3203,7 @@ export class Renderer {
     this.kilnHits.length = 0;
     this.furnitureHits.length = 0;
     this.glows.length = 0;
+    this.swirlsSeen.length = 0;
     this.anvilHits.length = 0;
     this.postHits.length = 0;
     this.trapHits.length = 0;
@@ -3496,6 +3504,15 @@ export class Renderer {
               const [px, py] = plantFoot(plant, this.plantFrame);
               this.take('waterplant', x, y, px, py, null).plant = plant;
             }
+          }
+        }
+        // A mote swirl turning over the middle of the tile: over the water's surface where there is water (`./swirls`).
+        if (this.game.swirls.size) {
+          const swirl = this.game.swirlAt(x, y);
+          if (swirl) {
+            const avg = (c[0] + c[1] + c[2] + c[3]) / 4;
+            const h = world.hasWater(x, y) ? Math.max(avg, world.surfaceAt(x, y)) : avg;
+            this.take('swirl', x, y, cam.worldToScreenX(x + 0.5, y + 0.5), cam.worldToScreenY(x + 0.5, y + 0.5, h), null).swirl = swirl;
           }
         }
         if (this.game.crops.size) {
@@ -4937,6 +4954,12 @@ export class Renderer {
       }
       if (ent.kind === 'waterplant' && ent.plant && this.plantFrame) {
         drawPlantUpright(ctx, ent.plant, this.plantFrame);
+        continue;
+      }
+      if (ent.kind === 'swirl' && ent.swirl) {
+        drawSwirl(ctx, ent.sx, ent.sy, zoom, ent.swirl.element, this.time, ent.swirl.id);
+        // And its light over the night, once the night is laid (`glowSwirl`).
+        this.swirlsSeen.push({ s: ent.swirl, x: ent.sx, y: ent.sy });
         continue;
       }
       if (ent.kind === 'deck' && ent.aq) {
@@ -13064,6 +13087,8 @@ export class Renderer {
     }
     // The fireflies, which are lights: over the night, not under it.
     if (!this.fast) this.life.glow(ctx);
+    // And the mote swirls' glow and glints, the same way (`glowSwirl`).
+    if (dark > 0.02) for (const w of this.swirlsSeen) glowSwirl(ctx, w.x, w.y, zoom, w.s.element, this.time, w.s.id, dark);
     // And the spells' light, over the night too, and the screen's tint for a great one of your own over that.
     this.spells.glowPass(ctx);
     this.spells.screenPass(ctx, this.canvas.width, this.canvas.height);

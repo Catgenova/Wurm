@@ -115,6 +115,11 @@ export const SKILL_DEFS: SkillDef[] = [
    */
   { id: 'driving', name: 'Driving', group: 'Skills', start: 1 },
   { id: 'sailing', name: 'Sailing', group: 'Skills', start: 1 },
+  /*
+   * Collecting the mote swirls the woods put down each day (`motes.ts`): it
+   * sets how many motes a swirl gives, and only a swirl collected trains it.
+   */
+  { id: 'elementalism', name: 'Elementalism', group: 'Skills', start: 1 },
 ];
 
 /**

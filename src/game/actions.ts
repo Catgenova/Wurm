@@ -1,6 +1,7 @@
 export { TRY_LEARN, tryGain } from './learn';
 import { BURYABLE, BUSH_DEFS, SLAB_BY_ITEM, SLAB_VARIANTS, TILE_DEFS, TREE_AGES, TREE_DEFS, TileType, bushSpecies, packTreeData, slabVariant, treeAge, treeSpecies, treeVariant, lastDawn, nextDawn, type TreeAge, LAWN_AFTER, MOWN_TODAY, MOWING, mownDays, mownToday } from '../world/tiles';
 import { FLOWER_ACTIONS, groundSays } from './wildflowers';
+import { MOTE_ACTIONS } from './motes';
 import { isSeam } from '../world/tiles';
 import type { World } from '../world/world';
 import { bedrockAt, oreAt } from '../world/ore';
@@ -3040,6 +3041,7 @@ export const ACTIONS: ActionDef[] = [
   ...AQUEDUCT_ACTIONS,
   ...SPRING_ACTIONS,
   ...FLOWER_ACTIONS,
+  ...MOTE_ACTIONS,
   ...WATER_GARDEN_ACTIONS,
   ...FOUNDATION_ACTIONS,
   ...STEPS_ACTIONS,

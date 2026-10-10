@@ -12,7 +12,7 @@ import type { IslandSpring } from '../game/springs';
 import { cleanLook, type Look } from '../game/look';
 import type { IslandCrate, IslandGround } from '../game/game';
 import type { Mark } from '../game/items';
-import { AWAY_SLOWER, BODY_EVERY, BODY_FRESH, SPRINGS_EVERY, CHANGE_PAGE, FOG_EVERY, FOUND_MAX, GROUND_EVERY, GROUND_IDLE, GROUND_RANGE, GUIDE_BATCH, GUIDE_EVERY, HEARTBEAT, LAND_ASK, LAND_NEAR, MOBS_EVERY, MOBS_RANGE, RECONCILE_EVERY, REGION, SNAP_GAP } from '../game/keep';
+import { AWAY_SLOWER, BODY_EVERY, BODY_FRESH, SPRINGS_EVERY, SWIRLS_EVERY, CHANGE_PAGE, FOG_EVERY, FOUND_MAX, GROUND_EVERY, GROUND_IDLE, GROUND_RANGE, GUIDE_BATCH, GUIDE_EVERY, HEARTBEAT, LAND_ASK, LAND_NEAR, MOBS_EVERY, MOBS_RANGE, RECONCILE_EVERY, REGION, SNAP_GAP } from '../game/keep';
 import type { GuideBook } from '../game/guide';
 import { packFog, unpackFog } from './fogpack';
 import type { Away } from '../game/away';
@@ -139,6 +139,8 @@ interface HeardBody {
   refresh?: unknown;
   /** A portcullis or a drawbridge in this block went up or down (`perform_gate`). */
   gates?: unknown;
+  /** A mote swirl in this block was collected (`{ gone: [id] }`), or the day's swirls were put down (`'day'`). */
+  swirls?: unknown;
   /** Where a keeper of the island has put this body. */
   x?: unknown;
   y?: unknown;
@@ -844,6 +846,15 @@ export interface IslandHooks {
   springs?: (near: Array<{ id: number; ver: number }>, chains: IslandSpring[]) => void;
   /** What this side already holds of the springs, by id, for asking only for what has changed. */
   knownSprings?: () => Record<string, number>;
+  /**
+   * The mote swirls in the nine blocks round us (`rpc_swirls`), as the island
+   * sent them: every one, so whatever this side held that is not among them
+   * has gone. The game reads the rows (`swirlIn`), which keeps this layer to
+   * types alone.
+   */
+  swirls?: (rows: unknown[]) => void;
+  /** Swirls somebody collected, by id, said over the block's channel the moment they went. */
+  swirlsGone?: (ids: number[]) => void;
   /** Somebody waved or hopped, which nothing but the renderer cares about. */
   emote?: (uid: string, name: string, emote: string) => void;
   /**
@@ -963,6 +974,9 @@ export class Island {
   private lastMobs = 0;
   private lastGround = 0;
   private lastSprings = 0;
+  /** When the swirls were last asked for, and whether something has said to ask again now. */
+  private lastSwirls = 0;
+  private swirlsOwed = true;
   private lastSaid = '';
   /**
    * The storey the island was last told. A change of storey -- down into a
@@ -2235,6 +2249,12 @@ export class Island {
   private heardLand(body: HeardBody): void {
     // A gate in this block went up or down (`perform_gate`): the next ground read brings it.
     if (body.gates === true) this.groundSlow = true;
+    // A swirl collected, which goes now; or the day's put down, which are asked for (`swirl_day`).
+    if (body.swirls === 'day') this.swirlsOwed = true;
+    else if (body.swirls && typeof body.swirls === 'object') {
+      const gone = (body.swirls as { gone?: unknown }).gone;
+      if (Array.isArray(gone)) this.hooks.swirlsGone?.(gone.filter((id): id is number => typeof id === 'number'));
+    }
     if (Array.isArray(body.rows)) {
       for (const c of body.rows as Array<TileChange & { n: number }>) this.applyChange(c);
     } else if (typeof body.upto === 'number' && body.upto > this.seenChange) {
@@ -2428,6 +2448,26 @@ export class Island {
     this.hooks.springs(said.near ?? [], said.chains ?? []);
   }
 
+  /**
+   * The mote swirls in the nine blocks round us (`rpc_swirls`): when something
+   * has said to ask -- coming ashore, walking into another block, a new day's
+   * swirls -- and otherwise every `SWIRLS_EVERY` seconds. A swirl collected
+   * is not waited for: its going comes over the block's channel.
+   */
+  async refreshSwirls(now: number): Promise<void> {
+    if (!this.info || !this.hooks.swirls) return;
+    if (!this.swirlsOwed && now - this.lastSwirls < SWIRLS_EVERY * this.slower()) return;
+    this.swirlsOwed = false;
+    this.lastSwirls = now;
+    const { data, error } = await supabase().rpc('rpc_swirls', { p_world: this.info.id });
+    // A call that failed is not a day with no swirls in it: asked again on the next step.
+    if (error || !Array.isArray(data)) {
+      this.swirlsOwed = true;
+      return;
+    }
+    this.hooks.swirls(data as unknown[]);
+  }
+
   async refreshPeople(): Promise<void> {
     if (!this.info) return;
     // And what each of them has on, which their rows cannot say: see `rpc_worn`.
@@ -2509,6 +2549,7 @@ export class Island {
     void this.refreshMobs(now);
     void this.refreshGround(now);
     void this.refreshSprings(now);
+    void this.refreshSwirls(now);
     void this.keepFog(now);
     void this.keepGuide(now);
     const said = `${x.toFixed(2)},${y.toFixed(2)},${level}`;
@@ -2573,6 +2614,8 @@ export class Island {
     // new one, and read whatever was dug in the blocks that are new to us.
     const block = `${Math.floor(x / REGION)},${Math.floor(y / REGION)}`;
     if (block !== this.block) {
+      // And the swirls of the blocks that are new to us, on the next step.
+      this.swirlsOwed = true;
       this.me = { ...(this.me as PlayerRow), x, y };
       await this.watch(this.info.id);
       await this.catchUpQuietly();
