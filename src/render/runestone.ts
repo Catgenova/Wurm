@@ -67,9 +67,9 @@ export const RUNESTONE_SPAN = 3;
  * Drawn only, as an altar's is: no rule asks how far it reaches.
  */
 export const RUNESTONE_REACH = 2.1;
-export const RUNESTONE_GLOW = 0.4;
+export const RUNESTONE_GLOW = 0.28;
 export const RUNESTONE_CAST = '255, 204, 128';
-export const RUNESTONE_CAST_ALPHA = 0.38;
+export const RUNESTONE_CAST_ALPHA = 0.28;
 /** The light of a runestone whose middle is at world (x, y), for the island's list of lights. */
 export const runestoneLight = (x: number, y: number): LightSource => ({
   x, y, radius: RUNESTONE_REACH, strength: RUNESTONE_GLOW, steady: true, soft: true, cast: RUNESTONE_CAST, castAlpha: RUNESTONE_CAST_ALPHA,
@@ -708,12 +708,20 @@ interface Spec {
   depthAt?: (s: number, t: number, half: number) => [number, number];
   /** Runes cut down the long side away from the moss, in place of the notches. */
   sideRunes?: string[];
+  /** A cleft down into its head, on the front: where its foot is and how wide it opens, kept clear of the head's moss. */
+  cleft?: { x: number; z: number; w: number };
+  /** Cracks across the back, as the front's are. */
+  backCracks?: Array<{ x: number; z: number; a: number; len: number }>;
+  /** Moss down the mossy edge of its top quarter, in the lee of its head, nought to one. */
+  leeMoss?: number;
+  /** How many patches of lichen on a broad face. */
+  lichenN?: number;
   seed: number;
 }
 
 /** A piece fallen off a stone: a carved disc on its edge, a drum on its side, a chunk off its top, a flake leaning on its foot. */
 type Fallen =
-  | { kind: 'disc'; x: number; y: number; r: number; lean: number; face: number; carve: string }
+  | { kind: 'disc'; x: number; y: number; r: number; lean: number; face: number; carve: string; sink?: number }
   | { kind: 'drum'; x: number; y: number; r: number; len: number; face: number }
   | { kind: 'chunk'; x: number; y: number; face: number; tilt: number }
   | { kind: 'flake'; x: number; y: number; face: number; lean: number; w: number; h: number };
@@ -755,14 +763,13 @@ const SPECS: Record<RunestoneId, Spec> = {
     mossSide: 1,
     moss: 0.55,
     ivy: [
-      { face: 'front', x: 16.2, kind: 'climb', v: 3, k: 1.6 },
-      { face: 'front', x: 12, kind: 'climb', v: 5, k: 1.5, flip: true },
-      { face: 'front', x: 15.4, kind: 'vine', v: 2, k: 1.6, z: 30 },
-      { face: 'front', x: 14, kind: 'vine', v: 1, k: 1.6, z: 58 },
-      { face: 'side', x: 0, kind: 'climb', v: 4, k: 1.6 },
-      { face: 'side', x: 2, kind: 'vine', v: 2, k: 1.6, z: 34 },
-      { face: 'back', x: -14.5, kind: 'climb', v: 3, k: 1.6 },
-      { face: 'back', x: -14, kind: 'vine', v: 2, k: 1.5, z: 32 },
+      { face: 'front', x: 17, kind: 'climb', v: 2, k: 1.25 },
+      { face: 'front', x: 15.6, kind: 'vine', v: 2, k: 1.6, z: 24 },
+      { face: 'front', x: 16.6, kind: 'vine', v: 0, k: 1.15, z: 54 },
+      { face: 'front', x: 14.6, kind: 'hang', v: 3, k: 1.35, z: 110 },
+      { face: 'side', x: 0, kind: 'climb', v: 3, k: 1.5 },
+      { face: 'back', x: -15.5, kind: 'climb', v: 2, k: 1.3 },
+      { face: 'back', x: -15, kind: 'vine', v: 1, k: 1.2, z: 30 },
     ],
     cracks: [{ x: 19, z: 40, a: 2.7, len: 9 }, { x: -12, z: 122, a: -1.7, len: 10 }, { x: -19.4, z: 66, a: -0.2, len: 7 }],
     flowers: [['white', 5], ['yellow', 3], ['pink', 2]],
@@ -772,6 +779,7 @@ const SPECS: Record<RunestoneId, Spec> = {
       { kind: 'flake', x: 36, y: 10, face: -2.2, lean: 1.25, w: 9, h: 13 },
     ],
     lichen: ['#efc867', '#ead9a0'],
+    lichenN: 9,
     // The horns: the left forward of the middle, the right behind it, each thinner than the body under them.
     depthAt: (s, t, h) => {
       if (t < 94) return [0, h];
@@ -811,21 +819,21 @@ const SPECS: Record<RunestoneId, Spec> = {
     mossSide: -1,
     moss: 0.95,
     ivy: [
-      { face: 'front', x: -18, kind: 'climb', v: 6, k: 1.8 },
-      { face: 'front', x: -15, kind: 'vine', v: 2, k: 1.7, z: 36 },
-      { face: 'front', x: -16.5, kind: 'vine', v: 1, k: 1.7, z: 62 },
-      { face: 'front', x: -12.5, kind: 'climb', v: 3, k: 1.6 },
-      { face: 'side', x: 2, kind: 'climb', v: 6, k: 1.8 },
-      { face: 'side', x: -3, kind: 'vine', v: 1, k: 1.7, z: 40 },
-      { face: 'back', x: 17, kind: 'climb', v: 5, k: 1.7 },
-      { face: 'back', x: 14, kind: 'vine', v: 2, k: 1.6, z: 36 },
-      { face: 'back', x: 15.5, kind: 'vine', v: 1, k: 1.6, z: 60 },
+      { face: 'front', x: -18.5, kind: 'climb', v: 6, k: 1.8 },
+      { face: 'front', x: -15.5, kind: 'vine', v: 2, k: 1.3, z: 34 },
+      { face: 'front', x: -17, kind: 'vine', v: 1, k: 1.6, z: 60 },
+      { face: 'front', x: -12.5, kind: 'hang', v: 4, k: 1.4, z: 95 },
+      { face: 'side', x: 2, kind: 'climb', v: 6, k: 1.6 },
+      { face: 'side', x: -3, kind: 'vine', v: 1, k: 1.4, z: 40 },
+      { face: 'back', x: 17.5, kind: 'climb', v: 5, k: 1.5 },
+      { face: 'back', x: 16, kind: 'vine', v: 1, k: 1.25, z: 50 },
+      { face: 'back', x: 12.5, kind: 'hang', v: 2, k: 1.3, z: 96 },
     ],
     cracks: [{ x: 21, z: 30, a: 2.9, len: 8 }, { x: -21.8, z: 48, a: 0.3, len: 6 }],
     flowers: [['lilac', 5], ['blue', 3], ['white', 3]],
     rocks: { foot: 6, outer: 6, size: 1.1 },
     fallen: [
-      { kind: 'disc', x: 34, y: 22, r: 12, lean: 1.22, face: -0.5, carve: 'moon' },
+      { kind: 'disc', x: -28, y: 28, r: 15, lean: 1.05, face: 1.97, carve: 'moon', sink: 0.45 },
     ],
     lichen: ['#d3dcb4', '#e2e0b4'],
     seed: 23,
@@ -863,11 +871,11 @@ const SPECS: Record<RunestoneId, Spec> = {
     mossSide: 1,
     moss: 0.42,
     ivy: [
-      { face: 'front', x: 15.5, kind: 'climb', v: 3, k: 1.6 },
-      { face: 'front', x: 15, kind: 'vine', v: 2, k: 1.6, z: 34 },
-      { face: 'front', x: 15.4, kind: 'vine', v: 1, k: 1.5, z: 58 },
+      { face: 'front', x: 16.4, kind: 'climb', v: 3, k: 1.3 },
+      { face: 'front', x: 15.8, kind: 'vine', v: 1, k: 1.45, z: 40 },
+      { face: 'front', x: 13, kind: 'hang', v: 1, k: 1.1, z: 104 },
       { face: 'side', x: 0, kind: 'climb', v: 2, k: 1.5 },
-      { face: 'back', x: -15, kind: 'climb', v: 4, k: 1.5 },
+      { face: 'back', x: -15.5, kind: 'climb', v: 3, k: 1.2 },
     ],
     cracks: [
       { x: 1.4, z: 82, a: -1.62, len: 12 }, { x: -19, z: 52, a: -0.35, len: 9 }, { x: 18.4, z: 64, a: 3.4, len: 8 },
@@ -879,7 +887,10 @@ const SPECS: Record<RunestoneId, Spec> = {
       { kind: 'flake', x: -26, y: 22, face: 0.4, lean: 1.0, w: 11, h: 19 },
       { kind: 'drum', x: 34, y: -6, r: 5.5, len: 13, face: 1.2 },
     ],
-    lichen: ['#c8d3c6', '#d9ddd4'],
+    lichen: ['#b7c79b', '#d4dbb0'],
+    lichenN: 11,
+    cleft: { x: 1.4, z: 82, w: 3.4 },
+    backCracks: [{ x: 19.2, z: 46, a: 2.9, len: 10 }, { x: -18.6, z: 70, a: 0.2, len: 9 }, { x: 6, z: 2, a: 1.4, len: 8 }],
     // The split halves: the left forward, the right back, apart through the thickness above the foot of the cleft.
     depthAt: (s, t, h) => {
       if (t < 80) return [0, h];
@@ -912,7 +923,7 @@ const SPECS: Record<RunestoneId, Spec> = {
     front: {
       x0: -1, x1: -3, w: 14, z0: 9, z1: 54, arch: 4, size: 2.8,
       runes: ['algiz', 'tiwaz', 'ingwaz', 'othala', 'algiz', 'key'],
-      roundel: { x: -7, z: 79, r: 8, kind: 'eye' },
+      roundel: { x: -7, z: 79, r: 9, kind: 'eye' },
     },
     back: {
       x0: 0, x1: 2, w: 13, z0: 9, z1: 52, arch: 4, size: 2.7, runes: ['eye', 'algiz', 'diamond', 'tiwaz', 'othala', 'algiz'],
@@ -921,12 +932,12 @@ const SPECS: Record<RunestoneId, Spec> = {
     mossSide: -1,
     moss: 0.62,
     ivy: [
-      { face: 'front', x: -16, kind: 'climb', v: 5, k: 1.7 },
-      { face: 'front', x: -15, kind: 'vine', v: 2, k: 1.6, z: 36 },
-      { face: 'front', x: -15.5, kind: 'vine', v: 1, k: 1.5, z: 60 },
-      { face: 'side', x: 0, kind: 'climb', v: 6, k: 1.7 },
-      { face: 'back', x: 15.5, kind: 'climb', v: 4, k: 1.6 },
-      { face: 'back', x: 15, kind: 'vine', v: 2, k: 1.5, z: 34 },
+      { face: 'front', x: -16.6, kind: 'climb', v: 4, k: 1.5 },
+      { face: 'front', x: -15.6, kind: 'vine', v: 1, k: 1.2, z: 40 },
+      { face: 'front', x: -12, kind: 'hang', v: 3, k: 1.3, z: 101 },
+      { face: 'side', x: 0, kind: 'climb', v: 5, k: 1.6 },
+      { face: 'back', x: 16, kind: 'climb', v: 3, k: 1.4 },
+      { face: 'back', x: 15.6, kind: 'vine', v: 2, k: 1.1, z: 34 },
     ],
     cracks: [{ x: 9, z: 74.5, a: -2.2, len: 8 }, { x: -18.6, z: 36, a: 0.25, len: 8 }],
     flowers: [['pink', 5], ['lilac', 3], ['white', 2]],
@@ -955,7 +966,7 @@ const SPECS: Record<RunestoneId, Spec> = {
     depth: [19, 13],
     lean: [0.035, -0.012],
     bevel: 1.4,
-    stone: toneOf('#f6e3c9', '#c1a7a3'),
+    stone: toneOf('#f7ddd0', '#c4a2a7'),
     rock: toneOf('#e3d4bf', '#ab9ca3'),
     front: {
       x0: 0, x1: 0, w: 14, z0: 11, z1: 80, arch: 6, size: 2.8,
@@ -969,12 +980,14 @@ const SPECS: Record<RunestoneId, Spec> = {
     mossSide: 1,
     moss: 0.45,
     ivy: [
-      { face: 'front', x: 13.5, kind: 'climb', v: 4, k: 1.6 },
-      { face: 'front', x: 12.6, kind: 'vine', v: 2, k: 1.6, z: 32 },
-      { face: 'side', x: 0, kind: 'climb', v: 2, k: 1.5 },
-      { face: 'side', x: 1, kind: 'vine', v: 1, k: 1.5, z: 30 },
-      { face: 'back', x: -13.5, kind: 'climb', v: 5, k: 1.6 },
-      { face: 'back', x: -12.8, kind: 'vine', v: 2, k: 1.5, z: 34 },
+      { face: 'front', x: 13.8, kind: 'climb', v: 3, k: 1.4 },
+      { face: 'front', x: 13.2, kind: 'vine', v: 1, k: 1.3, z: 30 },
+      { face: 'front', x: 7, kind: 'hang', v: 2, k: 1.2, z: 122 },
+      { face: 'side', x: 0, kind: 'climb', v: 2, k: 1.4 },
+      { face: 'side', x: 1, kind: 'vine', v: 1, k: 1.2, z: 30 },
+      { face: 'back', x: -13.8, kind: 'climb', v: 4, k: 1.3 },
+      { face: 'back', x: -13.2, kind: 'vine', v: 1, k: 1.2, z: 34 },
+      { face: 'back', x: -7, kind: 'hang', v: 1, k: 1.1, z: 121 },
     ],
     cracks: [{ x: -16, z: 70, a: -0.4, len: 7 }, { x: 16, z: 40, a: 3.0, len: 6 }],
     flowers: [['pink', 4], ['yellow', 4], ['white', 2]],
@@ -984,6 +997,7 @@ const SPECS: Record<RunestoneId, Spec> = {
       { kind: 'disc', x: 30, y: 30, r: 7.5, lean: 0.75, face: -0.9, carve: 'sun' },
     ],
     lichen: ['#efcf7a', '#e6e0ae'],
+    leeMoss: 0.85,
     seed: 71,
   },
 };
@@ -1368,8 +1382,8 @@ function modelOf(id: RunestoneId): Model {
       }
 
       /* -- cracks: a dark line jagging in from an edge, its lit lip below it -- */
-      if (which === 'front') {
-        for (const c of spec.cracks) {
+      {
+        for (const c of which === 'front' ? spec.cracks : spec.backCracks ?? []) {
           const pts: Pt[] = [[c.x, c.z]];
           let a = c.a, x = c.x, z = c.z;
           for (let i = 0; i < 6; i++) {
@@ -1384,7 +1398,7 @@ function modelOf(id: RunestoneId): Model {
       }
 
       /* -- lichen, on the upper half, more on the side away from the moss -- */
-      for (let i = 0; i < 6; i++) {
+      for (let i = 0; i < (spec.lichenN ?? 6); i++) {
         const z = tTop * (0.3 + 0.65 * T()), [a, b] = xs(z);
         const u = sideK > 0 ? Math.pow(T(), 1.6) : 1 - Math.pow(T(), 1.6);
         const x = a + u * (b - a);
@@ -1417,6 +1431,21 @@ function modelOf(id: RunestoneId): Model {
        */
       const foot = 6 + 22 * m;
       const reach = tTop * (0.35 + 0.55 * m);
+      const cleftX = spec.cleft ? (which === 'front' ? spec.cleft.x : -spec.cleft.x) : null;
+      if (cleftX !== null) {
+        // The cleft: a dark shadow down into it, and a few cushions caught in its foot, the lowest spilling onto the face.
+        const c = spec.cleft!;
+        g.beginPath();
+        g.moveTo(cleftX - 0.5, c.z + 14);
+        g.lineTo(cleftX, c.z - 0.5);
+        g.lineTo(cleftX + 0.5, c.z + 14);
+        g.closePath();
+        g.fillStyle = css(mix(fill, hex('#3f3b52'), 0.55), 0.7);
+        g.fill();
+        pad(cleftX + 0.3, c.z + 1.2, 1.9);
+        pad(cleftX - 1.1, c.z - 0.8, 1.3);
+        pad(cleftX + 0.9, c.z - 2.6, 0.9);
+      }
       const nseed = seed * 13 + 5;
       const [fa, fb] = xs(0);
       const tries = Math.round(((fb - fa) * tTop) / 1.5);
@@ -1430,8 +1459,12 @@ function modelOf(id: RunestoneId): Model {
           const d = sideK > 0 ? b - x : x - a, w = (3 + 8 * m) * (1 - z / reach);
           const inEdge = w > 0 ? 1 - d / w : 0;
           // A fringe along the head and the shoulders of every stone, deeper on its mossy side and the more it has.
-          const inHead = (0.55 + 0.45 * m) * (0.5 + 0.5 * Math.min(1, Math.max(0, side + 0.5))) * (1 - (headAt(x) - z) / (2.5 + 5 * m));
-          const share = Math.max(inFoot, inEdge, inHead);
+          let inHead = (0.55 + 0.45 * m) * (0.5 + 0.5 * Math.min(1, Math.max(0, side + 0.5))) * (1 - (headAt(x) - z) / (2.5 + 5 * m));
+          // Not in a cleft, where the head's fringe would run down both its sides as a pod of beads.
+          if (cleftX !== null && Math.abs(x - cleftX) < spec.cleft!.w && z > spec.cleft!.z - 3) inHead = 0;
+          const lee = spec.leeMoss ?? 0;
+          const inLee = lee > 0 && z > tTop * 0.68 ? lee * (1 - d / (3 + 5 * lee)) * Math.min(1, (z - tTop * 0.68) / (tTop * 0.08)) : 0;
+          const share = Math.max(inFoot, inEdge, inHead, inLee);
           if (share <= 0) continue;
           // Not over the runes: the panel is kept clear of all but the foot's.
           if (Math.abs(x - midAt(z)) < hw && z > panel.z0 + 3 && z < panel.z1 + panel.arch && inFoot < 0.5) continue;
@@ -1447,32 +1480,61 @@ function modelOf(id: RunestoneId): Model {
       g.restore();
     };
     const over: Painter = (g, k) => {
-      // Ivy, up from the foot on the mossy side, kept off the panel; leaves let run over the stone's edge.
+      /*
+       * Ivy on the mossy side, and over the shoulder: each strand moved out
+       * just far enough that it keeps off the carving over the height it
+       * covers, so nothing cuts it -- and only where moving it would take its
+       * root off the stone is it trimmed, along a ragged line, never a ruled
+       * one. Leaves let run over the stone's edge.
+       */
       for (const iv of spec.ivy) {
         if (iv.face !== which) continue;
         const pic = strandPic(iv.kind, iv.v, STAGES, true);
         if (!pic) continue;
         const z0 = iv.z ?? 0.5;
-        const panelEdge = midAt(z0) + sideK * (hw + 0.6);
+        const sc = (iv.k * 10) / PPM;
+        const left = (iv.flip ? pic.img.width - pic.ax : pic.ax) * sc, right = (iv.flip ? pic.ax : pic.img.width - pic.ax) * sc;
+        const zLo = z0 - (pic.img.height - pic.ay) * sc, zHi = z0 + pic.ay * sc;
+        const zoneTop = panel.roundel ? panel.roundel.z + panel.roundel.r : panel.z1 + panel.arch;
+        let x = iv.x, carved: number | null = null;
+        if (zHi > panel.z0 && zLo < zoneTop) {
+          const z0p = Math.max(panel.z0, zLo), z1p = Math.min(panel.z1 + panel.arch, zHi);
+          const mids = z1p > z0p ? [midAt(z0p), midAt(Math.min(panel.z1, z1p))] : [midAt(panel.z1)];
+          let edge = sideK > 0 ? Math.max(...mids) + hw : Math.min(...mids) - hw;
+          const rd = panel.roundel;
+          if (rd && zHi > rd.z - rd.r && zLo < rd.z + rd.r) edge = sideK > 0 ? Math.max(edge, rd.x + rd.r) : Math.min(edge, rd.x - rd.r);
+          carved = edge + sideK * 0.8;
+          const want = sideK > 0 ? carved + left : carved - right;
+          // No further out than keeps its root on the stone.
+          const [a, b] = xs(Math.max(1, z0)), limit = sideK > 0 ? b - 1.5 : a + 1.5;
+          x = sideK > 0 ? Math.max(x, Math.min(want, limit)) : Math.min(x, Math.max(want, limit));
+          if (sideK > 0 ? x - left >= carved : x + right <= carved) carved = null;
+        }
         g.save();
-        g.beginPath();
-        if (sideK > 0) g.rect(panelEdge, -10, 200, 400);
-        else g.rect(panelEdge - 200, -10, 200, 400);
-        g.clip();
-        const s = (iv.k * 10) / PPM;
-        g.translate(iv.x, z0);
-        g.scale(iv.flip ? -s : s, -s);
+        if (carved !== null) {
+          const cv = carved;
+          g.beginPath();
+          g.moveTo(cv, zLo - 2);
+          for (let z = zLo - 2; z <= zHi + 2; z += 1.5) g.lineTo(cv + sideK * (0.8 + 0.8 * Math.sin(z * 1.7) + 0.6 * noise2(z / 2, 1, seed)), z);
+          g.lineTo(cv + sideK * 200, zHi + 2);
+          g.lineTo(cv + sideK * 200, zLo - 2);
+          g.closePath();
+          g.clip();
+        }
+        g.translate(x, z0);
+        g.scale(iv.flip ? -sc : sc, -sc);
         g.drawImage(pic.img, -pic.ax, -pic.ay);
         g.restore();
+        const panelEdge = carved ?? (sideK > 0 ? -999 : 999);
         // Blossom on it, as on the reference's: a few small clusters up the strand, in the colours at its foot.
         const B = rand(seed * 5 + iv.v * 11 + Math.round(iv.x));
         const tall = STRAND_REACH_UNITS[iv.kind] * iv.k;
         const tr = g.getTransform(), inv = k.base.inverse();
         const sprays: Array<[number, number, string]> = [];
         for (let j = 0; j < 2 + Math.floor(B() * 2); j++) {
-          const z = z0 + tall * (0.15 + 0.6 * B()), x = iv.x + (B() - 0.5) * 6 * iv.k;
-          if (sideK > 0 ? x < panelEdge : x > panelEdge) continue;
-          const q = inv.transformPoint(tr.transformPoint(new DOMPoint(x, z)));
+          const z = z0 + (iv.kind === 'hang' ? -1 : 1) * tall * (0.15 + 0.6 * B()), bx = x + (B() - 0.5) * 6 * iv.k;
+          if (sideK > 0 ? bx < panelEdge : bx > panelEdge) continue;
+          const q = inv.transformPoint(tr.transformPoint(new DOMPoint(bx, z)));
           sprays.push([q.x, q.y, spec.flowers[Math.floor(B() * Math.min(2, spec.flowers.length))][0]]);
         }
         g.save();
@@ -1647,7 +1709,8 @@ function modelOf(id: RunestoneId): Model {
         // Standing on its rim, leaning back `lean` from upright, its carved face out.
         const A: V3 = [c * Math.cos(fl.lean), s * Math.cos(fl.lean), Math.sin(fl.lean)];
         const Wv: V3 = [-c * Math.sin(fl.lean), -s * Math.sin(fl.lean), Math.cos(fl.lean)];
-        const o: V3 = [fl.x, fl.y, r * Math.cos(fl.lean) - 1.2];
+        // Sunk into the turf as far as it says: what is under the ground is not drawn (`drawFaces`).
+        const o: V3 = [fl.x, fl.y, r * Math.cos(fl.lean) * (1 - (fl.sink ?? 0)) - 1.2];
         const carve = fl.carve;
         things.push({
           x: fl.x, y: fl.y,
@@ -1821,8 +1884,8 @@ interface Glow {
   halo: HTMLCanvasElement;
   /** The glow after dark: tighter, so a rune lit against the night is its shape with a little light round it. */
   dusk: HTMLCanvasElement;
-  /** Where the night is taken off it, in pixels at zoom one from the footprint's middle: spots along its strokes, each x, y, reach. */
-  holes: Array<[number, number, number]>;
+  /** Its own shape, a little widened, for the night to be taken off with (`runestoneMasks`): a picture the size of `box`. */
+  mask: HTMLCanvasElement;
   /** How much of its face the eye sees square on, nought (edge on) to one: a slanted face's runes glow as lines, not haze. */
   square: number;
   /** Where each picture goes, in pixels at zoom one from the footprint's middle: left, top, width, height. */
@@ -1866,8 +1929,25 @@ const canvasOf = (w: number, h: number): [HTMLCanvasElement, Ctx] => {
 };
 
 /** Draw a solid's faces, back to front, each lit, painted and creased, ruled round in ink `ink` wide. */
-function drawFaces(g: Ctx, e: Eye, faces: readonly Face[], ink: number): void {
+/** A face cut off at the ground: what of it stands at or above nought, or nothing. */
+function aboveGround(pts: readonly V3[]): V3[] {
+  if (pts.every((p) => p[2] >= 0)) return pts as V3[];
+  const out: V3[] = [];
+  for (let i = 0; i < pts.length; i++) {
+    const a = pts[i], b = pts[(i + 1) % pts.length];
+    if (a[2] >= 0) out.push(a);
+    if ((a[2] >= 0) !== (b[2] >= 0)) {
+      const t = a[2] / (a[2] - b[2]);
+      out.push([a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, 0]);
+    }
+  }
+  return out;
+}
+
+function drawFaces(g: Ctx, e: Eye, faces0: readonly Face[], ink: number): void {
   const base = g.getTransform();
+  // What stands under the turf -- a sunk disc's lower half, a boulder's foot -- is not drawn.
+  const faces = faces0.map((f) => ({ ...f, pts: aboveGround(f.pts) })).filter((f) => f.pts.length >= 3);
   const seen = faces.filter((f) => dot(f.n, e.toward) > 1e-6)
     .map((f) => ({ f, d: nearness(e, mul(f.pts.reduce<V3>((m, p) => add(m, p), [0, 0, 0]), 1 / f.pts.length)) }))
     .sort((a, b) => a.d - b.d);
@@ -2072,28 +2152,24 @@ function bake(id: RunestoneId, rotation: number, scale: number): Baked {
       const up = Math.hypot(M.c, M.d) * r.s, across = Math.hypot(M.a, M.b) * r.s;
       const reachPx = r.roundel ? Math.min(up, across) * 1.1 : Math.min(up * 1.25, across * 1.5 + 1.5);
       /*
-       * The night taken off it: a rune along its height, top, middle and
-       * foot, each spot as wide as the rune is on the screen there, so the
-       * whole of its shape is lit and not a round middle of it; a roundel
-       * all round its ring and in its middle, so the ring stays lit.
+       * The night taken off it in its own shape: its strokes laid wide and
+       * whole, and wider still and faint round them, on a picture the size of
+       * its light -- so what shows through the dark is the rune and a little
+       * of the stone round it, never a round spot, however slantwise its face.
        */
-      const holes: Array<[number, number, number]> = [];
-      const thin = Math.min(up, across);
-      if (r.roundel) {
-        const n = 22;
-        for (let j = 0; j < n; j++) {
-          const q = M.transformPoint(new DOMPoint(r.x + Math.cos((j / n) * TAU) * r.s * 0.93, r.z + Math.sin((j / n) * TAU) * r.s * 0.93));
-          holes.push([q.x, q.y, Math.max(1.4, thin * 0.27)]);
-        }
-        holes.push([mid.x, mid.y, Math.max(2, thin * 0.62)]);
-      } else {
-        for (const dz of [-0.6, 0, 0.6]) {
-          const q = M.transformPoint(new DOMPoint(r.x, r.z + dz * r.s));
-          holes.push([q.x, q.y, Math.max(1.6, Math.min(up * 0.62, across * 0.95 + 1))]);
-        }
-      }
+      const mask = sheet((h) => {
+        path(h);
+        // A roundel's strokes lie close, so its are narrower: its ring and figure lit, not the whole disc.
+        h.strokeStyle = 'rgba(0, 0, 0, 0.4)';
+        h.lineWidth = w * (r.roundel ? 2.6 : 3.6);
+        h.stroke();
+        path(h);
+        h.strokeStyle = 'rgba(0, 0, 0, 1)';
+        h.lineWidth = w * (r.roundel ? 1.8 : 2.2);
+        h.stroke();
+      });
       const square = Math.max(0.15, Math.min(1, across / up / 0.53));
-      glows.push({ core, halo, dusk, holes, square, box, cx: mid.x, cy: mid.y, r: reachPx, i: r.i, roundel: !!r.roundel });
+      glows.push({ core, halo, dusk, mask, square, box, cx: mid.x, cy: mid.y, r: reachPx, i: r.i, roundel: !!r.roundel });
     }
   }
   return { canvas, scale, ox: -x0 * scale, oy: -y0 * scale, bounds: [x0, y0, x1, y1], glows, motes };
@@ -2247,14 +2323,28 @@ export function runestoneHoles(sx: number, sy: number, zoom: number, id: Runesto
   const out: Array<{ x: number; y: number; r: number; a: number }> = [];
   for (const gl of b.glows) {
     const p = breath(gl, t);
-    // Along its shape, strong enough that where the spots overlap the night is all but gone off it.
-    const a = gl.roundel ? 0.42 + 0.2 * p : 0.55 + 0.3 * p;
-    for (const [x, y, r] of gl.holes) out.push({ x: sx + x * zoom, y: sy + y * zoom, r: r * zoom, a });
-    // And a wider, fainter one, so the stone round each rune is lit by it.
+    // A wide, faint hole round each, so the stone round a rune is lit by it; the rune itself goes by its own shape (`runestoneMasks`).
     out.push({ x: sx + gl.cx * zoom, y: sy + gl.cy * zoom, r: gl.r * 1.5 * zoom, a: 0.06 + 0.04 * p });
   }
   for (const m of motesAt(b, t, zoom)) out.push({ x: sx + m.x * zoom, y: sy + m.y * zoom, r: m.r * 2.2, a: 0.8 * m.a });
   return out;
+}
+
+/**
+ * The runes of a runestone drawn at (sx, sy), in their own shapes, to take
+ * the night back off with this frame: each a picture whose alpha is how much
+ * of the wash to take away, where to lay it on the screen in pixels, and how
+ * strongly, as it breathes. The renderer lays them `destination-out` on its
+ * night layer beside the round holes (`runestoneHoles`), so a lit rune shows
+ * through the dark as a rune and anybody in front of it is still in front.
+ */
+export function runestoneMasks(sx: number, sy: number, zoom: number, id: RunestoneId, rotation: number, t = performance.now() / 1000): Array<{ canvas: HTMLCanvasElement; x: number; y: number; w: number; h: number; a: number }> {
+  const b = bakedFor(id, rotation, zoom);
+  return b.glows.map((gl) => {
+    const p = breath(gl, t);
+    const [x, y, w, h] = gl.box;
+    return { canvas: gl.mask, x: sx + x * zoom, y: sy + y * zoom, w: w * zoom, h: h * zoom, a: gl.roundel ? 0.72 + 0.18 * p : 0.68 + 0.27 * p };
+  });
 }
 
 /** What a runestone covers on the screen from its footprint's middle, in pixels at zoom one: for where it is clicked. */

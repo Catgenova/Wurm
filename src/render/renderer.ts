@@ -1169,6 +1169,14 @@ export class Renderer {
    * painted over it.
    */
   private glows: Array<{ sx: number; sy: number; kind: string; view: PieceView }> = [];
+  /**
+   * Shapes to take the night back off with, where they were drawn this frame:
+   * a runestone's runes, each in its own shape (`runestoneMasks`), so what
+   * shows through the dark is the glyph and not a round spot of light. Laid
+   * `destination-out` on the night layer beside the glows' round holes; each
+   * picture's alpha is how much of the wash it takes, at strength `a`.
+   */
+  private nightMasks: Array<{ canvas: HTMLCanvasElement; x: number; y: number; w: number; h: number; a: number }> = [];
   private anvilHits: HitRect[] = [];
   private postHits: HitRect[] = [];
   private trapHits: HitRect[] = [];
@@ -3196,6 +3204,7 @@ export class Renderer {
     this.kilnHits.length = 0;
     this.furnitureHits.length = 0;
     this.glows.length = 0;
+    this.nightMasks.length = 0;
     this.anvilHits.length = 0;
     this.postHits.length = 0;
     this.trapHits.length = 0;
@@ -13003,7 +13012,7 @@ export class Renderer {
     if (washes.length) {
       // Gathered once at the top of the frame when it is dark enough to want them (`lightsNow`).
       const lights = dark > 0.02 ? this.lightsNow : game.lights();
-      if (!lights.length && !this.glows.length) {
+      if (!lights.length && !this.glows.length && !this.nightMasks.length) {
         for (const wash of washes) {
           ctx.fillStyle = `rgba(${wash.colour}, ${wash.alpha.toFixed(3)})`;
           ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
@@ -13017,7 +13026,7 @@ export class Renderer {
          * something with a light of its own is in view, whose holes are fine
          * work (an altar's stars and lines), and then at full size.
          */
-        const res = this.glows.length ? 1 : LIGHT_RES;
+        const res = this.glows.length || this.nightMasks.length ? 1 : LIGHT_RES;
         const night = this.nightLayer(res);
         const nc = night.getContext('2d') as CanvasRenderingContext2D;
         nc.setTransform(1, 0, 0, 1, 0, 0);
@@ -13045,6 +13054,12 @@ export class Renderer {
             nc.fill();
           }
         }
+        // And off whatever lit shapes were drawn, in their own shapes.
+        for (const m of this.nightMasks) {
+          nc.globalAlpha = m.a;
+          nc.drawImage(m.canvas, m.x, m.y, m.w, m.h);
+        }
+        nc.globalAlpha = 1;
         nc.globalCompositeOperation = 'source-over';
         ctx.drawImage(night, 0, 0, night.width / res, night.height / res);
         // A warm cast where the firelight actually falls, over the cold: the warmest light's at each spot, as dark as
